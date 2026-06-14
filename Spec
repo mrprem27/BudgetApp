@@ -1,0 +1,940 @@
+# BudgetSplit — iOS Budget & Split Expense App
+
+**Final Build Spec · v3.0 · For Claude Code**
+
+> React Native (Expo) · SQLite local · offline-first · solo v1, multi-user v2
+> Developer: Prem (3+ years RN/MERN, no iOS environment set up yet)
+> Target: personal use on own iPhone, sideloaded via AltStore (₹0)
+
+-----
+
+## 0. What this app does (one paragraph)
+
+BudgetSplit lets a single user manage unlimited budget groups (e.g. “Personal”, “Me & GF”, “Mussoorie Trip”), track income and expenses in each, split bills among group members with item-level control, and see a global financial picture across all groups. Debt simplification reduces multi-person balances to the fewest possible payments. v1 is fully offline with no accounts. v2 adds live sync so real people on other phones can share a group.
+
+-----
+
+## 1. Versions
+
+|Version|Scope                        |Network                  |
+|-------|-----------------------------|-------------------------|
+|**v1** |Solo, fully local            |None. Zero network calls.|
+|**v2** |Live multi-user shared groups|Supabase (free tier)     |
+|**v3** |OCR, multi-currency, widget  |TBD                      |
+
+**Build v1 first. Every milestone in this spec is v1 unless marked `[v2]`.**
+
+-----
+
+## 2. The core model (read this before writing any code)
+
+Every expense transaction stores **two amounts per person**:
+
+|Field  |Meaning                                        |
+|-------|-----------------------------------------------|
+|`paid` |Money that physically left this person’s wallet|
+|`share`|What this person actually consumed / owes      |
+
+**Hard invariant:** `Σ paid == Σ share` for every transaction. The UI enforces this — save is blocked and a live signed remainder is shown until balanced.
+
+**Why this matters:**
+
+- **Group budget** = Σ paid (total money that moved in the group)
+- **Your personal/global budget** = Σ YOUR share only (not what you fronted)
+- **Who owes whom** = per person: `paid − share` (positive = owed money, negative = owes money)
+
+**Example:** You pay ₹1000 for dinner, split 50/50 with GF.
+
+- Your paid = 1000, your share = 500 → net = +500 (GF owes you ₹500)
+- GF paid = 0, GF share = 500 → net = −500 (she owes ₹500)
+- Your global budget takes ₹500 hit (your share), not ₹1000
+
+**All money stored as integer paise (₹1 = 100 paise). Never use floats for money.**
+
+-----
+
+## 3. Data model (SQLite)
+
+```sql
+-- A real or local person
+CREATE TABLE person (
+  id            TEXT PRIMARY KEY,      -- uuid
+  name          TEXT NOT NULL,
+  avatar_color  TEXT NOT NULL,         -- hex e.g. '#E53E3E'
+  is_me         INTEGER NOT NULL DEFAULT 0,  -- exactly one row = 1
+  remote_uid    TEXT                   -- [v2] Supabase auth uid
+);
+
+-- Budget group
+CREATE TABLE budget_group (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  icon           TEXT NOT NULL,        -- expo/vector-icons icon name
+  color          TEXT NOT NULL,        -- hex
+  limit_daily    INTEGER,              -- paise, NULL = no limit
+  limit_monthly  INTEGER,
+  limit_yearly   INTEGER,
+  carry_over     INTEGER NOT NULL DEFAULT 0,  -- 0/1
+  is_shared      INTEGER NOT NULL DEFAULT 0,  -- [v2]
+  is_archived    INTEGER NOT NULL DEFAULT 0,
+  created_at     INTEGER NOT NULL      -- epoch ms
+);
+
+-- Many-to-many: group members
+CREATE TABLE group_member (
+  group_id   TEXT NOT NULL REFERENCES budget_group(id),
+  person_id  TEXT NOT NULL REFERENCES person(id),
+  PRIMARY KEY (group_id, person_id)
+);
+
+-- Transaction
+CREATE TABLE txn (
+  id             TEXT PRIMARY KEY,
+  group_id       TEXT NOT NULL REFERENCES budget_group(id),
+  kind           TEXT NOT NULL CHECK(kind IN ('income','expense','settlement')),
+  entry_mode     TEXT NOT NULL CHECK(entry_mode IN ('quick','itemized')),
+  date           INTEGER NOT NULL,     -- epoch ms
+  category       TEXT NOT NULL,
+  note           TEXT,
+  attachment_uri TEXT,                 -- local file uri for photo
+  tags           TEXT,                 -- JSON array e.g. '["#trip","#food"]'
+  recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','custom')),
+  recur_interval INTEGER,              -- e.g. 2 = every 2 weeks
+  recur_end      INTEGER,              -- epoch ms, NULL = forever
+  is_deleted     INTEGER NOT NULL DEFAULT 0,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+
+-- Who paid (one or more rows per txn)
+CREATE TABLE txn_payment (
+  txn_id     TEXT NOT NULL REFERENCES txn(id),
+  person_id  TEXT NOT NULL REFERENCES person(id),
+  amount     INTEGER NOT NULL,         -- paise
+  PRIMARY KEY (txn_id, person_id)
+);
+
+-- Who owes (one or more rows per txn) — stored explicitly, frozen at save
+CREATE TABLE txn_share (
+  txn_id     TEXT NOT NULL REFERENCES txn(id),
+  person_id  TEXT NOT NULL REFERENCES person(id),
+  amount     INTEGER NOT NULL,         -- paise
+  PRIMARY KEY (txn_id, person_id)
+);
+
+-- Line items (itemized entry only)
+CREATE TABLE line_item (
+  id           TEXT PRIMARY KEY,
+  txn_id       TEXT NOT NULL REFERENCES txn(id),
+  name         TEXT NOT NULL,
+  qty          INTEGER NOT NULL DEFAULT 1,
+  unit_price   INTEGER NOT NULL,       -- paise
+  assigned_to  TEXT NOT NULL           -- JSON array of person ids; cost split equally among them
+);
+
+-- Per-group custom categories
+CREATE TABLE category (
+  id        TEXT PRIMARY KEY,
+  group_id  TEXT NOT NULL REFERENCES budget_group(id),
+  name      TEXT NOT NULL,
+  icon      TEXT,
+  color     TEXT
+);
+```
+
+**Seeded data on first launch:**
+
+- One `person` row: name from phone (or “Me”), `is_me = 1`
+- One `budget_group`: name “Personal”, icon “wallet”, color “#4F46E5”
+- One `group_member` linking the two
+- Default categories for the Personal group: Food, Groceries, Rent, Utilities, Travel, Fuel, Medical, Shopping, Subscriptions, Other
+
+**Balances are always computed live — never stored:**
+
+```ts
+// Per person, per scope (group or global)
+net(personId) = Σ txn_payment.amount WHERE person_id = personId
+              − Σ txn_share.amount    WHERE person_id = personId
+// (over non-deleted txns in scope, excluding income txns from share side)
+
+// net > 0 → this person is owed money
+// net < 0 → this person owes money
+```
+
+-----
+
+## 4. Tech stack
+
+|Layer        |Package                            |Notes                                  |
+|-------------|-----------------------------------|---------------------------------------|
+|Framework    |`expo` (latest SDK)                |Managed workflow                       |
+|Navigation   |`expo-router`                      |File-based routing                     |
+|Local DB     |`expo-sqlite`                      |Built-in Expo, no native linking needed|
+|State        |`zustand`                          |Lightweight, no boilerplate            |
+|Charts       |`react-native-gifted-charts`       |Free, good RN support                  |
+|Notifications|`expo-notifications`               |Local only in v1                       |
+|Biometric    |`expo-local-authentication`        |Face ID / Touch ID                     |
+|Icons        |`@expo/vector-icons`               |Bundled with Expo                      |
+|File/share   |`expo-file-system` + `expo-sharing`|For export                             |
+|Date         |`date-fns`                         |Lightweight date utility               |
+|Backend      |— v1 none —                        |`[v2]` Supabase JS client              |
+
+**No Redux, no React Query in v1 — Zustand + direct SQLite queries is enough.**
+
+-----
+
+## 5. Project structure
+
+```
+budgetsplit/
+├── app/                        # expo-router pages
+│   ├── (tabs)/
+│   │   ├── index.tsx           # Dashboard
+│   │   ├── groups.tsx          # Groups list
+│   │   ├── reports.tsx         # Reports
+│   │   └── settings.tsx        # Settings
+│   ├── group/
+│   │   ├── [id].tsx            # Group detail (tabs: txns | balances | budget | members)
+│   │   └── [id]/
+│   │       ├── settle.tsx      # Settle up screen
+│   │       └── members.tsx     # Manage members
+│   ├── add/
+│   │   ├── quick.tsx           # Quick expense / income
+│   │   └── itemized.tsx        # Itemized bill entry
+│   └── _layout.tsx
+├── src/
+│   ├── db/
+│   │   ├── schema.ts           # CREATE TABLE statements
+│   │   ├── seed.ts             # First-launch seed
+│   │   └── queries/            # One file per entity (group, txn, person, etc.)
+│   ├── store/
+│   │   └── index.ts            # Zustand store
+│   ├── lib/
+│   │   ├── money.ts            # All paise math helpers
+│   │   ├── settle.ts           # Debt simplification algorithm
+│   │   ├── balance.ts          # Net balance computation
+│   │   ├── recurrence.ts       # Recurring txn materialization
+│   │   └── budget.ts           # Budget limit + carry-over logic
+│   ├── components/             # Shared UI components
+│   └── constants/
+│       └── categories.ts       # Default category list
+├── assets/
+└── app.json
+```
+
+-----
+
+## 6. Functional requirements
+
+### FR-1 Budget groups
+
+- FR-1.1 Create unlimited groups: name, icon (from icon picker), color (from palette).
+- FR-1.2 “Personal” group seeded on first launch.
+- FR-1.3 Add members to a group: pick from existing people or create a new person (name + color).
+- FR-1.4 Optional budget limits: any combination of daily/monthly/yearly.
+- FR-1.5 `carry_over` toggle: unspent budget from a period rolls into the next.
+- FR-1.6 Archive a group (hidden in main list, accessible via filter, all data retained).
+- FR-1.7 Delete a group (soft delete: `is_deleted = 1`; data retained for balance history).
+
+### FR-2 Transactions
+
+- FR-2.1 Two user-created kinds: `income` and `expense`. (`settlement` is system-created only — never shown in the add flow.)
+- FR-2.2 Required fields: amount, date (default today), category, at least one payer, shares. Optional: note, photo, tags.
+- FR-2.3 Custom categories per group. Default list seeded (§3). User can add/rename/delete.
+- FR-2.4 Recurring transactions: set frequency (daily/weekly/monthly/custom interval). Future instances materialize lazily when the relevant date range is viewed — not generated upfront. Editing a recurring txn prompts: “This instance only” or “This and all future.”
+- FR-2.5 Tags: free-text, prefixed with `#`. Used for cross-group filtering in Reports.
+- FR-2.6 Edit any transaction. Soft-delete (is_deleted = 1). Balances recompute automatically.
+
+### FR-3 Split engine
+
+- FR-3.1 **Split types:**
+  
+  |Type          |Behavior                                                          |
+  |--------------|------------------------------------------------------------------|
+  |Equal         |Total shared equally among selected members                       |
+  |Exact         |User enters exact paise amount per person                         |
+  |Percentage    |User enters % per person; must total 100%                         |
+  |Shares (ratio)|User enters ratio units (e.g. 2:1:1); auto-computes amounts       |
+  |Itemized      |Driven by line items (FR-4); shares computed from item assignments|
+- FR-3.2 Multiple payers per transaction: split the “who paid” side among any members.
+- FR-3.3 Exclude any member from a specific split without removing them from the group.
+- FR-3.4 **Invariant enforcement:** Save button is disabled until `Σ txn_payment == Σ txn_share`. A signed live remainder is shown (e.g. “₹50 unassigned” or “₹50 over-assigned”).
+- FR-3.5 Shares stored explicitly in `txn_share` at save time. Never recomputed later from the split type — the frozen amounts are the source of truth.
+- FR-3.6 **Paise rounding rule:** When dividing an amount that doesn’t divide evenly, the remainder paise go to the earliest-listed members one paise each. Final totals must sum to exactly the original amount. No paise created or lost.
+
+### FR-4 Itemized bill entry
+
+- FR-4.1 Add line items: name, qty (integer), unit price (paise). Running subtotal shown live.
+- FR-4.2 Add tax, tip, or discount: either a flat paise amount or a percentage of the subtotal. Applied proportionally across all items (affects per-item price for assignment math).
+- FR-4.3 Each line item is assigned to one or more members. A line item’s cost is split equally among its assignees (paise rounding per FR-3.6).
+- FR-4.4 Per-person running total updates live on every assignment change.
+- FR-4.5 **Quick-assign UX:** Tap a line item row → member avatar row appears below it. Tap avatar to assign/unassign. With many members, avatar row scrolls horizontally. Most recently used members float to the left.
+- FR-4.6 “Split the rest equally” button: assigns all currently-unassigned items equally across all group members.
+- FR-4.7 On confirm: line item assignments are collapsed into per-person `txn_share` amounts. Payers set on a separate step (same flow, next screen). Invariant check before final save.
+- FR-4.8 Attach a photo of the receipt (no OCR — manual entry only in v1).
+
+### FR-5 Debt simplification
+
+- FR-5.1 Compute net balance per member in scope (per-group or global across all groups).
+- FR-5.2 Apply greedy min-cash-flow algorithm (§8) to reduce to fewest settlements.
+- FR-5.3 **Settle-Up screen** shows a simple list: “Rahul pays GF ₹450”.
+- FR-5.4 “Mark as Paid” on a settlement creates a `settlement` txn (auditable history). Balances update immediately.
+- FR-5.5 **Global Settle-Up:** nets balances across ALL groups into the minimum cross-person payments. Entry point from the dashboard.
+
+### FR-6 Global dashboard
+
+- FR-6.1 Three tabs: **Today / This Month / This Year**
+- FR-6.2 “My Spending” = Σ my `txn_share` amounts in the selected period (not what I paid).
+- FR-6.3 Metrics shown: my income, my spending, net (income − spending), savings rate %.
+- FR-6.4 Category donut chart (my spending by category) + bar chart (spending over time — daily/weekly/monthly depending on tab).
+- FR-6.5 “You owe / you’re owed” total across all groups with a “Settle Up” button → global settle-up screen.
+- FR-6.6 Per-group budget health chips: group name + progress bar + color (green <80%, amber 80–100%, red >100%).
+
+### FR-7 Budget tracking and alerts
+
+- FR-7.1 Per-group limits (any combination of daily/monthly/yearly). Plus a separate **global personal limit** configurable in Settings — independent of any group, tracking only my shares.
+- FR-7.2 **Local notifications** when any limit hits 80% and 100%. Uses `expo-notifications`. Scheduled locally — no server.
+- FR-7.3 Budget progress bar on group card (groups list) and at the top of group detail.
+- FR-7.4 Carry-over: if enabled for a group, remaining budget from the prior period is added to the current period’s limit for comparison.
+
+### FR-8 Reports and export
+
+- FR-8.1 Per-group monthly summary: total income, total expense, net savings, top 3 categories by spend.
+- FR-8.2 Export transaction list as **CSV** (all fields) and **PDF** (formatted summary) via native share sheet (`expo-sharing`). Scoped to the current date filter.
+- FR-8.3 Date range filter (custom from/to dates) available in Reports.
+- FR-8.4 Year-in-review screen: total saved this year, biggest spending month, most-used category, biggest single expense.
+
+### FR-9 Sync `[v2 only — skip in v1]`
+
+- FR-9.1 Supabase email or Apple sign-in. Only required when sharing a group.
+- FR-9.2 Personal groups (is_shared = 0) never leave the device.
+- FR-9.3 Marking a group shared uploads group + all its txns to Supabase. Members linked by `remote_uid`.
+- FR-9.4 Invite by 6-character join code mapping to group id.
+- FR-9.5 Supabase Realtime channel per shared group; inbound changes merged into SQLite.
+- FR-9.6 Conflict rule: last-write-wins by `updated_at`. Soft-deletes always win over edits.
+- FR-9.7 Offline edits enqueue locally; flush on reconnect.
+
+-----
+
+## 7. Non-functional requirements
+
+|ID   |Requirement                                                                                                             |
+|-----|------------------------------------------------------------------------------------------------------------------------|
+|NFR-1|₹0 to build and run. No paid APIs, no ads, no subscriptions.                                                            |
+|NFR-2|v1 has zero network calls. Full functionality offline always.                                                           |
+|NFR-3|App launch → dashboard visible: <1s. Save transaction: <200ms. Settle-up computation: <100ms for up to 50 members.      |
+|NFR-4|Privacy: v1 data never leaves the device. v2 personal groups stay local.                                                |
+|NFR-5|Optional Face ID / Touch ID lock on app open via `expo-local-authentication`.                                           |
+|NFR-6|Dark mode supported. Accessible labels on all interactive elements. Min tap target 44pt. Dynamic font scaling respected.|
+|NFR-7|All money is integer paise. Float arithmetic is never used for money calculations.                                      |
+|NFR-8|No third-party analytics, crash reporting SDKs, or telemetry in v1.                                                     |
+
+-----
+
+## 8. Debt simplification algorithm (TypeScript)
+
+```ts
+// src/lib/settle.ts
+
+export type Settlement = {
+  from: string;   // person id (debtor)
+  to: string;     // person id (creditor)
+  amount: number; // paise
+};
+
+/**
+ * Given net balances per person (paise), returns the minimum set of
+ * payments to settle all debts.
+ *
+ * net[id] > 0 → this person is owed money (creditor)
+ * net[id] < 0 → this person owes money (debtor)
+ * net[id] = 0 → already settled (excluded)
+ *
+ * Algorithm: greedy — always match largest debtor with largest creditor.
+ * Not globally optimal (NP-hard) but near-optimal and correct at personal scale.
+ */
+export function simplify(net: Record<string, number>): Settlement[] {
+  const creditors = Object.entries(net)
+    .filter(([, v]) => v > 0)
+    .map(([id, v]) => ({ id, amt: v }))
+    .sort((a, b) => b.amt - a.amt);
+
+  const debtors = Object.entries(net)
+    .filter(([, v]) => v < 0)
+    .map(([id, v]) => ({ id, amt: -v }))
+    .sort((a, b) => b.amt - a.amt);
+
+  const result: Settlement[] = [];
+  let i = 0, j = 0;
+
+  while (i < debtors.length && j < creditors.length) {
+    const pay = Math.min(debtors[i].amt, creditors[j].amt);
+    if (pay > 0) {
+      result.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+    }
+    debtors[i].amt -= pay;
+    creditors[j].amt -= pay;
+    if (debtors[i].amt === 0) i++;
+    if (creditors[j].amt === 0) j++;
+  }
+
+  return result;
+}
+
+/**
+ * Compute net per person from raw txn data in scope.
+ * scope = array of { payments: {personId, amount}[], shares: {personId, amount}[] }
+ */
+export function computeNet(
+  txns: Array<{
+    payments: Array<{ personId: string; amount: number }>;
+    shares: Array<{ personId: string; amount: number }>;
+  }>
+): Record<string, number> {
+  const net: Record<string, number> = {};
+  for (const txn of txns) {
+    for (const p of txn.payments) {
+      net[p.personId] = (net[p.personId] ?? 0) + p.amount;
+    }
+    for (const s of txn.shares) {
+      net[s.personId] = (net[s.personId] ?? 0) - s.amount;
+    }
+  }
+  return net;
+}
+```
+
+-----
+
+## 9. Paise math helpers
+
+```ts
+// src/lib/money.ts
+
+/** Format paise as ₹ string: 150050 → "₹1,500.50" */
+export function formatRupees(paise: number): string {
+  return '₹' + (paise / 100).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Parse a user-typed rupee string to paise. "1500.50" → 150050 */
+export function parseToPaise(input: string): number {
+  const n = parseFloat(input.replace(/[^0-9.]/g, ''));
+  if (isNaN(n)) return 0;
+  return Math.round(n * 100);
+}
+
+/**
+ * Split `total` paise equally among `n` people.
+ * Returns array of length n summing to exactly total.
+ * Remainder paise go to earliest indices.
+ */
+export function splitEqual(total: number, n: number): number[] {
+  if (n === 0) return [];
+  const base = Math.floor(total / n);
+  const remainder = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+/**
+ * Apply percentage splits to a total.
+ * percentages must sum to 100 (integers, e.g. [50, 30, 20]).
+ * Returns amounts summing to exactly total.
+ */
+export function splitByPercent(total: number, percentages: number[]): number[] {
+  const raw = percentages.map(p => Math.floor((total * p) / 100));
+  const assigned = raw.reduce((a, b) => a + b, 0);
+  let remainder = total - assigned;
+  return raw.map((v, i) => {
+    if (remainder > 0) { remainder--; return v + 1; }
+    return v;
+  });
+}
+```
+
+-----
+
+## 10. Key UX flows
+
+### Flow A — Quick expense (solo or split)
+
+1. FAB → Quick Expense (or Income)
+1. Enter amount (rupee input → converted to paise on save)
+1. Pick category, date (default today), optional note/photo/tags
+1. If expense: payer defaults to “me”. Tap to change or add co-payers.
+1. Tap “Split” → pick split type → assign members. Live remainder shown.
+1. Save (disabled until invariant met) → txn appears immediately in group + dashboard.
+
+### Flow B — Itemized bill (restaurant, grocery, any large multi-item bill)
+
+1. FAB → Itemized Bill
+1. Add line items: name, qty, unit price. Subtotal shown live.
+1. Add tax/tip/discount (flat or %).
+1. Tap each item → quick-assign: tap member avatar(s) to assign. Per-person totals update live.
+1. Tap “Split the rest equally” for any unassigned items.
+1. Next screen: set payer(s).
+1. Review: per-person totals, payer amounts, invariant status.
+1. Save (blocked until Σ paid == Σ share).
+
+### Flow C — Settle up (per group or global)
+
+1. Group Detail → Balances tab → “Settle Up” OR Dashboard → global settle-up.
+1. Simplified payment list shown: “You pay GF ₹250”, “Rahul pays you ₹1,200”.
+1. Tap “Mark as Paid” on any row → creates a `settlement` txn → balance updates to 0.
+1. Settlement history visible in txn list (kind = settlement).
+
+### Flow D — Edit recurring transaction
+
+1. Tap any recurring txn → Edit.
+1. Prompt: “Edit this instance only” or “Edit this and all future instances.”
+1. “This instance”: saves a new one-off txn for this date with override values; recurrence continues for future dates.
+1. “All future”: updates recur_ fields on the original; past materialized instances unchanged.
+
+-----
+
+## 11. Edge cases (must handle — these are where bugs live)
+
+|Case                                              |Required behavior                                                                                                                                                       |
+|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|`Σ paid ≠ Σ share` at save                        |Save button disabled. Show signed remainder in red. Highlight the unbalanced side.                                                                                      |
+|Percentage split ≠ 100%                           |Save blocked. Show delta (e.g. “3% unassigned”).                                                                                                                        |
+|Zero-amount split member                          |Allowed (e.g. a member excluded but still in the group). Store 0 in txn_share.                                                                                          |
+|Paise rounding on equal split                     |Use `splitEqual()` helper. Largest-index members get the floor, earliest get the ceiling. Sum must be exact.                                                            |
+|Member removed from group with open balance       |Block removal. Show: “Settle up with [name] first.” Allow force-remove only after showing the outstanding amount.                                                       |
+|Deleting a txn that was already settled           |Allowed. Soft-delete it. Recompute balances. The settlement txn remains; net may become non-zero again (user must re-settle).                                           |
+|Editing the amount of a split txn                 |Re-open split screen with old split type pre-filled. User must rebalance and re-save.                                                                                   |
+|Recurring txn in a date range query               |Materialize instances lazily: compute all dates between query start and end using recur_freq + recur_interval + recur_end, yield virtual txn rows. Do not persist these.|
+|Income in a shared group                          |Counts to group income total. Counts to the payer’s personal income. Not split — no shares for income txns (txn_share empty for income).                                |
+|Global budget vs group budget                     |Completely independent. Both can fire notifications. Neither overrides the other.                                                                                       |
+|Self-only transaction (no split)                  |txn_payment = [{me, amount}], txn_share = [{me, amount}]. Invariant trivially holds.                                                                                    |
+|Multiple payers exact amounts don’t cover total   |Same invariant: Σ paid must equal Σ share = bill total. Enforce on payer side too.                                                                                      |
+|Large group itemized bill (10+ members, 20+ items)|Line item list and avatar row must both be virtualized (FlatList). No jank.                                                                                             |
+|First launch                                      |Seed DB. Show empty Personal group. Prompt to add first transaction.                                                                                                    |
+|Budget carry-over calculation                     |`remaining = limit + unused_prior_period`. Only compute if carry_over = 1. Cap carry-over at one period back (don’t accumulate indefinitely).                           |
+
+-----
+
+## 12. App screens reference
+
+```
+(tabs)/index          → Dashboard (Today/Month/Year tabs, owe/owed, group health)
+(tabs)/groups         → Group list (cards with health indicator, FAB to create)
+(tabs)/reports        → Reports (date filter, per-group summary, export)
+(tabs)/settings       → Settings
+
+group/[id]            → Group Detail
+  → /transactions     → Transaction list (filterable)
+  → /balances         → Net balances + Settle Up button
+  → /budget           → Budget progress + limit config
+  → /members          → Member list, add/remove
+
+group/[id]/settle     → Settle Up screen (simplified payments)
+
+add/quick             → Quick Expense / Income form
+add/itemized          → Itemized Bill (items → assign → payers → review → save)
+```
+
+-----
+
+## 13. v1 milestone build order
+
+Build in this exact order — each milestone is independently testable:
+
+|Milestone|What to build                                                             |Done when                                         |
+|---------|--------------------------------------------------------------------------|--------------------------------------------------|
+|**M1**   |DB schema + seed + person/group CRUD + navigation shell                   |Can create a group, add members, see empty screens|
+|**M2**   |Quick expense (no split), income, transaction list, soft-delete           |Can log a solo expense and see it in the list     |
+|**M3**   |Split engine: equal + exact + %, invariant enforcement, paise rounding    |Can split a bill, save is blocked if unbalanced   |
+|**M4**   |Balance computation + debt simplification + Settle Up flow                |Can see who owes whom and mark settled            |
+|**M5**   |Itemized bill entry: items, tax/tip, quick-assign, per-person totals      |Can enter a restaurant bill and assign items      |
+|**M6**   |Global dashboard: tabs, spending (share-based), charts, owe/owed          |Dashboard shows correct numbers across all groups |
+|**M7**   |Budget limits, carry-over, progress bars, local notifications             |Can set a monthly limit and get notified at 80%   |
+|**M8**   |Recurring transactions (lazy materialization), edit-instance vs all-future|Can set a monthly rent that auto-appears          |
+|**M9**   |Reports, CSV/PDF export, date filter, year-in-review                      |Can export a month’s transactions as CSV          |
+|**M10**  |Face ID lock, dark mode, accessibility pass, polish                       |App locks on background; looks good in dark mode  |
+
+-----
+
+## 14. Build and install guide (₹0, Mac)
+
+### Setup (one-time)
+
+```bash
+# Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Node
+brew install node
+
+# Install Expo and EAS CLIs
+npm install -g expo-cli eas-cli
+
+# Create project
+npx create-expo-app budgetsplit --template blank-typescript
+cd budgetsplit
+
+# Install dependencies
+npx expo install expo-sqlite expo-notifications expo-local-authentication \
+  expo-file-system expo-sharing expo-router \
+  @expo/vector-icons react-native-gifted-charts zustand date-fns
+```
+
+### Development (daily workflow)
+
+```bash
+npx expo start
+# Scan QR with iPhone camera → opens in Expo Go
+# Note: expo-sqlite and expo-local-authentication require a dev build (below)
+```
+
+### Dev build (needed for SQLite, Face ID — do this after M1)
+
+```bash
+# Connect iPhone via USB. Trust the Mac on the phone.
+npx expo run:ios
+# Builds and installs directly via Xcode using your free Apple ID.
+# Certificate lasts 7 days but Xcode re-signs on next run.
+```
+
+### Sideload for persistent personal use (AltStore method)
+
+```bash
+# 1. Build a release IPA
+eas build -p ios --profile preview
+# (EAS free tier: 30 builds/month, enough for personal use)
+
+# 2. Install AltServer on your Mac from altstore.io
+# 3. Connect iPhone via USB → Trust → AltServer installs AltStore on phone
+# 4. Open AltStore on phone → My Apps → + → select the downloaded .ipa
+# 5. Keep AltServer running + phone on same WiFi
+#    → AltStore auto-refreshes the 7-day signature in background
+```
+
+**Constraints on free Apple ID:**
+
+- Max 3 sideloaded apps at once (AltStore itself counts as 1)
+- Signature expires every 7 days → auto-refreshed over WiFi by AltStore when Mac is on
+- In practice: invisible if Mac stays on same WiFi. App keeps working.
+
+**Optional: Pay $99/yr for Apple Developer Program** → 365-day signing, no 3-app limit, no refresh needed.
+
+-----
+
+## 15. Out of scope (v1)
+
+- Bank / UPI account linking (requires paid APIs)
+- OCR receipt scanning (v3 candidate)
+- Multi-currency (v3 candidate)
+- Android or web
+- Live sync / multi-user (that is v2)
+- AI categorization or spend insights
+- Actual money transfer (this app tracks, not pays)
+- Group chat or comments (notes field is sufficient)
+
+-----
+
+## 16. Design system
+
+### 16.1 Design direction
+
+**Precision ledger.** This is a tool used in the moment — splitting a dinner bill, checking balances at a glance. The visual language comes from accounting: numbers are the hero, not illustrations or gradients. Every screen should feel like a well-kept ledger: dense where needed, quiet everywhere else. The one bold move is typographic — rupee amounts always render in a monospaced font, making the numbers feel exact and trustworthy. Everything else supports that.
+
+Not: another blue fintech app with card shadows and rounded everything.
+Not: dark mode with acid green accents.
+
+-----
+
+### 16.2 Color tokens
+
+```ts
+// src/constants/colors.ts
+
+export const colors = {
+  // Backgrounds
+  bg:         '#0F0F12',   // near-black with a hint of blue-grey, not pure black
+  bgCard:     '#18181F',   // card surface, slightly lifted
+  bgInput:    '#1E1E28',   // input fields
+  bgMuted:    '#24242F',   // dividers, muted surfaces
+
+  // Text
+  textPrimary:   '#F0EFE9',  // off-white, slightly warm — not harsh #FFFFFF
+  textSecondary: '#8B8A99',  // labels, placeholders
+  textMuted:     '#55546A',  // disabled, timestamps
+
+  // Accent — a single warm amber, used only on numbers and primary CTAs
+  accent:        '#F0A500',  // amber gold — comes from the idea of a coin, not a bank
+  accentMuted:   '#2A2210',  // amber at 10% for subtle backgrounds
+
+  // Semantic
+  income:    '#3ECF8E',    // green — but muted, not neon
+  expense:   '#F06060',    // red — same saturation level as income
+  settle:    '#7C6AF7',    // purple for settlement transactions
+
+  // Budget health
+  healthGreen:  '#3ECF8E',
+  healthAmber:  '#F0A500',
+  healthRed:    '#F06060',
+
+  // Borders
+  border:       '#2A2A38',
+  borderFocus:  '#F0A500',   // accent on focus
+};
+```
+
+-----
+
+### 16.3 Typography
+
+Two font roles only. Both available via `expo-google-fonts` (free, no license issues):
+
+|Role                    |Font                                    |Usage                                                                   |
+|------------------------|----------------------------------------|------------------------------------------------------------------------|
+|**Display / amounts**   |`SpaceMono_400Regular`                  |All ₹ amounts, balances, totals. Monospaced — numbers align, feel exact.|
+|**UI / everything else**|`Inter_400Regular` + `Inter_600SemiBold`|All labels, body text, buttons, nav.                                    |
+
+```ts
+// src/constants/typography.ts
+
+export const type = {
+  // Amount display — always SpaceMono
+  amountXL:   { fontFamily: 'SpaceMono_400Regular', fontSize: 36, letterSpacing: -0.5 },
+  amountLG:   { fontFamily: 'SpaceMono_400Regular', fontSize: 24, letterSpacing: -0.3 },
+  amountMD:   { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  amountSM:   { fontFamily: 'SpaceMono_400Regular', fontSize: 14 },
+
+  // UI text — Inter
+  heading:    { fontFamily: 'Inter_600SemiBold',  fontSize: 20 },
+  subheading: { fontFamily: 'Inter_600SemiBold',  fontSize: 16 },
+  body:       { fontFamily: 'Inter_400Regular',   fontSize: 15 },
+  label:      { fontFamily: 'Inter_400Regular',   fontSize: 13 },
+  caption:    { fontFamily: 'Inter_400Regular',   fontSize: 11 },
+  button:     { fontFamily: 'Inter_600SemiBold',  fontSize: 15 },
+};
+```
+
+Install:
+
+```bash
+npx expo install @expo-google-fonts/inter @expo-google-fonts/space-mono expo-font
+```
+
+-----
+
+### 16.4 Spacing and shape
+
+```ts
+// src/constants/layout.ts
+
+export const space = {
+  xs:  4,
+  sm:  8,
+  md:  16,
+  lg:  24,
+  xl:  32,
+  xxl: 48,
+};
+
+export const radius = {
+  sm:  8,
+  md:  12,
+  lg:  16,
+  pill: 999,
+};
+
+export const layout = {
+  screenPaddingH: 16,   // horizontal padding on all screens
+  cardPadding:    16,
+  tabBarHeight:   64,
+  headerHeight:   56,
+};
+```
+
+-----
+
+### 16.5 Core components (spec for Claude Code to implement)
+
+#### `<AmountText>`
+
+Renders any paise value as a formatted ₹ string using SpaceMono. Color varies by sign.
+
+```tsx
+// positive → colors.income, negative → colors.expense, zero → colors.textPrimary
+// size prop: 'xl' | 'lg' | 'md' | 'sm' — maps to type.amountXL etc.
+<AmountText paise={150050} size="lg" />  // renders "₹1,500.50" in SpaceMono
+```
+
+#### `<Card>`
+
+Standard surface. `bgCard` background, `radius.md`, `space.md` padding, no shadow (shadows look cheap on dark backgrounds — use border instead: `border: 1px solid colors.border`).
+
+#### `<PrimaryButton>`
+
+Full width. `accent` background, `bg` text color (dark text on amber), `radius.md`, height 52, `type.button`.
+
+#### `<SecondaryButton>`
+
+Outlined. `border: 1px solid colors.border`, transparent background, `textPrimary` text.
+
+#### `<CategoryChip>`
+
+Small pill: category icon + name. `bgMuted` background, `textSecondary` text, `radius.pill`. Tappable.
+
+#### `<MemberAvatar>`
+
+Circle, 40px default (32px in compact rows). Shows initials or first letter. Color = person’s `avatar_color`. Used throughout split screens.
+
+#### `<BalanceRow>`
+
+One row in a settle-up list: left = from-person avatar + name, right = AmountText in accent color, center = arrow icon. Height 56px.
+
+#### `<BudgetBar>`
+
+Full-width progress bar. Track = `bgMuted`, fill = health color (green/amber/red). Height 4px. No rounded ends on the track — flat, ledger-like.
+
+#### `<TransactionRow>`
+
+Category icon circle (left) + name + note (center) + amount (right, SpaceMono). Height 64px. Swipe-left to soft-delete.
+
+#### `<FAB>` (Floating Action Button)
+
+Bottom-right, above tab bar. `accent` background, `+` icon in `bg` color. 56px circle. Tap → bottom sheet with: “Expense”, “Income”, “Itemized Bill”.
+
+-----
+
+### 16.6 Screen-by-screen layout
+
+#### Dashboard
+
+```
+┌─────────────────────────────┐
+│  BudgetSplit     [avatar]   │  header, no border
+├─────────────────────────────┤
+│  [Today] [Month] [Year]     │  tab row, pill style, accent on active
+├─────────────────────────────┤
+│                             │
+│     My spending             │  label: textSecondary, type.label
+│     ₹12,450.00              │  AmountText size=xl, textPrimary
+│     of ₹30,000 budget       │  label: textMuted
+│     ████████░░░░ 41%        │  BudgetBar (green)
+│                             │
+│  Income ₹45,000  Net +₹...  │  two-column stat row, amountMD
+├─────────────────────────────┤
+│  Spending by category       │  subheading
+│  [donut chart — compact]    │  max height 180px
+├─────────────────────────────┤
+│  You owe ₹450 · Owed ₹1200  │  tap → global settle up
+├─────────────────────────────┤
+│  Groups                     │  subheading
+│  [Personal]  ████  ₹8,200   │  group health chips, horizontal scroll
+│  [Me & GF]   ████  ₹4,250   │
+└─────────────────────────────┘
+```
+
+#### Group Detail (Transactions tab)
+
+```
+┌─────────────────────────────┐
+│  ← Me & GF          [•••]  │
+│  ████████████░░ ₹8,200/₹15k │  BudgetBar below header
+├─────────────────────────────┤
+│  [Txns] [Balances] [Budget] │  segmented control
+├─────────────────────────────┤
+│  Today                      │  date section header, textMuted
+│  🍕 Dinner at Bikanervala   │  TransactionRow
+│     Note text        -₹500  │
+│  🛒 Groceries               │
+│     Sarojini market  -₹800  │
+│  Yesterday                  │
+│  ⛽ Fuel             -₹600  │
+└─────────────────────────────┘
+```
+
+#### Itemized Bill Entry
+
+```
+┌─────────────────────────────┐
+│  ← New Bill                 │
+│  Subtotal        ₹1,840.00  │  running total, amountLG, accent color
+├─────────────────────────────┤
+│  [+] Add item               │  inline input row at top: name | qty | price
+├─────────────────────────────┤
+│  Paneer Butter Masala  ×2   │
+│  ₹320.00  [Prem] [GF]      │  assigned avatars shown inline
+│                             │
+│  Dal Makhani           ×1   │
+│  ₹220.00  [—unassigned—]   │  red tint when unassigned
+│                             │
+│  Garlic Naan           ×4   │
+│  ₹160.00  [Prem] [GF]      │
+├─────────────────────────────┤
+│  + Tax 5%    + Tip  [Split] │  action row
+├─────────────────────────────┤
+│  Prem   ₹740.00             │  per-person footer, amountMD, SpaceMono
+│  GF     ₹740.00             │
+│  ⚠ ₹360 unassigned         │  shown in expense red until resolved
+└─────────────────────────────┘
+```
+
+#### Settle Up
+
+```
+┌─────────────────────────────┐
+│  ← Settle Up  Me & GF      │
+│  2 payments needed          │  textSecondary
+├─────────────────────────────┤
+│  [P] Prem → [G] GF          │
+│              ₹450.00  [Paid]│  BalanceRow, accent amount, pill button
+├─────────────────────────────┤
+│  [R] Rahul → [P] Prem       │
+│            ₹1,200.00  [Paid]│
+└─────────────────────────────┘
+```
+
+-----
+
+### 16.7 Motion and interaction
+
+- **Transitions:** React Navigation default slide (iOS feel). No custom page transitions — they add jank and look AI-generated.
+- **Save feedback:** On successful save, the FAB briefly pulses (scale 1 → 1.1 → 1, 200ms, `Animated.spring`). Transaction row slides in at the top of the list.
+- **Swipe to delete:** `react-native-gesture-handler` swipe left on TransactionRow → reveals red delete zone. Single swipe = soft delete.
+- **Balance number update:** When a settlement is marked paid, the amount animates to ₹0.00 (cross-fade, 300ms). Not a bounce — a ledger closing.
+- **Everything else:** no animation. Deliberately still. Motion is used only where it communicates a state change.
+
+-----
+
+### 16.8 Empty states
+
+Every empty list has two elements only: a short factual label and one action button. No illustrations, no emoji, no motivational copy.
+
+|Screen             |Empty label                    |Action              |
+|-------------------|-------------------------------|--------------------|
+|Dashboard (no txns)|“No transactions yet”          |“Add expense”       |
+|Group transactions |“Nothing logged in [Group]”    |“Add expense”       |
+|Settle Up          |“All settled up”               |— (no action needed)|
+|Reports            |“No transactions in this range”|“Change dates”      |
+
+-----
+
+### 16.9 Error and validation states
+
+- Unbalanced split: red signed remainder below the split row. “₹50 over-assigned” or “₹50 unassigned”. Save button stays grey/disabled.
+- Empty required field: field border turns `expense` red on blur. No modal alerts for validation — inline only.
+- Delete confirmation: bottom sheet (not alert dialog). “Delete this transaction?” with two buttons: “Delete” (red text) and “Cancel”. No destructive action via an alert.
+- Failed save (DB error): toast at bottom, `bgCard` background, `expense` left border. “Couldn’t save. Try again.” Auto-dismisses in 3s.
+
+-----
+
+### 16.10 Tab bar
+
+Four tabs. No labels — icons only (with accessibility labels set). Active icon fills with `accent` color; inactive = `textMuted`.
+
+|Tab      |Icon         |Screen         |
+|---------|-------------|---------------|
+|Dashboard|`home`       |Global overview|
+|Groups   |`layers`     |Group list     |
+|Reports  |`bar-chart-2`|Reports        |
+|Settings |`settings`   |Settings       |
+
+FAB sits centered above the tab bar, not inside it. It is not a fifth tab.
