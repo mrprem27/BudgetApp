@@ -68,6 +68,23 @@ export function SettleSheet({ visible, from, to, outstanding, onClose, onConfirm
         {over ? `Can't exceed the ${formatRupees(outstanding)} outstanding` : `Outstanding: ${formatRupees(outstanding)}`}
       </Text>
 
+      {/* Before → after balance preview, so the impact is obvious. */}
+      {from && to && valid && (
+        <View style={styles.preview}>
+          <View style={styles.previewCol}>
+            <Text style={styles.previewLabel}>Now</Text>
+            <Text style={styles.previewBefore}>{from.name} owes {formatRupees(outstanding)}</Text>
+          </View>
+          <Feather name="arrow-right" size={16} color={colors.textMuted} />
+          <View style={styles.previewCol}>
+            <Text style={styles.previewLabel}>After</Text>
+            <Text style={[styles.previewAfter, { color: outstanding - paise <= 0 ? colors.income : colors.textPrimary }]}>
+              {outstanding - paise <= 0 ? 'Settled up' : `owes ${formatRupees(outstanding - paise)}`}
+            </Text>
+          </View>
+        </View>
+      )}
+
       <PrimaryButton label="Record Payment" onPress={() => onConfirm(paise)} disabled={!valid} />
     </SheetModal>
   );
@@ -82,4 +99,10 @@ const styles = StyleSheet.create({
   rupee: { ...type.amountLG, color: colors.textMuted },
   amountInput: { ...type.amountLG, color: colors.textPrimary, flex: 1, paddingVertical: space.md, paddingLeft: space.xs },
   hint: { ...type.caption, color: colors.textMuted },
+  preview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md },
+  previewCol: { flex: 1, gap: 2 },
+  previewLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  previewBefore: { ...type.label, color: colors.textSecondary },
+  previewAfter: { ...type.label, fontFamily: 'Inter_600SemiBold' },
 });
+
