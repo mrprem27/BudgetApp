@@ -14,6 +14,7 @@ import { seedIfNeeded } from '../src/db/seed';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/LockGate';
 import { OnboardingGate } from '../src/components/OnboardingGate';
+import { PrivacyScreen } from '../src/components/PrivacyScreen';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -74,6 +75,7 @@ export default function RootLayout() {
             </OnboardingGate>
           </LockGate>
         </SQLiteProvider>
+        <PrivacyScreen />
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

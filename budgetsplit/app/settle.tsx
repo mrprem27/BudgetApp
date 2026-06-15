@@ -8,6 +8,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { EmptyState } from '../src/components/EmptyState';
 import { BalanceRow } from '../src/components/BalanceRow';
+import { SettleSheet } from '../src/components/SettleSheet';
 import { getGlobalNet } from '../src/db/queries/balances';
 import { getAllPersons, getMe } from '../src/db/queries/persons';
 import { getCommonGroupId } from '../src/db/queries/groups';
@@ -21,6 +22,7 @@ export default function GlobalSettleScreen() {
   const router = useRouter();
   const [net, setNet] = useState<Record<string, number>>({});
   const [persons, setPersons] = useState<Person[]>([]);
+  const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -64,7 +66,7 @@ export default function GlobalSettleScreen() {
                 if (!from || !to) return null;
                 return (
                   <View key={`${s.from}-${s.to}-${i}`} style={[styles.rowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                    <BalanceRow from={from} to={to} amount={s.amount} onPaid={() => markPaid(from, to, s.amount)} />
+                    <BalanceRow from={from} to={to} amount={s.amount} onPaid={() => setSettleTarget({ from, to, amount: s.amount })} />
                   </View>
                 );
               })}
@@ -74,6 +76,15 @@ export default function GlobalSettleScreen() {
           <EmptyState icon="check-circle" title="All settled up" body="You don't owe anyone and no one owes you." tint={colors.income} />
         )}
       </ScrollView>
+
+      <SettleSheet
+        visible={!!settleTarget}
+        from={settleTarget?.from ?? null}
+        to={settleTarget?.to ?? null}
+        outstanding={settleTarget?.amount ?? 0}
+        onClose={() => setSettleTarget(null)}
+        onConfirm={(amt) => { if (settleTarget) markPaid(settleTarget.from, settleTarget.to, amt); setSettleTarget(null); }}
+      />
     </View>
   );
 }

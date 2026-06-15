@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS person (
   name          TEXT NOT NULL,
   avatar_color  TEXT NOT NULL,
   is_me         INTEGER NOT NULL DEFAULT 0,
+  email         TEXT,
+  mobile        TEXT,
   remote_uid    TEXT
 );
 
@@ -48,6 +50,10 @@ CREATE TABLE IF NOT EXISTS txn (
   recur_end      INTEGER,
   recur_override_date INTEGER,
   recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
+  tz             TEXT,
+  lat            REAL,
+  lng            REAL,
+  place_label    TEXT,
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -123,6 +129,13 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN recur_state TEXT NOT NULL DEFAULT 'active'",
   // Budget v5: each category budget carries its own cadence.
   "ALTER TABLE category_budget ADD COLUMN cadence TEXT NOT NULL DEFAULT 'monthly'",
+  // v2: unique user identity + transaction metadata (timezone, optional location).
+  "ALTER TABLE person ADD COLUMN email TEXT",
+  "ALTER TABLE person ADD COLUMN mobile TEXT",
+  "ALTER TABLE txn ADD COLUMN tz TEXT",
+  "ALTER TABLE txn ADD COLUMN lat REAL",
+  "ALTER TABLE txn ADD COLUMN lng REAL",
+  "ALTER TABLE txn ADD COLUMN place_label TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -142,6 +155,10 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   // The seeded Personal group (oldest, name 'Personal') is the single-user space.
   await db.execAsync(
     "UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1);",
+  );
+  // Ensure the local user has a unique identifier (MVP default).
+  await db.execAsync(
+    "UPDATE person SET email='hello123@vortiqal.com' WHERE is_me=1 AND (email IS NULL OR email='');",
   );
   return db;
 }

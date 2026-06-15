@@ -15,8 +15,8 @@ export async function seedIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, ?)',
-      [meId, deviceName, '#4F46E5', 1],
+      'INSERT INTO person (id, name, avatar_color, is_me, email) VALUES (?, ?, ?, ?, ?)',
+      [meId, deviceName, '#4F46E5', 1, 'hello123@vortiqal.com'],
     );
 
     await db.runAsync(

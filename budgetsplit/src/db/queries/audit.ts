@@ -45,6 +45,7 @@ export async function logAudit(db: SQLite.SQLiteDatabase, entry: AuditInput): Pr
 
 export type AuditFilter = {
   groupId?: string;          // restrict to one group
+  entityId?: string;         // restrict to one entity (e.g. a single transaction)
   action?: AuditAction;
   entityType?: AuditEntityType;
   fromMs?: number;
@@ -59,6 +60,7 @@ export async function getAuditLog(
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (filter.groupId)    { where.push('group_id = ?');    args.push(filter.groupId); }
+  if (filter.entityId)   { where.push('entity_id = ?');   args.push(filter.entityId); }
   if (filter.action)     { where.push('action = ?');      args.push(filter.action); }
   if (filter.entityType) { where.push('entity_type = ?'); args.push(filter.entityType); }
   if (filter.fromMs)     { where.push('created_at >= ?'); args.push(filter.fromMs); }

@@ -8,6 +8,8 @@ export type Person = {
   name: string;
   avatar_color: string;
   is_me: number;
+  email: string | null;
+  mobile: string | null;
   remote_uid: string | null;
 };
 
@@ -43,7 +45,7 @@ export async function insertPerson(
     'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, 0)',
     [id, name, avatarColor],
   );
-  return { id, name, avatar_color: avatarColor, is_me: 0, remote_uid: null };
+  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null };
 }
 
 export async function updatePersonName(

@@ -17,8 +17,11 @@ import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
+import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { formatRupees } from '../../src/lib/money';
 import { AmountText } from '../../src/components/AmountText';
+import { BudgetBar } from '../../src/components/BudgetBar';
 import { SkeletonCard } from '../../src/components/Skeleton';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
@@ -58,6 +61,7 @@ export default function ReportsScreen() {
   const [month, setMonth] = useState(() => new Date());
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [summaries, setSummaries] = useState<GroupSummary[]>([]);
+  const [analyticsByGroup, setAnalyticsByGroup] = useState<Record<string, BudgetAnalytics>>({});
   const [yearIncome, setYearIncome] = useState(0);
   const [yearExpense, setYearExpense] = useState(0);
   const [yearTopCat, setYearTopCat] = useState('—');
@@ -77,11 +81,14 @@ export default function ReportsScreen() {
       const toMs = endOfMonth(month).getTime();
 
       const sums: GroupSummary[] = [];
+      const anMap: Record<string, BudgetAnalytics> = {};
       for (const g of grps) {
         const txns = await getTransactionsInRange(db, g.id, fromMs, toMs);
         sums.push(buildSummary(g, txns));
+        anMap[g.id] = await getBudgetAnalytics(db, g, month);
       }
       setSummaries(sums);
+      setAnalyticsByGroup(anMap);
 
       const yFrom = startOfYear(month).getTime();
       const yTo = endOfYear(month).getTime();
@@ -331,6 +338,35 @@ export default function ReportsScreen() {
                 </>
               )}
 
+              {(() => {
+                const an = analyticsByGroup[s.group.id];
+                if (!an || an.totalAllocated === 0) return null;
+                return (
+                  <>
+                    <View style={styles.sep} />
+                    <View style={styles.utilRow}>
+                      <Text style={styles.catTitle}>Budget used</Text>
+                      <Text style={styles.utilPct}>{an.utilizationPct ?? 0}%</Text>
+                    </View>
+                    <BudgetBar
+                      pct={an.utilizationPct}
+                      health={an.utilizationPct === null ? 'none' : an.utilizationPct >= 100 ? 'red' : an.utilizationPct >= 80 ? 'amber' : 'green'}
+                      height={6}
+                    />
+                    {an.recommendations.slice(0, 3).map(r => (
+                      <View key={r.id} style={styles.recRow}>
+                        <Feather
+                          name={r.icon}
+                          size={13}
+                          color={r.severity === 'warn' ? colors.expense : r.severity === 'good' ? colors.income : colors.textSecondary}
+                        />
+                        <Text style={styles.recRowText}>{r.text}</Text>
+                      </View>
+                    ))}
+                  </>
+                );
+              })()}
+
               {s.income === 0 && s.expense === 0 && (
                 <Text style={styles.emptyGroup}>No transactions this month</Text>
               )}
@@ -401,6 +437,10 @@ const styles = StyleSheet.create({
   catName: { ...type.body, color: colors.textPrimary },
   catAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.expense },
   emptyGroup: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingVertical: space.sm },
+  utilRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs },
+  utilPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
+  recRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs, marginTop: space.sm },
+  recRowText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 16 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: space.xl },
   emptyText: { ...type.body, color: colors.textSecondary },
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },

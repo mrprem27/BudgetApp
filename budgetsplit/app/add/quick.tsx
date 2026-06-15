@@ -8,6 +8,9 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { format, isSameDay } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -19,6 +22,7 @@ import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares }
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { CategoryPicker } from '../../src/components/CategoryPicker';
 import { SheetModal } from '../../src/components/SheetModal';
+import { DatePickerSheet } from '../../src/components/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/MemberAvatar';
 import { AmountText } from '../../src/components/AmountText';
 import { haptic } from '../../src/lib/haptics';
@@ -46,6 +50,8 @@ export default function QuickAddScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   const [showPayers, setShowPayers] = useState(false);
+  const [txnDate, setTxnDate] = useState(Date.now());
+  const [showDate, setShowDate] = useState(false);
   const [splitType, setSplitType] = useState<SplitType>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
@@ -71,6 +77,7 @@ export default function QuickAddScreen() {
           setSelectedGroupId(txn.group_id);
           await loadGroup(txn.group_id, meRow, txn.category);
           setKind(txn.kind === 'income' ? 'income' : 'expense');
+          setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
@@ -171,7 +178,7 @@ export default function QuickAddScreen() {
           id: editId!,
           groupId: selectedGroupId,
           kind,
-          date: Date.now(),
+          date: txnDate,
           category: selectedCategory!.name,
           note: note.trim() || undefined,
           payments: finalPayments,
@@ -190,16 +197,25 @@ export default function QuickAddScreen() {
         recurEnd = d.getTime();
       }
 
+      // Optional, user-controlled location capture (Settings → Privacy).
+      let place: { lat: number; lng: number; label: string | null } | null = null;
+      try {
+        if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
+      } catch { /* best-effort */ }
+
       await insertTxn(db, {
         groupId: selectedGroupId,
         kind,
         entryMode: 'quick',
-        date: Date.now(),
+        date: txnDate,
         category: selectedCategory!.name,
         note: note.trim() || undefined,
         recurFreq: recurEnabled ? recurFreq : undefined,
         recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
         recurEnd,
+        lat: place?.lat,
+        lng: place?.lng,
+        placeLabel: place?.label ?? undefined,
         payments: finalPayments,
         shares: finalShares,
       });
@@ -294,6 +310,14 @@ export default function QuickAddScreen() {
           placeholderTextColor={colors.textMuted}
           accessibilityLabel="Note"
         />
+
+        <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
+          <Feather name="calendar" size={16} color={colors.accent} />
+          <Text style={styles.dateText}>
+            {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'EEE, dd MMM yyyy')}
+          </Text>
+          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
 
         {!isEditing && (
         <View style={styles.recurRow}>
@@ -513,6 +537,8 @@ export default function QuickAddScreen() {
         </Pressable>
       </Modal>
 
+      <DatePickerSheet visible={showDate} value={txnDate} onClose={() => setShowDate(false)} onChange={setTxnDate} />
+
       {/* Paid by sheet — set one or more payers */}
       <SheetModal visible={showPayers} onClose={() => setShowPayers(false)} title="Who paid?">
         <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
@@ -570,6 +596,8 @@ const styles = StyleSheet.create({
   groupChipActive: { backgroundColor: colors.accent },
   groupChipText: { ...type.label, color: colors.textSecondary },
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
+  dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
   splitBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   splitBtnText: { ...type.body, color: colors.accent, flex: 1 },
   remainder: { ...type.label, color: colors.expense },

@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
@@ -13,6 +14,7 @@ import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
 import { EmptyState } from '../../../src/components/EmptyState';
 import { CategoryPicker } from '../../../src/components/CategoryPicker';
+import { SheetModal } from '../../../src/components/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
 import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
@@ -48,14 +50,18 @@ export default function BudgetEditorScreen() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
+  const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
   async function load() {
-    const [cats, budgets] = await Promise.all([
+    const [cats, budgets, dc] = await Promise.all([
       getCategoriesByFrequency(db, id),
       getCategoryBudgets(db, id),
+      AsyncStorage.getItem('default_cadence'),
     ]);
+    if (dc) setDefaultCadence(dc as BudgetCadence);
     setAllCategories(cats);
     setRows(budgets.filter(b => b.amount > 0).map(b => ({
       category: b.category, cadence: b.cadence, amount: (b.amount / 100).toString(),
@@ -68,7 +74,7 @@ export default function BudgetEditorScreen() {
 
   function addRow(name: string) {
     if (usedNames.has(name)) return;
-    setRows(prev => [...prev, { category: name, cadence: 'monthly', amount: '' }]);
+    setRows(prev => [...prev, { category: name, cadence: defaultCadence, amount: '' }]);
   }
   function setAmount(category: string, amount: string) {
     setRows(prev => prev.map(r => r.category === category ? { ...r, amount } : r));
@@ -78,7 +84,10 @@ export default function BudgetEditorScreen() {
     setRows(prev => prev.map(r => r.category === category ? { ...r, cadence } : r));
   }
   function removeRow(category: string) {
-    setRows(prev => prev.filter(r => r.category !== category));
+    Alert.alert(`Remove ${category} budget?`, 'It will no longer be tracked once you save.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setRows(prev => prev.filter(r => r.category !== category)) },
+    ]);
   }
 
   async function handleSave() {
@@ -138,19 +147,16 @@ export default function BudgetEditorScreen() {
                       <Feather name="x" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.cadenceRow}>
-                    {CADENCES.map(c => (
-                      <TouchableOpacity
-                        key={c.key}
-                        style={[styles.cadChip, r.cadence === c.key && styles.cadChipActive]}
-                        onPress={() => setCadence(r.category, c.key)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: r.cadence === c.key }}
-                      >
-                        <Text style={[styles.cadChipText, r.cadence === c.key && styles.cadChipTextActive]}>{c.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <TouchableOpacity
+                    style={styles.cadenceSelect}
+                    onPress={() => setCadenceSheetFor(r.category)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Cadence: ${CADENCES.find(c => c.key === r.cadence)?.label}`}
+                  >
+                    <Feather name="repeat" size={13} color={colors.textSecondary} />
+                    <Text style={styles.cadenceSelectText}>{CADENCES.find(c => c.key === r.cadence)?.label ?? 'Monthly'}</Text>
+                    <Feather name="chevron-down" size={14} color={colors.textMuted} />
+                  </TouchableOpacity>
                 </View>
               );
             })
@@ -172,6 +178,24 @@ export default function BudgetEditorScreen() {
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>
+
+      <SheetModal visible={!!cadenceSheetFor} onClose={() => setCadenceSheetFor(null)} title="How often?" scroll={false}>
+        {CADENCES.map(c => {
+          const active = cadenceSheetFor ? rows.find(r => r.category === cadenceSheetFor)?.cadence === c.key : false;
+          return (
+            <TouchableOpacity
+              key={c.key}
+              style={[styles.cadOption, active && styles.cadOptionActive]}
+              onPress={() => { if (cadenceSheetFor) setCadence(cadenceSheetFor, c.key); setCadenceSheetFor(null); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.cadOptionText, active && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{c.label}</Text>
+              {active && <Feather name="check" size={18} color={colors.accent} />}
+            </TouchableOpacity>
+          );
+        })}
+      </SheetModal>
     </View>
   );
 }
@@ -191,11 +215,11 @@ const styles = StyleSheet.create({
   amountWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 92 },
   rupee: { ...type.body, color: colors.textMuted },
   amountInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
-  cadenceRow: { flexDirection: 'row', gap: space.xs },
-  cadChip: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  cadChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  cadChipText: { ...type.caption, color: colors.textSecondary },
-  cadChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  cadenceSelect: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  cadenceSelectText: { ...type.caption, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
+  cadOptionActive: { backgroundColor: colors.accentMuted },
+  cadOptionText: { ...type.body, color: colors.textPrimary },
   addLabel: { ...type.label, color: colors.textSecondary },
   footer: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
 });

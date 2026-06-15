@@ -14,6 +14,9 @@ type Action = {
   icon: string;
   onPress: () => void;
   disabled?: boolean;
+  description?: string;
+  /** Tint for the icon circle (defaults to accent). */
+  tint?: string;
 };
 
 type Props = {
@@ -38,25 +41,28 @@ export function FAB({ actions }: Props) {
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
             <View style={styles.handle} />
-            {actions.map((a, i) => (
-              <React.Fragment key={a.label}>
-                {i > 0 && <View style={styles.divider} />}
+            {actions.map((a) => {
+              const tint = a.disabled ? colors.textMuted : (a.tint ?? colors.accent);
+              return (
                 <TouchableOpacity
+                  key={a.label}
                   style={[styles.action, a.disabled && styles.actionDisabled]}
                   disabled={a.disabled}
                   onPress={() => { haptic.light(); setOpen(false); a.onPress(); }}
                   accessibilityRole="button"
                   accessibilityLabel={a.label}
                 >
-                  <View style={styles.actionIcon}>
-                    <Feather name={a.icon as any} size={18} color={a.disabled ? colors.textMuted : colors.accent} />
+                  <View style={[styles.actionIcon, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
+                    <Feather name={a.icon as any} size={18} color={tint} />
                   </View>
-                  <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>
-                    {a.label}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>{a.label}</Text>
+                    {!!a.description && <Text style={styles.actionDesc}>{a.description}</Text>}
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
-              </React.Fragment>
-            ))}
+              );
+            })}
           </View>
         </Pressable>
       </Modal>
@@ -137,13 +143,11 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm + 2,
     paddingHorizontal: space.xs,
     borderRadius: radius.md,
-    minHeight: 52,
+    minHeight: 56,
   },
   actionIcon: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.bgElevated,
     borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
   actionDisabled: {
@@ -153,5 +157,10 @@ const styles = StyleSheet.create({
     ...type.body,
     color: colors.textPrimary,
     fontFamily: 'Inter_600SemiBold',
+  },
+  actionDesc: {
+    ...type.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
 });

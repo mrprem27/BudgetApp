@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
@@ -10,6 +10,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   startOfYear, endOfYear, format, eachDayOfInterval,
   eachWeekOfInterval, eachMonthOfInterval,
+  subDays, subMonths, subYears,
 } from 'date-fns';
 import { PieChart, BarChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
@@ -27,6 +28,7 @@ import { FadeIn } from '../../src/components/FadeIn';
 import { SkeletonCard } from '../../src/components/Skeleton';
 import { PressableScale } from '../../src/components/PressableScale';
 import { getBudgetUsage } from '../../src/lib/budget';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
 import { formatRupees } from '../../src/lib/money';
 
@@ -41,6 +43,17 @@ function getRange(tab: TabKey): { from: number; to: number } {
   }
 }
 
+function getPrevRange(tab: TabKey): { from: number; to: number } {
+  const now = new Date();
+  switch (tab) {
+    case 'today': { const d = subDays(now, 1);   return { from: startOfDay(d).getTime(), to: endOfDay(d).getTime() }; }
+    case 'month': { const d = subMonths(now, 1); return { from: startOfMonth(d).getTime(), to: endOfMonth(d).getTime() }; }
+    case 'year':  { const d = subYears(now, 1);  return { from: startOfYear(d).getTime(), to: endOfYear(d).getTime() }; }
+  }
+}
+
+const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
+
 const CHART_COLORS = [
   '#F0A500', '#3ECF8E', '#7C6AF7', '#F06060', '#60A5FA',
   '#FB923C', '#F472B6', '#34D399', '#A78BFA', '#8B8A99',
@@ -53,29 +66,23 @@ export default function DashboardScreen() {
   const { setPersons, setGroups } = useStore();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
+  const [prevSpending, setPrevSpending] = useState(0);
   const [income, setIncome] = useState(0);
   const [oweTotal, setOweTotal] = useState(0);
   const [owedTotal, setOwedTotal] = useState(0);
   const [groupHealth, setGroupHealth] = useState<Array<{ id: string; name: string; pct: number | null; health: 'green' | 'amber' | 'red' | 'none' }>>([]);
   const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
   const [barData, setBarData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
+  const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [meId, setMeId] = useState('');
   const groups = useStore(s => s.groups);
 
-  const firstLoad = useRef(true);
-
   async function load() {
     try {
       await loadInner();
     } finally {
-      // Let the skeleton breathe on the very first load only — focus
-      // refreshes (loading already false) stay instant.
-      if (firstLoad.current) {
-        firstLoad.current = false;
-        await new Promise(r => setTimeout(r, 450));
-      }
       setLoading(false);
     }
   }
@@ -112,6 +119,16 @@ export default function DashboardScreen() {
     setSpending(sp);
     setIncome(inc);
 
+    // Previous-period spending (my share) for period-over-period comparison.
+    const prev = getPrevRange(tab);
+    const prevTxns = await getTransactionsInRange(db, null, prev.from, prev.to);
+    let prevSp = 0;
+    for (const t of prevTxns) {
+      if (t.is_deleted || t.kind !== 'expense') continue;
+      prevSp += t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+    }
+    setPrevSpending(prevSp);
+
     const net = await getGlobalNet(db);
     const myNet = net[me.id] ?? 0;
     setOweTotal(myNet < 0 ? -myNet : 0);
@@ -124,6 +141,12 @@ export default function DashboardScreen() {
       }),
     );
     setGroupHealth(health);
+
+    // Budget rollup across all groups for the dashboard tiles.
+    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
+    let bAlloc = 0, bSpent = 0, over = 0, near = 0;
+    for (const a of analyticsAll) { bAlloc += a.totalAllocated; bSpent += a.totalSpent; over += a.overBudget.length; near += a.nearLimit.length; }
+    setBudgetSummary({ allocated: bAlloc, spent: bSpent, over, near });
 
     // Build pie chart data (spending by category)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -250,6 +273,20 @@ export default function DashboardScreen() {
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
           <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} />
+          {(spending > 0 || prevSpending > 0) && (() => {
+            const delta = spending - prevSpending;
+            const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
+            const up = delta > 0;
+            const color = delta === 0 ? colors.textMuted : up ? colors.expense : colors.income;
+            return (
+              <View style={styles.deltaRow}>
+                <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={color} />
+                <Text style={[styles.deltaText, { color }]}>
+                  {pct === null ? formatRupees(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
+                </Text>
+              </View>
+            );
+          })()}
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Income</Text>
@@ -267,6 +304,44 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
+
+        {/* Budget rollup tiles */}
+        {budgetSummary.allocated > 0 && (
+          <View style={styles.budgetCard}>
+            <View style={styles.budgetTiles}>
+              <View style={styles.budgetTile}>
+                <Text style={styles.budgetTileLabel}>Budget</Text>
+                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} />
+              </View>
+              <View style={styles.budgetTileDivider} />
+              <View style={styles.budgetTile}>
+                <Text style={styles.budgetTileLabel}>Spent</Text>
+                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} />
+              </View>
+              <View style={styles.budgetTileDivider} />
+              <View style={styles.budgetTile}>
+                <Text style={styles.budgetTileLabel}>Left</Text>
+                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} />
+              </View>
+            </View>
+            {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
+              <View style={styles.budgetFlags}>
+                {budgetSummary.over > 0 && (
+                  <View style={[styles.flagPill, { backgroundColor: '#3A1414' }]}>
+                    <Feather name="alert-triangle" size={12} color={colors.expense} />
+                    <Text style={[styles.flagText, { color: colors.expense }]}>{budgetSummary.over} over budget</Text>
+                  </View>
+                )}
+                {budgetSummary.near > 0 && (
+                  <View style={[styles.flagPill, { backgroundColor: colors.bgMuted }]}>
+                    <Feather name="clock" size={12} color={colors.healthAmber} />
+                    <Text style={[styles.flagText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Owe/Owed */}
         {(oweTotal > 0 || owedTotal > 0) && (
@@ -304,12 +379,17 @@ export default function DashboardScreen() {
                 )}
               />
               <View style={styles.legend}>
-                {pieData.slice(0, 5).map((d, i) => (
-                  <View key={i} style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-                    <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
-                  </View>
-                ))}
+                {(() => {
+                  const totalPie = pieData.reduce((s, d) => s + d.value, 0) || 1;
+                  return pieData.slice(0, 5).map((d, i) => (
+                    <View key={i} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: d.color }]} />
+                      <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
+                      <Text style={styles.legendPct}>{Math.round((d.value / totalPie) * 100)}%</Text>
+                      <Text style={styles.legendAmt}>{formatRupees(d.value)}</Text>
+                    </View>
+                  ));
+                })()}
               </View>
             </View>
           </View>
@@ -329,10 +409,17 @@ export default function DashboardScreen() {
               xAxisThickness={0}
               yAxisThickness={0}
               yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+              yAxisLabelPrefix="₹"
               xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
               noOfSections={3}
               barBorderRadius={3}
               isAnimated
+              focusBarOnPress
+              renderTooltip={(item: any) => (
+                <View style={styles.barTooltip}>
+                  <Text style={styles.barTooltipText}>₹{Number(item?.value ?? 0).toLocaleString('en-IN')}</Text>
+                </View>
+              )}
             />
           </View>
         )}
@@ -384,9 +471,10 @@ export default function DashboardScreen() {
 
       <FAB
         actions={[
-          { label: 'Expense', icon: 'minus-circle', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle',  onPress: () => router.push('/add/quick?kind=income') },
-          { label: 'Itemized Bill', icon: 'list', onPress: () => router.push('/add/itemized') },
+          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
+          { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/quick?kind=income') },
+          { label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between people', onPress: () => router.push('/add/transfer') },
+          { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') },
         ]}
       />
     </View>
@@ -405,10 +493,22 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   spendingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md },
   spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
+  deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: space.xs },
+  deltaText: { ...type.label },
+  barTooltip: { backgroundColor: colors.bgElevated, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, marginBottom: 4 },
+  barTooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md, gap: space.sm },
   stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  budgetCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetTiles: { flexDirection: 'row', alignItems: 'center' },
+  budgetTile: { flex: 1, alignItems: 'center', gap: 2 },
+  budgetTileLabel: { ...type.caption, color: colors.textMuted },
+  budgetTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  budgetFlags: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
+  flagPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.pill },
+  flagText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   balanceText: { ...type.body, color: colors.textSecondary, flex: 1 },
   settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
@@ -417,10 +517,12 @@ const styles = StyleSheet.create({
   pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 22, color: colors.textPrimary },
   pieCenterLabel: { ...type.caption, color: colors.textMuted },
-  legend: { flex: 1, gap: space.xs },
+  legend: { flex: 1, gap: space.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  legendPct: { ...type.caption, color: colors.textMuted, width: 34, textAlign: 'right' },
+  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: colors.textPrimary, width: 64, textAlign: 'right' },
   section: { marginBottom: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
   groupList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },

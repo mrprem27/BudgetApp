@@ -118,9 +118,9 @@ export default function GroupsScreen() {
 
       <FAB
         actions={[
-          { label: 'New Group', icon: 'plus-square', onPress: () => setShowCreate(true) },
-          { label: 'Expense', icon: 'minus-circle', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle',  onPress: () => router.push('/add/quick?kind=income') },
+          { label: 'New Group', icon: 'users', tint: colors.accent, description: 'Share expenses with others', onPress: () => setShowCreate(true) },
+          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
+          { label: 'Income',  icon: 'plus-circle', tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/quick?kind=income') },
         ]}
       />
 

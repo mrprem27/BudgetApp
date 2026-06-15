@@ -16,6 +16,8 @@ import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../src/lib/budget';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
+import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import { formatRupees } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
@@ -27,6 +29,7 @@ import { FAB } from '../../src/components/FAB';
 import { EmptyState } from '../../src/components/EmptyState';
 import { FilterBar } from '../../src/components/FilterBar';
 import { SheetModal } from '../../src/components/SheetModal';
+import { SettleSheet } from '../../src/components/SettleSheet';
 import { SettingsRow, settingsRowDivider } from '../../src/components/SettingsRow';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
@@ -36,6 +39,18 @@ type TabKey = 'transactions' | 'balances' | 'budget' | 'members';
 
 function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
+}
+
+function utilHealth(pct: number | null): 'green' | 'amber' | 'red' | 'none' {
+  if (pct === null) return 'none';
+  return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
+}
+
+function recBg(sev: 'warn' | 'info' | 'good'): string {
+  return sev === 'warn' ? '#3A1414' : sev === 'good' ? colors.accentMuted : colors.bgMuted;
+}
+function recColor(sev: 'warn' | 'info' | 'good'): string {
+  return sev === 'warn' ? colors.expense : sev === 'good' ? colors.income : colors.textSecondary;
 }
 
 function isRecurInstance(id: string): boolean {
@@ -73,8 +88,10 @@ export default function GroupDetailScreen() {
   const [net, setNet] = useState<Record<string, number>>({});
   const [budgetUsage, setBudgetUsage] = useState<any>(null);
   const [catStatus, setCatStatus] = useState<CategoryBudgetStatus[]>([]);
+  const [analytics, setAnalytics] = useState<BudgetAnalytics | null>(null);
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
+  const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -97,12 +114,14 @@ export default function GroupDetailScreen() {
     setNet(netMap);
 
     if (grp) {
-      const [usage, cs] = await Promise.all([
+      const [usage, cs, an] = await Promise.all([
         getBudgetUsage(db, grp, 'monthly'),
         getCategoryBudgetStatus(db, grp),
+        getBudgetAnalytics(db, grp),
       ]);
       setBudgetUsage(usage);
       setCatStatus(cs);
+      setAnalytics(an);
     }
   }
 
@@ -135,8 +154,8 @@ export default function GroupDetailScreen() {
       router.push(`/group/${id}/recurring`);
       return;
     }
-    if (txn.kind === 'settlement') return; // settlements aren't directly editable
-    router.push(`/add/quick?editId=${txn.id}&groupId=${id}`);
+    // Open the detail view (payer/who-added, splits, full edit history).
+    router.push(`/txn/${txn.id}`);
   }
 
   async function handleMarkPaid(from: Person, to: Person, amount: number) {
@@ -310,7 +329,7 @@ export default function GroupDetailScreen() {
                 if (!fromPerson || !toPerson) return null;
                 return (
                   <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => handleMarkPaid(fromPerson, toPerson, s.amount)} />
+                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => setSettleTarget({ from: fromPerson, to: toPerson, amount: s.amount })} />
                   </View>
                 );
               })}
@@ -331,6 +350,51 @@ export default function GroupDetailScreen() {
                   <Text style={styles.editLink}>Edit</Text>
                 </TouchableOpacity>
               </View>
+
+              {analytics && analytics.totalAllocated > 0 && (
+                <View style={styles.ovCard}>
+                  <View style={styles.ovTopRow}>
+                    <View>
+                      <Text style={styles.ovLabel}>Budget used</Text>
+                      <Text style={styles.ovSpent}>{formatRupees(analytics.totalSpent)}</Text>
+                      <Text style={styles.ovOf}>of {formatRupees(analytics.totalAllocated)}</Text>
+                    </View>
+                    <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
+                      {analytics.utilizationPct ?? 0}%
+                    </Text>
+                  </View>
+                  <View style={{ marginTop: space.md }}>
+                    <BudgetBar pct={analytics.utilizationPct} health={utilHealth(analytics.utilizationPct)} height={10} />
+                  </View>
+                  <View style={styles.ovStatsRow}>
+                    <View style={styles.ovStat}>
+                      <Text style={[styles.ovStatVal, { color: colors.expense }]}>{analytics.overBudget.length}</Text>
+                      <Text style={styles.ovStatLabel}>over</Text>
+                    </View>
+                    <View style={styles.ovStatDivider} />
+                    <View style={styles.ovStat}>
+                      <Text style={[styles.ovStatVal, { color: colors.healthAmber }]}>{analytics.nearLimit.length}</Text>
+                      <Text style={styles.ovStatLabel}>near limit</Text>
+                    </View>
+                    <View style={styles.ovStatDivider} />
+                    <View style={styles.ovStat}>
+                      <Text style={[styles.ovStatVal, { color: colors.income }]}>{analytics.onTrackCount}</Text>
+                      <Text style={styles.ovStatLabel}>on track</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {analytics && analytics.recommendations.length > 0 && (
+                <View style={styles.recList}>
+                  {analytics.recommendations.map(r => (
+                    <View key={r.id} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
+                      <Feather name={r.icon} size={15} color={recColor(r.severity)} />
+                      <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
               {CADENCE_SECTIONS.map(sec => {
                 const lines = catStatus.filter(c => c.cadence === sec.key);
@@ -390,10 +454,20 @@ export default function GroupDetailScreen() {
 
       <FAB
         actions={[
-          { label: 'Expense', icon: 'minus-circle', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
-          { label: 'Income', icon: 'plus-circle', onPress: () => router.push(`/add/quick?groupId=${id}&kind=income`) },
-          { label: 'Itemized Bill', icon: 'list', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
+          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
+          { label: 'Income', icon: 'plus-circle', tint: colors.income, description: 'Money received', onPress: () => router.push(`/add/quick?groupId=${id}&kind=income`) },
+          ...(isPersonal ? [] : [{ label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between members', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
+          { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
         ]}
+      />
+
+      <SettleSheet
+        visible={!!settleTarget}
+        from={settleTarget?.from ?? null}
+        to={settleTarget?.to ?? null}
+        outstanding={settleTarget?.amount ?? 0}
+        onClose={() => setSettleTarget(null)}
+        onConfirm={(amt) => { if (settleTarget) handleMarkPaid(settleTarget.from, settleTarget.to, amt); setSettleTarget(null); }}
       />
 
       {/* Group options menu */}
@@ -482,6 +556,9 @@ const styles = StyleSheet.create({
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   cadenceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
+  recList: { gap: space.sm, marginBottom: space.md },
+  recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
+  recText: { ...type.label, flex: 1, lineHeight: 18 },
   catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   catRow: { paddingVertical: space.md, gap: space.sm },
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

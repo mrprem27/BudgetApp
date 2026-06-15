@@ -20,6 +20,10 @@ export type Txn = {
   recur_end: number | null;
   recur_override_date: number | null;
   recur_state: 'active' | 'paused' | 'ended';
+  tz: string | null;
+  lat: number | null;
+  lng: number | null;
+  place_label: string | null;
   is_deleted: number;
   created_at: number;
   updated_at: number;
@@ -132,9 +136,16 @@ export type InsertTxnInput = {
   recurFreq?: 'daily' | 'weekly' | 'monthly' | 'custom';
   recurInterval?: number;
   recurEnd?: number;
+  lat?: number;
+  lng?: number;
+  placeLabel?: string;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
+
+function localTz(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; }
+}
 
 export async function insertTxn(
   db: SQLite.SQLiteDatabase,
@@ -147,13 +158,14 @@ export async function insertTxn(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
         input.recurFreq ?? null, input.recurInterval ?? null, input.recurEnd ?? null,
+        localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         now, now,
       ],
     );
