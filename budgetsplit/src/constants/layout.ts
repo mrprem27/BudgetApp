@@ -20,3 +20,32 @@ export const layout = {
   tabBarHeight:   64,
   headerHeight:   56,
 };
+
+/**
+ * Elevation presets tuned for the dark theme. On dark backgrounds a pure-black
+ * shadow reads as a soft halo around the card rather than a hard drop shadow,
+ * which is the current iOS look. `elevation` keeps Android in parity.
+ */
+export const shadow = {
+  sm: {
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 22,
+    elevation: 12,
+  },
+} as const;

@@ -1,6 +1,9 @@
 # BudgetSplit — iOS Budget & Split Expense App
 
-**Final Build Spec · v3.0 · For Claude Code**
+**Final Build Spec · v4.0 · For Claude Code**
+
+> ⚠️ **§18 (v4 Architecture Update) supersedes any conflicting rule earlier in this document.**
+> Read §18 first if there is any disagreement.
 
 > React Native (Expo) · SQLite local · offline-first · solo v1, multi-user v2
 > Developer: Prem (3+ years RN/MERN, no iOS environment set up yet)
@@ -1020,3 +1023,94 @@ const rows = await db.getAllAsync('SELECT * FROM txn WHERE group_id = ?', [group
 ```
 
 Use `useSQLiteContext()` hook inside components wrapped in `<SQLiteProvider>`. Do **not** use the legacy synchronous `openDatabase` / `transaction` API — it is deprecated.
+
+-----
+
+## 18. v4 Architecture Update (supersedes conflicting earlier rules)
+
+This section captures decisions made after the first build. Where it conflicts with §1–§17, **this section wins.**
+
+### 18.1 The "Personal" group is a special, single-user space
+
+- The seeded **Personal** group is marked `is_personal = 1`. There is exactly one.
+- **Personal can NEVER have other members.** No "Add member" / "Manage members" UI is shown for it. It always contains only `me`.
+- It is the home for solo budgeting — your own income, expenses, budgets, and recurring bills that involve nobody else.
+- **Only user-created groups** (`is_personal = 0`) can have multiple members and bill splitting.
+- The `Members` tab and the header `•••` (manage members) entry are **hidden** when `is_personal = 1`.
+- Personal cannot be archived or deleted.
+
+### 18.2 Recurring transactions are a first-class, managed entity
+
+A recurring transaction is **not** a throwaway flag — it is a managed rule with a lifecycle, owned by the context it was created in.
+
+**Storage:** the original `txn` row with `recur_freq` set IS the recurring rule (the "parent"). Materialized future instances stay ephemeral (§17.1). We add lifecycle state to the parent row:
+
+```sql
+ALTER TABLE txn ADD COLUMN recur_state TEXT NOT NULL DEFAULT 'active'
+  CHECK(recur_state IN ('active','paused','ended'));
+-- recur_start is the parent row's `date` (first occurrence).
+-- recur_end is the explicit end (NULL = open-ended until paused/ended).
+```
+
+**Lifecycle:**
+
+| State | Meaning | Materializes instances? |
+|---|---|---|
+| `active` | Running normally | Yes, from `date` up to query end (capped at `recur_end`) |
+| `paused` | Temporarily stopped, can resume | No (frozen — no new instances after pause) |
+| `ended` | Permanently stopped | No (instances only up to the end date) |
+
+- **Pause / Resume / End** actions available on each recurring rule.
+- **End now** sets `recur_state='ended'` and `recur_end = now`. Instances already in the past remain in history.
+- Every recurring rule has a visible **start date, frequency, interval, and end date** (or "Ongoing").
+
+**Ownership / scope:**
+- Created from a **group** → the recurring rule belongs to that group (`group_id` = that group). Shown in that group's **Recurring** section.
+- Created from **Personal / budget** context → `group_id` = Personal. No other users involved.
+- A dedicated **Recurring** section lists all rules for the current scope with their state, next occurrence, and lifecycle actions.
+
+### 18.3 Audit trail — complete history of changes
+
+Every mutation is recorded so the user can see what changed and when.
+
+```sql
+CREATE TABLE audit_log (
+  id          TEXT PRIMARY KEY,        -- uuid
+  entity_type TEXT NOT NULL,           -- 'txn' | 'group' | 'member' | 'budget' | 'recurring' | 'settlement'
+  entity_id   TEXT NOT NULL,           -- the affected row id
+  group_id    TEXT,                    -- scope for filtering (NULL = global/app-level)
+  action      TEXT NOT NULL,           -- 'created' | 'updated' | 'deleted' | 'settled' | 'paused' | 'resumed' | 'ended'
+  summary     TEXT NOT NULL,           -- human sentence: "Added expense ₹500 · Groceries"
+  amount      INTEGER,                 -- paise, when relevant
+  created_at  INTEGER NOT NULL         -- epoch ms
+);
+```
+
+- A helper `logAudit(db, entry)` is called inside the same `withTransactionAsync` as the mutation it records.
+- A **History** screen (accessible from Settings and from each group) lists audit entries newest-first.
+- **Filters** on the History screen: by group (all / a specific group), by action, by entity type, and by date range.
+
+### 18.4 Filters everywhere lists are long
+
+- **Transactions** (group detail) and **History** both get a filter bar: kind (expense/income/settlement), category, date range, and free-text search on note/category.
+- Filters use one shared, repeatable `<FilterBar>` component — no duplicated filter UIs.
+
+### 18.5 Balances: per-member totals + Simplify toggle (per group)
+
+- The Balances tab shows **two parts**:
+  1. **Per-member net** — a row per member: avatar, name, and their net (green "is owed ₹X" / red "owes ₹X" / muted "settled up").
+  2. **Settlements** — who pays whom.
+- A **"Simplify debts"** toggle lives in the Balances tab, **persisted per group** (`budget_group.simplify_debt`, default on).
+  - **On:** settlements use the greedy min-cash-flow `simplify()` (fewest payments).
+  - **Off:** settlements show the **raw** pairwise debts derived directly from each transaction (each unsettled obligation listed against the person actually owed), not netted across the group.
+- The toggle changes only the settlement list; per-member net totals are the same either way.
+
+```sql
+ALTER TABLE budget_group ADD COLUMN is_personal   INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE budget_group ADD COLUMN simplify_debt INTEGER NOT NULL DEFAULT 1;
+```
+
+### 18.6 Component discipline
+
+- Reuse repeatable components: `<EmptyState>`, `<FilterBar>`, `<SettingsRow>`, `<SegmentedTabs>`, `<SheetModal>`. Do not hand-roll the same row/sheet/empty layout per screen.
+- Every empty state uses `<EmptyState>` (icon circle + title + body + optional CTA) per AGENTS.md §2.

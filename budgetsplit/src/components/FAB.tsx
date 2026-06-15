@@ -2,9 +2,12 @@ import React, { useRef } from 'react';
 import {
   TouchableOpacity, View, Text, StyleSheet, Modal, Pressable, Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from './tokens';
+import { colors, type, space, radius, shadow, gradients } from './tokens';
 import { layout } from '../constants/layout';
+import { haptic } from '../lib/haptics';
 
 type Action = {
   label: string;
@@ -19,47 +22,67 @@ type Props = {
 
 export function FAB({ actions }: Props) {
   const [open, setOpen] = React.useState(false);
+  const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  function pulse() {
-    Animated.sequence([
-      Animated.spring(scaleAnim, { toValue: 1.1, useNativeDriver: true, speed: 30 }),
-      Animated.spring(scaleAnim, { toValue: 1,   useNativeDriver: true, speed: 30 }),
-    ]).start();
+  function pressIn() {
+    Animated.spring(scaleAnim, { toValue: 0.9, useNativeDriver: true, speed: 40 }).start();
+  }
+  function pressOut() {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 12 }).start();
   }
 
   return (
     <>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <View style={styles.sheet}>
-            {actions.map(a => (
-              <TouchableOpacity
-                key={a.label}
-                style={[styles.action, a.disabled && styles.actionDisabled]}
-                disabled={a.disabled}
-                onPress={() => { setOpen(false); a.onPress(); }}
-                accessibilityRole="button"
-                accessibilityLabel={a.label}
-              >
-                <Feather name={a.icon as any} size={20} color={a.disabled ? colors.textMuted : colors.textPrimary} />
-                <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>
-                  {a.label}
-                </Text>
-              </TouchableOpacity>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
+            <View style={styles.handle} />
+            {actions.map((a, i) => (
+              <React.Fragment key={a.label}>
+                {i > 0 && <View style={styles.divider} />}
+                <TouchableOpacity
+                  style={[styles.action, a.disabled && styles.actionDisabled]}
+                  disabled={a.disabled}
+                  onPress={() => { haptic.light(); setOpen(false); a.onPress(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={a.label}
+                >
+                  <View style={styles.actionIcon}>
+                    <Feather name={a.icon as any} size={18} color={a.disabled ? colors.textMuted : colors.accent} />
+                  </View>
+                  <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>
+                    {a.label}
+                  </Text>
+                </TouchableOpacity>
+              </React.Fragment>
             ))}
           </View>
         </Pressable>
       </Modal>
 
-      <Animated.View style={[styles.fab, { transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View
+        style={[
+          styles.fab,
+          { bottom: layout.tabBarHeight + insets.bottom + space.md, transform: [{ scale: scaleAnim }] },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.fabInner}
-          onPress={() => setOpen(true)}
+          activeOpacity={0.9}
+          onPressIn={pressIn}
+          onPressOut={pressOut}
+          onPress={() => { haptic.light(); setOpen(true); }}
           accessibilityRole="button"
           accessibilityLabel="Add transaction"
         >
-          <Feather name="plus" size={28} color={colors.bg} />
+          <LinearGradient
+            colors={gradients.brand}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.fabGradient}
+          >
+            <Feather name="plus" size={28} color="#fff" />
+          </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
     </>
@@ -69,21 +92,21 @@ export function FAB({ actions }: Props) {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    bottom: layout.tabBarHeight + space.md,
-    right: space.md,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
-    elevation: 6,
-    shadowColor: colors.accent,
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
+    right: space.lg,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: colors.coral,
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
     zIndex: 100,
   },
-  fabInner: {
-    flex: 1,
+  fabGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -96,16 +119,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
-    padding: space.lg,
-    gap: space.sm,
-    marginBottom: layout.tabBarHeight,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    ...shadow.lg,
+  },
+  divider: { height: 1, backgroundColor: colors.border, marginLeft: 40 + space.md },
+  handle: {
+    alignSelf: 'center',
+    width: 38, height: 4, borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: space.md,
   },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    padding: space.md,
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.xs,
     borderRadius: radius.md,
+    minHeight: 52,
+  },
+  actionIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
   },
   actionDisabled: {
     opacity: 0.5,
@@ -113,5 +152,6 @@ const styles = StyleSheet.create({
   actionLabel: {
     ...type.body,
     color: colors.textPrimary,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

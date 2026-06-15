@@ -19,6 +19,7 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { formatRupees } from '../../src/lib/money';
 import { AmountText } from '../../src/components/AmountText';
+import { SkeletonCard } from '../../src/components/Skeleton';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 
@@ -67,6 +68,7 @@ export default function ReportsScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const startedAt = Date.now();
     try {
       const grps = await getAllGroups(db);
       setGroups(grps);
@@ -107,6 +109,9 @@ export default function ReportsScreen() {
       const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
       setYearTopCat(topCat);
     } finally {
+      // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 450) await new Promise(r => setTimeout(r, 450 - elapsed));
       setLoading(false);
     }
   }, [db, month]);
@@ -124,7 +129,11 @@ export default function ReportsScreen() {
         const txns = await getTransactionsInRange(db, g.id, fromMs, toMs);
         for (const t of txns) {
           const date = format(new Date(t.date), 'yyyy-MM-dd');
-          const amt = (t.shares.reduce((s, sh) => s + sh.amount, 0) / 100).toFixed(2);
+          // Income has no shares — its amount lives on the payment side.
+          const paise = t.kind === 'income'
+            ? t.payments.reduce((s, p) => s + p.amount, 0)
+            : t.shares.reduce((s, sh) => s + sh.amount, 0);
+          const amt = (paise / 100).toFixed(2);
           const note = (t.note ?? '').replace(/"/g, '""');
           lines.push(`${date},"${g.name}","${t.category}",${t.kind},${amt},"${note}"`);
         }
@@ -275,7 +284,11 @@ export default function ReportsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: space.xl }} />
+        <View style={{ gap: space.md, marginTop: space.xs }}>
+          <SkeletonCard height={120} />
+          <SkeletonCard height={120} />
+          <SkeletonCard height={150} />
+        </View>
       ) : (
         <>
           {summaries.length === 0 && (

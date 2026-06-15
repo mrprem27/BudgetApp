@@ -1,18 +1,21 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Pressable, ScrollView, Alert,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  TextInput, Alert,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
-import { space, radius, layout } from '../../../src/constants/layout';
+import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup } from '../../../src/db/queries/persons';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/MemberAvatar';
+import { PrimaryButton } from '../../../src/components/PrimaryButton';
+import { SheetModal } from '../../../src/components/SheetModal';
 import { formatRupees } from '../../../src/lib/money';
 import type { Person } from '../../../src/db/queries/persons';
 
@@ -20,6 +23,7 @@ export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [members, setMembers] = useState<Person[]>([]);
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
@@ -91,136 +95,149 @@ export default function MembersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Members</Text>
       </View>
 
-      <FlatList
-        data={members}
-        keyExtractor={m => m.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <MemberAvatar name={item.name} color={item.avatar_color} size={40} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-              {net[item.id] !== undefined && net[item.id] !== 0 && (
-                <Text style={styles.netText}>
-                  {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
-                </Text>
-              )}
-            </View>
-            {!item.is_me && (
-              <TouchableOpacity onPress={() => handleRemove(item)} accessibilityLabel={`Remove ${item.name}`}>
-                <Feather name="user-minus" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-            )}
+      <ScrollView contentContainerStyle={styles.list}>
+        {members.length > 0 && (
+          <View style={styles.membersCard}>
+            {members.map((item, index) => (
+              <View key={item.id} style={[styles.row, index < members.length - 1 && styles.rowBorder]}>
+                <MemberAvatar name={item.name} color={item.avatar_color} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
+                  {net[item.id] !== undefined && net[item.id] !== 0 && (
+                    <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
+                      {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
+                    </Text>
+                  )}
+                </View>
+                {!item.is_me && (
+                  <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={10} accessibilityLabel={`Remove ${item.name}`}>
+                    <Feather name="user-minus" size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
           </View>
         )}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
-        ListFooterComponent={
-          <View style={styles.addButtons}>
-            <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityRole="button">
+
+        <View style={styles.addButtons}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityRole="button">
+            <View style={styles.addBtnIcon}>
               <Feather name="user-plus" size={16} color={colors.accent} />
-              <Text style={styles.addBtnText}>Add existing person</Text>
+            </View>
+            <Text style={styles.addBtnText}>Add existing person</Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowNew(true)} accessibilityRole="button">
+            <View style={styles.addBtnIcon}>
+              <Feather name="user" size={16} color={colors.accent} />
+            </View>
+            <Text style={styles.addBtnText}>Create new person</Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Add existing person sheet */}
+      <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add to group">
+        {nonMembers.length === 0
+          ? <Text style={styles.emptyText}>All existing people are already in this group.</Text>
+          : nonMembers.map(p => (
+            <TouchableOpacity key={p.id} style={styles.personRow} onPress={() => handleAdd(p.id)} accessibilityRole="button" accessibilityLabel={p.name}>
+              <MemberAvatar name={p.name} color={p.avatar_color} size={36} />
+              <Text style={styles.personName}>{p.name}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addBtn} onPress={() => setShowNew(true)} accessibilityRole="button">
-              <Feather name="plus" size={16} color={colors.accent} />
-              <Text style={styles.addBtnText}>Create new person</Text>
-            </TouchableOpacity>
-          </View>
+          ))
         }
-      />
+        <TouchableOpacity style={styles.newPersonLink} onPress={() => { setShowAdd(false); setShowNew(true); }} accessibilityRole="button">
+          <Text style={styles.newPersonText}>+ Create new person instead</Text>
+        </TouchableOpacity>
+      </SheetModal>
 
-      <Modal visible={showAdd} transparent animationType="slide" onRequestClose={() => setShowAdd(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowAdd(false)}>
-          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>Add to group</Text>
-            {nonMembers.length === 0
-              ? <Text style={styles.emptyText}>All existing people are already in this group.</Text>
-              : nonMembers.map(p => (
-                <TouchableOpacity key={p.id} style={styles.personRow} onPress={() => handleAdd(p.id)} accessibilityRole="button" accessibilityLabel={p.name}>
-                  <MemberAvatar name={p.name} color={p.avatar_color} size={36} />
-                  <Text style={styles.personName}>{p.name}</Text>
-                </TouchableOpacity>
-              ))
-            }
-            <TouchableOpacity style={styles.newPersonLink} onPress={() => { setShowAdd(false); setShowNew(true); }} accessibilityRole="button">
-              <Text style={styles.newPersonText}>+ Create new person instead</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal visible={showNew} transparent animationType="slide" onRequestClose={() => setShowNew(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowNew(false)}>
-          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>New person</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Name"
-              placeholderTextColor={colors.textMuted}
-              value={newName}
-              onChangeText={setNewName}
-              autoFocus
-            />
-            <Text style={styles.fieldLabel}>Avatar color</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.colorRow}>
-                {AVATAR_COLORS.map(c => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[styles.colorSwatch, { backgroundColor: c }, newColor === c && styles.colorSelected]}
-                    onPress={() => setNewColor(c)}
-                    accessibilityRole="button"
-                    accessibilityLabel={c}
-                  />
-                ))}
-              </View>
-            </ScrollView>
-            <TouchableOpacity
-              style={[styles.createBtn, !newName.trim() && { opacity: 0.4 }]}
-              onPress={handleCreateNew}
-              disabled={!newName.trim()}
-              accessibilityRole="button"
-            >
-              <Text style={styles.createBtnText}>Create & Add</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Create new person sheet */}
+      <SheetModal visible={showNew} onClose={() => setShowNew(false)} title="New person">
+        <TextInput
+          style={styles.input}
+          placeholder="Name"
+          placeholderTextColor={colors.textMuted}
+          value={newName}
+          onChangeText={setNewName}
+          autoFocus
+        />
+        <Text style={styles.fieldLabel}>Avatar color</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <View style={styles.colorRow}>
+            {AVATAR_COLORS.map(c => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.colorSwatch, { backgroundColor: c }, newColor === c && styles.colorSelected]}
+                onPress={() => setNewColor(c)}
+                accessibilityRole="button"
+                accessibilityLabel={c}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        <PrimaryButton label="Create & Add" onPress={handleCreateNew} disabled={!newName.trim()} />
+      </SheetModal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: layout.screenPaddingH, paddingTop: space.xl },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: layout.screenPaddingH },
   title: { ...type.heading, color: colors.textPrimary },
   list: { padding: layout.screenPaddingH, paddingBottom: 60 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  name: { ...type.body, color: colors.textPrimary },
-  netText: { ...type.caption, color: colors.textSecondary },
-  sep: { height: 1, backgroundColor: colors.border },
-  addButtons: { gap: space.sm, marginTop: space.lg },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: 8, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' },
-  addBtnText: { ...type.body, color: colors.accent },
+
+  membersCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    ...shadow.sm,
+    marginBottom: space.md,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  netText: { ...type.caption, marginTop: 2 },
+
+  addButtons: { gap: space.sm },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.sm,
+  },
+  addBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
+
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
+  handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.sm },
   sheetTitle: { ...type.subheading, color: colors.textPrimary },
   emptyText: { ...type.body, color: colors.textSecondary },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   personName: { ...type.body, color: colors.textPrimary },
   newPersonLink: { paddingTop: space.sm },
   newPersonText: { ...type.label, color: colors.accent },
+
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   colorRow: { flexDirection: 'row', gap: space.xs },
   colorSwatch: { width: 32, height: 32, borderRadius: 16 },
   colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
-  createBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  createBtnText: { ...type.button, color: colors.bg },
 });

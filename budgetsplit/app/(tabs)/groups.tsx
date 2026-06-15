@@ -1,28 +1,35 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity, Modal,
-  TextInput, Pressable, ScrollView, Alert,
+  View, Text, FlatList, StyleSheet, TouchableOpacity,
+  TextInput, ScrollView,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
+import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
 import { getAllGroups, insertGroup } from '../../src/db/queries/groups';
+import { PrimaryButton } from '../../src/components/PrimaryButton';
+import { SheetModal } from '../../src/components/SheetModal';
 import { getMe } from '../../src/db/queries/persons';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/BudgetBar';
 import { FAB } from '../../src/components/FAB';
+import { PressableScale } from '../../src/components/PressableScale';
+import { FadeIn } from '../../src/components/FadeIn';
+import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-const GROUP_ICONS = ['wallet', 'home', 'users', 'map', 'coffee', 'shopping-cart', 'heart', 'zap', 'star', 'briefcase'];
+const GROUP_ICONS = ['credit-card', 'home', 'users', 'map', 'coffee', 'shopping-cart', 'heart', 'zap', 'star', 'briefcase'];
 const GROUP_COLORS = ['#4F46E5', '#E53E3E', '#38A169', '#D69E2E', '#3182CE', '#553C9A', '#B83280', '#DD6B20', '#319795', '#2D3748'];
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { groups, setGroups } = useStore();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
@@ -50,41 +57,45 @@ export default function GroupsScreen() {
     const me = await getMe(db);
     if (!me) return;
     const group = await insertGroup(db, name.trim(), icon, color, [me.id]);
+    haptic.success();
     setShowCreate(false);
     setName('');
     await loadGroups();
     router.push(`/group/${group.id}`);
   }
 
-  function renderGroup({ item }: { item: BudgetGroup }) {
+  function renderGroup({ item, index }: { item: BudgetGroup; index: number }) {
     const h = health[item.id];
     return (
-      <TouchableOpacity
-        style={styles.groupCard}
-        onPress={() => router.push(`/group/${item.id}`)}
-        accessibilityRole="button"
-        accessibilityLabel={item.name}
-      >
-        <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
-          <Feather name={item.icon as any} size={20} color={item.color} />
-        </View>
-        <View style={styles.groupInfo}>
-          <Text style={styles.groupName}>{item.name}</Text>
-          {h && h.pct !== null && (
-            <View style={styles.budgetRow}>
-              <BudgetBar pct={h.pct} health={h.health} height={3} />
-              <Text style={styles.budgetPct}>{h.pct}%</Text>
-            </View>
-          )}
-        </View>
-        <Feather name="chevron-right" size={18} color={colors.textMuted} />
-      </TouchableOpacity>
+      <FadeIn delay={index * 55}>
+        <PressableScale
+          style={styles.groupCard}
+          onPress={() => router.push(`/group/${item.id}`)}
+          accessibilityLabel={item.name}
+        >
+          <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
+            <Feather name={item.icon as any} size={20} color={item.color} />
+          </View>
+          <View style={styles.groupInfo}>
+            <Text style={styles.groupName} numberOfLines={1}>{item.name}</Text>
+            {h && h.pct !== null && (
+              <View style={styles.budgetRow}>
+                <View style={{ flex: 1 }}>
+                  <BudgetBar pct={h.pct} health={h.health} height={5} />
+                </View>
+                <Text style={styles.budgetPct}>{h.pct}%</Text>
+              </View>
+            )}
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.textMuted} />
+        </PressableScale>
+      </FadeIn>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Groups</Text>
       </View>
 
@@ -93,10 +104,14 @@ export default function GroupsScreen() {
         keyExtractor={g => g.id}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
+        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No groups yet</Text>
+            <View style={styles.emptyIcon}>
+              <Feather name="users" size={28} color={colors.accent} />
+            </View>
+            <Text style={styles.emptyTitle}>No groups yet</Text>
+            <Text style={styles.emptyText}>Create a group to track shared expenses with friends, family or roommates.</Text>
           </View>
         }
       />
@@ -109,78 +124,65 @@ export default function GroupsScreen() {
         ]}
       />
 
-      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowCreate(false)}>
-          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>New Group</Text>
+      <SheetModal visible={showCreate} onClose={() => setShowCreate(false)} title="New Group">
+        <TextInput
+          style={styles.input}
+          placeholder="Group name"
+          placeholderTextColor={colors.textMuted}
+          value={name}
+          onChangeText={setName}
+          autoFocus
+        />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Group name"
-              placeholderTextColor={colors.textMuted}
-              value={name}
-              onChangeText={setName}
-              autoFocus
-            />
-
-            <Text style={styles.fieldLabel}>Icon</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.iconRow}>
-              {GROUP_ICONS.map(ic => (
-                <TouchableOpacity
-                  key={ic}
-                  style={[styles.iconOption, icon === ic && styles.iconSelected]}
-                  onPress={() => setIcon(ic)}
-                  accessibilityRole="button"
-                  accessibilityLabel={ic}
-                >
-                  <Feather name={ic as any} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.fieldLabel}>Color</Text>
-            <View style={styles.colorRow}>
-              {GROUP_COLORS.map(c => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSelected]}
-                  onPress={() => setColor(c)}
-                  accessibilityRole="button"
-                  accessibilityLabel={c}
-                />
-              ))}
-            </View>
-
+        <Text style={styles.fieldLabel}>Icon</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.iconRow} keyboardShouldPersistTaps="handled">
+          {GROUP_ICONS.map(ic => (
             <TouchableOpacity
-              style={[styles.createBtn, !name.trim() && { opacity: 0.4 }]}
-              onPress={handleCreate}
-              disabled={!name.trim()}
+              key={ic}
+              style={[styles.iconOption, icon === ic && styles.iconSelected]}
+              onPress={() => setIcon(ic)}
               accessibilityRole="button"
-              accessibilityLabel="Create group"
+              accessibilityLabel={ic}
             >
-              <Text style={styles.createBtnText}>Create Group</Text>
+              <Feather name={ic as any} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
             </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          ))}
+        </ScrollView>
+
+        <Text style={styles.fieldLabel}>Color</Text>
+        <View style={styles.colorRow}>
+          {GROUP_COLORS.map(c => (
+            <TouchableOpacity
+              key={c}
+              style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSelected]}
+              onPress={() => setColor(c)}
+              accessibilityRole="button"
+              accessibilityLabel={c}
+            />
+          ))}
+        </View>
+
+        <PrimaryButton label="Create Group" onPress={handleCreate} disabled={!name.trim()} />
+      </SheetModal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { padding: layout.screenPaddingH, paddingTop: space.xl },
-  title: { ...type.heading, color: colors.textPrimary },
+  header: { paddingHorizontal: layout.screenPaddingH, paddingBottom: layout.screenPaddingH },
+  title: { ...type.title, color: colors.textPrimary },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
-  groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  groupIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  groupInfo: { flex: 1, gap: 4 },
-  groupName: { ...type.body, color: colors.textPrimary },
-  budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  budgetPct: { ...type.caption, color: colors.textMuted },
-  sep: { height: 1, backgroundColor: colors.border },
-  empty: { alignItems: 'center', paddingVertical: space.xxl },
-  emptyText: { ...type.body, color: colors.textSecondary },
+  groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  groupInfo: { flex: 1, gap: 6 },
+  groupName: { ...type.subheading, color: colors.textPrimary },
+  budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
+  empty: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  emptyTitle: { ...type.subheading, color: colors.textPrimary },
+  emptyText: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md },
   sheetTitle: { ...type.subheading, color: colors.textPrimary },
@@ -192,6 +194,4 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   colorSwatch: { width: 32, height: 32, borderRadius: 16 },
   colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
-  createBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginTop: space.sm },
-  createBtnText: { ...type.button, color: colors.bg },
 });

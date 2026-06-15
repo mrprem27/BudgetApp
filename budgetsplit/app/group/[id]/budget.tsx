@@ -1,0 +1,201 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform,
+} from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { colors } from '../../../src/constants/colors';
+import { type } from '../../../src/constants/typography';
+import { space, radius, layout, shadow } from '../../../src/constants/layout';
+import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { PrimaryButton } from '../../../src/components/PrimaryButton';
+import { EmptyState } from '../../../src/components/EmptyState';
+import { CategoryPicker } from '../../../src/components/CategoryPicker';
+import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
+import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
+import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
+import { categoryVisual } from '../../../src/constants/categories';
+import { parseToPaise, formatRupees } from '../../../src/lib/money';
+import { haptic } from '../../../src/lib/haptics';
+import type { Category } from '../../../src/db/queries/categories';
+
+type Row = { category: string; cadence: BudgetCadence; amount: string };
+
+const CADENCES: { key: BudgetCadence; label: string }[] = [
+  { key: 'once', label: 'One-time' },
+  { key: 'daily', label: 'Daily' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
+];
+
+// Approximate monthly cost of a line, for a single comparable headline number.
+function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
+  switch (cadence) {
+    case 'daily':   return paise * 30;
+    case 'monthly': return paise;
+    case 'yearly':  return Math.round(paise / 12);
+    case 'once':    return 0; // not periodic
+  }
+}
+
+export default function BudgetEditorScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const db = useSQLiteContext();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useFocusEffect(useCallback(() => { load(); }, [id]));
+
+  async function load() {
+    const [cats, budgets] = await Promise.all([
+      getCategoriesByFrequency(db, id),
+      getCategoryBudgets(db, id),
+    ]);
+    setAllCategories(cats);
+    setRows(budgets.filter(b => b.amount > 0).map(b => ({
+      category: b.category, cadence: b.cadence, amount: (b.amount / 100).toString(),
+    })));
+  }
+
+  const monthlyApprox = rows.reduce((s, r) => s + monthlyEquivalent(r.cadence, parseToPaise(r.amount)), 0);
+  const usedNames = new Set(rows.map(r => r.category));
+  const available = allCategories.filter(c => !usedNames.has(c.name));
+
+  function addRow(name: string) {
+    if (usedNames.has(name)) return;
+    setRows(prev => [...prev, { category: name, cadence: 'monthly', amount: '' }]);
+  }
+  function setAmount(category: string, amount: string) {
+    setRows(prev => prev.map(r => r.category === category ? { ...r, amount } : r));
+  }
+  function setCadence(category: string, cadence: BudgetCadence) {
+    haptic.selection();
+    setRows(prev => prev.map(r => r.category === category ? { ...r, cadence } : r));
+  }
+  function removeRow(category: string) {
+    setRows(prev => prev.filter(r => r.category !== category));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const entries = rows
+        .map(r => ({ category: r.category, cadence: r.cadence, amount: parseToPaise(r.amount) }))
+        .filter(e => e.amount > 0);
+      await setCategoryBudgets(db, id, entries);
+      haptic.success();
+      router.back();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title="Set Budget" onBack={() => router.back()} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
+            <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
+            <Text style={styles.totalSub}>
+              {rows.length} {rows.length === 1 ? 'category' : 'categories'} · one-time not counted
+            </Text>
+          </View>
+
+          <Text style={styles.explain}>
+            Pick a cadence per category. Daily, monthly and yearly budgets roll forward on their own each period; one-time doesn't repeat.
+          </Text>
+
+          {rows.length > 0 ? (
+            rows.map(r => {
+              const vis = categoryVisual(r.category);
+              return (
+                <View key={r.category} style={styles.rowCard}>
+                  <View style={styles.rowTop}>
+                    <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+                      <Feather name={vis.icon as any} size={16} color={vis.color} />
+                    </View>
+                    <Text style={styles.rowName} numberOfLines={1}>{r.category}</Text>
+                    <View style={styles.amountWrap}>
+                      <Text style={styles.rupee}>₹</Text>
+                      <TextInput
+                        style={styles.amountInput}
+                        value={r.amount}
+                        onChangeText={v => setAmount(r.category, v)}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.textMuted}
+                        accessibilityLabel={`${r.category} budget`}
+                      />
+                    </View>
+                    <TouchableOpacity onPress={() => removeRow(r.category)} hitSlop={8} accessibilityLabel={`Remove ${r.category}`}>
+                      <Feather name="x" size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.cadenceRow}>
+                    {CADENCES.map(c => (
+                      <TouchableOpacity
+                        key={c.key}
+                        style={[styles.cadChip, r.cadence === c.key && styles.cadChipActive]}
+                        onPress={() => setCadence(r.category, c.key)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: r.cadence === c.key }}
+                      >
+                        <Text style={[styles.cadChipText, r.cadence === c.key && styles.cadChipTextActive]}>{c.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <EmptyState icon="target" title="No categories budgeted" body="Add a category below and choose how often its budget applies." />
+          )}
+
+          {available.length > 0 && (
+            <>
+              <Text style={styles.addLabel}>Add a category</Text>
+              <CategoryPicker categories={available} value={null} onChange={c => addRow(c.name)} />
+            </>
+          )}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+          <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+  totalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: 4, ...shadow.md },
+  totalLabel: { ...type.label, color: colors.textSecondary },
+  totalAmount: { ...type.amountXL, color: colors.accent },
+  totalSub: { ...type.caption, color: colors.textMuted },
+  explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  rowCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  rowName: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
+  amountWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 92 },
+  rupee: { ...type.body, color: colors.textMuted },
+  amountInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
+  cadenceRow: { flexDirection: 'row', gap: space.xs },
+  cadChip: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  cadChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
+  cadChipText: { ...type.caption, color: colors.textSecondary },
+  cadChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  addLabel: { ...type.label, color: colors.textSecondary },
+  footer: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
+});

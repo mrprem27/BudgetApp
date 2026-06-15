@@ -20,6 +20,28 @@ export async function getCategoriesForGroup(
   );
 }
 
+/**
+ * Categories ordered by how often they've been used in this group (most used
+ * first), then alphabetically. Unused categories still appear, at the end.
+ */
+export async function getCategoriesByFrequency(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<Category[]> {
+  return db.getAllAsync<Category>(
+    `SELECT c.* FROM category c
+       LEFT JOIN (
+         SELECT category, COUNT(*) AS cnt
+         FROM txn
+         WHERE group_id = ? AND is_deleted = 0
+         GROUP BY category
+       ) u ON u.category = c.name
+     WHERE c.group_id = ?
+     ORDER BY COALESCE(u.cnt, 0) DESC, c.name ASC`,
+    [groupId, groupId],
+  );
+}
+
 export async function insertCategory(
   db: SQLite.SQLiteDatabase,
   groupId: string,

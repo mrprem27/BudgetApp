@@ -2,6 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { materializeInstances } from '../../lib/recurrence';
+import { logAudit } from './audit';
+import { formatRupees } from '../../lib/money';
 
 export type Txn = {
   id: string;
@@ -17,6 +19,7 @@ export type Txn = {
   recur_interval: number | null;
   recur_end: number | null;
   recur_override_date: number | null;
+  recur_state: 'active' | 'paused' | 'ended';
   is_deleted: number;
   created_at: number;
   updated_at: number;
@@ -166,6 +169,29 @@ export async function insertTxn(
         [id, s.personId, s.amount],
       );
     }
+
+    const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
+    if (input.kind === 'settlement') {
+      await logAudit(db, {
+        entityType: 'settlement', entityId: id, groupId: input.groupId,
+        action: 'settled', amount: totalPaid,
+        summary: `Settled ${formatRupees(totalPaid)}`,
+      });
+    } else {
+      const label = input.kind === 'income' ? 'income' : 'expense';
+      await logAudit(db, {
+        entityType: 'txn', entityId: id, groupId: input.groupId,
+        action: 'created', amount: totalPaid,
+        summary: `Added ${label} ${formatRupees(totalPaid)} · ${input.category}`,
+      });
+      if (input.recurFreq) {
+        await logAudit(db, {
+          entityType: 'recurring', entityId: id, groupId: input.groupId,
+          action: 'created', amount: totalPaid,
+          summary: `New recurring ${input.recurFreq} ${label} · ${input.category}`,
+        });
+      }
+    }
   });
 
   return id;
@@ -218,18 +244,156 @@ export async function insertItemizedTxn(
         [id, s.personId, s.amount],
       );
     }
+
+    const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
+    await logAudit(db, {
+      entityType: 'txn', entityId: id, groupId: input.groupId,
+      action: 'created', amount: totalPaid,
+      summary: `Added itemized bill ${formatRupees(totalPaid)} · ${input.category}`,
+    });
   });
 
   return id;
 }
 
 export async function softDeleteTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
-  await db.runAsync(
-    'UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?',
-    [Date.now(), txnId],
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [Date.now(), txnId]);
+    if (row) {
+      const paid = await db.getFirstAsync<{ total: number }>(
+        'SELECT COALESCE(SUM(amount),0) as total FROM txn_payment WHERE txn_id=?', [txnId],
+      );
+      await logAudit(db, {
+        entityType: 'txn', entityId: txnId, groupId: row.group_id,
+        action: 'deleted', amount: paid?.total ?? null,
+        summary: `Deleted ${row.kind} · ${row.category}`,
+      });
+    }
+  });
+}
+
+/* ---- Recurring lifecycle (the parent txn row IS the recurring rule) ---- */
+
+export async function getRecurringForGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<TxnWithSplits[]> {
+  const rows = await db.getAllAsync<Txn>(
+    `SELECT * FROM txn
+     WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL
+     ORDER BY recur_state ASC, date DESC`,
+    [groupId],
   );
+  return Promise.all(rows.map(t => loadSplits(db, t)));
+}
+
+export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    // Pause = stop generating new instances from now; past instances remain.
+    await db.runAsync(
+      'UPDATE txn SET recur_state=?, recur_end=?, updated_at=? WHERE id=?',
+      ['paused', now, now, txnId],
+    );
+    if (row) {
+      await logAudit(db, {
+        entityType: 'recurring', entityId: txnId, groupId: row.group_id,
+        action: 'paused', summary: `Paused recurring · ${row.category}`,
+      });
+    }
+  });
+}
+
+export async function resumeRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    await db.runAsync(
+      'UPDATE txn SET recur_state=?, recur_end=NULL, updated_at=? WHERE id=?',
+      ['active', now, txnId],
+    );
+    if (row) {
+      await logAudit(db, {
+        entityType: 'recurring', entityId: txnId, groupId: row.group_id,
+        action: 'resumed', summary: `Resumed recurring · ${row.category}`,
+      });
+    }
+  });
+}
+
+export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    await db.runAsync(
+      'UPDATE txn SET recur_state=?, recur_end=?, updated_at=? WHERE id=?',
+      ['ended', now, now, txnId],
+    );
+    if (row) {
+      await logAudit(db, {
+        entityType: 'recurring', entityId: txnId, groupId: row.group_id,
+        action: 'ended', summary: `Ended recurring · ${row.category}`,
+      });
+    }
+  });
 }
 
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
   return db.getAllAsync<LineItem>('SELECT * FROM line_item WHERE txn_id = ?', [txnId]);
+}
+
+export async function getTxnById(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+): Promise<TxnWithSplits | null> {
+  const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id = ?', [txnId]);
+  if (!row) return null;
+  return loadSplits(db, row);
+}
+
+export type UpdateTxnInput = {
+  id: string;
+  groupId: string;
+  kind: 'income' | 'expense' | 'settlement';
+  date: number;
+  category: string;
+  note?: string;
+  payments: Array<{ personId: string; amount: number }>;
+  shares:   Array<{ personId: string; amount: number }>;
+};
+
+/** Edit an existing transaction: rewrite the row + its payments/shares. */
+export async function updateTxn(
+  db: SQLite.SQLiteDatabase,
+  input: UpdateTxnInput,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE txn SET kind=?, date=?, category=?, note=?, updated_at=? WHERE id=?`,
+      [input.kind, input.date, input.category, input.note ?? null, now, input.id],
+    );
+    await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
+    await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);
+    for (const p of input.payments) {
+      await db.runAsync(
+        'INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)',
+        [input.id, p.personId, p.amount],
+      );
+    }
+    for (const s of input.shares) {
+      await db.runAsync(
+        'INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)',
+        [input.id, s.personId, s.amount],
+      );
+    }
+    const total = input.payments.reduce((a, p) => a + p.amount, 0);
+    await logAudit(db, {
+      entityType: 'txn', entityId: input.id, groupId: input.groupId,
+      action: 'updated', amount: total,
+      summary: `Edited ${input.kind} ${formatRupees(total)} · ${input.category}`,
+    });
+  });
 }

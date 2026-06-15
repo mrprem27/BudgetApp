@@ -21,9 +21,9 @@ export async function seedIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
 
     await db.runAsync(
       `INSERT INTO budget_group
-         (id, name, icon, color, carry_over, is_shared, is_archived, created_at)
-       VALUES (?, ?, ?, ?, 0, 0, 0, ?)`,
-      [groupId, 'Personal', 'wallet', '#4F46E5', now],
+         (id, name, icon, color, carry_over, is_shared, is_archived, is_personal, simplify_debt, created_at)
+       VALUES (?, ?, ?, ?, 0, 0, 0, 1, 1, ?)`,
+      [groupId, 'Personal', 'credit-card', '#4F46E5', now],
     );
 
     await db.runAsync(

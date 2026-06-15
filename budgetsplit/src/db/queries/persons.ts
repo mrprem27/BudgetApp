@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
+import { logAudit } from './audit';
 
 export type Person = {
   id: string;
@@ -50,7 +51,29 @@ export async function updatePersonName(
   personId: string,
   name: string,
 ): Promise<void> {
-  await db.runAsync('UPDATE person SET name = ? WHERE id = ?', [name, personId]);
+  await db.withTransactionAsync(async () => {
+    const prev = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
+    await db.runAsync('UPDATE person SET name = ? WHERE id = ?', [name, personId]);
+    await logAudit(db, {
+      entityType: 'member', entityId: personId, action: 'updated',
+      summary: `Renamed ${prev?.name ?? 'person'} to ${name}`,
+    });
+  });
+}
+
+export async function updatePerson(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  name: string,
+  avatarColor: string,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE person SET name = ?, avatar_color = ? WHERE id = ?', [name, avatarColor, personId]);
+    await logAudit(db, {
+      entityType: 'member', entityId: personId, action: 'updated',
+      summary: `Updated ${name}`,
+    });
+  });
 }
 
 export async function addMemberToGroup(
@@ -58,10 +81,17 @@ export async function addMemberToGroup(
   groupId: string,
   personId: string,
 ): Promise<void> {
-  await db.runAsync(
-    'INSERT OR IGNORE INTO group_member (group_id, person_id) VALUES (?, ?)',
-    [groupId, personId],
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT OR IGNORE INTO group_member (group_id, person_id) VALUES (?, ?)',
+      [groupId, personId],
+    );
+    const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
+    await logAudit(db, {
+      entityType: 'member', entityId: personId, groupId, action: 'created',
+      summary: `Added ${p?.name ?? 'member'} to the group`,
+    });
+  });
 }
 
 export async function removeMemberFromGroup(
@@ -69,8 +99,15 @@ export async function removeMemberFromGroup(
   groupId: string,
   personId: string,
 ): Promise<void> {
-  await db.runAsync(
-    'DELETE FROM group_member WHERE group_id = ? AND person_id = ?',
-    [groupId, personId],
-  );
+  await db.withTransactionAsync(async () => {
+    const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
+    await db.runAsync(
+      'DELETE FROM group_member WHERE group_id = ? AND person_id = ?',
+      [groupId, personId],
+    );
+    await logAudit(db, {
+      entityType: 'member', entityId: personId, groupId, action: 'deleted',
+      summary: `Removed ${p?.name ?? 'member'} from the group`,
+    });
+  });
 }

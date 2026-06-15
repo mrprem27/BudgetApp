@@ -1,9 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   startOfYear, endOfYear, format, eachDayOfInterval,
@@ -12,7 +14,7 @@ import {
 import { PieChart, BarChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, layout } from '../../src/constants/layout';
+import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -21,6 +23,9 @@ import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/AmountText';
 import { BudgetBar } from '../../src/components/BudgetBar';
 import { FAB } from '../../src/components/FAB';
+import { FadeIn } from '../../src/components/FadeIn';
+import { SkeletonCard } from '../../src/components/Skeleton';
+import { PressableScale } from '../../src/components/PressableScale';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { simplify } from '../../src/lib/settle';
 import { formatRupees } from '../../src/lib/money';
@@ -44,6 +49,7 @@ const CHART_COLORS = [
 export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setPersons, setGroups } = useStore();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
@@ -54,10 +60,27 @@ export default function DashboardScreen() {
   const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
   const [barData, setBarData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [meId, setMeId] = useState('');
   const groups = useStore(s => s.groups);
 
+  const firstLoad = useRef(true);
+
   async function load() {
+    try {
+      await loadInner();
+    } finally {
+      // Let the skeleton breathe on the very first load only — focus
+      // refreshes (loading already false) stay instant.
+      if (firstLoad.current) {
+        firstLoad.current = false;
+        await new Promise(r => setTimeout(r, 450));
+      }
+      setLoading(false);
+    }
+  }
+
+  async function loadInner() {
     const persons = await getAllPersons(db);
     setPersons(persons);
     const grps = await getAllGroups(db);
@@ -113,6 +136,7 @@ export default function DashboardScreen() {
     // Build bar chart data
     const bars = buildBarData(txns, me.id, tab, from, to);
     setBarData(bars);
+    setLoading(false);
   }
 
   function buildBarData(
@@ -126,16 +150,18 @@ export default function DashboardScreen() {
     const toDate = new Date(to);
 
     if (tab === 'today') {
-      const hours = Array.from({ length: 24 }, (_, h) => ({ label: `${h}`, value: 0 }));
+      // 8 three-hour buckets (0–2, 3–5, … 21–23). Every txn lands in exactly
+      // one bucket, so no spending is dropped.
+      const buckets = Array.from({ length: 8 }, (_, b) => ({ label: `${b * 3}`, value: 0 }));
       for (const txn of txns) {
         if (txn.kind !== 'expense') continue;
         const h = new Date(txn.date).getHours();
         const share = txn.shares.find((s: any) => s.personId === myId)?.amount ?? 0;
-        hours[h].value += share;
+        buckets[Math.floor(h / 3)].value += share;
       }
-      return hours.filter((_, i) => i % 3 === 0).map(h => ({
-        label: h.label,
-        value: Math.round(h.value / 100),
+      return buckets.map(b => ({
+        label: b.label,
+        value: Math.round(b.value / 100),
         frontColor: colors.accent,
       }));
     }
@@ -182,7 +208,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -211,6 +237,15 @@ export default function DashboardScreen() {
           ))}
         </View>
 
+        {loading ? (
+          <View style={{ gap: space.md }}>
+            <SkeletonCard height={148} />
+            <SkeletonCard height={64} />
+            <SkeletonCard height={210} />
+            <SkeletonCard height={120} />
+          </View>
+        ) : (
+        <FadeIn>
         {/* Spending card */}
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
@@ -237,7 +272,7 @@ export default function DashboardScreen() {
         {(oweTotal > 0 || owedTotal > 0) && (
           <TouchableOpacity
             style={styles.balanceChip}
-            onPress={() => {}}
+            onPress={() => router.push('/settle')}
             accessibilityRole="button"
             accessibilityLabel="Settle up"
           >
@@ -256,12 +291,16 @@ export default function DashboardScreen() {
             <Text style={styles.chartTitle}>Spending by category</Text>
             <View style={styles.pieRow}>
               <PieChart
+                key={`pie-${tab}`}
                 data={pieData}
                 donut
                 radius={70}
                 innerRadius={44}
                 centerLabelComponent={() => (
-                  <Text style={styles.pieCenter}>{pieData.length}</Text>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={styles.pieCenterNum}>{pieData.length}</Text>
+                    <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
+                  </View>
                 )}
               />
               <View style={styles.legend}>
@@ -281,6 +320,7 @@ export default function DashboardScreen() {
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>Spending over time</Text>
             <BarChart
+              key={`bar-${tab}`}
               data={barData}
               barWidth={18}
               spacing={8}
@@ -301,35 +341,42 @@ export default function DashboardScreen() {
         {groupHealth.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Groups</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.groupChips}>
-                {groupHealth.map(g => (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={styles.groupChip}
-                    onPress={() => router.push(`/group/${g.id}`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={g.name}
-                  >
+            <View style={styles.groupList}>
+              {groupHealth.map((g, gi) => (
+                <PressableScale
+                  key={g.id}
+                  style={[styles.groupListItem, gi === groupHealth.length - 1 && { borderBottomWidth: 0 }]}
+                  onPress={() => router.push(`/group/${g.id}`)}
+                  accessibilityLabel={g.name}
+                >
+                  <View style={{ flex: 1, gap: 6 }}>
                     <Text style={styles.groupName}>{g.name}</Text>
-                    <BudgetBar pct={g.pct} health={g.health} />
                     {g.pct !== null && (
-                      <Text style={styles.groupPct}>{g.pct}%</Text>
+                      <View style={styles.groupBudgetRow}>
+                        <View style={{ flex: 1 }}>
+                          <BudgetBar pct={g.pct} health={g.health} height={4} />
+                        </View>
+                        <Text style={styles.groupPct}>{g.pct}%</Text>
+                      </View>
                     )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                </PressableScale>
+              ))}
+            </View>
           </View>
         )}
 
         {spending === 0 && income === 0 && (
           <View style={styles.empty}>
-            <Text style={styles.emptyLabel}>No transactions yet</Text>
-            <TouchableOpacity onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button">
-              <Text style={styles.emptyAction}>Add expense</Text>
-            </TouchableOpacity>
+            <View style={styles.emptyIcon}>
+              <Feather name="edit-3" size={26} color={colors.accent} />
+            </View>
+            <Text style={styles.emptyTitle}>Nothing logged yet</Text>
+            <Text style={styles.emptyLabel}>Tap + to add your first expense or income</Text>
           </View>
+        )}
+        </FadeIn>
         )}
 
         <View style={{ height: 120 }} />
@@ -349,37 +396,40 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg, paddingTop: space.lg },
-  appName: { ...type.heading, color: colors.textPrimary },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
+  appName: { ...type.title, color: colors.textPrimary },
   tabRow: { flexDirection: 'row', gap: space.xs, marginBottom: space.lg },
   tabPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999, backgroundColor: colors.bgMuted },
   tabActive: { backgroundColor: colors.accent },
   tabLabel: { ...type.label, color: colors.textSecondary },
   tabLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  spendingCard: { backgroundColor: colors.bgCard, borderRadius: 12, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border },
+  spendingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md },
   spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md },
-  stat: { alignItems: 'center' },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md, gap: space.sm },
+  stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 12, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border },
+  balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   balanceText: { ...type.body, color: colors.textSecondary, flex: 1 },
   settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  chartCard: { backgroundColor: colors.bgCard, borderRadius: 12, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border },
+  chartCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
   pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  pieCenter: { ...type.label, color: colors.textSecondary },
+  pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 22, color: colors.textPrimary },
+  pieCenterLabel: { ...type.caption, color: colors.textMuted },
   legend: { flex: 1, gap: space.xs },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
   section: { marginBottom: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
-  groupChips: { flexDirection: 'row', gap: space.sm },
-  groupChip: { backgroundColor: colors.bgCard, borderRadius: 12, padding: space.md, minWidth: 120, borderWidth: 1, borderColor: colors.border, gap: space.xs },
-  groupName: { ...type.label, color: colors.textPrimary },
-  groupPct: { ...type.caption, color: colors.textMuted },
-  empty: { alignItems: 'center', paddingVertical: space.xxl },
-  emptyLabel: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
-  emptyAction: { ...type.button, color: colors.accent },
+  groupList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  groupListItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingVertical: space.md, gap: space.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
+  empty: { alignItems: 'center', paddingVertical: space.xxl, gap: space.sm },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  emptyTitle: { ...type.subheading, color: colors.textPrimary },
+  emptyLabel: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
 });

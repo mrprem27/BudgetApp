@@ -1,23 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, Modal, Pressable, FlatList, Switch,
+  ScrollView, Alert, Modal, Pressable, Switch,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { getCategoriesForGroup } from '../../src/db/queries/categories';
-import { insertTxn } from '../../src/db/queries/transactions';
+import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
+import { insertTxn, updateTxn, getTxnById } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { CategoryChip } from '../../src/components/CategoryChip';
+import { CategoryPicker } from '../../src/components/CategoryPicker';
+import { SheetModal } from '../../src/components/SheetModal';
 import { MemberAvatar } from '../../src/components/MemberAvatar';
 import { AmountText } from '../../src/components/AmountText';
+import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
@@ -25,9 +29,11 @@ import type { Category } from '../../src/db/queries/categories';
 type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
 
 export default function QuickAddScreen() {
-  const { groupId: paramGroupId, kind: paramKind } = useLocalSearchParams<{ groupId?: string; kind?: string }>();
+  const { groupId: paramGroupId, kind: paramKind, editId } = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string }>();
+  const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
@@ -39,6 +45,7 @@ export default function QuickAddScreen() {
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
+  const [showPayers, setShowPayers] = useState(false);
   const [splitType, setSplitType] = useState<SplitType>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
@@ -49,7 +56,7 @@ export default function QuickAddScreen() {
   const [recurEnabled, setRecurEnabled] = useState(false);
   const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
-  const [recurEndText, setRecurEndText] = useState('');
+  const [recurEndPreset, setRecurEndPreset] = useState<'none' | '3m' | '6m' | '1y' | '2y'>('none');
 
   useEffect(() => {
     (async () => {
@@ -57,19 +64,41 @@ export default function QuickAddScreen() {
       setGroups(grps);
       const meRow = await getMe(db);
       setMe(meRow);
+
+      if (editId) {
+        const txn = await getTxnById(db, editId);
+        if (txn) {
+          setSelectedGroupId(txn.group_id);
+          await loadGroup(txn.group_id, meRow, txn.category);
+          setKind(txn.kind === 'income' ? 'income' : 'expense');
+          const total = txn.payments.reduce((a, p) => a + p.amount, 0);
+          setAmountText((total / 100).toString());
+          setNote(txn.note ?? '');
+          // Reconstruct the split as explicit amounts so it stays editable.
+          if (txn.kind === 'expense') {
+            setSplitType('exact');
+            setSplitMembers(txn.shares.map(s => s.personId));
+            setExactAmounts(Object.fromEntries(txn.shares.map(s => [s.personId, (s.amount / 100).toString()])));
+          }
+          setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, (p.amount / 100).toString()])));
+        }
+        return;
+      }
+
       const gid = paramGroupId ?? grps[0]?.id ?? '';
       setSelectedGroupId(gid);
       if (gid) await loadGroup(gid, meRow);
     })();
   }, []);
 
-  async function loadGroup(gid: string, meRow: Person | null) {
+  async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string) {
     const [cats, mems] = await Promise.all([
-      getCategoriesForGroup(db, gid),
+      getCategoriesByFrequency(db, gid),
       getGroupMembers(db, gid),
     ]);
     setCategories(cats);
-    setSelectedCategory(cats[0] ?? null);
+    const pre = preselectCategory ? cats.find(c => c.name === preselectCategory) : null;
+    setSelectedCategory(pre ?? cats[0] ?? null);
     setMembers(mems);
     const me_ = meRow ?? me;
     setSplitMembers(mems.map(m => m.id));
@@ -137,10 +166,28 @@ export default function QuickAddScreen() {
         ? []
         : shares;
 
+      if (isEditing) {
+        await updateTxn(db, {
+          id: editId!,
+          groupId: selectedGroupId,
+          kind,
+          date: Date.now(),
+          category: selectedCategory!.name,
+          note: note.trim() || undefined,
+          payments: finalPayments,
+          shares: finalShares,
+        });
+        haptic.success();
+        router.back();
+        return;
+      }
+
       let recurEnd: number | undefined;
-      if (recurEnabled && recurEndText) {
-        const d = new Date(recurEndText);
-        if (!isNaN(d.getTime())) recurEnd = d.getTime();
+      if (recurEnabled && recurEndPreset !== 'none') {
+        const monthsToAdd = { '3m': 3, '6m': 6, '1y': 12, '2y': 24 }[recurEndPreset];
+        const d = new Date();
+        d.setMonth(d.getMonth() + monthsToAdd);
+        recurEnd = d.getTime();
       }
 
       await insertTxn(db, {
@@ -156,6 +203,7 @@ export default function QuickAddScreen() {
         payments: finalPayments,
         shares: finalShares,
       });
+      haptic.success();
       router.back();
     } catch (e) {
       Alert.alert('Error', 'Could not save. Try again.');
@@ -166,15 +214,16 @@ export default function QuickAddScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="x" size={22} color={colors.textPrimary} />
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+          <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{kind === 'income' ? 'Add Income' : 'Add Expense'}</Text>
-        <View style={{ width: 22 }} />
+        <Text style={styles.title}>{isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.kindRow}>
           {(['expense', 'income'] as const).map(k => (
             <TouchableOpacity
@@ -200,6 +249,7 @@ export default function QuickAddScreen() {
           placeholder="₹0.00"
           placeholderTextColor={colors.textMuted}
           accessibilityLabel="Amount"
+          autoFocus={!isEditing}
         />
 
         {groups.length > 1 && (
@@ -224,18 +274,16 @@ export default function QuickAddScreen() {
 
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chipRow}>
-              {categories.map(c => (
-                <CategoryChip
-                  key={c.id}
-                  category={c}
-                  selected={selectedCategory?.id === c.id}
-                  onPress={() => setSelectedCategory(c)}
-                />
-              ))}
-            </View>
-          </ScrollView>
+          <CategoryPicker
+            categories={categories}
+            value={selectedCategory}
+            onChange={setSelectedCategory}
+            onCreate={async (name) => {
+              const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+              setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+              return created;
+            }}
+          />
         </View>
 
         <TextInput
@@ -247,6 +295,7 @@ export default function QuickAddScreen() {
           accessibilityLabel="Note"
         />
 
+        {!isEditing && (
         <View style={styles.recurRow}>
           <Text style={styles.fieldLabel}>Repeat</Text>
           <Switch
@@ -257,8 +306,9 @@ export default function QuickAddScreen() {
             accessibilityLabel="Enable recurring transaction"
           />
         </View>
+        )}
 
-        {recurEnabled && (
+        {!isEditing && recurEnabled && (
           <View style={styles.recurOptions}>
             <View style={styles.splitTypeRow}>
               {(['daily', 'weekly', 'monthly', 'custom'] as const).map(f => (
@@ -292,15 +342,42 @@ export default function QuickAddScreen() {
               </View>
             )}
 
-            <TextInput
-              style={styles.noteInput}
-              value={recurEndText}
-              onChangeText={setRecurEndText}
-              placeholder="End date (optional, YYYY-MM-DD)"
-              placeholderTextColor={colors.textMuted}
-              accessibilityLabel="Recurrence end date"
-            />
+            <Text style={styles.fieldLabel}>Ends</Text>
+            <View style={styles.endChipRow}>
+              {([['none', 'No end'], ['3m', '3 months'], ['6m', '6 months'], ['1y', '1 year'], ['2y', '2 years']] as const).map(([k, label]) => (
+                <TouchableOpacity
+                  key={k}
+                  style={[styles.endChip, recurEndPreset === k && styles.endChipActive]}
+                  onPress={() => setRecurEndPreset(k)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: recurEndPreset === k }}
+                >
+                  <Text style={[styles.endChipText, recurEndPreset === k && styles.endChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
+        )}
+
+        {kind === 'expense' && members.length > 1 && total > 0 && (
+          <TouchableOpacity
+            style={styles.splitBtn}
+            onPress={() => setShowPayers(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Who paid"
+          >
+            <Feather name="credit-card" size={16} color={colors.accent} />
+            <Text style={styles.splitBtnText}>
+              {payments.length === 1
+                ? `Paid by ${payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone'}`
+                : `${payments.length} people paid`}
+            </Text>
+            {paymentRemainder !== 0 && (
+              <Text style={styles.remainder}>
+                {paymentRemainder > 0 ? `₹${(paymentRemainder / 100).toFixed(2)} left` : `₹${(-paymentRemainder / 100).toFixed(2)} over`}
+              </Text>
+            )}
+          </TouchableOpacity>
         )}
 
         {kind === 'expense' && members.length > 1 && total > 0 && (
@@ -336,6 +413,7 @@ export default function QuickAddScreen() {
           style={styles.saveBtn}
         />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal visible={showSplit} transparent animationType="slide" onRequestClose={() => setShowSplit(false)}>
         <Pressable style={styles.backdrop} onPress={() => setShowSplit(false)}>
@@ -434,13 +512,49 @@ export default function QuickAddScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Paid by sheet — set one or more payers */}
+      <SheetModal visible={showPayers} onClose={() => setShowPayers(false)} title="Who paid?">
+        <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
+        {members.map(m => (
+          <View key={m.id} style={styles.payerSheetRow}>
+            <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+            <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
+            <View style={styles.payerInputWrap}>
+              <Text style={styles.payerRupee}>₹</Text>
+              <TextInput
+                style={styles.payerSheetInput}
+                value={payerAmounts[m.id] ?? ''}
+                onChangeText={v => setPayerAmounts(prev => ({ ...prev, [m.id]: v }))}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+          </View>
+        ))}
+        <TouchableOpacity
+          style={styles.payerQuickBtn}
+          onPress={() => me && setPayerAmounts({ [me.id]: (total / 100).toString() })}
+          accessibilityRole="button"
+        >
+          <Feather name="user" size={14} color={colors.accent} />
+          <Text style={styles.payerQuickText}>I paid the whole bill</Text>
+        </TouchableOpacity>
+        <View style={styles.remainderBar}>
+          <Text style={[styles.remainderText, { color: paymentRemainder === 0 ? colors.income : colors.expense }]}>
+            {paymentRemainder === 0 ? 'Balanced' : paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left to assign` : `${formatRupees(-paymentRemainder)} over`}
+          </Text>
+        </View>
+        <PrimaryButton label="Done" onPress={() => setShowPayers(false)} disabled={paymentRemainder !== 0} />
+      </SheetModal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: layout.screenPaddingH, paddingTop: space.xl },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
   kindRow: { flexDirection: 'row', gap: space.sm, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
@@ -478,6 +592,19 @@ const styles = StyleSheet.create({
   eqAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textSecondary },
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
   remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
+  payerHint: { ...type.caption, color: colors.textMuted },
+  payerSheetRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.xs },
+  payerSheetName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  payerInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 100 },
+  payerRupee: { ...type.body, color: colors.textMuted },
+  payerSheetInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
+  payerQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted },
+  payerQuickText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  endChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  endChip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  endChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
+  endChipText: { ...type.label, color: colors.textSecondary },
+  endChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   doneBtnText: { ...type.button, color: colors.bg },
 });

@@ -21,12 +21,12 @@ export function BalanceRow({ from, to, amount, onPaid }: Props) {
         <Feather name="arrow-right" size={14} color={colors.textMuted} style={styles.arrow} />
         <MemberAvatar name={to.name} color={to.avatar_color} size={36} />
         <View style={styles.names}>
-          <Text style={styles.fromName}>{from.name}</Text>
-          <Text style={styles.toName}>pays {to.name}</Text>
+          <Text style={styles.fromName} numberOfLines={1}>{from.name}</Text>
+          <Text style={styles.toName} numberOfLines={1}>pays {to.name}</Text>
         </View>
       </View>
       <View style={styles.right}>
-        <AmountText paise={amount} size="md" forceColor={colors.accent} />
+        <AmountText paise={amount} size="md" style={styles.amount} forceColor={colors.accent} />
         {onPaid && (
           <TouchableOpacity
             style={styles.paidBtn}
@@ -60,6 +60,8 @@ const styles = StyleSheet.create({
   },
   names: {
     marginLeft: space.sm,
+    flex: 1,
+    flexShrink: 1,
   },
   fromName: {
     ...type.body,
@@ -72,6 +74,11 @@ const styles = StyleSheet.create({
   right: {
     alignItems: 'flex-end',
     gap: space.xs,
+    marginLeft: space.sm,
+  },
+  amount: {
+    minWidth: 70,
+    textAlign: 'right',
   },
   paidBtn: {
     backgroundColor: colors.accentMuted,

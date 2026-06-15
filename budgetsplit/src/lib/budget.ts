@@ -5,6 +5,8 @@ import {
 } from 'date-fns';
 import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
+import { getCategoryBudgets } from '../db/queries/categoryBudgets';
+import type { BudgetCadence } from '../db/queries/categoryBudgets';
 
 export type Period = 'daily' | 'monthly' | 'yearly';
 
@@ -80,4 +82,86 @@ export async function getBudgetUsage(
   const pct = Math.round((spent / effectiveLimit) * 100);
   const health = pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
   return { spent, limit: effectiveLimit, pct, health };
+}
+
+function healthFor(pct: number): 'green' | 'amber' | 'red' {
+  return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
+}
+
+/** Total expense per category for a group within a period (full bill amount). */
+export async function getCategorySpending(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  fromMs: number,
+  toMs: number,
+): Promise<Record<string, number>> {
+  const txns = await getTransactionsInRange(db, groupId, fromMs, toMs);
+  const map: Record<string, number> = {};
+  for (const t of txns) {
+    if (t.kind !== 'expense') continue;
+    const amt = t.shares.reduce((s, sh) => s + sh.amount, 0);
+    map[t.category] = (map[t.category] ?? 0) + amt;
+  }
+  return map;
+}
+
+export type CategoryBudgetStatus = {
+  category: string;
+  cadence: BudgetCadence;
+  allocated: number;   // paise
+  spent: number;       // paise in the current window of this cadence
+  remaining: number;   // allocated - spent (can be negative)
+  pct: number | null;
+  health: 'green' | 'amber' | 'red' | 'none';
+};
+
+/** The spend window for a budget line, based on its cadence. */
+function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to: number } {
+  switch (cadence) {
+    case 'daily':   return getPeriodRange('daily', now);
+    case 'monthly': return getPeriodRange('monthly', now);
+    case 'yearly':  return getPeriodRange('yearly', now);
+    case 'once':    return { from: 0, to: endOfDay(now).getTime() }; // cumulative, all-time
+  }
+}
+
+/**
+ * Per-category budget status. Each budgeted category is compared against
+ * spending in the current window of ITS cadence (today / this month / this year
+ * / all-time). Daily/monthly/yearly lines roll forward automatically every
+ * period because the line itself persists; only the window moves.
+ */
+export async function getCategoryBudgetStatus(
+  db: SQLite.SQLiteDatabase,
+  group: BudgetGroup,
+  now = new Date(),
+): Promise<CategoryBudgetStatus[]> {
+  const budgets = await getCategoryBudgets(db, group.id);
+  if (budgets.length === 0) return [];
+
+  // One spending query per distinct cadence window.
+  const cadences = Array.from(new Set(budgets.map(b => b.cadence)));
+  const spendByCadence: Record<string, Record<string, number>> = {};
+  await Promise.all(cadences.map(async cad => {
+    const w = windowForCadence(cad, now);
+    spendByCadence[cad] = await getCategorySpending(db, group.id, w.from, w.to);
+  }));
+
+  const rows: CategoryBudgetStatus[] = budgets.map(b => {
+    const spent = spendByCadence[b.cadence]?.[b.category] ?? 0;
+    const pct = b.amount > 0 ? Math.round((spent / b.amount) * 100) : null;
+    return {
+      category: b.category,
+      cadence: b.cadence,
+      allocated: b.amount,
+      spent,
+      remaining: b.amount - spent,
+      pct,
+      health: pct === null ? 'none' : healthFor(pct),
+    };
+  });
+
+  const order: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
+  rows.sort((a, b) => order[a.cadence] - order[b.cadence] || (b.pct ?? 0) - (a.pct ?? 0));
+  return rows;
 }
