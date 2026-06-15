@@ -41,13 +41,6 @@
         }
       ],
       "expo-font",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#F0A500"
-        }
-      ],
       "expo-local-authentication",
       [
         "expo-location",
