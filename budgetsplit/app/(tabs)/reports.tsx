@@ -25,6 +25,7 @@ import { formatRupees, formatRupeesShort } from '../../src/lib/money';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { EmptyState } from '../../src/components/ui/EmptyState';
 import { categoryVisual } from '../../src/constants/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
@@ -518,9 +519,11 @@ export default function ReportsScreen() {
           )}
 
           {summaries.length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No groups yet</Text>
-            </View>
+            <EmptyState
+              icon="bar-chart-2"
+              title="Nothing to report yet"
+              body="Add some transactions and your monthly income, spending and category breakdowns will appear here."
+            />
           )}
 
           {summaries.map(s => (
@@ -670,8 +673,6 @@ const styles = StyleSheet.create({
   utilPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
   recRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs, marginTop: space.sm },
   recRowText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 16 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: space.xl },
-  emptyText: { ...type.body, color: colors.textSecondary },
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

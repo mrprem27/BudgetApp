@@ -57,6 +57,69 @@ export type BudgetAnalytics = {
   recommendations: Recommendation[];
 };
 
+export type GroupInsight = Recommendation & {
+  groupId: string;
+  groupName: string;
+};
+
+/**
+ * Cross-group insights for the dashboard. Runs the per-group analytics for
+ * every group, then merges and ranks their recommendations so the home screen
+ * can surface the few that matter most (warnings first, then movers, then a
+ * single positive note). Each insight carries its origin group so a tap can
+ * deep-link to that group's budget.
+ */
+export async function getDashboardInsights(
+  db: SQLite.SQLiteDatabase,
+  groups: BudgetGroup[],
+  now = new Date(),
+  limit = 3,
+): Promise<GroupInsight[]> {
+  const perGroup = await Promise.all(
+    groups.map(async g => ({ group: g, analytics: await getBudgetAnalytics(db, g, now) })),
+  );
+  return rankInsights(perGroup, limit);
+}
+
+/**
+ * Pure ranking of per-group analytics into a short, prioritized insight list.
+ * Split from {@link getDashboardInsights} so callers that already hold the
+ * analytics array (e.g. the dashboard) don't re-run the spending queries.
+ */
+export function rankInsights(
+  perGroup: Array<{ group: BudgetGroup; analytics: BudgetAnalytics }>,
+  limit = 3,
+): GroupInsight[] {
+  const all: GroupInsight[] = [];
+  for (const { group, analytics } of perGroup) {
+    for (const r of analytics.recommendations) {
+      // The "all on track" filler is per-group noise on a multi-group dashboard;
+      // we synthesize a single positive note below only if nothing else surfaces.
+      if (r.id === 'ontrack') continue;
+      all.push({ ...r, groupId: group.id, groupName: group.name });
+    }
+  }
+
+  const severityRank: Record<Recommendation['severity'], number> = { warn: 0, info: 1, good: 2 };
+  all.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
+
+  const ranked = all.slice(0, limit);
+
+  // Nothing noteworthy but the user does budget → reassure rather than show blank.
+  if (ranked.length === 0) {
+    const hasBudgets = perGroup.some(p => p.analytics.totalAllocated > 0);
+    if (hasBudgets) {
+      return [{
+        id: 'ontrack', severity: 'good', icon: 'check-circle',
+        text: 'All budgets are on track across your groups. Nice work.',
+        groupId: perGroup.find(p => p.analytics.totalAllocated > 0)!.group.id,
+        groupName: '',
+      }];
+    }
+  }
+  return ranked;
+}
+
 function currentWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } {
   switch (cadence) {
     case 'daily':   return { from: startOfDay(now).getTime(), to: endOfDay(now).getTime() };

@@ -25,11 +25,13 @@ import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { FAB } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
+import { EmptyState } from '../../src/components/ui/EmptyState';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetUsage } from '../../src/lib/budget';
-import { getBudgetAnalytics } from '../../src/lib/analytics';
+import { getBudgetAnalytics, rankInsights } from '../../src/lib/analytics';
+import type { GroupInsight } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
 import { formatRupees } from '../../src/lib/money';
 
@@ -75,6 +77,7 @@ export default function DashboardScreen() {
   const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
   const [barData, setBarData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
+  const [insights, setInsights] = useState<GroupInsight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
@@ -155,6 +158,9 @@ export default function DashboardScreen() {
     let bAlloc = 0, bSpent = 0, over = 0, near = 0;
     for (const a of analyticsAll) { bAlloc += a.totalAllocated; bSpent += a.totalSpent; over += a.overBudget.length; near += a.nearLimit.length; }
     setBudgetSummary({ allocated: bAlloc, spent: bSpent, over, near });
+
+    // Reuse the analytics we just computed — rank the top cross-group insights.
+    setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
 
     // Build pie chart data (spending by category)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -356,6 +362,37 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Insights — top cross-group analytics, tap to manage that group's budget */}
+        {insights.length > 0 && (
+          <View style={styles.insightsCard}>
+            <Text style={styles.chartTitle}>Insights</Text>
+            <View style={{ gap: space.sm }}>
+              {insights.map(ins => {
+                const tint = ins.severity === 'warn' ? colors.expense
+                  : ins.severity === 'good' ? colors.income : colors.accent;
+                return (
+                  <TouchableOpacity
+                    key={ins.id + ins.groupId}
+                    style={styles.insightRow}
+                    activeOpacity={0.7}
+                    onPress={() => router.push(`/group/${ins.groupId}/budget`)}
+                    accessibilityRole="button"
+                    accessibilityLabel={ins.text}
+                  >
+                    <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
+                      <Feather name={ins.icon} size={14} color={tint} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.insightText}>{ins.text}</Text>
+                      {!!ins.groupName && <Text style={styles.insightGroup}>{ins.groupName}</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         {/* Owe/Owed */}
         {(oweTotal > 0 || owedTotal > 0) && (
           <TouchableOpacity
@@ -490,13 +527,13 @@ export default function DashboardScreen() {
         )}
 
         {spending === 0 && income === 0 && (
-          <View style={styles.empty}>
-            <View style={styles.emptyIcon}>
-              <Feather name="edit-3" size={26} color={colors.accent} />
-            </View>
-            <Text style={styles.emptyTitle}>Nothing logged yet</Text>
-            <Text style={styles.emptyLabel}>Tap + to add your first expense or income</Text>
-          </View>
+          <EmptyState
+            icon="edit-3"
+            title="Nothing logged yet"
+            body="Track your first expense or income to see your spending, budgets and insights here."
+            actionLabel="Add expense"
+            onAction={() => router.push('/add/quick?kind=expense')}
+          />
         )}
         </FadeIn>
         )}
@@ -540,6 +577,11 @@ const styles = StyleSheet.create({
   budgetFlags: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
   flagPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.pill },
   flagText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
+  insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   balanceText: { ...type.body, color: colors.textSecondary, flex: 1 },
   settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
@@ -561,10 +603,6 @@ const styles = StyleSheet.create({
   groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
-  empty: { alignItems: 'center', paddingVertical: space.xxl, gap: space.sm },
-  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
-  emptyTitle: { ...type.subheading, color: colors.textPrimary },
-  emptyLabel: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
   tooltipContainer: { backgroundColor: colors.bgCard, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
   tooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
 });

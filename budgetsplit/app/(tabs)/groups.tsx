@@ -22,6 +22,7 @@ import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
+import { EmptyState } from '../../src/components/ui/EmptyState';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
@@ -182,21 +183,20 @@ export default function GroupsScreen() {
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListEmptyComponent={
           viewMode === 'active' ? (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Feather name="users" size={28} color={colors.accent} />
-              </View>
-              <Text style={styles.emptyTitle}>No groups yet</Text>
-              <Text style={styles.emptyText}>Create a group to track shared expenses with friends, family or roommates.</Text>
-            </View>
+            <EmptyState
+              icon="users"
+              title="No groups yet"
+              body="Create a group to track shared expenses with friends, family or roommates."
+              actionLabel="New Group"
+              onAction={() => setShowCreate(true)}
+            />
           ) : (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Feather name="archive" size={28} color={colors.textMuted} />
-              </View>
-              <Text style={styles.emptyTitle}>No archived groups</Text>
-              <Text style={styles.emptyText}>Swipe left on a group to archive it. Archived groups are hidden but data is preserved.</Text>
-            </View>
+            <EmptyState
+              icon="archive"
+              title="No archived groups"
+              body="Swipe left on a group to archive it. Archived groups are hidden but data is preserved."
+              tint={colors.textSecondary}
+            />
           )
         }
       />
@@ -274,10 +274,6 @@ const styles = StyleSheet.create({
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
-  empty: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },
-  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
-  emptyTitle: { ...type.subheading, color: colors.textPrimary },
-  emptyText: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md },
   sheetTitle: { ...type.subheading, color: colors.textPrimary },
