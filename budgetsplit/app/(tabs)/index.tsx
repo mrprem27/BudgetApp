@@ -526,8 +526,6 @@ const styles = StyleSheet.create({
   spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: space.xs },
   deltaText: { ...type.label },
-  barTooltip: { backgroundColor: colors.bgElevated, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, marginBottom: 4 },
-  barTooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md, gap: space.sm },
   stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },

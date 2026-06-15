@@ -59,12 +59,6 @@ function isRecurInstance(id: string): boolean {
   return /_\d+$/.test(id);
 }
 
-const CADENCE_SECTIONS = [
-  { key: 'daily', label: 'Daily · spent today' },
-  { key: 'monthly', label: 'Monthly · this month' },
-  { key: 'yearly', label: 'Yearly · this year' },
-  { key: 'once', label: 'One-time · all-time' },
-] as const;
 
 function groupTxnsByDate(txns: TxnWithSplits[]): Array<{ title: string; data: TxnWithSplits[] }> {
   const map = new Map<string, TxnWithSplits[]>();
