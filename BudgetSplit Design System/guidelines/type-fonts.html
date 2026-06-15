@@ -1,0 +1,27 @@
+<!-- @dsCard group="Type" viewport="700x170" name="Font Families" subtitle="Inter for words, Space Mono for money" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: var(--bg); font-family: var(--font-ui); padding: 22px; display:flex; gap: 22px; }
+  .fam { flex:1; background: var(--bg-card); border:1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; }
+  .lab { color: var(--text-secondary); font-size: 11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom: 8px; }
+  .name { color: var(--text-primary); font-size: 22px; font-weight: 600; }
+  .spec { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div class="fam">
+    <div class="lab">UI · words</div>
+    <div class="name" style="font-family:var(--font-ui)">Inter — Aa Bb Cc 123</div>
+    <div class="spec">400 · 500 · 600 · 700 — headings, body, labels, buttons</div>
+  </div>
+  <div class="fam">
+    <div class="lab">Money · amounts</div>
+    <div class="name" style="font-family:var(--font-mono)">Space Mono — ₹1,234</div>
+    <div class="spec">400 · 700 — reserved strictly for money amounts</div>
+  </div>
+</body>
+</html>

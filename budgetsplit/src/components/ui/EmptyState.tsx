@@ -40,6 +40,6 @@ const styles = StyleSheet.create({
   wrap: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },
   icon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
   title: { ...type.subheading, color: colors.textPrimary, textAlign: 'center' },
-  body: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
+  body: { ...type.body, color: colors.textSecondary, textAlign: 'center', maxWidth: 320, lineHeight: 22 },
   action: { alignSelf: 'stretch', marginTop: space.md, paddingHorizontal: space.lg, borderRadius: radius.md },
 });

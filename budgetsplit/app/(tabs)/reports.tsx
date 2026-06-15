@@ -13,6 +13,7 @@ import {
   startOfYear, endOfYear,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
+import { PieChart, BarChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -24,6 +25,7 @@ import { formatRupees, formatRupeesShort } from '../../src/lib/money';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { categoryVisual } from '../../src/constants/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 
@@ -68,6 +70,8 @@ export default function ReportsScreen() {
   const [yearExpense, setYearExpense] = useState(0);
   const [yearTopCat, setYearTopCat] = useState('—');
   const [biggestTxn, setBiggestTxn] = useState(0);
+  const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
+  const [trendData, setTrendData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -117,6 +121,53 @@ export default function ReportsScreen() {
       setBiggestTxn(biggest);
       const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
       setYearTopCat(topCat);
+
+      // Build spending-by-category pie chart data for the selected month
+      const monthCatMap: Record<string, number> = {};
+      for (const s of sums) {
+        for (const c of s.topCats) {
+          monthCatMap[c.name] = (monthCatMap[c.name] ?? 0) + c.amount;
+        }
+      }
+      // Add all categories from all groups (not just top 3)
+      const fromMs2 = startOfMonth(month).getTime();
+      const toMs2 = endOfMonth(month).getTime();
+      const allMonthTxns = await getTransactionsInRange(db, null, fromMs2, toMs2);
+      const fullCatMap: Record<string, number> = {};
+      for (const t of allMonthTxns) {
+        if (t.kind === 'expense' && !t.is_deleted) {
+          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+          fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
+        }
+      }
+      const CHART_COLORS = ['#20C4B8', '#FF6F61', '#8B7CF8', '#2BD49B', '#F5B301', '#60A5FA', '#FB923C', '#F472B6', '#A78BFA', '#8FA3A0'];
+      const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
+      setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
+        value: val,
+        color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
+        text: name,
+      })));
+
+      // Build 6-month spending trend bar chart
+      const trendBars: Array<{ value: number; label: string; frontColor: string }> = [];
+      for (let i = 5; i >= 0; i--) {
+        const m = subMonths(month, i);
+        const mFrom = startOfMonth(m).getTime();
+        const mTo = endOfMonth(m).getTime();
+        const mTxns = await getTransactionsInRange(db, null, mFrom, mTo);
+        let mSpend = 0;
+        for (const t of mTxns) {
+          if (t.kind === 'expense' && !t.is_deleted) {
+            mSpend += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+          }
+        }
+        trendBars.push({
+          value: Math.round(mSpend / 100),
+          label: format(m, 'MMM'),
+          frontColor: i === 0 ? colors.accent : colors.accentDeep,
+        });
+      }
+      setTrendData(trendBars);
     } finally {
       // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
@@ -300,6 +351,64 @@ export default function ReportsScreen() {
         </View>
       ) : (
         <>
+          {/* Spending by Category chart */}
+          {pieData.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.chartTitle}>Spending by category</Text>
+              <View style={styles.pieRow}>
+                <PieChart
+                  data={pieData}
+                  donut
+                  radius={65}
+                  innerRadius={42}
+                  innerCircleColor={colors.bgCard}
+                  focusOnPress
+                  centerLabelComponent={() => (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.pieCenterNum}>{pieData.length}</Text>
+                      <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
+                    </View>
+                  )}
+                />
+                <View style={styles.legend}>
+                  {(() => {
+                    const total = pieData.reduce((s, d) => s + d.value, 0) || 1;
+                    return pieData.slice(0, 5).map((d, i) => (
+                      <View key={i} style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: d.color }]} />
+                        <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
+                        <Text style={styles.legendPct}>{Math.round((d.value / total) * 100)}%</Text>
+                        <Text style={styles.legendAmt}>{formatRupeesShort(d.value)}</Text>
+                      </View>
+                    ));
+                  })()}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* 6-month Spending Trend */}
+          {trendData.length > 0 && trendData.some(b => b.value > 0) && (
+            <View style={styles.card}>
+              <Text style={styles.chartTitle}>6-month spending trend</Text>
+              <BarChart
+                data={trendData}
+                barWidth={28}
+                barBorderRadius={4}
+                noOfSections={4}
+                spacing={20}
+                xAxisThickness={0}
+                yAxisThickness={0}
+                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                yAxisLabelPrefix="₹"
+                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                hideRules
+                isAnimated
+                disableScroll
+              />
+            </View>
+          )}
+
           {summaries.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No groups yet</Text>
@@ -428,6 +537,16 @@ const styles = StyleSheet.create({
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
+  chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
+  pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 20, color: colors.textPrimary },
+  pieCenterLabel: { ...type.caption, color: colors.textMuted },
+  legend: { flex: 1, gap: space.sm },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  legendPct: { ...type.caption, color: colors.textMuted, width: 30, textAlign: 'right' },
+  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: colors.textPrimary, width: 60, textAlign: 'right' },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },

@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, InteractionManager,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -27,6 +27,7 @@ import { FAB } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { PressableScale } from '../../src/components/ui/PressableScale';
+import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
@@ -76,9 +77,16 @@ export default function DashboardScreen() {
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
   const groups = useStore(s => s.groups);
 
+  useEffect(() => {
+    if (!loading) {
+      const handle = InteractionManager.runAfterInteractions(() => setChartsReady(true));
+      return () => handle.cancel();
+    }
+  }, [loading]);
   async function load() {
     try {
       await loadInner();
@@ -245,19 +253,11 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.tabRow}>
-          {TABS.map(t => (
-            <TouchableOpacity
-              key={t.key}
-              style={[styles.tabPill, tab === t.key && styles.tabActive]}
-              onPress={() => setTab(t.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: tab === t.key }}
-            >
-              <Text style={[styles.tabLabel, tab === t.key && styles.tabLabelActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TabPills
+            tabs={TABS}
+            active={tab}
+            onChange={(key) => setTab(key as TabKey)}
+          />
         </View>
 
         {loading ? (
@@ -374,7 +374,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Donut chart */}
-        {pieData.length > 0 && (
+        {chartsReady && pieData.length > 0 && (
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>Spending by category</Text>
             <View style={styles.pieRow}>
@@ -385,6 +385,8 @@ export default function DashboardScreen() {
                 radius={70}
                 innerRadius={46}
                 innerCircleColor={colors.bgCard}
+                focusOnPress
+                sectionAutoFocus
                 centerLabelComponent={() => (
                   <View style={{ alignItems: 'center' }}>
                     <Text style={styles.pieCenterNum}>{pieData.length}</Text>
@@ -410,7 +412,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Trend area chart */}
-        {barData.length > 0 && barData.some(b => b.value > 0) && (
+        {chartsReady && barData.length > 0 && barData.some(b => b.value > 0) && (
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>Spending over time</Text>
             <LineChart
@@ -440,6 +442,19 @@ export default function DashboardScreen() {
               endSpacing={8}
               adjustToWidth
               disableScroll
+              pointerConfig={{
+                pointerStripColor: colors.accent,
+                pointerStripWidth: 1,
+                pointerColor: colors.accent,
+                radius: 5,
+                pointerLabelWidth: 80,
+                pointerLabelHeight: 28,
+                pointerLabelComponent: (items: { value: number }[]) => (
+                  <View style={styles.tooltipContainer}>
+                    <Text style={styles.tooltipText}>₹{items[0]?.value ?? 0}</Text>
+                  </View>
+                ),
+              }}
             />
           </View>
         )}
@@ -506,11 +521,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.md },
   appName: { ...type.title, color: colors.textPrimary },
-  tabRow: { flexDirection: 'row', gap: space.xs, marginBottom: space.lg },
-  tabPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999, backgroundColor: colors.bgMuted },
-  tabActive: { backgroundColor: colors.accent },
-  tabLabel: { ...type.label, color: colors.textSecondary },
-  tabLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  tabRow: { marginBottom: space.lg },
   spendingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md },
   spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: space.xs },
@@ -556,4 +567,6 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
   emptyTitle: { ...type.subheading, color: colors.textPrimary },
   emptyLabel: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
+  tooltipContainer: { backgroundColor: colors.bgCard, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
+  tooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
 });

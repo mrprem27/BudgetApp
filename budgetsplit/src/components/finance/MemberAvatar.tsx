@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { type } from '../tokens';
+import { type, colors } from '../tokens';
 
 type Props = {
   name: string;
@@ -23,7 +23,7 @@ export function MemberAvatar({ name, color, size = 40, onPress, selected }: Prop
       style={[
         styles.circle,
         { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-        selected && styles.selected,
+        selected && { borderWidth: 2, borderColor: colors.accent },
       ]}
     >
       <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initials}</Text>
@@ -53,9 +53,5 @@ const styles = StyleSheet.create({
   initials: {
     fontFamily: 'Inter_600SemiBold',
     color: '#fff',
-  },
-  selected: {
-    borderWidth: 2,
-    borderColor: '#fff',
   },
 });

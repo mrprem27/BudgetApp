@@ -185,7 +185,7 @@ export default function SettingsScreen() {
 function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof Feather.glyphMap; label: string; value: boolean; onValueChange: (v: boolean) => void }) {
   return (
     <View style={styles.toggleRow}>
-      <View style={styles.toggleIcon}><Feather name={icon} size={16} color={colors.accent} /></View>
+      <View style={styles.toggleIcon}><Feather name={icon} size={18} color={colors.accent} /></View>
       <Text style={styles.toggleLabel}>{label}</Text>
       <Switch value={value} onValueChange={onValueChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={label} />
     </View>
@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
   aboutText: { ...type.body, color: colors.textPrimary },
   aboutSub: { ...type.caption, color: colors.textSecondary },
   nameInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.xs, minHeight: 44 },
-  toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, minHeight: 56 },
+  toggleIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },

@@ -1,0 +1,50 @@
+/* BudgetSplit color system — a dark, near-black theme with a subtle teal tint.
+   Surfaces layer from bg → bgElevated for depth. Teal is the single brand
+   accent; coral provides the highlight (and the FAB gradient end). Income,
+   expense and settlement each own a fixed semantic color. Never use raw hex
+   in product work — reference these tokens. */
+:root {
+  /* ---- Surfaces (near-black, teal-tinted, layered for elevation) ---- */
+  --bg:           #0A0F11; /* screen background */
+  --bg-card:      #13201F; /* cards, sheets */
+  --bg-input:     #162825; /* text inputs */
+  --bg-muted:     #1B302D; /* tab pills, segmented controls, progress track */
+  --bg-elevated:  #1E3633; /* tooltips, raised surfaces */
+
+  /* ---- Text ---- */
+  --text-primary:   #ECF3F1; /* all primary text */
+  --text-secondary: #8FA3A0; /* supporting text, labels */
+  --text-muted:     #5A6B69; /* placeholders, captions, disabled */
+
+  /* ---- Brand: teal primary + coral highlight ---- */
+  --accent:       #20C4B8; /* primary buttons, active tabs, selected, links */
+  --accent-deep:  #15A89D; /* gradient end, pressed accent */
+  --accent-muted: #0E2C29; /* tinted accent backgrounds (icon circles, chips) */
+
+  --coral:        #FF6F61; /* FAB gradient end, danger hints */
+  --coral-muted:  #3A1714; /* tinted coral backgrounds */
+
+  /* ---- Semantic (money & status) ---- */
+  --income:  #2BD49B; /* positive amounts, success */
+  --expense: #FF6F61; /* negative amounts, warnings, destructive */
+  --settle:  #8B7CF8; /* settlement / transfer transactions */
+
+  --health-green: #2BD49B; /* budget on track */
+  --health-amber: #F5B301; /* budget near limit */
+  --health-red:   #FF5C5C; /* budget over limit */
+
+  /* ---- Lines ---- */
+  --border:       #21302E; /* card borders, hairline dividers */
+  --border-focus: #20C4B8; /* focused input border */
+
+  /* ---- Gradients (striking surfaces only: FAB, hero, primary CTA) ---- */
+  --gradient-accent: linear-gradient(135deg, #22D3C4, #15A89D); /* @kind color */ /* teal sheen — primary button */
+  --gradient-brand:  linear-gradient(135deg, #20C4B8, #FF6F61); /* @kind color */ /* teal → coral — FAB, hero logo */
+
+  /* ---- Semantic aliases ---- */
+  --surface-screen: var(--bg);
+  --surface-card:   var(--bg-card);
+  --text-body:      var(--text-primary);
+  --text-label:     var(--text-secondary);
+  --link:           var(--accent);
+}

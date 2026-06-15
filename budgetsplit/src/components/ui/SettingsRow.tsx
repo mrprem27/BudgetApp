@@ -32,7 +32,7 @@ export function SettingsRow({ icon, label, value, tint = colors.accent, onPress,
       accessibilityLabel={label}
     >
       <View style={[styles.iconDot, { backgroundColor: (danger ? colors.expense : tint) + '22' }]}>
-        <Feather name={icon} size={16} color={danger ? colors.expense : tint} />
+        <Feather name={icon} size={18} color={danger ? colors.expense : tint} />
       </View>
       <Text style={[styles.label, danger && { color: colors.expense }]} numberOfLines={1}>{label}</Text>
       <View style={styles.right}>
@@ -46,12 +46,12 @@ export function SettingsRow({ icon, label, value, tint = colors.accent, onPress,
 export const settingsRowDivider = {
   height: 1,
   backgroundColor: colors.border,
-  marginLeft: 32 + space.md + space.md,
+  marginLeft: 40 + space.md + space.md,
 };
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52 },
-  iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 56 },
+  iconDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary, flex: 1 },
   right: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
   value: { ...type.body, color: colors.textSecondary, flexShrink: 1 },

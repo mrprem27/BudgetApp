@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { format } from 'date-fns';
 import { AmountText } from '../ui/AmountText';
 import { colors, type, space } from '../tokens';
 import { formatRupees } from '../../lib/money';
@@ -12,16 +13,15 @@ type Props = {
   myId: string;
   onPress?: () => void;
   onDelete?: () => void;
+  showDate?: boolean;
 };
 
-export function TransactionRow({ txn, myId, onPress, onDelete }: Props) {
+export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false }: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
   const displayAmount = txn.kind === 'income'
     ? txn.payments.find(p => p.personId === myId)?.amount ?? 0
     : -myShare;
 
-  // Income & settlements get fixed treatment; expenses use the category's own
-  // icon + colour from the catalog (falls back to a tag for custom categories).
   const visual = txn.kind === 'income'
     ? { icon: 'trending-up', color: colors.income }
     : txn.kind === 'settlement'
@@ -44,22 +44,26 @@ export function TransactionRow({ txn, myId, onPress, onDelete }: Props) {
         <Text style={styles.category} numberOfLines={1}>{txn.category}</Text>
         {txn.note ? <Text style={styles.note} numberOfLines={1}>{txn.note}</Text> : null}
       </View>
-      <AmountText
-        paise={displayAmount}
-        size="sm"
-        style={styles.amount}
-        forceColor={txn.kind === 'settlement' ? colors.settle : undefined}
-      />
+      <View style={styles.right}>
+        <AmountText
+          paise={displayAmount}
+          size="sm"
+          forceColor={txn.kind === 'settlement' ? colors.settle : undefined}
+        />
+        {showDate && (
+          <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
+        )}
+      </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: space.sm,
-    minHeight: 64,
+    paddingVertical: space.sm + 2,
+    minHeight: 72,
     gap: space.sm,
   },
   iconCircle: {
@@ -72,8 +76,8 @@ const styles = StyleSheet.create({
   middle: {
     flex: 1,
   },
-  amount: {
-    marginLeft: space.xs,
+  right: {
+    alignItems: 'flex-end',
   },
   category: {
     ...type.body,
@@ -82,6 +86,11 @@ const styles = StyleSheet.create({
   note: {
     ...type.caption,
     color: colors.textSecondary,
+    marginTop: 2,
+  },
+  date: {
+    ...type.caption,
+    color: colors.textMuted,
     marginTop: 2,
   },
 });
