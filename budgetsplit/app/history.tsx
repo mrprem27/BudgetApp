@@ -11,17 +11,17 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { getAuditLog } from '../src/db/queries/audit';
-import { formatRupees } from '../src/lib/money';
+import { formatRupeesShort } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
 
-const ACTION_ICON: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string }> = {
-  created:  { icon: 'plus-circle', color: colors.income },
-  updated:  { icon: 'edit-2', color: colors.accent },
-  deleted:  { icon: 'trash-2', color: colors.expense },
-  settled:  { icon: 'check-circle', color: colors.settle },
-  paused:   { icon: 'pause-circle', color: colors.healthAmber },
-  resumed:  { icon: 'play-circle', color: colors.income },
-  ended:    { icon: 'x-circle', color: colors.textMuted },
+const ACTION_ICON: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
+  created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
+  updated:  { icon: 'edit-2', color: colors.accent, label: 'Edited' },
+  deleted:  { icon: 'trash-2', color: colors.expense, label: 'Deleted' },
+  settled:  { icon: 'check-circle', color: colors.settle, label: 'Settled' },
+  paused:   { icon: 'pause-circle', color: colors.healthAmber, label: 'Paused' },
+  resumed:  { icon: 'play-circle', color: colors.income, label: 'Resumed' },
+  ended:    { icon: 'x-circle', color: colors.textMuted, label: 'Ended' },
 };
 
 function rangeStart(range: string): number | undefined {
@@ -103,10 +103,13 @@ export default function HistoryScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.summary}>{item.summary}</Text>
-                <Text style={styles.time}>{format(new Date(item.created_at), 'h:mm a')}</Text>
+                <Text style={styles.time}>
+                  <Text style={{ color: meta.color }}>{meta.label}</Text>
+                  {`  ·  ${format(new Date(item.created_at), 'h:mm a')}`}
+                </Text>
               </View>
               {item.amount != null && (
-                <Text style={styles.amount}>{formatRupees(item.amount)}</Text>
+                <Text style={styles.amount}>{formatRupeesShort(item.amount)}</Text>
               )}
             </View>
           );
