@@ -7,8 +7,8 @@ import { format, addDays, addWeeks, addMonths } from 'date-fns';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
-import { ScreenHeader } from '../../../src/components/ScreenHeader';
-import { EmptyState } from '../../../src/components/EmptyState';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { EmptyState } from '../../../src/components/ui/EmptyState';
 import {
   getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
 } from '../../../src/db/queries/transactions';
@@ -129,6 +129,10 @@ export default function RecurringScreen() {
 
                 {r.recur_state !== 'ended' && (
                   <View style={styles.actions}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => router.push(`/add/${r.kind === 'income' ? 'income' : 'quick'}?editId=${r.id}&groupId=${id}`)} accessibilityRole="button">
+                      <Feather name="edit-2" size={14} color={colors.accent} />
+                      <Text style={[styles.actionText, { color: colors.accent }]}>Edit</Text>
+                    </TouchableOpacity>
                     {r.recur_state === 'active' ? (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onPause(r)} accessibilityRole="button">
                         <Feather name="pause" size={14} color={colors.healthAmber} />

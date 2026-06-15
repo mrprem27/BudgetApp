@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from './tokens';
+import { colors, type, space, radius } from '../tokens';
 
 export type ChipGroup = {
   key: string;

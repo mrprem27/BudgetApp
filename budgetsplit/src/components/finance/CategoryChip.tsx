@@ -1,8 +1,8 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, radius, space } from './tokens';
-import type { Category } from '../db/queries/categories';
+import { colors, type, radius, space } from '../tokens';
+import type { Category } from '../../db/queries/categories';
 
 type Props = {
   category: Category;

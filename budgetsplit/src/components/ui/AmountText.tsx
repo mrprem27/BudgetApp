@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, TextStyle } from 'react-native';
-import { formatRupees } from '../lib/money';
-import { type, colors } from './tokens';
+import { formatRupees, formatRupeesShort } from '../../lib/money';
+import { type, colors } from '../tokens';
 
 type Size = 'xl' | 'lg' | 'md' | 'sm';
 
@@ -23,9 +23,11 @@ type Props = {
    * resizes when it goes negative or grows).
    */
   fit?: boolean;
+  /** Drop the paise/decimals — for dashboard cards and summaries. */
+  rounded?: boolean;
 };
 
-export function AmountText({ paise, size = 'md', style, forceColor, fit = false }: Props) {
+export function AmountText({ paise, size = 'md', style, forceColor, fit = false, rounded = false }: Props) {
   const color = forceColor
     ? forceColor
     : paise > 0
@@ -34,15 +36,17 @@ export function AmountText({ paise, size = 'md', style, forceColor, fit = false 
     ? colors.expense
     : colors.textPrimary;
 
+  const text = rounded ? formatRupeesShort(paise) : formatRupees(paise);
+
   return (
     <Text
       style={[styleMap[size], { color }, style]}
       numberOfLines={1}
       adjustsFontSizeToFit={fit}
       minimumFontScale={fit ? 0.6 : undefined}
-      accessibilityLabel={formatRupees(Math.abs(paise))}
+      accessibilityLabel={text}
     >
-      {formatRupees(paise)}
+      {text}
     </Text>
   );
 }

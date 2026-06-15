@@ -5,9 +5,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from './tokens';
-import { haptic } from '../lib/haptics';
-import type { Category } from '../db/queries/categories';
+import { colors, type, space, radius, shadow } from '../tokens';
+import { haptic } from '../../lib/haptics';
+import type { Category } from '../../db/queries/categories';
 
 type Props = {
   categories: Category[];

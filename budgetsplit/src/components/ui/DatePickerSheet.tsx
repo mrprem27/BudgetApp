@@ -5,7 +5,7 @@ import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, subMonths, isSameDay, isSameMonth, format,
 } from 'date-fns';
-import { colors, type, space, radius } from './tokens';
+import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from './SheetModal';
 
 type Props = {

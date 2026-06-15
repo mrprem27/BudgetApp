@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { Animated, Pressable, Text, StyleSheet, ViewStyle, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, type, radius, gradients, shadow } from './tokens';
-import { haptic } from '../lib/haptics';
+import { colors, type, radius, gradients, shadow } from '../tokens';
+import { haptic } from '../../lib/haptics';
 
 type Props = {
   label: string;

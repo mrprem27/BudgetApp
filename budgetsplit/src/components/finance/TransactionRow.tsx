@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { AmountText } from './AmountText';
-import { colors, type, space } from './tokens';
-import { formatRupees } from '../lib/money';
-import { categoryVisual } from '../constants/categories';
-import type { TxnWithSplits } from '../db/queries/transactions';
+import { AmountText } from '../ui/AmountText';
+import { colors, type, space } from '../tokens';
+import { formatRupees } from '../../lib/money';
+import { categoryVisual } from '../../constants/categories';
+import type { TxnWithSplits } from '../../db/queries/transactions';
 
 type Props = {
   txn: TxnWithSplits;

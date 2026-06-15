@@ -13,9 +13,9 @@ import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup } from '../../../src/db/queries/persons';
 import { getGroupNet } from '../../../src/db/queries/balances';
-import { MemberAvatar } from '../../../src/components/MemberAvatar';
-import { PrimaryButton } from '../../../src/components/PrimaryButton';
-import { SheetModal } from '../../../src/components/SheetModal';
+import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { formatRupees } from '../../../src/lib/money';
 import type { Person } from '../../../src/db/queries/persons';
 

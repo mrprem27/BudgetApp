@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES } from '../../constants/categories';
+import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../../constants/categories';
 import { logAudit } from './audit';
 
 export type BudgetGroup = {
@@ -30,6 +30,23 @@ export async function getGroupById(db: SQLite.SQLiteDatabase, id: string): Promi
   return db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id = ?', [id]);
 }
 
+export async function getArchivedGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
+  return db.getAllAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE is_archived = 1 ORDER BY created_at ASC',
+  );
+}
+
+export async function unarchiveGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
+    await db.runAsync('UPDATE budget_group SET is_archived=0 WHERE id=?', [groupId]);
+    await logAudit(db, {
+      entityType: 'group', entityId: groupId, groupId,
+      action: 'updated', summary: `Restored group · ${g?.name ?? ''}`,
+    });
+  });
+}
+
 export async function insertGroup(
   db: SQLite.SQLiteDatabase,
   name: string,
@@ -54,7 +71,13 @@ export async function insertGroup(
     }
     for (const cat of DEFAULT_CATEGORIES) {
       await db.runAsync(
-        'INSERT INTO category (id, group_id, name, icon, color) VALUES (?, ?, ?, ?, ?)',
+        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'expense')",
+        [uuid(), id, cat.name, cat.icon, cat.color],
+      );
+    }
+    for (const cat of INCOME_CATEGORIES) {
+      await db.runAsync(
+        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
         [uuid(), id, cat.name, cat.icon, cat.color],
       );
     }

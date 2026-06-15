@@ -14,10 +14,10 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { parseToPaise } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, updatePersonName } from '../../src/db/queries/persons';
-import { MemberAvatar } from '../../src/components/MemberAvatar';
-import { SheetModal } from '../../src/components/SheetModal';
-import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { SettingsRow, settingsRowDivider } from '../../src/components/SettingsRow';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 
@@ -195,10 +195,10 @@ function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof F
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: 60 },
-  header: { marginBottom: space.lg },
+  header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
-  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: space.lg, textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md, textTransform: 'uppercase', letterSpacing: 0.5 },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.xs, gap: 2, ...shadow.sm },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   profileName: { ...type.subheading, color: colors.textPrimary },
   profileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },

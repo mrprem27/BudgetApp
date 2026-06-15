@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
-import { ScreenHeader } from '../src/components/ScreenHeader';
+import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { getAllGroups } from '../src/db/queries/groups';
 import {
   getCategoriesForGroup, insertCategory, deleteCategory,

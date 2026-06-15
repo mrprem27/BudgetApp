@@ -19,12 +19,12 @@ import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
-import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { CategoryPicker } from '../../src/components/CategoryPicker';
-import { SheetModal } from '../../src/components/SheetModal';
-import { DatePickerSheet } from '../../src/components/DatePickerSheet';
-import { MemberAvatar } from '../../src/components/MemberAvatar';
-import { AmountText } from '../../src/components/AmountText';
+import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { AmountText } from '../../src/components/ui/AmountText';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
@@ -62,7 +62,8 @@ export default function QuickAddScreen() {
   const [recurEnabled, setRecurEnabled] = useState(false);
   const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
-  const [recurEndPreset, setRecurEndPreset] = useState<'none' | '3m' | '6m' | '1y' | '2y'>('none');
+  const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
+  const [showEndDate, setShowEndDate] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -189,13 +190,8 @@ export default function QuickAddScreen() {
         return;
       }
 
-      let recurEnd: number | undefined;
-      if (recurEnabled && recurEndPreset !== 'none') {
-        const monthsToAdd = { '3m': 3, '6m': 6, '1y': 12, '2y': 24 }[recurEndPreset];
-        const d = new Date();
-        d.setMonth(d.getMonth() + monthsToAdd);
-        recurEnd = d.getTime();
-      }
+      // End date is optional; only valid if it's after the start date.
+      const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
 
       // Optional, user-controlled location capture (Settings → Privacy).
       let place: { lat: number; lng: number; label: string | null } | null = null;
@@ -240,22 +236,7 @@ export default function QuickAddScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.kindRow}>
-          {(['expense', 'income'] as const).map(k => (
-            <TouchableOpacity
-              key={k}
-              style={[styles.kindBtn, kind === k && styles.kindActive]}
-              onPress={() => setKind(k)}
-              accessibilityRole="button"
-              accessibilityLabel={k}
-              accessibilityState={{ selected: kind === k }}
-            >
-              <Text style={[styles.kindLabel, kind === k && styles.kindLabelActive]}>
-                {k.charAt(0).toUpperCase() + k.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Income has its own dedicated screen (add/income); this screen is expense-only. */}
 
         <TextInput
           style={styles.amountInput}
@@ -311,6 +292,7 @@ export default function QuickAddScreen() {
           accessibilityLabel="Note"
         />
 
+        <Text style={styles.fieldLabel}>{recurEnabled ? 'Starts on' : 'Date'}</Text>
         <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
           <Feather name="calendar" size={16} color={colors.accent} />
           <Text style={styles.dateText}>
@@ -367,18 +349,16 @@ export default function QuickAddScreen() {
             )}
 
             <Text style={styles.fieldLabel}>Ends</Text>
-            <View style={styles.endChipRow}>
-              {([['none', 'No end'], ['3m', '3 months'], ['6m', '6 months'], ['1y', '1 year'], ['2y', '2 years']] as const).map(([k, label]) => (
-                <TouchableOpacity
-                  key={k}
-                  style={[styles.endChip, recurEndPreset === k && styles.endChipActive]}
-                  onPress={() => setRecurEndPreset(k)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: recurEndPreset === k }}
-                >
-                  <Text style={[styles.endChipText, recurEndPreset === k && styles.endChipTextActive]}>{label}</Text>
+            <View style={styles.endRow}>
+              <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
+                <Feather name="calendar" size={15} color={colors.accent} />
+                <Text style={styles.dateText}>{recurEndMs ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
+              </TouchableOpacity>
+              {recurEndMs != null && (
+                <TouchableOpacity style={styles.endNeverBtn} onPress={() => setRecurEndMs(null)} accessibilityRole="button" accessibilityLabel="No end date">
+                  <Text style={styles.endNeverText}>Never</Text>
                 </TouchableOpacity>
-              ))}
+              )}
             </View>
           </View>
         )}
@@ -538,6 +518,12 @@ export default function QuickAddScreen() {
       </Modal>
 
       <DatePickerSheet visible={showDate} value={txnDate} onClose={() => setShowDate(false)} onChange={setTxnDate} />
+      <DatePickerSheet
+        visible={showEndDate}
+        value={recurEndMs ?? (txnDate + 30 * 24 * 60 * 60 * 1000)}
+        onClose={() => setShowEndDate(false)}
+        onChange={setRecurEndMs}
+      />
 
       {/* Paid by sheet — set one or more payers */}
       <SheetModal visible={showPayers} onClose={() => setShowPayers(false)} title="Who paid?">
@@ -628,11 +614,10 @@ const styles = StyleSheet.create({
   payerSheetInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
   payerQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted },
   payerQuickText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  endChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  endChip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  endChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  endChipText: { ...type.label, color: colors.textSecondary },
-  endChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
+  endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
+  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
+  endNeverText: { ...type.label, color: colors.textSecondary },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   doneBtnText: { ...type.button, color: colors.bg },
 });

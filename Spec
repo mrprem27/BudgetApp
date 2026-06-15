@@ -1,9 +1,10 @@
 # BudgetSplit — iOS Budget & Split Expense App
 
-**Final Build Spec · v4.0 · For Claude Code**
+**Final Build Spec · v6.0 · For Claude Code**
 
-> ⚠️ **§18 (v4 Architecture Update) supersedes any conflicting rule earlier in this document.**
-> Read §18 first if there is any disagreement.
+> ⚠️ **§19 (Current Architecture) is the source of truth for structure, schema and components.**
+> §18 (v4 update) and §19 (v5/v6) supersede any conflicting rule earlier in this document.
+> Read §19 first.
 
 > React Native (Expo) · SQLite local · offline-first · solo v1, multi-user v2
 > Developer: Prem (3+ years RN/MERN, no iOS environment set up yet)
@@ -1114,3 +1115,112 @@ ALTER TABLE budget_group ADD COLUMN simplify_debt INTEGER NOT NULL DEFAULT 1;
 
 - Reuse repeatable components: `<EmptyState>`, `<FilterBar>`, `<SettingsRow>`, `<SegmentedTabs>`, `<SheetModal>`. Do not hand-roll the same row/sheet/empty layout per screen.
 - Every empty state uses `<EmptyState>` (icon circle + title + body + optional CTA) per AGENTS.md §2.
+
+-----
+
+## 19. Current Architecture (v5/v6 — source of truth)
+
+This section documents the app **as actually built**. Where it differs from §1–§18, this wins.
+
+### 19.1 Folder structure
+
+```
+budgetsplit/
+├── app/                          # expo-router routes (file = route; do not reorganize)
+│   ├── _layout.tsx               # providers, fonts, DB open, gates, PrivacyScreen
+│   ├── (tabs)/                   # index (dashboard) · groups · reports · settings
+│   ├── add/                      # quick.tsx · itemized.tsx · transfer.tsx
+│   ├── group/[id].tsx            # group detail (Expenses/Balances/Budget/Members)
+│   ├── group/[id]/               # budget.tsx · edit.tsx · members.tsx · recurring.tsx
+│   ├── txn/[id].tsx              # transaction detail + edit history
+│   ├── history.tsx · help.tsx · settle.tsx · categories.tsx
+├── src/
+│   ├── components/
+│   │   ├── ui/                   # generic primitives (see 19.2)
+│   │   ├── finance/              # domain widgets (see 19.2)
+│   │   ├── system/               # app-shell / lifecycle (see 19.2)
+│   │   └── tokens.ts             # re-exports colors/type/space/radius/shadow/gradients
+│   ├── db/
+│   │   ├── schema.ts             # tables + idempotent column migrations
+│   │   ├── seed.ts
+│   │   └── queries/              # audit · balances · categories · categoryBudgets
+│   │                             #  · groups · persons · transactions
+│   ├── lib/                      # analytics · budget · haptics · location · money
+│   │                             #  · notifications · recurrence · settle
+│   ├── constants/                # categories · colors · layout · typography
+│   └── store/                    # zustand store
+└── ios/ (committed prebuild) · app.json · AGENTS.md
+```
+
+### 19.2 Component catalogue
+
+**`components/ui/`** (generic, no domain knowledge):
+`AmountText` (paise→₹, `rounded` + `fit` props), `Card`, `PrimaryButton`, `SecondaryButton`,
+`PressableScale`, `FadeIn`, `Skeleton`, `EmptyState`, `ScreenHeader`, `SettingsRow`,
+`FilterBar`, `SheetModal` (keyboard-safe bottom sheet), `DatePickerSheet` (JS calendar), `FAB`.
+
+**`components/finance/`** (domain widgets):
+`BudgetBar`, `TransactionRow`, `BalanceRow`, `CategoryChip`, `CategoryPicker`,
+`SettleSheet` (partial-settlement amount editor), `MemberAvatar`.
+
+**`components/system/`** (app shell):
+`Onboarding` (swipe carousel), `OnboardingGate`, `LockGate` (Face ID), `PrivacyScreen` (app-switcher mask).
+
+Rules: import shared tokens from `../tokens`; `ui` never imports from `finance`/`system`;
+`finance`/`system` may import from `ui`.
+
+### 19.3 Data model (current)
+
+All of §3 plus:
+
+```sql
+-- budget_group adds:
+is_personal    INTEGER NOT NULL DEFAULT 0,   -- the seeded single-user space
+simplify_debt  INTEGER NOT NULL DEFAULT 1,   -- per-group Balances toggle
+
+-- txn adds:
+recur_state TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
+tz          TEXT,        -- IANA timezone captured at create
+lat REAL, lng REAL, place_label TEXT,   -- optional, user-controlled location
+
+-- category_budget adds:
+cadence TEXT NOT NULL DEFAULT 'monthly' CHECK(cadence IN ('once','daily','monthly','yearly')),
+
+-- new table:
+CREATE TABLE audit_log (
+  id TEXT PRIMARY KEY, entity_type TEXT, entity_id TEXT, group_id TEXT,
+  action TEXT, summary TEXT, amount INTEGER, created_at INTEGER NOT NULL
+);
+```
+
+Migrations run idempotently in `openDB()` (try/catch `ALTER TABLE ADD COLUMN`).
+
+### 19.4 Budget model (v5)
+
+Each budgeted category has ONE line: `{ cadence, amount }`. Spending is compared within the
+current window of its cadence (today / this month / this year / all-time for `once`). Lines are
+persistent templates — daily/monthly/yearly roll forward automatically; `once` never resets.
+Budget cadence is **independent of transaction recurrence**.
+
+### 19.5 Transaction kinds & flows
+
+- `expense` / `income` (quick or itemized) · `settlement` (system: settle-up + transfers).
+- Edit: quick expenses/income editable via `txn/[id]` → quick editor. **Itemized bills are
+  not in-place editable** (would orphan line items) — shown read-only, delete + re-add to change.
+- Recurring rules editable from the Recurring screen (preserves recurrence).
+- Every mutation writes an `audit_log` row; per-txn history shows on the detail screen.
+
+### 19.6 Privacy, location, identity
+
+- `PrivacyScreen` masks content on background (toggle: Settings → Privacy, default on).
+- Location capture is opt-in (Settings toggle, default off), reverse-geocoded to a place name,
+  via `expo-location` (requires `NSLocationWhenInUseUsageDescription` in Info.plist).
+- Each person carries a unique identifier (email/mobile) for future groups/sync; offline in v1.
+
+### 19.7 Outstanding roadmap (not yet built)
+
+Budget sections layer; budget filtering; multi-user / split income; advanced reports
+(forecasts/anomalies); group theming + top-nav redesign; archive UX.
+
+**v2 / next version:** a free in-app map (Mapbox free tier / OpenStreetMap / react-native-maps)
+on the transaction detail to show where a transaction was made, using the stored lat/lng.

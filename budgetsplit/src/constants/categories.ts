@@ -56,20 +56,61 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
   { name: 'Education',        icon: 'book-open',      color: '#4ADE80' },
   { name: 'Taxes',            icon: 'percent',        color: '#FCD34D' },
 
-  // Other & income
+  // Other
   { name: 'Travel',           icon: 'map',            color: '#F472B6' },
   { name: 'Family & Support', icon: 'users',          color: '#FB7185' },
   { name: 'Other',            icon: 'more-horizontal', color: '#8B8A99' },
+];
 
-  // Income types
+/**
+ * Income has its own purpose-built category set — never mixed with expense
+ * categories. Seeded per group with kind = 'income'.
+ */
+export const INCOME_CATEGORIES: CategoryDef[] = [
   { name: 'Salary',           icon: 'briefcase',      color: '#3ECF8E' },
   { name: 'Freelance',        icon: 'edit-3',         color: '#2DD4BF' },
-  { name: 'Refunds',          icon: 'corner-up-left', color: '#86EFAC' },
+  { name: 'Business',         icon: 'trending-up',    color: '#22C55E' },
+  { name: 'Interest',         icon: 'percent',        color: '#34D399' },
+  { name: 'Dividends',        icon: 'pie-chart',      color: '#4ADE80' },
+  { name: 'Rent Received',    icon: 'home',           color: '#86EFAC' },
+  { name: 'Bonus',            icon: 'award',          color: '#A3E635' },
+  { name: 'Cashback',         icon: 'corner-up-left', color: '#2DD4BF' },
+  { name: 'Refunds',          icon: 'rotate-ccw',     color: '#86EFAC' },
+  { name: 'Gifts Received',   icon: 'gift',           color: '#F9A8D4' },
+  { name: 'Other Income',     icon: 'plus-circle',    color: '#8B8A99' },
 ];
+
+/**
+ * Sections group categories so the budget UI can present "pick a section →
+ * see its categories". Derived from the catalog (no DB column) — custom
+ * categories fall into "Other".
+ */
+export const CATEGORY_SECTIONS: { title: string; names: string[] }[] = [
+  { title: 'Home & Living', names: ['Rent', 'Maintenance', 'Household Help', 'Home Supplies'] },
+  { title: 'Food', names: ['Groceries', 'Food Delivery', 'Eating Out', 'Chai & Snacks'] },
+  { title: 'Transport', names: ['Cab & Auto', 'Metro & Bus', 'Fuel', 'Parking & Toll'] },
+  { title: 'Bills & Utilities', names: ['Electricity', 'Mobile Recharge', 'WiFi & Broadband', 'Bills'] },
+  { title: 'Lifestyle', names: ['Shopping', 'Subscriptions', 'Entertainment', 'Gym & Fitness', 'Salon & Grooming', 'Electronics', 'Gifts'] },
+  { title: 'Health', names: ['Health & Pharmacy', 'Insurance'] },
+  { title: 'Money & Growth', names: ['Investments / SIP', 'Savings', 'EMI & Loans', 'Education', 'Taxes'] },
+  { title: 'Other', names: ['Travel', 'Family & Support', 'Other'] },
+];
+
+const SECTION_OF: Record<string, string> = Object.fromEntries(
+  CATEGORY_SECTIONS.flatMap(s => s.names.map(n => [n, s.title])),
+);
+
+/** The section a category belongs to (defaults to "Other" for custom ones). */
+export function categorySection(name: string): string {
+  return SECTION_OF[name] ?? 'Other';
+}
+
+/** Ordered list of section titles for grouping UIs. */
+export const SECTION_ORDER = CATEGORY_SECTIONS.map(s => s.title);
 
 /** name → {icon,color} lookup for rendering any stored category by name. */
 export const CATEGORY_LOOKUP: Record<string, { icon: string; color: string }> = Object.fromEntries(
-  DEFAULT_CATEGORIES.map(c => [c.name, { icon: c.icon, color: c.color }]),
+  [...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
 );
 
 /** Special non-catalog categories that still need an icon/colour. */

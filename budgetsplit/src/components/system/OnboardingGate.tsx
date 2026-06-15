@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from '../constants/colors';
+import { colors } from '../../constants/colors';
 import { Onboarding } from './Onboarding';
 
 const KEY = 'onboarding_done';

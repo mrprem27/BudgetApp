@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Animated, Pressable, ViewStyle, StyleProp, GestureResponderEvent } from 'react-native';
-import { haptic } from '../lib/haptics';
+import { haptic } from '../../lib/haptics';
 
 type Props = {
   children: React.ReactNode;

@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
-import { ScreenHeader } from '../src/components/ScreenHeader';
+import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 
 type Item = { icon: keyof typeof Feather.glyphMap; title: string; body: string };
 type Section = { title: string; items: Item[] };

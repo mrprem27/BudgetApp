@@ -5,9 +5,9 @@ import {
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../constants/colors';
-import { type } from '../constants/typography';
-import { space, radius } from '../constants/layout';
+import { colors } from '../../constants/colors';
+import { type } from '../../constants/typography';
+import { space, radius } from '../../constants/layout';
 
 /**
  * Wraps the app. If the user has enabled biometric lock, the app locks whenever

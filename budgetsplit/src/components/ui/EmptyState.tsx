@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from './tokens';
+import { colors, type, space, radius } from '../tokens';
 import { PrimaryButton } from './PrimaryButton';
 
 type Props = {

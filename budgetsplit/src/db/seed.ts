@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as Device from 'expo-device';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES } from '../constants/categories';
+import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../constants/categories';
 
 export async function seedIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ cnt: number }>('SELECT count(*) as cnt FROM person');
@@ -33,7 +33,13 @@ export async function seedIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
 
     for (const cat of DEFAULT_CATEGORIES) {
       await db.runAsync(
-        'INSERT INTO category (id, group_id, name, icon, color) VALUES (?, ?, ?, ?, ?)',
+        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'expense')",
+        [uuid(), groupId, cat.name, cat.icon, cat.color],
+      );
+    }
+    for (const cat of INCOME_CATEGORIES) {
+      await db.runAsync(
+        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
         [uuid(), groupId, cat.name, cat.icon, cat.color],
       );
     }

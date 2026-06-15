@@ -7,8 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout } from '../../../src/constants/layout';
-import { ScreenHeader } from '../../../src/components/ScreenHeader';
-import { PrimaryButton } from '../../../src/components/PrimaryButton';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { getGroupById, updateGroup } from '../../../src/db/queries/groups';
 import { haptic } from '../../../src/lib/haptics';
 

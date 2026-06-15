@@ -212,6 +212,10 @@ Never raw hex. Always use tokens.
 - **UUIDs**: `import 'react-native-get-random-values'; import { v4 as uuid } from 'uuid';`
 - **No `new Date()` in DB operations** — use `Date.now()` for timestamps.
 - **StyleSheet.create()** for all styles. Inline objects only for dynamic values (color from state, etc).
-- **Import from tokens**: `import { colors, type, space, radius, shadow, gradients } from '../components/tokens'`
+- **Component folders**: place new components in the right bucket —
+  `components/ui/` (generic primitives, no domain knowledge),
+  `components/finance/` (budget/transaction/member/settle widgets),
+  `components/system/` (onboarding, gates, privacy). `ui` must never import from `finance`/`system`; the others may import from `ui`. Shared tokens live at `components/tokens.ts`.
+- **Import from tokens**: from inside a component subfolder use `import { colors, type, space, radius, shadow, gradients } from '../tokens'`; screens import components via `../../src/components/<folder>/<Name>`.
 - **No `any` types** unless wrapping an untyped third-party API.
 - **Null checks**: check results before using — DB queries can return null for missing rows.

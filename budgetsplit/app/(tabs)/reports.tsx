@@ -19,10 +19,10 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { formatRupees } from '../../src/lib/money';
-import { AmountText } from '../../src/components/AmountText';
-import { BudgetBar } from '../../src/components/BudgetBar';
-import { SkeletonCard } from '../../src/components/Skeleton';
+import { formatRupees, formatRupeesShort } from '../../src/lib/money';
+import { AmountText } from '../../src/components/ui/AmountText';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 

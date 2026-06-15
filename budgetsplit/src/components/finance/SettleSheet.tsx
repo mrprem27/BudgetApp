@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from './tokens';
+import { colors, type, space, radius } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
-import { PrimaryButton } from './PrimaryButton';
-import { SheetModal } from './SheetModal';
-import { parseToPaise, formatRupees } from '../lib/money';
-import type { Person } from '../db/queries/persons';
+import { PrimaryButton } from '../ui/PrimaryButton';
+import { SheetModal } from '../ui/SheetModal';
+import { parseToPaise, formatRupees } from '../../lib/money';
+import type { Person } from '../../db/queries/persons';
 
 type Props = {
   visible: boolean;

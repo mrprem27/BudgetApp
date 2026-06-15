@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, ViewStyle, StyleProp, DimensionValue } from 'react-native';
-import { colors, radius } from './tokens';
+import { colors, radius } from '../tokens';
 
 type Props = {
   width?: DimensionValue;

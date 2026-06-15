@@ -12,9 +12,9 @@ import * as Notifications from 'expo-notifications';
 import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { colors } from '../src/constants/colors';
-import { LockGate } from '../src/components/LockGate';
-import { OnboardingGate } from '../src/components/OnboardingGate';
-import { PrivacyScreen } from '../src/components/PrivacyScreen';
+import { LockGate } from '../src/components/system/LockGate';
+import { OnboardingGate } from '../src/components/system/OnboardingGate';
+import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -70,7 +70,9 @@ export default function RootLayout() {
               >
                 <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
                 <Stack.Screen name="add/quick" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="add/income" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
                 <Stack.Screen name="add/itemized" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="add/transfer" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               </Stack>
             </OnboardingGate>
           </LockGate>

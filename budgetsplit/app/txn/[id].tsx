@@ -7,16 +7,16 @@ import { format } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
-import { ScreenHeader } from '../../src/components/ScreenHeader';
-import { MemberAvatar } from '../../src/components/MemberAvatar';
-import { getTxnById, softDeleteTxn } from '../../src/db/queries/transactions';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { getTxnById, softDeleteTxn, getLineItems } from '../../src/db/queries/transactions';
 import { getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getAuditLog } from '../../src/db/queries/audit';
 import { categoryVisual } from '../../src/constants/categories';
 import { formatRupees } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
-import type { TxnWithSplits } from '../../src/db/queries/transactions';
+import type { TxnWithSplits, LineItem } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
 
@@ -39,6 +39,7 @@ export default function TxnDetailScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [groupName, setGroupName] = useState('');
   const [history, setHistory] = useState<AuditLog[]>([]);
+  const [items, setItems] = useState<LineItem[]>([]);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
@@ -46,16 +47,18 @@ export default function TxnDetailScreen() {
     const t = await getTxnById(db, id);
     setTxn(t);
     if (!t) return;
-    const [grp, mems, meRow, hist] = await Promise.all([
+    const [grp, mems, meRow, hist, li] = await Promise.all([
       getGroupById(db, t.group_id),
       getGroupMembers(db, t.group_id),
       getMe(db),
       getAuditLog(db, { entityId: id }),
+      t.entry_mode === 'itemized' ? getLineItems(db, id) : Promise.resolve([]),
     ]);
     setGroupName(grp?.name ?? '');
     setMembers(mems);
     setMe(meRow);
     setHistory(hist);
+    setItems(li);
   }
 
   if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
@@ -65,6 +68,9 @@ export default function TxnDetailScreen() {
   const total = txn.payments.reduce((s, p) => s + p.amount, 0);
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
+  const isItemized = txn.entry_mode === 'itemized';
+  // Itemized bills can't be edited in the quick form (it would orphan line items).
+  const canEdit = !isSettlement && !isItemized;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
@@ -82,8 +88,8 @@ export default function TxnDetailScreen() {
       <ScreenHeader
         title="Transaction"
         onBack={() => router.back()}
-        right={!isSettlement ? (
-          <TouchableOpacity onPress={() => router.push(`/add/quick?editId=${id}&groupId=${txn.group_id}`)} hitSlop={10} accessibilityLabel="Edit">
+        right={canEdit ? (
+          <TouchableOpacity onPress={() => router.push(`/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`)} hitSlop={10} accessibilityLabel="Edit">
             <Feather name="edit-2" size={18} color={colors.accent} />
           </TouchableOpacity>
         ) : undefined}
@@ -111,7 +117,15 @@ export default function TxnDetailScreen() {
           <Row label="Group" value={groupName} />
           <View style={styles.divider} />
           <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
-          {!!txn.place_label && (<><View style={styles.divider} /><Row label="Location" value={txn.place_label} /></>)}
+          {!!txn.place_label && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.locationRow}>
+                <Feather name="map-pin" size={14} color={colors.textSecondary} />
+                <Text style={styles.locationText}>{txn.place_label}</Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Paid by */}
@@ -146,6 +160,22 @@ export default function TxnDetailScreen() {
           </>
         )}
 
+        {/* Itemized line items (read-only) */}
+        {isItemized && items.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Items</Text>
+            <View style={styles.card}>
+              {items.map((it, i) => (
+                <View key={it.id} style={[styles.personRow, i < items.length - 1 && styles.divider]}>
+                  <Text style={styles.personName} numberOfLines={1}>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}</Text>
+                  <Text style={styles.personAmt}>{formatRupees(it.qty * it.unit_price)}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.itemHint}>Itemized bills can’t be edited in place — delete and re-add to change items.</Text>
+          </>
+        )}
+
         {/* History */}
         <Text style={styles.sectionLabel}>History</Text>
         <View style={styles.card}>
@@ -167,7 +197,7 @@ export default function TxnDetailScreen() {
           })}
         </View>
 
-        {!isSettlement && (
+        {(!isSettlement || isItemized) && (
           <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
             <Feather name="trash-2" size={16} color={colors.expense} />
             <Text style={styles.deleteText}>Delete transaction</Text>
@@ -203,6 +233,8 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   metaLabel: { ...type.label, color: colors.textSecondary },
   metaValue: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right' },
+  locationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
+  locationText: { ...type.body, color: colors.textPrimary, flex: 1, lineHeight: 20 },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.xs },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   personName: { ...type.body, color: colors.textPrimary, flex: 1 },
@@ -212,6 +244,7 @@ const styles = StyleSheet.create({
   histText: { ...type.label, color: colors.textPrimary },
   histTime: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   emptyHistory: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
+  itemHint: { ...type.caption, color: colors.textMuted },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 });

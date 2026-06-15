@@ -6,7 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { format, isSameDay } from 'date-fns';
+import { format, isSameDay, startOfMonth } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
@@ -20,17 +20,18 @@ import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import { formatRupees } from '../../src/lib/money';
+import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
-import { TransactionRow } from '../../src/components/TransactionRow';
-import { BalanceRow } from '../../src/components/BalanceRow';
-import { BudgetBar } from '../../src/components/BudgetBar';
-import { MemberAvatar } from '../../src/components/MemberAvatar';
-import { FAB } from '../../src/components/FAB';
-import { EmptyState } from '../../src/components/EmptyState';
-import { FilterBar } from '../../src/components/FilterBar';
-import { SheetModal } from '../../src/components/SheetModal';
-import { SettleSheet } from '../../src/components/SettleSheet';
-import { SettingsRow, settingsRowDivider } from '../../src/components/SettingsRow';
+import { TransactionRow } from '../../src/components/finance/TransactionRow';
+import { BalanceRow } from '../../src/components/finance/BalanceRow';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { FAB } from '../../src/components/ui/FAB';
+import { EmptyState } from '../../src/components/ui/EmptyState';
+import { FilterBar } from '../../src/components/ui/FilterBar';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { SettleSheet } from '../../src/components/finance/SettleSheet';
+import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -94,6 +95,7 @@ export default function GroupDetailScreen() {
   const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
+  const [budgetFilter, setBudgetFilter] = useState('all');
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
@@ -201,10 +203,34 @@ export default function GroupDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
           <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
+      </View>
+
+      {/* Group hero — themed by the group's colour */}
+      <View style={styles.hero}>
+        <View style={[styles.heroIcon, { backgroundColor: group.color + '22' }]}>
+          <Feather name={(group.icon as any) ?? 'credit-card'} size={22} color={group.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
+          <Text style={styles.heroSub} numberOfLines={1}>
+            {(() => {
+              const monthStart = startOfMonth(new Date()).getTime();
+              const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
+              const myNet = net[me?.id ?? ''] ?? 0;
+              const parts: string[] = [`${formatRupees(monthSpend)} this month`];
+              if (!isPersonal) {
+                parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
+                if (myNet > 0) parts.push(`you're owed ${formatRupees(myNet)}`);
+                else if (myNet < 0) parts.push(`you owe ${formatRupees(-myNet)}`);
+              }
+              return parts.join(' · ');
+            })()}
+          </Text>
+        </View>
       </View>
 
       {budgetUsage && budgetUsage.pct !== null && (
@@ -216,16 +242,18 @@ export default function GroupDetailScreen() {
         </View>
       )}
 
-      <View style={styles.segmented}>
+      {/* Modern underline tab strip (replaces the boxed segmented control) */}
+      <View style={styles.tabStrip}>
         {TABS.map(t => (
           <TouchableOpacity
             key={t.key}
-            style={[styles.seg, activeTab === t.key && styles.segActive]}
+            style={styles.tab}
             onPress={() => setActiveTab(t.key)}
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === t.key }}
           >
-            <Text style={[styles.segLabel, activeTab === t.key && styles.segLabelActive]}>{t.label}</Text>
+            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>{t.label}</Text>
+            <View style={[styles.tabUnderline, activeTab === t.key && { backgroundColor: group.color }]} />
           </TouchableOpacity>
         ))}
       </View>
@@ -346,8 +374,9 @@ export default function GroupDetailScreen() {
             <>
               <View style={styles.budgetHeadingRow}>
                 <Text style={styles.budgetHeading}>Budget</Text>
-                <TouchableOpacity onPress={() => router.push(`/group/${id}/budget`)} accessibilityRole="button">
-                  <Text style={styles.editLink}>Edit</Text>
+                <TouchableOpacity style={styles.editPill} onPress={() => router.push(`/group/${id}/budget`)} accessibilityRole="button" accessibilityLabel="Edit budget">
+                  <Feather name="edit-2" size={13} color={colors.accent} />
+                  <Text style={styles.editPillText}>Edit</Text>
                 </TouchableOpacity>
               </View>
 
@@ -396,26 +425,57 @@ export default function GroupDetailScreen() {
                 </View>
               )}
 
-              {CADENCE_SECTIONS.map(sec => {
-                const lines = catStatus.filter(c => c.cadence === sec.key);
-                if (lines.length === 0) return null;
-                return (
-                  <View key={sec.key} style={{ marginBottom: space.md }}>
-                    <Text style={styles.cadenceLabel}>{sec.label}</Text>
-                    <View style={styles.catCard}>
-                      {lines.map((c, i) => (
-                        <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
-                          <View style={styles.catTop}>
-                            <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
-                            <Text style={styles.catAmt}>{formatRupees(c.spent)} / {formatRupees(c.allocated)}</Text>
-                          </View>
-                          <BudgetBar pct={c.pct} health={c.health} height={6} />
-                        </View>
-                      ))}
+              <View style={{ marginBottom: space.sm }}>
+                <FilterBar
+                  selected={{ status: budgetFilter }}
+                  onSelect={(_, v) => setBudgetFilter(v)}
+                  groups={[{ key: 'status', options: [
+                    { label: 'All', value: 'all' },
+                    { label: 'Over', value: 'over' },
+                    { label: 'Near limit', value: 'near' },
+                    { label: 'On track', value: 'ontrack' },
+                  ] }]}
+                />
+              </View>
+
+              {(() => {
+                const matches = (c: CategoryBudgetStatus) =>
+                  budgetFilter === 'all' ? true
+                  : budgetFilter === 'over' ? c.health === 'red'
+                  : budgetFilter === 'near' ? c.health === 'amber'
+                  : c.health === 'green';
+                const visible = catStatus.filter(matches);
+                if (visible.length === 0) {
+                  return <EmptyState icon="filter" title="Nothing here" body="No categories match this filter." tint={colors.textSecondary} />;
+                }
+                return SECTION_ORDER.map(section => {
+                  const lines = visible.filter(c => categorySection(c.category) === section);
+                  if (lines.length === 0) return null;
+                  return (
+                    <View key={section} style={{ marginBottom: space.md }}>
+                      <Text style={styles.cadenceLabel}>{section}</Text>
+                      <View style={styles.catCard}>
+                        {lines.map((c, i) => {
+                          const vis = categoryVisual(c.category);
+                          return (
+                            <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
+                              <View style={styles.catTop}>
+                                <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
+                                  <Feather name={vis.icon as any} size={14} color={vis.color} />
+                                </View>
+                                <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
+                                <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
+                                <Text style={styles.catAmt}>{formatRupees(c.spent)} / {formatRupees(c.allocated)}</Text>
+                              </View>
+                              <BudgetBar pct={c.pct} health={c.health} height={6} />
+                            </View>
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
-                );
-              })}
+                  );
+                });
+              })()}
             </>
           ) : (
             <EmptyState
@@ -453,9 +513,10 @@ export default function GroupDetailScreen() {
       )}
 
       <FAB
+        aboveTabBar={false}
         actions={[
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
-          { label: 'Income', icon: 'plus-circle', tint: colors.income, description: 'Money received', onPress: () => router.push(`/add/quick?groupId=${id}&kind=income`) },
+          { label: 'Income', icon: 'plus-circle', tint: colors.income, description: 'Money received', onPress: () => router.push(`/add/income?groupId=${id}`) },
           ...(isPersonal ? [] : [{ label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between members', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
           { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
         ]}
@@ -514,15 +575,18 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: layout.screenPaddingH },
-  title: { ...type.heading, color: colors.textPrimary, flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
+  heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  heroName: { ...type.title, fontSize: 26, color: colors.textPrimary },
+  heroSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: 4, marginBottom: space.sm },
   budgetHeaderText: { ...type.caption, color: colors.textMuted },
-  segmented: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, backgroundColor: colors.bgMuted, borderRadius: 8, marginBottom: space.md, padding: 3 },
-  seg: { flex: 1, paddingVertical: space.xs, alignItems: 'center', borderRadius: 6 },
-  segActive: { backgroundColor: colors.bgCard, ...shadow.sm },
-  segLabel: { ...type.label, color: colors.textSecondary },
-  segLabelActive: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  tabStrip: { flexDirection: 'row', paddingHorizontal: layout.screenPaddingH, gap: space.lg, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: space.md },
+  tab: { paddingBottom: space.sm, alignItems: 'center' },
+  tabLabel: { ...type.subheading, fontSize: 15, color: colors.textMuted },
+  tabLabelActive: { color: colors.textPrimary },
+  tabUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent', marginTop: space.sm },
   listContent: { padding: layout.screenPaddingH, paddingBottom: 120 },
   sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   sep: { height: 1, backgroundColor: colors.border },
@@ -555,6 +619,8 @@ const styles = StyleSheet.create({
   budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.lg, marginBottom: space.sm },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
+  editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   cadenceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   recList: { gap: space.sm, marginBottom: space.md },
   recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
@@ -562,9 +628,11 @@ const styles = StyleSheet.create({
   catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   catRow: { paddingVertical: space.md, gap: space.sm },
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  catTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  catTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  catIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   catName: { ...type.body, color: colors.textPrimary, flex: 1 },
   catAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
+  catCadenceTag: { ...type.caption, color: colors.textMuted, backgroundColor: colors.bgMuted, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, overflow: 'hidden' },
   catUnbudgeted: { ...type.caption, color: colors.textMuted },
 
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },

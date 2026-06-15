@@ -5,6 +5,11 @@ export function formatRupees(paise: number): string {
   });
 }
 
+/** Rounded, no paise — for dashboard cards and summaries. e.g. 150050 → "₹1,501". */
+export function formatRupeesShort(paise: number): string {
+  return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
+}
+
 export function parseToPaise(input: string): number {
   const n = parseFloat(input.replace(/[^0-9.]/g, ''));
   if (isNaN(n)) return 0;

@@ -12,7 +12,7 @@ import {
   eachWeekOfInterval, eachMonthOfInterval,
   subDays, subMonths, subYears,
 } from 'date-fns';
-import { PieChart, BarChart } from 'react-native-gifted-charts';
+import { PieChart, LineChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
@@ -21,12 +21,12 @@ import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
-import { AmountText } from '../../src/components/AmountText';
-import { BudgetBar } from '../../src/components/BudgetBar';
-import { FAB } from '../../src/components/FAB';
-import { FadeIn } from '../../src/components/FadeIn';
-import { SkeletonCard } from '../../src/components/Skeleton';
-import { PressableScale } from '../../src/components/PressableScale';
+import { AmountText } from '../../src/components/ui/AmountText';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { FAB } from '../../src/components/ui/FAB';
+import { FadeIn } from '../../src/components/ui/FadeIn';
+import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { PressableScale } from '../../src/components/ui/PressableScale';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
@@ -272,7 +272,7 @@ export default function DashboardScreen() {
         {/* Spending card */}
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
-          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} />
+          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} rounded />
           {(spending > 0 || prevSpending > 0) && (() => {
             const delta = spending - prevSpending;
             const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
@@ -290,11 +290,11 @@ export default function DashboardScreen() {
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Income</Text>
-              <AmountText paise={income} size="md" forceColor={colors.income} />
+              <AmountText paise={income} size="md" forceColor={colors.income} rounded />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Net</Text>
-              <AmountText paise={net} size="md" />
+              <AmountText paise={net} size="md" rounded />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Savings</Text>
@@ -305,23 +305,36 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Budget rollup tiles */}
+        {/* Budget rollup tiles — tap to manage the budget directly (less nesting) */}
         {budgetSummary.allocated > 0 && (
-          <View style={styles.budgetCard}>
+          <TouchableOpacity
+            style={styles.budgetCard}
+            activeOpacity={0.85}
+            onPress={() => {
+              const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
+              if (pid) router.push(`/group/${pid}/budget`);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Manage budget"
+          >
+            <View style={styles.budgetCardHead}>
+              <Text style={styles.budgetCardTitle}>Budget</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </View>
             <View style={styles.budgetTiles}>
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Budget</Text>
-                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} />
+                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} rounded />
               </View>
               <View style={styles.budgetTileDivider} />
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Spent</Text>
-                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} />
+                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} rounded />
               </View>
               <View style={styles.budgetTileDivider} />
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Left</Text>
-                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} />
+                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} rounded />
               </View>
             </View>
             {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
@@ -340,7 +353,7 @@ export default function DashboardScreen() {
                 )}
               </View>
             )}
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Owe/Owed */}
@@ -370,7 +383,8 @@ export default function DashboardScreen() {
                 data={pieData}
                 donut
                 radius={70}
-                innerRadius={44}
+                innerRadius={46}
+                innerCircleColor={colors.bgCard}
                 centerLabelComponent={() => (
                   <View style={{ alignItems: 'center' }}>
                     <Text style={styles.pieCenterNum}>{pieData.length}</Text>
@@ -395,31 +409,37 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Bar chart */}
+        {/* Trend area chart */}
         {barData.length > 0 && barData.some(b => b.value > 0) && (
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>Spending over time</Text>
-            <BarChart
-              key={`bar-${tab}`}
-              data={barData}
-              barWidth={18}
-              spacing={8}
-              roundedTop
+            <LineChart
+              key={`line-${tab}`}
+              data={barData.map(b => ({ value: b.value, label: b.label }))}
+              areaChart
+              curved
+              isAnimated
+              color={colors.accent}
+              startFillColor={colors.accent}
+              endFillColor={colors.accent}
+              startOpacity={0.28}
+              endOpacity={0.02}
+              thickness={2.5}
               hideRules
+              hideDataPoints={false}
+              dataPointsColor={colors.accent}
+              dataPointsRadius={3}
               xAxisThickness={0}
               yAxisThickness={0}
               yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
               yAxisLabelPrefix="₹"
               xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
               noOfSections={3}
-              barBorderRadius={3}
-              isAnimated
-              focusBarOnPress
-              renderTooltip={(item: any) => (
-                <View style={styles.barTooltip}>
-                  <Text style={styles.barTooltipText}>₹{Number(item?.value ?? 0).toLocaleString('en-IN')}</Text>
-                </View>
-              )}
+              spacing={Math.max(28, Math.round(280 / Math.max(barData.length, 1)))}
+              initialSpacing={12}
+              endSpacing={8}
+              adjustToWidth
+              disableScroll
             />
           </View>
         )}
@@ -472,7 +492,7 @@ export default function DashboardScreen() {
       <FAB
         actions={[
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/quick?kind=income') },
+          { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
           { label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between people', onPress: () => router.push('/add/transfer') },
           { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') },
         ]}
@@ -502,6 +522,8 @@ const styles = StyleSheet.create({
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
   budgetCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetCardTitle: { ...type.subheading, color: colors.textPrimary },
   budgetTiles: { flexDirection: 'row', alignItems: 'center' },
   budgetTile: { flex: 1, alignItems: 'center', gap: 2 },
   budgetTileLabel: { ...type.caption, color: colors.textMuted },

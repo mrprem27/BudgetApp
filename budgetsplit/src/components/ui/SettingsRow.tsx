@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space } from './tokens';
+import { colors, type, space } from '../tokens';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;

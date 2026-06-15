@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, layout } from './tokens';
+import { colors, type, space, layout } from '../tokens';
 
 type Props = {
   title: string;

@@ -1,4 +1,7 @@
 import * as SQLite from 'expo-sqlite';
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
+import { INCOME_CATEGORIES } from '../constants/categories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -87,7 +90,8 @@ CREATE TABLE IF NOT EXISTS category (
   group_id  TEXT NOT NULL REFERENCES budget_group(id),
   name      TEXT NOT NULL,
   icon      TEXT,
-  color     TEXT
+  color     TEXT,
+  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income'))
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -136,6 +140,8 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN lat REAL",
   "ALTER TABLE txn ADD COLUMN lng REAL",
   "ALTER TABLE txn ADD COLUMN place_label TEXT",
+  // Income gets its own category set (Phase G).
+  "ALTER TABLE category ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense'",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -160,5 +166,23 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync(
     "UPDATE person SET email='hello123@vortiqal.com' WHERE is_me=1 AND (email IS NULL OR email='');",
   );
+
+  // Phase G: reclassify legacy income-named categories, then backfill the
+  // income category set into any group that doesn't have it yet.
+  await db.execAsync("UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income');");
+  const groups = await db.getAllAsync<{ id: string }>('SELECT id FROM budget_group');
+  for (const g of groups) {
+    for (const cat of INCOME_CATEGORIES) {
+      const exists = await db.getFirstAsync<{ one: number }>(
+        'SELECT 1 as one FROM category WHERE group_id=? AND name=?', [g.id, cat.name],
+      );
+      if (!exists) {
+        await db.runAsync(
+          "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
+          [uuid(), g.id, cat.name, cat.icon, cat.color],
+        );
+      }
+    }
+  }
   return db;
 }

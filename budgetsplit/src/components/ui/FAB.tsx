@@ -5,9 +5,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow, gradients } from './tokens';
-import { layout } from '../constants/layout';
-import { haptic } from '../lib/haptics';
+import { colors, type, space, radius, shadow, gradients } from '../tokens';
+import { layout } from '../../constants/layout';
+import { haptic } from '../../lib/haptics';
 
 type Action = {
   label: string;
@@ -21,9 +21,11 @@ type Action = {
 
 type Props = {
   actions: Action[];
+  /** Lift the FAB above the tab bar. Set false on pushed screens (no tab bar). */
+  aboveTabBar?: boolean;
 };
 
-export function FAB({ actions }: Props) {
+export function FAB({ actions, aboveTabBar = true }: Props) {
   const [open, setOpen] = React.useState(false);
   const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -70,7 +72,14 @@ export function FAB({ actions }: Props) {
       <Animated.View
         style={[
           styles.fab,
-          { bottom: layout.tabBarHeight + insets.bottom + space.md, transform: [{ scale: scaleAnim }] },
+          {
+            // Tab screens: clear the tab bar. Pushed screens: a small fixed gap
+            // above the home indicator — no leftover empty space below.
+            bottom: aboveTabBar
+              ? layout.tabBarHeight + insets.bottom + space.md
+              : insets.bottom + space.sm,
+            transform: [{ scale: scaleAnim }],
+          },
         ]}
       >
         <TouchableOpacity

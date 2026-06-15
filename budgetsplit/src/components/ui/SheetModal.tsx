@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, type, space, radius, shadow } from './tokens';
+import { colors, type, space, radius, shadow } from '../tokens';
 
 type Props = {
   visible: boolean;

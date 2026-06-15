@@ -11,15 +11,16 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
-import { getAllGroups, insertGroup } from '../../src/db/queries/groups';
-import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { SheetModal } from '../../src/components/SheetModal';
-import { getMe } from '../../src/db/queries/persons';
+import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup } from '../../src/db/queries/groups';
+import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { getMe, getGroupMembers } from '../../src/db/queries/persons';
 import { getBudgetUsage } from '../../src/lib/budget';
-import { BudgetBar } from '../../src/components/BudgetBar';
-import { FAB } from '../../src/components/FAB';
-import { PressableScale } from '../../src/components/PressableScale';
-import { FadeIn } from '../../src/components/FadeIn';
+import { formatRupeesShort } from '../../src/lib/money';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { FAB } from '../../src/components/ui/FAB';
+import { PressableScale } from '../../src/components/ui/PressableScale';
+import { FadeIn } from '../../src/components/ui/FadeIn';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
@@ -33,9 +34,11 @@ export default function GroupsScreen() {
   const { groups, setGroups } = useStore();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
-  const [icon, setIcon] = useState('wallet');
+  const [icon, setIcon] = useState('credit-card');
   const [color, setColor] = useState('#4F46E5');
-  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none' }>>({});
+  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number }>>({});
+  const [archived, setArchived] = useState<BudgetGroup[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   useFocusEffect(useCallback(() => {
     loadGroups();
@@ -44,12 +47,20 @@ export default function GroupsScreen() {
   async function loadGroups() {
     const grps = await getAllGroups(db);
     setGroups(grps);
+    setArchived(await getArchivedGroups(db));
     const h: typeof health = {};
     for (const g of grps) {
       const usage = await getBudgetUsage(db, g, 'monthly');
-      h[g.id] = { pct: usage.pct, health: usage.health };
+      const mems = await getGroupMembers(db, g.id);
+      h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
     }
     setHealth(h);
+  }
+
+  async function handleRestore(g: BudgetGroup) {
+    await unarchiveGroup(db, g.id);
+    haptic.success();
+    await loadGroups();
   }
 
   async function handleCreate() {
@@ -78,6 +89,10 @@ export default function GroupsScreen() {
           </View>
           <View style={styles.groupInfo}>
             <Text style={styles.groupName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.groupSub} numberOfLines={1}>
+              {formatRupeesShort(h?.spent ?? 0)} this month
+              {item.is_personal !== 1 && h ? ` · ${h.members} member${h.members === 1 ? '' : 's'}` : ''}
+            </Text>
             {h && h.pct !== null && (
               <View style={styles.budgetRow}>
                 <View style={{ flex: 1 }}>
@@ -114,13 +129,36 @@ export default function GroupsScreen() {
             <Text style={styles.emptyText}>Create a group to track shared expenses with friends, family or roommates.</Text>
           </View>
         }
+        ListFooterComponent={
+          archived.length > 0 ? (
+            <View style={styles.archivedWrap}>
+              <TouchableOpacity style={styles.archivedToggle} onPress={() => setShowArchived(s => !s)} accessibilityRole="button">
+                <Feather name="archive" size={15} color={colors.textSecondary} />
+                <Text style={styles.archivedToggleText}>Archived ({archived.length})</Text>
+                <Feather name={showArchived ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+              {showArchived && archived.map(g => (
+                <View key={g.id} style={styles.archivedRow}>
+                  <View style={[styles.groupIcon, { backgroundColor: g.color + '22', width: 36, height: 36 }]}>
+                    <Feather name={g.icon as any} size={16} color={g.color} />
+                  </View>
+                  <Text style={styles.archivedName} numberOfLines={1}>{g.name}</Text>
+                  <TouchableOpacity style={styles.restoreBtn} onPress={() => handleRestore(g)} accessibilityRole="button" accessibilityLabel={`Restore ${g.name}`}>
+                    <Feather name="rotate-ccw" size={13} color={colors.accent} />
+                    <Text style={styles.restoreText}>Restore</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
       />
 
       <FAB
         actions={[
           { label: 'New Group', icon: 'users', tint: colors.accent, description: 'Share expenses with others', onPress: () => setShowCreate(true) },
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle', tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/quick?kind=income') },
+          { label: 'Income',  icon: 'plus-circle', tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
         ]}
       />
 
@@ -173,10 +211,18 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: layout.screenPaddingH, paddingBottom: layout.screenPaddingH },
   title: { ...type.title, color: colors.textPrimary },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
+  archivedWrap: { marginTop: space.lg, gap: space.sm },
+  archivedToggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
+  archivedToggleText: { ...type.label, color: colors.textSecondary, flex: 1 },
+  archivedRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md },
+  archivedName: { ...type.body, color: colors.textSecondary, flex: 1 },
+  restoreBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
+  restoreText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  groupInfo: { flex: 1, gap: 6 },
+  groupInfo: { flex: 1, gap: 4 },
   groupName: { ...type.subheading, color: colors.textPrimary },
+  groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
   empty: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },

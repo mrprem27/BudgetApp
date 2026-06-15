@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { type } from './tokens';
+import { type } from '../tokens';
 
 type Props = {
   name: string;

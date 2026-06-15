@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { AmountText } from './AmountText';
+import { AmountText } from '../ui/AmountText';
 import { MemberAvatar } from './MemberAvatar';
-import { colors, type, space, radius } from './tokens';
-import type { Person } from '../db/queries/persons';
+import { colors, type, space, radius } from '../tokens';
+import type { Person } from '../../db/queries/persons';
 
 type Props = {
   from: Person;
