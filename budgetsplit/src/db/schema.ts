@@ -142,6 +142,9 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN place_label TEXT",
   // Income gets its own category set (Phase G).
   "ALTER TABLE category ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense'",
+  // v2: multi-currency — default null means app-wide default (INR).
+  "ALTER TABLE txn ADD COLUMN currency TEXT",
+  "ALTER TABLE budget_group ADD COLUMN default_currency TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

@@ -123,7 +123,7 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   filters: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  list: { padding: layout.screenPaddingH, paddingBottom: 60 },
+  list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },

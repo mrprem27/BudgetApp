@@ -80,11 +80,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const p = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (p !== page) { setPage(p); haptic.selection(); }
+    if (p !== page) setPage(p);
   }
 
   function advance() {
-    haptic.light();
     if (page < SLIDES.length - 1) {
       scrollRef.current?.scrollTo({ x: (page + 1) * width, animated: true });
       setPage(page + 1);
@@ -94,7 +93,6 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   }
 
   function backFromFeatures() {
-    haptic.light();
     if (page > 0) {
       scrollRef.current?.scrollTo({ x: (page - 1) * width, animated: true });
       setPage(page - 1);
@@ -102,6 +100,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       setStage('hero');
     }
   }
+
 
   async function finish() {
     setSaving(true);
@@ -134,7 +133,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Text style={styles.tagline}>Budget your money and split bills — all on your phone, nothing in the cloud.</Text>
           </View>
           <View style={styles.footer}>
-            <PrimaryButton label="Get Started" onPress={() => { haptic.light(); setStage('features'); }} />
+            <PrimaryButton label="Get Started" onPress={() => setStage('features')} />
             <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
           </View>
         </FadeIn>
@@ -152,7 +151,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 <View key={i} style={[styles.dot, i === page && styles.dotActive]} />
               ))}
             </View>
-            <TouchableOpacity onPress={() => { haptic.light(); setStage('name'); }} hitSlop={10} accessibilityRole="button">
+            <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} accessibilityRole="button">
               <Text style={styles.skip}>Skip</Text>
             </TouchableOpacity>
           </View>
@@ -198,10 +197,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       {/* NAME ENTRY */}
       {stage === 'name' && (
         <FadeIn key="name" style={styles.page}>
-          <TouchableOpacity onPress={() => { haptic.light(); setStage('features'); }} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
+          <TouchableOpacity onPress={() => setStage('features')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
-          <View style={styles.nameTop}>
+          <View style={styles.nameCenter}>
             <View style={[styles.slideIcon, { backgroundColor: colors.accentMuted }]}>
               <Feather name="user" size={34} color={colors.accent} />
             </View>
@@ -285,14 +284,14 @@ const styles = StyleSheet.create({
   footNote: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
 
   nameBack: { height: 40, justifyContent: 'center', marginLeft: -6 },
-  nameTop: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  nameCenter: { flex: 1, justifyContent: 'flex-start', alignItems: 'center', paddingTop: '20%' },
   nameInput: {
     ...type.body,
     fontSize: 20,
     color: colors.textPrimary,
     backgroundColor: colors.bgInput,
     borderRadius: radius.md,
-    paddingHorizontal: space.md, paddingVertical: space.md,
+    paddingHorizontal: space.md, paddingVertical: space.md + 2,
     borderWidth: 1, borderColor: colors.border,
     marginTop: space.lg,
     alignSelf: 'stretch',

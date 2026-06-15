@@ -10,10 +10,10 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import {
   startOfMonth, endOfMonth, addMonths, subMonths, format,
-  startOfYear, endOfYear,
+  startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { PieChart, BarChart } from 'react-native-gifted-charts';
+import { PieChart, BarChart, LineChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -72,6 +72,9 @@ export default function ReportsScreen() {
   const [biggestTxn, setBiggestTxn] = useState(0);
   const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
   const [trendData, setTrendData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
+  const [forecastActual, setForecastActual] = useState<Array<{ value: number; label?: string }>>([]);
+  const [forecastProjected, setForecastProjected] = useState<Array<{ value: number; label?: string }>>([]);
+  const [projectedTotal, setProjectedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -168,6 +171,48 @@ export default function ReportsScreen() {
         });
       }
       setTrendData(trendBars);
+
+      // Build daily cumulative spending forecast (current month only)
+      const now = new Date();
+      const monthStart = startOfMonth(month);
+      const daysInMonth = getDaysInMonth(month);
+      const dayOfMonth = getDate(now);
+      const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
+
+      if (isCurrentMonth) {
+        // Compute daily cumulative spending for each day up to today
+        const dailyCumulative: Array<{ value: number; label?: string }> = [];
+        let runningTotal = 0;
+        const allMonthExpenses = (await getTransactionsInRange(db, null, monthStart.getTime(), endOfMonth(month).getTime()))
+          .filter(t => t.kind === 'expense' && !t.is_deleted);
+
+        for (let d = 1; d <= dayOfMonth; d++) {
+          const dayStart = addDays(monthStart, d - 1).getTime();
+          const dayEnd = addDays(monthStart, d).getTime() - 1;
+          const daySpend = allMonthExpenses
+            .filter(t => t.date >= dayStart && t.date <= dayEnd)
+            .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+          runningTotal += daySpend;
+          dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 5 === 1 ? `${d}` : '' });
+        }
+        setForecastActual(dailyCumulative);
+
+        // Linear projection for remaining days
+        const dailyRate = runningTotal / Math.max(1, dayOfMonth);
+        const projectedLine: Array<{ value: number; label?: string }> = [];
+        // Start projected line from the last actual point
+        projectedLine.push({ value: Math.round(runningTotal / 100), label: '' });
+        for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
+          const projected = runningTotal + dailyRate * (d - dayOfMonth);
+          projectedLine.push({ value: Math.round(projected / 100), label: d % 5 === 1 ? `${d}` : '' });
+        }
+        setForecastProjected(projectedLine);
+        setProjectedTotal(Math.round((runningTotal + dailyRate * (daysInMonth - dayOfMonth)) / 100));
+      } else {
+        setForecastActual([]);
+        setForecastProjected([]);
+        setProjectedTotal(0);
+      }
     } finally {
       // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
@@ -231,12 +276,12 @@ export default function ReportsScreen() {
             const amt = t.kind === 'income'
               ? t.payments.reduce((x, p) => x + p.amount, 0)
               : t.shares.reduce((x, sh) => x + sh.amount, 0);
-            const color = t.kind === 'income' ? '#2e9e6b' : '#c94a4a';
+            const color = t.kind === 'income' ? '#2BD49B' : '#FF6F61';
             return `<tr>
               <td>${format(new Date(t.date), 'dd MMM')}</td>
               <td>${esc(t.category)}</td>
-              <td>${esc(t.note ?? '')}</td>
-              <td style="text-align:right;color:${color}">${t.kind === 'income' ? '+' : '-'}${formatRupees(amt)}</td>
+              <td class="note">${esc(t.note ?? '')}</td>
+              <td style="text-align:right;color:${color};font-family:'SF Mono',monospace;font-weight:600">${t.kind === 'income' ? '+' : '-'}${formatRupees(amt)}</td>
             </tr>`;
           })
           .join('');
@@ -244,9 +289,9 @@ export default function ReportsScreen() {
         body += `
           <h2>${esc(s.group.name)}</h2>
           <div class="totals">
-            <span>Income <b style="color:#2e9e6b">${formatRupees(s.income)}</b></span>
-            <span>Expense <b style="color:#c94a4a">${formatRupees(s.expense)}</b></span>
-            <span>Net <b>${formatRupees(s.income - s.expense)}</b></span>
+            <div class="total-card income"><span class="total-label">Income</span><span class="total-value">${formatRupees(s.income)}</span></div>
+            <div class="total-card expense"><span class="total-label">Expense</span><span class="total-value">${formatRupees(s.expense)}</span></div>
+            <div class="total-card net"><span class="total-label">Net</span><span class="total-value">${formatRupees(s.income - s.expense)}</span></div>
           </div>
           <table>
             <thead><tr><th>Date</th><th>Category</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead>
@@ -258,20 +303,32 @@ export default function ReportsScreen() {
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8" />
         <style>
-          body { font-family: -apple-system, Helvetica, sans-serif; color: #1a1a1a; padding: 32px; }
-          h1 { font-size: 24px; margin: 0; }
-          .sub { color: #888; margin: 4px 0 24px; }
-          h2 { font-size: 16px; margin: 28px 0 8px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
-          .totals { display: flex; gap: 20px; font-size: 13px; color: #555; margin-bottom: 10px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          th { text-align: left; color: #999; font-weight: 600; padding: 6px 4px; border-bottom: 1px solid #eee; }
-          td { padding: 6px 4px; border-bottom: 1px solid #f4f4f4; }
-          .empty { color: #999; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #0A0F11; color: #ECF3F1; padding: 40px 36px; margin: 0; }
+          h1 { font-size: 26px; margin: 0; color: #FFFFFF; font-weight: 700; letter-spacing: -0.5px; }
+          .sub { color: #20C4B8; font-size: 14px; margin: 4px 0 32px; font-weight: 500; }
+          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #1E2A2E; color: #FFFFFF; font-weight: 600; }
+          .totals { display: flex; gap: 12px; margin-bottom: 16px; }
+          .total-card { flex: 1; background: #131A1D; border: 1px solid #1E2A2E; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+          .total-card.income { border-left: 3px solid #2BD49B; }
+          .total-card.expense { border-left: 3px solid #FF6F61; }
+          .total-card.net { border-left: 3px solid #20C4B8; }
+          .total-label { font-size: 11px; color: #7A8F8C; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+          .total-value { font-size: 16px; font-weight: 700; color: #ECF3F1; font-family: 'SF Mono', monospace; }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; background: #131A1D; border-radius: 10px; overflow: hidden; border: 1px solid #1E2A2E; }
+          th { text-align: left; color: #7A8F8C; font-weight: 600; padding: 10px 12px; background: #0E1517; border-bottom: 1px solid #1E2A2E; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+          td { padding: 10px 12px; border-bottom: 1px solid #1A2326; color: #ECF3F1; }
+          td.note { color: #7A8F8C; }
+          tr:last-child td { border-bottom: none; }
+          tr:hover { background: #1A2326; }
+          .empty { color: #7A8F8C; text-align: center; padding: 40px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #4A5E5B; border-top: 1px solid #1E2A2E; padding-top: 16px; }
         </style></head>
         <body>
           <h1>BudgetSplit Report</h1>
           <div class="sub">${monthLabel}</div>
           ${body}
+          <div class="footer">Generated by BudgetSplit &middot; ${format(new Date(), 'dd MMM yyyy')}</div>
         </body></html>`;
 
       const { uri } = await Print.printToFileAsync({ html });
@@ -409,6 +466,57 @@ export default function ReportsScreen() {
             </View>
           )}
 
+          {/* Spending Forecast (current month only) */}
+          {forecastActual.length > 2 && (
+            <View style={styles.card}>
+              <View style={styles.forecastHeader}>
+                <Text style={styles.chartTitle}>Month-end forecast</Text>
+                <View style={styles.forecastBadge}>
+                  <Feather name="trending-up" size={12} color={colors.accent} />
+                  <Text style={styles.forecastBadgeText}>₹{projectedTotal.toLocaleString('en-IN')}</Text>
+                </View>
+              </View>
+              <Text style={styles.forecastSub}>Projected total spending based on your pace so far</Text>
+              <LineChart
+                data={forecastActual}
+                data2={forecastProjected}
+                color1={colors.expense}
+                color2={colors.accent}
+                dataPointsColor1={colors.expense}
+                dataPointsColor2={colors.accent}
+                thickness={2}
+                thickness2={2}
+                dashWidth={6}
+                dashGap={4}
+                startFillColor1={colors.expense + '22'}
+                endFillColor1={colors.expense + '05'}
+                areaChart
+                noOfSections={4}
+                spacing={Math.max(8, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
+                xAxisThickness={0}
+                yAxisThickness={0}
+                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                yAxisLabelPrefix="₹"
+                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
+                hideRules
+                hideDataPoints
+                curved
+                isAnimated
+                disableScroll
+              />
+              <View style={styles.forecastLegend}>
+                <View style={styles.forecastLegendItem}>
+                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.expense }]} />
+                  <Text style={styles.forecastLegendText}>Actual</Text>
+                </View>
+                <View style={styles.forecastLegendItem}>
+                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.accent, borderStyle: 'dashed' as any }]} />
+                  <Text style={styles.forecastLegendText}>Projected</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           {summaries.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No groups yet</Text>
@@ -524,7 +632,7 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: 80, gap: space.md },
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl, gap: space.md },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
   exportRow: { flexDirection: 'row', gap: space.xs },
@@ -567,4 +675,12 @@ const styles = StyleSheet.create({
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  forecastBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 4 },
+  forecastBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.accent },
+  forecastSub: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
+  forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
+  forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  forecastLegendLine: { width: 16, height: 3, borderRadius: 2 },
+  forecastLegendText: { ...type.caption, color: colors.textMuted },
 });

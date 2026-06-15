@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -120,10 +120,17 @@ export default function TxnDetailScreen() {
           {!!txn.place_label && (
             <>
               <View style={styles.divider} />
-              <View style={styles.locationRow}>
-                <Feather name="map-pin" size={14} color={colors.textSecondary} />
-                <Text style={styles.locationText}>{txn.place_label}</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.locationRow}
+                disabled={!txn.lat || !txn.lng}
+                onPress={() => txn.lat && txn.lng && Linking.openURL(`maps://?ll=${txn.lat},${txn.lng}&q=${encodeURIComponent(txn.place_label ?? '')}`)}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${txn.place_label} in Maps`}
+              >
+                <Feather name="map-pin" size={14} color={txn.lat != null && txn.lng != null ? colors.accent : colors.textSecondary} />
+                <Text style={[styles.locationText, txn.lat != null && txn.lng != null ? { color: colors.accent } : null]}>{txn.place_label}</Text>
+                {txn.lat != null && txn.lng != null && <Feather name="external-link" size={12} color={colors.accent} style={{ marginLeft: 'auto' }} />}
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -219,7 +226,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   hero: { alignItems: 'center', gap: space.xs, paddingVertical: space.md },
   iconDot: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
   heroAmount: { ...type.amountXL, color: colors.textPrimary },

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, SectionList, StyleSheet, TouchableOpacity, Alert, ScrollView, Switch,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -199,39 +200,46 @@ export default function GroupDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Group hero — themed by the group's colour */}
-      <View style={styles.hero}>
-        <View style={[styles.heroIcon, { backgroundColor: group.color + '22' }]}>
-          <Feather name={(group.icon as any) ?? 'credit-card'} size={22} color={group.color} />
+      <LinearGradient
+        colors={[group.color + '22', colors.bg]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.gradientHeader}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
+            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
-          <Text style={styles.heroSub} numberOfLines={1}>
-            {(() => {
-              const monthStart = startOfMonth(new Date()).getTime();
-              const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
-              const myNet = net[me?.id ?? ''] ?? 0;
-              const parts: string[] = [`${formatRupees(monthSpend)} this month`];
-              if (!isPersonal) {
-                parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
-                if (myNet > 0) parts.push(`you're owed ${formatRupees(myNet)}`);
-                else if (myNet < 0) parts.push(`you owe ${formatRupees(-myNet)}`);
-              }
-              return parts.join(' · ');
+
+        {/* Group hero — themed by the group's colour */}
+        <View style={styles.hero}>
+          <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
+            <Feather name={(group.icon as any) ?? 'credit-card'} size={22} color={group.color} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
+            <Text style={styles.heroSub} numberOfLines={1}>
+              {(() => {
+                const monthStart = startOfMonth(new Date()).getTime();
+                const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
+                const myNet = net[me?.id ?? ''] ?? 0;
+                const parts: string[] = [`${formatRupees(monthSpend)} this month`];
+                if (!isPersonal) {
+                  parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
+                  if (myNet > 0) parts.push(`you're owed ${formatRupees(myNet)}`);
+                  else if (myNet < 0) parts.push(`you owe ${formatRupees(-myNet)}`);
+                }
+                return parts.join(' · ');
             })()}
           </Text>
         </View>
       </View>
+      </LinearGradient>
 
       {budgetUsage && budgetUsage.pct !== null && (
         <View style={styles.budgetHeaderBar}>
@@ -575,6 +583,7 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  gradientHeader: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
   heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },

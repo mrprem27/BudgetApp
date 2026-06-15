@@ -293,7 +293,7 @@ export default function CategoriesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   kindRow: { flexDirection: 'row', backgroundColor: colors.bgMuted, borderRadius: radius.pill, padding: 3 },
   kindPill: { flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   kindPillActive: { backgroundColor: colors.accent },

@@ -91,7 +91,7 @@ export default function GlobalSettleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   hint: { ...type.body, color: colors.textSecondary, marginBottom: space.md },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   rowWrap: { paddingHorizontal: space.md },

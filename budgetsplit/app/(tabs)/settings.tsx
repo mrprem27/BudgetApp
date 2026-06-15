@@ -11,13 +11,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
-import { parseToPaise } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, updatePersonName } from '../../src/db/queries/persons';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
+import { CURRENCIES, DEFAULT_CURRENCY, type CurrencyCode } from '../../src/constants/currencies';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 
@@ -39,10 +39,8 @@ export default function SettingsScreen() {
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-
-  const [globalMonthly, setGlobalMonthly] = useState('');
-  const [globalYearly, setGlobalYearly] = useState('');
-  const [savedLimits, setSavedLimits] = useState(false);
+  const [defaultCurrency, setDefaultCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
+  const [showCurrency, setShowCurrency] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -52,10 +50,8 @@ export default function SettingsScreen() {
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
-      const gm = await AsyncStorage.getItem('global_limit_monthly');
-      const gy = await AsyncStorage.getItem('global_limit_yearly');
-      if (gm) setGlobalMonthly((parseInt(gm, 10) / 100).toString());
-      if (gy) setGlobalYearly((parseInt(gy, 10) / 100).toString());
+      const cur = await AsyncStorage.getItem('default_currency');
+      if (cur) setDefaultCurrency(cur as CurrencyCode);
     })();
   }, []);
 
@@ -78,14 +74,6 @@ export default function SettingsScreen() {
     setMe({ ...me, name: trimmed });
     haptic.success();
     setShowName(false);
-  }
-
-  async function saveLimits() {
-    await AsyncStorage.setItem('global_limit_monthly', parseToPaise(globalMonthly).toString());
-    await AsyncStorage.setItem('global_limit_yearly', parseToPaise(globalYearly).toString());
-    haptic.success();
-    setSavedLimits(true);
-    setTimeout(() => setSavedLimits(false), 2000);
   }
 
   return (
@@ -121,24 +109,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="dollar-sign" label="Currency" value="₹ Indian Rupee" chevron={false} />
-      </View>
-
-      {/* Personal budget limits */}
-      <Text style={styles.sectionTitle}>Personal Budget Limits</Text>
-      <View style={styles.card}>
-        <View style={styles.fieldRow}>
-          <Text style={styles.fieldLabel}>Monthly limit</Text>
-          <TextInput style={styles.input} value={globalMonthly} onChangeText={setGlobalMonthly} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} />
-        </View>
-        <View style={styles.sep} />
-        <View style={styles.fieldRow}>
-          <Text style={styles.fieldLabel}>Yearly limit</Text>
-          <TextInput style={styles.input} value={globalYearly} onChangeText={setGlobalYearly} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} />
-        </View>
-        <TouchableOpacity style={styles.saveBtn} onPress={saveLimits} accessibilityRole="button">
-          <Text style={styles.saveBtnText}>{savedLimits ? 'Saved!' : 'Save Limits'}</Text>
-        </TouchableOpacity>
+        <SettingsRow icon="dollar-sign" label="Currency" value={`${CURRENCIES.find(c => c.code === defaultCurrency)?.symbol ?? '₹'} ${CURRENCIES.find(c => c.code === defaultCurrency)?.name ?? 'Indian Rupee'}`} onPress={() => setShowCurrency(true)} />
       </View>
 
       {/* Manage */}
@@ -160,7 +131,7 @@ export default function SettingsScreen() {
       {/* About */}
       <Text style={styles.sectionTitle}>About</Text>
       <View style={styles.card}>
-        <Text style={styles.aboutText}>BudgetSplit v1.0</Text>
+        <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
         <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
       </View>
 
@@ -174,6 +145,20 @@ export default function SettingsScreen() {
           <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} onPress={() => pickCadence(c)} accessibilityRole="button">
             <Text style={[styles.cadOptionText, defaultCadence === c && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{CADENCE_LABELS[c]}</Text>
             {defaultCadence === c && <Feather name="check" size={18} color={colors.accent} />}
+          </TouchableOpacity>
+        ))}
+      </SheetModal>
+
+      <SheetModal visible={showCurrency} onClose={() => setShowCurrency(false)} title="Default currency" scroll>
+        {CURRENCIES.map(c => (
+          <TouchableOpacity
+            key={c.code}
+            style={[styles.cadOption, defaultCurrency === c.code && styles.cadOptionActive]}
+            onPress={async () => { setDefaultCurrency(c.code); setShowCurrency(false); await AsyncStorage.setItem('default_currency', c.code); haptic.selection(); }}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.cadOptionText, defaultCurrency === c.code && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{c.symbol}  {c.name} ({c.code})</Text>
+            {defaultCurrency === c.code && <Feather name="check" size={18} color={colors.accent} />}
           </TouchableOpacity>
         ))}
       </SheetModal>
@@ -194,7 +179,7 @@ function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof F
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -202,12 +187,7 @@ const styles = StyleSheet.create({
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   profileName: { ...type.subheading, color: colors.textPrimary },
   profileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  fieldRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  fieldLabel: { ...type.body, color: colors.textPrimary },
-  input: { ...type.body, color: colors.textPrimary, textAlign: 'right', minWidth: 80 },
-  sep: { height: 1, backgroundColor: colors.border },
-  saveBtn: { height: 44, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginTop: space.xs },
-  saveBtnText: { ...type.button, color: colors.bg },
+
   aboutText: { ...type.body, color: colors.textPrimary },
   aboutSub: { ...type.caption, color: colors.textSecondary },
   nameInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },

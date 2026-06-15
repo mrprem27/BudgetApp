@@ -76,7 +76,7 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
             // Tab screens: clear the tab bar. Pushed screens: a small fixed gap
             // above the home indicator — no leftover empty space below.
             bottom: aboveTabBar
-              ? layout.tabBarHeight + insets.bottom + space.md
+              ? insets.bottom + space.sm
               : insets.bottom + space.sm,
             transform: [{ scale: scaleAnim }],
           },

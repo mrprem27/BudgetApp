@@ -174,7 +174,7 @@ export default function TransferScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   peopleRow: { flexDirection: 'row', gap: space.md, paddingVertical: space.xs },

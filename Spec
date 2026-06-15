@@ -1219,8 +1219,138 @@ Budget cadence is **independent of transaction recurrence**.
 
 ### 19.7 Outstanding roadmap (not yet built)
 
-Budget sections layer; budget filtering; multi-user / split income; advanced reports
-(forecasts/anomalies); group theming + top-nav redesign; archive UX.
+Budget sections layer; budget filtering; multi-user / split income.
 
 **v2 / next version:** a free in-app map (Mapbox free tier / OpenStreetMap / react-native-maps)
 on the transaction detail to show where a transaction was made, using the stored lat/lng.
+
+-----
+
+## 20. v2 Architecture Update (supersedes conflicting rules in §1–§19)
+
+### 20.1 Settings changes
+
+- **Removed:** "Personal Budget Limits" section (global monthly/yearly inputs). Redundant with per-category budget system. Budget limits are exclusively managed per-group per-category.
+- **Currency** row kept for future multi-currency picker (v2.1).
+- Bottom padding standardized to `space.lg` (24px) across all screens.
+
+### 20.2 Recurring transaction UX
+
+- **Removed:** Switch/toggle for enabling recurring. Felt binary and inconsistent.
+- **Replaced with:** "Set schedule" button that expands inline options. Tap to reveal frequency picker + end date. Tap again (X icon) to disable.
+- Both expense and income flows now have identical recurring UX: frequency chips + mandatory end date visibility.
+- End date picker available in both quick expense and income flows.
+
+### 20.3 Help & Guide screen
+
+Comprehensive feature documentation covering 10 sections, 42 items:
+
+1. **Getting Started** (4): first expense, income, itemized bills, transfers
+2. **Groups & Splitting** (6): create group, split types, multiple payers, balance rule, settle up, simplify debts
+3. **Budgets & Limits** (5): setting budgets, health bars, carry-over, notifications, recommendations
+4. **Recurring Transactions** (3): setup, pause/resume/end, how they appear
+5. **Reports & Export** (5): monthly reports, charts, year in review, CSV, PDF
+6. **Categories** (4): expense categories, income sources, custom, organization
+7. **Privacy & Security** (4): Face ID, privacy screen, location, offline-first
+8. **Dashboard** (5): time views, category chart, trend, owe/owed, group health
+9. **Tips & Tricks** (6): tags, photos, notes, any date, audit history, budget advice
+
+Each section has a colorful 3-icon illustration cluster. Each item has its own colored icon dot. Sections are collapsible (accordion). Items expand individually with +/- indicator.
+
+### 20.4 Groups screen
+
+- Group cards now have a **4px colored left stripe** matching the group's color for visual identity.
+- Card has `overflow: 'hidden'` to clip the stripe within border radius.
+- Spending amount + member count shown as subtitle.
+- Budget health bar inline when budget is set.
+
+### 20.5 Padding standardization
+
+All scrollable screens use consistent bottom padding:
+- Screens with FAB (groups, group detail): `paddingBottom: 120` (clearance for FAB + tab bar)
+- All other screens: `paddingBottom: space.lg` (24px)
+- No more arbitrary `60px` or `80px` values.
+
+### 20.6 v2 Feature Roadmap (planned)
+
+| Feature | Package | Status |
+|---------|---------|--------|
+| Map link on txn detail | Direct Apple Maps `Linking.openURL` (zero deps) | ✅ Done |
+| Group picker redesign | SheetModal dropdown (replaces chips) | ✅ Done |
+| PDF report dark theme | Dark HTML template matching app colors | ✅ Done |
+| Multi-currency | `currency` col on txn + settings picker + per-txn selector | ✅ Done |
+| OCR receipt scanning | `expo-image-picker` + camera scan + regex parser | ✅ Done |
+| Advanced reports (forecasts) | LineChart with linear projection of month-end spend | ✅ Done |
+| Group theming | LinearGradient header with group color | ✅ Done |
+| Archive UX polish | Filter chips, muted cards, swipe-to-archive | ✅ Done |
+
+### 20.7 Map link (txn detail)
+
+- When a transaction has `lat` + `lng` + `place_label`, the location row in `txn/[id].tsx` is a **tappable link** that opens Apple Maps via `Linking.openURL('maps://?ll=${lat},${lng}&q=...')`.
+- Icon color changes to `colors.accent` when tappable; an external-link icon appears on the right.
+- **No native map dependency** — zero bundle size impact, no native rebuild required.
+- Falls back to a non-tappable text row when only `place_label` is available (no coordinates).
+
+### 20.8 Group picker redesign (add flows)
+
+- Both `quick.tsx` and `income.tsx` replace the horizontal chip row with a **dropdown selector** (TouchableOpacity displaying the selected group icon, name, and a chevron-down).
+- Tapping opens a `SheetModal` with the full list of groups — each row shows the group's icon (tinted circle) and name, with a checkmark on the active selection.
+- Matches the pattern of the `CategoryPicker` and `DatePickerSheet` — consistent bottom-sheet UX.
+
+### 20.9 PDF export dark theme
+
+The exported PDF now matches the app's dark design language:
+- Background: `#0A0F11`, text: `#ECF3F1`, accent: `#20C4B8`
+- Summary cards with colored left borders (income green, expense coral, net teal)
+- Table uses `#131A1D` background with `#1E2A2E` borders, rounded corners
+- Monospace font for amounts, uppercase labels for column headers
+- Footer with generation date
+- Income = `#2BD49B`, Expense = `#FF6F61` (matching in-app colors)
+
+### 20.10 Multi-currency support
+
+- New DB columns: `txn.currency TEXT` (nullable, null = app default), `budget_group.default_currency TEXT`
+- `src/constants/currencies.ts`: 10 currencies (INR, USD, EUR, GBP, JPY, AUD, CAD, SGD, AED, THB) with symbol, locale, and decimal info
+- `src/lib/money.ts`: New `formatAmount(smallestUnit, currency)` and `formatAmountShort()` functions for multi-currency formatting (existing `formatRupees` preserved for backward compat)
+- Settings: Currency picker (SheetModal with all currencies, persisted to AsyncStorage `default_currency`)
+- Quick add: Currency badge next to amount input — tap to switch currency per-transaction
+- `insertTxn` passes `currency` to DB; null = default
+- All amounts remain stored as smallest unit (paise/cents) — display layer handles formatting
+
+### 20.11 OCR receipt scanning
+
+- `src/lib/ocr.ts`: Utility module with `scanReceipt(source)` and `parseReceiptText(text)` functions
+- Uses `expo-image-picker` for camera/gallery image capture
+- Regex-based amount extraction from receipt text (patterns: "Total: ₹1,234", "Amount: Rs 500", currency symbols)
+- Quick add screen: Camera icon button in header — tap to scan receipt, auto-fills amount and note
+- Architecture prepared for Apple Vision VNRecognizeTextRequest integration (swap in native module when ready)
+- Falls back gracefully: if no amount parsed, user gets the image attached and enters manually
+
+### 20.12 Advanced reports — spending forecast
+
+- Reports tab now shows a **month-end forecast** section (only for current month)
+- Computes daily cumulative spending up to today
+- Linear projection extends the trend line to month-end
+- `LineChart` (react-native-gifted-charts) with two data series: actual (coral, filled area) + projected (teal, dashed)
+- Projected total shown in a badge pill at top-right of the chart
+- Legend differentiates actual vs projected lines
+- Auto-hides when viewing past/future months or when < 2 data points
+
+### 20.13 Group theming
+
+- Group detail screen (`app/group/[id].tsx`) now wraps the header + hero in a `<LinearGradient>` using the group's color
+- Gradient: `[group.color + '22', colors.bg]` (subtle 13% opacity → background)
+- Rounded bottom corners on the gradient container
+- Hero icon uses `'33'` opacity background for stronger presence
+- Tab strip underline uses `group.color` (was already in place)
+- Zero new dependencies — uses `expo-linear-gradient` (already installed)
+
+### 20.14 Archive UX polish
+
+- Groups screen now has **filter chips** at the top: "Active (N)" / "Archived (N)"
+- Chips show when archived groups exist; tapping switches the FlatList data source
+- Archived cards render with `opacity: 0.65` and dashed border for clear visual distinction
+- Swipe-to-archive: left-swipe reveals an "Archive" action (or "Restore" in archived view) using `react-native-gesture-handler` Swipeable
+- Personal group is protected from archiving (no swipe action rendered)
+- Empty state differs per view: "No groups yet" vs "No archived groups"
+- Removed the old collapsible "Archived" footer section — replaced by the chip-based tab system

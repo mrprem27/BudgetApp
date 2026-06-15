@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: layout.screenPaddingH },
   title: { ...type.heading, color: colors.textPrimary },
-  list: { padding: layout.screenPaddingH, paddingBottom: 60 },
+  list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
 
   membersCard: {
     backgroundColor: colors.bgCard,

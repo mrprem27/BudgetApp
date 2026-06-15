@@ -161,7 +161,7 @@ export default function RecurringScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   iconDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },

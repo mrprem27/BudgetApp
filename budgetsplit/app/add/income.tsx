@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -19,6 +19,7 @@ import { parseToPaise } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
+import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
@@ -50,6 +51,9 @@ export default function AddIncomeScreen() {
   const [showDate, setShowDate] = useState(false);
   const [recurOn, setRecurOn] = useState(false);
   const [freq, setFreq] = useState<Freq>('monthly');
+  const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
+  const [showEndDate, setShowEndDate] = useState(false);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -100,6 +104,7 @@ export default function AddIncomeScreen() {
           category: category!.name, note: note.trim() || undefined,
           recurFreq: recurOn ? (freq === 'yearly' ? 'custom' : freq) : undefined,
           recurInterval: recurOn && freq === 'yearly' ? 365 : undefined,
+          recurEnd: recurOn && recurEndMs && recurEndMs > date ? recurEndMs : undefined,
           payments: [{ personId: me.id, amount: total }], shares: [],
         });
       }
@@ -139,25 +144,26 @@ export default function AddIncomeScreen() {
             />
           </View>
 
-          {groups.length > 1 && (
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Account / Group</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={styles.chipRow}>
-                  {groups.map(g => (
-                    <TouchableOpacity
-                      key={g.id}
-                      style={[styles.groupChip, selectedGroupId === g.id && styles.groupChipActive]}
-                      onPress={async () => { setSelectedGroupId(g.id); await loadCats(g.id); }}
-                      accessibilityRole="button"
-                    >
-                      <Text style={[styles.groupChipText, selectedGroupId === g.id && { color: colors.bg }]}>{g.name}</Text>
-                    </TouchableOpacity>
-                  ))}
+          {groups.length > 1 && (() => {
+            const selectedGroup = groups.find(g => g.id === selectedGroupId);
+            return (
+              <TouchableOpacity
+                style={styles.groupSelector}
+                onPress={() => setShowGroupPicker(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Select group"
+              >
+                <View style={[styles.groupSelectorIcon, { backgroundColor: (selectedGroup?.color ?? colors.income) + '22' }]}>
+                  <Feather name={(selectedGroup?.icon ?? 'layers') as any} size={16} color={selectedGroup?.color ?? colors.income} />
                 </View>
-              </ScrollView>
-            </View>
-          )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupSelectorLabel}>Account / Group</Text>
+                  <Text style={styles.groupSelectorName}>{selectedGroup?.name ?? 'Select'}</Text>
+                </View>
+                <Feather name="chevron-down" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            );
+          })()}
 
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Source</Text>
@@ -192,29 +198,47 @@ export default function AddIncomeScreen() {
 
           {!isEditing && (
             <>
-              <View style={styles.recurRow}>
-                <Text style={styles.fieldLabel}>Repeats (e.g. salary)</Text>
-                <Switch
-                  value={recurOn}
-                  onValueChange={setRecurOn}
-                  trackColor={{ true: colors.income, false: colors.bgMuted }}
-                  thumbColor={colors.textPrimary}
-                  accessibilityLabel="Recurring income"
-                />
-              </View>
+              <TouchableOpacity
+                style={styles.scheduleBtn}
+                onPress={() => setRecurOn(!recurOn)}
+                accessibilityRole="button"
+                accessibilityLabel="Set recurring schedule"
+              >
+                <View style={styles.scheduleBtnLeft}>
+                  <Feather name="repeat" size={16} color={recurOn ? colors.income : colors.textSecondary} />
+                  <Text style={[styles.fieldLabel, recurOn && { color: colors.income }]}>
+                    {recurOn ? `Repeats ${freq}` : 'Set schedule (e.g. salary)'}
+                  </Text>
+                </View>
+                <Feather name={recurOn ? 'x' : 'chevron-right'} size={16} color={colors.textMuted} />
+              </TouchableOpacity>
               {recurOn && (
-                <View style={styles.freqRow}>
-                  {FREQS.map(f => (
-                    <TouchableOpacity
-                      key={f.key}
-                      style={[styles.freqChip, freq === f.key && styles.freqChipActive]}
-                      onPress={() => setFreq(f.key)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: freq === f.key }}
-                    >
-                      <Text style={[styles.freqText, freq === f.key && styles.freqTextActive]}>{f.label}</Text>
+                <View style={styles.recurOptions}>
+                  <View style={styles.freqRow}>
+                    {FREQS.map(f => (
+                      <TouchableOpacity
+                        key={f.key}
+                        style={[styles.freqChip, freq === f.key && styles.freqChipActive]}
+                        onPress={() => setFreq(f.key)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: freq === f.key }}
+                      >
+                        <Text style={[styles.freqText, freq === f.key && styles.freqTextActive]}>{f.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.fieldLabel}>Ends</Text>
+                  <View style={styles.endRow}>
+                    <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
+                      <Feather name="calendar" size={15} color={colors.income} />
+                      <Text style={styles.dateText}>{recurEndMs ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
                     </TouchableOpacity>
-                  ))}
+                    {recurEndMs != null && (
+                      <TouchableOpacity style={styles.endNeverBtn} onPress={() => setRecurEndMs(null)} accessibilityRole="button">
+                        <Text style={styles.endNeverText}>Never</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               )}
             </>
@@ -225,6 +249,24 @@ export default function AddIncomeScreen() {
       </KeyboardAvoidingView>
 
       <DatePickerSheet visible={showDate} value={date} onClose={() => setShowDate(false)} onChange={setDate} />
+      <DatePickerSheet visible={showEndDate} value={recurEndMs ?? Date.now()} onClose={() => setShowEndDate(false)} onChange={(ms) => { setRecurEndMs(ms); setShowEndDate(false); }} />
+
+      <SheetModal visible={showGroupPicker} onClose={() => setShowGroupPicker(false)} title="Select group" scroll={false}>
+        {groups.map(g => (
+          <TouchableOpacity
+            key={g.id}
+            style={[styles.groupPickerRow, selectedGroupId === g.id && styles.groupPickerRowActive]}
+            onPress={async () => { setSelectedGroupId(g.id); await loadCats(g.id); setShowGroupPicker(false); }}
+            accessibilityRole="button"
+          >
+            <View style={[styles.groupPickerIcon, { backgroundColor: g.color + '22' }]}>
+              <Feather name={g.icon as any} size={16} color={g.color} />
+            </View>
+            <Text style={styles.groupPickerName}>{g.name}</Text>
+            {selectedGroupId === g.id && <Feather name="check" size={18} color={colors.income} />}
+          </TouchableOpacity>
+        ))}
+      </SheetModal>
     </View>
   );
 }
@@ -233,7 +275,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: 60 },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   amountWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
   field: { gap: space.xs },
@@ -246,9 +288,24 @@ const styles = StyleSheet.create({
   dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
   recurRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.xs },
+  scheduleBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
+  endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
+  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
+  endNeverText: { ...type.label, color: colors.textSecondary },
   freqRow: { flexDirection: 'row', gap: space.xs },
   freqChip: { flex: 1, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   freqChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.income },
   freqText: { ...type.caption, color: colors.textSecondary },
   freqTextActive: { color: colors.income, fontFamily: 'Inter_600SemiBold' },
+  groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  groupSelectorIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  groupSelectorLabel: { ...type.caption, color: colors.textMuted },
+  groupSelectorName: { ...type.body, color: colors.textPrimary },
+  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.md, borderRadius: radius.md },
+  groupPickerRowActive: { backgroundColor: colors.accentMuted },
+  groupPickerIcon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
 });

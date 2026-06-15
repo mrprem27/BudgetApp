@@ -1,3 +1,5 @@
+import { CURRENCY_MAP, DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
+
 export function formatRupees(paise: number): string {
   return '₹' + (paise / 100).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -8,6 +10,24 @@ export function formatRupees(paise: number): string {
 /** Rounded, no paise — for dashboard cards and summaries. e.g. 150050 → "₹1,501". */
 export function formatRupeesShort(paise: number): string {
   return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
+}
+
+/** Multi-currency formatter: formats smallest unit (paise/cents) to display string */
+export function formatAmount(smallestUnit: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
+  const def = CURRENCY_MAP[currency];
+  const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
+  const value = smallestUnit / divisor;
+  return def.symbol + value.toLocaleString(def.locale, {
+    minimumFractionDigits: def.decimals,
+    maximumFractionDigits: def.decimals,
+  });
+}
+
+/** Short (no decimal) multi-currency format for cards/summaries */
+export function formatAmountShort(smallestUnit: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
+  const def = CURRENCY_MAP[currency];
+  const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
+  return def.symbol + Math.round(smallestUnit / divisor).toLocaleString(def.locale);
 }
 
 export function parseToPaise(input: string): number {
