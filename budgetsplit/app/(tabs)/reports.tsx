@@ -4,6 +4,7 @@ import {
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -58,6 +59,7 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
+  const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [summaries, setSummaries] = useState<GroupSummary[]>([]);
@@ -232,7 +234,7 @@ export default function ReportsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Reports</Text>
         <View style={styles.exportRow}>
           <TouchableOpacity
@@ -311,17 +313,17 @@ export default function ReportsScreen() {
               <View style={styles.metricRow}>
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
-                  <AmountText paise={s.income} size="sm" forceColor={colors.income} />
+                  <AmountText paise={s.income} size="sm" forceColor={colors.income} rounded />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Expense</Text>
-                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} />
+                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} rounded />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Net</Text>
-                  <AmountText paise={s.income - s.expense} size="sm" />
+                  <AmountText paise={s.income - s.expense} size="sm" rounded />
                 </View>
               </View>
 
@@ -332,7 +334,7 @@ export default function ReportsScreen() {
                   {s.topCats.map(c => (
                     <View key={c.name} style={styles.catRow}>
                       <Text style={styles.catName}>{c.name}</Text>
-                      <Text style={styles.catAmt}>{formatRupees(c.amount)}</Text>
+                      <Text style={styles.catAmt}>{formatRupeesShort(c.amount)}</Text>
                     </View>
                   ))}
                 </>
@@ -378,17 +380,17 @@ export default function ReportsScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Income</Text>
-                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} />
+                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} rounded />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Spent</Text>
-                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} />
+                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} rounded />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Saved</Text>
-                <AmountText paise={yearIncome - yearExpense} size="sm" />
+                <AmountText paise={yearIncome - yearExpense} size="sm" rounded />
               </View>
             </View>
 
@@ -401,7 +403,7 @@ export default function ReportsScreen() {
             <View style={styles.reviewRow}>
               <Text style={styles.reviewLabel}>Biggest expense</Text>
               <Text style={[styles.reviewValue, { fontFamily: 'SpaceMono_400Regular' }]}>
-                {formatRupees(biggestTxn)}
+                {formatRupeesShort(biggestTxn)}
               </Text>
             </View>
           </View>
@@ -414,7 +416,7 @@ export default function ReportsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: 80, gap: space.md },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space.xl },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
   exportRow: { flexDirection: 'row', gap: space.xs },
   exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: 36 },
