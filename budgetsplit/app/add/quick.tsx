@@ -26,8 +26,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
-import { scanReceipt } from '../../src/lib/ocr';
 import { haptic } from '../../src/lib/haptics';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
@@ -40,6 +40,7 @@ export default function QuickAddScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
@@ -239,24 +240,7 @@ export default function QuickAddScreen() {
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
-        {!isEditing ? (
-          <TouchableOpacity
-            onPress={async () => {
-              const result = await scanReceipt('camera');
-              if (result) {
-                if (result.amount) setAmountText((result.amount / 100).toString());
-                if (result.note) setNote(result.note);
-                haptic.selection();
-              }
-            }}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Scan receipt"
-            style={styles.scanBtn}
-          >
-            <Feather name="camera" size={18} color={colors.accent} />
-          </TouchableOpacity>
-        ) : <View style={{ width: 24 }} />}
+        <View style={{ width: 24 }} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -333,7 +317,7 @@ export default function QuickAddScreen() {
           <Feather name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>
 
-        {!isEditing && (
+        {!isEditing && flags.recurring && (
         <TouchableOpacity
           style={styles.scheduleBtn}
           onPress={() => setRecurEnabled(!recurEnabled)}
@@ -636,7 +620,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
-  scanBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },

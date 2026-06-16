@@ -85,22 +85,13 @@ export default function CategoriesScreen() {
   }
 
   function getCategoriesInSection(sectionTitle: string): Category[] {
-    const sectionDef = CATEGORY_SECTIONS.find(s => s.title === sectionTitle);
-    if (!sectionDef) return [];
-    const namesInSection = new Set(sectionDef.names);
-    return categories.filter(c => {
-      if (namesInSection.has(c.name)) return true;
-      if (sectionTitle === 'Other') {
-        return categorySection(c.name) === 'Other' && !CATEGORY_SECTIONS.some(s => s.names.includes(c.name));
-      }
-      return false;
-    });
+    return categories.filter(c => (c.section ?? categorySection(c.name)) === sectionTitle);
   }
 
   async function addCategory() {
     const trimmed = name.trim();
     if (!trimmed || !groupId) return;
-    const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab);
+    const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab, addingToSection);
     haptic.success();
     setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
     setName('');

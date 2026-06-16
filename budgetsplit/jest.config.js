@@ -12,5 +12,7 @@ module.exports = {
   moduleNameMapper: {
     '^expo-sqlite$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^react-native-get-random-values$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    '^expo-image-picker$': '<rootDir>/src/__tests__/__mocks__/empty.js',
   },
 };

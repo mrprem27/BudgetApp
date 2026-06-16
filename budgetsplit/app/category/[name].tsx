@@ -1,0 +1,169 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { startOfMonth, endOfMonth, format, startOfYear, endOfYear } from 'date-fns';
+import { colors } from '../../src/constants/colors';
+import { type } from '../../src/constants/typography';
+import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { AmountText } from '../../src/components/ui/AmountText';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { EmptyState } from '../../src/components/ui/EmptyState';
+import { TransactionRow } from '../../src/components/finance/TransactionRow';
+import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
+import { getCategoryBudgets } from '../../src/db/queries/categoryBudgets';
+import { getMe } from '../../src/db/queries/persons';
+import { getAllGroups } from '../../src/db/queries/groups';
+import { categoryVisual } from '../../src/constants/categories';
+
+export default function CategoryDetailScreen() {
+  const { name } = useLocalSearchParams<{ name?: string }>();
+  const db = useSQLiteContext();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const categoryName = name ? decodeURIComponent(name) : '';
+
+  const [loading, setLoading] = useState(true);
+  const [myId, setMyId] = useState('');
+  const [monthSpent, setMonthSpent] = useState(0);
+  const [yearSpent, setYearSpent] = useState(0);
+  const [monthBudget, setMonthBudget] = useState(0);
+  const [txns, setTxns] = useState<TxnWithSplits[]>([]);
+  const [txnCount, setTxnCount] = useState(0);
+
+  const visual = categoryVisual(categoryName);
+  const now = new Date();
+  const monthStart = startOfMonth(now).getTime();
+  const monthEnd = endOfMonth(now).getTime();
+  const yearStart = startOfYear(now).getTime();
+  const yearEnd = endOfYear(now).getTime();
+
+  useEffect(() => {
+    (async () => {
+      if (!categoryName) return;
+
+      const me = await getMe(db);
+      if (me) setMyId(me.id);
+
+      const groups = await getAllGroups(db);
+      const [monthTxns, yearTxns, ...budgetArrays] = await Promise.all([
+        getTransactionsInRange(db, null, monthStart, monthEnd),
+        getTransactionsInRange(db, null, yearStart, yearEnd),
+        ...groups.map(g => getCategoryBudgets(db, g.id)),
+      ]);
+      const budgets = budgetArrays.flat();
+
+      const monthCat = monthTxns.filter(t => t.category === categoryName && t.kind === 'expense' && !t.is_deleted);
+      const yearCat = yearTxns.filter(t => t.category === categoryName && t.kind === 'expense' && !t.is_deleted);
+      const monthBudgetCat = budgets.find(b => b.category === categoryName && b.cadence === 'monthly');
+
+      const monthTotal = monthCat.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+      const yearTotal = yearCat.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+
+      setMonthSpent(monthTotal);
+      setYearSpent(yearTotal);
+      setMonthBudget(monthBudgetCat?.amount ?? 0);
+      setTxns(monthCat.sort((a, b) => b.date - a.date));
+      setTxnCount(yearCat.length);
+      setLoading(false);
+    })();
+  }, [db, categoryName, monthStart, monthEnd, yearStart, yearEnd]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title={categoryName} onBack={() => router.back()} />
+        <ScrollView style={styles.scroll}>
+          <SkeletonCard height={120} />
+          <SkeletonCard height={180} />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title={categoryName} onBack={() => router.back()} />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {/* Hero */}
+        <View style={styles.heroCard}>
+          <View style={[styles.heroIcon, { backgroundColor: visual.color + '22' }]}>
+            <Feather name={visual.icon as any} size={24} color={visual.color} />
+          </View>
+          <Text style={styles.heroAmount}>
+            ₹{Math.round(monthSpent / 100).toLocaleString('en-IN')}
+          </Text>
+          <Text style={styles.heroSub}>
+            This month
+            {monthBudget > 0 && monthSpent > 0 ? ` • ${Math.round((monthSpent / monthBudget) * 100)}% of budget` : ''}
+          </Text>
+          <Text style={styles.heroTxnCount}>
+            {txnCount} transactions this year{txnCount > 0 ? ` • Avg ₹${Math.round(yearSpent / txnCount / 100)}` : ''}
+          </Text>
+        </View>
+
+        {/* Budget bar if budget exists */}
+        {monthBudget > 0 && (
+          <View style={styles.budgetSection}>
+            <Text style={styles.sectionLabel}>Monthly Budget</Text>
+            <BudgetBar allocated={monthBudget} spent={monthSpent} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs }}>
+              <Text style={styles.budgetSub}>{Math.round((monthSpent / monthBudget) * 100)}% used</Text>
+              <Text style={styles.budgetSub}>
+                {monthBudget - monthSpent >= 0 ? `₹${Math.round((monthBudget - monthSpent) / 100)} left` : `Over by ₹${Math.round((monthSpent - monthBudget) / 100)}`}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Year summary */}
+        {txnCount > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Year-to-date</Text>
+            <Text style={styles.statValue}>
+              <AmountText paise={yearSpent} size="md" compact />
+            </Text>
+            <Text style={styles.statLabel}>across {txnCount} {txnCount === 1 ? 'transaction' : 'transactions'}</Text>
+          </View>
+        )}
+
+        {/* Transactions this month */}
+        {txns.length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>This Month</Text>
+            {txns.map((txn, i) => (
+              <React.Fragment key={txn.id}>
+                <TransactionRow txn={txn} myId={myId} />
+                {i < txns.length - 1 && <View style={styles.txnDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
+        ) : (
+          <EmptyState icon="inbox" title="No transactions" body="No expenses recorded in this category this month." />
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  scroll: { flex: 1 },
+  scrollContent: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
+  heroCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, borderWidth: 1, borderColor: colors.border, alignItems: 'center', gap: space.sm, ...shadow.md },
+  heroIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  heroAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 30, letterSpacing: -0.6, color: colors.textPrimary },
+  heroSub: { ...type.label, color: colors.textSecondary },
+  heroTxnCount: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  budgetSection: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  sectionLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
+  statValue: { ...type.subheading, color: colors.textPrimary },
+  statLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  budgetSub: { ...type.caption, color: colors.textMuted },
+  txnDivider: { height: 1, backgroundColor: colors.border, marginLeft: 56 },
+});

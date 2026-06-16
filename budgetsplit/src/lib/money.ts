@@ -30,6 +30,53 @@ export function formatAmountShort(smallestUnit: number, currency: CurrencyCode =
   return def.symbol + Math.round(smallestUnit / divisor).toLocaleString(def.locale);
 }
 
+/** Drop a trailing ".0" so "1.0K" reads "1K" but "1.2K" stays. */
+function trimDecimal(n: number): string {
+  return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '');
+}
+
+/**
+ * Abbreviate a value already in major units (rupees / dollars) — for chart
+ * axis labels (chart data is stored divided by 100) and other space-tight
+ * spots. INR uses the Indian scale (K, L, Cr); every other currency uses the
+ * international scale (K, M, B). Values under 1000 stay as grouped integers.
+ * Negative / NaN / Infinity safe.
+ */
+export function formatCompactMajor(value: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
+  const def = CURRENCY_MAP[currency];
+  if (!isFinite(value)) return def.symbol + '0';
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+
+  if (abs < 1000) {
+    return sign + def.symbol + Math.round(abs).toLocaleString(def.locale);
+  }
+
+  let body: string;
+  if (currency === 'INR') {
+    if (abs >= 1e7) body = trimDecimal(abs / 1e7) + 'Cr';
+    else if (abs >= 1e5) body = trimDecimal(abs / 1e5) + 'L';
+    else body = trimDecimal(abs / 1e3) + 'K';
+  } else {
+    if (abs >= 1e9) body = trimDecimal(abs / 1e9) + 'B';
+    else if (abs >= 1e6) body = trimDecimal(abs / 1e6) + 'M';
+    else body = trimDecimal(abs / 1e3) + 'K';
+  }
+  return sign + def.symbol + body;
+}
+
+/**
+ * Abbreviate a smallest-unit amount (paise / cents). Wraps
+ * {@link formatCompactMajor} after converting to major units. Use on
+ * dashboard cards, legends and anywhere a full amount would overflow.
+ */
+export function formatCompact(smallestUnit: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
+  const def = CURRENCY_MAP[currency];
+  if (!isFinite(smallestUnit)) return def.symbol + '0';
+  const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
+  return formatCompactMajor(smallestUnit / divisor, currency);
+}
+
 export function parseToPaise(input: string): number {
   const n = parseFloat(input.replace(/[^0-9.]/g, ''));
   if (isNaN(n)) return 0;

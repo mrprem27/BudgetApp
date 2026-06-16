@@ -62,8 +62,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: space.sm + 2,
-    minHeight: 72,
+    paddingVertical: space.sm,
+    minHeight: 64,
     gap: space.sm,
   },
   iconCircle: {

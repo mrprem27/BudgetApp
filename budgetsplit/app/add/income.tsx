@@ -21,6 +21,7 @@ import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
@@ -39,6 +40,7 @@ export default function AddIncomeScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
@@ -172,7 +174,7 @@ export default function AddIncomeScreen() {
               value={category}
               onChange={setCategory}
               onCreate={async (name) => {
-                const created = await insertCategory(db, selectedGroupId, name, 'plus-circle', colors.income, 'income');
+                const created = await insertCategory(db, selectedGroupId, name, 'plus-circle', colors.income, 'income', 'Income');
                 setCategories(prev => [...prev, created]);
                 return created;
               }}
@@ -196,7 +198,7 @@ export default function AddIncomeScreen() {
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {!isEditing && (
+          {!isEditing && flags.recurring && (
             <>
               <TouchableOpacity
                 style={styles.scheduleBtn}

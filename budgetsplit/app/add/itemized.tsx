@@ -15,10 +15,13 @@ import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertItemizedTxn } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual } from '../../src/lib/money';
+import { scanReceipt } from '../../src/lib/ocr';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { haptic } from '../../src/lib/haptics';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -98,6 +101,7 @@ export default function ItemizedScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
 
   const [step, setStep] = useState<Step>('items');
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
@@ -163,6 +167,21 @@ export default function ItemizedScreen() {
     setNewName('');
     setNewQty('1');
     setNewPrice('');
+  }
+
+  async function handleScanReceipt() {
+    const result = await scanReceipt('camera');
+    if (!result) return;
+    if (result.amount) {
+      setItems(prev => [...prev, {
+        id: Math.random().toString(),
+        name: result.note || 'Scanned item',
+        qty: '1',
+        unitPrice: (result.amount! / 100).toString(),
+        assignedTo: [],
+      }]);
+      haptic.success();
+    }
   }
 
   function removeItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
@@ -247,6 +266,11 @@ export default function ItemizedScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{stepTitle}</Text>
         </View>
+        {step === 'items' && flags.itemizedOcr && (
+          <TouchableOpacity onPress={handleScanReceipt} hitSlop={10} accessibilityRole="button" accessibilityLabel="Scan receipt" style={styles.scanBtn}>
+            <Feather name="camera" size={18} color={colors.accent} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.stepIndicator}>{STEPS.indexOf(step) + 1}/4</Text>
       </View>
 
@@ -581,6 +605,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
+  scanBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   stepIndicator: { ...type.label, color: colors.textMuted },
   dots: { flexDirection: 'row', gap: 6, paddingHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   dot: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.bgMuted },

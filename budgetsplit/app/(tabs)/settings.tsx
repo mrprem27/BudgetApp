@@ -17,6 +17,7 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CURRENCIES, DEFAULT_CURRENCY, type CurrencyCode } from '../../src/constants/currencies';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
@@ -28,6 +29,7 @@ export default function SettingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags, setFlag } = useFeatureFlags();
 
   const [me, setMe] = useState<Person | null>(null);
   const [showName, setShowName] = useState(false);
@@ -112,6 +114,22 @@ export default function SettingsScreen() {
         <SettingsRow icon="dollar-sign" label="Currency" value={`${CURRENCIES.find(c => c.code === defaultCurrency)?.symbol ?? '₹'} ${CURRENCIES.find(c => c.code === defaultCurrency)?.name ?? 'Indian Rupee'}`} onPress={() => setShowCurrency(true)} />
       </View>
 
+      {/* Features */}
+      <Text style={styles.sectionTitle}>Features</Text>
+      <View style={styles.card}>
+        <ToggleRow icon="bar-chart-2" label="Insights & tips" value={flags.insights} onValueChange={(v) => setFlag('insights', v)} />
+        <Text style={styles.featureCaption}>Cross-group spending insights on dashboard</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="trending-up" label="Spending forecast" value={flags.forecast} onValueChange={(v) => setFlag('forecast', v)} />
+        <Text style={styles.featureCaption}>Month-end projection on Reports</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="list" label="Itemized split + receipt scan" value={flags.itemizedOcr} onValueChange={(v) => setFlag('itemizedOcr', v)} />
+        <Text style={styles.featureCaption}>Line-item bills with optional OCR</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="refresh-cw" label="Recurring transactions" value={flags.recurring} onValueChange={(v) => setFlag('recurring', v)} />
+        <Text style={styles.featureCaption}>Auto-repeat schedules for expenses & income</Text>
+      </View>
+
       {/* Manage */}
       <Text style={styles.sectionTitle}>Manage</Text>
       <View style={styles.card}>
@@ -170,7 +188,7 @@ export default function SettingsScreen() {
 function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof Feather.glyphMap; label: string; value: boolean; onValueChange: (v: boolean) => void }) {
   return (
     <View style={styles.toggleRow}>
-      <View style={styles.toggleIcon}><Feather name={icon} size={18} color={colors.accent} /></View>
+      <View style={styles.toggleIcon}><Feather name={icon} size={16} color={colors.accent} /></View>
       <Text style={styles.toggleLabel}>{label}</Text>
       <Switch value={value} onValueChange={onValueChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={label} />
     </View>
@@ -182,7 +200,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
-  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.xs, gap: 2, ...shadow.sm },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   profileName: { ...type.subheading, color: colors.textPrimary },
@@ -191,9 +209,10 @@ const styles = StyleSheet.create({
   aboutText: { ...type.body, color: colors.textPrimary },
   aboutSub: { ...type.caption, color: colors.textSecondary },
   nameInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, minHeight: 56 },
-  toggleIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, minHeight: 52 },
+  toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
+  featureCaption: { ...type.caption, color: colors.textMuted, marginLeft: 32 + space.md, marginTop: -space.sm, marginBottom: space.xs },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },

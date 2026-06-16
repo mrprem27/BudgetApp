@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, TextStyle } from 'react-native';
-import { formatRupees, formatRupeesShort } from '../../lib/money';
+import { formatRupees, formatRupeesShort, formatCompact } from '../../lib/money';
 import { type, colors } from '../tokens';
 
 type Size = 'xl' | 'lg' | 'md' | 'sm';
@@ -25,9 +25,14 @@ type Props = {
   fit?: boolean;
   /** Drop the paise/decimals — for dashboard cards and summaries. */
   rounded?: boolean;
+  /**
+   * Abbreviate large amounts (₹1.2L / $3.4M) so they never overflow on tight
+   * surfaces like dashboard tiles and legends. Takes precedence over `rounded`.
+   */
+  compact?: boolean;
 };
 
-export function AmountText({ paise, size = 'md', style, forceColor, fit = false, rounded = false }: Props) {
+export function AmountText({ paise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false }: Props) {
   const color = forceColor
     ? forceColor
     : paise > 0
@@ -36,7 +41,9 @@ export function AmountText({ paise, size = 'md', style, forceColor, fit = false,
     ? colors.expense
     : colors.textPrimary;
 
-  const text = rounded ? formatRupeesShort(paise) : formatRupees(paise);
+  // Screen readers always announce the exact amount, even when shown compact.
+  const fullText = formatRupees(paise);
+  const text = compact ? formatCompact(paise) : rounded ? formatRupeesShort(paise) : fullText;
 
   return (
     <Text
@@ -44,7 +51,7 @@ export function AmountText({ paise, size = 'md', style, forceColor, fit = false,
       numberOfLines={1}
       adjustsFontSizeToFit={fit}
       minimumFontScale={fit ? 0.6 : undefined}
-      accessibilityLabel={text}
+      accessibilityLabel={fullText}
     >
       {text}
     </Text>

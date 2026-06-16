@@ -33,7 +33,8 @@ import { getBudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics, rankInsights } from '../../src/lib/analytics';
 import type { GroupInsight } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
-import { formatRupees } from '../../src/lib/money';
+import { formatRupees, formatCompact, formatCompactMajor } from '../../src/lib/money';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -67,8 +68,10 @@ export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setPersons, setGroups } = useStore();
+  const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
+  const [selectedDonutCat, setSelectedDonutCat] = useState<string | null>(null);
   const [prevSpending, setPrevSpending] = useState(0);
   const [income, setIncome] = useState(0);
   const [oweTotal, setOweTotal] = useState(0);
@@ -262,7 +265,7 @@ export default function DashboardScreen() {
           <TabPills
             tabs={TABS}
             active={tab}
-            onChange={(key) => setTab(key as TabKey)}
+            onChange={(key) => { setTab(key as TabKey); setSelectedDonutCat(null); }}
           />
         </View>
 
@@ -278,7 +281,7 @@ export default function DashboardScreen() {
         {/* Spending card */}
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
-          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} rounded />
+          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} compact />
           {(spending > 0 || prevSpending > 0) && (() => {
             const delta = spending - prevSpending;
             const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
@@ -288,7 +291,7 @@ export default function DashboardScreen() {
               <View style={styles.deltaRow}>
                 <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={color} />
                 <Text style={[styles.deltaText, { color }]}>
-                  {pct === null ? formatRupees(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
+                  {pct === null ? formatCompact(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
                 </Text>
               </View>
             );
@@ -296,11 +299,11 @@ export default function DashboardScreen() {
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Income</Text>
-              <AmountText paise={income} size="md" forceColor={colors.income} rounded />
+              <AmountText paise={income} size="md" forceColor={colors.income} compact />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Net</Text>
-              <AmountText paise={net} size="md" rounded />
+              <AmountText paise={net} size="md" compact />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Savings</Text>
@@ -311,14 +314,16 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Budget rollup tiles — tap to manage the budget directly (less nesting) */}
+        {/* Compact tiles: Budget + Balances side-by-side */}
+        <View style={styles.compactGrid}>
+        {/* Budget rollup tile */}
         {budgetSummary.allocated > 0 && (
           <TouchableOpacity
             style={styles.budgetCard}
             activeOpacity={0.85}
             onPress={() => {
               const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
-              if (pid) router.push(`/group/${pid}/budget`);
+              if (pid) router.push(flags.insights ? `/group/${pid}/insights` : `/group/${pid}/budget`);
             }}
             accessibilityRole="button"
             accessibilityLabel="Manage budget"
@@ -330,17 +335,17 @@ export default function DashboardScreen() {
             <View style={styles.budgetTiles}>
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Budget</Text>
-                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} rounded />
+                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} compact />
               </View>
               <View style={styles.budgetTileDivider} />
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Spent</Text>
-                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} rounded />
+                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} compact />
               </View>
               <View style={styles.budgetTileDivider} />
               <View style={styles.budgetTile}>
                 <Text style={styles.budgetTileLabel}>Left</Text>
-                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} rounded />
+                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} compact />
               </View>
             </View>
             {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
@@ -362,8 +367,27 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Balance tile */}
+        {(oweTotal > 0 || owedTotal > 0) && (
+          <TouchableOpacity
+            style={styles.balanceChip}
+            onPress={() => router.push('/settle')}
+            accessibilityRole="button"
+            accessibilityLabel="Settle up"
+          >
+            <Text style={styles.balanceLabel}>Balances</Text>
+            <Text style={styles.balanceText}>
+              {oweTotal > 0 ? `You owe ${formatCompact(oweTotal)}` : ''}
+              {oweTotal > 0 && owedTotal > 0 ? '\n' : ''}
+              {owedTotal > 0 ? `Owed ${formatCompact(owedTotal)}` : ''}
+            </Text>
+            <Text style={styles.settleLink}>Settle Up →</Text>
+          </TouchableOpacity>
+        )}
+        </View>
+
         {/* Insights — top cross-group analytics, tap to manage that group's budget */}
-        {insights.length > 0 && (
+        {flags.insights && insights.length > 0 && (
           <View style={styles.insightsCard}>
             <Text style={styles.chartTitle}>Insights</Text>
             <View style={{ gap: space.sm }}>
@@ -393,23 +417,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Owe/Owed */}
-        {(oweTotal > 0 || owedTotal > 0) && (
-          <TouchableOpacity
-            style={styles.balanceChip}
-            onPress={() => router.push('/settle')}
-            accessibilityRole="button"
-            accessibilityLabel="Settle up"
-          >
-            <Text style={styles.balanceText}>
-              {oweTotal > 0 ? `You owe ${formatRupees(oweTotal)}` : ''}
-              {oweTotal > 0 && owedTotal > 0 ? ' · ' : ''}
-              {owedTotal > 0 ? `Owed ${formatRupees(owedTotal)}` : ''}
-            </Text>
-            <Text style={styles.settleLink}>Settle Up</Text>
-          </TouchableOpacity>
-        )}
-
         {/* Donut chart */}
         {chartsReady && pieData.length > 0 && (
           <View style={styles.chartCard}>
@@ -419,31 +426,62 @@ export default function DashboardScreen() {
                 key={`pie-${tab}`}
                 data={pieData}
                 donut
-                radius={70}
-                innerRadius={46}
+                radius={88}
+                innerRadius={60}
                 innerCircleColor={colors.bgCard}
                 focusOnPress
                 sectionAutoFocus
-                centerLabelComponent={() => (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={styles.pieCenterNum}>{pieData.length}</Text>
-                    <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
-                  </View>
-                )}
+                onPress={(item: any) => setSelectedDonutCat(selectedDonutCat === item.text ? null : item.text)}
+                centerLabelComponent={() => {
+                  if (selectedDonutCat) {
+                    const cat = pieData.find(d => d.text === selectedDonutCat);
+                    return (
+                      <TouchableOpacity onPress={() => router.push(`/category/${encodeURIComponent(selectedDonutCat)}` as any)} style={{ alignItems: 'center' }}>
+                        <Text style={styles.pieCenterNum}>{cat ? formatCompact(cat.value) : '—'}</Text>
+                        <Text style={[styles.pieCenterLabel, { maxWidth: 80, fontSize: 12 }]} numberOfLines={1}>{selectedDonutCat}</Text>
+                        <Text style={{ ...type.caption, color: colors.accent, marginTop: 2 }}>View →</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  return (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.pieCenterNum}>{pieData.length}</Text>
+                      <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
+                      <Text style={{ ...type.caption, color: colors.textMuted, marginTop: 2 }}>Tap a slice</Text>
+                    </View>
+                  );
+                }}
               />
               <View style={styles.legend}>
                 {(() => {
                   const totalPie = pieData.reduce((s, d) => s + d.value, 0) || 1;
                   return pieData.slice(0, 5).map((d, i) => (
-                    <View key={i} style={styles.legendItem}>
+                    <TouchableOpacity
+                      key={i}
+                      style={[styles.legendItem, selectedDonutCat === d.text && { opacity: 1 }, selectedDonutCat && selectedDonutCat !== d.text && { opacity: 0.4 }]}
+                      onPress={() => setSelectedDonutCat(selectedDonutCat === d.text ? null : d.text)}
+                    >
                       <View style={[styles.legendDot, { backgroundColor: d.color }]} />
                       <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
                       <Text style={styles.legendPct}>{Math.round((d.value / totalPie) * 100)}%</Text>
-                      <Text style={styles.legendAmt}>{formatRupees(d.value)}</Text>
-                    </View>
+                      <Text style={styles.legendAmt}>{formatCompact(d.value)}</Text>
+                    </TouchableOpacity>
                   ));
                 })()}
               </View>
+            </View>
+            {/* Quick-pick chips */}
+            <View style={styles.chipRow}>
+              {pieData.slice(0, 5).map((d, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.chip, selectedDonutCat === d.text && styles.chipActive]}
+                  onPress={() => setSelectedDonutCat(selectedDonutCat === d.text ? null : d.text)}
+                >
+                  <View style={[styles.chipDot, { backgroundColor: d.color }]} />
+                  <Text style={[styles.chipText, selectedDonutCat === d.text && styles.chipTextActive]} numberOfLines={1}>{d.text}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         )}
@@ -471,7 +509,7 @@ export default function DashboardScreen() {
               xAxisThickness={0}
               yAxisThickness={0}
               yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-              yAxisLabelPrefix="₹"
+              formatYLabel={(v: string) => formatCompactMajor(Number(v))}
               xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
               noOfSections={3}
               spacing={Math.max(28, Math.round(280 / Math.max(barData.length, 1)))}
@@ -488,7 +526,7 @@ export default function DashboardScreen() {
                 pointerLabelHeight: 28,
                 pointerLabelComponent: (items: { value: number }[]) => (
                   <View style={styles.tooltipContainer}>
-                    <Text style={styles.tooltipText}>₹{items[0]?.value ?? 0}</Text>
+                    <Text style={styles.tooltipText}>{formatCompactMajor(items[0]?.value ?? 0)}</Text>
                   </View>
                 ),
               }}
@@ -508,6 +546,9 @@ export default function DashboardScreen() {
                   onPress={() => router.push(`/group/${g.id}`)}
                   accessibilityLabel={g.name}
                 >
+                  <View style={[styles.groupIcon, { backgroundColor: colors.accent + '22' }]}>
+                    <Text style={styles.groupIconText}>{g.name.charAt(0).toUpperCase()}</Text>
+                  </View>
                   <View style={{ flex: 1, gap: 6 }}>
                     <Text style={styles.groupName}>{g.name}</Text>
                     {g.pct !== null && (
@@ -546,7 +587,7 @@ export default function DashboardScreen() {
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
           { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
           { label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between people', onPress: () => router.push('/add/transfer') },
-          { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') },
+          ...(flags.itemizedOcr ? [{ label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') }] : []),
         ]}
       />
     </View>
@@ -567,7 +608,7 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  budgetCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
   budgetCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetCardTitle: { ...type.subheading, color: colors.textPrimary },
   budgetTiles: { flexDirection: 'row', alignItems: 'center' },
@@ -582,15 +623,16 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  balanceText: { ...type.body, color: colors.textSecondary, flex: 1 },
-  settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  balanceChip: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs },
+  balanceLabel: { ...type.subheading, color: colors.textPrimary },
+  balanceText: { ...type.body, color: colors.textSecondary },
+  settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
   chartCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  pieRow: { alignItems: 'center', gap: space.md },
   pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 22, color: colors.textPrimary },
   pieCenterLabel: { ...type.caption, color: colors.textMuted },
-  legend: { flex: 1, gap: space.sm },
+  legend: { alignSelf: 'stretch', gap: space.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
@@ -605,4 +647,13 @@ const styles = StyleSheet.create({
   groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
   tooltipContainer: { backgroundColor: colors.bgCard, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
   tooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
+  compactGrid: { flexDirection: 'row', gap: 12, marginBottom: space.md },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.md },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  chipActive: { backgroundColor: colors.accent },
+  chipDot: { width: 8, height: 8, borderRadius: 4 },
+  chipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
+  chipTextActive: { color: colors.bg },
+  groupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  groupIconText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.accent },
 });

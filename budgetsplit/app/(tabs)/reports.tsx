@@ -21,7 +21,9 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { formatRupees, formatRupeesShort } from '../../src/lib/money';
+import { formatRupees, formatRupeesShort, formatCompactMajor } from '../../src/lib/money';
+import { Badge } from '../../src/components/ui/Badge';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
@@ -63,6 +65,7 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
 export default function ReportsScreen() {
   const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
   const [month, setMonth] = useState(() => new Date());
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [summaries, setSummaries] = useState<GroupSummary[]>([]);
@@ -458,7 +461,7 @@ export default function ReportsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                yAxisLabelPrefix="₹"
+                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
                 hideRules
                 isAnimated
@@ -468,14 +471,11 @@ export default function ReportsScreen() {
           )}
 
           {/* Spending Forecast (current month only) */}
-          {forecastActual.length > 2 && (
+          {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
             <View style={styles.card}>
               <View style={styles.forecastHeader}>
                 <Text style={styles.chartTitle}>Month-end forecast</Text>
-                <View style={styles.forecastBadge}>
-                  <Feather name="trending-up" size={12} color={colors.accent} />
-                  <Text style={styles.forecastBadgeText}>₹{projectedTotal.toLocaleString('en-IN')}</Text>
-                </View>
+                <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
               </View>
               <Text style={styles.forecastSub}>Projected total spending based on your pace so far</Text>
               <LineChart
@@ -493,11 +493,12 @@ export default function ReportsScreen() {
                 endFillColor1={colors.expense + '05'}
                 areaChart
                 noOfSections={4}
-                spacing={Math.max(8, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
+                maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
+                spacing={Math.max(12, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                yAxisLabelPrefix="₹"
+                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
                 hideRules
                 hideDataPoints
@@ -677,8 +678,6 @@ const styles = StyleSheet.create({
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forecastBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 4 },
-  forecastBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.accent },
   forecastSub: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
   forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },

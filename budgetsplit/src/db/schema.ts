@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { INCOME_CATEGORIES } from '../constants/categories';
+import { INCOME_CATEGORIES, CATEGORY_SECTIONS } from '../constants/categories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -145,6 +145,8 @@ const COLUMN_MIGRATIONS = [
   // v2: multi-currency — default null means app-wide default (INR).
   "ALTER TABLE txn ADD COLUMN currency TEXT",
   "ALTER TABLE budget_group ADD COLUMN default_currency TEXT",
+  // v3: section persists where a category belongs (custom categories no longer lost).
+  "ALTER TABLE category ADD COLUMN section TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -187,5 +189,20 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       }
     }
   }
+
+  // Backfill section column for all categories that don't have one yet.
+  for (const sec of CATEGORY_SECTIONS) {
+    if (sec.names.length > 0) {
+      const placeholders = sec.names.map(() => '?').join(',');
+      await db.runAsync(
+        `UPDATE category SET section=? WHERE section IS NULL AND name IN (${placeholders})`,
+        [sec.title, ...sec.names],
+      );
+    }
+  }
+  await db.runAsync(
+    "UPDATE category SET section='Income' WHERE section IS NULL AND kind='income'",
+  );
+
   return db;
 }

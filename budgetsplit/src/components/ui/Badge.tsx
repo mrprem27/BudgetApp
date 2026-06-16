@@ -1,37 +1,44 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
+
+export type BadgeTone = 'neutral' | 'accent' | 'income' | 'expense' | 'amber' | 'settle';
+
+const TONE_COLORS: Record<BadgeTone, { fg: string; bg: string }> = {
+  neutral: { fg: colors.textSecondary, bg: colors.bgMuted },
+  accent:  { fg: colors.accent, bg: colors.accentMuted },
+  income:  { fg: colors.income, bg: colors.income + '24' },
+  expense: { fg: colors.expense, bg: colors.coralMuted },
+  amber:   { fg: colors.healthAmber, bg: colors.healthAmber + '28' },
+  settle:  { fg: colors.settle, bg: colors.settle + '28' },
+};
 
 type Props = {
   label: string;
-  variant?: 'subtle' | 'solid';
-  color?: string;
+  tone?: BadgeTone;
+  icon?: keyof typeof Feather.glyphMap;
   style?: ViewStyle;
 };
 
-/**
- * Small pill badge for counts, status indicators (e.g. "3 over", "New").
- * Subtle = tinted background; Solid = full color background.
- */
-export function Badge({ label, variant = 'subtle', color = colors.accent, style }: Props) {
-  const bg = variant === 'solid' ? color : color + '22';
-  const textColor = variant === 'solid' ? '#fff' : color;
-
+export function Badge({ label, tone = 'neutral', icon, style }: Props) {
+  const { fg, bg } = TONE_COLORS[tone];
   return (
     <View style={[styles.badge, { backgroundColor: bg }, style]}>
-      <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+      {icon && <Feather name={icon} size={12} color={fg} />}
+      <Text style={[styles.label, { color: fg }]}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
-    height: 22,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.sm,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    gap: space.xs,
   },
   label: {
     ...type.caption,
