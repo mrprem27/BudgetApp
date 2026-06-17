@@ -111,11 +111,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    elevation: 8,
-    shadowColor: colors.coral,
-    shadowOpacity: 0.45,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 14,
+    ...shadow.fab,
     zIndex: 100,
   },
   fabGradient: {

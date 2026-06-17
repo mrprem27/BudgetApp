@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, AppState, AppStateStatus, TouchableOpacity,
+  View, Text, StyleSheet, AppState, AppStateStatus, TouchableOpacity, Image,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius } from '../../constants/layout';
+
+const LOGO = require('../../../assets/splash-icon.png');
 
 /**
  * Wraps the app. If the user has enabled biometric lock, the app locks whenever
@@ -81,8 +83,12 @@ export function LockGate({ children }: { children: React.ReactNode }) {
       {children}
       {enabled && locked && (
         <View style={styles.overlay}>
-          <View style={styles.iconCircle}>
-            <Feather name="lock" size={36} color={colors.accent} />
+          {/* The lock nests in the donut's centre — the logo IS the lock UI */}
+          <View style={styles.lockMark}>
+            <Image source={LOGO} style={styles.lockMarkImg} resizeMode="contain" />
+            <View style={styles.lockMarkCenter}>
+              <Feather name="lock" size={26} color={colors.accent} />
+            </View>
           </View>
           <Text style={styles.title}>BudgetSplit Locked</Text>
           <Text style={styles.subtitle}>Authenticate to continue</Text>
@@ -110,13 +116,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: space.md,
   },
-  iconCircle: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: space.sm,
-  },
+  lockMark: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: space.lg },
+  lockMarkImg: { position: 'absolute', width: 120, height: 120 },
+  lockMarkCenter: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   title: { ...type.heading, color: colors.textPrimary },
   subtitle: { ...type.body, color: colors.textSecondary, marginBottom: space.lg },
   unlockBtn: {

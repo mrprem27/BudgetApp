@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from '../../constants/colors';
 import { Onboarding } from './Onboarding';
+import { BrandedLoader } from './BrandedLoader';
 
 const KEY = 'onboarding_done';
 
@@ -22,11 +21,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'loading') {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+    return <BrandedLoader />;
   }
 
   if (status === 'onboarding') {

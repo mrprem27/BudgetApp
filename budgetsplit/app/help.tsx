@@ -48,13 +48,12 @@ const SECTIONS: Section[] = [
     illustration: { icons: [
       { name: 'target', bg: '#2BD49B22', color: '#2BD49B' },
       { name: 'bar-chart-2', bg: '#F5B30122', color: '#F5B301' },
-      { name: 'bell', bg: '#FF5C5C22', color: '#FF5C5C' },
+      { name: 'zap', bg: '#FF5C5C22', color: '#FF5C5C' },
     ] },
     items: [
       { icon: 'target', color: colors.income, title: 'Setting budgets', body: 'Open any group \u2192 Budget tab \u2192 add a budget for a category. Set a limit amount and cadence (Daily, Monthly, Yearly, or One-time). Monthly budgets reset each month automatically.' },
       { icon: 'activity', color: '#F5B301', title: 'Budget health', body: 'Each budget shows a colored progress bar: Green (under 80%), Amber (80\u2013100%), Red (over budget). The dashboard shows all groups\' budget health at a glance.' },
       { icon: 'fast-forward', color: colors.accent, title: 'Carry-over', body: 'If you underspend in a period, the unspent amount rolls into the next period. So if your \u20b95000 food budget only used \u20b94000 this month, next month\'s effective limit is \u20b96000.' },
-      { icon: 'bell', color: '#FF5C5C', title: 'Notifications', body: 'BudgetSplit sends you a local notification when any budget hits 80% and again at 100%. These work fully offline \u2014 no server needed.' },
       { icon: 'zap', color: colors.settle, title: 'Recommendations', body: 'The app spots patterns: categories exceeding budget, big month-over-month jumps, and projected overruns. You\'ll see actionable tips like "Food is 40% above last month".' },
     ],
   },

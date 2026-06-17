@@ -1,6 +1,5 @@
 import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,7 +7,6 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { StatusBar } from 'expo-status-bar';
-import * as Notifications from 'expo-notifications';
 import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { colors } from '../src/constants/colors';
@@ -16,16 +14,7 @@ import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 import { FeatureFlagsProvider } from '../src/components/system/FeatureFlagsProvider';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+import { BrandedLoader } from '../src/components/system/BrandedLoader';
 
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
@@ -43,16 +32,8 @@ export default function RootLayout() {
     })();
   }, []);
 
-  useEffect(() => {
-    Notifications.requestPermissionsAsync().catch(() => {});
-  }, []);
-
   if (!fontsLoaded || !dbReady) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+    return <BrandedLoader />;
   }
 
   return (
