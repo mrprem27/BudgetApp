@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'reac
 import Svg, { G, Path } from 'react-native-svg';
 import { colors, type, space, radius } from '../tokens';
 import { formatCompact } from '../../lib/money';
+import { computeDonutWedges, type DonutSeg, type DonutWedge } from '../../lib/donut';
 
 const AG = Animated.createAnimatedComponent(G as any);
 
@@ -13,32 +14,14 @@ const POP = 7;            // translate distance (SVG units) on selection
 const DIM = 0.32;         // non-selected segment opacity
 const SVG_SIZE = 220;
 
-export type DonutSeg = { name: string; paise: number; color: string };
-
-type CSeg = DonutSeg & { a0: number; a1: number; mid: number; pct: number };
-
-function computeSegs(data: DonutSeg[], total: number): CSeg[] {
-  if (!data.length || total <= 0) return [];
-  let acc = 0;
-  const out: CSeg[] = [];
-  for (const d of data) {
-    const frac = Math.max(0, d.paise) / total;
-    const a0 = acc * 360 + GAP / 2;
-    const a1 = a0 + frac * 360 - GAP;
-    if (a1 > a0) {
-      out.push({ ...d, a0, a1, mid: (a0 + a1) / 2, pct: Math.round(frac * 100) });
-    }
-    acc += frac;
-  }
-  return out;
-}
+export type { DonutSeg };
 
 function ptOnRing(r: number, deg: number): [number, number] {
   const a = (deg - 90) * Math.PI / 180;
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
 }
 
-function wedgePath(s: CSeg, selected: boolean): string {
+function wedgePath(s: DonutWedge, selected: boolean): string {
   const ro = selected ? SEL_RO : RO;
   const large = s.a1 - s.a0 > 180 ? 1 : 0;
   const [x0, y0] = ptOnRing(ro, s.a0);
@@ -62,7 +45,7 @@ type Props = {
 
 export function CategoryDonut({ data, total, onOpen }: Props) {
   const [sel, setSel] = useState<number | null>(null);
-  const segs = useMemo(() => computeSegs(data, total), [data, total]);
+  const segs = useMemo(() => computeDonutWedges(data, total, { gap: GAP }), [data, total]);
 
   const opacityRefs = useRef<Animated.Value[]>([]);
 
