@@ -24,12 +24,16 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   // Load the preference on mount; if enabled, start locked.
   useEffect(() => {
     (async () => {
-      const val = await AsyncStorage.getItem('biometric_enabled');
-      const on = val === 'true';
-      setEnabled(on);
-      if (on) {
-        setLocked(true);
-        authenticate();
+      try {
+        const val = await AsyncStorage.getItem('biometric_enabled');
+        const on = val === 'true';
+        setEnabled(on);
+        if (on) {
+          setLocked(true);
+          authenticate();
+        }
+      } catch {
+        setEnabled(false);
       }
     })();
   }, []);

@@ -32,7 +32,9 @@ type Props = {
   compact?: boolean;
 };
 
-export function AmountText({ paise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false }: Props) {
+export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false }: Props) {
+  // Never render "₹NaN" — coerce a non-finite amount to 0 before formatting.
+  const paise = Number.isFinite(rawPaise) ? rawPaise : 0;
   const color = forceColor
     ? forceColor
     : paise > 0

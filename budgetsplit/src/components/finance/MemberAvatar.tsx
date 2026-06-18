@@ -11,12 +11,16 @@ type Props = {
 };
 
 export function MemberAvatar({ name, color, size = 40, onPress, selected }: Props) {
-  const initials = name
-    .split(' ')
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
+  // Robust to empty / whitespace-only / multi-space names (DB-derived).
+  const initials =
+    (name ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(w => w[0])
+      .join('')
+      .toUpperCase() || '?';
 
   const content = (
     <View

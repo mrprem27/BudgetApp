@@ -6,7 +6,12 @@ import { MemberAvatar } from './MemberAvatar';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { SheetModal } from '../ui/SheetModal';
 import { parseToPaise, formatRupees } from '../../lib/money';
+import { CURRENCY_MAP, DEFAULT_CURRENCY } from '../../constants/currencies';
 import type { Person } from '../../db/queries/persons';
+
+// Settlement amounts are formatted with formatRupees (DEFAULT_CURRENCY); source
+// the input adornment from the same place rather than a hardcoded glyph.
+const CURRENCY_SYMBOL = CURRENCY_MAP[DEFAULT_CURRENCY].symbol;
 
 type Props = {
   visible: boolean;
@@ -51,7 +56,7 @@ export function SettleSheet({ visible, from, to, outstanding, onClose, onConfirm
 
       <Text style={styles.label}>Amount</Text>
       <View style={styles.amountWrap}>
-        <Text style={styles.rupee}>₹</Text>
+        <Text style={styles.rupee}>{CURRENCY_SYMBOL}</Text>
         <TextInput
           style={styles.amountInput}
           value={amount}

@@ -15,11 +15,11 @@ const RI = DONUT * 0.30;
 // FINAL ring — yellow dominant from 12 → ~5 o'clock; the rest fill round it.
 // Index 0 = the tiny teal keeper. Indices 1..4 = colored (yellow first).
 const FINAL_ANG = [
-  { a0: 232, a1: 250, color: colors.accent }, // keeper — ≈8 o'clock
-  { a0: 0,   a1: 150, color: '#F5B301' },      // yellow — 12 → 5 o'clock (dominant)
-  { a0: 150, a1: 232, color: '#2BD49B' },      // green
-  { a0: 250, a1: 305, color: '#8B7CF8' },      // purple
-  { a0: 305, a1: 360, color: '#FF5C5C' },      // red
+  { a0: 232, a1: 250, color: colors.accent },       // keeper — ≈8 o'clock
+  { a0: 0,   a1: 150, color: colors.healthAmber },  // yellow — 12 → 5 o'clock (dominant)
+  { a0: 150, a1: 232, color: colors.income },       // green
+  { a0: 250, a1: 305, color: colors.settle },       // purple
+  { a0: 305, a1: 360, color: colors.healthRed },    // red
 ];
 
 // INITIAL ring — 4 teal slices of DIFFERENT, uneven proportions that fly off.

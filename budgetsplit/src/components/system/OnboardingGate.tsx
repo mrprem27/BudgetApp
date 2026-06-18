@@ -10,14 +10,21 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const val = await AsyncStorage.getItem(KEY);
-      setStatus(val === 'true' ? 'done' : 'onboarding');
+      try {
+        const val = await AsyncStorage.getItem(KEY);
+        setStatus(val === 'true' ? 'done' : 'onboarding');
+      } catch {
+        setStatus('onboarding');
+      }
     })();
   }, []);
 
   async function complete() {
-    await AsyncStorage.setItem(KEY, 'true');
-    setStatus('done');
+    try {
+      await AsyncStorage.setItem(KEY, 'true');
+    } finally {
+      setStatus('done');
+    }
   }
 
   if (status === 'loading') {

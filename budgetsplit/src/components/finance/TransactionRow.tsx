@@ -50,7 +50,7 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
           size="sm"
           forceColor={txn.kind === 'settlement' ? colors.settle : undefined}
         />
-        {showDate && (
+        {showDate && Number.isFinite(txn.date) && (
           <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
         )}
       </View>

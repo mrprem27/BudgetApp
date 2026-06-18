@@ -298,9 +298,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         if (me) await updatePersonName(db, me.id, trimmed);
       }
       haptic.success();
-      onDone();
+    } catch {
+      haptic.error();
     } finally {
       setSaving(false);
+      onDone();
     }
   }
 

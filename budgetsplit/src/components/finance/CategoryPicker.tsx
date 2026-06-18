@@ -52,10 +52,16 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
 
   async function create() {
     if (!onCreate) return;
-    const created = await onCreate(query.trim());
-    haptic.success();
-    onChange(created);
-    close();
+    try {
+      const created = await onCreate(query.trim());
+      haptic.success();
+      onChange(created);
+      close();
+    } catch {
+      // Create failed (e.g. duplicate name / DB error) — keep the sheet open so
+      // the user can retry, and signal the failure rather than hanging silently.
+      haptic.error();
+    }
   }
 
   return (

@@ -16,7 +16,7 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    loadFlags().then(f => { setFlags(f); setReady(true); });
+    loadFlags().then(f => { setFlags(f); }).catch(() => {}).finally(() => setReady(true));
   }, []);
 
   const set = useCallback((key: FeatureKey, value: boolean) => {
