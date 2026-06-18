@@ -38,6 +38,7 @@ export default function TxnDetailScreen() {
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
   const [groupName, setGroupName] = useState('');
+  const [isPersonal, setIsPersonal] = useState(false);
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
 
@@ -55,6 +56,7 @@ export default function TxnDetailScreen() {
       t.entry_mode === 'itemized' ? getLineItems(db, id) : Promise.resolve([]),
     ]);
     setGroupName(grp?.name ?? '');
+    setIsPersonal(grp?.is_personal === 1);
     setMembers(mems);
     setMe(meRow);
     setHistory(hist);
@@ -108,6 +110,13 @@ export default function TxnDetailScreen() {
             <Text style={styles.heroCat}>{txn.category}</Text>
           </View>
           {!!txn.note && <Text style={styles.heroNote}>{txn.note}</Text>}
+          {/* Cash vs consumption: what you paid out of pocket vs your share. */}
+          {!isPersonal && !isIncome && !isSettlement && (() => {
+            const myPaid = txn.payments.find(p => p.personId === me?.id)?.amount ?? 0;
+            const myShare = txn.shares.find(s => s.personId === me?.id)?.amount ?? 0;
+            if (myPaid === myShare) return null;
+            return <Text style={styles.heroCashLine}>You paid {formatRupees(myPaid)} · your share {formatRupees(myShare)}</Text>;
+          })()}
         </View>
 
         {/* Meta */}
@@ -115,8 +124,13 @@ export default function TxnDetailScreen() {
           <Row label="When" value={format(new Date(txn.date), 'dd MMM yyyy · h:mm a')} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
-          <View style={styles.divider} />
-          <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
+          {/* "Added by" is shared-group attribution — meaningless in the solo ledger. */}
+          {!isPersonal && (
+            <>
+              <View style={styles.divider} />
+              <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
+            </>
+          )}
           {!!txn.place_label && (
             <>
               <View style={styles.divider} />
@@ -135,8 +149,8 @@ export default function TxnDetailScreen() {
           )}
         </View>
 
-        {/* Paid by */}
-        {txn.payments.length > 0 && (
+        {/* Paid by / Split — only meaningful in shared groups */}
+        {!isPersonal && txn.payments.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>{isSettlement ? 'From' : 'Paid by'}</Text>
             <View style={styles.card}>
@@ -152,7 +166,7 @@ export default function TxnDetailScreen() {
         )}
 
         {/* Split / To */}
-        {txn.shares.length > 0 && (
+        {!isPersonal && txn.shares.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>{isSettlement ? 'To' : 'Split between'}</Text>
             <View style={styles.card}>
@@ -235,6 +249,7 @@ const styles = StyleSheet.create({
   kindText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   heroCat: { ...type.body, color: colors.textSecondary },
   heroNote: { ...type.body, color: colors.textPrimary, textAlign: 'center', marginTop: space.xs },
+  heroCashLine: { ...type.caption, color: colors.textSecondary, textAlign: 'center', marginTop: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   divider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },

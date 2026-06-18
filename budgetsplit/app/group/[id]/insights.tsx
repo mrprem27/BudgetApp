@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { differenceInDays, endOfMonth } from 'date-fns';
+import { getDate, getDaysInMonth } from 'date-fns';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
@@ -18,6 +18,7 @@ import { SkeletonCard } from '../../../src/components/ui/Skeleton';
 import { getBudgetAnalytics, type BudgetAnalytics, type CategoryTrend } from '../../../src/lib/analytics';
 import { getGroupById } from '../../../src/db/queries/groups';
 import { categoryVisual } from '../../../src/constants/categories';
+import { formatRupees } from '../../../src/lib/money';
 
 export default function BudgetInsightsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,7 +67,10 @@ export default function BudgetInsightsScreen() {
   const health = analytics.utilizationPct !== null && analytics.utilizationPct <= 100 ? 'good'
     : analytics.overBudget.length > 0 ? 'warn' : 'info';
 
-  const daysLeft = differenceInDays(endOfMonth(new Date()), new Date());
+  const now = new Date();
+  const dayOfMonth = getDate(now);
+  const daysInMonth = getDaysInMonth(now);
+  const projDelta = analytics.projectedMonthEnd - analytics.monthlyBudgetTotal;
 
   return (
     <View style={styles.container}>
@@ -108,16 +112,20 @@ export default function BudgetInsightsScreen() {
         </View>
 
         {/* Projection card */}
-        {daysLeft > 0 && analytics.totalAllocated > 0 && (
+        {analytics.projectedMonthEnd > 0 && analytics.monthlyBudgetTotal > 0 && (
           <View style={styles.projectionCard}>
             <View style={styles.projectionIcon}>
-              <Feather name="calendar" size={22} color={colors.accent} />
+              <Feather name="trending-up" size={22} color={projDelta > 0 ? colors.expense : colors.income} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.projectionText}>
-                {analytics.remaining >= 0
-                  ? `₹${Math.round(analytics.remaining / 100 / daysLeft)} per day for ${daysLeft} days remaining`
-                  : `Over budget with ${daysLeft} days left in the month`}
+              <Text style={styles.projectionTitle}>Projected month-end {formatRupees(analytics.projectedMonthEnd)}</Text>
+              <Text style={styles.projectionSub}>
+                Day {dayOfMonth} of {daysInMonth} ·{' '}
+                {projDelta > 0
+                  ? `${formatRupees(projDelta)} over budget at this pace`
+                  : projDelta < 0
+                  ? `${formatRupees(-projDelta)} under budget at this pace`
+                  : 'right on budget at this pace'}
               </Text>
             </View>
           </View>
@@ -126,7 +134,7 @@ export default function BudgetInsightsScreen() {
         {/* Needs attention */}
         {(analytics.overBudget.length > 0 || analytics.nearLimit.length > 0) && (
           <View>
-            <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
+            <Text style={styles.sectionTitle}>Needs attention</Text>
             {analytics.overBudget.map(cat => (
               <CategoryBudgetRow key={cat.category} trend={cat} isOver />
             ))}
@@ -139,7 +147,7 @@ export default function BudgetInsightsScreen() {
         {/* On track */}
         {analytics.onTrackCount > 0 && (
           <View>
-            <Text style={styles.sectionTitle}>✓ On Track</Text>
+            <Text style={styles.sectionTitle}>On track</Text>
             <Text style={styles.onTrackText}>{analytics.onTrackCount} categories within budget</Text>
           </View>
         )}
@@ -202,7 +210,7 @@ export default function BudgetInsightsScreen() {
                     <Feather name={visual.icon as any} size={13} color={visual.color} />
                   </View>
                   <Text style={styles.catName}>{cat.category}</Text>
-                  <Text style={styles.catAmount}>{`₹${Math.round(cat.spent / 100)}`}</Text>
+                  <Text style={styles.catAmount}>{formatRupees(cat.spent)}</Text>
                 </PressableScale>
               );
             })}
@@ -232,7 +240,7 @@ function CategoryBudgetRow({ trend, isOver }: { trend: CategoryTrend; isOver?: b
           {trend.pct !== null ? `${Math.round(trend.pct)}% used` : 'No budget'}
         </Text>
         <Text style={styles.budgetSub}>
-          {trend.remaining >= 0 ? `₹${Math.round(trend.remaining / 100)}` : `over by ₹${Math.round(Math.abs(trend.remaining) / 100)}`}
+          {trend.remaining >= 0 ? `${formatRupees(trend.remaining)} left` : `over by ${formatRupees(Math.abs(trend.remaining))}`}
         </Text>
       </View>
     </View>
@@ -251,7 +259,8 @@ const styles = StyleSheet.create({
   badgeRow: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
   projectionCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   projectionIcon: { width: 46, height: 46, borderRadius: 14, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  projectionText: { ...type.body, color: colors.textSecondary, lineHeight: 22 },
+  projectionTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  projectionSub: { ...type.caption, color: colors.textMuted, marginTop: 2, lineHeight: 18 },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginTop: space.sm },
   onTrackText: { ...type.body, color: colors.income, marginTop: space.xs },
   trendCard: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.xs },

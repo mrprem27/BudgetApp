@@ -20,7 +20,7 @@ import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
-import { formatRupees } from '../../src/lib/money';
+import { formatRupees, formatCompact } from '../../src/lib/money';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
@@ -177,6 +177,29 @@ export default function GroupDetailScreen() {
       return true;
     });
   }, [txns, filterKind, search]);
+
+  // "Who paid what" — sum each member's expense payments, vs the equal fair share.
+  // net > 0 means the member is ahead (the group owes them); net < 0 means they owe.
+  const contributions = useMemo(() => {
+    const paid: Record<string, number> = {};
+    let total = 0;
+    for (const t of txns) {
+      if (t.is_deleted || t.kind !== 'expense') continue;
+      for (const p of t.payments) {
+        paid[p.personId] = (paid[p.personId] ?? 0) + p.amount;
+        total += p.amount;
+      }
+    }
+    const fairShare = members.length > 0 ? Math.round(total / members.length) : 0;
+    const maxPaid = Math.max(1, ...members.map(m => paid[m.id] ?? 0));
+    return {
+      total,
+      fairShare,
+      rows: members
+        .map(m => ({ member: m, paid: paid[m.id] ?? 0, net: net[m.id] ?? 0, frac: (paid[m.id] ?? 0) / maxPaid }))
+        .sort((a, b) => b.paid - a.paid),
+    };
+  }, [txns, members, net]);
 
   const TABS: { key: TabKey; label: string }[] = isPersonal
     ? [
@@ -427,6 +450,56 @@ export default function GroupDetailScreen() {
                 </View>
               )}
 
+              {/* Driving overspend — over-budget categories worst-first, or all-clear */}
+              {analytics && analytics.totalAllocated > 0 && (
+                analytics.overBudget.length > 0 ? (
+                  <View style={styles.drivingCard}>
+                    <Text style={styles.drivingTitle}>Driving overspend</Text>
+                    {analytics.overBudget.slice(0, 4).map(t => {
+                      const vis = categoryVisual(t.category);
+                      const over = t.spent - t.allocated;
+                      return (
+                        <View key={t.category} style={styles.drivingRow}>
+                          <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
+                            <Feather name={vis.icon as any} size={14} color={vis.color} />
+                          </View>
+                          <Text style={styles.drivingName} numberOfLines={1}>{t.category}</Text>
+                          <Text style={styles.drivingOver}>{formatRupees(over)} over</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.allClearCard}>
+                    <Feather name="check-circle" size={16} color={colors.income} />
+                    <Text style={styles.allClearText}>Every category within budget</Text>
+                  </View>
+                )
+              )}
+
+              {/* Who paid what — shared groups only */}
+              {!isPersonal && contributions.total > 0 && (
+                <View style={styles.contribCard}>
+                  <Text style={styles.contribTitle}>Who paid what</Text>
+                  {contributions.rows.map((r, i) => (
+                    <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
+                      <View style={styles.contribHead}>
+                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} />
+                        <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
+                        <Text style={styles.contribPaid}>{formatRupees(r.paid)}</Text>
+                        <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
+                          {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.contribTrack}>
+                        <View style={[styles.contribFill, { width: `${Math.round(r.frac * 100)}%`, backgroundColor: r.member.avatar_color }]} />
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={styles.contribFoot}>Fair share is {formatRupees(contributions.fairShare)} each · + ahead, − owes the group</Text>
+                </View>
+              )}
+
               <View style={{ marginBottom: space.sm }}>
                 <FilterBar
                   selected={{ status: budgetFilter }}
@@ -518,8 +591,11 @@ export default function GroupDetailScreen() {
         aboveTabBar={false}
         actions={[
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
-          { label: 'Income', icon: 'plus-circle', tint: colors.income, description: 'Money received', onPress: () => router.push(`/add/income?groupId=${id}`) },
-          ...(isPersonal ? [] : [{ label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between members', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
+          // Income is real money you received → personal ledger only. Shared groups
+          // move money via Transfer (settling "I owe you"), not income.
+          ...(isPersonal
+            ? [{ label: 'Income', icon: 'plus-circle' as const, tint: colors.income, description: 'Money you received', onPress: () => router.push(`/add/income?groupId=${id}`) }]
+            : [{ label: 'Transfer', icon: 'repeat' as const, tint: colors.settle, description: 'Settle who owes whom', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
           { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
         ]}
       />
@@ -628,6 +704,26 @@ const styles = StyleSheet.create({
   recList: { gap: space.sm, marginBottom: space.md },
   recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
   recText: { ...type.label, flex: 1, lineHeight: 18 },
+
+  drivingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, gap: space.sm, ...shadow.sm },
+  drivingTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 2 },
+  drivingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  drivingName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  drivingOver: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  allClearCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  allClearText: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold' },
+
+  contribCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  contribTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.md },
+  contribRow: { gap: space.xs },
+  contribRowGap: { marginBottom: space.md },
+  contribHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  contribName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  contribPaid: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
+  contribDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold', minWidth: 52, textAlign: 'right' },
+  contribTrack: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
+  contribFill: { height: 6, borderRadius: 3 },
+  contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   catRow: { paddingVertical: space.md, gap: space.sm },
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

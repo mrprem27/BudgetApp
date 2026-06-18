@@ -36,7 +36,7 @@ export function getPriorPeriodRange(period: Period, date: Date): { from: number;
   }
 }
 
-async function getSpentInRange(
+export async function getSpentInRange(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   fromMs: number,

@@ -398,7 +398,7 @@ export default function QuickAddScreen() {
             </Text>
             {paymentRemainder !== 0 && (
               <Text style={styles.remainder}>
-                {paymentRemainder > 0 ? `₹${(paymentRemainder / 100).toFixed(2)} left` : `₹${(-paymentRemainder / 100).toFixed(2)} over`}
+                {paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left` : `${formatRupees(-paymentRemainder)} over`}
               </Text>
             )}
           </TouchableOpacity>
@@ -417,7 +417,7 @@ export default function QuickAddScreen() {
             </Text>
             {remainder !== 0 && (
               <Text style={styles.remainder}>
-                {remainder > 0 ? `₹${(remainder / 100).toFixed(2)} unassigned` : `₹${(-remainder / 100).toFixed(2)} over`}
+                {remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over`}
               </Text>
             )}
           </TouchableOpacity>

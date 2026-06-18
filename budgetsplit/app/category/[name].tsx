@@ -4,12 +4,11 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { startOfMonth, endOfMonth, format, startOfYear, endOfYear } from 'date-fns';
+import { startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
-import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -19,6 +18,7 @@ import { getCategoryBudgets } from '../../src/db/queries/categoryBudgets';
 import { getMe } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { categoryVisual } from '../../src/constants/categories';
+import { formatRupees, formatCompact } from '../../src/lib/money';
 
 export default function CategoryDetailScreen() {
   const { name } = useLocalSearchParams<{ name?: string }>();
@@ -30,6 +30,7 @@ export default function CategoryDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState('');
   const [monthSpent, setMonthSpent] = useState(0);
+  const [monthTotalAll, setMonthTotalAll] = useState(0);
   const [yearSpent, setYearSpent] = useState(0);
   const [monthBudget, setMonthBudget] = useState(0);
   const [txns, setTxns] = useState<TxnWithSplits[]>([]);
@@ -57,14 +58,18 @@ export default function CategoryDetailScreen() {
       ]);
       const budgets = budgetArrays.flat();
 
-      const monthCat = monthTxns.filter(t => t.category === categoryName && t.kind === 'expense' && !t.is_deleted);
+      const monthExpenses = monthTxns.filter(t => t.kind === 'expense' && !t.is_deleted);
+      const monthCat = monthExpenses.filter(t => t.category === categoryName);
       const yearCat = yearTxns.filter(t => t.category === categoryName && t.kind === 'expense' && !t.is_deleted);
       const monthBudgetCat = budgets.find(b => b.category === categoryName && b.cadence === 'monthly');
 
-      const monthTotal = monthCat.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
-      const yearTotal = yearCat.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+      const sumShares = (arr: TxnWithSplits[]) =>
+        arr.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+      const monthTotal = sumShares(monthCat);
+      const yearTotal = sumShares(yearCat);
 
       setMonthSpent(monthTotal);
+      setMonthTotalAll(sumShares(monthExpenses));
       setYearSpent(yearTotal);
       setMonthBudget(monthBudgetCat?.amount ?? 0);
       setTxns(monthCat.sort((a, b) => b.date - a.date));
@@ -89,52 +94,42 @@ export default function CategoryDetailScreen() {
     <View style={styles.container}>
       <ScreenHeader title={categoryName} onBack={() => router.back()} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* Hero */}
+        {/* Hero — horizontal: icon + amount/stats column */}
         <View style={styles.heroCard}>
-          <View style={[styles.heroIcon, { backgroundColor: visual.color + '22' }]}>
-            <Feather name={visual.icon as any} size={24} color={visual.color} />
-          </View>
-          <Text style={styles.heroAmount}>
-            ₹{Math.round(monthSpent / 100).toLocaleString('en-IN')}
-          </Text>
-          <Text style={styles.heroSub}>
-            This month
-            {monthBudget > 0 && monthSpent > 0 ? ` • ${Math.round((monthSpent / monthBudget) * 100)}% of budget` : ''}
-          </Text>
-          <Text style={styles.heroTxnCount}>
-            {txnCount} transactions this year{txnCount > 0 ? ` • Avg ₹${Math.round(yearSpent / txnCount / 100)}` : ''}
-          </Text>
-        </View>
-
-        {/* Budget bar if budget exists */}
-        {monthBudget > 0 && (
-          <View style={styles.budgetSection}>
-            <Text style={styles.sectionLabel}>Monthly Budget</Text>
-            <BudgetBar allocated={monthBudget} spent={monthSpent} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs }}>
-              <Text style={styles.budgetSub}>{Math.round((monthSpent / monthBudget) * 100)}% used</Text>
-              <Text style={styles.budgetSub}>
-                {monthBudget - monthSpent >= 0 ? `₹${Math.round((monthBudget - monthSpent) / 100)} left` : `Over by ₹${Math.round((monthSpent - monthBudget) / 100)}`}
+          <View style={styles.heroRow}>
+            <View style={[styles.heroIcon, { backgroundColor: visual.color + '22' }]}>
+              <Feather name={visual.icon as any} size={24} color={visual.color} />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.heroAmount}>{formatRupees(monthSpent)}</Text>
+              <Text style={styles.heroSub}>
+                {monthTotalAll > 0 ? `${Math.round((monthSpent / monthTotalAll) * 100)}% of spending` : 'This month'}
+                {` · ${txns.length} ${txns.length === 1 ? 'txn' : 'txns'}`}
+                {txnCount > 0 ? ` · avg ${formatCompact(Math.round(yearSpent / txnCount))}` : ''}
               </Text>
             </View>
           </View>
-        )}
 
-        {/* Year summary */}
-        {txnCount > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.sectionLabel}>Year-to-date</Text>
-            <Text style={styles.statValue}>
-              <AmountText paise={yearSpent} size="md" compact />
-            </Text>
-            <Text style={styles.statLabel}>across {txnCount} {txnCount === 1 ? 'transaction' : 'transactions'}</Text>
-          </View>
-        )}
+          {/* Budget bar inline in hero (if budget exists) */}
+          {monthBudget > 0 && (
+            <View style={styles.heroBudget}>
+              <BudgetBar allocated={monthBudget} spent={monthSpent} />
+              <View style={styles.budgetRow}>
+                <Text style={styles.budgetSub}>
+                  {`${Math.round((monthSpent / monthBudget) * 100)}% of ${formatCompact(monthBudget)} budget`}
+                </Text>
+                <Text style={[styles.budgetSub, { color: monthBudget - monthSpent >= 0 ? colors.income : colors.expense }]}>
+                  {monthBudget - monthSpent >= 0 ? `${formatRupees(monthBudget - monthSpent)} left` : `Over by ${formatRupees(monthSpent - monthBudget)}`}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Transactions this month */}
         {txns.length > 0 ? (
           <View>
-            <Text style={styles.sectionLabel}>This Month</Text>
+            <Text style={styles.txnLabel}>Transactions</Text>
             {txns.map((txn, i) => (
               <React.Fragment key={txn.id}>
                 <TransactionRow txn={txn} myId={myId} />
@@ -154,16 +149,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1 },
   scrollContent: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
-  heroCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, borderWidth: 1, borderColor: colors.border, alignItems: 'center', gap: space.sm, ...shadow.md },
-  heroIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  heroCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, borderWidth: 1, borderColor: colors.border, gap: space.md, ...shadow.md },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  heroText: { flex: 1, gap: 2 },
   heroAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 30, letterSpacing: -0.6, color: colors.textPrimary },
-  heroSub: { ...type.label, color: colors.textSecondary },
-  heroTxnCount: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  budgetSection: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  sectionLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  statValue: { ...type.subheading, color: colors.textPrimary },
-  statLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  heroSub: { ...type.caption, color: colors.textMuted },
+  heroBudget: { gap: space.xs },
+  budgetRow: { flexDirection: 'row', justifyContent: 'space-between' },
   budgetSub: { ...type.caption, color: colors.textMuted },
+  txnLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   txnDivider: { height: 1, backgroundColor: colors.border, marginLeft: 56 },
 });

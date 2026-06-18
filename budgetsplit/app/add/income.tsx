@@ -61,7 +61,9 @@ export default function AddIncomeScreen() {
   useEffect(() => {
     (async () => {
       const [grps, meRow] = await Promise.all([getAllGroups(db), getMe(db)]);
-      setGroups(grps);
+      // Income is your own money → personal ledger only (never shared groups).
+      const personal = grps.filter(g => g.is_personal === 1);
+      setGroups(personal);
       setMe(meRow);
       if (editId) {
         const txn = await getTxnById(db, editId);
@@ -75,7 +77,7 @@ export default function AddIncomeScreen() {
           return;
         }
       }
-      const gid = paramGroupId ?? grps[0]?.id ?? '';
+      const gid = (paramGroupId && personal.some(g => g.id === paramGroupId)) ? paramGroupId : personal[0]?.id ?? '';
       setSelectedGroupId(gid);
       if (gid) await loadCats(gid);
     })();

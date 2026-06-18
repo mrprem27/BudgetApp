@@ -230,13 +230,14 @@ type Stage = 'hero' | 'features' | 'name';
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [stage, setStage] = useState<Stage>('hero');
   const [page, setPage] = useState(0);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<any>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(1 / SLIDES.length)).current; // top progress bar fill
   // Source of truth for the current page. `page` state drives the dots/button
   // label, but navigation reads this ref so the "last slide → name" transition
   // fires even after a slow drag-release (which never emits onMomentumScrollEnd).
@@ -278,6 +279,16 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     }
   }
 
+  // Animate the top progress bar as the slide changes.
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: (page + 1) / SLIDES.length,
+      duration: 300,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [page, progress]);
+
   async function finish() {
     setSaving(true);
     try {
@@ -300,20 +311,22 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     >
       {/* HERO — the brand mark assembles, then the name + tagline reveal */}
       {stage === 'hero' && (
-        <View style={[styles.page, { paddingBottom: bottomPad }]}>
-          <View style={styles.heroTop}>
-            <LogoAssembly size={190} />
-            <FadeIn delay={1900} offset={14}>
+        <View style={styles.heroRoot}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <LogoAssembly width={width} height={height} cy={height * 0.38} />
+          </View>
+          <View style={[styles.heroBottom, { paddingBottom: bottomPad }]}>
+            <FadeIn delay={4300} offset={14}>
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
-            <FadeIn delay={2120} offset={10} style={styles.taglineWrap}>
+            <FadeIn delay={4520} offset={10} style={styles.taglineWrap}>
               <Text style={styles.tagline}>Budget your money and split bills — all on your phone, nothing in the cloud.</Text>
             </FadeIn>
+            <FadeIn delay={4760} style={styles.footer}>
+              <PrimaryButton label="Get Started" onPress={enterFeatures} />
+              <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
+            </FadeIn>
           </View>
-          <FadeIn delay={2360} style={styles.footer}>
-            <PrimaryButton label="Get Started" onPress={enterFeatures} />
-            <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
-          </FadeIn>
         </View>
       )}
 
@@ -324,10 +337,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <TouchableOpacity onPress={backFromFeatures} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
               <Feather name="chevron-left" size={26} color={colors.textSecondary} />
             </TouchableOpacity>
-            <View style={styles.dots}>
-              {SLIDES.map((_, i) => (
-                <View key={i} style={[styles.dot, i === page && styles.dotActive]} />
-              ))}
+            <View style={styles.progressTrack}>
+              <Animated.View style={[styles.progressFill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
             </View>
             <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} accessibilityRole="button">
               <Text style={styles.skip}>Skip</Text>
@@ -350,13 +361,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               const artTranslate = scrollX.interpolate({ inputRange, outputRange: [width * 0.3, 0, -width * 0.3], extrapolate: 'clamp' });
               const artOpacity = scrollX.interpolate({ inputRange, outputRange: [0, 1, 0], extrapolate: 'clamp' });
               const textTranslate = scrollX.interpolate({ inputRange, outputRange: [width * 0.15, 0, -width * 0.15], extrapolate: 'clamp' });
+              const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: 'clamp' });
               return (
                 <View key={slide.title} style={[styles.slide, { width }]}>
                   <View style={styles.slideTop}>
-                    <Animated.View style={{ opacity: artOpacity, transform: [{ translateX: artTranslate }] }}>
+                    <Animated.View style={{ opacity: artOpacity, transform: [{ translateX: artTranslate }, { scale }] }}>
                       <SlideArt kind={slide.anim} tint={slide.tint} active={page === i} />
                     </Animated.View>
-                    <Animated.View style={{ alignItems: 'center', alignSelf: 'stretch', transform: [{ translateX: textTranslate }] }}>
+                    <Animated.View style={{ alignItems: 'center', alignSelf: 'stretch', transform: [{ translateX: textTranslate }, { scale }] }}>
                       <Text style={styles.slideTitle}>{slide.title}</Text>
                       <Text style={styles.slideBody}>{slide.body}</Text>
                       <View style={styles.pointsCard}>
@@ -430,14 +442,14 @@ const styles = StyleSheet.create({
     height: 40,
   },
   skip: { ...type.label, color: colors.textSecondary, width: 36, textAlign: 'right' },
-  dots: { flexDirection: 'row', gap: 6 },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.border },
-  dotActive: { backgroundColor: colors.accent, width: 22 },
+  progressTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.bgMuted, marginHorizontal: space.md, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2, backgroundColor: colors.accent },
 
   page: { flex: 1, paddingHorizontal: layout.screenPaddingH },
 
-  heroTop: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center', marginTop: space.lg },
+  heroRoot: { flex: 1 },
+  heroBottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: layout.screenPaddingH, gap: space.md },
+  brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center' },
   taglineWrap: { alignSelf: 'stretch' },
   tagline: { ...type.body, fontSize: 16, color: colors.textSecondary, marginTop: space.md, lineHeight: 24, textAlign: 'center', paddingHorizontal: space.md },
 

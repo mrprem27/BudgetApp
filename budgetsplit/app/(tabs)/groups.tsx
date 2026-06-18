@@ -15,10 +15,14 @@ import { useStore } from '../../src/store';
 import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { getMe, getGroupMembers } from '../../src/db/queries/persons';
+import { getMe, getGroupMembers, getAllPersons } from '../../src/db/queries/persons';
+import { getGlobalNet } from '../../src/db/queries/balances';
 import { getBudgetUsage } from '../../src/lib/budget';
-import { formatRupeesShort } from '../../src/lib/money';
+import { simplify } from '../../src/lib/settle';
+import { formatRupeesShort, formatCompact } from '../../src/lib/money';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { AmountText } from '../../src/components/ui/AmountText';
 import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
@@ -42,6 +46,7 @@ export default function GroupsScreen() {
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+  const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useFocusEffect(useCallback(() => {
@@ -59,6 +64,23 @@ export default function GroupsScreen() {
       h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
     }
     setHealth(h);
+
+    // Balances hero — who-owes-whom across all shared groups, from my view.
+    const [net, persons, me] = await Promise.all([getGlobalNet(db), getAllPersons(db), getMe(db)]);
+    if (me) {
+      const pmap = new Map(persons.map(p => [p.id, p]));
+      const mine = simplify(net).filter(s => s.from === me.id || s.to === me.id);
+      let youOwe = 0, youAreOwed = 0;
+      const rows = mine.map(s => {
+        const iPay = s.from === me.id;
+        if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
+        const other = pmap.get(iPay ? s.to : s.from);
+        return { key: `${s.from}-${s.to}`, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
+      });
+      setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
+    } else {
+      setBal(null);
+    }
   }
 
   async function handleRestore(g: BudgetGroup) {
@@ -146,6 +168,47 @@ export default function GroupsScreen() {
     );
   }
 
+  // Personal lives under the Money tab now — Groups is shared splitting only.
+  const activeGroups = groups.filter(g => g.is_personal !== 1);
+
+  function renderBalances() {
+    if (!bal || bal.rows.length === 0) return null;
+    return (
+      <View style={styles.balancesWrap}>
+        <View style={styles.balHero}>
+          <Text style={styles.balCaption}>Net balance · {bal.rows.length} {bal.rows.length === 1 ? 'person' : 'people'}</Text>
+          <AmountText paise={bal.net} size="xl" forceColor={bal.net < 0 ? colors.expense : colors.income} compact />
+          <View style={styles.balSplit}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.balCaption}>You owe</Text>
+              <AmountText paise={bal.youOwe} size="md" forceColor={colors.expense} compact />
+            </View>
+            <View style={styles.balDivider} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.balCaption}>You're owed</Text>
+              <AmountText paise={bal.youAreOwed} size="md" forceColor={colors.income} compact />
+            </View>
+          </View>
+        </View>
+        <Text style={styles.balListLabel}>Settle up · tap a person</Text>
+        <View style={styles.balList}>
+          {bal.rows.map((r, i) => (
+            <TouchableOpacity key={r.key} style={[styles.balRow, i < bal.rows.length - 1 && styles.balRowBorder]} onPress={() => router.push('/settle')} accessibilityRole="button" accessibilityLabel={`Settle with ${r.name}`}>
+              <MemberAvatar name={r.name} color={r.color} size={36} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.balName} numberOfLines={1}>{r.name}</Text>
+                <Text style={styles.balSub}>{r.label}</Text>
+              </View>
+              <Text style={[styles.balAmt, { color: r.label === 'you owe' ? colors.expense : colors.income }]}>{formatCompact(r.amount)}</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.balListLabel}>Your groups</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
@@ -161,7 +224,7 @@ export default function GroupsScreen() {
             accessibilityRole="tab"
             accessibilityState={{ selected: viewMode === 'active' }}
           >
-            <Text style={[styles.filterChipText, viewMode === 'active' && styles.filterChipTextActive]}>Active ({groups.length})</Text>
+            <Text style={[styles.filterChipText, viewMode === 'active' && styles.filterChipTextActive]}>Active ({activeGroups.length})</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterChip, viewMode === 'archived' && styles.filterChipActive]}
@@ -176,10 +239,11 @@ export default function GroupsScreen() {
       )}
 
       <FlatList
-        data={viewMode === 'active' ? groups : archived}
+        data={viewMode === 'active' ? activeGroups : archived}
         keyExtractor={g => g.id}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListEmptyComponent={
           viewMode === 'active' ? (
@@ -205,7 +269,6 @@ export default function GroupsScreen() {
         actions={[
           { label: 'New Group', icon: 'users', tint: colors.accent, description: 'Share expenses with others', onPress: () => setShowCreate(true) },
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle', tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
         ]}
       />
 
@@ -263,6 +326,18 @@ const styles = StyleSheet.create({
   filterChipText: { ...type.label, color: colors.textMuted },
   filterChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
+  balancesWrap: { marginBottom: space.sm },
+  balHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  balCaption: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
+  balSplit: { flexDirection: 'row', marginTop: space.md, paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
+  balDivider: { width: 1, backgroundColor: colors.border, marginHorizontal: space.md },
+  balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
+  balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
+  balRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  balName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  balSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  balAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
   swipeAction: { backgroundColor: colors.expense, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', width: 80, marginLeft: space.sm, gap: 4 },
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
   groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + 4, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },

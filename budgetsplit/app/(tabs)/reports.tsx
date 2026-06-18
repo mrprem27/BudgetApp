@@ -4,6 +4,7 @@ import {
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -64,6 +65,7 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
   const [month, setMonth] = useState(() => new Date());
@@ -345,9 +347,12 @@ export default function ReportsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={styles.title}>Reports</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={{ marginRight: space.xs, marginLeft: -6 }}>
+          <Feather name="chevron-left" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { flex: 1 }]}>Reports</Text>
         <View style={styles.exportRow}>
           <TouchableOpacity
             style={styles.exportBtn}

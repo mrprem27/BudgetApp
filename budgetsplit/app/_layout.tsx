@@ -9,6 +9,7 @@ import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { StatusBar } from 'expo-status-bar';
 import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
+import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
@@ -28,6 +29,7 @@ export default function RootLayout() {
     (async () => {
       const db = await openDB();
       await seedIfNeeded(db);
+      await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
       setDbReady(true);
     })();
   }, []);

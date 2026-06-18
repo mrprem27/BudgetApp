@@ -37,36 +37,43 @@ First-run only (re-triggerable via Settings → "Replay welcome tour"). Horizont
 
 ## 2. Tab bar (`app/(tabs)/_layout.tsx`)
 
-Four tabs (icon-only): **Dashboard** (`home`) · **Groups** (`layers`) · **Reports** (`bar-chart-2`) · **Settings** (`settings`). Active tint = teal accent.
+Four **labelled** tabs on a **frosted-glass** bar (`expo-blur`, translucent, absolute): **Home** (`home`) · **Groups** (`users`) · **Savings** (`target`) · **Settings** (`settings`). Active tint = teal accent. **Reports is not a tab** — it folds into Home (reachable from the dashboard header's chart button). The Personal ledger + all Savings live under the **Savings** tab; **Groups** is purely shared splitting.
+
+> Note: the blur is a native module — needs a dev-client rebuild (`npx expo run:ios`) to render.
 
 ---
 
-## 3. Dashboard — `app/(tabs)/index.tsx`
+## 3. Dashboard / Home — `app/(tabs)/index.tsx`
 
 Hero financial overview across all groups. Sub-sections, top to bottom:
 
+- **3.0 Greeting header** — "Good morning/afternoon/evening" + your first name + avatar; a **Reports** chart-button (→ `/reports`) sits top-right.
 - **3.1 Time-range pills** — `Today` / `Month` / `Year`; everything below recomputes per range.
 - **3.2 Spending hero card**
   - My spending (xl, **compact**) for the range.
   - Delta row vs previous period (% or compact rupees; up = coral, down = green).
   - Stats strip: **Income** · **Net** · **Savings %**.
-- **3.3 Budget rollup card** (only if budgets exist) — tiles **Budget / Spent / Left** (compact) + flag pills (`N over budget`, `N near limit`). Tap → group budget.
-- **3.4 Insights card** *(gated: `insights`)* — ranked cross-group analytics rows; tap a row → that group's budget.
-- **3.5 Owe / Owed chip** (only if balances exist) — "You owe …" / "Owed …" (compact) → Settle Up.
-- **3.6 Spending-by-category donut** — interactive `PieChart`; tap a wedge to focus; legend shows top 5 with % and compact amount.
-- **3.7 Spending-over-time area chart** — `LineChart` with drag tooltip; compact y-axis labels.
-- **3.8 Group health list** — each group's monthly budget bar + %; tap → group detail.
-- **3.9 Empty state** — when nothing is logged, a CTA to add the first expense.
-- **3.10 FAB** — Expense · Income · Transfer · Itemized Bill.
+- **3.3 Budget + Balances tiles** — a 2-column compact grid: **Budget** tile (Budget/Spent/Left + over/near flags → group budget/insights) and **Balances** tile (you owe / owed → Settle Up).
+- **3.4 Savings card** — **Pool / Available / Goals** count → Savings tab (only if savings or goals exist).
+- **3.5 Insights card** *(gated: `insights`)* — ranked cross-group analytics rows; tap → that group's budget.
+- **3.6 Spending-by-category donut** — interactive `PieChart`; tap a wedge to focus; quick-pick chips + legend.
+- **3.7 Spending-over-time area chart** — `LineChart` with drag tooltip; compact y-axis.
+- **3.8 Recent activity** — latest 3 transactions across all groups → txn detail.
+- **3.9 Group health list** — each group's monthly budget bar + %; tap → group detail.
+- **3.10 Empty state** — when nothing is logged, a CTA to add the first expense.
+- **3.11 FAB** — Expense · Income (→ personal ledger) · Transfer · Itemized Bill.
 
 ---
 
-## 4. Groups — `app/(tabs)/groups.tsx`
+## 4. Groups (Split) — `app/(tabs)/groups.tsx`
 
+Shared splitting only — the **Personal** group is excluded here (it lives under the Money tab).
+
+- **4.0 Balances hero + Settle** — net balance (compact), **You owe / You're owed**, then a **"Settle up · tap a person"** list (who-owes-whom from `simplify(getGlobalNet)`, your view); tap a row → Settle screen.
 - **4.1 Filter chips** (only if archived groups exist) — `Active (n)` / `Archived (n)`.
-- **4.2 Group list** — each card: color stripe, icon, name, "₹X this month · N members", monthly budget bar + %. **Swipe left** to Archive (or Restore in archived view). The **Personal** group can't be archived.
+- **4.2 Group list** — shared groups only; each card: color stripe, icon, name, "₹X this month · N members", monthly budget bar + %. **Swipe left** to Archive/Restore.
 - **4.3 Empty states** — separate ones for no active groups (CTA: New Group) and no archived groups.
-- **4.4 FAB** — New Group · Expense · Income.
+- **4.4 FAB** — New Group · Expense. (No Income — income is personal-only.)
 - **4.5 "New Group" sheet** — name, icon picker, color picker → creates and opens the group.
 
 ---
@@ -92,12 +99,15 @@ Color-themed gradient header (back, group hero: icon + name + "₹X this month �
   - Category budget lines grouped by section, each with cadence tag + spent/allocated + budget bar.
   - "No budget yet" empty state → create budget.
 - **5.4 Members tab** (shared only) — member list with net balances + "Manage members".
-- **5.5 FAB** — Expense · Income · (Transfer, shared only) · Itemized Bill (all pre-scoped to this group).
+- **5.5 FAB** — **Personal:** Expense · Income · Itemized. **Shared:** Expense · Transfer · Itemized. (Income is personal-only; shared groups move money via Transfer = settling who-owes-whom.)
+- **Personal mode is a solo ledger:** no member attribution — the txn detail hides "Added by / Paid by / Split", and quick-add hides the payer/split UI (single member).
 - **5.6 Options menu (⋯ sheet)** — Recurring transactions · History · Edit group · Manage members · Archive group (shared) / personal-space note.
 
 ---
 
-## 6. Reports — `app/(tabs)/reports.tsx`
+## 6. Reports — `app/(tabs)/reports.tsx` (reached from Home, not a tab)
+
+Routed at `/reports`; opened via the **chart button** in the dashboard header.
 
 - **6.1 Header** — title + **CSV** and **PDF** export buttons (share sheet).
 - **6.2 Month navigator** — ◀ Month Year ▶.
@@ -109,6 +119,21 @@ Color-themed gradient header (back, group hero: icon + name + "₹X this month �
 
 ---
 
+## 6.5 Savings — `app/(tabs)/savings.tsx` (+ goal detail `app/savings/[id].tsx`)
+
+Your personal money hub (all saving is personal-budget). Budgets and savings stay strictly separate — leftover never inflates a budget.
+
+- **Cash available hero** — your real money (derived: income − what you paid out of pocket − settlements you paid + settlements received − money in savings), with an `in · out · saved` breakdown.
+- **Personal budget & spending** — entry to the personal ledger + budget (opens the personal group detail).
+- **Pool card** — Total **Pool** / **Allocated** / **Available**; **Add** (deposit) and **Withdraw** (take money out of the pool).
+- **Insights** — psychological opportunity-cost nudges (emoji + line), tone-varied, from real 30-day spending vs goals.
+- **Goals list** — card per goal: icon, name, priority chip, progress bar + %. Tap → goal detail.
+- **New-goal sheet** — name, target, priority (High/Med/Low), icon/color, fixed allocation + frequency.
+- **Goal detail** — hero (saved/target, %, bar, remaining, priority, est. completion), **Add funds** (allocates from pool, auto-tops-up if short) · **Withdraw to pool** · **lock** · delete; contribution history.
+- **Automation** (`runSavingsMaintenance`, on launch + focus): ① **scheduled auto-funding** — each goal's fixed allocation × elapsed periods, priority-ordered when short; ② **auto-reduce** — if allocated exceeds the pool, pull from lowest-priority *unlocked* goals first. *(Budget-leftover auto-sweep exists in code but is currently OFF — under the cash model it would silently lower "Cash available"; funding model TBD.)*
+
+---
+
 ## 7. Settings — `app/(tabs)/settings.tsx`
 
 Grouped cards, each under an uppercase section label:
@@ -117,7 +142,7 @@ Grouped cards, each under an uppercase section label:
 - **7.2 Privacy & Security** — toggles: Face ID / Touch ID lock · Privacy screen in app switcher · Save transaction location.
 - **7.3 Preferences** — Default budget cadence (sheet) · Currency (sheet).
 - **7.4 Features** *(feature toggles, default ON)* — Insights & tips · Spending forecast · Itemized split + receipt scan (OCR) · Recurring transactions.
-- **7.5 Manage** — Categories · History.
+- **7.5 Manage** — Categories · History. (Savings is now its own tab, not here.)
 - **7.6 Help & Support** — Help & Guide · Replay welcome tour.
 - **7.7 About** — version + "Offline-first · No accounts · No tracking".
 
@@ -134,9 +159,9 @@ Grouped cards, each under an uppercase section label:
 - **Who paid?** sheet (multi-payer; must balance to total).
 - **Split** sheet — Equal / Exact / Percent / Shares; live "unassigned/over" indicator; save blocked until balanced.
 
-### 8.2 Income — `app/add/income.tsx`
+### 8.2 Income — `app/add/income.tsx` (Personal only)
+Income = real money **you** received → only the Personal ledger (the group picker lists personal groups only; no shared groups).
 - Amount (income green).
-- Account/Group selector.
 - **Source** category picker (income categories; inline-create writes `section='Income'`).
 - Note · Date.
 - **Set schedule** (e.g. salary) *(gated: `recurring`)* — frequency + end date.
@@ -156,7 +181,7 @@ Four-step flow (`items → assign → payers → review`):
 
 ## 9. Secondary / drill-in screens
 
-- **9.1 Transaction detail — `app/txn/[id].tsx`** — category hero + amount, payer/who-paid, split breakdown, line items (if itemized), location/map link, note, and full **audit history** (created/edited/deleted/settled timestamps). Edit / delete actions.
+- **9.1 Transaction detail — `app/txn/[id].tsx`** — category hero + amount, then (shared groups only) payer/who-paid + split breakdown, line items (if itemized), location/map link, note, and full **audit history**. **Personal-group txns hide all attribution** (Added by / Paid by / Split). Edit / delete actions.
 - **9.2 Category detail — `app/category/[name].tsx`** — hero (icon + this-month spend + % of budget + txn count/avg), monthly budget bar, year-to-date summary, this-month transaction list. Reached from Budget & Insights.
 - **9.3 Budget & Insights — `app/group/[id]/insights.tsx`** *(V3)* — utilization hero %, status badges (over/near/on-track), daily-allowance projection card, "Needs attention" list, "On track" count, **Trends** (biggest increase/decrease), recommendations, and all-categories list (tap → category detail).
 - **9.4 Budget editor — `app/group/[id]/budget.tsx`** — per-category budget rows with cadence (One-time/Daily/Monthly/Yearly) + amount; monthly-equivalent headline; save all.
@@ -185,13 +210,16 @@ Source: `src/lib/featureFlags.ts` (AsyncStorage, `feature_` prefix) via `Feature
 
 ## 11. Data model (SQLite — `src/db/schema.ts`)
 
-`person` · `budget_group` · `group_member` · `txn` (+ `txn_payment`, `txn_share`, `line_item`) · `category` (kind: expense/income, + `section`) · `category_budget` (cadence) · `settings` · `audit_log`. Recurring transactions are computed on the fly (materialization-aware queries), not stored per occurrence.
+`person` · `budget_group` · `group_member` · `txn` (+ `txn_payment`, `txn_share`, `line_item`) · `category` (kind: expense/income, + `section`) · `category_budget` (cadence) · `savings_goal` (priority, allocation, frequency, `last_auto_at`) · `savings_txn` (deposit/allocate/withdraw ledger) · `settings` · `audit_log`. Recurring transactions are computed on the fly (materialization-aware queries), not stored per occurrence.
 
 ---
 
 ## 12. Current status
 
-- Tests: **45/45 pass**; TypeScript: **clean**.
-- OCR: **real** on-device Apple Vision (`modules/expo-ocr`, used only in the itemized flow).
-- Notifications: **removed** for now.
-- Number formatting (compact K/L/Cr) and the forecast graph: in progress per the active plan (`Phase 1` remaining items: donut legend, owe/owed chip, chart y-axis labels, forecast `maxValue`/guards).
+- Tests: **69/69 pass**; TypeScript: **clean**.
+- OCR: **real** on-device Apple Vision (`modules/expo-ocr`, itemized flow only).
+- Notifications: **removed**.
+- Compact number formatting (K/L/Cr) and the forecast graph: **done**.
+- **Savings Goals** feature complete: pool, goals CRUD, manual + scheduled auto-funding, leftover sweep, auto-reduce, opportunity-cost insights, withdraw.
+- **IA restructure:** bottom nav = Home · Groups · Savings · Settings (frosted-glass bar, labels); Reports folds into Home; **Income is personal-only**; **Personal mode is a solo ledger** (no member attribution).
+- Onboarding: animated logo-assembly intro + scroll-progress carousel.
