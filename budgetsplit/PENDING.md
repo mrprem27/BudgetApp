@@ -269,19 +269,23 @@ scoped), fields changed (before→after), scope, timestamp, actor. The existing
 6. **v1 scope = skip-one + this-and-future split + end.** ✅ Decided.
    Single-occurrence *value* exceptions deferred to a later pass.
 
-**Interim safety:** ✅ DONE — the blind-overwrite "Edit" entry point is hidden on
-the Recurring screen (`app/group/[id]/recurring.tsx`); only Pause / Resume / End
-remain until the redesign ships. Skip-one is part of v1 and will be added with it.
+### 6.11 v1 — ✅ SHIPPED
+1. **Schema:** `recur_skip(series_id, occurrence_date, created_at)` table.
+2. **`recurrence.ts`:** `materializeInstances` takes an optional `skips: Set<ms>`
+   and omits those dates; new `nextOccurrenceOnOrAfter()` helper.
+3. **Queries (`transactions.ts`):** `getSkipsMap`/`getSkips`,
+   `skipNextOccurrence` (persists a skip for the next upcoming date),
+   `splitRecurringSeries` (inserts the forward rule, then caps the old rule at
+   `splitDate-1` / soft-deletes it if it never produced a past occurrence). Both
+   materialization callers thread skips. Audit entries on skip + split.
+4. **UI:** Recurring screen has Edit (→ `recurEditId`, "this & future" split),
+   Skip (next occurrence), Pause/Resume, End; `nextOccurrence` steps over skips.
+   `add/quick` + `add/income` accept `recurEditId` → load template, show schedule
+   controls, and save via `splitRecurringSeries`.
+5. **Tests:** skip-filtering + `nextOccurrenceOnOrAfter` covered (88 pass).
+   Budgets/reports/balances read the shared materialization, so skips/splits flow
+   through automatically.
 
-### 6.11 Build outline (when greenlit)
-1. Schema: add `parent_id` (series link) + reuse `recur_override_date`; a
-   `skipped` marker (column or `recur_state` value on the override row).
-2. `recurrence.ts`: skip dates that have a persisted override/skip when
-   materializing; resolve overrides to their stored values.
-3. Series-split helper: end current rule (`recur_end = splitDate - ε`), clone a
-   new rule from `splitDate` with edited values.
-4. Skip-one: persist a `skipped` override for `(series, date)`.
-5. UI: scope picker (this & future / skip this one / end) on the Recurring screen;
-   re-introduce an edit affordance wired to these safe ops only.
-6. Verify budgets/reports/balances read the same materialization + overrides;
-   add audit entries for each op.
+**Deferred to a later pass:** single-occurrence *value* exceptions
+(materialize-on-touch with edited values for one date), and a per-edit scope
+picker UI (v1 fixes scope to "this & future" for Edit, "this one" for Skip).

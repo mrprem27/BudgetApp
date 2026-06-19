@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { materializeInstances } from '../../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 
@@ -63,10 +63,11 @@ export async function getTransactionsForGroup(
     `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL`,
     [groupId],
   );
+  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, rt.date, now));
+    instances.push(...materializeInstances(rw, rt.date, now, skipMap.get(rt.id)));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date || b.created_at - a.created_at);
@@ -102,10 +103,11 @@ export async function getTransactionsInRange(
     `SELECT t.* FROM txn t ${recurWhere}`,
     recurArgs,
   );
+  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, fromMs, toMs));
+    instances.push(...materializeInstances(rw, fromMs, toMs, skipMap.get(rt.id)));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date);
@@ -353,6 +355,115 @@ export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Pr
       });
     }
   });
+}
+
+// --- Recurring exceptions (skip-one) & series-split ----------------------
+
+/** Batch-load skipped occurrence dates for the given series, as series_id → Set<ms>. */
+export async function getSkipsMap(
+  db: SQLite.SQLiteDatabase,
+  seriesIds: string[],
+): Promise<Map<string, Set<number>>> {
+  const map = new Map<string, Set<number>>();
+  if (seriesIds.length === 0) return map;
+  const placeholders = seriesIds.map(() => '?').join(',');
+  const rows = await db.getAllAsync<{ series_id: string; occurrence_date: number }>(
+    `SELECT series_id, occurrence_date FROM recur_skip WHERE series_id IN (${placeholders})`,
+    seriesIds,
+  );
+  for (const r of rows) {
+    let set = map.get(r.series_id);
+    if (!set) { set = new Set(); map.set(r.series_id, set); }
+    set.add(r.occurrence_date);
+  }
+  return map;
+}
+
+/** All skipped occurrence dates (ms) for one series. */
+export async function getSkips(db: SQLite.SQLiteDatabase, seriesId: string): Promise<number[]> {
+  const rows = await db.getAllAsync<{ occurrence_date: number }>(
+    'SELECT occurrence_date FROM recur_skip WHERE series_id = ? ORDER BY occurrence_date ASC',
+    [seriesId],
+  );
+  return rows.map(r => r.occurrence_date);
+}
+
+/**
+ * Skip a single upcoming occurrence: the next one on/after now that isn't
+ * already skipped. Persists a skip row so materialization omits that date.
+ * Returns the skipped occurrence date (ms), or null if there's no future one.
+ */
+export async function skipNextOccurrence(db: SQLite.SQLiteDatabase, seriesId: string): Promise<number | null> {
+  const series = await getTxnById(db, seriesId);
+  if (!series || !series.recur_freq) return null;
+  const skipped = new Set(await getSkips(db, seriesId));
+
+  // Walk forward from now until we find an occurrence that isn't already skipped.
+  let from = Date.now();
+  let date = nextOccurrenceOnOrAfter(series, from);
+  let guard = 0;
+  while (date !== null && skipped.has(date) && guard < 1000) {
+    from = date + 1;
+    date = nextOccurrenceOnOrAfter(series, from);
+    guard++;
+  }
+  if (date === null) return null;
+
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT OR IGNORE INTO recur_skip (series_id, occurrence_date, created_at) VALUES (?, ?, ?)',
+      [seriesId, date as number, now],
+    );
+    await logAudit(db, {
+      entityType: 'recurring', entityId: seriesId, groupId: series.group_id,
+      action: 'updated', summary: `Skipped one occurrence · ${series.category}`,
+    });
+  });
+  return date;
+}
+
+/**
+ * Apply a "this and future" edit by splitting the series at its next occurrence:
+ * the old rule is capped just before the split (history preserved), and a new
+ * rule carries the edited values forward. Never rewrites past occurrences.
+ * Returns the new series id (or the old id if nothing needed splitting).
+ */
+export async function splitRecurringSeries(
+  db: SQLite.SQLiteDatabase,
+  seriesId: string,
+  newRule: InsertTxnInput,
+): Promise<string | null> {
+  const old = await getTxnById(db, seriesId);
+  if (!old || !old.recur_freq) return null;
+
+  const splitDate = nextOccurrenceOnOrAfter(old, Date.now());
+  if (splitDate === null) return null; // series already finished — nothing future to edit
+
+  const now = Date.now();
+  // New rule starts at the split date and inherits the original end.
+  const forward: InsertTxnInput = { ...newRule, date: splitDate, recurEnd: old.recur_end ?? undefined };
+
+  // insertTxn opens its own transaction, so it runs first (atomic on its own);
+  // then cap/supersede the old rule + audit in a second transaction.
+  const newId = await insertTxn(db, forward);
+  await db.withTransactionAsync(async () => {
+    if (splitDate <= old.date) {
+      // The old rule never produced a past occurrence — fully superseded.
+      await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [now, seriesId]);
+    } else {
+      // Cap the old rule just before the split; its past occurrences remain.
+      await db.runAsync(
+        'UPDATE txn SET recur_end=?, recur_state=?, updated_at=? WHERE id=?',
+        [splitDate - 1, 'ended', now, seriesId],
+      );
+    }
+    await logAudit(db, {
+      entityType: 'recurring', entityId: seriesId, groupId: old.group_id,
+      action: 'updated', summary: `Edited recurring (this & future) · ${newRule.category}`,
+    });
+  });
+  return newId;
 }
 
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {

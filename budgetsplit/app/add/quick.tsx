@@ -19,7 +19,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/con
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -36,8 +36,9 @@ import type { Category } from '../../src/db/queries/categories';
 type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
 
 export default function QuickAddScreen() {
-  const { groupId: paramGroupId, kind: paramKind, editId } = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string }>();
+  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId } = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string }>();
   const isEditing = !!editId;
+  const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -80,8 +81,9 @@ export default function QuickAddScreen() {
       const savedCur = await AsyncStorage.getItem('default_currency');
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
-      if (editId) {
-        const txn = await getTxnById(db, editId);
+      const loadId = editId ?? recurEditId;
+      if (loadId) {
+        const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
           await loadGroup(txn.group_id, meRow, txn.category);
@@ -97,6 +99,14 @@ export default function QuickAddScreen() {
             setExactAmounts(Object.fromEntries(txn.shares.map(s => [s.personId, (s.amount / 100).toString()])));
           }
           setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, (p.amount / 100).toString()])));
+          // For a recurring "this & future" edit, surface the schedule controls
+          // pre-filled so the user can adjust frequency going forward.
+          if (recurEditId && txn.recur_freq) {
+            setRecurEnabled(true);
+            setRecurFreq(txn.recur_freq);
+            setRecurInterval(String(txn.recur_interval ?? 1));
+            if (txn.recur_end) setRecurEndMs(txn.recur_end);
+          }
         }
         return;
       }
@@ -204,6 +214,27 @@ export default function QuickAddScreen() {
         return;
       }
 
+      if (isRecurEdit) {
+        // "This & future": split the series — past occurrences are preserved,
+        // the new values apply from the next occurrence forward.
+        await splitRecurringSeries(db, recurEditId!, {
+          groupId: selectedGroupId,
+          kind,
+          entryMode: 'quick',
+          date: txnDate, // overridden to the split date inside the query
+          category: selectedCategory!.name,
+          note: note.trim() || undefined,
+          recurFreq: recurFreq,
+          recurInterval: recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
+          currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
+          payments: finalPayments,
+          shares: finalShares,
+        });
+        haptic.success();
+        router.back();
+        return;
+      }
+
       // End date is optional; only valid if it's after the start date.
       const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
 
@@ -245,7 +276,7 @@ export default function QuickAddScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
+        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
         <View style={{ width: 24 }} />
       </View>
 

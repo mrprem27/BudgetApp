@@ -15,7 +15,7 @@ import { space, radius, layout } from '../../src/constants/layout';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
 import { parseToPaise } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -37,8 +37,9 @@ const FREQS: { key: Freq; label: string }[] = [
 ];
 
 export default function AddIncomeScreen() {
-  const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
+  const { groupId: paramGroupId, editId, recurEditId } = useLocalSearchParams<{ groupId?: string; editId?: string; recurEditId?: string }>();
   const isEditing = !!editId;
+  const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -70,8 +71,9 @@ export default function AddIncomeScreen() {
       const personal = grps.filter(g => g.is_personal === 1);
       setGroups(personal);
       setMe(meRow);
-      if (editId) {
-        const txn = await getTxnById(db, editId);
+      const loadId = editId ?? recurEditId;
+      if (loadId) {
+        const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
           await loadCats(txn.group_id, txn.category);
@@ -79,6 +81,13 @@ export default function AddIncomeScreen() {
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
           setDate(txn.date);
+          // Recurring "this & future" edit: pre-fill the schedule controls.
+          if (recurEditId && txn.recur_freq) {
+            setRecurOn(true);
+            // 'custom' with a ~yearly interval maps back to the 'yearly' option.
+            setFreq(txn.recur_freq === 'custom' && (txn.recur_interval ?? 0) >= 365 ? 'yearly' : (txn.recur_freq as Freq));
+            if (txn.recur_end) setRecurEndMs(txn.recur_end);
+          }
           setLoadError(false);
           return;
         }
@@ -108,7 +117,16 @@ export default function AddIncomeScreen() {
     if (!canSave || saving || !me) return;
     setSaving(true);
     try {
-      if (isEditing) {
+      if (isRecurEdit) {
+        // "This & future": split the series; past income entries are preserved.
+        await splitRecurringSeries(db, recurEditId!, {
+          groupId: selectedGroupId, kind: 'income', entryMode: 'quick', date,
+          category: category!.name, note: note.trim() || undefined,
+          recurFreq: freq === 'yearly' ? 'custom' : freq,
+          recurInterval: freq === 'yearly' ? 365 : undefined,
+          payments: [{ personId: me.id, amount: total }], shares: [],
+        });
+      } else if (isEditing) {
         await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind: 'income', date,
           category: category!.name, note: note.trim() || undefined,
@@ -139,7 +157,7 @@ export default function AddIncomeScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? 'Edit Income' : 'Add Income'}</Text>
+        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add Income'}</Text>
         <View style={{ width: 24 }} />
       </View>
 

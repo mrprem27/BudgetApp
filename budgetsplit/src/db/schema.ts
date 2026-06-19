@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS txn (
   updated_at     INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS recur_skip (
+  series_id       TEXT NOT NULL REFERENCES txn(id),
+  occurrence_date INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (series_id, occurrence_date)
+);
+
 CREATE TABLE IF NOT EXISTS txn_payment (
   txn_id     TEXT NOT NULL REFERENCES txn(id),
   person_id  TEXT NOT NULL REFERENCES person(id),

@@ -324,21 +324,20 @@ export default function ReportsScreen() {
           body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #FFFFFF; color: #1A1A1A; padding: 40px 36px; margin: 0; }
           h1 { font-size: 26px; margin: 0; color: #0A0F11; font-weight: 700; letter-spacing: -0.5px; }
           .sub { color: #0E7C5A; font-size: 14px; margin: 4px 0 32px; font-weight: 600; }
-          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #E2E8E6; color: #0A0F11; font-weight: 600; }
+          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #2A3433; color: #0A0F11; font-weight: 700; }
           .totals { display: flex; gap: 12px; margin-bottom: 16px; }
-          .total-card { flex: 1; background: #F6F8F8; border: 1px solid #E2E8E6; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
-          .total-card.income { border-left: 3px solid #0E9F6E; }
-          .total-card.expense { border-left: 3px solid #E02424; }
-          .total-card.net { border-left: 3px solid #128277; }
-          .total-label { font-size: 11px; color: #3A4544; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+          .total-card { flex: 1; background: #F2F5F4; border: 1px solid #6E7A78; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+          .total-card.income { border-left: 4px solid #0E7C5A; }
+          .total-card.expense { border-left: 4px solid #C0392B; }
+          .total-card.net { border-left: 4px solid #0E6E66; }
+          .total-label { font-size: 11px; color: #2A3433; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
           .total-value { font-size: 16px; font-weight: 700; color: #111111; font-family: 'SF Mono', monospace; }
-          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; background: #FFFFFF; border-radius: 10px; overflow: hidden; border: 1px solid #E2E8E6; }
-          th { text-align: left; color: #2A3433; font-weight: 700; padding: 10px 12px; background: #EDF1F0; border-bottom: 1px solid #D8E0DE; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-          td { padding: 10px 12px; border-bottom: 1px solid #E2E8E6; color: #1A1A1A; }
-          td.note { color: #3A4544; }
-          tr:last-child td { border-bottom: none; }
-          .empty { color: #3A4544; text-align: center; padding: 40px; }
-          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #51605E; border-top: 1px solid #E2E8E6; padding-top: 16px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; background: #FFFFFF; border: 2px solid #2A3433; }
+          th { text-align: left; color: #111111; font-weight: 700; padding: 10px 12px; background: #E3E8E7; border: 1px solid #6E7A78; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+          td { padding: 10px 12px; border: 1px solid #6E7A78; color: #1A1A1A; }
+          td.note { color: #2A3433; }
+          .empty { color: #2A3433; text-align: center; padding: 40px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #2A3433; border-top: 2px solid #2A3433; padding-top: 16px; }
         </style></head>
         <body>
           <h1>BudgetSplit Report</h1>
