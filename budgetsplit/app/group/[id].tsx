@@ -20,7 +20,7 @@ import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
-import { formatRupees, formatCompact } from '../../src/lib/money';
+import { formatCompact } from '../../src/lib/money';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
@@ -245,11 +245,11 @@ export default function GroupDetailScreen() {
                 const monthStart = startOfMonth(new Date()).getTime();
                 const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
                 const myNet = net[me?.id ?? ''] ?? 0;
-                const parts: string[] = [`${formatRupees(monthSpend)} this month`];
+                const parts: string[] = [`${formatCompact(monthSpend)} this month`];
                 if (!isPersonal) {
                   parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
-                  if (myNet > 0) parts.push(`you're owed ${formatRupees(myNet)}`);
-                  else if (myNet < 0) parts.push(`you owe ${formatRupees(-myNet)}`);
+                  if (myNet > 0) parts.push(`you're owed ${formatCompact(myNet)}`);
+                  else if (myNet < 0) parts.push(`you owe ${formatCompact(-myNet)}`);
                 }
                 return parts.join(' · ');
             })()}
@@ -262,7 +262,7 @@ export default function GroupDetailScreen() {
         <View style={styles.budgetHeaderBar}>
           <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
           <Text style={styles.budgetHeaderText}>
-            {formatRupees(budgetUsage.spent)} / {formatRupees(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
+            {formatCompact(budgetUsage.spent)} / {formatCompact(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
           </Text>
         </View>
       )}
@@ -348,7 +348,7 @@ export default function GroupDetailScreen() {
                   <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
                   <Text style={styles.memberNetName} numberOfLines={1}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNetAmt, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
-                    {v > 0 ? `is owed ${formatRupees(v)}` : v < 0 ? `owes ${formatRupees(-v)}` : 'settled up'}
+                    {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'settled up'}
                   </Text>
                 </View>
               );
@@ -410,8 +410,8 @@ export default function GroupDetailScreen() {
                   <View style={styles.ovTopRow}>
                     <View>
                       <Text style={styles.ovLabel}>Budget used</Text>
-                      <Text style={styles.ovSpent}>{formatRupees(analytics.totalSpent)}</Text>
-                      <Text style={styles.ovOf}>of {formatRupees(analytics.totalAllocated)}</Text>
+                      <Text style={styles.ovSpent}>{formatCompact(analytics.totalSpent)}</Text>
+                      <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
                     </View>
                     <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
                       {analytics.utilizationPct ?? 0}%
@@ -464,7 +464,7 @@ export default function GroupDetailScreen() {
                             <Feather name={vis.icon} size={14} color={vis.color} />
                           </View>
                           <Text style={styles.drivingName} numberOfLines={1}>{t.category}</Text>
-                          <Text style={styles.drivingOver}>{formatRupees(over)} over</Text>
+                          <Text style={styles.drivingOver}>{formatCompact(over)} over</Text>
                         </View>
                       );
                     })}
@@ -486,7 +486,7 @@ export default function GroupDetailScreen() {
                       <View style={styles.contribHead}>
                         <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} />
                         <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
-                        <Text style={styles.contribPaid}>{formatRupees(r.paid)}</Text>
+                        <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
                         <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
                           {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
                         </Text>
@@ -496,7 +496,7 @@ export default function GroupDetailScreen() {
                       </View>
                     </View>
                   ))}
-                  <Text style={styles.contribFoot}>Fair share is {formatRupees(contributions.fairShare)} each · + ahead, − owes the group</Text>
+                  <Text style={styles.contribFoot}>Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group</Text>
                 </View>
               )}
 
@@ -540,7 +540,7 @@ export default function GroupDetailScreen() {
                                 </View>
                                 <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
                                 <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
-                                <Text style={styles.catAmt}>{formatRupees(c.spent)} / {formatRupees(c.allocated)}</Text>
+                                <Text style={styles.catAmt}>{formatCompact(c.spent)} / {formatCompact(c.allocated)}</Text>
                               </View>
                               <BudgetBar pct={c.pct} health={c.health} height={6} />
                             </View>
@@ -573,7 +573,7 @@ export default function GroupDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNet, { color: net[m.id] > 0 ? colors.income : net[m.id] < 0 ? colors.expense : colors.textMuted }]}>
-                    {net[m.id] ? net[m.id] > 0 ? `Owed ${formatRupees(net[m.id])}` : `Owes ${formatRupees(-net[m.id])}` : 'Settled up'}
+                    {net[m.id] ? net[m.id] > 0 ? `Owed ${formatCompact(net[m.id])}` : `Owes ${formatCompact(-net[m.id])}` : 'Settled up'}
                   </Text>
                 </View>
               </View>

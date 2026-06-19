@@ -70,6 +70,7 @@ nothing looks like a 2010 form.
 | F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
 | F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ✅ Done |
 | F11 | **Compact decimals** — show meaningful decimals with K/L/M/Cr so summary math reads right (e.g. ₹14.51L, not ₹15L) | ✅ Done (1 dp for K, 2 dp for L/Cr/M/B) |
+| F13 | **Budget UI/IA is buried & unformatted** — the budget-used summary sits *below* insights/recommendations (critical info too deep); budget amounts show full `₹30,000.00` not compact `₹30K`; long category names truncate; budget isn't surfaced *outside* the Budget tab (dashboard/group header/list). Fix: lead the tab with the utilization hero, apply compact K/L/Cr to all budget figures, and surface a budget glance outside. | ⏳ In progress |
 | F12 | **Budget entry redesign** — group budget categories under **collapsible parent sections with icons** (less clutter), and rethink entry to be faster/easier (e.g. quick-set rows, smart defaults). *(User still refining the exact entry UX.)* | ⏳ Pending (design + build) |
 | F10 | **Forecast logic weak/misleading** — naive `dailyRate × days` linear projection; meaningless early in the month. Wanted: smarter on-device model (historical month patterns, day-of-week seasonality, category mix) + a clear "needs N days of data" gate. *(Strictly offline — no cloud ML; on-device heuristics only.)* | ⏳ Pending (P1 redesign) |
 
