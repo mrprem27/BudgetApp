@@ -30,9 +30,15 @@ export function formatAmountShort(smallestUnit: number, currency: CurrencyCode =
   return def.symbol + Math.round(smallestUnit / divisor).toLocaleString(def.locale);
 }
 
-/** Drop a trailing ".0" so "1.0K" reads "1K" but "1.2K" stays. */
-function trimDecimal(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '');
+/**
+ * Round to `decimals` and drop trailing zeros: "1.00L"→"1L", "1.50L"→"1.5L",
+ * "1.45L" stays. Larger units carry more decimals because one decimal there is
+ * too coarse (0.1L = ₹10,000) — keeps summary math honest.
+ */
+function compactNum(n: number, decimals: number): string {
+  let s = (Math.round(n * 10 ** decimals) / 10 ** decimals).toFixed(decimals);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s;
 }
 
 /**
@@ -54,13 +60,13 @@ export function formatCompactMajor(value: number, currency: CurrencyCode = DEFAU
 
   let body: string;
   if (currency === 'INR') {
-    if (abs >= 1e7) body = trimDecimal(abs / 1e7) + 'Cr';
-    else if (abs >= 1e5) body = trimDecimal(abs / 1e5) + 'L';
-    else body = trimDecimal(abs / 1e3) + 'K';
+    if (abs >= 1e7) body = compactNum(abs / 1e7, 2) + 'Cr';
+    else if (abs >= 1e5) body = compactNum(abs / 1e5, 2) + 'L';
+    else body = compactNum(abs / 1e3, 1) + 'K';
   } else {
-    if (abs >= 1e9) body = trimDecimal(abs / 1e9) + 'B';
-    else if (abs >= 1e6) body = trimDecimal(abs / 1e6) + 'M';
-    else body = trimDecimal(abs / 1e3) + 'K';
+    if (abs >= 1e9) body = compactNum(abs / 1e9, 2) + 'B';
+    else if (abs >= 1e6) body = compactNum(abs / 1e6, 2) + 'M';
+    else body = compactNum(abs / 1e3, 1) + 'K';
   }
   return sign + def.symbol + body;
 }
