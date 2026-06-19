@@ -64,11 +64,12 @@ nothing looks like a 2010 form.
 | F2 | **Transaction detail** felt like a stacked from/to form + clunky history | ✅ Fixed (paid→owes summary + history timeline) |
 | F3 | **Itemized scan** only read a total (no AI/offline) | ✅ Hidden (Decision D2/D3) |
 | F4 | **Top Insights on the dashboard instead of Recents** | ⏳ In progress |
-| F5 | **Flicker on navigation** — content pops in/out when focusing/navigating (chart-defer + focus reload) | ⏳ Pending |
+| F5 | **Flicker on navigation** — content pops in/out when focusing/navigating | 🟡 Donut no longer remounts on tab change; broader focus-refetch flicker needs device repro (likely store write on every focus) |
 | F6 | **Zero/empty states** — for a 0/empty day show a clean dash/line, not a number with icon-animation/emoji | ⏳ Pending |
 | F7 | **Settings UI** — sparse Preferences card + long flat Features list; regroup, fix rhythm, 44pt rows | ⏳ Pending |
 | F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
 | F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ✅ Done |
+| F11 | **Compact decimals** — show meaningful decimals with K/L/M/Cr so summary math reads right (e.g. ₹14.51L, not ₹15L) | ⏳ Pending |
 | F10 | **Forecast logic weak/misleading** — naive `dailyRate × days` linear projection; meaningless early in the month. Wanted: smarter on-device model (historical month patterns, day-of-week seasonality, category mix) + a clear "needs N days of data" gate. *(Strictly offline — no cloud ML; on-device heuristics only.)* | ⏳ Pending (P1 redesign) |
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)

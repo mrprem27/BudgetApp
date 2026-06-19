@@ -282,7 +282,6 @@ export default function DashboardScreen() {
           <View style={styles.donutCard}>
             <Text style={styles.chartTitle}>Where it went</Text>
             <CategoryDonut
-              key={`donut-${tab}`}
               data={donutData}
               total={donutTotal}
               onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
