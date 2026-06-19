@@ -10,7 +10,7 @@ export async function getGroupNet(
     `SELECT tp.person_id, SUM(tp.amount) as total
      FROM txn_payment tp
      JOIN txn t ON t.id = tp.txn_id
-     WHERE t.group_id = ? AND t.is_deleted = 0
+     WHERE t.group_id = ? AND t.is_deleted = 0 AND t.kind != 'income'
      GROUP BY tp.person_id`,
     [groupId],
   );
@@ -36,7 +36,7 @@ export async function getGlobalNet(
     `SELECT tp.person_id, SUM(tp.amount) as total
      FROM txn_payment tp
      JOIN txn t ON t.id = tp.txn_id
-     WHERE t.is_deleted = 0
+     WHERE t.is_deleted = 0 AND t.kind != 'income'
      GROUP BY tp.person_id`,
   );
   const shares = await db.getAllAsync<{ person_id: string; total: number }>(
