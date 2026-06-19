@@ -1,6 +1,8 @@
+import type { FeatherName } from './palette';
+
 export type CategoryDef = {
   name: string;
-  icon: string;
+  icon: FeatherName;
   color: string;
 };
 
@@ -109,18 +111,18 @@ export function categorySection(name: string): string {
 export const SECTION_ORDER = CATEGORY_SECTIONS.map(s => s.title);
 
 /** name → {icon,color} lookup for rendering any stored category by name. */
-export const CATEGORY_LOOKUP: Record<string, { icon: string; color: string }> = Object.fromEntries(
+export const CATEGORY_LOOKUP: Record<string, { icon: FeatherName; color: string }> = Object.fromEntries(
   [...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
 );
 
 /** Special non-catalog categories that still need an icon/colour. */
-const EXTRA_LOOKUP: Record<string, { icon: string; color: string }> = {
+const EXTRA_LOOKUP: Record<string, { icon: FeatherName; color: string }> = {
   Settlement: { icon: 'check-circle', color: '#7C6AF7' },
   Income:     { icon: 'trending-up',  color: '#3ECF8E' },
 };
 
 /** Resolve icon + colour for any category name, with a sensible fallback. */
-export function categoryVisual(name: string): { icon: string; color: string } {
+export function categoryVisual(name: string): { icon: FeatherName; color: string } {
   return CATEGORY_LOOKUP[name] ?? EXTRA_LOOKUP[name] ?? { icon: 'tag', color: '#8B8A99' };
 }
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, radius, space } from '../tokens';
+import { asFeather } from '../../constants/palette';
 import type { Category } from '../../db/queries/categories';
 
 type Props = {
@@ -21,7 +22,7 @@ export function CategoryChip({ category, selected, onPress, style }: Props) {
       accessibilityState={{ selected }}
     >
       <Feather
-        name={(category.icon ?? 'tag') as any}
+        name={asFeather(category.icon, 'tag')}
         size={13}
         color={selected ? colors.bg : (category.color ?? colors.textSecondary)}
       />

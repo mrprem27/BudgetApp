@@ -12,6 +12,7 @@ import { format, isSameDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
@@ -279,7 +280,7 @@ export default function QuickAddScreen() {
               accessibilityLabel="Select group"
             >
               <View style={[styles.groupSelectorIcon, { backgroundColor: (selectedGroup?.color ?? colors.accent) + '22' }]}>
-                <Feather name={(selectedGroup?.icon ?? 'layers') as any} size={16} color={selectedGroup?.color ?? colors.accent} />
+                <Feather name={asFeather(selectedGroup?.icon, 'layers')} size={16} color={selectedGroup?.color ?? colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.groupSelectorLabel}>Group</Text>
@@ -559,7 +560,7 @@ export default function QuickAddScreen() {
             accessibilityRole="button"
           >
             <View style={[styles.groupPickerIcon, { backgroundColor: g.color + '22' }]}>
-              <Feather name={g.icon as any} size={16} color={g.color} />
+              <Feather name={asFeather(g.icon, 'layers')} size={16} color={g.color} />
             </View>
             <Text style={styles.groupPickerName}>{g.name}</Text>
             {selectedGroupId === g.id && <Feather name="check" size={18} color={colors.accent} />}
@@ -619,10 +620,6 @@ const styles = StyleSheet.create({
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   field: { gap: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  chipRow: { flexDirection: 'row', gap: space.xs, paddingBottom: space.xs },
-  groupChip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
-  groupChipActive: { backgroundColor: colors.accent },
-  groupChipText: { ...type.label, color: colors.textSecondary },
   groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   groupSelectorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   groupSelectorLabel: { ...type.caption, color: colors.textMuted },
@@ -639,7 +636,6 @@ const styles = StyleSheet.create({
   remainder: { ...type.label, color: colors.expense },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
   saveBtn: { marginTop: space.md },
-  recurRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.xs },
   scheduleBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },

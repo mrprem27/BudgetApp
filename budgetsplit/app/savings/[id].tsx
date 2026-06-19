@@ -7,6 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -157,7 +158,7 @@ export default function GoalDetailScreen() {
         {/* Hero */}
         <View style={styles.heroCard}>
           <View style={[styles.heroIcon, { backgroundColor: (goal.color ?? colors.accent) + '22' }]}>
-            <Feather name={(goal.icon ?? 'target') as any} size={24} color={goal.color ?? colors.accent} />
+            <Feather name={asFeather(goal.icon, 'target')} size={24} color={goal.color ?? colors.accent} />
           </View>
           <AmountText paise={p.saved} size="xl" forceColor={colors.textPrimary} compact />
           <Text style={styles.heroSub}>of {formatRupees(p.target)} · {p.pct}%</Text>

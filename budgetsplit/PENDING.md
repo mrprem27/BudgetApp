@@ -65,17 +65,35 @@ P1 follow-up**.
 
 ---
 
-## 3. P2 — Polish, consistency, perf
+## 3. P2 — Polish, consistency, perf ✅ DONE
 
-- **Color-token discipline** — raw hex palette arrays used as real colors and persisted to the DB: `group/[id]/edit.tsx` (`GROUP_COLORS`), `groups.tsx:33` (`GROUP_COLORS`/`GROUP_ICONS`), `categories.tsx:28` (`COLOR_CHOICES`), `reports.tsx:152` (`CHART_COLORS`), `help.tsx` (illustration colors). Most map exactly to existing tokens; move to a shared palette constant. (PDF `<style>` hex in reports is unavoidable — print engine can't read JS tokens.) Note `#FB923C` (orange) in help has **no** token — add one.
-- **Touch targets <44pt** — `TabPills` (36), `ScreenHeader` back (32+hitSlop), `FilterBar` chips (32, no hitSlop), `members.tsx` remove icon (~38), `Onboarding` Skip. Add/raise `hitSlop`.
-- **`PressableScale`** — sets `accessibilityRole="button"` even when non-interactive; only set when `onPress`/`onLongPress` exists. Consider a `hitSlop` passthrough.
-- **`Feather name={… as any}`** — pervasive (`FAB`, `TransactionRow`, `budget`, `txn`, `categories`, `groups`, `recurring`, `edit`, `quick`, `savings/[id]`). Type `categoryVisual().icon` and friends as `keyof typeof Feather.glyphMap` and drop the casts.
-- **Loading vs not-found** — `txn/[id].tsx:66` and `savings/[id].tsx:62` render a bare header while loading *and* when the row is missing — indistinguishable. Add a skeleton + a proper "not found" state.
-- **Perf (N+1 serial queries)** — `groups.tsx:61`, `transfer.tsx:44`, `reports.tsx:162-203` await per-group/per-month/per-day in series. Batch or query the range once and bucket in memory.
-- **Components defined inside render** — `transfer.tsx` `PersonPicker` remounts each keystroke (focus loss). Hoist out.
-- **Dead code** — `settle.tsx` unused `getMe` import; `members.tsx:228` + `groups.tsx:352` + `income.tsx:287` unused sheet/chip styles; `groups.tsx:45` unused `showArchived` state.
-- **Misc** — `members.tsx:67` doesn't reset `newColor` between creates; `reports.tsx` forecast is noisy for days 1-2 (consider gating to `dayOfMonth ≥ 3`).
+- **Color-token discipline** — new `src/constants/palette.ts` centralises the
+  duplicated/scattered palette data (`GROUP_ICONS`/`GROUP_COLORS`,
+  `CATEGORY_ICON_CHOICES`/`CATEGORY_COLOR_CHOICES`, `CHART_COLORS` built from
+  tokens, plus a `decor` set for non-semantic hues). edit/groups/categories/
+  reports import from it; help.tsx hex → tokens + `decor.orange` (the one missing
+  hue). Picker swatches stay as documented data (they don't map to semantic
+  tokens). PDF hex is intentional (print document, see below).
+- **`Feather name={… as any}` — eliminated.** Catalog typed (`categoryVisual()`
+  returns `FeatherName`), picker arrays typed, and one `asFeather()` helper
+  coerces DB-sourced icon strings. Zero `as any` icon casts remain.
+- **Touch targets** — `hitSlop` added/raised on TabPills (+empty guard),
+  FilterBar chips, members remove/back, Onboarding Skip; ScreenHeader verified OK.
+- **`PressableScale`** — `accessibilityRole`/`accessibilityState` only when
+  interactive; `hitSlop` passthrough added.
+- **Loading vs not-found** — done in §1 batch (savings/txn skeleton vs not-found).
+- **Perf (N+1)** — groups & transfer per-group queries now `Promise.all` batched.
+  (reports daily loop already fetches once + buckets in memory; per-month trend is
+  bounded to 6 and left as-is.)
+- **Components in render** — `transfer.tsx` `PersonPicker` hoisted to module scope.
+- **Dead code** — removed across settle/members/groups/quick (styles, state).
+- **Forecast** — projection now gated to `dayOfMonth ≥ 3` (1–2 points were misleading).
+
+### PDF export (reported separately)
+- The PDF was dark-themed (near-black bg, near-white text) → invisible on white
+  paper / when backgrounds are dropped by printers. **Rewritten as a light
+  document**: white background, solid dark text throughout (`#1A1A1A` body,
+  `#0A0F11` headings, dark grays for labels/notes), dark-on-white amount colors.
 
 ---
 
@@ -105,3 +123,138 @@ P1 follow-up**.
 
 No screen is missing or half-built. Everything pending is hardening + the §4
 decisions.
+
+---
+
+## 6. Recurring Edit — first-principles design (PLANNING, pre-implementation)
+
+**Status: design only. Do NOT implement until the decision points below are
+resolved.** Recurring edits are not a simple `UPDATE` — every CRUD op must be
+reasoned about against history, future occurrences, assignments, relationships,
+state, and time. This section defines the scenarios and behaviours first.
+
+### 6.1 How recurring works today (the constraint)
+- A recurring transaction is **one template row** on `txn` with `recur_freq`,
+  `recur_interval`, `recur_end`, `recur_state` (`active|paused|ended`), and an
+  **unused** `recur_override_date`.
+- Occurrences are **virtual**: `materializeInstances()` (`src/lib/recurrence.ts`)
+  projects them on the fly within a date range, with synthetic ids
+  `${txn.id}_${timestamp}`. They are **never persisted**.
+- Consequence: editing the template **retroactively rewrites every past and
+  future occurrence** — amounts, splits, category, payer, even the start date all
+  change history. There is no notion of "this occurrence", "this and future", or
+  a per-occurrence exception. **This is the core defect.**
+- Today's "edit" routes a recurring row into `add/quick`/`add/income` with
+  `editId`, i.e. a blind template overwrite. Pause/Resume/End mutate
+  `recur_state`; End sets `recur_end`.
+
+### 6.2 First principles
+1. **History is immutable.** An occurrence that has already happened (date ≤ now)
+   is a record of a real (or assumed-real) event. Editing the rule must not
+   silently alter past occurrences.
+2. **A rule and an occurrence are different entities.** Editing one occurrence ≠
+   editing the schedule. The UI must always disambiguate scope.
+3. **Every edit has a temporal scope:** *this occurrence only* · *this and all
+   future* · *the whole series* (rarely; only for true corrections). The default
+   offered must be the safe one.
+4. **Referenced occurrences are frozen.** If an occurrence has been settled,
+   included in a closed report, or otherwise referenced, it cannot be mutated in
+   place — only superseded/adjusted with an audit trail.
+5. **Auditability:** every change records what changed, when, by whom, and its
+   scope.
+
+### 6.3 Required model change (the decision that unlocks everything)
+The virtual-only model cannot represent exceptions. Options:
+- **(A) Materialize-on-touch + exceptions table (recommended).** Keep generating
+  virtually, but persist an occurrence row the moment it is edited/skipped/settled
+  ("materialize this instance"), keyed by `(series_id, occurrence_date)`. A
+  `recur_exception` (or a `parent_id` + `recur_override_date` on `txn`) marks an
+  occurrence as detached/overridden/skipped. Virtual generation skips dates that
+  have a persisted exception.
+- **(B) Split-the-series on "this and future."** Editing "this and future" ends
+  the current rule at the split date (`recur_end = splitDate - ε`) and creates a
+  **new** rule starting at the split date with the new values. Past stays intact;
+  future diverges. (Compose with A for single-occurrence edits.)
+- **(C) Fully materialize all occurrences up front.** Simpler reads, but bloats
+  the DB and reintroduces the "edit rewrites all" problem unless paired with A.
+  Not recommended.
+
+→ **Decision needed:** adopt **A + B** (exceptions for single edits, series-split
+for this-and-future)? This is the recommended path and the rest assumes it.
+
+### 6.4 Scope-of-edit matrix
+For each edit the user picks a scope; behaviour:
+
+| Scope | Past occurrences | The edited occurrence | Future occurrences |
+|---|---|---|---|
+| **This occurrence only** | untouched | persisted as a detached exception with new values | untouched (still follow the rule) |
+| **This and future** | untouched | becomes the first of a new split rule | regenerated from the new rule |
+| **Entire series** (correction) | rewritten (guarded; warns it alters history) | rewritten | rewritten |
+
+The picker must appear for **every** field change, and "This and future" should
+be the default for schedule-shaped fields (frequency, interval, end), while
+"This occurrence only" is the default for value-shaped fields (amount, note).
+
+### 6.5 Field-by-field semantics (define each before building)
+- **Amount / split / payers:** value-shaped. Default *this occurrence*; offer
+  *this and future*. Past edits only via *entire series* with a warning.
+- **Category:** value-shaped, same as above; but reassigning category affects
+  budget attribution per period (see 6.7).
+- **Date of one occurrence:** moves only that occurrence (exception); must not
+  collide with another occurrence's date in the series (conflict → 6.8).
+- **Frequency / interval:** schedule-shaped → *this and future* via series-split.
+  Never silently re-space past occurrences.
+- **Start date:** only meaningful as *entire series* (it is the rule anchor);
+  warn that it shifts all unreferenced occurrences.
+- **End date (recur_end):** truncates/extends future only; cannot end before the
+  last already-referenced occurrence.
+
+### 6.6 Delete / skip semantics
+- **Skip one occurrence:** persist a "skipped" exception; virtual generation omits
+  that date. Reversible.
+- **Delete this and future:** set `recur_end` to before the chosen date (soft);
+  past stays.
+- **Delete entire series:** soft-delete the template; past occurrences that were
+  materialized (settled/referenced) must survive (don't cascade-delete history).
+
+### 6.7 Impact on derived data (must stay consistent)
+- **Budgets:** per-period budget usage counts occurrences in that period. A *this
+  and future* change must not retroactively change a closed period's usage.
+- **Reports / analytics / forecast:** must read the same materialization rules;
+  an exception or split must show correctly in the month it applies to, not
+  smeared across the series.
+- **Balances / settlements:** if an occurrence created a debt that was settled,
+  editing its amount/split afterwards must NOT silently change the settled
+  balance — see 6.8.
+
+### 6.8 Conflict resolution (already-processed / referenced)
+- Occurrence already **settled** → block in-place edit; offer "create an
+  adjustment entry" instead, preserving the original.
+- Occurrence already in a **closed/exported report** → allow edit only as a new
+  forward-dated correction; never mutate the historical figure.
+- **Date collision** (moving an occurrence onto another's date) → reject with a
+  clear message.
+- Editing a **paused** series → allowed for future; clarify it takes effect on
+  resume. Editing an **ended** series → only *entire series* corrections, with a
+  strong warning, or disallow.
+
+### 6.9 Auditability
+Every recurring mutation writes an audit entry: series id, occurrence date (if
+scoped), fields changed (before→after), scope, timestamp, actor. The existing
+`audit` log is the home; extend its entity types for `recur_series` /
+`recur_occurrence`.
+
+### 6.10 Open decision points (resolve before coding)
+1. Adopt model **A + B** (exceptions + series-split)? (recommended)
+2. Do single-occurrence edits **persist** that occurrence (materialize-on-touch),
+   or keep an `exceptions` table separate from `txn`?
+3. Default scope per field group — confirm 6.5 defaults.
+4. Settlement conflict: hard-block vs. adjustment-entry — pick one.
+5. Is *entire series* (history-rewriting) edit even allowed, or only forward
+   corrections? (Leaning: disallow true history rewrites; corrections only.)
+6. Scope of v1: ship **skip-one + this-and-future split + end** first; defer
+   single-occurrence value exceptions if it's too much for v1.
+
+Until these are decided, the current blind-overwrite "edit" should arguably be
+**reduced to safe ops only** (pause/resume/end + skip-one) and the full edit
+entry point hidden, to avoid silent history corruption. → **decision needed.**

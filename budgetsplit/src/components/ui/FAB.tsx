@@ -7,11 +7,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, gradients } from '../tokens';
 import { layout } from '../../constants/layout';
+import type { FeatherName } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
 
-type Action = {
+export type Action = {
   label: string;
-  icon: string;
+  icon: FeatherName;
   onPress: () => void;
   disabled?: boolean;
   description?: string;
@@ -55,7 +56,7 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
                   accessibilityLabel={a.label}
                 >
                   <View style={[styles.actionIcon, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
-                    <Feather name={a.icon as any} size={18} color={tint} />
+                    <Feather name={a.icon} size={18} color={tint} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>{a.label}</Text>

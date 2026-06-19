@@ -23,9 +23,9 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     : -myShare;
 
   const visual = txn.kind === 'income'
-    ? { icon: 'trending-up', color: colors.income }
+    ? { icon: 'trending-up' as const, color: colors.income }
     : txn.kind === 'settlement'
-    ? { icon: 'check-circle', color: colors.settle }
+    ? { icon: 'check-circle' as const, color: colors.settle }
     : categoryVisual(txn.category);
 
   return (
@@ -38,7 +38,7 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
       accessibilityLabel={`${txn.category}: ${formatRupees(Math.abs(displayAmount))}`}
     >
       <View style={[styles.iconCircle, { backgroundColor: visual.color + '22' }]}>
-        <Feather name={visual.icon as any} size={18} color={visual.color} />
+        <Feather name={visual.icon} size={18} color={visual.color} />
       </View>
       <View style={styles.middle}>
         <Text style={styles.category} numberOfLines={1}>{txn.category}</Text>

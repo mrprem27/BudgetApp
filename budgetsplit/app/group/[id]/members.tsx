@@ -122,7 +122,7 @@ export default function MembersScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={14} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Members</Text>
@@ -146,7 +146,7 @@ export default function MembersScreen() {
                   )}
                 </View>
                 {!item.is_me && (
-                  <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={10} accessibilityLabel={`Remove ${item.name}`}>
+                  <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={14} accessibilityLabel={`Remove ${item.name}`}>
                     <Feather name="user-minus" size={18} color={colors.textMuted} />
                   </TouchableOpacity>
                 )}

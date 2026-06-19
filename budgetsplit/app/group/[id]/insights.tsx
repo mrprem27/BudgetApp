@@ -207,7 +207,7 @@ export default function BudgetInsightsScreen() {
                   onPress={() => router.push(`/category/${encodeURIComponent(cat.category)}` as any)}
                 >
                   <View style={[styles.catDotSmall, { backgroundColor: visual.color + '22' }]}>
-                    <Feather name={visual.icon as any} size={13} color={visual.color} />
+                    <Feather name={visual.icon} size={13} color={visual.color} />
                   </View>
                   <Text style={styles.catName}>{cat.category}</Text>
                   <Text style={styles.catAmount}>{formatRupees(cat.spent)}</Text>
@@ -227,7 +227,7 @@ function CategoryBudgetRow({ trend, isOver }: { trend: CategoryTrend; isOver?: b
     <View style={styles.catBudgetCard}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm }}>
         <View style={[styles.catDot, { backgroundColor: visual.color + '22' }]}>
-          <Feather name={visual.icon as any} size={16} color={visual.color} />
+          <Feather name={visual.icon} size={16} color={visual.color} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.catName}>{trend.category}</Text>

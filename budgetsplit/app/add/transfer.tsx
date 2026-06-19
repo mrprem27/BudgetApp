@@ -21,6 +21,32 @@ import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 
+function PersonPicker({
+  label, value, onChange, exclude, members,
+}: {
+  label: string;
+  value: string;
+  onChange: (id: string) => void;
+  exclude?: string;
+  members: Person[];
+}) {
+  return (
+    <View style={{ gap: space.xs }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.peopleRow}>
+          {members.filter(m => m.id !== exclude).map(m => (
+            <TouchableOpacity key={m.id} style={styles.personChip} onPress={() => onChange(m.id)} accessibilityRole="button">
+              <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={value === m.id} />
+              <Text style={[styles.personChipName, value === m.id && { color: colors.accent }]} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function TransferScreen() {
   const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
   const db = useSQLiteContext();
@@ -37,14 +63,11 @@ export default function TransferScreen() {
 
   useEffect(() => {
     (async () => {
-      const grps = await getAllGroups(db);
-      const me = await getMe(db);
+      const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
       // Transfers need at least two people → only multi-member groups qualify.
-      const eligible: BudgetGroup[] = [];
-      for (const g of grps) {
-        const mems = await getGroupMembers(db, g.id);
-        if (mems.length >= 2) eligible.push(g);
-      }
+      // Fetch member counts in parallel, then filter (preserving group order).
+      const counts = await Promise.all(grps.map(g => getGroupMembers(db, g.id)));
+      const eligible: BudgetGroup[] = grps.filter((_, i) => counts[i].length >= 2);
       setGroups(eligible);
       const gid = (paramGroupId && eligible.some(g => g.id === paramGroupId)) ? paramGroupId : eligible[0]?.id ?? '';
       setGroupId(gid);
@@ -95,22 +118,6 @@ export default function TransferScreen() {
     );
   }
 
-  const PersonPicker = ({ label, value, onChange, exclude }: { label: string; value: string; onChange: (id: string) => void; exclude?: string }) => (
-    <View style={{ gap: space.xs }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.peopleRow}>
-          {members.filter(m => m.id !== exclude).map(m => (
-            <TouchableOpacity key={m.id} style={styles.personChip} onPress={() => onChange(m.id)} accessibilityRole="button">
-              <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={value === m.id} />
-              <Text style={[styles.personChipName, value === m.id && { color: colors.accent }]} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-
   return (
     <View style={styles.container}>
       <ScreenHeader title="Transfer" onBack={() => router.back()} />
@@ -147,9 +154,9 @@ export default function TransferScreen() {
             </View>
           )}
 
-          <PersonPicker label="From" value={fromId} onChange={setFromId} exclude={toId} />
+          <PersonPicker label="From" value={fromId} onChange={setFromId} exclude={toId} members={members} />
           <View style={styles.arrow}><Feather name="arrow-down" size={18} color={colors.textMuted} /></View>
-          <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} />
+          <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} members={members} />
 
           <TextInput
             style={styles.noteInput}

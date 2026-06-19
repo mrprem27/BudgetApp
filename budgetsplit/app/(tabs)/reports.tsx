@@ -31,6 +31,7 @@ import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { categoryVisual } from '../../src/constants/categories';
+import { CHART_COLORS } from '../../src/constants/palette';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 
@@ -152,7 +153,6 @@ export default function ReportsScreen() {
           fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
         }
       }
-      const CHART_COLORS = ['#20C4B8', '#FF6F61', '#8B7CF8', '#2BD49B', '#F5B301', '#60A5FA', '#FB923C', '#F472B6', '#A78BFA', '#8FA3A0'];
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
       setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
         value: val,
@@ -188,7 +188,10 @@ export default function ReportsScreen() {
       const dayOfMonth = getDate(now);
       const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
 
-      if (isCurrentMonth) {
+      // Skip the projection for the first couple of days — one or two data points
+      // make the linear run-rate wildly misleading (a single big buy projects to
+      // a huge month-end total).
+      if (isCurrentMonth && dayOfMonth >= 3) {
         // Compute daily cumulative spending for each day up to today
         const dailyCumulative: Array<{ value: number; label?: string }> = [];
         let runningTotal = 0;
@@ -287,7 +290,8 @@ export default function ReportsScreen() {
             const amt = t.kind === 'income'
               ? t.payments.reduce((x, p) => x + p.amount, 0)
               : t.shares.reduce((x, sh) => x + sh.amount, 0);
-            const color = t.kind === 'income' ? '#2BD49B' : '#FF6F61';
+            // Print-safe (dark-on-white) amount colors — the PDF is a light document.
+            const color = t.kind === 'income' ? '#0E7C5A' : '#C0392B';
             return `<tr>
               <td>${format(new Date(t.date), 'dd MMM')}</td>
               <td>${esc(t.category)}</td>
@@ -314,26 +318,27 @@ export default function ReportsScreen() {
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8" />
         <style>
+          /* Light document — readable on white paper and when printed (dark page
+             backgrounds are commonly dropped by PDF viewers/printers). */
           * { box-sizing: border-box; }
-          body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #0A0F11; color: #ECF3F1; padding: 40px 36px; margin: 0; }
-          h1 { font-size: 26px; margin: 0; color: #FFFFFF; font-weight: 700; letter-spacing: -0.5px; }
-          .sub { color: #20C4B8; font-size: 14px; margin: 4px 0 32px; font-weight: 500; }
-          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #1E2A2E; color: #FFFFFF; font-weight: 600; }
+          body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #FFFFFF; color: #1A1A1A; padding: 40px 36px; margin: 0; }
+          h1 { font-size: 26px; margin: 0; color: #0A0F11; font-weight: 700; letter-spacing: -0.5px; }
+          .sub { color: #0E7C5A; font-size: 14px; margin: 4px 0 32px; font-weight: 600; }
+          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #E2E8E6; color: #0A0F11; font-weight: 600; }
           .totals { display: flex; gap: 12px; margin-bottom: 16px; }
-          .total-card { flex: 1; background: #131A1D; border: 1px solid #1E2A2E; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
-          .total-card.income { border-left: 3px solid #2BD49B; }
-          .total-card.expense { border-left: 3px solid #FF6F61; }
-          .total-card.net { border-left: 3px solid #20C4B8; }
-          .total-label { font-size: 11px; color: #7A8F8C; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
-          .total-value { font-size: 16px; font-weight: 700; color: #ECF3F1; font-family: 'SF Mono', monospace; }
-          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; background: #131A1D; border-radius: 10px; overflow: hidden; border: 1px solid #1E2A2E; }
-          th { text-align: left; color: #7A8F8C; font-weight: 600; padding: 10px 12px; background: #0E1517; border-bottom: 1px solid #1E2A2E; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-          td { padding: 10px 12px; border-bottom: 1px solid #1A2326; color: #ECF3F1; }
-          td.note { color: #7A8F8C; }
+          .total-card { flex: 1; background: #F6F8F8; border: 1px solid #E2E8E6; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+          .total-card.income { border-left: 3px solid #0E9F6E; }
+          .total-card.expense { border-left: 3px solid #E02424; }
+          .total-card.net { border-left: 3px solid #128277; }
+          .total-label { font-size: 11px; color: #3A4544; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+          .total-value { font-size: 16px; font-weight: 700; color: #111111; font-family: 'SF Mono', monospace; }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; background: #FFFFFF; border-radius: 10px; overflow: hidden; border: 1px solid #E2E8E6; }
+          th { text-align: left; color: #2A3433; font-weight: 700; padding: 10px 12px; background: #EDF1F0; border-bottom: 1px solid #D8E0DE; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+          td { padding: 10px 12px; border-bottom: 1px solid #E2E8E6; color: #1A1A1A; }
+          td.note { color: #3A4544; }
           tr:last-child td { border-bottom: none; }
-          tr:hover { background: #1A2326; }
-          .empty { color: #7A8F8C; text-align: center; padding: 40px; }
-          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #4A5E5B; border-top: 1px solid #1E2A2E; padding-top: 16px; }
+          .empty { color: #3A4544; text-align: center; padding: 40px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #51605E; border-top: 1px solid #E2E8E6; padding-top: 16px; }
         </style></head>
         <body>
           <h1>BudgetSplit Report</h1>

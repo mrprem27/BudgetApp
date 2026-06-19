@@ -461,7 +461,7 @@ export default function GroupDetailScreen() {
                       return (
                         <View key={t.category} style={styles.drivingRow}>
                           <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
-                            <Feather name={vis.icon as any} size={14} color={vis.color} />
+                            <Feather name={vis.icon} size={14} color={vis.color} />
                           </View>
                           <Text style={styles.drivingName} numberOfLines={1}>{t.category}</Text>
                           <Text style={styles.drivingOver}>{formatRupees(over)} over</Text>
@@ -536,7 +536,7 @@ export default function GroupDetailScreen() {
                             <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
                               <View style={styles.catTop}>
                                 <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
-                                  <Feather name={vis.icon as any} size={14} color={vis.color} />
+                                  <Feather name={vis.icon} size={14} color={vis.color} />
                                 </View>
                                 <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
                                 <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>

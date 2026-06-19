@@ -29,10 +29,8 @@ import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { haptic } from '../../src/lib/haptics';
+import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
 import type { BudgetGroup } from '../../src/db/queries/groups';
-
-const GROUP_ICONS = ['credit-card', 'home', 'users', 'map', 'coffee', 'shopping-cart', 'heart', 'zap', 'star', 'briefcase'];
-const GROUP_COLORS = ['#4F46E5', '#E53E3E', '#38A169', '#D69E2E', '#3182CE', '#553C9A', '#B83280', '#DD6B20', '#319795', '#2D3748'];
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
@@ -41,8 +39,8 @@ export default function GroupsScreen() {
   const { groups, setGroups } = useStore();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
-  const [icon, setIcon] = useState('credit-card');
-  const [color, setColor] = useState('#4F46E5');
+  const [icon, setIcon] = useState<string>(GROUP_ICONS[0]);
+  const [color, setColor] = useState<string>(GROUP_COLORS[0]);
   const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
@@ -59,12 +57,15 @@ export default function GroupsScreen() {
       const grps = await getAllGroups(db);
       setGroups(grps);
       setArchived(await getArchivedGroups(db));
+      // Per-group usage + member counts in parallel rather than serially.
       const h: typeof health = {};
-      for (const g of grps) {
-        const usage = await getBudgetUsage(db, g, 'monthly');
-        const mems = await getGroupMembers(db, g.id);
+      await Promise.all(grps.map(async g => {
+        const [usage, mems] = await Promise.all([
+          getBudgetUsage(db, g, 'monthly'),
+          getGroupMembers(db, g.id),
+        ]);
         h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
-      }
+      }));
       setHealth(h);
 
       // Balances hero — who-owes-whom across all shared groups, from my view.
@@ -153,7 +154,7 @@ export default function GroupsScreen() {
           >
             <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
             <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
-              <Feather name={item.icon as any} size={20} color={item.color} />
+              <Feather name={asFeather(item.icon, 'credit-card')} size={20} color={item.color} />
             </View>
             <View style={styles.groupInfo}>
               <Text style={[styles.groupName, isArchivedView && { color: colors.textSecondary }]} numberOfLines={1}>{item.name}</Text>
@@ -310,7 +311,7 @@ export default function GroupsScreen() {
               accessibilityRole="button"
               accessibilityLabel={ic}
             >
-              <Feather name={ic as any} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
+              <Feather name={ic} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -367,9 +368,6 @@ const styles = StyleSheet.create({
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md },
-  sheetTitle: { ...type.subheading, color: colors.textPrimary },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   iconRow: { marginBottom: space.xs },

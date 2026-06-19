@@ -120,7 +120,7 @@ export default function RecurringScreen() {
               <View key={r.id} style={styles.card}>
                 <View style={styles.cardTop}>
                   <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-                    <Feather name={vis.icon as any} size={18} color={vis.color} />
+                    <Feather name={vis.icon} size={18} color={vis.color} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cat} numberOfLines={1}>{r.category}</Text>

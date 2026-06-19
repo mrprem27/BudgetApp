@@ -98,7 +98,7 @@ export default function CategoryDetailScreen() {
         <View style={styles.heroCard}>
           <View style={styles.heroRow}>
             <View style={[styles.heroIcon, { backgroundColor: visual.color + '22' }]}>
-              <Feather name={visual.icon as any} size={24} color={visual.color} />
+              <Feather name={visual.icon} size={24} color={visual.color} />
             </View>
             <View style={styles.heroText}>
               <Text style={styles.heroAmount}>{formatRupees(monthSpent)}</Text>

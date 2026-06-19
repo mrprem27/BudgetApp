@@ -19,26 +19,17 @@ import { haptic } from '../src/lib/haptics';
 import {
   CATEGORY_SECTIONS, categorySection, DEFAULT_CATEGORIES, INCOME_CATEGORIES,
 } from '../src/constants/categories';
+import {
+  CATEGORY_ICON_CHOICES as ICON_CHOICES,
+  CATEGORY_COLOR_CHOICES as COLOR_CHOICES,
+  asFeather,
+} from '../src/constants/palette';
 import type { BudgetGroup } from '../src/db/queries/groups';
 import type { Category } from '../src/db/queries/categories';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-
-const ICON_CHOICES = [
-  'coffee', 'shopping-cart', 'home', 'zap', 'wifi', 'smartphone', 'droplet',
-  'truck', 'navigation', 'map', 'heart', 'activity', 'scissors', 'shopping-bag',
-  'tag', 'film', 'music', 'repeat', 'monitor', 'gift', 'book-open', 'briefcase',
-  'shield', 'trending-up', 'dollar-sign', 'credit-card', 'percent', 'box',
-  'file-text', 'package', 'star', 'more-horizontal',
-];
-
-const COLOR_CHOICES = [
-  '#F0A500', '#3ECF8E', '#7C6AF7', '#60A5FA', '#F472B6', '#FB923C',
-  '#F06060', '#A78BFA', '#34D399', '#22D3EE', '#FACC15', '#F43F5E',
-  '#10B981', '#818CF8', '#E879F9', '#94A3B8',
-];
 
 type KindTab = 'expense' | 'income';
 
@@ -208,7 +199,7 @@ export default function CategoriesScreen() {
                   {catsInSection.map((c, i) => (
                     <View key={c.id} style={[styles.row, i < catsInSection.length - 1 && styles.rowBorder]}>
                       <View style={[styles.iconDot, { backgroundColor: (c.color ?? colors.accent) + '22' }]}>
-                        <Feather name={(c.icon ?? 'tag') as any} size={16} color={c.color ?? colors.accent} />
+                        <Feather name={asFeather(c.icon, 'tag')} size={16} color={c.color ?? colors.accent} />
                       </View>
                       <Text style={styles.rowName}>{c.name}</Text>
                       <TouchableOpacity
@@ -246,7 +237,7 @@ export default function CategoriesScreen() {
                             accessibilityRole="button"
                             accessibilityLabel={ic}
                           >
-                            <Feather name={ic as any} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
+                            <Feather name={ic} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
                           </TouchableOpacity>
                         ))}
                       </View>

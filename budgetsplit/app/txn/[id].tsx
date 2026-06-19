@@ -127,7 +127,7 @@ export default function TxnDetailScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-            <Feather name={vis.icon as any} size={24} color={vis.color} />
+            <Feather name={vis.icon} size={24} color={vis.color} />
           </View>
           <Text style={styles.heroAmount}>{formatRupees(total)}</Text>
           <View style={styles.kindRow}>

@@ -12,9 +12,7 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { getGroupById, updateGroup } from '../../../src/db/queries/groups';
 import { haptic } from '../../../src/lib/haptics';
-
-const GROUP_ICONS = ['credit-card', 'home', 'users', 'map', 'coffee', 'shopping-cart', 'heart', 'zap', 'star', 'briefcase'];
-const GROUP_COLORS = ['#4F46E5', '#E53E3E', '#38A169', '#D69E2E', '#3182CE', '#553C9A', '#B83280', '#DD6B20', '#319795', '#2D3748'];
+import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../../src/constants/palette';
 
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -65,7 +63,7 @@ export default function EditGroupScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.previewRow}>
           <View style={[styles.previewIcon, { backgroundColor: color + '22' }]}>
-            <Feather name={icon as any} size={26} color={color} />
+            <Feather name={asFeather(icon, 'credit-card')} size={26} color={color} />
           </View>
           <Text style={styles.previewName} numberOfLines={1}>{name || 'Group name'}</Text>
         </View>
@@ -90,7 +88,7 @@ export default function EditGroupScreen() {
               accessibilityRole="button"
               accessibilityLabel={ic}
             >
-              <Feather name={ic as any} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
+              <Feather name={ic} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
             </TouchableOpacity>
           ))}
         </View>

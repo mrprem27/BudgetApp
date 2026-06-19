@@ -8,6 +8,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -200,7 +201,7 @@ export default function SavingsScreen() {
               return (
                 <View key={ins.text} style={[styles.insightRow, i > 0 && styles.insightBorder]}>
                   <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
-                    <Feather name={ins.icon as any} size={14} color={tint} />
+                    <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
                   </View>
                   <Text style={styles.insightText}>{ins.text}</Text>
                 </View>
@@ -225,7 +226,7 @@ export default function SavingsScreen() {
                 <PressableScale key={g.id} style={styles.goalCard} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityLabel={g.name}>
                   <View style={styles.goalTop}>
                     <View style={[styles.goalIcon, { backgroundColor: (g.color ?? colors.accent) + '22' }]}>
-                      <Feather name={(g.icon ?? 'target') as any} size={18} color={g.color ?? colors.accent} />
+                      <Feather name={asFeather(g.icon, 'target')} size={18} color={g.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.goalName} numberOfLines={1}>{g.name}</Text>
@@ -311,7 +312,7 @@ export default function SavingsScreen() {
           <View style={styles.iconGrid}>
             {GOAL_ICONS.map(ic => (
               <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
-                <Feather name={ic as any} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
+                <Feather name={asFeather(ic, 'tag')} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>

@@ -142,7 +142,7 @@ export default function BudgetEditorScreen() {
                 <View key={r.category} style={styles.rowCard}>
                   <View style={styles.rowTop}>
                     <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-                      <Feather name={vis.icon as any} size={16} color={vis.color} />
+                      <Feather name={vis.icon} size={16} color={vis.color} />
                     </View>
                     <Text style={styles.rowName} numberOfLines={1}>{r.category}</Text>
                     <View style={styles.amountWrap}>
