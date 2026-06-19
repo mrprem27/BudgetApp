@@ -16,7 +16,7 @@ import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGr
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons } from '../../src/db/queries/persons';
-import { getGlobalNet } from '../../src/db/queries/balances';
+import { getGlobalNet, getFriendBalances, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
 import { formatCompact } from '../../src/lib/money';
@@ -46,6 +46,7 @@ export default function GroupsScreen() {
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [loadError, setLoadError] = useState(false);
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
+  const [friends, setFriends] = useState<FriendBalance[]>([]);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useFocusEffect(useCallback(() => {
@@ -84,8 +85,10 @@ export default function GroupsScreen() {
           return { key: `${s.from}-${s.to}`, otherId, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
         });
         setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
+        setFriends(await getFriendBalances(db, me.id));
       } else {
         setBal(null);
+        setFriends([]);
       }
       setLoadError(false);
     } catch {
@@ -189,6 +192,7 @@ export default function GroupsScreen() {
 
   function renderBalances() {
     if (!bal || bal.rows.length === 0) return null;
+    const activeFriends = friends.filter(f => f.net !== 0);
     return (
       <View style={styles.balancesWrap}>
         <View style={styles.balHero}>
@@ -206,20 +210,35 @@ export default function GroupsScreen() {
             </View>
           </View>
         </View>
-        <Text style={styles.balListLabel}>Settle up · tap a person</Text>
-        <View style={styles.balList}>
-          {bal.rows.map((r, i) => (
-            <TouchableOpacity key={r.key} style={[styles.balRow, i < bal.rows.length - 1 && styles.balRowBorder]} onPress={() => router.push(`/settle?focus=${r.otherId}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${r.name}`}>
-              <MemberAvatar name={r.name} color={r.color} size={36} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.balName} numberOfLines={1}>{r.name}</Text>
-                <Text style={styles.balSub}>{r.label}</Text>
-              </View>
-              <Text style={[styles.balAmt, { color: r.label === 'you owe' ? colors.expense : colors.income }]}>{formatCompact(r.amount)}</Text>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))}
-        </View>
+
+        {/* People section */}
+        <Text style={styles.balListLabel}>
+          People{activeFriends.length > 0 ? ` · ${activeFriends.length} ${activeFriends.length === 1 ? 'friend' : 'friends'}` : ''}
+        </Text>
+        {activeFriends.length > 0 ? (
+          <View style={styles.balList}>
+            {activeFriends.map((f, i) => (
+              <TouchableOpacity
+                key={f.personId}
+                style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
+                onPress={() => router.push(`/settle?focus=${f.personId}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Settle with ${f.name}`}
+              >
+                <MemberAvatar name={f.name} color={f.avatarColor} size={36} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
+                  <Text style={styles.balSub}>{f.net > 0 ? 'owes you' : 'you owe'} · {f.groupCount} {f.groupCount === 1 ? 'group' : 'groups'}</Text>
+                </View>
+                <Text style={[styles.balAmt, { color: f.net > 0 ? colors.income : colors.expense }]}>{formatCompact(Math.abs(f.net))}</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.allSettled}>All settled up</Text>
+        )}
+
         <Text style={styles.balListLabel}>Your groups</Text>
       </View>
     );
@@ -360,6 +379,7 @@ const styles = StyleSheet.create({
   balName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   balSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   balAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
+  allSettled: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   swipeAction: { backgroundColor: colors.expense, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', width: 80, marginLeft: space.sm, gap: 4 },
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
   groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + 4, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },

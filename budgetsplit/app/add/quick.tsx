@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, Modal, Pressable, Switch,
-  KeyboardAvoidingView, Platform,
+  ScrollView, Alert, Modal, Pressable, Switch, Image,
+  KeyboardAvoidingView, Platform, ActionSheetIOS,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -28,6 +28,7 @@ import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { haptic } from '../../src/lib/haptics';
+import { pickAttachment } from '../../src/lib/attachment';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
@@ -64,6 +65,7 @@ export default function QuickAddScreen() {
   const [ratios, setRatios] = useState<Record<string, string>>({});
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
   const [recurEnabled, setRecurEnabled] = useState(false);
   const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
@@ -251,6 +253,7 @@ export default function QuickAddScreen() {
         date: txnDate,
         category: selectedCategory!.name,
         note: note.trim() || undefined,
+        attachmentUri: attachmentUri ?? undefined,
         recurFreq: recurEnabled ? recurFreq : undefined,
         recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
         recurEnd,
@@ -347,6 +350,38 @@ export default function QuickAddScreen() {
           accessibilityLabel="Note"
         />
 
+        {attachmentUri ? (
+          <View style={styles.attachRow}>
+            <Image source={{ uri: attachmentUri }} style={styles.attachThumb} />
+            <Text style={styles.attachName} numberOfLines={1}>Receipt attached</Text>
+            <TouchableOpacity onPress={() => setAttachmentUri(null)} hitSlop={10} accessibilityLabel="Remove attachment">
+              <Feather name="x" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                ActionSheetIOS.showActionSheetWithOptions(
+                  { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+                  async (i) => {
+                    if (i === 1) { const u = await pickAttachment('camera'); if (u) setAttachmentUri(u); }
+                    if (i === 2) { const u = await pickAttachment('gallery'); if (u) setAttachmentUri(u); }
+                  },
+                );
+              } else {
+                pickAttachment('camera').then(u => { if (u) setAttachmentUri(u); });
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Attach receipt"
+          >
+            <Feather name="paperclip" size={16} color={colors.accent} />
+            <Text style={styles.attachBtnText}>Attach receipt</Text>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.fieldLabel}>{recurEnabled ? 'Starts on' : 'Date'}</Text>
         <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
           <Feather name="calendar" size={16} color={colors.accent} />
@@ -421,48 +456,32 @@ export default function QuickAddScreen() {
         )}
 
         {kind === 'expense' && members.length > 1 && total > 0 && (
-          <TouchableOpacity
-            style={styles.splitBtn}
-            onPress={() => setShowPayers(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Who paid"
-          >
-            <Feather name="credit-card" size={16} color={colors.accent} />
-            <Text style={styles.splitBtnText}>
-              {payments.length === 1
-                ? `Paid by ${payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone'}`
-                : `${payments.length} people paid`}
-            </Text>
-            {paymentRemainder !== 0 && (
-              <Text style={styles.remainder}>
-                {paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left` : `${formatRupees(-paymentRemainder)} over`}
+          <View style={styles.sentenceRow}>
+            <Text style={styles.sentenceText}>Paid by</Text>
+            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowPayers(true)} accessibilityRole="button" accessibilityLabel="Who paid">
+              <Text style={styles.sentencePillText}>
+                {payments.length === 1
+                  ? payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone'
+                  : `${payments.length} people`}
               </Text>
-            )}
-          </TouchableOpacity>
+              <Feather name="chevron-down" size={14} color={colors.accent} />
+            </TouchableOpacity>
+            <Text style={styles.sentenceDot}>·</Text>
+            <Text style={styles.sentenceText}>split</Text>
+            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowSplit(true)} accessibilityRole="button" accessibilityLabel="Configure split">
+              <Text style={styles.sentencePillText}>
+                {splitType === 'equal' ? 'equally' : splitType}
+              </Text>
+              <Feather name="chevron-down" size={14} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
         )}
 
-        {kind === 'expense' && members.length > 1 && total > 0 && (
-          <TouchableOpacity
-            style={styles.splitBtn}
-            onPress={() => setShowSplit(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Configure split"
-          >
-            <Feather name="users" size={16} color={colors.accent} />
-            <Text style={styles.splitBtnText}>
-              {splitType === 'equal' ? 'Split equally' : `Split (${splitType})`}
-            </Text>
-            {remainder !== 0 && (
-              <Text style={styles.remainder}>
-                {remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over`}
-              </Text>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {kind === 'expense' && remainder !== 0 && total > 0 && (
+        {kind === 'expense' && total > 0 && (paymentRemainder !== 0 || remainder !== 0) && (
           <Text style={styles.remainderWarning}>
-            {remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over-assigned`}
+            {paymentRemainder !== 0
+              ? paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left to assign payers` : `${formatRupees(-paymentRemainder)} over-assigned to payers`
+              : remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over-assigned`}
           </Text>
         )}
 
@@ -654,11 +673,18 @@ const styles = StyleSheet.create({
   groupPickerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
+  attachBtnText: { ...type.body, color: colors.accent },
+  attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  attachThumb: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
+  attachName: { ...type.body, color: colors.textPrimary, flex: 1 },
   dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  splitBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  splitBtnText: { ...type.body, color: colors.accent, flex: 1 },
-  remainder: { ...type.label, color: colors.expense },
+  sentenceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs, padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  sentenceText: { ...type.body, color: colors.textSecondary },
+  sentencePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, minHeight: 32 },
+  sentencePillText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  sentenceDot: { ...type.body, color: colors.textMuted },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
   saveBtn: { marginTop: space.md },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },

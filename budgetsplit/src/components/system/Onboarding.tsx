@@ -342,7 +342,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <View style={styles.progressTrack}>
               <Animated.View style={[styles.progressFill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
             </View>
-            <TouchableOpacity onPress={() => setStage('name')} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }} accessibilityRole="button">
+            <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} accessibilityRole="button">
               <Text style={styles.skip}>Skip</Text>
             </TouchableOpacity>
           </View>

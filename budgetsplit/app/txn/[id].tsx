@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -43,6 +43,7 @@ export default function TxnDetailScreen() {
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [showAttachment, setShowAttachment] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
@@ -176,6 +177,18 @@ export default function TxnDetailScreen() {
           )}
         </View>
 
+        {/* Attachment */}
+        {!!txn.attachment_uri && (
+          <TouchableOpacity style={styles.attachCard} onPress={() => setShowAttachment(true)} accessibilityLabel="View receipt">
+            <Image source={{ uri: txn.attachment_uri }} style={styles.attachThumb} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.attachLabel}>Receipt attached</Text>
+              <Text style={styles.attachHint}>Tap to view full size</Text>
+            </View>
+            <Feather name="maximize-2" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
         {/* Split summary — who paid, then who owes — one card, not two forms. */}
         {!isPersonal && (txn.payments.length > 0 || txn.shares.length > 0) && (() => {
           const colorOf = (id: string) => members.find(m => m.id === id)?.avatar_color ?? colors.accent;
@@ -282,6 +295,24 @@ export default function TxnDetailScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {!!txn.attachment_uri && (
+        <Modal visible={showAttachment} transparent animationType="fade" onRequestClose={() => setShowAttachment(false)}>
+          <View style={styles.attachOverlay}>
+            <TouchableOpacity style={styles.attachClose} onPress={() => setShowAttachment(false)} hitSlop={10} accessibilityLabel="Close">
+              <Feather name="x" size={24} color="#fff" />
+            </TouchableOpacity>
+            <ScrollView
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              contentContainerStyle={styles.attachZoom}
+              centerContent
+            >
+              <Image source={{ uri: txn.attachment_uri }} style={styles.attachFull} resizeMode="contain" />
+            </ScrollView>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -344,4 +375,13 @@ const styles = StyleSheet.create({
   itemHint: { ...type.caption, color: colors.textMuted },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+
+  attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  attachThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
+  attachLabel: { ...type.body, color: colors.textPrimary },
+  attachHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  attachOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  attachClose: { position: 'absolute', top: 56, right: 20, zIndex: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  attachZoom: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  attachFull: { width: '100%', height: '100%' },
 });

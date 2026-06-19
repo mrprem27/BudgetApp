@@ -136,44 +136,49 @@ export default function BudgetEditorScreen() {
           </Text>
 
           {rows.length > 0 ? (
-            rows.map(r => {
+            <View style={styles.rowsCard}>
+            {rows.map((r, i) => {
               const vis = categoryVisual(r.category);
               return (
-                <View key={r.category} style={styles.rowCard}>
-                  <View style={styles.rowTop}>
-                    <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-                      <Feather name={vis.icon} size={16} color={vis.color} />
+                <View key={r.category}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <View style={styles.rowItem}>
+                    <View style={styles.rowTop}>
+                      <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+                        <Feather name={vis.icon} size={16} color={vis.color} />
+                      </View>
+                      <Text style={styles.rowName} numberOfLines={1}>{r.category}</Text>
+                      <View style={styles.amountWrap}>
+                        <Text style={styles.rupee}>₹</Text>
+                        <TextInput
+                          style={styles.amountInput}
+                          value={r.amount}
+                          onChangeText={v => setAmount(r.category, v)}
+                          keyboardType="decimal-pad"
+                          placeholder="0"
+                          placeholderTextColor={colors.textMuted}
+                          accessibilityLabel={`${r.category} budget`}
+                        />
+                      </View>
+                      <TouchableOpacity onPress={() => removeRow(r.category)} hitSlop={8} accessibilityLabel={`Remove ${r.category}`}>
+                        <Feather name="x" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.rowName} numberOfLines={1}>{r.category}</Text>
-                    <View style={styles.amountWrap}>
-                      <Text style={styles.rupee}>₹</Text>
-                      <TextInput
-                        style={styles.amountInput}
-                        value={r.amount}
-                        onChangeText={v => setAmount(r.category, v)}
-                        keyboardType="decimal-pad"
-                        placeholder="0"
-                        placeholderTextColor={colors.textMuted}
-                        accessibilityLabel={`${r.category} budget`}
-                      />
-                    </View>
-                    <TouchableOpacity onPress={() => removeRow(r.category)} hitSlop={8} accessibilityLabel={`Remove ${r.category}`}>
-                      <Feather name="x" size={18} color={colors.textMuted} />
+                    <TouchableOpacity
+                      style={styles.cadenceSelect}
+                      onPress={() => setCadenceSheetFor(r.category)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Cadence: ${CADENCES.find(c => c.key === r.cadence)?.label}`}
+                    >
+                      <Feather name="repeat" size={13} color={colors.textSecondary} />
+                      <Text style={styles.cadenceSelectText}>{CADENCES.find(c => c.key === r.cadence)?.label ?? 'Monthly'}</Text>
+                      <Feather name="chevron-down" size={14} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={styles.cadenceSelect}
-                    onPress={() => setCadenceSheetFor(r.category)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Cadence: ${CADENCES.find(c => c.key === r.cadence)?.label}`}
-                  >
-                    <Feather name="repeat" size={13} color={colors.textSecondary} />
-                    <Text style={styles.cadenceSelectText}>{CADENCES.find(c => c.key === r.cadence)?.label ?? 'Monthly'}</Text>
-                    <Feather name="chevron-down" size={14} color={colors.textMuted} />
-                  </TouchableOpacity>
                 </View>
               );
-            })
+            })}
+            </View>
           ) : (
             <EmptyState icon="target" title="No categories budgeted" body="Add a category below and choose how often its budget applies." />
           )}
@@ -223,7 +228,9 @@ const styles = StyleSheet.create({
   totalAmount: { ...type.amountXL, color: colors.accent },
   totalSub: { ...type.caption, color: colors.textMuted },
   explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
-  rowCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  rowsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  divider: { height: 1, backgroundColor: colors.border },
+  rowItem: { padding: space.md, gap: space.sm },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   rowName: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },

@@ -4,9 +4,10 @@ import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { AmountText } from '../ui/AmountText';
 import { colors, type, space } from '../tokens';
-import { formatRupees } from '../../lib/money';
+import { formatRupees, formatCompact } from '../../lib/money';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
+import type { Person } from '../../db/queries/persons';
 
 type Props = {
   txn: TxnWithSplits;
@@ -14,9 +15,11 @@ type Props = {
   onPress?: () => void;
   onDelete?: () => void;
   showDate?: boolean;
+  members?: Person[];
+  isPersonal?: boolean;
 };
 
-export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false }: Props) {
+export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false, members, isPersonal }: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
   const displayAmount = txn.kind === 'income'
     ? txn.payments.find(p => p.personId === myId)?.amount ?? 0
@@ -27,6 +30,25 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     : txn.kind === 'settlement'
     ? { icon: 'check-circle' as const, color: colors.settle }
     : categoryVisual(txn.category);
+
+  // Attribution line for shared groups
+  let attribution: { text: string; color: string } | null = null;
+  if (members && !isPersonal && txn.kind === 'expense') {
+    const myPaid = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
+    const lent = myPaid - myShare;
+    if (lent > 0) {
+      attribution = { text: `you lent ${formatCompact(lent)}`, color: colors.income };
+    } else if (lent < 0) {
+      attribution = { text: `you borrowed ${formatCompact(-lent)}`, color: colors.expense };
+    }
+  } else if (members && !isPersonal && txn.kind === 'settlement') {
+    const other = txn.payments[0]?.personId === myId
+      ? members.find(m => m.id === txn.shares[0]?.personId)
+      : members.find(m => m.id === txn.payments[0]?.personId);
+    if (other) attribution = { text: `settled with ${other.name}`, color: colors.settle };
+  }
+
+  const hasAttachment = !!txn.attachment_uri;
 
   return (
     <TouchableOpacity
@@ -43,6 +65,7 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
       <View style={styles.middle}>
         <Text style={styles.category} numberOfLines={1}>{txn.category}</Text>
         {txn.note ? <Text style={styles.note} numberOfLines={1}>{txn.note}</Text> : null}
+        {attribution && <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>{attribution.text}</Text>}
       </View>
       <View style={styles.right}>
         <AmountText
@@ -50,9 +73,12 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
           size="sm"
           forceColor={txn.kind === 'settlement' ? colors.settle : undefined}
         />
-        {showDate && Number.isFinite(txn.date) && (
-          <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
-        )}
+        <View style={styles.rightMeta}>
+          {hasAttachment && <Feather name="paperclip" size={12} color={colors.textMuted} />}
+          {showDate && Number.isFinite(txn.date) && (
+            <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -88,9 +114,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  attribution: {
+    ...type.caption,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 2,
+  },
   date: {
     ...type.caption,
     color: colors.textMuted,
+  },
+  rightMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginTop: 2,
   },
 });

@@ -148,12 +148,12 @@ Everything in §3 is shipped. All feedback items closed:
 - **1.3** ✅ Navigation flicker — donut fixed; broader flicker deferred to device *(F5)*
 - **1.4** **Ship v1** — PR `feat/design-adoption-bugfixes-toggles` → `main`. *(F8, Decision D1)*
 
-### Phase 2 — Premium pass (image-inspired)
-- **2.1 Faster add-expense (2-tap):** inline **"Paid by [you ▾] · split [equally ▾]"** sentence; sheets open only when a pill changes. → `add/quick.tsx`.
-- **2.2 Balance & activity clarity:** transaction rows show **"you lent / you borrowed ₹X"**; activity rows = colored thumbnail + sentence + colored amount; collapse noisy edits; group recurring-series changes. → `TransactionRow.tsx`, `group/[id].tsx`, `history.tsx`.
-- **2.3 Receipts done right (offline):** wire the dead `attachment_uri` — attach on add + detail → store via FileSystem → row thumbnail + full-screen zoom. No scanning claims. → `add/*`, `txn/[id].tsx`, `TransactionRow.tsx`.
-- **2.4 People reuse (D4):** type-to-create people picker (members + payers); `getFriendBalances`; **People segment on Groups** w/ one-tap settle; later friend profiles (email/mobile, merge dupes).
-- **2.5 Form-row sweep:** apply the cleaner pattern to member / settle / budget-editor rows.
+### Phase 2 — Premium pass (image-inspired) *(done)*
+- **2.1** ✅ Faster add-expense — inline "Paid by [you ▾] · split [equally ▾]" sentence. → `add/quick.tsx`.
+- **2.2** ✅ Balance & activity clarity — "you lent / you borrowed ₹X" attribution on transaction rows; paperclip indicator for attachments. → `TransactionRow.tsx`, `group/[id].tsx`.
+- **2.3** ✅ Receipts done right (offline) — `attachment_uri` wired: attach on add + detail view with pinch-to-zoom; `src/lib/attachment.ts` helper using expo-file-system Paths API. → `add/quick.tsx`, `txn/[id].tsx`.
+- **2.4** ✅ People reuse (D4) — `PersonPicker` component (type-to-create); `getFriendBalances` query; People section on Groups tab; PersonPicker wired into member management. → `PersonPicker.tsx`, `balances.ts`, `groups.tsx`, `members.tsx`.
+- **2.5** ✅ Form-row sweep — BalanceRow overlapping avatars + sentence; budget editor single card with dividers; member rows 52pt min height + swipe-to-remove. → `BalanceRow.tsx`, `budget.tsx`, `members.tsx`.
 
 ### Phase 3 — Depth features
 - **3.1 Budget entry redesign (F12):** collapsible parent-category sections w/ icons; faster entry (smart defaults / quick-set rows).

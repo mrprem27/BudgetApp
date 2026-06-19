@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { AmountText } from '../ui/AmountText';
 import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space, radius } from '../tokens';
@@ -16,14 +15,18 @@ type Props = {
 export function BalanceRow({ from, to, amount, onPaid }: Props) {
   return (
     <View style={styles.row}>
-      <View style={styles.persons}>
+      <View style={styles.avatars}>
         <MemberAvatar name={from.name} color={from.avatar_color} size={36} />
-        <Feather name="arrow-right" size={14} color={colors.textMuted} style={styles.arrow} />
-        <MemberAvatar name={to.name} color={to.avatar_color} size={36} />
-        <View style={styles.names}>
-          <Text style={styles.fromName} numberOfLines={1}>{from.name}</Text>
-          <Text style={styles.toName} numberOfLines={1}>pays {to.name}</Text>
+        <View style={styles.avatarOverlap}>
+          <MemberAvatar name={to.name} color={to.avatar_color} size={28} />
         </View>
+      </View>
+      <View style={styles.names}>
+        <Text style={styles.sentence} numberOfLines={1}>
+          <Text style={styles.bold}>{from.name}</Text>
+          {' owes '}
+          <Text style={styles.bold}>{to.name}</Text>
+        </Text>
       </View>
       <View style={styles.right}>
         <AmountText paise={amount} size="md" style={styles.amount} forceColor={colors.accent} />
@@ -49,27 +52,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: space.sm,
     minHeight: 56,
+    gap: space.sm,
   },
-  persons: {
+  avatars: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    width: 52,
   },
-  arrow: {
-    marginHorizontal: space.xs,
+  avatarOverlap: {
+    marginLeft: -12,
+    borderWidth: 2,
+    borderColor: colors.bgCard,
+    borderRadius: 16,
   },
   names: {
-    marginLeft: space.sm,
     flex: 1,
     flexShrink: 1,
   },
-  fromName: {
+  sentence: {
     ...type.body,
-    color: colors.textPrimary,
-  },
-  toName: {
-    ...type.label,
     color: colors.textSecondary,
+  },
+  bold: {
+    color: colors.textPrimary,
+    fontFamily: 'Inter_600SemiBold',
   },
   right: {
     alignItems: 'flex-end',

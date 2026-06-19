@@ -319,6 +319,8 @@ export default function GroupDetailScreen() {
               myId={me?.id ?? ''}
               onDelete={() => handleDelete(item.id)}
               onPress={() => handleEditTxn(item)}
+              members={members}
+              isPersonal={isPersonal}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
