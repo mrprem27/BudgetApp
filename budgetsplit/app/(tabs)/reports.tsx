@@ -14,7 +14,8 @@ import {
   startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { PieChart, BarChart, LineChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
+import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -78,7 +79,8 @@ export default function ReportsScreen() {
   const [yearExpense, setYearExpense] = useState(0);
   const [yearTopCat, setYearTopCat] = useState('—');
   const [biggestTxn, setBiggestTxn] = useState(0);
-  const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
+  const [pieData, setPieData] = useState<DonutSeg[]>([]);
+  const [pieTotal, setPieTotal] = useState(0);
   const [trendData, setTrendData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
   const [forecastActual, setForecastActual] = useState<Array<{ value: number; label?: string }>>([]);
   const [forecastProjected, setForecastProjected] = useState<Array<{ value: number; label?: string }>>([]);
@@ -155,10 +157,11 @@ export default function ReportsScreen() {
       }
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
       setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
-        value: val,
+        name,
+        paise: val,
         color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
-        text: name,
       })));
+      setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
 
       // Build 6-month spending trend bar chart
       const trendBars: Array<{ value: number; label: string; frontColor: string }> = [];
@@ -428,39 +431,17 @@ export default function ReportsScreen() {
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
         <>
-          {/* Spending by Category chart */}
+          {/* Spending by category — selected month, ALL groups (the dashboard
+              donut is current-period & personal; this is the cross-group analysis). */}
           {pieData.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.chartTitle}>Spending by category</Text>
-              <View style={styles.pieRow}>
-                <PieChart
-                  data={pieData}
-                  donut
-                  radius={65}
-                  innerRadius={42}
-                  innerCircleColor={colors.bgCard}
-                  focusOnPress
-                  centerLabelComponent={() => (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={styles.pieCenterNum}>{pieData.length}</Text>
-                      <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
-                    </View>
-                  )}
-                />
-                <View style={styles.legend}>
-                  {(() => {
-                    const total = pieData.reduce((s, d) => s + d.value, 0) || 1;
-                    return pieData.slice(0, 5).map((d, i) => (
-                      <View key={i} style={styles.legendItem}>
-                        <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-                        <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
-                        <Text style={styles.legendPct}>{Math.round((d.value / total) * 100)}%</Text>
-                        <Text style={styles.legendAmt}>{formatCompact(d.value)}</Text>
-                      </View>
-                    ));
-                  })()}
-                </View>
-              </View>
+              <Text style={styles.chartSub}>{format(month, 'MMMM yyyy')} · all groups</Text>
+              <CategoryDonut
+                data={pieData}
+                total={pieTotal}
+                onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+              />
             </View>
           )}
 
@@ -666,15 +647,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 20, color: colors.textPrimary },
-  pieCenterLabel: { ...type.caption, color: colors.textMuted },
-  legend: { flex: 1, gap: space.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
-  legendPct: { ...type.caption, color: colors.textMuted, width: 30, textAlign: 'right' },
-  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: colors.textPrimary, width: 60, textAlign: 'right' },
+  chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },
