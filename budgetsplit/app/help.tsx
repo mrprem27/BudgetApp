@@ -59,6 +59,22 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: 'Savings & Goals',
+    illustration: { icons: [
+      { name: 'target', bg: colors.accent + '22', color: colors.accent },
+      { name: 'dollar-sign', bg: colors.income + '22', color: colors.income },
+      { name: 'trending-up', bg: colors.settle + '22', color: colors.settle },
+    ] },
+    items: [
+      { icon: 'dollar-sign', color: colors.income, title: 'Cash available', body: 'The Money tab shows what you can actually spend right now: income received, minus expenses you’ve paid, minus what you’ve set aside in savings. One honest number at the top.' },
+      { icon: 'database', color: colors.accent, title: 'Savings pool', body: 'Money you set aside lives in a pool. Part of it is allocated to specific goals; the rest stays unallocated and ready to assign. Add to a goal and the app tops up the pool automatically if needed.' },
+      { icon: 'target', color: colors.settle, title: 'Goals', body: 'Create goals with a target amount, priority and icon. Each shows a progress bar, what’s left, and — if you set an auto-save amount — an estimated “done by” date. Add or withdraw funds anytime; withdrawing returns money to the pool.' },
+      { icon: 'refresh-cw', color: colors.healthAmber, title: 'Auto-save', body: 'Give a goal a fixed amount and cadence (e.g. ₹5,000 monthly) and the app moves it from your pool into the goal on schedule. Locked and higher-priority goals are protected if the pool runs short.' },
+      { icon: 'download-cloud', color: colors.accent, title: 'Auto-sweep leftover (optional)', body: 'Off by default. Turn it on in Settings → Features to automatically move each month’s unspent budget into your savings pool. It lowers “Cash available”, so it’s opt-in — and it never sweeps retroactively.' },
+      { icon: 'zap', color: colors.income, title: 'Savings insights', body: 'Gentle opportunity-cost nudges on the Money tab (e.g. how a recurring expense compares to a goal). Toggle them off anytime in Settings → Features → Savings insights.' },
+    ],
+  },
+  {
     title: 'Recurring Transactions',
     illustration: { icons: [
       { name: 'repeat', bg: colors.accent + '22', color: colors.accent },
@@ -66,8 +82,10 @@ const SECTIONS: Section[] = [
       { name: 'pause-circle', bg: colors.healthAmber + '22', color: colors.healthAmber },
     ] },
     items: [
-      { icon: 'repeat', color: colors.accent, title: 'Setting up', body: 'When adding an expense or income, tap "Set schedule". Choose a frequency (Daily, Weekly, Monthly) and set an end date. The transaction will repeat automatically \u2014 no need to re-enter each time.' },
-      { icon: 'pause-circle', color: colors.healthAmber, title: 'Pause, resume & end', body: 'Go to a group \u2192 Recurring tab to see all active schedules. You can Pause (temporarily stop), Resume, or End any recurring rule. Past instances remain in your history.' },
+      { icon: 'repeat', color: colors.accent, title: 'Setting up', body: 'When adding an expense or income, flip the "Repeat this" switch. Choose a frequency (Daily, Weekly, Monthly or a custom interval) and an optional end date. It then repeats automatically \u2014 no need to re-enter each time.' },
+      { icon: 'pause-circle', color: colors.healthAmber, title: 'Pause, resume & end', body: 'Open a group \u2192 Recurring tab to manage every schedule. Pause to temporarily stop generating new ones, Resume to continue, or End to stop for good. Past occurrences always stay in your history.' },
+      { icon: 'skip-forward', color: colors.settle, title: 'Skip one occurrence', body: 'Need to skip just the next instance (a month you didn\u2019t pay rent, say)? Tap Skip on the Recurring tab. Only that single occurrence is dropped \u2014 the schedule continues normally afterwards.' },
+      { icon: 'edit-2', color: colors.income, title: 'Edit going forward', body: 'Tap Edit to change the amount, category or frequency from the next occurrence onward. Past entries are never rewritten \u2014 the app keeps the old run intact and starts a new one with your changes.' },
       { icon: 'calendar', color: colors.settle, title: 'How they appear', body: 'Recurring transactions show up automatically in your transaction list and budget calculations for the relevant period. They\'re computed on-the-fly \u2014 nothing clutters your database.' },
     ],
   },
@@ -138,11 +156,11 @@ const SECTIONS: Section[] = [
       { name: 'clock', bg: colors.settle + '22', color: colors.settle },
     ] },
     items: [
-      { icon: 'camera', color: decor.orange, title: 'Scan receipts', body: 'Tap the camera icon in the top-right when adding an expense. Take a photo of your receipt \u2014 the app will try to extract the total amount automatically. Works offline with on-device processing.' },
+      { icon: 'camera', color: decor.orange, title: 'Scan a total', body: 'On an itemized bill you can snap a photo and the app reads the bill’s total on-device to prefill the amount. Full line-by-line receipt scanning (with AI) is planned for a future update.' },
       { icon: 'dollar-sign', color: colors.accent, title: 'Currency', body: 'Amounts are in Indian Rupees (₹). Multi-currency support is coming in a future update.' },
       { icon: 'map-pin', color: colors.coral, title: 'Map link', body: 'If location tagging is on, transactions show their location. Tap the location row in transaction detail to open Apple Maps at that exact spot.' },
       { icon: 'hash', color: colors.settle, title: 'Tags', body: 'Add #tags to any transaction (e.g. #trip, #wedding). Tags work across groups \u2014 filter by tag in Reports to see all related spending regardless of group.' },
-      { icon: 'paperclip', color: colors.income, title: 'Receipt photos', body: 'Attach a photo to any transaction. Tap the camera icon when adding an expense to snap or pick a receipt image for your records.' },
+      { icon: 'sliders', color: colors.accent, title: 'Turn features on/off', body: 'Settings → Features lets you toggle Dashboard / Budget / Savings insights, the spending forecast, itemized bills, recurring transactions, and the optional budget auto-sweep — so the app shows only what you use.' },
       { icon: 'edit', color: colors.settle, title: 'Notes', body: 'Add context to any transaction (e.g. "Rajesh\'s birthday dinner"). Notes are searchable in the transaction filter bar.' },
       { icon: 'calendar', color: colors.healthAmber, title: 'Any date', body: 'Transactions aren\'t limited to today. Set any past or future date. Backdate a forgotten expense or pre-record a known payment.' },
       { icon: 'clock', color: colors.accent, title: 'Audit history', body: 'Every change is recorded. Open any transaction to see its complete edit history: created, modified, deleted \u2014 with timestamps.' },
