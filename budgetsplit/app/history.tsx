@@ -9,6 +9,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatRupeesShort } from '../src/lib/money';
@@ -41,22 +42,29 @@ export default function HistoryScreen() {
   const [entries, setEntries] = useState<AuditLog[]>([]);
   const [action, setAction] = useState('all');
   const [range, setRange] = useState('all');
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [groupId, action, range]));
 
   async function load() {
-    const rows = await getAuditLog(db, {
-      groupId: groupId || undefined,
-      action: action === 'all' ? undefined : (action as AuditAction),
-      fromMs: rangeStart(range),
-    });
-    setEntries(rows);
+    try {
+      const rows = await getAuditLog(db, {
+        groupId: groupId || undefined,
+        action: action === 'all' ? undefined : (action as AuditAction),
+        fromMs: rangeStart(range),
+      });
+      setEntries(rows);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const sections = useMemo(() => {
     const map = new Map<string, AuditLog[]>();
     for (const e of entries) {
       const d = new Date(e.created_at);
+      if (!isFinite(d.getTime())) continue;
       const key = isSameDay(d, new Date()) ? 'Today' : format(d, 'dd MMM yyyy');
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
@@ -89,6 +97,9 @@ export default function HistoryScreen() {
         />
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <SectionList
         sections={sections}
         keyExtractor={e => e.id}
@@ -96,6 +107,8 @@ export default function HistoryScreen() {
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         renderItem={({ item }) => {
           const meta = ACTION_ICON[item.action] ?? ACTION_ICON.updated;
+          const itemDate = new Date(item.created_at);
+          const timeStr = isFinite(itemDate.getTime()) ? format(itemDate, 'h:mm a') : null;
           return (
             <View style={styles.row}>
               <View style={[styles.iconDot, { backgroundColor: meta.color + '22' }]}>
@@ -105,7 +118,7 @@ export default function HistoryScreen() {
                 <Text style={styles.summary}>{item.summary}</Text>
                 <Text style={styles.time}>
                   <Text style={{ color: meta.color }}>{meta.label}</Text>
-                  {`  ·  ${format(new Date(item.created_at), 'h:mm a')}`}
+                  {timeStr ? `  ·  ${timeStr}` : ''}
                 </Text>
               </View>
               {item.amount != null && (
@@ -119,6 +132,7 @@ export default function HistoryScreen() {
           <EmptyState icon="clock" title="No history yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
         }
       />
+      )}
     </View>
   );
 }

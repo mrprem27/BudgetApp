@@ -16,7 +16,9 @@ import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
+import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 
 export default function MembersScreen() {
@@ -31,27 +33,40 @@ export default function MembersScreen() {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(AVATAR_COLORS[0]);
+  const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => { load(); }, [groupId]));
+
+  if (!groupId) { router.back(); return null; }
 
   async function load() {
-    const [m, all, n] = await Promise.all([
-      getGroupMembers(db, groupId),
-      getAllPersons(db),
-      getGroupNet(db, groupId),
-    ]);
-    setMembers(m);
-    setAllPersons(all);
-    setNet(n);
+    try {
+      const [m, all, n] = await Promise.all([
+        getGroupMembers(db, groupId),
+        getAllPersons(db),
+        getGroupNet(db, groupId),
+      ]);
+      setMembers(m);
+      setAllPersons(all);
+      setNet(n);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const memberIds = new Set(members.map(m => m.id));
   const nonMembers = allPersons.filter(p => !memberIds.has(p.id));
 
   async function handleAdd(personId: string) {
-    await addMemberToGroup(db, groupId, personId);
-    setShowAdd(false);
-    await load();
+    try {
+      await addMemberToGroup(db, groupId, personId);
+      setShowAdd(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   async function handleCreateNew() {
@@ -64,11 +79,17 @@ export default function MembersScreen() {
       ]);
       return;
     }
-    const person = await insertPerson(db, newName.trim(), newColor);
-    await addMemberToGroup(db, groupId, person.id);
-    setShowNew(false);
-    setNewName('');
-    await load();
+    try {
+      const person = await insertPerson(db, newName.trim(), newColor);
+      await addMemberToGroup(db, groupId, person.id);
+      setShowNew(false);
+      setNewName('');
+      setNewColor(AVATAR_COLORS[0]);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   async function handleRemove(person: Person) {
@@ -86,8 +107,13 @@ export default function MembersScreen() {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          await removeMemberFromGroup(db, groupId, person.id);
-          await load();
+          try {
+            await removeMemberFromGroup(db, groupId, person.id);
+            await load();
+          } catch {
+            haptic.error();
+            Alert.alert('Something went wrong', 'Please try again.');
+          }
         },
       },
     ]);
@@ -102,6 +128,9 @@ export default function MembersScreen() {
         <Text style={styles.title}>Members</Text>
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={styles.list}>
         {members.length > 0 && (
           <View style={styles.membersCard}>
@@ -143,6 +172,7 @@ export default function MembersScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      )}
 
       {/* Add existing person sheet */}
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add to group">
@@ -225,10 +255,6 @@ const styles = StyleSheet.create({
   addBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
-  handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.sm },
-  sheetTitle: { ...type.subheading, color: colors.textPrimary },
   emptyText: { ...type.body, color: colors.textSecondary },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   personName: { ...type.body, color: colors.textPrimary },

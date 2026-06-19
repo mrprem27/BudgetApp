@@ -1,5 +1,6 @@
 import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,9 +17,12 @@ import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 import { FeatureFlagsProvider } from '../src/components/system/FeatureFlagsProvider';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
+import { ErrorState } from '../src/components/ui/ErrorState';
 
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_600SemiBold,
@@ -26,13 +30,35 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const db = await openDB();
-      await seedIfNeeded(db);
-      await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
-      setDbReady(true);
+      try {
+        const db = await openDB();
+        await seedIfNeeded(db);
+        await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
+        if (alive) { setDbReady(true); setDbError(false); }
+      } catch {
+        // Never strand the user on the splash — surface a retry instead.
+        if (alive) setDbError(true);
+      }
     })();
-  }, []);
+    return () => { alive = false; };
+  }, [attempt]);
+
+  if (dbError) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
+          <ErrorState
+            title="Couldn't start BudgetSplit"
+            body="We couldn't open your data. Please try again."
+            retryLabel="Retry"
+            onRetry={() => { setDbError(false); setAttempt(a => a + 1); }}
+          />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   if (!fontsLoaded || !dbReady) {
     return <BrandedLoader />;

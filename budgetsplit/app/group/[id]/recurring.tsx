@@ -9,6 +9,7 @@ import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import {
   getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
 } from '../../../src/db/queries/transactions';
@@ -34,6 +35,7 @@ function nextOccurrence(rule: Rule): Date | null {
   if (rule.recur_state !== 'active') return null;
   const interval = rule.recur_interval ?? 1;
   let cursor = new Date(rule.date);
+  if (!isFinite(cursor.getTime())) return null;
   const now = Date.now();
   let guard = 0;
   const adv = (d: Date) => {
@@ -53,23 +55,40 @@ export default function RecurringScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const [rules, setRules] = useState<Rule[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
+  if (!id) { router.back(); return null; }
+
   async function load() {
-    setRules(await getRecurringForGroup(db, id));
+    try {
+      setRules(await getRecurringForGroup(db, id));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   function amountOf(r: Rule): number {
     return r.payments.reduce((a, p) => a + p.amount, 0);
   }
 
-  async function onPause(r: Rule) { await pauseRecurring(db, r.id); haptic.warning(); await load(); }
-  async function onResume(r: Rule) { await resumeRecurring(db, r.id); haptic.success(); await load(); }
+  async function onPause(r: Rule) {
+    try { await pauseRecurring(db, r.id); haptic.warning(); await load(); }
+    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+  }
+  async function onResume(r: Rule) {
+    try { await resumeRecurring(db, r.id); haptic.success(); await load(); }
+    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+  }
   function onEnd(r: Rule) {
     Alert.alert('End this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'End', style: 'destructive', onPress: async () => { await endRecurring(db, r.id); haptic.warning(); await load(); } },
+      { text: 'End', style: 'destructive', onPress: async () => {
+        try { await endRecurring(db, r.id); haptic.warning(); await load(); }
+        catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+      } },
     ]);
   }
 
@@ -82,6 +101,9 @@ export default function RecurringScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Recurring" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {rules.length === 0 ? (
           <EmptyState
@@ -155,6 +177,7 @@ export default function RecurringScreen() {
           })
         )}
       </ScrollView>
+      )}
     </View>
   );
 }

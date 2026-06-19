@@ -8,6 +8,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { getTxnById, softDeleteTxn, getLineItems } from '../../src/db/queries/transactions';
 import { getGroupById } from '../../src/db/queries/groups';
@@ -41,26 +42,43 @@ export default function TxnDetailScreen() {
   const [isPersonal, setIsPersonal] = useState(false);
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
+  if (!id) { router.back(); return null; }
+
   async function load() {
-    const t = await getTxnById(db, id);
-    setTxn(t);
-    if (!t) return;
-    const [grp, mems, meRow, hist, li] = await Promise.all([
-      getGroupById(db, t.group_id),
-      getGroupMembers(db, t.group_id),
-      getMe(db),
-      getAuditLog(db, { entityId: id }),
-      t.entry_mode === 'itemized' ? getLineItems(db, id) : Promise.resolve([]),
-    ]);
-    setGroupName(grp?.name ?? '');
-    setIsPersonal(grp?.is_personal === 1);
-    setMembers(mems);
-    setMe(meRow);
-    setHistory(hist);
-    setItems(li);
+    try {
+      const t = await getTxnById(db, id);
+      setTxn(t);
+      if (!t) { setLoadError(false); return; }
+      const [grp, mems, meRow, hist, li] = await Promise.all([
+        getGroupById(db, t.group_id),
+        getGroupMembers(db, t.group_id),
+        getMe(db),
+        getAuditLog(db, { entityId: id }),
+        t.entry_mode === 'itemized' ? getLineItems(db, id) : Promise.resolve([]),
+      ]);
+      setGroupName(grp?.name ?? '');
+      setIsPersonal(grp?.is_personal === 1);
+      setMembers(mems);
+      setMe(meRow);
+      setHistory(hist);
+      setItems(li);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Transaction" onBack={() => router.back()} />
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      </View>
+    );
   }
 
   if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
@@ -81,7 +99,16 @@ export default function TxnDetailScreen() {
   function onDelete() {
     Alert.alert('Delete transaction?', undefined, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await softDeleteTxn(db, id); haptic.warning(); router.back(); } },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await softDeleteTxn(db, id);
+          haptic.warning();
+          router.back();
+        } catch {
+          haptic.error();
+          Alert.alert('Something went wrong', 'Please try again.');
+        }
+      } },
     ]);
   }
 
@@ -121,7 +148,7 @@ export default function TxnDetailScreen() {
 
         {/* Meta */}
         <View style={styles.card}>
-          <Row label="When" value={format(new Date(txn.date), 'dd MMM yyyy · h:mm a')} />
+          <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
           {/* "Added by" is shared-group attribution — meaningless in the solo ledger. */}
@@ -211,7 +238,7 @@ export default function TxnDetailScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.histText}>{h.summary}</Text>
-                  <Text style={styles.histTime}>{format(new Date(h.created_at), 'dd MMM yyyy · h:mm a')}</Text>
+                  <Text style={styles.histTime}>{(() => { const d = new Date(h.created_at); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()}</Text>
                 </View>
               </View>
             );

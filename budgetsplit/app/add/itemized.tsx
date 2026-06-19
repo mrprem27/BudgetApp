@@ -57,7 +57,7 @@ function computeAdjustedTotal(subtotal: number, adjustments: Adjustment[]): numb
 }
 
 function computeItemSubtotal(item: LineItemDraft): number {
-  const qty = parseInt(item.qty, 10) || 1;
+  const qty = Math.max(1, parseInt(item.qty, 10) || 1);
   const price = parseToPaise(item.unitPrice);
   return qty * price;
 }
@@ -170,17 +170,21 @@ export default function ItemizedScreen() {
   }
 
   async function handleScanReceipt() {
-    const result = await scanReceipt('camera');
-    if (!result) return;
-    if (result.amount) {
-      setItems(prev => [...prev, {
-        id: Math.random().toString(),
-        name: result.note || 'Scanned item',
-        qty: '1',
-        unitPrice: (result.amount! / 100).toString(),
-        assignedTo: [],
-      }]);
-      haptic.success();
+    try {
+      const result = await scanReceipt('camera');
+      if (!result) return;
+      if (result.amount) {
+        setItems(prev => [...prev, {
+          id: Math.random().toString(),
+          name: result.note || 'Scanned item',
+          qty: '1',
+          unitPrice: (result.amount! / 100).toString(),
+          assignedTo: [],
+        }]);
+        haptic.success();
+      }
+    } catch {
+      Alert.alert('Scan failed', "Couldn't read the receipt. Enter items manually.");
     }
   }
 

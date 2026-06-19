@@ -10,6 +10,7 @@ import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { getAllGroups } from '../src/db/queries/groups';
 import {
   getCategoriesForGroup, insertCategory, deleteCategory,
@@ -53,17 +54,23 @@ export default function CategoriesScreen() {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState(COLOR_CHOICES[0]);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { init(); }, []));
 
   async function init() {
-    const grps = await getAllGroups(db);
-    setGroups(grps);
-    const gid = groupId || grps[0]?.id || '';
-    setGroupId(gid);
-    if (gid) {
-      const cats = await getCategoriesForGroup(db, gid, kindTab);
-      setCategories(cats);
+    try {
+      const grps = await getAllGroups(db);
+      setGroups(grps);
+      const gid = groupId || grps[0]?.id || '';
+      setGroupId(gid);
+      if (gid) {
+        const cats = await getCategoriesForGroup(db, gid, kindTab);
+        setCategories(cats);
+      }
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     }
   }
 
@@ -91,13 +98,18 @@ export default function CategoriesScreen() {
   async function addCategory() {
     const trimmed = name.trim();
     if (!trimmed || !groupId) return;
-    const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab, addingToSection);
-    haptic.success();
-    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-    setName('');
-    setIcon('tag');
-    setColor(COLOR_CHOICES[0]);
-    setAddingToSection(null);
+    try {
+      const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab, addingToSection);
+      haptic.success();
+      setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setName('');
+      setIcon('tag');
+      setColor(COLOR_CHOICES[0]);
+      setAddingToSection(null);
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   function confirmDelete(cat: Category) {
@@ -109,9 +121,14 @@ export default function CategoriesScreen() {
         {
           text: 'Delete', style: 'destructive',
           onPress: async () => {
-            await deleteCategory(db, cat.id);
-            haptic.warning();
-            setCategories(prev => prev.filter(c => c.id !== cat.id));
+            try {
+              await deleteCategory(db, cat.id);
+              haptic.warning();
+              setCategories(prev => prev.filter(c => c.id !== cat.id));
+            } catch {
+              haptic.error();
+              Alert.alert('Something went wrong', 'Please try again.');
+            }
           },
         },
       ],
@@ -137,6 +154,9 @@ export default function CategoriesScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Categories" onBack={() => router.back()} />
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); init(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Kind tab: Expense / Income */}
@@ -278,6 +298,7 @@ export default function CategoriesScreen() {
         })}
       </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }

@@ -13,6 +13,7 @@ import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { CategoryPicker } from '../../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
@@ -52,20 +53,27 @@ export default function BudgetEditorScreen() {
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
   async function load() {
-    const [cats, budgets, dc] = await Promise.all([
-      getCategoriesByFrequency(db, id),
-      getCategoryBudgets(db, id),
-      AsyncStorage.getItem('default_cadence'),
-    ]);
-    if (dc) setDefaultCadence(dc as BudgetCadence);
-    setAllCategories(cats);
-    setRows(budgets.filter(b => b.amount > 0).map(b => ({
-      category: b.category, cadence: b.cadence, amount: (b.amount / 100).toString(),
-    })));
+    if (!id) return;
+    try {
+      const [cats, budgets, dc] = await Promise.all([
+        getCategoriesByFrequency(db, id),
+        getCategoryBudgets(db, id),
+        AsyncStorage.getItem('default_cadence'),
+      ]);
+      if (dc) setDefaultCadence(dc as BudgetCadence);
+      setAllCategories(cats);
+      setRows(budgets.filter(b => b.amount > 0).map(b => ({
+        category: b.category, cadence: b.cadence, amount: (b.amount / 100).toString(),
+      })));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const monthlyApprox = rows.reduce((s, r) => s + monthlyEquivalent(r.cadence, parseToPaise(r.amount)), 0);
@@ -99,6 +107,9 @@ export default function BudgetEditorScreen() {
       await setCategoryBudgets(db, id, entries);
       haptic.success();
       router.back();
+    } catch {
+      haptic.error();
+      Alert.alert("Couldn't save", 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -107,6 +118,9 @@ export default function BudgetEditorScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Set Budget" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.totalCard}>
@@ -178,6 +192,7 @@ export default function BudgetEditorScreen() {
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>
+      )}
 
       <SheetModal visible={!!cadenceSheetFor} onClose={() => setCadenceSheetFor(null)} title="How often?" scroll={false}>
         {CADENCES.map(c => {

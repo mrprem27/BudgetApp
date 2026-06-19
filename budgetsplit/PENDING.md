@@ -10,7 +10,23 @@ Last full audit: every component in `src/components/**` and every screen in
 
 ---
 
-## 0. Done this session (uncommitted unless noted)
+## 0. Done
+
+### Latest batch (P0 hardening)
+- **§1a async error handling — DONE** across `_layout` (app-init retry screen),
+  settle, history, edit, recurring, budget, savings/[id], members, txn,
+  categories, groups, income, reports, itemized (scan). Pattern: `loadError`
+  state + `<ErrorState onRetry>` for failed loads (header preserved); mutations
+  `try/catch` + `haptic.error()` + `Alert`. New `ErrorState` component.
+- **§1b route-id guards — DONE** (edit, recurring, budget, savings, members, txn).
+- **§1c date-fns `isFinite` guards — DONE** (history, recurring, txn, income).
+- **§1d split/qty guards — DONE** (quick.tsx percent/share NaN→0/1; itemized qty `Math.max(1,…)`).
+- **INR-only (§4.2) — DONE** (currency picker + setting hidden; copy updated).
+- **Rollover reword (§4.3) — DONE** (group detail, budget editor, budget.ts, help).
+- **savings/txn loading-vs-not-found — DONE** (skeleton vs ErrorState vs EmptyState).
+- **Dead code — DONE**: settle `getMe`, members sheet styles, groups `showArchived`.
+
+### Earlier this session
 
 - **Donut hardening** — `computeDonutWedges` (pure, tested) so tiny/zero/negative
   categories never vanish or emit NaN. *(committed `52f88f4`)*
@@ -28,58 +44,24 @@ Last full audit: every component in `src/components/**` and every screen in
 
 ---
 
-## 1. P0 — Robustness (the dominant theme)
+## 1. P0 — Robustness ✅ DONE (see §0)
 
-The audit found one pattern in **almost every screen**: async DB work with no
-error handling, so a failure either hangs the screen on a loader/blank or masks
-itself as an empty state. Plus route-param IDs used before they're validated.
-
-### 1a. Async DB calls with no try/catch
-Wrap each `load()` / mutation handler; on failure show an error state or
-`Alert` + `haptic.error()`. `app/add/quick.tsx` (`handleSave`) and
-`app/add/transfer.tsx` (`handleSave`) already model the correct pattern — copy it.
-
-- `app/_layout.tsx:28` — DB init (`openDB`/`seedIfNeeded`/`runSavingsMaintenance`); failure = **app stuck on loader forever**. Needs a retry screen.
-- `app/settle.tsx:29` `load()`, `:38` `markPaid` (settlement silently fails).
-- `app/group/[id]/edit.tsx:28` load, save path.
-- `app/history.tsx:47` `load()`.
-- `app/group/[id]/recurring.tsx:59` load, `:67` pause/resume/end writes.
-- `app/group/[id]/budget.tsx:58` load, `:93` `handleSave` (try/finally but **no catch**).
-- `app/savings/[id].tsx:52` load, `:68` `handleAdd`, `:80` `handleWithdraw` (multi-write — should also be one `db.withTransactionAsync`).
-- `app/group/[id]/members.tsx:37` load, `:51`/`:57`/`:88` add/create/remove writes.
-- `app/txn/[id].tsx:47` load, `:84` delete.
-- `app/categories.tsx:59` init, `:94` add, `:112` delete (optimistic state diverges from DB on failure).
-- `app/(tabs)/groups.tsx:56` `loadGroups`, `:101` `handleCreate` (navigates even if insert threw).
-- `app/add/income.tsx:61` mount load.
-- `app/add/itemized.tsx:172` **`handleScanReceipt`** — camera/OCR rejection unhandled.
-- `app/(tabs)/reports.tsx:88` `load()` (try/finally, **no catch**).
-
-### 1b. `useLocalSearchParams` id used before validation
-Typed `string` but undefined at runtime is possible; it flows straight into DB
-calls. Add `if (!id) { router.back(); return; }` (or an error state) before use.
-
-- `edit.tsx:19`, `recurring.tsx:52`, `budget.tsx:46`, `savings/[id].tsx:38`, `members.tsx:23`, `txn/[id].tsx:34`.
-
-### 1c. date-fns on raw DB timestamps (RangeError crash)
-`new Date(x)` → `format`/`addX`/`isSameDay` throws on a 0/NaN/garbage timestamp.
-Guard with `isValid` before formatting. Schema currently always writes a number,
-so risk is low — but it's a flagged rule and a hard crash if it ever happens.
-
-- `history.tsx:59,108` · `recurring.tsx:33` (`nextOccurrence` seed) · `txn/[id].tsx:124,214` · `income.tsx:198,238`.
-
-### 1d. Split / quantity math can take NaN or negatives
-- `add/quick.tsx:138,143` — `parseInt(percent/share)` → `NaN` propagates into `splitByPercent/Shares` and silently breaks the balance check. Coerce non-finite → 0 (shares → 1).
-- `add/itemized.tsx:60` — qty `"0"`→1 (ok) but `"-2"` → negative subtotal / negative bill total. Clamp `Math.max(1, …)`.
+The dominant theme — async DB work with no error handling, unchecked route-param
+IDs, unguarded date-fns, and NaN/negative split math — is resolved across all
+screens. `savings/[id]` add/withdraw should still ideally be wrapped in a single
+`db.withTransactionAsync` (currently sequential writes in a try/catch) — **minor
+P1 follow-up**.
 
 ---
 
-## 2. P1 — Bugs & rule violations
+## 2. P1 — Bugs & rule violations (remaining)
 
-- **Multi-currency `₹` literals in the split/payer UI** — `add/quick.tsx:474,588` (and the remainder/over displays at `:401,420,428,524`) hardcode `₹` and use `formatRupees` even when a non-INR currency is picked → **wrong symbol shown**. Thread the selected `currency` through `formatAmount(…, currency)` / `CURRENCY_MAP[currency].symbol`. (Static input *placeholders* like `₹0` elsewhere are acceptable.)
 - **SecondaryButton.tsx:18** — `fontSize` variable actually holds a `TextStyle` object and double-applies `type.button`/`type.label`; rename + apply size typography cleanly.
 - **groups.tsx:196** — every balance row opens the generic `/settle` and ignores the tapped person, though the a11y label says "Settle with {name}". Pass the person if `/settle` supports it.
-- **income.tsx:68** — editing a txn whose row is missing still runs `updateTxn` against a non-existent id; Alert + back instead.
 - **reports.tsx:147 vs 48/117/241/279** — charts filter `!is_deleted` but summary cards / year-in-review / CSV / PDF may not. Confirm `getTransactionsInRange` excludes soft-deleted; apply consistently.
+- **savings/[id]** — `handleAdd` (`addToPool` + `allocateToGoal`) is two writes; wrap in one `db.withTransactionAsync` so a mid-failure can't top up the pool without allocating.
+- ~~Multi-currency `₹` literals~~ — moot: INR-only for v1 (currency UI hidden).
+- ~~income.tsx missing-txn on edit~~ — DONE (Alert + back).
 
 ---
 

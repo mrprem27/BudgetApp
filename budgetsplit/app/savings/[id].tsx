@@ -10,10 +10,12 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution } from '../../src/lib/savings';
@@ -46,20 +48,59 @@ export default function GoalDetailScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [amt, setAmt] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
+  if (!id) { router.back(); return null; }
+
   async function load() {
-    const [g, savedMap, pool, hist] = await Promise.all([
-      getGoalById(db, id), getGoalSavedMap(db), getPoolSummary(db), getGoalHistory(db, id),
-    ]);
-    setGoal(g);
-    setSaved(savedMap[id] ?? 0);
-    setUnallocated(pool.unallocated);
-    setHistory(hist);
+    try {
+      const [g, savedMap, pool, hist] = await Promise.all([
+        getGoalById(db, id), getGoalSavedMap(db), getPoolSummary(db), getGoalHistory(db, id),
+      ]);
+      setGoal(g);
+      setSaved(savedMap[id] ?? 0);
+      setUnallocated(pool.unallocated);
+      setHistory(hist);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (!goal) return <View style={styles.container}><ScreenHeader title="Goal" onBack={() => router.back()} /></View>;
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <ErrorState onRetry={() => { setLoadError(false); setLoading(true); load(); }} />
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <View style={styles.scroll}>
+          <SkeletonCard height={180} />
+          <SkeletonCard height={120} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!goal) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <EmptyState icon="target" title="Goal not found" body="This savings goal may have been deleted." tint={colors.textSecondary} />
+      </View>
+    );
+  }
 
   const p = goalProgress(saved, goal.target);
   const est = estimatedCompletion(p.remaining, goal.allocation, goal.frequency);
@@ -68,22 +109,32 @@ export default function GoalDetailScreen() {
   async function handleAdd() {
     const a = parseToPaise(amt);
     if (a <= 0) return;
-    // Pull from the unallocated pool; top it up first if there isn't enough.
-    const shortfall = Math.max(0, a - unallocated);
-    if (shortfall > 0) await addToPool(db, shortfall);
-    await allocateToGoal(db, id, a);
-    haptic.success();
-    setAmt(''); setShowAdd(false);
-    await load();
+    try {
+      // Pull from the unallocated pool; top it up first if there isn't enough.
+      const shortfall = Math.max(0, a - unallocated);
+      if (shortfall > 0) await addToPool(db, shortfall);
+      await allocateToGoal(db, id, a);
+      haptic.success();
+      setAmt(''); setShowAdd(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   async function handleWithdraw() {
     const a = parseToPaise(amt);
     if (a <= 0) return;
-    await withdrawFromGoal(db, id, Math.min(a, saved));
-    haptic.warning();
-    setAmt(''); setShowWithdraw(false);
-    await load();
+    try {
+      await withdrawFromGoal(db, id, Math.min(a, saved));
+      haptic.warning();
+      setAmt(''); setShowWithdraw(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   async function toggleLock() {

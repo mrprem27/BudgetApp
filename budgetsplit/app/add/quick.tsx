@@ -134,12 +134,18 @@ export default function QuickAddScreen() {
       return selected.map(m => ({ personId: m.id, amount: parseToPaise(exactAmounts[m.id] ?? '0') }));
     }
     if (splitType === 'percent') {
-      const pcts = selected.map(m => parseInt(percentages[m.id] ?? '0', 10));
+      const pcts = selected.map(m => {
+        const p = parseInt(percentages[m.id] ?? '0', 10);
+        return Number.isFinite(p) ? p : 0;
+      });
       const amounts = splitByPercent(total, pcts);
       return selected.map((m, i) => ({ personId: m.id, amount: amounts[i] }));
     }
     if (splitType === 'shares') {
-      const rs = selected.map(m => parseInt(ratios[m.id] ?? '1', 10));
+      const rs = selected.map(m => {
+        const r = parseInt(ratios[m.id] ?? '1', 10);
+        return Number.isFinite(r) ? r : 1;
+      });
       const amounts = splitByShares(total, rs);
       return selected.map((m, i) => ({ personId: m.id, amount: amounts[i] }));
     }

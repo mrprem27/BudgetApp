@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { getGroupById, updateGroup } from '../../../src/db/queries/groups';
 import { haptic } from '../../../src/lib/haptics';
@@ -24,13 +25,23 @@ export default function EditGroupScreen() {
   const [icon, setIcon] = useState('credit-card');
   const [color, setColor] = useState(GROUP_COLORS[0]);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  async function load() {
+    if (!id) return;
+    try {
       const g = await getGroupById(db, id);
-      if (g) { setName(g.name); setIcon(g.icon); setColor(g.color); }
-    })();
-  }, []);
+      if (!g) { Alert.alert('Group not found', 'This group may have been deleted.'); router.back(); return; }
+      setName(g.name); setIcon(g.icon); setColor(g.color);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  }
+
+  useEffect(() => { load(); }, [id]);
+
+  if (!id) { router.back(); return null; }
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -47,6 +58,9 @@ export default function EditGroupScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Edit Group" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.previewRow}>
@@ -98,6 +112,7 @@ export default function EditGroupScreen() {
         <PrimaryButton label="Save Changes" onPress={handleSave} disabled={!name.trim()} loading={saving} />
       </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }

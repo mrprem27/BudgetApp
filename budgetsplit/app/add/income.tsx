@@ -21,6 +21,7 @@ import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
@@ -57,9 +58,12 @@ export default function AddIncomeScreen() {
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    try {
       const [grps, meRow] = await Promise.all([getAllGroups(db), getMe(db)]);
       // Income is your own money → personal ledger only (never shared groups).
       const personal = grps.filter(g => g.is_personal === 1);
@@ -74,14 +78,21 @@ export default function AddIncomeScreen() {
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
           setDate(txn.date);
+          setLoadError(false);
           return;
         }
+        Alert.alert('Not found', "This income entry no longer exists.");
+        router.back();
+        return;
       }
       const gid = (paramGroupId && personal.some(g => g.id === paramGroupId)) ? paramGroupId : personal[0]?.id ?? '';
       setSelectedGroupId(gid);
       if (gid) await loadCats(gid);
-    })();
-  }, []);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  }
 
   async function loadCats(gid: string, preselect?: string) {
     const cats = await getCategoriesByFrequency(db, gid, 'income');
@@ -131,6 +142,9 @@ export default function AddIncomeScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Amount */}
@@ -195,7 +209,9 @@ export default function AddIncomeScreen() {
           <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button">
             <Feather name="calendar" size={16} color={colors.income} />
             <Text style={styles.dateText}>
-              {isSameDay(new Date(date), new Date()) ? 'Today' : format(new Date(date), 'EEE, dd MMM yyyy')}
+              {Number.isFinite(date)
+                ? (isSameDay(new Date(date), new Date()) ? 'Today' : format(new Date(date), 'EEE, dd MMM yyyy'))
+                : 'Pick a date'}
             </Text>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
@@ -235,7 +251,7 @@ export default function AddIncomeScreen() {
                   <View style={styles.endRow}>
                     <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
                       <Feather name="calendar" size={15} color={colors.income} />
-                      <Text style={styles.dateText}>{recurEndMs ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
+                      <Text style={styles.dateText}>{recurEndMs && Number.isFinite(recurEndMs) ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
                     </TouchableOpacity>
                     {recurEndMs != null && (
                       <TouchableOpacity style={styles.endNeverBtn} onPress={() => setRecurEndMs(null)} accessibilityRole="button">
@@ -251,6 +267,7 @@ export default function AddIncomeScreen() {
           <PrimaryButton label={isEditing ? 'Save Income' : 'Add Income'} onPress={handleSave} disabled={!canSave} loading={saving} style={{ marginTop: space.md }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
 
       <DatePickerSheet visible={showDate} value={date} onClose={() => setShowDate(false)} onChange={setDate} />
       <DatePickerSheet visible={showEndDate} value={recurEndMs ?? Date.now()} onClose={() => setShowEndDate(false)} onChange={(ms) => { setRecurEndMs(ms); setShowEndDate(false); }} />

@@ -29,6 +29,7 @@ import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { categoryVisual } from '../../src/constants/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
@@ -82,6 +83,7 @@ export default function ReportsScreen() {
   const [forecastProjected, setForecastProjected] = useState<Array<{ value: number; label?: string }>>([]);
   const [projectedTotal, setProjectedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
@@ -89,6 +91,7 @@ export default function ReportsScreen() {
     setLoading(true);
     const startedAt = Date.now();
     try {
+      setLoadError(false);
       const grps = await getAllGroups(db);
       setGroups(grps);
 
@@ -219,6 +222,8 @@ export default function ReportsScreen() {
         setForecastProjected([]);
         setProjectedTotal(0);
       }
+    } catch {
+      setLoadError(true);
     } finally {
       // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
@@ -415,6 +420,8 @@ export default function ReportsScreen() {
           <SkeletonCard height={120} />
           <SkeletonCard height={150} />
         </View>
+      ) : loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
         <>
           {/* Spending by Category chart */}

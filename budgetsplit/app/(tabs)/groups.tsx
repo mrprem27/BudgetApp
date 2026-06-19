@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, ScrollView, Animated,
+  TextInput, ScrollView, Animated, Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -27,6 +27,7 @@ import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
@@ -44,8 +45,8 @@ export default function GroupsScreen() {
   const [color, setColor] = useState('#4F46E5');
   const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
-  const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+  const [loadError, setLoadError] = useState(false);
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
@@ -54,32 +55,37 @@ export default function GroupsScreen() {
   }, []));
 
   async function loadGroups() {
-    const grps = await getAllGroups(db);
-    setGroups(grps);
-    setArchived(await getArchivedGroups(db));
-    const h: typeof health = {};
-    for (const g of grps) {
-      const usage = await getBudgetUsage(db, g, 'monthly');
-      const mems = await getGroupMembers(db, g.id);
-      h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
-    }
-    setHealth(h);
+    try {
+      const grps = await getAllGroups(db);
+      setGroups(grps);
+      setArchived(await getArchivedGroups(db));
+      const h: typeof health = {};
+      for (const g of grps) {
+        const usage = await getBudgetUsage(db, g, 'monthly');
+        const mems = await getGroupMembers(db, g.id);
+        h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
+      }
+      setHealth(h);
 
-    // Balances hero — who-owes-whom across all shared groups, from my view.
-    const [net, persons, me] = await Promise.all([getGlobalNet(db), getAllPersons(db), getMe(db)]);
-    if (me) {
-      const pmap = new Map(persons.map(p => [p.id, p]));
-      const mine = simplify(net).filter(s => s.from === me.id || s.to === me.id);
-      let youOwe = 0, youAreOwed = 0;
-      const rows = mine.map(s => {
-        const iPay = s.from === me.id;
-        if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
-        const other = pmap.get(iPay ? s.to : s.from);
-        return { key: `${s.from}-${s.to}`, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
-      });
-      setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
-    } else {
-      setBal(null);
+      // Balances hero — who-owes-whom across all shared groups, from my view.
+      const [net, persons, me] = await Promise.all([getGlobalNet(db), getAllPersons(db), getMe(db)]);
+      if (me) {
+        const pmap = new Map(persons.map(p => [p.id, p]));
+        const mine = simplify(net).filter(s => s.from === me.id || s.to === me.id);
+        let youOwe = 0, youAreOwed = 0;
+        const rows = mine.map(s => {
+          const iPay = s.from === me.id;
+          if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
+          const other = pmap.get(iPay ? s.to : s.from);
+          return { key: `${s.from}-${s.to}`, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
+        });
+        setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
+      } else {
+        setBal(null);
+      }
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     }
   }
 
@@ -100,14 +106,19 @@ export default function GroupsScreen() {
 
   async function handleCreate() {
     if (!name.trim()) return;
-    const me = await getMe(db);
-    if (!me) return;
-    const group = await insertGroup(db, name.trim(), icon, color, [me.id]);
-    haptic.success();
-    setShowCreate(false);
-    setName('');
-    await loadGroups();
-    router.push(`/group/${group.id}`);
+    try {
+      const me = await getMe(db);
+      if (!me) return;
+      const group = await insertGroup(db, name.trim(), icon, color, [me.id]);
+      haptic.success();
+      setShowCreate(false);
+      setName('');
+      await loadGroups();
+      router.push(`/group/${group.id}`);
+    } catch {
+      haptic.error();
+      Alert.alert('Error', 'Could not create the group. Try again.');
+    }
   }
 
   function renderGroup({ item, index }: { item: BudgetGroup; index: number }) {
@@ -215,6 +226,10 @@ export default function GroupsScreen() {
         <Text style={styles.title}>Groups</Text>
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
+      ) : (
+        <>
       {/* Filter chips */}
       {archived.length > 0 && (
         <View style={styles.filterRow}>
@@ -264,6 +279,8 @@ export default function GroupsScreen() {
           )
         }
       />
+        </>
+      )}
 
       <FAB
         actions={[
