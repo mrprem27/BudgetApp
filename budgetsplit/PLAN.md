@@ -68,8 +68,14 @@ nothing looks like a 2010 form.
 | F6 | **Zero/empty states** — for a 0/empty day show a clean dash/line, not a number with icon-animation/emoji | ⏳ Pending |
 | F7 | **Settings UI** — sparse Preferences card + long flat Features list; regroup, fix rhythm, 44pt rows | ⏳ Pending |
 | F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
+| F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ⏳ Pending |
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
+
+**Working mode:** execute this queue + §6 roadmap **autonomously, one phase at a
+time, gate + commit each**. New user feedback is appended here and the work
+continues without pausing to ask. Standing rule: apply the Splitwise-screenshot
+taste throughout.
 
 ---
 

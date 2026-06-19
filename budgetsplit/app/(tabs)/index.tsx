@@ -22,7 +22,6 @@ import { getPoolSummary, getGoals } from '../../src/db/queries/savings';
 import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
-import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { FAB, type Action } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
@@ -92,7 +91,6 @@ export default function DashboardScreen() {
   const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
   const [meInfo, setMeInfo] = useState<{ name: string; color: string } | null>(null);
-  const [recent, setRecent] = useState<TxnWithSplits[]>([]);
   const groups = useStore(s => s.groups);
 
   useEffect(() => {
@@ -177,10 +175,6 @@ export default function DashboardScreen() {
     // Savings pool snapshot for the dashboard card.
     const [savePool, saveGoals] = await Promise.all([getPoolSummary(db), getGoals(db)]);
     setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
-
-    // Recent activity — latest 3 transactions across all groups.
-    const recentTxns = await getTransactionsInRange(db, null, Date.now() - 60 * 86400000, Date.now());
-    setRecent(recentTxns.filter(t => !t.is_deleted).sort((a, b) => b.date - a.date).slice(0, 3));
 
     // Build donut data (spending by category, sorted largest first)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -380,10 +374,10 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Insights — top cross-group analytics, tap to manage that group's budget */}
+        {/* Top Insights — top cross-group analytics, tap to manage that group's budget */}
         {flags.dashboardInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
-            <Text style={styles.chartTitle}>Insights</Text>
+            <Text style={styles.chartTitle}>Top insights</Text>
             <View style={{ gap: space.sm }}>
               {insights.map(ins => {
                 const tint = ins.severity === 'warn' ? colors.expense
@@ -407,21 +401,6 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          </View>
-        )}
-
-        {/* Recent activity */}
-        {recent.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent</Text>
-            <View style={styles.recentCard}>
-              {recent.map((t, i) => (
-                <View key={t.id}>
-                  {i > 0 && <View style={styles.recentDivider} />}
-                  <TransactionRow txn={t} myId={meId} onPress={() => router.push(`/txn/${t.id}`)} />
-                </View>
-              ))}
             </View>
           </View>
         )}
@@ -529,8 +508,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
   groupList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  recentCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', paddingHorizontal: space.md, ...shadow.sm },
-  recentDivider: { height: 1, backgroundColor: colors.border },
   groupListItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingVertical: space.md, gap: space.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
