@@ -52,6 +52,27 @@ nothing looks like a 2010 form.
 
 ---
 
+## 3.5 Live feedback queue (active — newest user feedback)
+
+> Standing rule: **take inspiration from the provided Splitwise reference
+> screenshots** (add-expense inline sentence, owes-tree, "you lent/you borrowed",
+> colored activity, clean detail). Apply that taste to everything below.
+
+| # | Item | Status |
+|---|---|---|
+| F1 | **Balances wrong on dashboard** — income leaked into net (payer rows counted) | ✅ Fixed (`balances.ts`: exclude `kind='income'`) |
+| F2 | **Transaction detail** felt like a stacked from/to form + clunky history | ✅ Fixed (paid→owes summary + history timeline) |
+| F3 | **Itemized scan** only read a total (no AI/offline) | ✅ Hidden (Decision D2/D3) |
+| F4 | **Top Insights on the dashboard instead of Recents** | ⏳ In progress |
+| F5 | **Flicker on navigation** — content pops in/out when focusing/navigating (chart-defer + focus reload) | ⏳ Pending |
+| F6 | **Zero/empty states** — for a 0/empty day show a clean dash/line, not a number with icon-animation/emoji | ⏳ Pending |
+| F7 | **Settings UI** — sparse Preferences card + long flat Features list; regroup, fix rhythm, 44pt rows | ⏳ Pending |
+| F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
+
+(These feed the v2-P0 "premium pass" workstreams in §6.)
+
+---
+
 ## 4. Decisions log (locked)
 
 - **D1 — Ship current branch as v1** (PR to `main`); everything below is v2/next.
