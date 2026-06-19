@@ -244,17 +244,44 @@ scoped), fields changed (before→after), scope, timestamp, actor. The existing
 `audit` log is the home; extend its entity types for `recur_series` /
 `recur_occurrence`.
 
-### 6.10 Open decision points (resolve before coding)
-1. Adopt model **A + B** (exceptions + series-split)? (recommended)
-2. Do single-occurrence edits **persist** that occurrence (materialize-on-touch),
-   or keep an `exceptions` table separate from `txn`?
-3. Default scope per field group — confirm 6.5 defaults.
-4. Settlement conflict: hard-block vs. adjustment-entry — pick one.
-5. Is *entire series* (history-rewriting) edit even allowed, or only forward
-   corrections? (Leaning: disallow true history rewrites; corrections only.)
-6. Scope of v1: ship **skip-one + this-and-future split + end** first; defer
-   single-occurrence value exceptions if it's too much for v1.
+### 6.10 Decisions (locked Jun 2026)
+1. **Model = A + B (exceptions + series-split).** ✅ Decided. Occurrences stay
+   virtual until touched; "this & future" ends the current rule and starts a new
+   one. History never mutates.
+2. **Persistence = materialize-on-touch (recommended resolution).** When an
+   occurrence is edited/skipped/settled, persist it as a real `txn` row linked to
+   the series via `parent_id` + `recur_override_date` (reuse the existing unused
+   column) and a `recur_kind`/marker of `detached|skipped`. Virtual generation
+   skips any date that has a persisted override/skip. → reuses the `txn` table and
+   existing rendering; no separate exceptions table. *(Confirm when building.)*
+3. **Default scope per field (recommended resolution):** value-shaped fields
+   (amount, note, split, payers, category) default to **this occurrence**;
+   schedule-shaped fields (frequency, interval, end) default to **this & future**.
+   Since single-occurrence value edits are **deferred from v1** (see 6), v1's only
+   editable path is "this & future" on schedule fields. *(Confirm when building.)*
+4. **Settlement / referenced conflict = adjustment-entry (recommended
+   resolution, follows from #5).** Never mutate a settled/closed-report occurrence
+   in place; offer a new dated adjustment entry that preserves the original.
+   *(Confirm when building.)*
+5. **History rewrites = forward corrections only.** ✅ Decided. Past occurrences
+   are immutable; the "entire series incl. past" rewrite is **not** offered. Fixes
+   to history are new dated adjustments.
+6. **v1 scope = skip-one + this-and-future split + end.** ✅ Decided.
+   Single-occurrence *value* exceptions deferred to a later pass.
 
-Until these are decided, the current blind-overwrite "edit" should arguably be
-**reduced to safe ops only** (pause/resume/end + skip-one) and the full edit
-entry point hidden, to avoid silent history corruption. → **decision needed.**
+**Interim safety:** ✅ DONE — the blind-overwrite "Edit" entry point is hidden on
+the Recurring screen (`app/group/[id]/recurring.tsx`); only Pause / Resume / End
+remain until the redesign ships. Skip-one is part of v1 and will be added with it.
+
+### 6.11 Build outline (when greenlit)
+1. Schema: add `parent_id` (series link) + reuse `recur_override_date`; a
+   `skipped` marker (column or `recur_state` value on the override row).
+2. `recurrence.ts`: skip dates that have a persisted override/skip when
+   materializing; resolve overrides to their stored values.
+3. Series-split helper: end current rule (`recur_end = splitDate - ε`), clone a
+   new rule from `splitDate` with edited values.
+4. Skip-one: persist a `skipped` override for `(series, date)`.
+5. UI: scope picker (this & future / skip this one / end) on the Recurring screen;
+   re-introduce an edit affordance wired to these safe ops only.
+6. Verify budgets/reports/balances read the same materialization + overrides;
+   add audit entries for each op.

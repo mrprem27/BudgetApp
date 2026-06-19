@@ -151,10 +151,9 @@ export default function RecurringScreen() {
 
                 {r.recur_state !== 'ended' && (
                   <View style={styles.actions}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => router.push(`/add/${r.kind === 'income' ? 'income' : 'quick'}?editId=${r.id}&groupId=${id}`)} accessibilityRole="button">
-                      <Feather name="edit-2" size={14} color={colors.accent} />
-                      <Text style={[styles.actionText, { color: colors.accent }]}>Edit</Text>
-                    </TouchableOpacity>
+                    {/* Full edit intentionally hidden: editing the template row
+                        rewrites all past + future occurrences (see PENDING §6).
+                        Only safe ops until the exceptions/series-split redesign. */}
                     {r.recur_state === 'active' ? (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onPause(r)} accessibilityRole="button">
                         <Feather name="pause" size={14} color={colors.healthAmber} />
