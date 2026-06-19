@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, Modal, Pressable,
+  ScrollView, Alert, Modal, Pressable, Switch,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -355,20 +355,21 @@ export default function QuickAddScreen() {
         </TouchableOpacity>
 
         {!isEditing && flags.recurring && (
-        <TouchableOpacity
-          style={styles.scheduleBtn}
-          onPress={() => setRecurEnabled(!recurEnabled)}
-          accessibilityRole="button"
-          accessibilityLabel="Set recurring schedule"
-        >
+        <View style={styles.scheduleRow}>
           <View style={styles.scheduleBtnLeft}>
             <Feather name="repeat" size={16} color={recurEnabled ? colors.accent : colors.textSecondary} />
             <Text style={[styles.fieldLabel, recurEnabled && { color: colors.accent }]}>
-              {recurEnabled ? `Repeats ${recurFreq}` : 'Set schedule'}
+              {recurEnabled ? `Repeats ${recurFreq}` : 'Repeat this'}
             </Text>
           </View>
-          <Feather name={recurEnabled ? 'x' : 'chevron-right'} size={16} color={recurEnabled ? colors.textMuted : colors.textMuted} />
-        </TouchableOpacity>
+          <Switch
+            value={recurEnabled}
+            onValueChange={setRecurEnabled}
+            trackColor={{ true: colors.accent, false: colors.bgMuted }}
+            thumbColor={colors.textPrimary}
+            accessibilityLabel="Repeat on a schedule"
+          />
+        </View>
         )}
 
         {!isEditing && recurEnabled && (
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   remainder: { ...type.label, color: colors.expense },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
   saveBtn: { marginTop: space.md },
-  scheduleBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
   scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -237,20 +237,21 @@ export default function AddIncomeScreen() {
 
           {!isEditing && flags.recurring && (
             <>
-              <TouchableOpacity
-                style={styles.scheduleBtn}
-                onPress={() => setRecurOn(!recurOn)}
-                accessibilityRole="button"
-                accessibilityLabel="Set recurring schedule"
-              >
+              <View style={styles.scheduleRow}>
                 <View style={styles.scheduleBtnLeft}>
                   <Feather name="repeat" size={16} color={recurOn ? colors.income : colors.textSecondary} />
                   <Text style={[styles.fieldLabel, recurOn && { color: colors.income }]}>
-                    {recurOn ? `Repeats ${freq}` : 'Set schedule (e.g. salary)'}
+                    {recurOn ? `Repeats ${freq}` : 'Repeat this (e.g. salary)'}
                   </Text>
                 </View>
-                <Feather name={recurOn ? 'x' : 'chevron-right'} size={16} color={colors.textMuted} />
-              </TouchableOpacity>
+                <Switch
+                  value={recurOn}
+                  onValueChange={setRecurOn}
+                  trackColor={{ true: colors.income, false: colors.bgMuted }}
+                  thumbColor={colors.textPrimary}
+                  accessibilityLabel="Repeat on a schedule"
+                />
+              </View>
               {recurOn && (
                 <View style={styles.recurOptions}>
                   <View style={styles.freqRow}>
@@ -323,7 +324,7 @@ const styles = StyleSheet.create({
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  scheduleBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
   scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
