@@ -226,6 +226,8 @@ export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean
 }
 
 const SWEEP_KEY = 'savings_last_sweep';
+/** Opt-in flag for the budget-leftover auto-sweep (off by default). */
+export const AUTO_SWEEP_KEY = 'auto_sweep_enabled';
 
 /**
  * Sweep completed-month budget leftover into the Savings Pool (replaces
@@ -276,13 +278,16 @@ export async function reconcileAllocations(db: SQLite.SQLiteDatabase): Promise<n
 }
 
 /**
- * Run savings automation: scheduled per-goal funding → reconcile.
- * NOTE: the budget-leftover auto-sweep (`runLeftoverSweep`) is intentionally
- * NOT wired — under the cash model it would silently lower "Cash available".
- * It's kept available pending a decision on how leftover savings should work.
+ * Run savings automation: scheduled per-goal funding → (opt-in) leftover sweep →
+ * reconcile. The budget-leftover sweep moves unspent budget into the pool, which
+ * lowers "Cash available", so it is OFF by default and runs only when the user
+ * has enabled it in Settings (`AUTO_SWEEP_KEY`).
  */
 export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<void> {
   await runAutoFunding(db).catch(() => {});
+  if ((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true') {
+    await runLeftoverSweep(db).catch(() => {});
+  }
   await reconcileAllocations(db).catch(() => {});
 }
 

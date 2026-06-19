@@ -13,6 +13,7 @@ import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, updatePersonName } from '../../src/db/queries/persons';
+import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
@@ -37,6 +38,7 @@ export default function SettingsScreen() {
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
   const [saveLocation, setSaveLocation] = useState(false);
+  const [autoSweep, setAutoSweep] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
@@ -47,6 +49,7 @@ export default function SettingsScreen() {
       setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
       setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
+      setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
@@ -128,6 +131,9 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <ToggleRow icon="refresh-cw" label="Recurring transactions" value={flags.recurring} onValueChange={(v) => setFlag('recurring', v)} />
         <Text style={styles.featureCaption}>Auto-repeat schedules for expenses & income</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="download-cloud" label="Auto-sweep leftover budget" value={autoSweep} onValueChange={(v) => toggle(AUTO_SWEEP_KEY, v, setAutoSweep)} />
+        <Text style={styles.featureCaption}>At month end, move unspent budget into your savings pool (lowers cash available)</Text>
       </View>
 
       {/* Manage */}
