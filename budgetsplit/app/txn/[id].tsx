@@ -176,37 +176,63 @@ export default function TxnDetailScreen() {
           )}
         </View>
 
-        {/* Paid by / Split — only meaningful in shared groups */}
-        {!isPersonal && txn.payments.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>{isSettlement ? 'From' : 'Paid by'}</Text>
-            <View style={styles.card}>
-              {txn.payments.map((p, i) => (
-                <View key={p.personId} style={[styles.personRow, i < txn.payments.length - 1 && styles.divider]}>
-                  <MemberAvatar name={nameOf(p.personId)} color={members.find(m => m.id === p.personId)?.avatar_color ?? colors.accent} size={32} />
-                  <Text style={styles.personName} numberOfLines={1}>{nameOf(p.personId)}</Text>
-                  <Text style={styles.personAmt}>{formatRupees(p.amount)}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
+        {/* Split summary — who paid, then who owes — one card, not two forms. */}
+        {!isPersonal && (txn.payments.length > 0 || txn.shares.length > 0) && (() => {
+          const colorOf = (id: string) => members.find(m => m.id === id)?.avatar_color ?? colors.accent;
 
-        {/* Split / To */}
-        {!isPersonal && txn.shares.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>{isSettlement ? 'To' : 'Split between'}</Text>
+          if (isSettlement) {
+            const from = txn.payments[0];
+            const to = txn.shares[0];
+            if (!from || !to) return null;
+            return (
+              <View style={styles.card}>
+                <View style={styles.settleFlow}>
+                  <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} />
+                  <Text style={styles.settleName} numberOfLines={1}>{nameOf(from.personId)}</Text>
+                  <Feather name="arrow-right" size={16} color={colors.settle} />
+                  <MemberAvatar name={nameOf(to.personId)} color={colorOf(to.personId)} size={30} />
+                  <Text style={styles.settleName} numberOfLines={1}>{nameOf(to.personId)}</Text>
+                  <Text style={styles.settleAmt}>{formatRupees(from.amount)}</Text>
+                </View>
+              </View>
+            );
+          }
+
+          // Net per person = paid − share. Payers shown as "paid"; negatives "owe".
+          const paid = new Map<string, number>();
+          txn.payments.forEach(p => paid.set(p.personId, (paid.get(p.personId) ?? 0) + p.amount));
+          const share = new Map<string, number>();
+          txn.shares.forEach(s => share.set(s.personId, (share.get(s.personId) ?? 0) + s.amount));
+          const ids = new Set<string>([...paid.keys(), ...share.keys()]);
+          const paidRows = [...paid.entries()].filter(([, a]) => a > 0);
+          const oweRows = [...ids]
+            .map(id => ({ id, net: (paid.get(id) ?? 0) - (share.get(id) ?? 0) }))
+            .filter(o => o.net < 0)
+            .sort((a, b) => a.net - b.net);
+
+          return (
             <View style={styles.card}>
-              {txn.shares.map((s, i) => (
-                <View key={s.personId} style={[styles.personRow, i < txn.shares.length - 1 && styles.divider]}>
-                  <MemberAvatar name={nameOf(s.personId)} color={members.find(m => m.id === s.personId)?.avatar_color ?? colors.accent} size={32} />
-                  <Text style={styles.personName} numberOfLines={1}>{nameOf(s.personId)}</Text>
-                  <Text style={styles.personAmt}>{formatRupees(s.amount)}</Text>
+              {paidRows.map(([id, amt]) => (
+                <View key={`paid-${id}`} style={styles.splitPaidRow}>
+                  <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} />
+                  <Text style={styles.splitPaidName} numberOfLines={1}>
+                    <Text style={styles.splitPaidNameBold}>{nameOf(id)}</Text> paid
+                  </Text>
+                  <Text style={styles.splitPaidAmt}>{formatRupees(amt)}</Text>
+                </View>
+              ))}
+              {oweRows.length > 0 && <View style={styles.divider} />}
+              {oweRows.map(o => (
+                <View key={`owe-${o.id}`} style={styles.splitOweRow}>
+                  <View style={styles.splitConnector} />
+                  <MemberAvatar name={nameOf(o.id)} color={colorOf(o.id)} size={22} />
+                  <Text style={styles.splitOweName} numberOfLines={1}>{nameOf(o.id)} owes</Text>
+                  <Text style={styles.splitOweAmt}>{formatRupees(-o.net)}</Text>
                 </View>
               ))}
             </View>
-          </>
-        )}
+          );
+        })()}
 
         {/* Itemized line items (read-only) */}
         {isItemized && items.length > 0 && (
@@ -231,12 +257,16 @@ export default function TxnDetailScreen() {
             <Text style={styles.emptyHistory}>No changes recorded.</Text>
           ) : history.map((h, i) => {
             const meta = ACTION_META[h.action] ?? ACTION_META.updated;
+            const last = i === history.length - 1;
             return (
-              <View key={h.id} style={[styles.histRow, i < history.length - 1 && styles.divider]}>
-                <View style={[styles.histIcon, { backgroundColor: meta.color + '22' }]}>
-                  <Feather name={meta.icon} size={13} color={meta.color} />
+              <View key={h.id} style={styles.histRow}>
+                <View style={styles.histRail}>
+                  <View style={[styles.histIcon, { backgroundColor: meta.color + '22' }]}>
+                    <Feather name={meta.icon} size={11} color={meta.color} />
+                  </View>
+                  {!last && <View style={styles.histRailLine} />}
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={[styles.histContent, !last && { paddingBottom: space.md }]}>
                   <Text style={styles.histText}>{h.summary}</Text>
                   <Text style={styles.histTime}>{(() => { const d = new Date(h.created_at); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()}</Text>
                 </View>
@@ -288,9 +318,27 @@ const styles = StyleSheet.create({
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   personName: { ...type.body, color: colors.textPrimary, flex: 1 },
   personAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  histRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
-  histIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  histText: { ...type.label, color: colors.textPrimary },
+
+  // Split summary
+  splitPaidRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  splitPaidName: { ...type.body, color: colors.textSecondary, flex: 1 },
+  splitPaidNameBold: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  splitPaidAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
+  splitOweRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2, paddingLeft: space.sm },
+  splitConnector: { width: 10, height: 1.5, backgroundColor: colors.border, marginRight: space.xs },
+  splitOweName: { ...type.body, color: colors.textSecondary, flex: 1 },
+  splitOweAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.expense },
+  settleFlow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md },
+  settleName: { ...type.body, color: colors.textPrimary, flexShrink: 1 },
+  settleAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.settle, marginLeft: 'auto' },
+
+  // History timeline
+  histRow: { flexDirection: 'row', gap: space.sm },
+  histRail: { width: 24, alignItems: 'center', paddingTop: space.sm },
+  histIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  histRailLine: { flex: 1, width: 1.5, backgroundColor: colors.border, marginTop: 2 },
+  histContent: { flex: 1, paddingTop: space.sm },
+  histText: { ...type.label, color: colors.textSecondary },
   histTime: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   emptyHistory: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   itemHint: { ...type.caption, color: colors.textMuted },
