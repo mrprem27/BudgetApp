@@ -68,7 +68,8 @@ nothing looks like a 2010 form.
 | F6 | **Zero/empty states** — for a 0/empty day show a clean dash/line, not a number with icon-animation/emoji | ⏳ Pending |
 | F7 | **Settings UI** — sparse Preferences card + long flat Features list; regroup, fix rhythm, 44pt rows | ⏳ Pending |
 | F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
-| F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ⏳ Pending |
+| F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ✅ Done |
+| F10 | **Forecast logic weak/misleading** — naive `dailyRate × days` linear projection; meaningless early in the month. Wanted: smarter on-device model (historical month patterns, day-of-week seasonality, category mix) + a clear "needs N days of data" gate. *(Strictly offline — no cloud ML; on-device heuristics only.)* | ⏳ Pending (P1 redesign) |
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
 
@@ -76,6 +77,14 @@ nothing looks like a 2010 form.
 time, gate + commit each**. New user feedback is appended here and the work
 continues without pausing to ask. Standing rule: apply the Splitwise-screenshot
 taste throughout.
+
+**Conventions (standing):**
+- **Use enums / named constants for states & options** — no bare magic strings
+  for finite sets (status, kind, frequency, split type, etc.). New code uses a TS
+  `enum` (or a single `as const` map) so states are referenced by name; retrofit
+  opportunistically when touching a file.
+- Money = paise; compact on overviews, exact on entry/rows; Feather icons only;
+  tokens not raw hex; ≥44pt targets (per `AGENTS.md`).
 
 ---
 

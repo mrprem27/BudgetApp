@@ -28,12 +28,13 @@ import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
 
-type Freq = 'daily' | 'weekly' | 'monthly' | 'yearly';
+type Freq = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 const FREQS: { key: Freq; label: string }[] = [
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'yearly', label: 'Yearly' },
+  { key: 'custom', label: 'Custom' },
 ];
 
 export default function AddIncomeScreen() {
@@ -56,6 +57,7 @@ export default function AddIncomeScreen() {
   const [showDate, setShowDate] = useState(false);
   const [recurOn, setRecurOn] = useState(false);
   const [freq, setFreq] = useState<Freq>('monthly');
+  const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
@@ -84,8 +86,13 @@ export default function AddIncomeScreen() {
           // Recurring "this & future" edit: pre-fill the schedule controls.
           if (recurEditId && txn.recur_freq) {
             setRecurOn(true);
-            // 'custom' with a ~yearly interval maps back to the 'yearly' option.
-            setFreq(txn.recur_freq === 'custom' && (txn.recur_interval ?? 0) >= 365 ? 'yearly' : (txn.recur_freq as Freq));
+            if (txn.recur_freq === 'custom') {
+              // ~yearly interval maps back to the 'yearly' chip; otherwise it's a real custom interval.
+              if ((txn.recur_interval ?? 0) >= 365) setFreq('yearly');
+              else { setFreq('custom'); setRecurInterval(String(txn.recur_interval ?? 1)); }
+            } else {
+              setFreq(txn.recur_freq as Freq);
+            }
             if (txn.recur_end) setRecurEndMs(txn.recur_end);
           }
           setLoadError(false);
@@ -122,8 +129,8 @@ export default function AddIncomeScreen() {
         await splitRecurringSeries(db, recurEditId!, {
           groupId: selectedGroupId, kind: 'income', entryMode: 'quick', date,
           category: category!.name, note: note.trim() || undefined,
-          recurFreq: freq === 'yearly' ? 'custom' : freq,
-          recurInterval: freq === 'yearly' ? 365 : undefined,
+          recurFreq: (freq === 'yearly' || freq === 'custom') ? 'custom' : freq,
+          recurInterval: freq === 'custom' ? (parseInt(recurInterval, 10) || 1) : freq === 'yearly' ? 365 : undefined,
           payments: [{ personId: me.id, amount: total }], shares: [],
         });
       } else if (isEditing) {
@@ -136,8 +143,8 @@ export default function AddIncomeScreen() {
         await insertTxn(db, {
           groupId: selectedGroupId, kind: 'income', entryMode: 'quick', date,
           category: category!.name, note: note.trim() || undefined,
-          recurFreq: recurOn ? (freq === 'yearly' ? 'custom' : freq) : undefined,
-          recurInterval: recurOn && freq === 'yearly' ? 365 : undefined,
+          recurFreq: recurOn ? ((freq === 'yearly' || freq === 'custom') ? 'custom' : freq) : undefined,
+          recurInterval: recurOn ? (freq === 'custom' ? (parseInt(recurInterval, 10) || 1) : freq === 'yearly' ? 365 : undefined) : undefined,
           recurEnd: recurOn && recurEndMs && recurEndMs > date ? recurEndMs : undefined,
           payments: [{ personId: me.id, amount: total }], shares: [],
         });
@@ -267,6 +274,21 @@ export default function AddIncomeScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {freq === 'custom' && (
+                    <View style={styles.recurIntervalRow}>
+                      <Text style={styles.fieldLabel}>Every</Text>
+                      <TextInput
+                        style={styles.recurIntervalInput}
+                        value={recurInterval}
+                        onChangeText={setRecurInterval}
+                        keyboardType="number-pad"
+                        placeholder="1"
+                        placeholderTextColor={colors.textMuted}
+                        accessibilityLabel="Interval days"
+                      />
+                      <Text style={styles.fieldLabel}>days</Text>
+                    </View>
+                  )}
                   <Text style={styles.fieldLabel}>Ends</Text>
                   <View style={styles.endRow}>
                     <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
@@ -331,7 +353,9 @@ const styles = StyleSheet.create({
   endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
   endNeverText: { ...type.label, color: colors.textSecondary },
-  freqRow: { flexDirection: 'row', gap: space.xs },
+  freqRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
   freqChip: { flex: 1, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   freqChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.income },
   freqText: { ...type.caption, color: colors.textSecondary },
