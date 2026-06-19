@@ -244,7 +244,7 @@ export default function DashboardScreen() {
         {/* Spending card */}
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
-          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} compact />
+          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} compact zeroDash />
           {(spending > 0 || prevSpending > 0) && (() => {
             const delta = spending - prevSpending;
             const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;

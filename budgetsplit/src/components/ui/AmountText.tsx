@@ -30,11 +30,24 @@ type Props = {
    * surfaces like dashboard tiles and legends. Takes precedence over `rounded`.
    */
   compact?: boolean;
+  /**
+   * Render a muted "—" instead of "₹0" when the amount is exactly zero. Use on
+   * overview surfaces where zero means "nothing happened" (a quiet dash reads
+   * calmer than a hard ₹0).
+   */
+  zeroDash?: boolean;
 };
 
-export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false }: Props) {
+export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false, zeroDash = false }: Props) {
   // Never render "₹NaN" — coerce a non-finite amount to 0 before formatting.
   const paise = Number.isFinite(rawPaise) ? rawPaise : 0;
+
+  if (zeroDash && paise === 0) {
+    return (
+      <Text style={[styleMap[size], { color: colors.textMuted }, style]} numberOfLines={1} accessibilityLabel="None">—</Text>
+    );
+  }
+
   const color = forceColor
     ? forceColor
     : paise > 0
