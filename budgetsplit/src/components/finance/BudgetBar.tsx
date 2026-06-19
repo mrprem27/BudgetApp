@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { colors, type, space } from '../tokens';
-import { formatRupees } from '../../lib/money';
+import { formatCompact } from '../../lib/money';
 
 type Health = 'green' | 'amber' | 'red' | 'none';
 
@@ -82,8 +82,8 @@ export function BudgetBar(props: Props) {
     <View>
       {showLabel && (
         <View style={styles.labelRow}>
-          <Text style={styles.labelText}>
-            {formatRupees(spent!)} <Text style={styles.labelMuted}>/ {formatRupees(limit!)}</Text>
+          <Text style={[styles.labelText, { color: healthColor[health] }]}>
+            {formatCompact(spent!)} <Text style={styles.labelMuted}>/ {formatCompact(limit!)}</Text>
           </Text>
           <Text style={[styles.pctText, { color: healthColor[health] }]}>
             {Math.round(pct ?? 0)}%

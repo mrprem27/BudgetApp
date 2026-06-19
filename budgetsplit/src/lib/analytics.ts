@@ -7,7 +7,7 @@ import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
 import { getCategorySpending } from './budget';
-import { formatRupees } from './money';
+import { formatCompact } from './money';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
 
@@ -238,7 +238,7 @@ export async function getBudgetAnalytics(
     recommendations.push({
       id: `over-${t.category}`,
       severity: 'warn', icon: 'alert-triangle',
-      text: `${t.category} is over budget by ${formatRupees(t.spent - t.allocated)} (${t.pct}% used).`,
+      text: `${t.category} is over budget by ${formatCompact(t.spent - t.allocated)} (${t.pct}% used).`,
     });
   }
   for (const t of nearLimit.slice(0, 3)) {
@@ -266,7 +266,7 @@ export async function getBudgetAnalytics(
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {
     recommendations.push({
       id: 'projected', severity: 'warn', icon: 'pie-chart',
-      text: `On pace to spend ${formatRupees(projectedMonthEnd)} this month — ${formatRupees(projectedMonthEnd - monthlyBudgetTotal)} over your monthly budgets.`,
+      text: `On pace to spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} over your monthly budgets.`,
     });
   }
   if (recommendations.length === 0 && totalAllocated > 0) {

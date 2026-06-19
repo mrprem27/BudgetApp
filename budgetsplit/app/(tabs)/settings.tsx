@@ -94,46 +94,43 @@ export default function SettingsScreen() {
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {/* Privacy & Security */}
-      <Text style={styles.sectionTitle}>Privacy & Security</Text>
+      {/* Security */}
+      <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
         <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
+      </View>
+
+      {/* Budget & Data */}
+      <Text style={styles.sectionTitle}>Budget & Data</Text>
+      <View style={styles.card}>
+        <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
-      </View>
-
-      {/* Preferences */}
-      <Text style={styles.sectionTitle}>Preferences</Text>
-      <View style={styles.card}>
-        {/* Currency selection hidden for v1 (INR-only) — re-add when multi-currency ships. */}
-        <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
-      </View>
-
-      {/* Features */}
-      <Text style={styles.sectionTitle}>Features</Text>
-      <View style={styles.card}>
-        <ToggleRow icon="bar-chart-2" label="Dashboard insights" value={flags.dashboardInsights} onValueChange={(v) => setFlag('dashboardInsights', v)} />
-        <Text style={styles.featureCaption}>Cross-group spending insights on the dashboard</Text>
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="pie-chart" label="Budget insights" value={flags.budgetInsights} onValueChange={(v) => setFlag('budgetInsights', v)} />
-        <Text style={styles.featureCaption}>Analytics & projections on group budgets</Text>
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="target" label="Savings insights" value={flags.savingsInsights} onValueChange={(v) => setFlag('savingsInsights', v)} />
-        <Text style={styles.featureCaption}>Opportunity-cost nudges on the Savings tab</Text>
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="trending-up" label="Spending forecast" value={flags.forecast} onValueChange={(v) => setFlag('forecast', v)} />
-        <Text style={styles.featureCaption}>Month-end projection on Reports</Text>
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="list" label="Itemized split + receipt scan" value={flags.itemizedOcr} onValueChange={(v) => setFlag('itemizedOcr', v)} />
-        <Text style={styles.featureCaption}>Line-item bills with optional OCR</Text>
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="refresh-cw" label="Recurring transactions" value={flags.recurring} onValueChange={(v) => setFlag('recurring', v)} />
-        <Text style={styles.featureCaption}>Auto-repeat schedules for expenses & income</Text>
         <View style={settingsRowDivider} />
         <ToggleRow icon="download-cloud" label="Auto-sweep leftover budget" value={autoSweep} onValueChange={(v) => toggle(AUTO_SWEEP_KEY, v, setAutoSweep)} />
-        <Text style={styles.featureCaption}>At month end, move unspent budget into your savings pool (lowers cash available)</Text>
+        <Text style={styles.featureCaption}>Move unspent budget into savings at month end</Text>
+      </View>
+
+      {/* Insights */}
+      <Text style={styles.sectionTitle}>Insights</Text>
+      <View style={styles.card}>
+        <ToggleRow icon="bar-chart-2" label="Dashboard insights" value={flags.dashboardInsights} onValueChange={(v) => setFlag('dashboardInsights', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="pie-chart" label="Budget insights" value={flags.budgetInsights} onValueChange={(v) => setFlag('budgetInsights', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="target" label="Savings insights" value={flags.savingsInsights} onValueChange={(v) => setFlag('savingsInsights', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="trending-up" label="Spending forecast" value={flags.forecast} onValueChange={(v) => setFlag('forecast', v)} />
+      </View>
+
+      {/* Experimental */}
+      <Text style={styles.sectionTitle}>Experimental</Text>
+      <View style={styles.card}>
+        <ToggleRow icon="list" label="Itemized bill splitting" value={flags.itemizedOcr} onValueChange={(v) => setFlag('itemizedOcr', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="refresh-cw" label="Recurring transactions" value={flags.recurring} onValueChange={(v) => setFlag('recurring', v)} />
       </View>
 
       {/* Manage */}

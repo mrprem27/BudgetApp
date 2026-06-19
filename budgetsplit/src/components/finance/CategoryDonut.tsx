@@ -54,10 +54,10 @@ export function CategoryDonut({ data, total, onOpen }: Props) {
     opacityRefs.current = segs.map(() => new Animated.Value(1));
   }
 
-  // Reset stale selection when segment count changes (data reload)
+  // Reset selection whenever the underlying data changes (tab switch, reload)
   useEffect(() => {
-    if (sel !== null && sel >= segs.length) setSel(null);
-  }, [segs.length]);
+    setSel(null);
+  }, [segs]);
 
   // Drive opacity animation whenever selection changes
   useEffect(() => {
@@ -75,11 +75,7 @@ export function CategoryDonut({ data, total, onOpen }: Props) {
   const selected = sel !== null && sel < segs.length ? segs[sel] : null;
 
   function handleWedgePress(i: number) {
-    if (sel === i) {
-      onOpen(segs[i]);
-    } else {
-      setSel(i);
-    }
+    setSel(sel === i ? null : i);
   }
 
   if (!segs.length) {

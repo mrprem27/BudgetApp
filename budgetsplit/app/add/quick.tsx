@@ -277,7 +277,9 @@ export default function QuickAddScreen() {
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -356,12 +358,9 @@ export default function QuickAddScreen() {
 
         {!isEditing && flags.recurring && (
         <View style={styles.scheduleRow}>
-          <View style={styles.scheduleBtnLeft}>
-            <Feather name="repeat" size={16} color={recurEnabled ? colors.accent : colors.textSecondary} />
-            <Text style={[styles.fieldLabel, recurEnabled && { color: colors.accent }]}>
-              {recurEnabled ? `Repeats ${recurFreq}` : 'Repeat this'}
-            </Text>
-          </View>
+          <Text style={[styles.fieldLabel, recurEnabled && { color: colors.accent }]}>
+            {recurEnabled ? `Repeats ${recurFreq}` : 'Repeat this'}
+          </Text>
           <Switch
             value={recurEnabled}
             onValueChange={setRecurEnabled}
@@ -467,13 +466,6 @@ export default function QuickAddScreen() {
           </Text>
         )}
 
-        <PrimaryButton
-          label="Save"
-          onPress={handleSave}
-          disabled={!canSave}
-          loading={saving}
-          style={styles.saveBtn}
-        />
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -645,6 +637,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
@@ -696,8 +689,8 @@ const styles = StyleSheet.create({
   payerQuickText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
-  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
-  endNeverText: { ...type.label, color: colors.textSecondary },
+  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '44' },
+  endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   doneBtnText: { ...type.button, color: colors.bg },
 });

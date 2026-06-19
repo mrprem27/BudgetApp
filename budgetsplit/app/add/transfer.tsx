@@ -10,7 +10,6 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
-import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -120,7 +119,11 @@ export default function TransferScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Transfer" onBack={() => router.back()} />
+      <ScreenHeader title="Transfer" onBack={() => router.back()} right={
+        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+        </TouchableOpacity>
+      } />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <TextInput
@@ -172,7 +175,6 @@ export default function TransferScreen() {
             </Text>
           )}
 
-          <PrimaryButton label="Record Transfer" onPress={handleSave} disabled={!canSave} loading={saving} style={{ marginTop: space.md }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -181,6 +183,7 @@ export default function TransferScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary },

@@ -17,9 +17,9 @@ import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons } from '../../src/db/queries/persons';
 import { getGlobalNet } from '../../src/db/queries/balances';
-import { getBudgetUsage } from '../../src/lib/budget';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
-import { formatRupeesShort, formatCompact } from '../../src/lib/money';
+import { formatCompact } from '../../src/lib/money';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -41,7 +41,7 @@ export default function GroupsScreen() {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string>(GROUP_ICONS[0]);
   const [color, setColor] = useState<string>(GROUP_COLORS[0]);
-  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number }>>({});
+  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [loadError, setLoadError] = useState(false);
@@ -60,11 +60,13 @@ export default function GroupsScreen() {
       // Per-group usage + member counts in parallel rather than serially.
       const h: typeof health = {};
       await Promise.all(grps.map(async g => {
-        const [usage, mems] = await Promise.all([
-          getBudgetUsage(db, g, 'monthly'),
+        const [analytics, mems] = await Promise.all([
+          getBudgetAnalytics(db, g),
           getGroupMembers(db, g.id),
         ]);
-        h[g.id] = { pct: usage.pct, health: usage.health, spent: usage.spent, members: mems.length };
+        const pct = analytics.utilizationPct;
+        const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
+        h[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length };
       }));
       setHealth(h);
 
@@ -161,7 +163,7 @@ export default function GroupsScreen() {
               <Text style={styles.groupSub} numberOfLines={1}>
                 {isArchivedView
                   ? 'Archived — tap to restore'
-                  : `${formatRupeesShort(h?.spent ?? 0)} this month${item.is_personal !== 1 && h ? ` · ${h.members} member${h.members === 1 ? '' : 's'}` : ''}`
+                  : `${formatCompact(h?.spent ?? 0)} this month${item.is_personal !== 1 && h ? ` · ${h.members} member${h.members === 1 ? '' : 's'}` : ''}`
                 }
               </Text>
               {!isArchivedView && h && h.pct !== null && (
@@ -170,6 +172,7 @@ export default function GroupsScreen() {
                     <BudgetBar pct={h.pct} health={h.health} height={5} />
                   </View>
                   <Text style={styles.budgetPct}>{h.pct}%</Text>
+                  {h.over > 0 && <Text style={styles.overBadge}>{h.over} over</Text>}
                 </View>
               )}
             </View>
@@ -368,6 +371,7 @@ const styles = StyleSheet.create({
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
+  overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   iconRow: { marginBottom: space.xs },

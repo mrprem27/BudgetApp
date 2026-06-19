@@ -277,27 +277,14 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Where it went — interactive SVG donut */}
-        {chartsReady && donutData.length > 0 && (
-          <View style={styles.donutCard}>
-            <Text style={styles.chartTitle}>Where it went</Text>
-            <CategoryDonut
-              data={donutData}
-              total={donutTotal}
-              onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
-            />
-          </View>
-        )}
-
-        {/* Compact tiles: Budget + Balances side-by-side */}
-        <View style={styles.compactGrid}>
-        {/* Budget rollup tile */}
+        {/* Budget rollup — prominent, before the donut */}
         {budgetSummary.allocated > 0 && (() => {
           const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
           const bLeft = budgetSummary.allocated - budgetSummary.spent;
+          const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
           return (
           <TouchableOpacity
-            style={styles.budgetCard}
+            style={styles.budgetHero}
             activeOpacity={0.85}
             onPress={() => {
               const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
@@ -310,16 +297,46 @@ export default function DashboardScreen() {
               <Text style={styles.budgetCardTitle}>Budget</Text>
               <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </View>
-            <Text style={styles.budgetUtil}>{bUtil}%</Text>
-            <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={6} />
-            <Text style={styles.budgetLeft}>
-              {bLeft >= 0 ? `${formatCompact(bLeft)} left` : `Over by ${formatCompact(-bLeft)}`}
-            </Text>
+            <View style={styles.budgetHeroRow}>
+              <Text style={[styles.budgetUtil, { color: bHealth }]}>{bUtil}%</Text>
+              <View style={{ flex: 1 }}>
+                <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
+                <Text style={styles.budgetLeft}>
+                  {bLeft >= 0 ? `${formatCompact(bLeft)} left of ${formatCompact(budgetSummary.allocated)}` : `Over by ${formatCompact(-bLeft)}`}
+                </Text>
+              </View>
+            </View>
+            {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
+              <View style={styles.budgetBadgeRow}>
+                {budgetSummary.over > 0 && (
+                  <View style={[styles.budgetBadge, { backgroundColor: colors.expense + '22' }]}>
+                    <Text style={[styles.budgetBadgeText, { color: colors.expense }]}>{budgetSummary.over} over</Text>
+                  </View>
+                )}
+                {budgetSummary.near > 0 && (
+                  <View style={[styles.budgetBadge, { backgroundColor: colors.healthAmber + '22' }]}>
+                    <Text style={[styles.budgetBadgeText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </TouchableOpacity>
           );
         })()}
 
-        {/* Balance tile */}
+        {/* Where it went — interactive SVG donut */}
+        {chartsReady && donutData.length > 0 && (
+          <View style={styles.donutCard}>
+            <Text style={styles.chartTitle}>Where it went</Text>
+            <CategoryDonut
+              data={donutData}
+              total={donutTotal}
+              onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+            />
+          </View>
+        )}
+
+        {/* Balances */}
         {(oweTotal > 0 || owedTotal > 0) && (
           <TouchableOpacity
             style={styles.balanceChip}
@@ -336,7 +353,6 @@ export default function DashboardScreen() {
             <Text style={styles.settleLink}>Settle Up →</Text>
           </TouchableOpacity>
         )}
-        </View>
 
         {/* Savings pool */}
         {(savings.total > 0 || savings.goals > 0) && (
@@ -354,19 +370,19 @@ export default function DashboardScreen() {
               </View>
               <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </View>
-            <View style={styles.budgetTiles}>
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Pool</Text>
+            <View style={styles.savingsTiles}>
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Pool</Text>
                 <AmountText paise={savings.total} size="sm" forceColor={colors.textPrimary} compact />
               </View>
-              <View style={styles.budgetTileDivider} />
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Available</Text>
+              <View style={styles.savingsTileDivider} />
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Available</Text>
                 <AmountText paise={savings.unallocated} size="sm" forceColor={colors.income} compact />
               </View>
-              <View style={styles.budgetTileDivider} />
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Goals</Text>
+              <View style={styles.savingsTileDivider} />
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Goals</Text>
                 <Text style={styles.savingsGoalCount}>{savings.goals}</Text>
               </View>
             </View>
@@ -481,28 +497,32 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  budgetCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetHeroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   budgetCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetCardTitle: { ...type.subheading, color: colors.textPrimary },
-  budgetUtil: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, letterSpacing: -0.5, color: colors.textPrimary },
-  budgetLeft: { ...type.caption, color: colors.textMuted },
+  budgetUtil: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, letterSpacing: -0.5 },
+  budgetLeft: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  budgetBadgeRow: { flexDirection: 'row', gap: space.sm },
+  budgetBadge: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  budgetBadgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   savingsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm, marginBottom: space.md },
   savingsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   savingsGoalCount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },
-  budgetTiles: { flexDirection: 'row', alignItems: 'center' },
-  budgetTile: { flex: 1, alignItems: 'center', gap: 2 },
-  budgetTileLabel: { ...type.caption, color: colors.textMuted },
-  budgetTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  savingsTiles: { flexDirection: 'row', alignItems: 'center' },
+  savingsTile: { flex: 1, alignItems: 'center', gap: 2 },
+  savingsTileLabel: { ...type.caption, color: colors.textMuted },
+  savingsTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  donutCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  balanceChip: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs },
+  balanceChip: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs, marginBottom: space.md },
   balanceLabel: { ...type.subheading, color: colors.textPrimary },
   balanceText: { ...type.body, color: colors.textSecondary },
   settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
-  donutCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
   section: { marginBottom: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
@@ -511,7 +531,6 @@ const styles = StyleSheet.create({
   groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
-  compactGrid: { flexDirection: 'row', gap: 12, marginBottom: space.md },
   groupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   groupIconText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.accent },
 });

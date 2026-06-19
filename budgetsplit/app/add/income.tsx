@@ -165,7 +165,9 @@ export default function AddIncomeScreen() {
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add Income'}</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>{isEditing ? 'Save' : 'Add'}</Text>
+        </TouchableOpacity>
       </View>
 
       {loadError ? (
@@ -245,12 +247,9 @@ export default function AddIncomeScreen() {
           {!isEditing && flags.recurring && (
             <>
               <View style={styles.scheduleRow}>
-                <View style={styles.scheduleBtnLeft}>
-                  <Feather name="repeat" size={16} color={recurOn ? colors.income : colors.textSecondary} />
-                  <Text style={[styles.fieldLabel, recurOn && { color: colors.income }]}>
-                    {recurOn ? `Repeats ${freq}` : 'Repeat this (e.g. salary)'}
-                  </Text>
-                </View>
+                <Text style={[styles.fieldLabel, recurOn && { color: colors.income }]}>
+                  {recurOn ? `Repeats ${freq}` : 'Repeat this (e.g. salary)'}
+                </Text>
                 <Switch
                   value={recurOn}
                   onValueChange={setRecurOn}
@@ -306,7 +305,6 @@ export default function AddIncomeScreen() {
             </>
           )}
 
-          <PrimaryButton label={isEditing ? 'Save Income' : 'Add Income'} onPress={handleSave} disabled={!canSave} loading={saving} style={{ marginTop: space.md }} />
         </ScrollView>
       </KeyboardAvoidingView>
       )}
@@ -338,6 +336,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
+  headerSave: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
@@ -351,8 +350,8 @@ const styles = StyleSheet.create({
   recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
-  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
-  endNeverText: { ...type.label, color: colors.textSecondary },
+  endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '44' },
+  endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   freqRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },

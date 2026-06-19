@@ -122,7 +122,7 @@ export default function HistoryScreen() {
                 </Text>
               </View>
               {item.amount != null && (
-                <Text style={styles.amount}>{formatRupeesShort(item.amount)}</Text>
+                <Text style={[styles.amount, { color: meta.color }]}>{formatRupeesShort(item.amount)}</Text>
               )}
             </View>
           );

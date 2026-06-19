@@ -252,6 +252,11 @@ export default function ItemizedScreen() {
         {/* Receipt scan hidden until true AI line-item extraction exists (the
             old on-device OCR only read a single total). See PLAN.md. */}
         <Text style={styles.stepIndicator}>{STEPS.indexOf(step) + 1}/4</Text>
+        {step === 'review' && (
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Step progress dots */}
@@ -539,12 +544,9 @@ export default function ItemizedScreen() {
             })}
           </View>
 
-          <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
-            <PrimaryButton label="Save Bill" onPress={handleSave} loading={saving} disabled={!canSave} style={{ flex: 1 }} />
-          </View>
+          <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
+            <Text style={styles.backBtnText}>Back</Text>
+          </TouchableOpacity>
         </ScrollView>
       )}
 
@@ -586,6 +588,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
   stepIndicator: { ...type.label, color: colors.textMuted },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   dots: { flexDirection: 'row', gap: 6, paddingHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   dot: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.bgMuted },
   dotActive: { backgroundColor: colors.accent },

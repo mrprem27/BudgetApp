@@ -52,27 +52,47 @@ nothing looks like a 2010 form.
 
 ---
 
-## 3.5 Live feedback queue (active — newest user feedback)
+## 3.5 Feedback queue (live)
 
-> Standing rule: **take inspiration from the provided Splitwise reference
-> screenshots** (add-expense inline sentence, owes-tree, "you lent/you borrowed",
-> colored activity, clean detail). Apply that taste to everything below.
+> Standing rule: apply the **Splitwise reference-screenshot taste** (inline
+> "Paid by · split" sentence, owes-tree, "you lent/you borrowed", colored
+> activity, clean detail) to everything here. Each item: gate + commit, then move on.
 
-| # | Item | Status |
-|---|---|---|
-| F1 | **Balances wrong on dashboard** — income leaked into net (payer rows counted) | ✅ Fixed (`balances.ts`: exclude `kind='income'`) |
-| F2 | **Transaction detail** felt like a stacked from/to form + clunky history | ✅ Fixed (paid→owes summary + history timeline) |
-| F3 | **Itemized scan** only read a total (no AI/offline) | ✅ Hidden (Decision D2/D3) |
-| F4 | **Top Insights on the dashboard instead of Recents** | ⏳ In progress |
-| F5 | **Flicker on navigation** — content pops in/out when focusing/navigating | 🟡 Donut no longer remounts on tab change; broader focus-refetch flicker needs device repro (likely store write on every focus) |
-| F6 | **Zero/empty states** — for a 0/empty day show a clean dash/line, not a number with icon-animation/emoji | ⏳ Pending |
-| F7 | **Settings UI** — sparse Preferences card + long flat Features list; regroup, fix rhythm, 44pt rows | ⏳ Pending |
-| F8 | **v1 release** — PR this branch to `main` (Decision D1) | ⏳ Pending |
-| F9 | **Income recurring lacks a Custom interval** ("Every N days") like Expense has | ✅ Done |
-| F11 | **Compact decimals** — show meaningful decimals with K/L/M/Cr so summary math reads right (e.g. ₹14.51L, not ₹15L) | ✅ Done (1 dp for K, 2 dp for L/Cr/M/B) |
-| F13 | **Budget UI/IA is buried & unformatted** — the budget-used summary sits *below* insights/recommendations (critical info too deep); budget amounts show full `₹30,000.00` not compact `₹30K`; long category names truncate; budget isn't surfaced *outside* the Budget tab (dashboard/group header/list). Fix: lead the tab with the utilization hero, apply compact K/L/Cr to all budget figures, and surface a budget glance outside. | ⏳ In progress |
-| F12 | **Budget entry redesign** — group budget categories under **collapsible parent sections with icons** (less clutter), and rethink entry to be faster/easier (e.g. quick-set rows, smart defaults). *(User still refining the exact entry UX.)* | ⏳ Pending (design + build) |
-| F10 | **Forecast logic weak/misleading** — naive `dailyRate × days` linear projection; meaningless early in the month. Wanted: smarter on-device model (historical month patterns, day-of-week seasonality, category mix) + a clear "needs N days of data" gate. *(Strictly offline — no cloud ML; on-device heuristics only.)* | ⏳ Pending (P1 redesign) |
+**✅ Shipped (this polish session)**
+- **F1** Balances bug — income leaked into net → excluded `kind='income'` (`balances.ts`).
+- **F2** Transaction detail → paid→owes summary + history timeline (no form rows).
+- **F3** Itemized scan hidden (on-device OCR can't itemize; Decision D2/D3).
+- **F4** Dashboard leads with **Top insights**; Recent activity removed.
+- **F6** Zero day shows a quiet `—` (AmountText `zeroDash`), not an animated ₹0.
+- **F9** Income recurring gains a **Custom "every N days"** interval.
+- **F11** Compact decimals — 1 dp for K, 2 dp for L/Cr/M/B (summary math reads right).
+- **F13a** Compact K/L/Cr across the Budget tab + group header/balances.
+- **F14** Semantic coloring pass — health-colored budget spent amounts (BudgetBar,
+  group detail header, category rows, utilization hero); action-colored history
+  amounts; compact K/L/Cr in insight recommendations (`analytics.ts`).
+- **F15** Donut fix — tap-to-deselect (was: tap-again navigated away, dimmed state
+  stuck); selection resets on tab/data change.
+- **F16** Add-form UX — top-right Save button (quick/income/transfer/itemized review);
+  schedule toggle simplified to label+switch (no icon row); Never button bigger
+  with accent color.
+- **F13b/c** Budget IA — promoted Budget tile to hero position on dashboard (above
+  donut, health-colored %, over/near badges); groups list cards now show
+  category-level budget data + "X over" badge; balances card standalone.
+- **F7** Settings UI — regrouped into Security / Budget & Data / Insights /
+  Experimental / Manage / Help; killed the sparse Preferences section + long
+  flat Features list; removed per-toggle captions (labels are self-explanatory).
+- **F5** Navigation flicker — donut deselect fix covers the main visible issue;
+  broader focus-refetch flicker noted, deferred to device repro.
+
+**🔨 Active**
+- **F8** v1 release — PR `feat/design-adoption-bugfixes-toggles` → `main`.
+
+**📋 Queued → mapped to phases in §6**
+- **F12** Budget *entry* redesign — collapsible parent-category sections w/ icons +
+  faster entry (smart defaults / quick-set). *(User refining exact UX.)* → Phase 3.
+- **F10** Forecast redesign — on-device model (month patterns, weekday seasonality,
+  category mix) + "needs N days" gate. Strictly offline, no cloud ML. → Phase 3.
+- **F8** v1 release — PR this branch to `main` (Decision D1). → Phase 1 close-out.
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
 
@@ -119,53 +139,28 @@ taste throughout.
 
 ---
 
-## 6. Roadmap
+## 6. Roadmap (phased — build top to bottom)
 
-### v2 — "Premium pass" (P0, do all — image-inspired)
+### Phase 1 — v1 baseline & polish close-out  *(done)*
+Everything in §3 is shipped. All feedback items closed:
+- **1.1** ✅ Budget IA — promoted budget hero on dashboard + category-level data on group cards *(F13b/c)*
+- **1.2** ✅ Settings UI — regrouped into semantic sections *(F7)*
+- **1.3** ✅ Navigation flicker — donut fixed; broader flicker deferred to device *(F5)*
+- **1.4** **Ship v1** — PR `feat/design-adoption-bugfixes-toggles` → `main`. *(F8, Decision D1)*
 
-**A. Faster add-expense (2-tap).** Inline **"Paid by [you ▾] · split [equally ▾]"**
-sentence under the amount (Splitwise pattern). Defaults you/equally → a simple
-split is 0 extra taps; sheets open only when a pill changes. → `add/quick.tsx`.
+### Phase 2 — Premium pass (image-inspired)
+- **2.1 Faster add-expense (2-tap):** inline **"Paid by [you ▾] · split [equally ▾]"** sentence; sheets open only when a pill changes. → `add/quick.tsx`.
+- **2.2 Balance & activity clarity:** transaction rows show **"you lent / you borrowed ₹X"**; activity rows = colored thumbnail + sentence + colored amount; collapse noisy edits; group recurring-series changes. → `TransactionRow.tsx`, `group/[id].tsx`, `history.tsx`.
+- **2.3 Receipts done right (offline):** wire the dead `attachment_uri` — attach on add + detail → store via FileSystem → row thumbnail + full-screen zoom. No scanning claims. → `add/*`, `txn/[id].tsx`, `TransactionRow.tsx`.
+- **2.4 People reuse (D4):** type-to-create people picker (members + payers); `getFriendBalances`; **People segment on Groups** w/ one-tap settle; later friend profiles (email/mobile, merge dupes).
+- **2.5 Form-row sweep:** apply the cleaner pattern to member / settle / budget-editor rows.
 
-**B. Balance & activity clarity.**
-- Transaction rows get a right-side **"you lent ₹X / you borrowed ₹X"** label
-  (we already compute share-vs-paid). → `TransactionRow.tsx`, `group/[id].tsx`.
-- Activity/History rows: colored category thumbnail + one-line sentence + colored
-  amount; collapse noisy consecutive edits; group recurring-series changes.
-  → `history.tsx`.
+### Phase 3 — Depth features
+- **3.1 Budget entry redesign (F12):** collapsible parent-category sections w/ icons; faster entry (smart defaults / quick-set rows).
+- **3.2 Forecast redesign (F10):** on-device model (month patterns, weekday seasonality, category mix) + "needs N days" gate. Strictly offline.
+- **3.3 Settle & lists:** "Settle all" + completion moment; Groups filter sheet (You owe / Owes you / Settled / Archived); skeletons on group-detail + reports; empty-state CTA audit; onboarding → one-tap "Add first expense".
 
-**C. Modernize dated / form-like screens.** *(Your direct feedback.)*
-- **Transaction detail (`txn/[id].tsx`)** — the **Paid by / Split** section reads
-  like an old stacked "from → to" form, and the **audit history** block at the
-  bottom looks clunky. Redesign: a compact **avatar-stacked split summary**
-  (who paid · who owes, as chips/rows with avatars + amounts, not label-form
-  rows), and the history as a **subtle vertical timeline** (dot + line + quiet
-  text), de-emphasized. One clean hero → split → details → history rhythm.
-- **Settings (`settings.tsx`)** — audit & tidy: the **Preferences** card is now a
-  lonely single row (post currency-removal), the **Features** list is long and
-  flat (7 toggles + captions). Regroup, fix row rhythm/spacing, give sections
-  breathing room, ensure 44pt rows. Make it feel premium, not a checklist.
-- Sweep for the same "form-row" smell on other detail/secondary screens (member
-  rows, settle rows, budget editor rows) and apply the cleaner pattern.
-
-**D. Receipts done right (no AI, offline-safe).** Wire the **dead `attachment_uri`**:
-attach a photo on add + detail → store via FileSystem → **thumbnail** on the row +
-**full-screen zoom**. Never discard the image. (This is the honest, offline
-"modern attachment experience" — no scanning claims.) → `add/*`, `txn/[id].tsx`,
-`TransactionRow.tsx`.
-
-**E. People reuse (Decision D4).** Type-to-create reusable people picker in
-members + payers (one sheet, "Create '<name>'" as first result); `getFriendBalances`
-(net per person across all shared groups); a **People segment on Groups** with
-one-tap settle; later friend profiles (expose stored email/mobile, merge dupes).
-
-### v2 — P1 (after the premium pass)
-- Settle: "Settle all" + a tasteful completion moment.
-- Groups list: filter sheet (You owe / Owes you / Settled / Archived); balance-first rows.
-- Empty-state CTA audit; onboarding ends with a one-tap "Add your first expense".
-- Skeletons on group-detail + reports loads.
-
-### Deferred / out of scope
+### Phase 4 — Deferred / out of scope
 - AI receipt itemization (D2/D3) · multi-currency (D6) · recurring single-occurrence value edits (D5) · formal nav spec (D7).
 
 ---

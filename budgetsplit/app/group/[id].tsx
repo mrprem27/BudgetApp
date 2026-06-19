@@ -262,7 +262,7 @@ export default function GroupDetailScreen() {
         <View style={styles.budgetHeaderBar}>
           <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
           <Text style={styles.budgetHeaderText}>
-            {formatCompact(budgetUsage.spent)} / {formatCompact(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
+            <Text style={{ color: healthColor(budgetUsage.health) }}>{formatCompact(budgetUsage.spent)}</Text> / {formatCompact(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
           </Text>
         </View>
       )}
@@ -410,7 +410,7 @@ export default function GroupDetailScreen() {
                   <View style={styles.ovTopRow}>
                     <View>
                       <Text style={styles.ovLabel}>Budget used</Text>
-                      <Text style={styles.ovSpent}>{formatCompact(analytics.totalSpent)}</Text>
+                      <Text style={[styles.ovSpent, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>{formatCompact(analytics.totalSpent)}</Text>
                       <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
                     </View>
                     <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
@@ -540,7 +540,7 @@ export default function GroupDetailScreen() {
                                 </View>
                                 <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
                                 <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
-                                <Text style={styles.catAmt}>{formatCompact(c.spent)} / {formatCompact(c.allocated)}</Text>
+                                <Text style={styles.catAmt}><Text style={{ color: healthColor(c.health) }}>{formatCompact(c.spent)}</Text> / {formatCompact(c.allocated)}</Text>
                               </View>
                               <BudgetBar pct={c.pct} health={c.health} height={6} />
                             </View>
