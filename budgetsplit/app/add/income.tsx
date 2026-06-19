@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
   field: { gap: space.xs },

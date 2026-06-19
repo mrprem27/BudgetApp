@@ -146,7 +146,11 @@ export default function SavingsScreen() {
             <Text style={styles.cashLabel}>Cash available</Text>
             <AmountText paise={cash.available} size="xl" forceColor={cash.available >= 0 ? colors.textPrimary : colors.expense} compact />
             <Text style={styles.cashBreak}>
-              {formatCompact(cash.income)} in · {formatCompact(cash.paidExpenses + cash.settledOut)} out · {formatCompact(cash.savings)} saved
+              <Text style={{ color: colors.income }}>{formatCompact(cash.income)} in</Text>
+              <Text style={styles.cashBreakSep}> · </Text>
+              <Text style={{ color: colors.expense }}>{formatCompact(cash.paidExpenses + cash.settledOut)} out</Text>
+              <Text style={styles.cashBreakSep}> · </Text>
+              <Text style={{ color: colors.accent }}>{formatCompact(cash.savings)} saved</Text>
             </Text>
           </View>
         )}
@@ -230,7 +234,7 @@ export default function SavingsScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.goalName} numberOfLines={1}>{g.name}</Text>
-                      <Text style={styles.goalSub}>{formatRupees(p.saved)} <Text style={styles.goalSubMuted}>of {formatRupees(p.target)}</Text></Text>
+                      <Text style={styles.goalSub}>{formatCompact(p.saved)} <Text style={styles.goalSubMuted}>of {formatCompact(p.target)}</Text></Text>
                     </View>
                     <View style={[styles.prioChip, { backgroundColor: priorityColor(g.priority) + '22' }]}>
                       <Text style={[styles.prioText, { color: priorityColor(g.priority) }]}>{g.priority}</Text>
@@ -287,7 +291,7 @@ export default function SavingsScreen() {
           autoFocus
           accessibilityLabel="Amount"
         />
-        <Text style={styles.hint}>{formatRupees(pool.unallocated)} available · returns to your spending money.</Text>
+        <Text style={styles.hint}>{formatCompact(pool.unallocated)} available · returns to your spending money.</Text>
         <PrimaryButton label="Withdraw" onPress={handleWithdrawPool} disabled={parseToPaise(poolAmt) <= 0} />
       </SheetModal>
 
@@ -350,6 +354,7 @@ const styles = StyleSheet.create({
   cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
   cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  cashBreakSep: { color: colors.textMuted },
   poolCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
   poolLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   poolRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },

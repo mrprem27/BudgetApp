@@ -18,7 +18,7 @@ import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { formatRupees, parseToPaise } from '../../src/lib/money';
+import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
 import {
@@ -161,14 +161,14 @@ export default function GoalDetailScreen() {
             <Feather name={asFeather(goal.icon, 'target')} size={24} color={goal.color ?? colors.accent} />
           </View>
           <AmountText paise={p.saved} size="xl" forceColor={colors.textPrimary} compact />
-          <Text style={styles.heroSub}>of {formatRupees(p.target)} · {p.pct}%</Text>
+          <Text style={styles.heroSub}>of {formatCompact(p.target)} · {p.pct}%</Text>
           <View style={styles.heroBar}><BudgetBar pct={p.pct} health="green" height={8} /></View>
           <View style={styles.heroStats}>
-            <Stat label="Remaining" value={formatRupees(p.remaining)} />
+            <Stat label="Remaining" value={formatCompact(p.remaining)} />
             <View style={styles.heroDivider} />
             <Stat label="Priority" value={goal.priority} tint={priorityColor(goal.priority)} cap />
             <View style={styles.heroDivider} />
-            <Stat label={est ? 'Done by' : 'Per month'} value={est ? format(est.date, 'MMM yyyy') : (monthly > 0 ? formatRupees(monthly) : '—')} />
+            <Stat label={est ? 'Done by' : 'Per month'} value={est ? format(est.date, 'MMM yyyy') : (monthly > 0 ? formatCompact(monthly) : '—')} />
           </View>
         </View>
 
@@ -185,7 +185,7 @@ export default function GoalDetailScreen() {
 
         {goal.allocation > 0 && goal.frequency !== 'none' && (
           <Text style={styles.cadenceNote}>
-            Auto-saving {formatRupees(goal.allocation)} / {goal.frequency}{est ? ` · ~${est.periods} ${goal.frequency} left` : ''}
+            Auto-saving {formatCompact(goal.allocation)} / {goal.frequency}{est ? ` · ~${est.periods} ${goal.frequency} left` : ''}
           </Text>
         )}
 
@@ -223,13 +223,13 @@ export default function GoalDetailScreen() {
 
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add funds">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatRupees(unallocated)} available in your pool · extra is added automatically.</Text>
+        <Text style={styles.hint}>{formatCompact(unallocated)} available in your pool · extra is added automatically.</Text>
         <PrimaryButton label="Add to goal" onPress={handleAdd} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
 
       <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw to pool">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatRupees(saved)} saved · returns to your unallocated pool.</Text>
+        <Text style={styles.hint}>{formatCompact(saved)} saved · returns to your unallocated pool.</Text>
         <PrimaryButton label="Withdraw" onPress={handleWithdraw} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
     </View>

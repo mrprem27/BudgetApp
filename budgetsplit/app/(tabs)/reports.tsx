@@ -22,7 +22,7 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { formatRupees, formatRupeesShort, formatCompactMajor } from '../../src/lib/money';
+import { formatRupees, formatCompact, formatCompactMajor } from '../../src/lib/money';
 import { Badge } from '../../src/components/ui/Badge';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -455,7 +455,7 @@ export default function ReportsScreen() {
                         <View style={[styles.legendDot, { backgroundColor: d.color }]} />
                         <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
                         <Text style={styles.legendPct}>{Math.round((d.value / total) * 100)}%</Text>
-                        <Text style={styles.legendAmt}>{formatRupeesShort(d.value)}</Text>
+                        <Text style={styles.legendAmt}>{formatCompact(d.value)}</Text>
                       </View>
                     ));
                   })()}
@@ -550,17 +550,17 @@ export default function ReportsScreen() {
               <View style={styles.metricRow}>
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
-                  <AmountText paise={s.income} size="sm" forceColor={colors.income} rounded />
+                  <AmountText paise={s.income} size="sm" forceColor={colors.income} compact />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Expense</Text>
-                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} rounded />
+                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} compact />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Net</Text>
-                  <AmountText paise={s.income - s.expense} size="sm" rounded />
+                  <AmountText paise={s.income - s.expense} size="sm" compact />
                 </View>
               </View>
 
@@ -571,7 +571,7 @@ export default function ReportsScreen() {
                   {s.topCats.map(c => (
                     <View key={c.name} style={styles.catRow}>
                       <Text style={styles.catName}>{c.name}</Text>
-                      <Text style={styles.catAmt}>{formatRupeesShort(c.amount)}</Text>
+                      <Text style={styles.catAmt}>{formatCompact(c.amount)}</Text>
                     </View>
                   ))}
                 </>
@@ -617,17 +617,17 @@ export default function ReportsScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Income</Text>
-                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} rounded />
+                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} compact />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Spent</Text>
-                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} rounded />
+                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} compact />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Saved</Text>
-                <AmountText paise={yearIncome - yearExpense} size="sm" rounded />
+                <AmountText paise={yearIncome - yearExpense} size="sm" compact />
               </View>
             </View>
 
@@ -640,7 +640,7 @@ export default function ReportsScreen() {
             <View style={styles.reviewRow}>
               <Text style={styles.reviewLabel}>Biggest expense</Text>
               <Text style={[styles.reviewValue, { fontFamily: 'SpaceMono_400Regular' }]}>
-                {formatRupeesShort(biggestTxn)}
+                {formatCompact(biggestTxn)}
               </Text>
             </View>
           </View>

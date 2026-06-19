@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
   currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
