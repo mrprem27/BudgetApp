@@ -47,7 +47,7 @@ export default function GroupsScreen() {
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [loadError, setLoadError] = useState(false);
-  const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; name: string; color: string; label: string; amount: number }> } | null>(null);
+  const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useFocusEffect(useCallback(() => {
@@ -76,8 +76,9 @@ export default function GroupsScreen() {
         const rows = mine.map(s => {
           const iPay = s.from === me.id;
           if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
-          const other = pmap.get(iPay ? s.to : s.from);
-          return { key: `${s.from}-${s.to}`, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
+          const otherId = iPay ? s.to : s.from;
+          const other = pmap.get(otherId);
+          return { key: `${s.from}-${s.to}`, otherId, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
         });
         setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
       } else {
@@ -204,7 +205,7 @@ export default function GroupsScreen() {
         <Text style={styles.balListLabel}>Settle up · tap a person</Text>
         <View style={styles.balList}>
           {bal.rows.map((r, i) => (
-            <TouchableOpacity key={r.key} style={[styles.balRow, i < bal.rows.length - 1 && styles.balRowBorder]} onPress={() => router.push('/settle')} accessibilityRole="button" accessibilityLabel={`Settle with ${r.name}`}>
+            <TouchableOpacity key={r.key} style={[styles.balRow, i < bal.rows.length - 1 && styles.balRowBorder]} onPress={() => router.push(`/settle?focus=${r.otherId}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${r.name}`}>
               <MemberAvatar name={r.name} color={r.color} size={36} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.balName} numberOfLines={1}>{r.name}</Text>

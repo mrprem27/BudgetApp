@@ -15,7 +15,7 @@ type Props = {
 export function SecondaryButton({ label, onPress, disabled, icon, size = 'lg', style }: Props) {
   const heights = { lg: 52, md: 44, sm: 36 };
   const height = heights[size];
-  const fontSize = size === 'sm' ? type.label : type.button;
+  const labelType = size === 'sm' ? type.label : type.button;
 
   return (
     <TouchableOpacity
@@ -26,7 +26,7 @@ export function SecondaryButton({ label, onPress, disabled, icon, size = 'lg', s
       accessibilityLabel={label}
     >
       {icon ? <Feather name={icon} size={size === 'sm' ? 14 : 16} color={colors.accent} /> : null}
-      <Text style={[styles.label, fontSize]}>{label}</Text>
+      <Text style={[labelType, styles.label]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -44,7 +44,6 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.4 },
   label: {
-    ...type.button,
     color: colors.accent,
   },
 });

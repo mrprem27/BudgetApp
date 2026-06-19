@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
@@ -21,10 +21,12 @@ import type { Person } from '../src/db/queries/persons';
 export default function GlobalSettleScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const [net, setNet] = useState<Record<string, number>>({});
   const [persons, setPersons] = useState<Person[]>([]);
   const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const autoFocused = useRef(false);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -41,6 +43,20 @@ export default function GlobalSettleScreen() {
 
   const personMap = new Map(persons.map(p => [p.id, p]));
   const settlements = simplify(net);
+
+  // When arriving from a specific balance row (?focus=<personId>), open that
+  // person's settlement sheet directly — once, after data has loaded.
+  useEffect(() => {
+    if (autoFocused.current || !focus || persons.length === 0) return;
+    const s = settlements.find(x => x.from === focus || x.to === focus);
+    if (!s) return;
+    const from = personMap.get(s.from);
+    const to = personMap.get(s.to);
+    if (from && to) {
+      autoFocused.current = true;
+      setSettleTarget({ from, to, amount: s.amount });
+    }
+  }, [focus, persons, net]);
 
   async function markPaid(from: Person, to: Person, amount: number) {
     try {

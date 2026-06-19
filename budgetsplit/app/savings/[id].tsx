@@ -22,7 +22,7 @@ import { goalProgress, estimatedCompletion, monthlyContribution } from '../../sr
 import { haptic } from '../../src/lib/haptics';
 import {
   getGoalById, getGoalSavedMap, getPoolSummary, getGoalHistory,
-  addToPool, allocateToGoal, withdrawFromGoal, setGoalLocked, deleteGoal,
+  depositAndAllocate, withdrawFromGoal, setGoalLocked, deleteGoal,
   type SavingsGoal, type SavingsTxn, type Priority,
 } from '../../src/db/queries/savings';
 
@@ -111,9 +111,9 @@ export default function GoalDetailScreen() {
     if (a <= 0) return;
     try {
       // Pull from the unallocated pool; top it up first if there isn't enough.
+      // Both writes happen in one transaction so we never deposit without allocating.
       const shortfall = Math.max(0, a - unallocated);
-      if (shortfall > 0) await addToPool(db, shortfall);
-      await allocateToGoal(db, id, a);
+      await depositAndAllocate(db, id, a, shortfall);
       haptic.success();
       setAmt(''); setShowAdd(false);
       await load();

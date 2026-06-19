@@ -128,6 +128,21 @@ export async function allocateToGoal(db: SQLite.SQLiteDatabase, goalId: string, 
   await insertTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null });
 }
 
+/**
+ * Atomically top up the pool by `shortfall` (when the goal needs more than the
+ * unallocated balance) and allocate `amount` to the goal — in one transaction so
+ * a failure can never deposit without allocating.
+ */
+export async function depositAndAllocate(db: SQLite.SQLiteDatabase, goalId: string, amount: number, shortfall = 0): Promise<void> {
+  if (amount <= 0) return;
+  await db.withTransactionAsync(async () => {
+    if (shortfall > 0) {
+      await insertTxn(db, { goal_id: null, amount: shortfall, kind: 'deposit', source: 'manual', date: Date.now(), note: null });
+    }
+    await insertTxn(db, { goal_id: goalId, amount, kind: 'allocate', source: 'manual', date: Date.now(), note: null });
+  });
+}
+
 /** Pull money back out of a goal, returning it to the pool's unallocated balance. */
 export async function withdrawFromGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, note?: string): Promise<void> {
   if (amount <= 0) return;

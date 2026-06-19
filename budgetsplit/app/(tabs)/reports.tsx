@@ -147,7 +147,7 @@ export default function ReportsScreen() {
       const allMonthTxns = await getTransactionsInRange(db, null, fromMs2, toMs2);
       const fullCatMap: Record<string, number> = {};
       for (const t of allMonthTxns) {
-        if (t.kind === 'expense' && !t.is_deleted) {
+        if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
           const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
         }
@@ -169,7 +169,7 @@ export default function ReportsScreen() {
         const mTxns = await getTransactionsInRange(db, null, mFrom, mTo);
         let mSpend = 0;
         for (const t of mTxns) {
-          if (t.kind === 'expense' && !t.is_deleted) {
+          if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
             mSpend += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           }
         }
@@ -193,7 +193,7 @@ export default function ReportsScreen() {
         const dailyCumulative: Array<{ value: number; label?: string }> = [];
         let runningTotal = 0;
         const allMonthExpenses = (await getTransactionsInRange(db, null, monthStart.getTime(), endOfMonth(month).getTime()))
-          .filter(t => t.kind === 'expense' && !t.is_deleted);
+          .filter(t => t.kind === 'expense'); // soft-deleted already excluded by the query
 
         for (let d = 1; d <= dayOfMonth; d++) {
           const dayStart = addDays(monthStart, d - 1).getTime();

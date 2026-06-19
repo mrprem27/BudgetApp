@@ -54,12 +54,12 @@ P1 follow-up**.
 
 ---
 
-## 2. P1 — Bugs & rule violations (remaining)
+## 2. P1 — Bugs & rule violations ✅ DONE
 
-- **SecondaryButton.tsx:18** — `fontSize` variable actually holds a `TextStyle` object and double-applies `type.button`/`type.label`; rename + apply size typography cleanly.
-- **groups.tsx:196** — every balance row opens the generic `/settle` and ignores the tapped person, though the a11y label says "Settle with {name}". Pass the person if `/settle` supports it.
-- **reports.tsx:147 vs 48/117/241/279** — charts filter `!is_deleted` but summary cards / year-in-review / CSV / PDF may not. Confirm `getTransactionsInRange` excludes soft-deleted; apply consistently.
-- **savings/[id]** — `handleAdd` (`addToPool` + `allocateToGoal`) is two writes; wrap in one `db.withTransactionAsync` so a mid-failure can't top up the pool without allocating.
+- **SecondaryButton** — typography no longer double-applied; size style applied cleanly (base style is color-only).
+- **groups.tsx** — balance row now opens `/settle?focus=<personId>`; settle auto-opens that person's settlement sheet once on load.
+- **reports.tsx** — verified `getTransactionsInRange` already excludes soft-deleted (`is_deleted = 0` in the query); removed the redundant always-true `!t.is_deleted` checks so all paths are consistent.
+- **savings/[id]** — new `depositAndAllocate` query wraps pool top-up + allocation in one `db.withTransactionAsync`; `handleAdd` uses it.
 - ~~Multi-currency `₹` literals~~ — moot: INR-only for v1 (currency UI hidden).
 - ~~income.tsx missing-txn on edit~~ — DONE (Alert + back).
 
