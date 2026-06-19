@@ -18,7 +18,6 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { CURRENCIES, DEFAULT_CURRENCY, type CurrencyCode } from '../../src/constants/currencies';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 
@@ -41,8 +40,6 @@ export default function SettingsScreen() {
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-  const [defaultCurrency, setDefaultCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
-  const [showCurrency, setShowCurrency] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -52,8 +49,6 @@ export default function SettingsScreen() {
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
-      const cur = await AsyncStorage.getItem('default_currency');
-      if (cur) setDefaultCurrency(cur as CurrencyCode);
     })();
   }, []);
 
@@ -109,16 +104,21 @@ export default function SettingsScreen() {
       {/* Preferences */}
       <Text style={styles.sectionTitle}>Preferences</Text>
       <View style={styles.card}>
+        {/* Currency selection hidden for v1 (INR-only) — re-add when multi-currency ships. */}
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="dollar-sign" label="Currency" value={`${CURRENCIES.find(c => c.code === defaultCurrency)?.symbol ?? '₹'} ${CURRENCIES.find(c => c.code === defaultCurrency)?.name ?? 'Indian Rupee'}`} onPress={() => setShowCurrency(true)} />
       </View>
 
       {/* Features */}
       <Text style={styles.sectionTitle}>Features</Text>
       <View style={styles.card}>
-        <ToggleRow icon="bar-chart-2" label="Insights & tips" value={flags.insights} onValueChange={(v) => setFlag('insights', v)} />
-        <Text style={styles.featureCaption}>Cross-group spending insights on dashboard</Text>
+        <ToggleRow icon="bar-chart-2" label="Dashboard insights" value={flags.dashboardInsights} onValueChange={(v) => setFlag('dashboardInsights', v)} />
+        <Text style={styles.featureCaption}>Cross-group spending insights on the dashboard</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="pie-chart" label="Budget insights" value={flags.budgetInsights} onValueChange={(v) => setFlag('budgetInsights', v)} />
+        <Text style={styles.featureCaption}>Analytics & projections on group budgets</Text>
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="target" label="Savings insights" value={flags.savingsInsights} onValueChange={(v) => setFlag('savingsInsights', v)} />
+        <Text style={styles.featureCaption}>Opportunity-cost nudges on the Savings tab</Text>
         <View style={settingsRowDivider} />
         <ToggleRow icon="trending-up" label="Spending forecast" value={flags.forecast} onValueChange={(v) => setFlag('forecast', v)} />
         <Text style={styles.featureCaption}>Month-end projection on Reports</Text>
@@ -167,19 +167,7 @@ export default function SettingsScreen() {
         ))}
       </SheetModal>
 
-      <SheetModal visible={showCurrency} onClose={() => setShowCurrency(false)} title="Default currency" scroll>
-        {CURRENCIES.map(c => (
-          <TouchableOpacity
-            key={c.code}
-            style={[styles.cadOption, defaultCurrency === c.code && styles.cadOptionActive]}
-            onPress={async () => { setDefaultCurrency(c.code); setShowCurrency(false); await AsyncStorage.setItem('default_currency', c.code); haptic.selection(); }}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.cadOptionText, defaultCurrency === c.code && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{c.symbol}  {c.name} ({c.code})</Text>
-            {defaultCurrency === c.code && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
+      {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
     </KeyboardAvoidingView>
   );

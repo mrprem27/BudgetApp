@@ -118,7 +118,7 @@ export default function BudgetEditorScreen() {
           </View>
 
           <Text style={styles.explain}>
-            Pick a cadence per category. Daily, monthly and yearly budgets roll forward on their own each period; one-time doesn't repeat.
+            Pick a cadence per category. Daily, monthly and yearly budgets repeat each period — the limit resets and unused amount doesn't carry over; one-time doesn't repeat.
           </Text>
 
           {rows.length > 0 ? (

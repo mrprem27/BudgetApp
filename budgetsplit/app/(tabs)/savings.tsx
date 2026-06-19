@@ -27,6 +27,7 @@ import {
 import { getAllGroups } from '../../src/db/queries/groups';
 import type { Insight } from '../../src/lib/savingsInsights';
 import type { CashPosition } from '../../src/lib/cash';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 const GOAL_ICONS = ['smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield', 'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target'];
 const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060'];
@@ -61,6 +62,7 @@ export default function SavingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [saved, setSaved] = useState<Record<string, number>>({});
   const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
@@ -190,7 +192,7 @@ export default function SavingsScreen() {
         </View>
 
         {/* Insights */}
-        {insights.length > 0 && (
+        {flags.savingsInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
             <Text style={styles.insightsTitle}>Insights</Text>
             {insights.map((ins, i) => {

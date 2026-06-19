@@ -138,7 +138,7 @@ const SECTIONS: Section[] = [
     ] },
     items: [
       { icon: 'camera', color: '#FB923C', title: 'Scan receipts', body: 'Tap the camera icon in the top-right when adding an expense. Take a photo of your receipt \u2014 the app will try to extract the total amount automatically. Works offline with on-device processing.' },
-      { icon: 'dollar-sign', color: colors.accent, title: 'Multi-currency', body: 'Tap the currency badge (₹) next to the amount input to switch currencies per transaction. Set your default currency in Settings \u2192 Preferences. Supports INR, USD, EUR, GBP, JPY, and more.' },
+      { icon: 'dollar-sign', color: colors.accent, title: 'Currency', body: 'Amounts are in Indian Rupees (₹). Multi-currency support is coming in a future update.' },
       { icon: 'map-pin', color: '#FF6F61', title: 'Map link', body: 'If location tagging is on, transactions show their location. Tap the location row in transaction detail to open Apple Maps at that exact spot.' },
       { icon: 'hash', color: '#8B7CF8', title: 'Tags', body: 'Add #tags to any transaction (e.g. #trip, #wedding). Tags work across groups \u2014 filter by tag in Reports to see all related spending regardless of group.' },
       { icon: 'paperclip', color: colors.income, title: 'Receipt photos', body: 'Attach a photo to any transaction. Tap the camera icon when adding an expense to snap or pick a receipt image for your records.' },

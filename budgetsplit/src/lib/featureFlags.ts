@@ -1,11 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type FeatureKey = 'insights' | 'forecast' | 'itemizedOcr' | 'recurring';
+// Each insight surface owns its own flag so it can be toggled independently.
+export type FeatureKey =
+  | 'dashboardInsights'
+  | 'budgetInsights'
+  | 'savingsInsights'
+  | 'forecast'
+  | 'itemizedOcr'
+  | 'recurring';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
 const DEFAULTS: FeatureFlags = {
-  insights: true,
+  dashboardInsights: true,
+  budgetInsights: true,
+  savingsInsights: true,
   forecast: true,
   itemizedOcr: true,
   recurring: true,

@@ -308,7 +308,7 @@ export default function DashboardScreen() {
             activeOpacity={0.85}
             onPress={() => {
               const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
-              if (pid) router.push(flags.insights ? `/group/${pid}/insights` : `/group/${pid}/budget`);
+              if (pid) router.push(flags.budgetInsights ? `/group/${pid}/insights` : `/group/${pid}/budget`);
             }}
             accessibilityRole="button"
             accessibilityLabel="Manage budget"
@@ -381,7 +381,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Insights — top cross-group analytics, tap to manage that group's budget */}
-        {flags.insights && insights.length > 0 && (
+        {flags.dashboardInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
             <Text style={styles.chartTitle}>Insights</Text>
             <View style={{ gap: space.sm }}>

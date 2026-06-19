@@ -556,7 +556,7 @@ export default function GroupDetailScreen() {
             <EmptyState
               icon="target"
               title="No budget yet"
-              body="Give a category a limit — one-time, daily, monthly or yearly — and track it live. It rolls forward automatically each period."
+              body="Give a category a limit — one-time, daily, monthly or yearly — and track it live. Each period starts fresh: the limit resets and unused amount doesn't carry over."
               actionLabel="Create budget"
               onAction={() => router.push(`/group/${id}/budget`)}
             />

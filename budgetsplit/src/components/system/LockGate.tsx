@@ -77,6 +77,9 @@ export function LockGate({ children }: { children: React.ReactNode }) {
         fallbackLabel: 'Use passcode',
       });
       if (result.success) setLocked(false);
+    } catch {
+      // Auth threw (e.g. too many attempts / OS lockout) — stay locked; the
+      // user can retry with the Unlock button. Never crash on a rejection.
     } finally {
       setAuthing(false);
     }
@@ -100,7 +103,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
             style={styles.unlockBtn}
             onPress={authenticate}
             accessibilityRole="button"
-            accessibilityLabel="Unlock with Face ID"
+            accessibilityLabel="Unlock"
           >
             <Feather name="unlock" size={18} color={colors.bg} />
             <Text style={styles.unlockText}>Unlock</Text>

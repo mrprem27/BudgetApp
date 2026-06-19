@@ -7,7 +7,7 @@ type ContextValue = {
   ready: boolean;
 };
 
-const defaultFlags: FeatureFlags = { insights: true, forecast: true, itemizedOcr: true, recurring: true };
+const defaultFlags: FeatureFlags = { dashboardInsights: true, budgetInsights: true, savingsInsights: true, forecast: true, itemizedOcr: true, recurring: true };
 
 const Ctx = createContext<ContextValue>({ flags: defaultFlags, setFlag: () => {}, ready: false });
 
@@ -16,12 +16,14 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    loadFlags().then(f => { setFlags(f); }).catch(() => {}).finally(() => setReady(true));
+    let alive = true;
+    loadFlags().then(f => { if (alive) setFlags(f); }).catch(() => {}).finally(() => { if (alive) setReady(true); });
+    return () => { alive = false; };
   }, []);
 
   const set = useCallback((key: FeatureKey, value: boolean) => {
     setFlags(prev => ({ ...prev, [key]: value }));
-    persistFlag(key, value);
+    persistFlag(key, value).catch(() => {}); // best-effort persist
   }, []);
 
   return <Ctx.Provider value={{ flags, setFlag: set, ready }}>{children}</Ctx.Provider>;

@@ -14,7 +14,7 @@ import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
-import { CURRENCIES, DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
+import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
@@ -69,7 +69,6 @@ export default function QuickAddScreen() {
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -248,10 +247,10 @@ export default function QuickAddScreen() {
         {/* Income has its own dedicated screen (add/income); this screen is expense-only. */}
 
         <View style={styles.amountRow}>
-          <TouchableOpacity style={styles.currencyBadge} onPress={() => setShowCurrencyPicker(true)} accessibilityLabel="Change currency">
+          {/* INR-only for v1 — currency picker hidden; static symbol. */}
+          <View style={styles.currencyBadge}>
             <Text style={styles.currencyBadgeText}>{CURRENCY_MAP[currency].symbol}</Text>
-            <Feather name="chevron-down" size={12} color={colors.textMuted} />
-          </TouchableOpacity>
+          </View>
           <TextInput
             style={styles.amountInput}
             value={amountText}
@@ -562,20 +561,7 @@ export default function QuickAddScreen() {
         ))}
       </SheetModal>
 
-      <SheetModal visible={showCurrencyPicker} onClose={() => setShowCurrencyPicker(false)} title="Currency" scroll>
-        {CURRENCIES.map(c => (
-          <TouchableOpacity
-            key={c.code}
-            style={[styles.groupPickerRow, currency === c.code && styles.groupPickerRowActive]}
-            onPress={() => { setCurrency(c.code); setShowCurrencyPicker(false); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.currencySymbol}>{c.symbol}</Text>
-            <Text style={styles.groupPickerName}>{c.name} ({c.code})</Text>
-            {currency === c.code && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
+      {/* Currency picker hidden for v1 (INR-only). */}
 
       {/* Paid by sheet — set one or more payers */}
       <SheetModal visible={showPayers} onClose={() => setShowPayers(false)} title="Who paid?">
@@ -624,7 +610,6 @@ const styles = StyleSheet.create({
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
   currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  currencySymbol: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary, width: 28, textAlign: 'center' },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   field: { gap: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },

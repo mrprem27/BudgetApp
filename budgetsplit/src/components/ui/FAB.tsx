@@ -73,10 +73,10 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
         style={[
           styles.fab,
           {
-            // Tab screens: clear the tab bar. Pushed screens: a small fixed gap
-            // above the home indicator — no leftover empty space below.
+            // Tab screens: clear the frosted tab bar. Pushed screens: a small
+            // fixed gap above the home indicator — no leftover empty space below.
             bottom: aboveTabBar
-              ? insets.bottom + space.sm
+              ? insets.bottom + layout.tabBarHeight + space.sm
               : insets.bottom + space.sm,
             transform: [{ scale: scaleAnim }],
           },
@@ -134,7 +134,6 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     ...shadow.lg,
   },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: 40 + space.md },
   handle: {
     alignSelf: 'center',
     width: 38, height: 4, borderRadius: 2,
