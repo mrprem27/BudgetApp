@@ -636,6 +636,30 @@ export async function splitRecurringSeries(
   return newId;
 }
 
+/**
+ * True if a non-recurring transaction with the same category + total amount
+ * already exists in the group within ±24h — used to warn about accidental
+ * double entries before saving.
+ */
+export async function findRecentDuplicate(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  category: string,
+  amountPaise: number,
+  dateMs: number,
+): Promise<boolean> {
+  const window = 24 * 60 * 60 * 1000;
+  const rows = await db.getAllAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(p.amount),0) as total
+       FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
+      WHERE t.group_id=? AND t.category=? AND t.is_deleted=0 AND t.recur_freq IS NULL
+        AND t.date BETWEEN ? AND ?
+      GROUP BY t.id`,
+    [groupId, category, dateMs - window, dateMs + window],
+  );
+  return rows.some(r => r.total === amountPaise);
+}
+
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
   return db.getAllAsync<LineItem>('SELECT * FROM line_item WHERE txn_id = ?', [txnId]);
 }

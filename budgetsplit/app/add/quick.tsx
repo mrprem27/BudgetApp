@@ -21,7 +21,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/con
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -256,32 +256,53 @@ export default function QuickAddScreen() {
       // End date is optional; only valid if it's after the start date.
       const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
 
-      // Optional, user-controlled location capture (Settings → Privacy).
-      let place: { lat: number; lng: number; label: string | null } | null = null;
-      try {
-        if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
-      } catch { /* best-effort */ }
+      const commit = async () => {
+        // Optional, user-controlled location capture (Settings → Privacy).
+        let place: { lat: number; lng: number; label: string | null } | null = null;
+        try {
+          if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
+        } catch { /* best-effort */ }
 
-      await insertTxn(db, {
-        groupId: selectedGroupId,
-        kind,
-        entryMode: 'quick',
-        date: txnDate,
-        category: selectedCategory!.name,
-        note: note.trim() || undefined,
-        attachmentUri: attachmentUri ?? undefined,
-        recurFreq: recurEnabled ? recurFreq : undefined,
-        recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
-        recurEnd,
-        lat: place?.lat,
-        lng: place?.lng,
-        placeLabel: place?.label ?? undefined,
-        currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
-        payments: finalPayments,
-        shares: finalShares,
-      });
-      haptic.success();
-      router.back();
+        await insertTxn(db, {
+          groupId: selectedGroupId,
+          kind,
+          entryMode: 'quick',
+          date: txnDate,
+          category: selectedCategory!.name,
+          note: note.trim() || undefined,
+          attachmentUri: attachmentUri ?? undefined,
+          recurFreq: recurEnabled ? recurFreq : undefined,
+          recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
+          recurEnd,
+          lat: place?.lat,
+          lng: place?.lng,
+          placeLabel: place?.label ?? undefined,
+          currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
+          payments: finalPayments,
+          shares: finalShares,
+        });
+        haptic.success();
+        router.back();
+      };
+
+      // Warn on a likely double-entry (same category + amount within 24h).
+      if (kind === 'expense' && !recurEnabled) {
+        const dup = await findRecentDuplicate(db, selectedGroupId, selectedCategory!.name, total, txnDate);
+        if (dup) {
+          setSaving(false);
+          Alert.alert(
+            'Possible duplicate',
+            `You already logged ${formatRupees(total)} on ${selectedCategory!.name} recently. Add it anyway?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Add anyway', onPress: () => { setSaving(true); commit().catch(() => Alert.alert('Error', 'Could not save. Try again.')).finally(() => setSaving(false)); } },
+            ],
+          );
+          return;
+        }
+      }
+
+      await commit();
     } catch (e) {
       Alert.alert('Error', 'Could not save. Try again.');
     } finally {
