@@ -128,6 +128,8 @@ export default function SettingsScreen() {
       {/* Manage */}
       <Text style={styles.sectionTitle}>Manage</Text>
       <View style={styles.card}>
+        <SettingsRow icon="search" label="Search transactions" onPress={() => { haptic.light(); router.push('/search'); }} />
+        <View style={settingsRowDivider} />
         <SettingsRow icon="tag" label="Categories" onPress={() => { haptic.light(); router.push('/categories'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="History" onPress={() => { haptic.light(); router.push('/history'); }} />
