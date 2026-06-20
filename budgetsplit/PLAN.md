@@ -73,10 +73,6 @@ color-format sweep · **D** F18 inputs + F17 spacing + F20 friends-entry + F12 b
 - **F20** Manage-friends entry (rename / photo / remove). *(Balances + settle already
   on Groups.)*
 - **F21′** Color-where-+/--matters sweep on remaining neutral owe/owed figures.
-- **F24** Feature-management screen — one Settings row → dedicated, **sectioned**
-  toggle screen for every component.
-- **F27** Money tab — clearer Personal-ledger / expense-management section (it's
-  buried among savings).
 - **F28** Insights numbers — apply **K/L/Cr** + semantic color (figure colored by meaning).
 - **F29** Increase/decrease cues — ▲/▼ Feather icon + matching color in front of deltas.
 
@@ -87,7 +83,8 @@ dash · F7 Settings regroup · F9 income custom interval · F10 forecast redesig
 (+tests) · F11 compact decimals · F13 budget compact + rows + IA · F14 semantic
 coloring · F15 donut deselect · F16 add-form UX · F19 donut wedge return · F21
 settlement sign-color · F22 settlement directional rows · F23 Settings padding ·
-F26 History spacing · F25 avatar photos (user + friends).
+F26 History spacing · F25 avatar photos (user + friends) · F24 feature-management
+screen · F27 Money-tab Spending/Savings sections.
 
 ---
 

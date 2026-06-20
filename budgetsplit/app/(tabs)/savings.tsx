@@ -157,17 +157,21 @@ export default function SavingsScreen() {
 
         {/* Personal budget & spending (the personal ledger lives here now) */}
         {!!personalId && (
-          <TouchableOpacity style={styles.personalCard} onPress={() => router.push(`/group/${personalId}` as any)} accessibilityRole="button" accessibilityLabel="Personal budget and spending">
-            <View style={styles.personalIcon}><Feather name="book" size={18} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personalTitle}>Personal budget & spending</Text>
-              <Text style={styles.personalSub}>Your ledger, categories & limits</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
+          <>
+            <Text style={styles.moneySection}>Spending & budget</Text>
+            <TouchableOpacity style={styles.personalCard} onPress={() => router.push(`/group/${personalId}` as any)} accessibilityRole="button" accessibilityLabel="Personal budget and spending">
+              <View style={styles.personalIcon}><Feather name="book" size={18} color={colors.accent} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personalTitle}>Personal budget & spending</Text>
+                <Text style={styles.personalSub}>Your ledger, categories & limits</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          </>
         )}
 
         {/* Savings pool */}
+        <Text style={styles.moneySection}>Savings</Text>
         <View style={styles.poolCard}>
           <Text style={styles.poolLabel}>Savings Pool</Text>
           <AmountText paise={pool.total} size="xl" forceColor={colors.textPrimary} compact />
@@ -376,6 +380,7 @@ const styles = StyleSheet.create({
 
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
+  moneySection: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
