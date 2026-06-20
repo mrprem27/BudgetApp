@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal, useWindowDimensions } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -47,6 +47,7 @@ export default function TxnDetailScreen() {
   const [parentRule, setParentRule] = useState<TxnWithSplits | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [showAttachment, setShowAttachment] = useState(false);
+  const { width: winW, height: winH } = useWindowDimensions();
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
@@ -336,12 +337,15 @@ export default function TxnDetailScreen() {
               <Feather name="x" size={24} color="#fff" />
             </TouchableOpacity>
             <ScrollView
+              style={{ width: winW, height: winH }}
               maximumZoomScale={4}
               minimumZoomScale={1}
               contentContainerStyle={styles.attachZoom}
               centerContent
             >
-              <Image source={{ uri: txn.attachment_uri }} style={styles.attachFull} resizeMode="contain" />
+              {/* Explicit pixel size — a percentage height collapses to 0 inside
+                  a ScrollView, which left the image invisible. */}
+              <Image source={{ uri: txn.attachment_uri }} style={{ width: winW, height: winH }} resizeMode="contain" />
             </ScrollView>
           </View>
         </Modal>
@@ -419,6 +423,5 @@ const styles = StyleSheet.create({
   attachHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   attachOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   attachClose: { position: 'absolute', top: 56, right: 20, zIndex: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  attachZoom: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  attachFull: { width: '100%', height: '100%' },
+  attachZoom: { justifyContent: 'center', alignItems: 'center' },
 });
