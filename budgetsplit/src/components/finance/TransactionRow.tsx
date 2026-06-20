@@ -21,9 +21,29 @@ type Props = {
 
 export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false, members, isPersonal }: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
-  const displayAmount = txn.kind === 'income'
-    ? txn.payments.find(p => p.personId === myId)?.amount ?? 0
-    : -myShare;
+  const nameOf = (pid?: string) => members?.find(m => m.id === pid)?.name ?? 'Someone';
+
+  // Title + signed amount. Settlements read directionally (who paid whom); the
+  // payer has no share, so the old `-myShare` showed ₹0 for them.
+  let title = txn.category;
+  let displayAmount: number;
+  if (txn.kind === 'income') {
+    displayAmount = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
+  } else if (txn.kind === 'settlement') {
+    const fromId = txn.payments[0]?.personId;
+    const toId = txn.shares[0]?.personId;
+    const amount = txn.payments[0]?.amount ?? 0;
+    const iPaid = fromId === myId;
+    const iGot = toId === myId;
+    displayAmount = iPaid ? -amount : amount; // out when I paid, in when I received
+    if (members && !isPersonal) {
+      title = iPaid ? `You paid ${nameOf(toId)}`
+        : iGot ? `${nameOf(fromId)} paid you`
+        : `${nameOf(fromId)} paid ${nameOf(toId)}`;
+    }
+  } else {
+    displayAmount = -myShare;
+  }
 
   const visual = txn.kind === 'income'
     ? { icon: 'trending-up' as const, color: colors.income }
@@ -31,7 +51,7 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     ? { icon: 'check-circle' as const, color: colors.settle }
     : categoryVisual(txn.category);
 
-  // Attribution line for shared groups
+  // Attribution line — "you lent / you borrowed" on shared-group expenses.
   let attribution: { text: string; color: string } | null = null;
   if (members && !isPersonal && txn.kind === 'expense') {
     const myPaid = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
@@ -41,11 +61,6 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     } else if (lent < 0) {
       attribution = { text: `you borrowed ${formatCompact(-lent)}`, color: colors.expense };
     }
-  } else if (members && !isPersonal && txn.kind === 'settlement') {
-    const other = txn.payments[0]?.personId === myId
-      ? members.find(m => m.id === txn.shares[0]?.personId)
-      : members.find(m => m.id === txn.payments[0]?.personId);
-    if (other) attribution = { text: `settled with ${other.name}`, color: colors.settle };
   }
 
   const hasAttachment = !!txn.attachment_uri;
@@ -63,16 +78,14 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
         <Feather name={visual.icon} size={18} color={visual.color} />
       </View>
       <View style={styles.middle}>
-        <Text style={styles.category} numberOfLines={1}>{txn.category}</Text>
+        <Text style={styles.category} numberOfLines={1}>{title}</Text>
         {txn.note ? <Text style={styles.note} numberOfLines={1}>{txn.note}</Text> : null}
         {attribution && <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>{attribution.text}</Text>}
       </View>
       <View style={styles.right}>
-        <AmountText
-          paise={displayAmount}
-          size="sm"
-          forceColor={txn.kind === 'settlement' ? colors.settle : undefined}
-        />
+        {/* Sign-colored: + received (green) / − paid out (red). The purple icon
+            already marks it as a settlement, so the amount can show direction. */}
+        <AmountText paise={displayAmount} size="sm" />
         <View style={styles.rightMeta}>
           {hasAttachment && <Feather name="paperclip" size={12} color={colors.textMuted} />}
           {showDate && Number.isFinite(txn.date) && (
