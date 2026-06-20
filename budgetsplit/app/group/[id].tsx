@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format, isSameDay, startOfMonth } from 'date-fns';
 import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
@@ -228,6 +229,11 @@ export default function GroupDetailScreen() {
             <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
+          {!isPersonal && (
+            <TouchableOpacity onPress={() => router.push(`/group/${id}/members`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage members" style={styles.headerAction}>
+              <Feather name="users" size={21} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
             <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -236,7 +242,7 @@ export default function GroupDetailScreen() {
         {/* Group hero — themed by the group's colour */}
         <View style={styles.hero}>
           <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
-            <Feather name={(group.icon as any) ?? 'credit-card'} size={22} color={group.color} />
+            <Feather name={asFeather(group.icon, 'credit-card')} size={22} color={group.color} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
@@ -659,6 +665,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   gradientHeader: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
+  headerAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgCard + 'AA', alignItems: 'center', justifyContent: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
   heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   heroName: { ...type.title, fontSize: 26, color: colors.textPrimary },

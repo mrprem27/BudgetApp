@@ -88,16 +88,21 @@ export default function SettingsScreen() {
       {/* Profile */}
       <Text style={styles.sectionTitle}>Account</Text>
       <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button">
-        <MemberAvatar
-          name={me?.name ?? '?'}
-          color={me?.avatar_color ?? colors.accent}
-          size={44}
-          imageUri={me?.image_uri}
-          onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
-        />
+        <View>
+          <MemberAvatar
+            name={me?.name ?? '?'}
+            color={me?.avatar_color ?? colors.accent}
+            size={44}
+            imageUri={me?.image_uri}
+            onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
+          />
+          <View style={styles.cameraBadge} pointerEvents="none">
+            <Feather name="camera" size={10} color={colors.bg} />
+          </View>
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
-          <Text style={styles.profileSub}>{me?.email ?? 'Tap to edit your name'}</Text>
+          <Text style={styles.profileSub}>Tap photo to change · name to rename</Text>
         </View>
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
@@ -179,13 +184,14 @@ const styles = StyleSheet.create({
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.xs, gap: 2, ...shadow.sm },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   profileName: { ...type.subheading, color: colors.textPrimary },
   profileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
 
-  aboutText: { ...type.body, color: colors.textPrimary },
-  aboutSub: { ...type.caption, color: colors.textSecondary },
+  aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },
+  aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 2 },
   nameInputGap: { marginBottom: space.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
