@@ -89,28 +89,19 @@ F29 increase=coral severity.
 > need a custom dev build (expo-notifications / WidgetKit). Full strategic detail
 > in root `FEATURE_ROADMAP.md` §0.
 
-### Phase A — Edit integrity & recurring model  *(P0 · no dev build)*
-- [ ] **A1 — Edit itemized bills**
-  - [ ] Allow edit on itemized txns (drop `!isItemized` lock in `txn/[id].tsx`)
-  - [ ] `add/itemized.tsx`: accept `editId`; load existing items + assignments + payers
-  - [ ] Add `updateItemizedTxn` (rewrite line_item + payments + shares atomically)
-  - [ ] Header → "Edit Itemized"; Save calls update; no orphaned `line_item` rows
-- [ ] **A2 — Recurring occurrences become real, editable transactions**
-  - [ ] Schema: add `parent_recur_id` (+ `recur_occurrence_date`) to `txn`; migration
-  - [ ] Materialize-on-due job: at app-open (and a catch-up loop) insert real rows for
-        every due occurrence since last run; idempotent/dedup by (rule, date)
-  - [ ] Stop double-counting: computed `materializeInstances` no longer renders an
-        occurrence once a real row exists for it
-  - [ ] Each occurrence editable like any txn (amount/split/note/date) — editing the
-        occurrence never mutates the rule
-- [ ] **A3 — "Added by [recurring]" provenance**
-  - [ ] On `txn/[id].tsx`, if `parent_recur_id` set, show an "Added by ⟳ <rule>" row
-  - [ ] Tap → navigate to Recurring Manager and **highlight** that exact rule
-        (pass `focusId`; scroll-to + brief highlight ring)
-- [ ] **A4 — Undo for deletes (5s toast)**
-  - [ ] Reusable `UndoToast` (countdown, Undo button) in `components/ui`
-  - [ ] Soft-delete already sets `is_deleted=1`; Undo restores within window
-  - [ ] Wire on txn delete (detail + swipe), with haptic.warning on delete
+### Phase A — Edit integrity & recurring model  *(P0 · no dev build)*  ✅ DONE
+- [x] **A1 — Edit itemized bills** — `updateItemizedTxn`; `add/itemized` accepts
+      `editId` (loads items/assignments/payers/adjustments); persisted `adjustments`
+      column so bills round-trip; itemized edit unlocked on `txn/[id]`.
+- [x] **A2 — Recurring occurrences become real, editable transactions** —
+      `parent_recur_id` column; `materializeDueOccurrences` catch-up on app-open +
+      foreground (AppState); `getClaimedOccurrences` dedups so the virtual generator
+      never double-counts; 92-day back-fill horizon; `occurrenceDatesUpTo` (+tests).
+- [x] **A3 — "Added by [recurring]" provenance** — "Recurring · Added by '<rule>'"
+      row on txn detail → taps to Recurring Manager and highlights the rule (`?focus=`).
+- [x] **A4 — Undo for deletes (5s toast)** — root `UndoProvider`/`UndoToast` survives
+      `router.back()`; `restoreTxn`; wired on detail + group-swipe deletes.
+      Recurring-rule delete now **asks** before removing already-logged occurrences.
 
 ### Phase B — On-device smart wins  *(no dev build)*
 - [ ] **B1 — Goal celebration** — confetti + `haptic.success` when a goal hits 100%
