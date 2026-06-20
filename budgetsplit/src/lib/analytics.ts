@@ -268,9 +268,12 @@ export async function getBudgetAnalytics(
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {
+    // Overage reads best as the amount (what to claw back) plus a % for scale —
+    // a small rupee figure over a big budget is noise; over a small one it's not.
+    const overPct = Math.round(((projectedMonthEnd - monthlyBudgetTotal) / monthlyBudgetTotal) * 100);
     recommendations.push({
       id: 'projected', severity: 'warn', icon: 'pie-chart',
-      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} over budget.`,
+      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} (${overPct}%) over budget.`,
     });
   }
   if (recommendations.length === 0 && totalAllocated > 0) {
