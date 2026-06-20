@@ -31,12 +31,15 @@ export function formatAmountShort(smallestUnit: number, currency: CurrencyCode =
 }
 
 /**
- * Round to `decimals` and keep them fixed: "1L"→"1.00L", "1.5L"→"1.50L". Every
- * K/L/Cr figure carries 2 decimals so summary math stays legible and consistent
- * (0.1L = ₹10,000 — one decimal there is too coarse).
+ * Round to up to `decimals` places, then drop trailing zeros:
+ * "1.00L"→"1L", "1.20L"→"1.2L", "1.24K" stays. K/L/Cr all use 2-decimal
+ * precision so summary math stays honest (0.1L = ₹10,000), but we never show
+ * padding zeros after the decimal.
  */
 function compactNum(n: number, decimals: number): string {
-  return (Math.round(n * 10 ** decimals) / 10 ** decimals).toFixed(decimals);
+  let s = (Math.round(n * 10 ** decimals) / 10 ** decimals).toFixed(decimals);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s;
 }
 
 /**

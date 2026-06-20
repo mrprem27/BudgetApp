@@ -41,9 +41,11 @@ type Props = {
   data: DonutSeg[];
   total: number;
   onOpen: (seg: DonutSeg) => void;
+  /** Fires when the highlighted wedge changes (tap to select, tap again / data change to clear). */
+  onSelect?: (seg: DonutSeg | null) => void;
 };
 
-export function CategoryDonut({ data, total, onOpen }: Props) {
+export function CategoryDonut({ data, total, onOpen, onSelect }: Props) {
   const [sel, setSel] = useState<number | null>(null);
   const segs = useMemo(() => computeDonutWedges(data, total, { gap: GAP }), [data, total]);
 
@@ -75,7 +77,9 @@ export function CategoryDonut({ data, total, onOpen }: Props) {
   const selected = sel !== null && sel < segs.length ? segs[sel] : null;
 
   function handleWedgePress(i: number) {
-    setSel(sel === i ? null : i);
+    const next = sel === i ? null : i;
+    setSel(next);
+    onSelect?.(next === null ? null : (data[next] ?? null));
   }
 
   if (!segs.length) {

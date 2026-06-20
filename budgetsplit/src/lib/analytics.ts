@@ -238,35 +238,35 @@ export async function getBudgetAnalytics(
     recommendations.push({
       id: `over-${t.category}`,
       severity: 'warn', icon: 'alert-triangle',
-      text: `${t.category} is over budget by ${formatCompact(t.spent - t.allocated)} (${t.pct}% used).`,
+      text: `You're ${formatCompact(t.spent - t.allocated)} over on ${t.category} (${t.pct}% used).`,
     });
   }
   for (const t of nearLimit.slice(0, 3)) {
     const tail = t.daysToLimit !== null && t.daysToLimit <= 10
-      ? ` — may exceed in ${t.daysToLimit} day${t.daysToLimit === 1 ? '' : 's'}`
+      ? ` — could run out in ${t.daysToLimit} day${t.daysToLimit === 1 ? '' : 's'}`
       : '';
     recommendations.push({
       id: `near-${t.category}`,
       severity: 'warn', icon: 'clock',
-      text: `${t.category} budget is ${t.pct}% consumed${tail}.`,
+      text: `${t.category} is ${t.pct}% used${tail}.`,
     });
   }
   if (biggestIncrease && (biggestIncrease.deltaPct ?? 0) >= 15) {
     recommendations.push({
       id: 'increase', severity: 'warn', icon: 'trending-up',
-      text: `${biggestIncrease.category} spending is ${biggestIncrease.deltaPct}% higher than last month.`,
+      text: `${biggestIncrease.category} is up ${biggestIncrease.deltaPct}% from last month.`,
     });
   }
   if (biggestDecrease && (biggestDecrease.deltaPct ?? 0) <= -15) {
     recommendations.push({
       id: 'decrease', severity: 'good', icon: 'trending-down',
-      text: `${biggestDecrease.category} spending dropped ${Math.abs(biggestDecrease.deltaPct ?? 0)}% vs last month.`,
+      text: `${biggestDecrease.category} is down ${Math.abs(biggestDecrease.deltaPct ?? 0)}% from last month — nice.`,
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {
     recommendations.push({
       id: 'projected', severity: 'warn', icon: 'pie-chart',
-      text: `On pace to spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} over your monthly budgets.`,
+      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} over budget.`,
     });
   }
   if (recommendations.length === 0 && totalAllocated > 0) {
