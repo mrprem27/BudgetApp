@@ -114,13 +114,20 @@ export default function QuickAddScreen() {
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
-          // Reconstruct the split as explicit amounts so it stays editable.
-          if (txn.kind === 'expense') {
+          // Reconstruct the split/payers as explicit amounts so a *shared*
+          // expense stays editable exactly as it was. In a personal (solo)
+          // ledger there's only one member who always owns 100% and is the sole
+          // payer, so we keep the auto-following equal split that loadGroup set.
+          // Freezing it to exact there would strand a phantom "balance out" /
+          // "left to assign" warning — and block saving — the moment the amount
+          // is edited, because the frozen shares no longer sum to the new total.
+          const personalGroup = grps.find(g => g.id === txn.group_id)?.is_personal === 1;
+          if (txn.kind === 'expense' && !personalGroup) {
             setSplitType('exact');
             setSplitMembers(txn.shares.map(s => s.personId));
             setExactAmounts(Object.fromEntries(txn.shares.map(s => [s.personId, (s.amount / 100).toString()])));
+            setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, (p.amount / 100).toString()])));
           }
-          setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, (p.amount / 100).toString()])));
           // For a recurring "this & future" edit, surface the schedule controls
           // pre-filled so the user can adjust frequency going forward.
           if (recurEditId && txn.recur_freq) {
