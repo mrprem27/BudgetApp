@@ -116,7 +116,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features' as any); }} />
       </View>
 
       {/* Manage */}
