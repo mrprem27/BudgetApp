@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -54,14 +54,23 @@ function nextOccurrence(rule: Rule, skips?: Set<number>): Date | null {
 }
 
 export default function RecurringScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
   const [rules, setRules] = useState<Rule[]>([]);
   const [skips, setSkips] = useState<Map<string, Set<number>>>(new Map());
   const [loadError, setLoadError] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
+
+  // Briefly highlight the rule we arrived to view (from a transaction's "Recurring" row).
+  useEffect(() => {
+    if (!focus) return;
+    setHighlightId(focus);
+    const t = setTimeout(() => setHighlightId(null), 2600);
+    return () => clearTimeout(t);
+  }, [focus]);
 
   if (!id) { router.back(); return null; }
 
@@ -138,7 +147,7 @@ export default function RecurringScreen() {
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;
             const next = nextOccurrence(r, skips.get(r.id));
             return (
-              <View key={r.id} style={styles.card}>
+              <View key={r.id} style={[styles.card, highlightId === r.id && styles.cardHighlight]}>
                 <View style={styles.cardTop}>
                   <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
                     <Feather name={vis.icon} size={18} color={vis.color} />
@@ -216,6 +225,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  cardHighlight: { borderColor: colors.accent, borderWidth: 1.5, backgroundColor: colors.accentMuted },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   iconDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   cat: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

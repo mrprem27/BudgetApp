@@ -42,6 +42,7 @@ export default function TxnDetailScreen() {
   const [isPersonal, setIsPersonal] = useState(false);
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [parentRule, setParentRule] = useState<TxnWithSplits | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [showAttachment, setShowAttachment] = useState(false);
 
@@ -67,6 +68,7 @@ export default function TxnDetailScreen() {
       setMe(meRow);
       setHistory(hist);
       setItems(li);
+      setParentRule(t.parent_recur_id ? await getTxnById(db, t.parent_recur_id) : null);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -164,6 +166,24 @@ export default function TxnDetailScreen() {
             <>
               <View style={styles.divider} />
               <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
+            </>
+          )}
+          {!!txn.parent_recur_id && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                style={styles.recurRow}
+                onPress={() => router.push(`/group/${parentRule?.group_id ?? txn.group_id}/recurring?focus=${txn.parent_recur_id}`)}
+                accessibilityRole="button"
+                accessibilityLabel="View the recurring rule that created this"
+              >
+                <Text style={styles.metaLabel}>Recurring</Text>
+                <View style={styles.recurValue}>
+                  <Feather name="repeat" size={13} color={colors.accent} />
+                  <Text style={styles.recurText} numberOfLines={1}>Added by “{parentRule?.category ?? txn.category}”</Text>
+                  <Feather name="chevron-right" size={15} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
             </>
           )}
           {!!txn.place_label && (
@@ -350,6 +370,9 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   metaLabel: { ...type.label, color: colors.textSecondary },
   metaValue: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right' },
+  recurRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  recurValue: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
+  recurText: { ...type.body, color: colors.accent, flexShrink: 1 },
   locationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
   locationText: { ...type.body, color: colors.textPrimary, flex: 1, lineHeight: 20 },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.xs },
