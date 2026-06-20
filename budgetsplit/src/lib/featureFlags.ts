@@ -19,7 +19,8 @@ export type FeatureKey =
   | 'savingsInsights'
   // Modules
   | 'itemizedOcr'
-  | 'recurring';
+  | 'recurring'
+  | 'smartCategory';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
@@ -37,6 +38,7 @@ const DEFAULTS: FeatureFlags = {
   savingsInsights: true,
   itemizedOcr: true,
   recurring: true,
+  smartCategory: false, // opt-in
 };
 
 const PREFIX = 'feature_';

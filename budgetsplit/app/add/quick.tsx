@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
+import { matchCategory } from '../../src/lib/smartCategory';
+import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
@@ -53,6 +55,19 @@ export default function QuickAddScreen() {
   const [note, setNote] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [catManual, setCatManual] = useState(false); // user overrode the smart guess
+
+  // Smart categories: typing a title auto-picks a category (until the user overrides).
+  function onTitleChange(text: string) {
+    setNote(text);
+    if (flags.smartCategory && !catManual) {
+      const name = matchCategory(text, categories);
+      if (name) {
+        const c = categories.find(cat => cat.name === name);
+        if (c) setSelectedCategory(c);
+      }
+    }
+  }
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
@@ -328,27 +343,65 @@ export default function QuickAddScreen() {
           );
         })()}
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Category</Text>
-          <CategoryPicker
-            categories={categories}
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-            onCreate={async (name) => {
-              const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-              setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-              return created;
-            }}
-          />
-        </View>
+        {flags.smartCategory ? (
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>What for?</Text>
+            <Input
+              value={note}
+              onChangeText={onTitleChange}
+              placeholder="e.g. Uber, Groceries, Netflix"
+              accessibilityLabel="Title"
+              autoCapitalize="sentences"
+              maxLength={80}
+            />
+            {!catManual && selectedCategory ? (
+              <TouchableOpacity style={styles.smartCatChip} onPress={() => setCatManual(true)} accessibilityRole="button" accessibilityLabel="Change category">
+                <View style={[styles.smartCatDot, { backgroundColor: categoryVisual(selectedCategory.name).color + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={categoryVisual(selectedCategory.name).color} />
+                </View>
+                <Text style={styles.smartCatName}>{selectedCategory.name}</Text>
+                <Text style={styles.smartCatHint}>auto · tap to change</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ marginTop: space.sm }}>
+                <CategoryPicker
+                  categories={categories}
+                  value={selectedCategory}
+                  onChange={(c) => { setSelectedCategory(c); setCatManual(true); }}
+                  onCreate={async (name) => {
+                    const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+                    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+                    return created;
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        ) : (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Category</Text>
+              <CategoryPicker
+                categories={categories}
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+                onCreate={async (name) => {
+                  const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+                  setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+                  return created;
+                }}
+              />
+            </View>
 
-        <Input
-          value={note}
-          onChangeText={setNote}
-          placeholder="Note (optional)"
-          accessibilityLabel="Note"
-          maxLength={80}
-        />
+            <Input
+              value={note}
+              onChangeText={setNote}
+              placeholder="Note (optional)"
+              accessibilityLabel="Note"
+              maxLength={80}
+            />
+          </>
+        )}
 
         {attachmentUri ? (
           <View style={styles.attachRow}>
@@ -663,6 +716,10 @@ const styles = StyleSheet.create({
   currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   field: { gap: space.xs },
+  smartCatChip: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.xs },
+  smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  smartCatHint: { ...type.caption, color: colors.textMuted },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   groupSelectorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

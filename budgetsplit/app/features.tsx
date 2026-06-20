@@ -46,6 +46,7 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
   {
     title: 'Modules',
     rows: [
+      { kind: 'flag', key: 'smartCategory', icon: 'zap', label: 'Smart categories', caption: 'Type a title (e.g. "Uber") and the category auto-fills — no picking' },
       { kind: 'flag', key: 'itemizedOcr', icon: 'list', label: 'Itemized bills', caption: 'Split a bill line by line' },
       { kind: 'flag', key: 'recurring', icon: 'refresh-cw', label: 'Recurring transactions', caption: 'Auto-repeat schedules for expenses & income' },
     ],

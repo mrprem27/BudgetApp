@@ -131,7 +131,33 @@ Everything in §3 is shipped. All feedback items closed:
 - **3.2** ✅ Forecast redesign (F10) — run-rate blended with prior-month actual + "needs N days" gate. Strictly offline. *(Deeper weekday/category-mix model still possible later.)*
 - **3.3 Settle & lists:** "Settle all" + completion moment; Groups filter sheet (You owe / Owes you / Settled / Archived); skeletons on group-detail + reports; empty-state CTA audit; onboarding → one-tap "Add first expense".
 
-### Phase 4 — Deferred / out of scope
+### Phase 3.5 — Current cycle (in progress)
+- ✅ Colored insight figures + plain-English copy + 2-decimal compact (drop trailing zeros).
+- ✅ Reports: clean forecast line + donut-driven category trend + current-month highlight.
+- ✅ Transfer redesign (From → To card) · editable settlements/transfers.
+- ✅ User/friend photos everywhere · Friends list screen + Groups-tab entry.
+- ✅ Dashboard Cash-available card · section-level feature toggles (simple↔complex).
+- 🔄 **Smart categories** (opt-in): type a title → category auto-fills (`smartCategory.ts`).
+- 🔄 **Smart one-screen fast entry** (amount + title, you-paid/split-equally default).
+- 🔄 Pop-up/sheet header (cancel/save) padding sweep.
+
+### Phase 5 — Next version (v2 candidates)
+> Most need a **custom dev build** (native modules) — they can't run in Expo Go.
+> Local-only where possible to keep the offline promise (D2).
+
+- **N1 — Subscription/renewal reminders (local notifications).** Opt-in per
+  recurring item: "Remind me before renewal" → a **local** `expo-notifications`
+  alert N days before the next occurrence so people can cancel unwanted
+  subscriptions. On-device only (no server) → still offline-safe. Needs a dev
+  build + notification permission + scheduling tied to `materializeInstances`.
+- **N2 — Recurring/subscription *detection*.** Heuristic over history: same
+  payee/amount/cadence repeating → surface "Looks like a subscription —
+  track it / set a reminder?" Pure on-device analysis.
+- **N3 — iOS quick-add widget / home-screen widget.** WidgetKit target + app
+  group + dev build (deferred from this cycle — sizable native work).
+- **N4 — Deeper forecast model** (weekday seasonality, category mix).
+
+### Phase 6 — Deferred / out of scope
 - AI receipt itemization (D2/D3) · multi-currency (D6) · recurring single-occurrence value edits (D5) · formal nav spec (D7).
 
 ---
