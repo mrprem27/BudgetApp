@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -9,48 +9,74 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
-import { endOfMonth } from 'date-fns';
-import { getCashPosition } from '../src/db/queries/savings';
-import { getMe } from '../src/db/queries/persons';
-import { getTransactionsInRange } from '../src/db/queries/transactions';
-import { evaluateAfford } from '../src/lib/afford';
+import { CategoryChip } from '../src/components/finance/CategoryChip';
+import { getAffordSnapshot, type AffordSnapshot } from '../src/db/queries/savings';
+import {
+  evaluateAfford, AffordVerdict, AffordReason,
+  type AffordContext, type AffordResult,
+} from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
 
 export default function AffordScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const [amountText, setAmountText] = useState('');
-  const [cash, setCash] = useState<number | null>(null);
-  const [upcoming, setUpcoming] = useState(0);
+  const [snap, setSnap] = useState<AffordSnapshot | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      try {
-        const [pos, me] = await Promise.all([getCashPosition(db), getMe(db)]);
-        setCash(pos.available);
-        // Bills already committed this month: my share of upcoming (incl. recurring)
-        // expenses dated from now to month-end.
-        const now = Date.now();
-        const future = await getTransactionsInRange(db, null, now, endOfMonth(new Date()).getTime());
-        const meId = me?.id ?? '';
-        const bills = future
-          .filter(t => t.kind === 'expense')
-          .reduce((s, t) => s + (t.shares.find(sh => sh.personId === meId)?.amount ?? 0), 0);
-        setUpcoming(bills);
-      } catch { setCash(0); }
+      try { setSnap(await getAffordSnapshot(db)); }
+      catch { setSnap({ available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }); }
     })();
   }, []);
 
   const amount = parseToPaise(amountText);
-  const available = cash ?? 0;
-  const { verdict, freeToSpend, remaining } = evaluateAfford(amount, available, upcoming);
-  const showResult = amount > 0 && cash !== null;
+  const available = snap?.available ?? 0;
+  const upcoming = snap?.upcomingBills ?? 0;
+  const monthlyIncome = snap?.monthlyIncome ?? 0;
+  const catStat = categoryName ? snap?.byCategory[categoryName] : undefined;
+
+  const result: AffordResult = useMemo(() => {
+    const ctx: AffordContext = {
+      amount, available, upcomingBills: upcoming,
+      monthlyIncome: monthlyIncome > 0 ? monthlyIncome : undefined,
+      category: categoryName && catStat
+        ? { name: categoryName, spentThisMonth: catStat.spentThisMonth, norm: catStat.norm, budget: catStat.budget }
+        : undefined,
+    };
+    return evaluateAfford(ctx);
+  }, [amount, available, upcoming, monthlyIncome, categoryName, catStat]);
+
+  const showResult = amount > 0 && snap !== null;
+  const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare } = result;
 
   const V = {
-    comfortable: { color: colors.income, icon: 'check-circle' as const, title: 'Yes — you can afford it', sub: `Leaves ${formatCompact(remaining)} free after this month’s bills.` },
-    tight:       { color: colors.healthAmber, icon: 'alert-circle' as const, title: 'Yes, but it’s tight', sub: `Only ${formatCompact(remaining)} would be left once bills are covered.` },
-    no:          { color: colors.expense, icon: 'x-circle' as const, title: 'Not right now', sub: `You’d be short by ${formatCompact(-remaining)} after bills. Consider saving toward it.` },
+    [AffordVerdict.Comfortable]: { color: colors.income, icon: 'check-circle' as const, title: 'Yes — you can afford it' },
+    [AffordVerdict.Tight]:       { color: colors.healthAmber, icon: 'alert-circle' as const, title: 'Yes, but think twice' },
+    [AffordVerdict.No]:          { color: colors.expense, icon: 'x-circle' as const, title: 'Not right now' },
   }[verdict];
+
+  // Turn each engine reason into a plain-English line with the real numbers.
+  const reasonLine = (r: AffordReason): string | null => {
+    switch (r) {
+      case AffordReason.CashShort:
+        return `You'd be short by ${formatCompact(-remaining)} once this month's bills are covered.`;
+      case AffordReason.OverCategoryBudget:
+        return `This pushes ${categoryName} to ${formatCompact(categoryAfter ?? 0)} — over your ${formatCompact(categoryCap ?? 0)} monthly budget.`;
+      case AffordReason.AboveCategoryNorm:
+        return `That's more than you usually spend on ${categoryName} (about ${formatCompact(categoryCap ?? 0)}/month).`;
+      case AffordReason.LargeIncomeShare:
+        return `It's ${Math.round((incomeShare ?? 0) * 100)}% of a month's income in one go.`;
+      case AffordReason.ThinBuffer:
+        return `It leaves only ${formatCompact(remaining)} — less than a comfortable cushion.`;
+      case AffordReason.Healthy:
+        return `Leaves ${formatCompact(remaining)} free, and it fits how you normally spend.`;
+      default:
+        return null;
+    }
+  };
+  const lines = reasons.map(reasonLine).filter((s): s is string => !!s);
 
   return (
     <View style={styles.container}>
@@ -72,10 +98,27 @@ export default function AffordScreen() {
             />
           </View>
 
+          {/* Category — sharpens the verdict using how you spend on this kind of thing. */}
+          {(snap?.categories.length ?? 0) > 0 && (
+            <View>
+              <Text style={styles.label}>What's it for? <Text style={styles.labelHint}>(optional)</Text></Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
+                {snap!.categories.map(c => (
+                  <CategoryChip
+                    key={c.id}
+                    category={c}
+                    selected={categoryName === c.name}
+                    onPress={() => setCategoryName(categoryName === c.name ? null : c.name)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.breakdownCard}>
             <View style={styles.cashRow}>
               <Text style={styles.cashLabel}>Spendable cash now</Text>
-              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{cash === null ? '—' : formatRupees(available)}</Text>
+              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{snap === null ? '—' : formatRupees(available)}</Text>
             </View>
             {upcoming > 0 && (
               <>
@@ -91,6 +134,27 @@ export default function AffordScreen() {
                 </View>
               </>
             )}
+            {catStat && (categoryCap ?? 0) > 0 && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.cashRow}>
+                  <Text style={styles.cashLabel}>{categoryName} this month</Text>
+                  <Text style={styles.cashVal}>
+                    {formatCompact(catStat.spentThisMonth)}
+                    <Text style={{ color: colors.textMuted }}> / {formatCompact(categoryCap ?? 0)}{catStat.budget ? '' : ' usual'}</Text>
+                  </Text>
+                </View>
+              </>
+            )}
+            {showResult && incomeShare !== undefined && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.cashRow}>
+                  <Text style={styles.cashLabel}>Share of monthly income</Text>
+                  <Text style={[styles.cashVal, { color: incomeShare > 0.1 ? colors.healthAmber : colors.textPrimary }]}>{Math.round(incomeShare * 100)}%</Text>
+                </View>
+              </>
+            )}
           </View>
 
           {showResult && (
@@ -99,13 +163,18 @@ export default function AffordScreen() {
                 <Feather name={V.icon} size={22} color={V.color} />
               </View>
               <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
-              <Text style={styles.resultSub}>{V.sub}</Text>
+              {lines.map((l, i) => (
+                <View key={i} style={styles.reasonRow}>
+                  <View style={[styles.reasonDot, { backgroundColor: V.color }]} />
+                  <Text style={styles.reasonText}>{l}</Text>
+                </View>
+              ))}
             </View>
           )}
 
           {showResult && (
             <View style={{ gap: space.sm, marginTop: space.sm }}>
-              {verdict !== 'no' && (
+              {verdict !== AffordVerdict.No && (
                 <PrimaryButton label="Looks good — log the expense" onPress={() => router.replace('/add/quick')} />
               )}
               <SecondaryButton label="Save toward it in a goal instead" onPress={() => router.replace('/savings')} />
@@ -121,16 +190,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
   label: { ...type.label, color: colors.textSecondary },
+  labelHint: { ...type.label, color: colors.textMuted },
   amountWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.border },
   rupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, minWidth: 120, textAlign: 'center' },
+  chipRow: { flexDirection: 'row', gap: space.sm, paddingTop: space.sm, paddingRight: space.md },
   breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   breakdownDivider: { height: 1, backgroundColor: colors.border },
   cashRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md },
   cashLabel: { ...type.body, color: colors.textSecondary },
-  cashVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
+  cashVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
   resultCard: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, padding: space.lg, ...shadow.sm },
   resultIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
-  resultTitle: { ...type.subheading },
-  resultSub: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
+  resultTitle: { ...type.subheading, marginBottom: space.xs },
+  reasonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, alignSelf: 'stretch' },
+  reasonDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
+  reasonText: { ...type.body, color: colors.textSecondary, flex: 1 },
 });

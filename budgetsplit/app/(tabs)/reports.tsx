@@ -232,27 +232,34 @@ export default function ReportsScreen() {
 
         const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
         if (fc.ready) {
-          // One continuous cumulative line. Days 1..today are the solid "actual"
-          // series; today..month-end is the dashed "projected" series. Both span
-          // the full month so the x-axis stays aligned; the projected series is
-          // front-padded with hidden points that trace the actual line, so the
-          // dashed line appears to start exactly at today.
+          // X-axis labels: always anchor day 1 and the month's LAST day so the
+          // axis visibly spans the whole month, plus evenly-spaced midpoints
+          // (suppressed near the end so they don't collide with the last label).
+          const labelForDay = (d: number) =>
+            (d === 1 || d === daysInMonth || (d % 5 === 0 && d <= daysInMonth - 3)) ? `${d}` : '';
+
+          // The PROJECTED line spans the full month (days 1..month-end) and is the
+          // chart's primary series, so it owns the x-axis labels — that's what
+          // makes the axis run the complete month. Days 1..today trace the real
+          // cumulative spend; today..month-end is the forecast.
+          const projectedLine = Array.from({ length: daysInMonth }, (_, i) => {
+            const d = i + 1;
+            const value = d <= dayOfMonth
+              ? dailyCumulative[d - 1].value
+              : Math.round(projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d) / 100);
+            return { value, label: labelForDay(d), hideDataPoint: true };
+          });
+
+          // The ACTUAL line (days 1..today) is overlaid solid on top, marking
+          // "today". Labels live on the projected series, so this carries none.
           const actualLine = dailyCumulative.map((p, i) => ({
             value: p.value,
-            label: p.label,
+            label: '',
             hideDataPoint: i !== dayOfMonth - 1, // only mark "today"
             dataPointColor: colors.expense,
             dataPointRadius: 5,
           }));
-          const projectedLine: Array<{ value: number; label?: string; hideDataPoint?: boolean }> = [];
-          for (let d = 1; d <= daysInMonth; d++) {
-            if (d <= dayOfMonth) {
-              projectedLine.push({ value: dailyCumulative[d - 1].value, label: '', hideDataPoint: true });
-            } else {
-              const v = projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d);
-              projectedLine.push({ value: Math.round(v / 100), label: d % 5 === 1 ? `${d}` : '', hideDataPoint: true });
-            }
-          }
+
           setForecastActual(actualLine);
           setForecastProjected(projectedLine);
           setProjectedTotal(Math.round(fc.projected / 100));
@@ -533,14 +540,13 @@ export default function ReportsScreen() {
               </View>
               <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
               <LineChart
-                data={forecastActual}
-                data2={forecastProjected}
-                color1={colors.expense}
-                color2={colors.accent}
-                thickness={2.5}
-                thickness2={2}
-                dashWidth={5}
-                dashGap={5}
+                data={forecastProjected}
+                data2={forecastActual}
+                color1={colors.accent}
+                color2={colors.expense}
+                thickness1={2}
+                thickness2={2.5}
+                strokeDashArray1={[5, 5]}
                 noOfSections={4}
                 maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
                 spacing={Math.max(8, 300 / Math.max(forecastProjected.length, 1))}

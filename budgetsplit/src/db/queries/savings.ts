@@ -9,6 +9,9 @@ import { computeCash, type CashPosition } from '../../lib/cash';
 import { getAllGroups } from './groups';
 import { getMe } from './persons';
 import { getTransactionsInRange } from './transactions';
+import { getCategoriesByFrequency, type Category } from './categories';
+import { getCategoryBudgets, type BudgetCadence } from './categoryBudgets';
+import { startOfMonth, endOfMonth, getDaysInMonth } from 'date-fns';
 
 export type Priority = 'high' | 'medium' | 'low';
 export type SavingsFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'none';
@@ -318,6 +321,123 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
     getPoolSummary(db),
   ]);
   return computeCash(txns, me.id, pool.total);
+}
+
+// --- "Can I afford this?" snapshot ---------------------------------------
+
+/** Per-category context feeding the afford engine (all paise). */
+export type AffordCategoryStat = { spentThisMonth: number; norm: number; budget?: number };
+
+export type AffordSnapshot = {
+  /** Spendable cash right now. */
+  available: number;
+  /** My share of expenses dated from now to month-end (committed bills). */
+  upcomingBills: number;
+  /** Last-30-day income, used as a typical-monthly-income proxy. */
+  monthlyIncome: number;
+  /** Personal-ledger expense categories, for the picker. */
+  categories: Category[];
+  /** Per-category spend-this-month, 30-day norm, and monthly budget (if set). */
+  byCategory: Record<string, AffordCategoryStat>;
+};
+
+const AFFORD_DAY_MS = 86_400_000;
+
+/** Normalize a budget line of any cadence to its monthly-equivalent paise. */
+function monthlyBudgetEquivalent(cadence: BudgetCadence, amount: number, daysInMonth: number): number | undefined {
+  switch (cadence) {
+    case 'monthly': return amount;
+    case 'yearly': return Math.round(amount / 12);
+    case 'daily': return amount * daysInMonth;
+    case 'once': return undefined; // a one-off isn't a recurring monthly cap
+    default: return undefined;
+  }
+}
+
+/**
+ * Everything the "Can I afford this?" engine needs, in one round-trip: cash,
+ * committed upcoming bills, a monthly-income proxy, the categories you can pick,
+ * and — per category — how much you've spent this month, your 30-day norm, and
+ * any explicit monthly budget. Keeping the gathering here makes the screen thin
+ * and the inputs reproducible.
+ */
+export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} };
+  const me = await getMe(db);
+  if (!me) return empty;
+
+  const now = Date.now();
+  const today = new Date(now);
+  const monthStart = startOfMonth(today).getTime();
+  const monthEnd = endOfMonth(today).getTime();
+  const daysInMonth = getDaysInMonth(today);
+
+  const groups = await getAllGroups(db);
+  const personal = groups.find(g => g.is_personal === 1) ?? groups[0] ?? null;
+
+  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns] = await Promise.all([
+    getCashPosition(db),
+    personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
+    personal ? getCategoryBudgets(db, personal.id) : Promise.resolve([]),
+    getTransactionsInRange(db, null, monthStart, now),
+    getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
+    getTransactionsInRange(db, null, now, monthEnd),
+  ]);
+
+  const myShare = (t: { shares: Array<{ personId: string; amount: number }> }) =>
+    t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+
+  // This-month spend per category (my share).
+  const spentThisMonth: Record<string, number> = {};
+  for (const t of monthTxns) {
+    if (t.is_deleted || t.kind !== 'expense') continue;
+    const mine = myShare(t);
+    if (mine > 0) spentThisMonth[t.category] = (spentThisMonth[t.category] ?? 0) + mine;
+  }
+
+  // 30-day norm per category (my share) + 30-day income (monthly-income proxy).
+  const norm: Record<string, number> = {};
+  let monthlyIncome = 0;
+  for (const t of recentTxns) {
+    if (t.is_deleted) continue;
+    if (t.kind === 'expense') {
+      const mine = myShare(t);
+      if (mine > 0) norm[t.category] = (norm[t.category] ?? 0) + mine;
+    } else if (t.kind === 'income') {
+      monthlyIncome += t.payments.reduce((s, p) => s + p.amount, 0);
+    }
+  }
+
+  // Committed bills: my share of future-dated expenses through month-end.
+  let upcomingBills = 0;
+  for (const t of futureTxns) {
+    if (t.is_deleted || t.kind !== 'expense') continue;
+    upcomingBills += myShare(t);
+  }
+
+  // Budgets, normalized to a monthly figure.
+  const budgetByCat: Record<string, number> = {};
+  for (const b of budgets) {
+    const m = monthlyBudgetEquivalent(b.cadence, b.amount, daysInMonth);
+    if (m && m > 0) budgetByCat[b.category] = m;
+  }
+
+  const byCategory: Record<string, AffordCategoryStat> = {};
+  const names = new Set<string>([
+    ...categories.map(c => c.name),
+    ...Object.keys(spentThisMonth),
+    ...Object.keys(norm),
+    ...Object.keys(budgetByCat),
+  ]);
+  for (const name of names) {
+    byCategory[name] = {
+      spentThisMonth: spentThisMonth[name] ?? 0,
+      norm: norm[name] ?? 0,
+      budget: budgetByCat[name],
+    };
+  }
+
+  return { available: pos.available, upcomingBills, monthlyIncome, categories, byCategory };
 }
 
 /** Build psychological savings insights from real goals + spending. */
