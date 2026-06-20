@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, LayoutAnimation, UIManager,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -11,6 +11,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { Input } from '../src/components/ui/Input';
 import { getAllGroups } from '../src/db/queries/groups';
 import {
   getCategoriesForGroup, insertCategory, deleteCategory,
@@ -219,13 +220,14 @@ export default function CategoriesScreen() {
 
                   {isAddingHere ? (
                     <View style={styles.addForm}>
-                      <TextInput
-                        style={styles.input}
+                      <Input
                         placeholder="Category name"
-                        placeholderTextColor={colors.textMuted}
                         value={name}
                         onChangeText={setName}
                         autoFocus
+                        autoCapitalize="words"
+                        maxLength={30}
+                        style={styles.inputGap}
                       />
                       <Text style={styles.fieldLabel}>Icon</Text>
                       <View style={styles.iconGrid}>
@@ -317,7 +319,7 @@ const styles = StyleSheet.create({
   addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, marginTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   addRowText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addForm: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md },
+  inputGap: { marginBottom: space.md },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.md },
   iconOption: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },

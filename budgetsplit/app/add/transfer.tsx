@@ -10,6 +10,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { Input } from '../../src/components/ui/Input';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -161,12 +162,12 @@ export default function TransferScreen() {
           <View style={styles.arrow}><Feather name="arrow-down" size={18} color={colors.textMuted} /></View>
           <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} members={members} />
 
-          <TextInput
-            style={styles.noteInput}
+          <Input
             value={note}
             onChangeText={setNote}
             placeholder="Note (optional)"
-            placeholderTextColor={colors.textMuted}
+            accessibilityLabel="Note"
+            maxLength={80}
           />
 
           {total > 0 && fromId && toId && (
@@ -194,6 +195,5 @@ const styles = StyleSheet.create({
   groupChipActive: { backgroundColor: colors.accent },
   groupChipText: { ...type.label, color: colors.textSecondary },
   arrow: { alignItems: 'center' },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   summary: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
 });

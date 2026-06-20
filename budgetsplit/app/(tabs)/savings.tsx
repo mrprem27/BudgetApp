@@ -18,6 +18,7 @@ import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Input } from '../../src/components/ui/Input';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
@@ -302,10 +303,10 @@ export default function SavingsScreen() {
       {/* New goal sheet */}
       <SheetModal visible={showNew} onClose={() => setShowNew(false)} title="New goal">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Goal name (e.g. New Phone)" placeholderTextColor={colors.textMuted} />
+          <Input value={name} onChangeText={setName} placeholder="Goal name (e.g. New Phone)" autoCapitalize="words" maxLength={40} style={styles.inputGap} />
 
           <Text style={styles.fieldLabel}>Target amount</Text>
-          <TextInput style={styles.input} value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} />
+          <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" style={styles.inputGap} />
 
           <Text style={styles.fieldLabel}>Priority</Text>
           <View style={styles.segRow}>
@@ -331,7 +332,7 @@ export default function SavingsScreen() {
           </View>
 
           <Text style={styles.fieldLabel}>Fixed allocation (optional)</Text>
-          <TextInput style={styles.input} value={allocation} onChangeText={setAllocation} keyboardType="decimal-pad" placeholder="₹0 per period" placeholderTextColor={colors.textMuted} />
+          <Input value={allocation} onChangeText={setAllocation} keyboardType="decimal-pad" placeholder="₹0 per period" style={styles.inputGap} />
           <View style={styles.segRow}>
             {FREQS.map(f => (
               <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button">
@@ -397,7 +398,7 @@ const styles = StyleSheet.create({
 
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.sm },
+  inputGap: { marginBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
   segRow: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
   seg: { flex: 1, minWidth: 80, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },

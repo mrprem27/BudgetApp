@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { space, radius, layout } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { Input } from '../../../src/components/ui/Input';
 import { getGroupById, updateGroup } from '../../../src/db/queries/groups';
 import { haptic } from '../../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../../src/constants/palette';
@@ -69,13 +70,13 @@ export default function EditGroupScreen() {
         </View>
 
         <Text style={styles.fieldLabel}>Name</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           value={name}
           onChangeText={setName}
           placeholder="Group name"
-          placeholderTextColor={colors.textMuted}
           accessibilityLabel="Group name"
+          autoCapitalize="words"
+          maxLength={40}
         />
 
         <Text style={styles.fieldLabel}>Icon</Text>
@@ -121,8 +122,7 @@ const styles = StyleSheet.create({
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md },
   previewIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   previewName: { ...type.subheading, color: colors.textPrimary, flex: 1 },
-  fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm },
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   iconOption: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   iconSelected: { backgroundColor: colors.accent },

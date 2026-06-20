@@ -18,6 +18,7 @@ import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/c
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
 import { parseToPaise } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { Input } from '../../src/components/ui/Input';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -225,13 +226,12 @@ export default function AddIncomeScreen() {
             />
           </View>
 
-          <TextInput
-            style={styles.noteInput}
+          <Input
             value={note}
             onChangeText={setNote}
             placeholder="Note (optional)"
-            placeholderTextColor={colors.textMuted}
             accessibilityLabel="Note"
+            maxLength={80}
           />
 
           <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button">
@@ -342,7 +342,6 @@ const styles = StyleSheet.create({
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
   field: { gap: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },

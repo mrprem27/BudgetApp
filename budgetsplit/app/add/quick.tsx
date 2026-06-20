@@ -27,6 +27,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
+import { Input } from '../../src/components/ui/Input';
 import { haptic } from '../../src/lib/haptics';
 import { pickAttachment } from '../../src/lib/attachment';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
@@ -341,13 +342,12 @@ export default function QuickAddScreen() {
           />
         </View>
 
-        <TextInput
-          style={styles.noteInput}
+        <Input
           value={note}
           onChangeText={setNote}
           placeholder="Note (optional)"
-          placeholderTextColor={colors.textMuted}
           accessibilityLabel="Note"
+          maxLength={80}
         />
 
         {attachmentUri ? (
@@ -672,7 +672,6 @@ const styles = StyleSheet.create({
   groupPickerRowActive: { backgroundColor: colors.accentMuted },
   groupPickerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
   attachBtnText: { ...type.body, color: colors.accent },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },

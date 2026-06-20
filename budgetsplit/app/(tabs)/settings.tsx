@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,7 @@ import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
@@ -143,7 +144,7 @@ export default function SettingsScreen() {
       </View>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
-        <TextInput style={styles.nameInput} value={nameText} onChangeText={setNameText} placeholder="Your name" placeholderTextColor={colors.textMuted} autoFocus maxLength={30} returnKeyType="done" onSubmitEditing={saveName} />
+        <Input value={nameText} onChangeText={setNameText} placeholder="Your name" autoFocus maxLength={30} autoCapitalize="words" returnKeyType="done" onSubmitEditing={saveName} style={styles.nameInputGap} />
         <PrimaryButton label="Save" onPress={saveName} disabled={!nameText.trim()} />
       </SheetModal>
 
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
 
   aboutText: { ...type.body, color: colors.textPrimary },
   aboutSub: { ...type.caption, color: colors.textSecondary },
-  nameInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  nameInputGap: { marginBottom: space.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
