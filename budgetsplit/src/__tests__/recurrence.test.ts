@@ -1,4 +1,4 @@
-import { materializeInstances, nextOccurrenceOnOrAfter } from '../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../lib/recurrence';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -62,5 +62,27 @@ describe('nextOccurrenceOnOrAfter', () => {
   it('returns null when not recurring', () => {
     const t: any = { ...base, recur_freq: null, date: ms(2024, 0, 1) };
     expect(nextOccurrenceOnOrAfter(t, ms(2024, 0, 1))).toBeNull();
+  });
+});
+
+describe('occurrenceDatesUpTo (materialize job)', () => {
+  it('lists monthly occurrences from start to the until date inclusive', () => {
+    const dates = occurrenceDatesUpTo(ms(2024, 0, 1), 'monthly', 1, ms(2024, 2, 15), null);
+    expect(dates).toEqual([ms(2024, 0, 1), ms(2024, 1, 1), ms(2024, 2, 1)]);
+  });
+
+  it('clamps to recur_end when it is earlier than until', () => {
+    const dates = occurrenceDatesUpTo(ms(2024, 0, 1), 'monthly', 1, ms(2024, 5, 1), ms(2024, 1, 1));
+    expect(dates).toEqual([ms(2024, 0, 1), ms(2024, 1, 1)]);
+  });
+
+  it('honors the interval (every 2 weeks)', () => {
+    const dates = occurrenceDatesUpTo(ms(2024, 0, 1), 'weekly', 2, ms(2024, 0, 29), null);
+    expect(dates).toEqual([ms(2024, 0, 1), ms(2024, 0, 15), ms(2024, 0, 29)]);
+  });
+
+  it('returns just the start when until is before the next occurrence', () => {
+    const dates = occurrenceDatesUpTo(ms(2024, 0, 1), 'monthly', 1, ms(2024, 0, 10), null);
+    expect(dates).toEqual([ms(2024, 0, 1)]);
   });
 });

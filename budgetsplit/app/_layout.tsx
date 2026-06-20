@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { View, AppState } from 'react-native';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
+import { materializeDueOccurrences } from '../src/db/queries/transactions';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
@@ -31,10 +32,15 @@ export default function RootLayout() {
 
   useEffect(() => {
     let alive = true;
+    let dbRef: Awaited<ReturnType<typeof openDB>> | null = null;
     (async () => {
       try {
         const db = await openDB();
+        dbRef = db;
         await seedIfNeeded(db);
+        // Catch-up: any recurring occurrence that came due (incl. across a missed
+        // "midnight") materializes into a real editable row the moment the app loads.
+        await materializeDueOccurrences(db);
         await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
         if (alive) { setDbReady(true); setDbError(false); }
       } catch {
@@ -42,7 +48,17 @@ export default function RootLayout() {
         if (alive) setDbError(true);
       }
     })();
-    return () => { alive = false; };
+
+    // Also catch up when the app returns to the foreground (e.g. left open
+    // overnight, then reopened the next day).
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && dbRef) {
+        materializeDueOccurrences(dbRef).catch(() => {});
+        runSavingsMaintenance(dbRef).catch(() => {});
+      }
+    });
+
+    return () => { alive = false; sub.remove(); };
   }, [attempt]);
 
   if (dbError) {

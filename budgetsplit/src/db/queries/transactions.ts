@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { materializeInstances, nextOccurrenceOnOrAfter } from '../../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 
@@ -20,6 +20,7 @@ export type Txn = {
   recur_interval: number | null;
   recur_end: number | null;
   recur_override_date: number | null;
+  parent_recur_id: string | null;
   recur_state: 'active' | 'paused' | 'ended';
   tz: string | null;
   lat: number | null;
@@ -64,11 +65,12 @@ export async function getTransactionsForGroup(
     `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL`,
     [groupId],
   );
-  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
+  const ids = recurTxns.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, rt.date, now, skipMap.get(rt.id)));
+    instances.push(...materializeInstances(rw, rt.date, now, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date || b.created_at - a.created_at);
@@ -104,11 +106,12 @@ export async function getTransactionsInRange(
     `SELECT t.* FROM txn t ${recurWhere}`,
     recurArgs,
   );
-  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
+  const ids = recurTxns.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, fromMs, toMs, skipMap.get(rt.id)));
+    instances.push(...materializeInstances(rw, fromMs, toMs, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date);
@@ -425,6 +428,95 @@ export async function getSkipsMap(
     set.add(r.occurrence_date);
   }
   return map;
+}
+
+/**
+ * Occurrence dates (ms) that already have a **real** materialized row for each
+ * series — counted regardless of is_deleted, so a deleted occurrence never
+ * regenerates as a virtual instance. The virtual generator treats these like
+ * skips to avoid double-counting against the real rows.
+ */
+export async function getClaimedOccurrences(
+  db: SQLite.SQLiteDatabase,
+  seriesIds: string[],
+): Promise<Map<string, Set<number>>> {
+  const map = new Map<string, Set<number>>();
+  if (seriesIds.length === 0) return map;
+  const placeholders = seriesIds.map(() => '?').join(',');
+  const rows = await db.getAllAsync<{ parent_recur_id: string; recur_override_date: number }>(
+    `SELECT parent_recur_id, recur_override_date FROM txn
+       WHERE parent_recur_id IN (${placeholders}) AND recur_override_date IS NOT NULL`,
+    seriesIds,
+  );
+  for (const r of rows) {
+    let set = map.get(r.parent_recur_id);
+    if (!set) { set = new Set(); map.set(r.parent_recur_id, set); }
+    set.add(r.recur_override_date);
+  }
+  return map;
+}
+
+/** Merge skip + claimed-occurrence sets for one series into a single omit-set. */
+function mergedOmit(skips?: Set<number>, claimed?: Set<number>): Set<number> | undefined {
+  if (!skips && !claimed) return undefined;
+  const out = new Set<number>(skips);
+  if (claimed) for (const c of claimed) out.add(c);
+  return out;
+}
+
+/**
+ * Turn every **due** recurring occurrence (date ≤ now) into a real, editable
+ * transaction linked to its rule via `parent_recur_id` + `recur_override_date`.
+ * Idempotent — skips occurrences already claimed (real row exists) or skipped.
+ * Run once on app open. Future occurrences stay virtual until they come due.
+ */
+const MATERIALIZE_HORIZON_MS = 92 * 24 * 60 * 60 * 1000; // back-fill at most ~3 months
+
+export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Promise<number> {
+  const now = Date.now();
+  const horizonStart = now - MATERIALIZE_HORIZON_MS;
+  const templates = await db.getAllAsync<Txn>(
+    `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
+  );
+  if (templates.length === 0) return 0;
+
+  const ids = templates.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
+  let created = 0;
+
+  for (const t of templates) {
+    const rw = await loadSplits(db, t);
+    const dates = occurrenceDatesUpTo(t.date, t.recur_freq!, t.recur_interval ?? 1, now, t.recur_end);
+    const skips = skipMap.get(t.id);
+    const claimed = claimedMap.get(t.id);
+    for (const occ of dates) {
+      // Older occurrences stay virtual (still shown/counted) to avoid a huge
+      // first-run back-fill; only recent due ones become real editable rows.
+      if (occ < horizonStart) continue;
+      if (skips?.has(occ) || claimed?.has(occ)) continue;
+      const newId = uuid();
+      await db.withTransactionAsync(async () => {
+        await db.runAsync(
+          `INSERT INTO txn
+             (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
+              recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
+          [
+            newId, t.group_id, t.kind, t.entry_mode, occ, t.category, t.note,
+            t.attachment_uri, t.tags, t.adjustments, occ, t.id, now, now,
+          ],
+        );
+        for (const p of rw.payments) {
+          await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
+        }
+        for (const s of rw.shares) {
+          await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
+        }
+      });
+      created++;
+    }
+  }
+  return created;
 }
 
 /** All skipped occurrence dates (ms) for one series. */
