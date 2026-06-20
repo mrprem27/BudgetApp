@@ -51,13 +51,14 @@
 ### Phase E — iOS widget *(needs dev build — WidgetKit)*
 - [ ] **Quick-add / dashboard widget** (N3)
 
-### Phase F — Bigger bets (v3.0+)
+### Phase F — Bigger bets *(⏸ DEFERRED — months out, revisit later)*
 - [ ] Multi-currency (D6) · cloud sync / multi-device · real-time collaboration · UPI payment links
 - [ ] Net worth (assets/liabilities) · data import (Splitwise/CSV/bank) · goal sharing
 - [ ] AI receipt OCR / NL entry — **deferred** (breaks offline promise, D2)
 
-**Suggested order:** A → B → C → D → E → F. A and B can ship in the current
-(no-dev-build) track; C and E start a dev-build track in parallel when you're ready.
+**Build order now:** A → B → C → D → E. **Phase F is parked** (revisit after
+months). A and B ship on the current no-dev-build track; C and E open a
+dev-build track in parallel when ready.
 
 ---
 

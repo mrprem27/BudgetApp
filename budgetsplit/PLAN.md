@@ -82,6 +82,72 @@ F29 increase=coral severity.
 
 ---
 
+## 3.6 — Next-Version Build Checklist (Phases A–E)  ← **ACTIVE**
+
+> Build order **A → B → C → D → E**. **Phase F parked** (months out). Gate every
+> item: `tsc` clean + tests green, then commit. A/B need no native modules; C/E
+> need a custom dev build (expo-notifications / WidgetKit). Full strategic detail
+> in root `FEATURE_ROADMAP.md` §0.
+
+### Phase A — Edit integrity & recurring model  *(P0 · no dev build)*
+- [ ] **A1 — Edit itemized bills**
+  - [ ] Allow edit on itemized txns (drop `!isItemized` lock in `txn/[id].tsx`)
+  - [ ] `add/itemized.tsx`: accept `editId`; load existing items + assignments + payers
+  - [ ] Add `updateItemizedTxn` (rewrite line_item + payments + shares atomically)
+  - [ ] Header → "Edit Itemized"; Save calls update; no orphaned `line_item` rows
+- [ ] **A2 — Recurring occurrences become real, editable transactions**
+  - [ ] Schema: add `parent_recur_id` (+ `recur_occurrence_date`) to `txn`; migration
+  - [ ] Materialize-on-due job: at app-open (and a catch-up loop) insert real rows for
+        every due occurrence since last run; idempotent/dedup by (rule, date)
+  - [ ] Stop double-counting: computed `materializeInstances` no longer renders an
+        occurrence once a real row exists for it
+  - [ ] Each occurrence editable like any txn (amount/split/note/date) — editing the
+        occurrence never mutates the rule
+- [ ] **A3 — "Added by [recurring]" provenance**
+  - [ ] On `txn/[id].tsx`, if `parent_recur_id` set, show an "Added by ⟳ <rule>" row
+  - [ ] Tap → navigate to Recurring Manager and **highlight** that exact rule
+        (pass `focusId`; scroll-to + brief highlight ring)
+- [ ] **A4 — Undo for deletes (5s toast)**
+  - [ ] Reusable `UndoToast` (countdown, Undo button) in `components/ui`
+  - [ ] Soft-delete already sets `is_deleted=1`; Undo restores within window
+  - [ ] Wire on txn delete (detail + swipe), with haptic.warning on delete
+
+### Phase B — On-device smart wins  *(no dev build)*
+- [ ] **B1 — Goal celebration** — confetti + `haptic.success` when a goal hits 100%
+      (fires once per goal completion; guard re-trigger)
+- [ ] **B2 — Pattern-aware "Can I afford this?"** — factor projected month-end pace +
+      remaining recurring this month + category avg into the verdict; show the math
+- [ ] **B3 — Global transaction search** + richer filters (date / amount / person range)
+      → new search screen over all groups; reuse `FilterBar`
+- [ ] **B4 — Duplicate detection** — on add, warn if same amount+category within 24h
+- [ ] **B5 — Photos:** up to 3 per txn · per-photo size cap (compress on import) ·
+      storage-used + delete-old · PDF attachments
+- [ ] **B6 — Financial-health score** (0–100: budget adherence + savings rate + debt) ·
+      **what-if simulator** ("cut dining 20% → save ₹X")
+- [ ] **B7 — Smart categories: learn from corrections** (remember title→category overrides)
+- [ ] **B8 — Pull-to-refresh** on list screens · **bulk actions** (multi-select)
+
+### Phase C — Notifications & subscriptions  *(needs dev build — expo-notifications)*
+- [ ] **C1 — Local notification engine** (permission, schedule, cancel) foundation
+- [ ] **C2 — Budget warnings** (80/100%) · **bill/renewal reminders** (N1, from recurring)
+- [ ] **C3 — Subscription auto-detect** (N2) → dashboard · renewal calendar · cost optimization
+- [ ] **C4 — Streak push nudge** · settlement nudges · daily digest
+- [ ] **C5 — Data-gated unlocks** — N-day streak unlocks 60/90-day forecast + pattern search
+
+### Phase D — Onboarding & data safety  *(no dev build)*
+- [ ] **D1 — Full interactive onboarding** covering all main features
+      (create group → add → split → budget → savings → settle)
+- [ ] **D2 — Encrypted auto-backup** to iCloud/Drive (full export already ✅)
+
+### Phase E — iOS widget  *(needs dev build — WidgetKit)*
+- [ ] **E1 — Quick-add / dashboard widget** (N3): app-group shared JSON → SwiftUI widget
+
+### Phase F — Bigger bets  *(⏸ PARKED — revisit after months)*
+- Multi-currency · cloud sync/multi-device · UPI links · net worth · data import ·
+  goal sharing · AI receipt OCR (D2). **Not in this build cycle.**
+
+---
+
 ## 4. Decisions log (locked)
 
 - **D1 — Ship current branch as v1** (PR to `main`); everything below is v2/next.
