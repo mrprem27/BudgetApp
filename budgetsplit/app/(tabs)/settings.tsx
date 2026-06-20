@@ -212,7 +212,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
       </View>
-      <Text style={styles.featureCaption}>Pick how many days before a charge to start, and the exact time. If several land together they’re spaced a few seconds apart. All on-device — nothing leaves your phone.</Text>
+      <Text style={styles.featureCaption}>Pick how many days before a charge to start, and the exact time. All on-device — nothing leaves your phone.</Text>
 
       {/* Budget & Data */}
       <Text style={styles.sectionTitle}>Budget & Data</Text>

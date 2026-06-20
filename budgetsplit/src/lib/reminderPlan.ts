@@ -27,8 +27,6 @@ export const DEFAULT_DAILY_TIME: ReminderTime = { hour: 20, minute: 0 };
 export const DEFAULT_LEAD_DAYS = 1;
 export const MAX_LEAD_DAYS = 7;
 
-/** Min spacing between two delivered reminders so they don't all buzz at once. */
-export const REMINDER_GAP_MS = 5000;
 /** Cap on scheduled one-offs — stays well under iOS's 64 pending-notification limit. */
 export const REMINDER_CAP = 50;
 
@@ -60,23 +58,14 @@ export function formatReminderTime(t: ReminderTime): string {
 }
 
 /**
- * Enforce a minimum gap between delivered reminders and cap the count. Reminders
- * that would land within `gapMs` of the previous one are pushed forward just
- * enough to keep the spacing — this is the "release the queue 5s apart" done at
- * schedule time (local notifications fire while the app is closed, so we can't
- * drip-feed them at runtime). Only ever moves a fire time later, never earlier.
+ * Schedule the soonest `cap` reminders, in time order. The OS happily delivers
+ * several local notifications at once, so there's no runtime queue to manage —
+ * we only need to keep the total under iOS's pending-notification limit, and
+ * drop the furthest-out ones (the schedule rebuilds on every app open, so they
+ * come back into range later).
  */
-export function staggerReminders(items: PlannedReminder[], gapMs = REMINDER_GAP_MS, cap = REMINDER_CAP): PlannedReminder[] {
-  const sorted = [...items].sort((a, b) => a.fireAt - b.fireAt);
-  const out: PlannedReminder[] = [];
-  let last = -Infinity;
-  for (const it of sorted) {
-    if (out.length >= cap) break;
-    const fireAt = Math.max(it.fireAt, last + gapMs);
-    out.push({ ...it, fireAt });
-    last = fireAt;
-  }
-  return out;
+export function limitReminders(items: PlannedReminder[], cap = REMINDER_CAP): PlannedReminder[] {
+  return [...items].sort((a, b) => a.fireAt - b.fireAt).slice(0, cap);
 }
 
 /** Set a date to a given wall-clock time (local), returning epoch ms. */

@@ -10,14 +10,14 @@ import { formatRupees } from './money';
 import {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
   DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME,
-  clampLead, clampTime, defaultReminderPrefs, staggerReminders, atTimeOfDay,
+  clampLead, clampTime, defaultReminderPrefs, limitReminders, atTimeOfDay,
 } from './reminderPlan';
 
 // Re-export the pure surface so callers import everything from one place.
 export {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
   DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_LEAD_DAYS, MAX_LEAD_DAYS,
-  REMINDER_GAP_MS, REMINDER_CAP, formatReminderTime, staggerReminders,
+  REMINDER_CAP, formatReminderTime, limitReminders,
 } from './reminderPlan';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -102,7 +102,7 @@ export async function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<vo
         });
       }
     }
-    for (const rem of staggerReminders(planned)) {
+    for (const rem of limitReminders(planned)) {
       await scheduleReminderAt(rem.id, new Date(rem.fireAt), rem.title, rem.body);
     }
   }
