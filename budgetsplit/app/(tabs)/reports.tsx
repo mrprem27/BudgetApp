@@ -23,6 +23,7 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
+import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../../src/lib/forecast';
 import { formatRupees, formatCompact, formatCompactMajor } from '../../src/lib/money';
 import { Badge } from '../../src/components/ui/Badge';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
@@ -191,11 +192,9 @@ export default function ReportsScreen() {
       const dayOfMonth = getDate(now);
       const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
 
-      // Skip the projection for the first couple of days — one or two data points
-      // make the linear run-rate wildly misleading (a single big buy projects to
-      // a huge month-end total).
-      if (isCurrentMonth && dayOfMonth >= 3) {
-        // Compute daily cumulative spending for each day up to today
+      // Forecast needs a few days of signal — see forecast.ts (FORECAST_MIN_DAYS).
+      if (isCurrentMonth && dayOfMonth >= FORECAST_MIN_DAYS) {
+        // Daily cumulative spending up to today (the "actual" line).
         const dailyCumulative: Array<{ value: number; label?: string }> = [];
         let runningTotal = 0;
         const allMonthExpenses = (await getTransactionsInRange(db, null, monthStart.getTime(), endOfMonth(month).getTime()))
@@ -210,19 +209,32 @@ export default function ReportsScreen() {
           runningTotal += daySpend;
           dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 5 === 1 ? `${d}` : '' });
         }
-        setForecastActual(dailyCumulative);
 
-        // Linear projection for remaining days
-        const dailyRate = runningTotal / Math.max(1, dayOfMonth);
-        const projectedLine: Array<{ value: number; label?: string }> = [];
-        // Start projected line from the last actual point
-        projectedLine.push({ value: Math.round(runningTotal / 100), label: '' });
-        for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
-          const projected = runningTotal + dailyRate * (d - dayOfMonth);
-          projectedLine.push({ value: Math.round(projected / 100), label: d % 5 === 1 ? `${d}` : '' });
+        // Prior-month actual total anchors the projection so an early spike doesn't
+        // explode the forecast (blended model — see forecast.ts).
+        const prevStart = startOfMonth(subMonths(month, 1)).getTime();
+        const prevEnd = endOfMonth(subMonths(month, 1)).getTime();
+        const priorMonthTotal = (await getTransactionsInRange(db, null, prevStart, prevEnd))
+          .filter(t => t.kind === 'expense')
+          .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+
+        const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
+        if (fc.ready) {
+          setForecastActual(dailyCumulative);
+          const projectedLine: Array<{ value: number; label?: string }> = [
+            { value: Math.round(runningTotal / 100), label: '' }, // continue from today's point
+          ];
+          for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
+            const v = projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d);
+            projectedLine.push({ value: Math.round(v / 100), label: d % 5 === 1 ? `${d}` : '' });
+          }
+          setForecastProjected(projectedLine);
+          setProjectedTotal(Math.round(fc.projected / 100));
+        } else {
+          setForecastActual([]);
+          setForecastProjected([]);
+          setProjectedTotal(0);
         }
-        setForecastProjected(projectedLine);
-        setProjectedTotal(Math.round((runningTotal + dailyRate * (daysInMonth - dayOfMonth)) / 100));
       } else {
         setForecastActual([]);
         setForecastProjected([]);
@@ -474,7 +486,7 @@ export default function ReportsScreen() {
                 <Text style={styles.chartTitle}>Month-end forecast</Text>
                 <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
               </View>
-              <Text style={styles.forecastSub}>Projected total spending based on your pace so far</Text>
+              <Text style={styles.forecastSub}>Projected month-end total — your pace so far, anchored to last month</Text>
               <LineChart
                 data={forecastActual}
                 data2={forecastProjected}

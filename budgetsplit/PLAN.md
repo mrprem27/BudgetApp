@@ -88,10 +88,15 @@ nothing looks like a 2010 form.
 - **F8** v1 release — PR `feat/design-adoption-bugfixes-toggles` → `main`.
 
 **📋 Queued → mapped to phases in §6**
+- **F10** Forecast redesign — ✅ **done**: pure `forecast.ts` (run-rate blended with
+  last month's actual; `FORECAST_MIN_DAYS` gate) + tests; wired into Reports. → Phase 3.2.
 - **F12** Budget *entry* redesign — collapsible parent-category sections w/ icons +
-  faster entry (smart defaults / quick-set). *(User refining exact UX.)* → Phase 3.
-- **F10** Forecast redesign — on-device model (month patterns, weekday seasonality,
-  category mix) + "needs N days" gate. Strictly offline, no cloud ML. → Phase 3.
+  faster entry (smart defaults / quick-set). *(User refining exact UX.)* → Phase 3.1.
+- **F17** Budget components mis-spaced in several places — pad/align audit. → polish.
+- **F18** Input fields inconsistent empty vs typed (border/bg/placeholder state) —
+  standardize a focused/filled input style. → polish.
+- **F19** Donut wedges don't return to place on release (pop-out doesn't restore;
+  some selection/animation logic issue). → bug.
 - **F8** v1 release — PR this branch to `main` (Decision D1). → Phase 1 close-out.
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
