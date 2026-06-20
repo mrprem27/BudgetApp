@@ -1,8 +1,14 @@
 # BudgetSplit — Multi-Version Feature Roadmap
 
 **World-Class Budget & Expense Splitting App**
-**Document Version:** 1.0 | **Last Updated:** 2026-06-15
+**Document Version:** 2.0 | **Last Updated:** 2026-06-20
 **Benchmark:** Splitwise · YNAB · Monarch Money · Tricount · Copilot Money · PocketGuard · Honeydue
+
+> **Status note (2026-06-20):** v1 shipped to `main`; a large polish + smart-money
+> cycle is on `feat/design-adoption-bugfixes-toggles`. Many features once planned
+> for v2.0 / v2.5 below are **already built** — see §1 for the live inventory.
+> Day-to-day working log lives in `budgetsplit/PLAN.md`; this doc is the
+> strategic multi-version view.
 
 ---
 
@@ -23,28 +29,51 @@
 
 ## 1. Current State Assessment <a name="current-state-assessment"></a>
 
-### What BudgetSplit Already Does Well
-| Feature | Status | Quality |
-|---------|--------|---------|
-| Multi-group expense tracking | ✅ Complete | Excellent |
-| Quick & itemized bill splitting | ✅ Complete | Excellent |
-| Income tracking | ✅ Complete | Good |
-| Category budgets (4 cadences) | ✅ Complete | Excellent |
-| Budget health analytics + recommendations | ✅ Complete | Excellent |
-| Recurring transactions | ✅ Complete | Good |
-| Debt simplification algorithm | ✅ Complete | Excellent |
-| Audit log | ✅ Complete | Good |
-| CSV/PDF export | ✅ Complete | Good |
-| Biometric lock + privacy screen | ✅ Complete | Good |
-| Location tagging | ✅ Complete | Basic |
-| Dark theme design system | ✅ Complete | Excellent |
+### Core (shipped in v1)
+| Feature | Status |
+|---------|--------|
+| Multi-group expense tracking | ✅ |
+| Quick & itemized bill splitting (equal / %, shares, exact) | ✅ |
+| Income tracking (with custom recurrence intervals) | ✅ |
+| Category budgets — 4 cadences (once/daily/monthly/yearly, resets each period) | ✅ |
+| Budget health analytics + plain-English recommendations | ✅ |
+| Recurring transactions — skip-one · this-&-future · pause/resume/end | ✅ |
+| Debt simplification + global "Settle up" (targets the tapped person) | ✅ |
+| Audit log / per-transaction timeline | ✅ |
+| CSV + solid-theme PDF export | ✅ |
+| Biometric lock + privacy screen | ✅ |
+| Dark theme design system (tokens, palette, Feather icons) | ✅ |
+| INR paise-precision money; compact K/L/Cr (2-dec, no trailing zeros) | ✅ |
+| Robustness: ErrorState+Retry on every screen, guards, atomic writes | ✅ |
 
-### What's Partially Done
+### Shipped this cycle (post-v1, branch `feat/design-adoption-bugfixes-toggles`)
+| Feature | Status |
+|---------|--------|
+| **Savings module** — pool, goals, cash-available, auto-save, opt-in budget sweep | ✅ |
+| **Receipt photo attachments** — attach on add + pinch-zoom on detail (offline) | ✅ |
+| **Transfer transactions** — clear From → To card UI | ✅ |
+| **Editable transactions incl. settlements/transfers** (itemized excepted) | ✅ |
+| **Reports** — interactive donut, 6-mo trend (donut-driven per-category), forecast | ✅ |
+| **Month-end forecast** — run-rate blended w/ prior month, "needs N days" gate, clean line | ✅ |
+| **Insights everywhere** — colored figures by meaning, plain English, per-surface toggles | ✅ |
+| **Smart categories** (opt-in) — type a title → category auto-fills | ✅ |
+| **Smart one-screen fast entry** (amount + title, you-paid/split-equally default) | ✅ |
+| **"Can I afford this?"** (opt-in) — verdict vs spendable cash + save-to-goal | ✅ |
+| **Tracking streak** (opt-in) — gentle daily-logging streak chip (in-app) | ✅ |
+| **Dashboard Cash-available** card (liquid money after savings) | ✅ |
+| **Avatars/photos** for user + friends, shown app-wide | ✅ |
+| **Friends list** screen (balances, rename, photo, settle) + Groups-tab entry | ✅ |
+| **Feature management** — section-level toggles (make the app simple↔complex) | ✅ |
+| **Manage-members** icon in group header; collapsible budget-entry editor | ✅ |
+| Settle/balance directional rows; History/Settings/Budget spacing & padding sweep | ✅ |
+
+### Partially done / still open
 | Feature | Status | Gap |
 |---------|--------|-----|
-| Transfer transactions | 🟡 Schema ready | UI incomplete |
-| Settlement recording | 🟡 Works | No partial payments |
-| Onboarding | 🟡 Basic | No interactive tutorial |
+| Settlement recording | 🟡 | No partial payments yet |
+| Onboarding | 🟡 | Basic; no interactive tutorial |
+| Transaction search/filter | 🟡 | Groups/budget filters exist; no global txn search |
+| Multi-currency | 🟡 | Infra dormant, INR-only (Decision D6) |
 
 ---
 
@@ -82,6 +111,14 @@
 
 **Theme:** Complete the core, fix UX gaps, world-class polish
 **Timeline:** 4-6 weeks
+
+> **✅ Shipped from this version already:** Transfer txn UI · transaction notes ·
+> split methods (%/shares/exact) · receipt photos + full-screen viewer ·
+> interactive onboarding · destructive confirmations · empty-state CTAs ·
+> skeleton loading · keyboard avoidance · date-picker sheet · smart categories.
+> **Still open:** partial settlements · transaction search/filter · bulk actions ·
+> duplicate detection · multi-currency · local notifications (needs dev build) ·
+> undo/redo · home-screen widgets.
 
 ### 2.0.1 — Transaction Completeness
 | Feature | Description | Priority |
@@ -139,6 +176,28 @@
 
 **Theme:** Intelligent features that make users financially smarter
 **Timeline:** 4-6 weeks after v2.0
+
+> **✅ Shipped already:** full Savings Goals module (create/track/contribute,
+> auto-allocation, opt-in sweep) · spending velocity/pace (forecast) · category
+> trends (6-mo, donut-driven) · savings rate · cash-flow forecast (30-day pace) ·
+> year-in-review · smart categorization (title→category) · EMI/loan + household-help
+> categories · **"Can I afford this?"** v1 · gentle **tracking streak**.
+> **Still open / next:** subscription auto-detect + renewal reminders (N1/N2),
+> financial-health score, what-if simulator, debt tracker, learn-from-corrections.
+
+### 2.5.6 — Smart "Can I afford this?" engine *(evolve the v1 checker)*
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Pattern-aware verdict** | Move beyond current cash → factor projected month-end pace, upcoming recurring/bills, and average category spend before saying yes/tight/no | P1 |
+| **Insight-driven** | A small on-device engine over the user's own history (run-rate, recurring load, category mix) — no cloud, no AI service | P1 |
+| **Save-instead nudge** | If "tight/no", one-tap create or top up a goal for the item | P1 |
+
+### 2.5.7 — Data-gated unlocks (retention loop)
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Tracking-streak unlocks** | Advanced analysis (deeper forecasting, weekly/2-month projections, pattern search) "unlocks" after N continuous days of tracking (e.g. 30) — both a quality gate (enough data to be accurate) and a reason to come back | P1 |
+| **Honest gating copy** | "3 more days of tracking unlocks 2-month forecasting" — never fake; the gate reflects real data sufficiency | P1 |
+| **Progress visibility** | Show how close they are to the next unlock on the dashboard/streak chip | P2 |
 
 ### 2.5.1 — Savings Goals
 | Feature | Description | Priority |
@@ -358,7 +417,7 @@
 ### 5.0.4 — Gamification & Engagement
 | Feature | Description | Priority |
 |---------|-------------|----------|
-| **Streaks** | "30-day tracking streak" with visual flame | P1 |
+| **Streaks** | "30-day tracking streak" with visual flame | ✅ v1 shipped (in-app chip; push reminder still v2) |
 | **Achievements** | Badges: "First ₹10K saved", "Zero debt month" | P1 |
 | **Monthly challenges** | "No-spend weekend", "₹500 dining budget this week" | P2 |
 | **Leaderboard** | Optional: rank savings rate among friends | P2 |
@@ -421,6 +480,13 @@ HIGH IMPACT
 ## 10. Known Issues & Fixes Required <a name="known-issues"></a>
 
 ### Critical Bugs / UX Issues to Fix in v2.0
+
+> **✅ Resolved since this list was written:** #1 transfer UI · #5 destructive
+> confirmations · #6 budget cadence picker (now a sheet) · #7 date picker (sheet) ·
+> #8 transaction notes · #9 onboarding (interactive gate) · #14 receipt capture.
+> Also fixed: income-leak in balances, donut deselect, settlement direction.
+> **Still open:** #2 partial settlements · #3 search · #4 undo · #10 backup ·
+> #11 multi-currency · #12 multi-device · #13 notifications · #15 widgets.
 
 | # | Issue | Severity | Category |
 |---|-------|----------|----------|
