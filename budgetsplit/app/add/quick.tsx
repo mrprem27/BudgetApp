@@ -13,13 +13,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
+import { matchCategory } from '../../src/lib/smartCategory';
+import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../../src/lib/smartCategoryLearn';
+import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -53,6 +56,21 @@ export default function QuickAddScreen() {
   const [note, setNote] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [catManual, setCatManual] = useState(false); // user overrode the smart guess
+  const [learned, setLearned] = useState<LearnedMap>({});
+
+  // Smart categories: typing a title auto-picks a category (until the user overrides).
+  // Learned corrections take priority over the built-in keyword rules.
+  function onTitleChange(text: string) {
+    setNote(text);
+    if (flags.smartCategory && !catManual) {
+      const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories);
+      if (name) {
+        const c = categories.find(cat => cat.name === name);
+        if (c) setSelectedCategory(c);
+      }
+    }
+  }
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
@@ -81,6 +99,7 @@ export default function QuickAddScreen() {
       setGroups(grps);
       const meRow = await getMe(db);
       setMe(meRow);
+      loadLearned().then(setLearned).catch(() => {});
       const savedCur = await AsyncStorage.getItem('default_currency');
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
@@ -241,32 +260,53 @@ export default function QuickAddScreen() {
       // End date is optional; only valid if it's after the start date.
       const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
 
-      // Optional, user-controlled location capture (Settings → Privacy).
-      let place: { lat: number; lng: number; label: string | null } | null = null;
-      try {
-        if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
-      } catch { /* best-effort */ }
+      const commit = async () => {
+        // Optional, user-controlled location capture (Settings → Privacy).
+        let place: { lat: number; lng: number; label: string | null } | null = null;
+        try {
+          if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
+        } catch { /* best-effort */ }
 
-      await insertTxn(db, {
-        groupId: selectedGroupId,
-        kind,
-        entryMode: 'quick',
-        date: txnDate,
-        category: selectedCategory!.name,
-        note: note.trim() || undefined,
-        attachmentUri: attachmentUri ?? undefined,
-        recurFreq: recurEnabled ? recurFreq : undefined,
-        recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
-        recurEnd,
-        lat: place?.lat,
-        lng: place?.lng,
-        placeLabel: place?.label ?? undefined,
-        currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
-        payments: finalPayments,
-        shares: finalShares,
-      });
-      haptic.success();
-      router.back();
+        await insertTxn(db, {
+          groupId: selectedGroupId,
+          kind,
+          entryMode: 'quick',
+          date: txnDate,
+          category: selectedCategory!.name,
+          note: note.trim() || undefined,
+          attachmentUri: attachmentUri ?? undefined,
+          recurFreq: recurEnabled ? recurFreq : undefined,
+          recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
+          recurEnd,
+          lat: place?.lat,
+          lng: place?.lng,
+          placeLabel: place?.label ?? undefined,
+          currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
+          payments: finalPayments,
+          shares: finalShares,
+        });
+        haptic.success();
+        router.back();
+      };
+
+      // Warn on a likely double-entry (same category + amount within 24h).
+      if (kind === 'expense' && !recurEnabled) {
+        const dup = await findRecentDuplicate(db, selectedGroupId, selectedCategory!.name, total, txnDate);
+        if (dup) {
+          setSaving(false);
+          Alert.alert(
+            'Possible duplicate',
+            `You already logged ${formatRupees(total)} on ${selectedCategory!.name} recently. Add it anyway?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Add anyway', onPress: () => { setSaving(true); commit().catch(() => Alert.alert('Error', 'Could not save. Try again.')).finally(() => setSaving(false)); } },
+            ],
+          );
+          return;
+        }
+      }
+
+      await commit();
     } catch (e) {
       Alert.alert('Error', 'Could not save. Try again.');
     } finally {
@@ -277,7 +317,7 @@ export default function QuickAddScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
@@ -328,27 +368,70 @@ export default function QuickAddScreen() {
           );
         })()}
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Category</Text>
-          <CategoryPicker
-            categories={categories}
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-            onCreate={async (name) => {
-              const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-              setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-              return created;
-            }}
-          />
-        </View>
+        {flags.smartCategory ? (
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>What for?</Text>
+            <Input
+              value={note}
+              onChangeText={onTitleChange}
+              placeholder="e.g. Uber, Groceries, Netflix"
+              accessibilityLabel="Title"
+              autoCapitalize="sentences"
+              maxLength={80}
+            />
+            {!catManual && selectedCategory ? (
+              <TouchableOpacity style={styles.smartCatChip} onPress={() => setCatManual(true)} accessibilityRole="button" accessibilityLabel="Change category">
+                <View style={[styles.smartCatDot, { backgroundColor: categoryVisual(selectedCategory.name).color + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={categoryVisual(selectedCategory.name).color} />
+                </View>
+                <Text style={styles.smartCatName}>{selectedCategory.name}</Text>
+                <Text style={styles.smartCatHint}>auto · tap to change</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ marginTop: space.sm }}>
+                <CategoryPicker
+                  categories={categories}
+                  value={selectedCategory}
+                  onChange={(c) => {
+                    setSelectedCategory(c);
+                    setCatManual(true);
+                    // Learn from the correction so this title picks `c` next time.
+                    if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
+                  }}
+                  onCreate={async (name) => {
+                    const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+                    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+                    return created;
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        ) : (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Category</Text>
+              <CategoryPicker
+                categories={categories}
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+                onCreate={async (name) => {
+                  const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+                  setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+                  return created;
+                }}
+              />
+            </View>
 
-        <Input
-          value={note}
-          onChangeText={setNote}
-          placeholder="Note (optional)"
-          accessibilityLabel="Note"
-          maxLength={80}
-        />
+            <Input
+              value={note}
+              onChangeText={setNote}
+              placeholder="Note (optional)"
+              accessibilityLabel="Note"
+              maxLength={80}
+            />
+          </>
+        )}
 
         {attachmentUri ? (
           <View style={styles.attachRow}>
@@ -553,7 +636,7 @@ export default function QuickAddScreen() {
                 }
                 return (
                   <View key={m.id} style={styles.splitRow}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} onPress={() => {
+                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} onPress={() => {
                       setSplitMembers(prev =>
                         prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
                       );
@@ -618,7 +701,7 @@ export default function QuickAddScreen() {
         <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
         {members.map(m => (
           <View key={m.id} style={styles.payerSheetRow}>
-            <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+            <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
             <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
             <View style={styles.payerInputWrap}>
               <Text style={styles.payerRupee}>₹</Text>
@@ -654,15 +737,20 @@ export default function QuickAddScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  title: { ...type.heading, color: colors.textPrimary },
-  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
+  title: { ...type.heading, color: colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: space.sm },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
+  headerClose: { minWidth: 40, alignItems: 'flex-start' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
   currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   field: { gap: space.xs },
+  smartCatChip: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.xs },
+  smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  smartCatHint: { ...type.caption, color: colors.textMuted },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   groupSelectorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

@@ -9,10 +9,13 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format, isSameDay, startOfMonth } from 'date-fns';
 import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
-import { getTransactionsForGroup, softDeleteTxn, insertTxn } from '../../src/db/queries/transactions';
+import { getTransactionsForGroup, softDeleteTxn, restoreTxn, insertTxn } from '../../src/db/queries/transactions';
+import { useUndo } from '../../src/components/system/UndoToast';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
@@ -75,6 +78,8 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
+  const { refreshing, onRefresh } = useRefresh(() => load());
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [group, setGroup] = useState<BudgetGroup | null>(null);
@@ -130,18 +135,34 @@ export default function GroupDetailScreen() {
     await setSimplifyDebt(db, id, on);
   }
 
+  async function deleteTxn(targetId: string, cascade: boolean, message: string) {
+    await softDeleteTxn(db, targetId, cascade);
+    haptic.warning();
+    await load();
+    showUndo({
+      message,
+      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); await load(); } catch { /* ignore */ } },
+    });
+  }
+
   async function handleDelete(txnId: string) {
     const recurring = isRecurInstance(txnId);
     const targetId = recurring ? txnId.replace(/_\d+$/, '') : txnId;
+    if (!recurring) {
+      Alert.alert('Delete transaction?', undefined, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteTxn(targetId, false, 'Transaction deleted') },
+      ]);
+      return;
+    }
+    // Recurring rule: keep the already-logged occurrences unless the user asks otherwise.
     Alert.alert(
-      recurring ? 'Delete recurring transaction?' : 'Delete transaction?',
-      recurring ? 'This removes the recurring transaction and all its occurrences.' : undefined,
+      'Delete recurring rule?',
+      'Keep the transactions it has already logged, or remove them too?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => { await softDeleteTxn(db, targetId); haptic.warning(); await load(); },
-        },
+        { text: 'Delete rule only', onPress: () => deleteTxn(targetId, false, 'Recurring rule deleted') },
+        { text: 'Delete rule + all logged', style: 'destructive', onPress: () => deleteTxn(targetId, true, 'Recurring + occurrences deleted') },
       ],
     );
   }
@@ -228,6 +249,11 @@ export default function GroupDetailScreen() {
             <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
+          {!isPersonal && (
+            <TouchableOpacity onPress={() => router.push(`/group/${id}/members`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage members" style={styles.headerAction}>
+              <Feather name="users" size={21} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
             <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -236,7 +262,7 @@ export default function GroupDetailScreen() {
         {/* Group hero — themed by the group's colour */}
         <View style={styles.hero}>
           <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
-            <Feather name={(group.icon as any) ?? 'credit-card'} size={22} color={group.color} />
+            <Feather name={asFeather(group.icon, 'credit-card')} size={22} color={group.color} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
@@ -288,6 +314,7 @@ export default function GroupDetailScreen() {
           sections={groupTxnsByDate(filteredTxns)}
           keyExtractor={t => t.id}
           contentContainerStyle={styles.listContent}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
             txns.length > 0 ? (
               <View style={{ marginBottom: space.sm }}>
@@ -347,7 +374,7 @@ export default function GroupDetailScreen() {
               const v = net[m.id] ?? 0;
               return (
                 <View key={m.id} style={[styles.memberNetRow, i < members.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
                   <Text style={styles.memberNetName} numberOfLines={1}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNetAmt, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
                     {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'settled up'}
@@ -486,7 +513,7 @@ export default function GroupDetailScreen() {
                   {contributions.rows.map((r, i) => (
                     <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
                       <View style={styles.contribHead}>
-                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} />
+                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
                         <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
                         <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
                         <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
@@ -573,7 +600,7 @@ export default function GroupDetailScreen() {
           <View style={styles.card}>
             {members.map((m, mi) => (
               <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={40} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNet, { color: net[m.id] > 0 ? colors.income : net[m.id] < 0 ? colors.expense : colors.textMuted }]}>
@@ -659,6 +686,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   gradientHeader: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
+  headerAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgCard + 'AA', alignItems: 'center', justifyContent: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
   heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   heroName: { ...type.title, fontSize: 26, color: colors.textPrimary },
@@ -686,7 +714,7 @@ const styles = StyleSheet.create({
   toggleTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   toggleSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
-  ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, marginBottom: space.md, ...shadow.md },
   ovTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   ovLabel: { ...type.label, color: colors.textSecondary },
   ovSpent: { ...type.amountLG, color: colors.textPrimary, marginTop: 2 },
@@ -699,7 +727,7 @@ const styles = StyleSheet.create({
   ovStatLabel: { ...type.caption, color: colors.textMuted },
   insightPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, marginTop: space.md },
   insightText: { ...type.label, flex: 1 },
-  budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.lg, marginBottom: space.sm },
+  budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, marginBottom: space.sm },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },

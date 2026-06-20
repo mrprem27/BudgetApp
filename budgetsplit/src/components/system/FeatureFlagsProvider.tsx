@@ -7,7 +7,12 @@ type ContextValue = {
   ready: boolean;
 };
 
-const defaultFlags: FeatureFlags = { dashboardInsights: true, budgetInsights: true, savingsInsights: true, forecast: true, itemizedOcr: true, recurring: true };
+const defaultFlags: FeatureFlags = {
+  dashboardCash: true, dashboardBudget: true, dashboardDonut: true, dashboardBalances: true, dashboardSavings: true, dashboardInsights: true,
+  reportsDonut: true, reportsTrend: true, forecast: true,
+  budgetInsights: true, savingsInsights: true,
+  itemizedOcr: true, recurring: true, smartCategory: false, affordCheck: false, streak: false, healthScore: false, subscriptions: false,
+};
 
 const Ctx = createContext<ContextValue>({ flags: defaultFlags, setFlag: () => {}, ready: false });
 

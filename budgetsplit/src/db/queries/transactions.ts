@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { materializeInstances, nextOccurrenceOnOrAfter } from '../../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 
@@ -15,10 +15,12 @@ export type Txn = {
   note: string | null;
   attachment_uri: string | null;
   tags: string | null;
+  adjustments: string | null;
   recur_freq: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
   recur_interval: number | null;
   recur_end: number | null;
   recur_override_date: number | null;
+  parent_recur_id: string | null;
   recur_state: 'active' | 'paused' | 'ended';
   tz: string | null;
   lat: number | null;
@@ -63,11 +65,12 @@ export async function getTransactionsForGroup(
     `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL`,
     [groupId],
   );
-  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
+  const ids = recurTxns.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, rt.date, now, skipMap.get(rt.id)));
+    instances.push(...materializeInstances(rw, rt.date, now, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date || b.created_at - a.created_at);
@@ -103,11 +106,12 @@ export async function getTransactionsInRange(
     `SELECT t.* FROM txn t ${recurWhere}`,
     recurArgs,
   );
-  const skipMap = await getSkipsMap(db, recurTxns.map(t => t.id));
+  const ids = recurTxns.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
   const instances: TxnWithSplits[] = [];
   for (const rt of recurTxns) {
     const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, fromMs, toMs, skipMap.get(rt.id)));
+    instances.push(...materializeInstances(rw, fromMs, toMs, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
   }
 
   return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date);
@@ -214,6 +218,8 @@ export async function insertTxn(
   return id;
 }
 
+export type ItemizedAdjustment = { label: string; type: 'tax' | 'tip' | 'discount'; mode: 'flat' | 'percent'; value: string };
+
 export type InsertItemizedTxnInput = InsertTxnInput & {
   items: Array<{
     name: string;
@@ -221,6 +227,8 @@ export type InsertItemizedTxnInput = InsertTxnInput & {
     unitPrice: number;
     assignedTo: string[];
   }>;
+  /** Persisted so an itemized bill round-trips on edit (tax/tip/discount). */
+  adjustments?: ItemizedAdjustment[];
 };
 
 export async function insertItemizedTxn(
@@ -233,13 +241,14 @@ export async function insertItemizedTxn(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO txn
-         (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
+         (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
           recur_freq,recur_interval,recur_end,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
+        input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, now, now,
       ],
     );
@@ -273,10 +282,82 @@ export async function insertItemizedTxn(
   return id;
 }
 
-export async function softDeleteTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+/** Edit an itemized bill in place: rewrite the txn row + its line items, payments
+ *  and shares atomically (delete-then-reinsert, so no orphaned line_item rows). */
+export async function updateItemizedTxn(
+  db: SQLite.SQLiteDatabase,
+  id: string,
+  input: InsertItemizedTxnInput,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, updated_at=? WHERE id=?`,
+      [
+        input.category, input.note ?? null, input.attachmentUri ?? null,
+        input.tags ? JSON.stringify(input.tags) : null,
+        input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
+        input.date, now, id,
+      ],
+    );
+    await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
+    await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
+    await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
+    for (const item of input.items) {
+      await db.runAsync(
+        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo)],
+      );
+    }
+    for (const p of input.payments) {
+      await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, p.personId, p.amount]);
+    }
+    for (const s of input.shares) {
+      await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, s.personId, s.amount]);
+    }
+    const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
+    await logAudit(db, {
+      entityType: 'txn', entityId: id, groupId: input.groupId,
+      action: 'updated', amount: totalPaid,
+      summary: `Edited itemized bill ${formatRupees(totalPaid)} · ${input.category}`,
+    });
+  });
+}
+
+/** Restore a soft-deleted transaction (the Undo of softDeleteTxn). Pass
+ *  `cascadeOccurrences` to also restore a rule's materialized occurrences —
+ *  only when the matching delete cascaded. */
+export async function restoreTxn(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  cascadeOccurrences = false,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE id=?', [now, txnId]);
+    if (cascadeOccurrences) {
+      await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE parent_recur_id=?', [now, txnId]);
+    }
+  });
+}
+
+/**
+ * Soft-delete a transaction. For a recurring **template**, the already-logged
+ * occurrences are kept by default (they're real transactions) — pass
+ * `cascadeOccurrences` only when the user explicitly confirms deleting all
+ * occurrences too.
+ */
+export async function softDeleteTxn(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  cascadeOccurrences = false,
+): Promise<void> {
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
     await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [Date.now(), txnId]);
+    if (cascadeOccurrences && row?.recur_freq) {
+      await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE parent_recur_id=?', [Date.now(), txnId]);
+    }
     if (row) {
       const paid = await db.getFirstAsync<{ total: number }>(
         'SELECT COALESCE(SUM(amount),0) as total FROM txn_payment WHERE txn_id=?', [txnId],
@@ -379,6 +460,95 @@ export async function getSkipsMap(
   return map;
 }
 
+/**
+ * Occurrence dates (ms) that already have a **real** materialized row for each
+ * series — counted regardless of is_deleted, so a deleted occurrence never
+ * regenerates as a virtual instance. The virtual generator treats these like
+ * skips to avoid double-counting against the real rows.
+ */
+export async function getClaimedOccurrences(
+  db: SQLite.SQLiteDatabase,
+  seriesIds: string[],
+): Promise<Map<string, Set<number>>> {
+  const map = new Map<string, Set<number>>();
+  if (seriesIds.length === 0) return map;
+  const placeholders = seriesIds.map(() => '?').join(',');
+  const rows = await db.getAllAsync<{ parent_recur_id: string; recur_override_date: number }>(
+    `SELECT parent_recur_id, recur_override_date FROM txn
+       WHERE parent_recur_id IN (${placeholders}) AND recur_override_date IS NOT NULL`,
+    seriesIds,
+  );
+  for (const r of rows) {
+    let set = map.get(r.parent_recur_id);
+    if (!set) { set = new Set(); map.set(r.parent_recur_id, set); }
+    set.add(r.recur_override_date);
+  }
+  return map;
+}
+
+/** Merge skip + claimed-occurrence sets for one series into a single omit-set. */
+function mergedOmit(skips?: Set<number>, claimed?: Set<number>): Set<number> | undefined {
+  if (!skips && !claimed) return undefined;
+  const out = new Set<number>(skips);
+  if (claimed) for (const c of claimed) out.add(c);
+  return out;
+}
+
+/**
+ * Turn every **due** recurring occurrence (date ≤ now) into a real, editable
+ * transaction linked to its rule via `parent_recur_id` + `recur_override_date`.
+ * Idempotent — skips occurrences already claimed (real row exists) or skipped.
+ * Run once on app open. Future occurrences stay virtual until they come due.
+ */
+const MATERIALIZE_HORIZON_MS = 92 * 24 * 60 * 60 * 1000; // back-fill at most ~3 months
+
+export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Promise<number> {
+  const now = Date.now();
+  const horizonStart = now - MATERIALIZE_HORIZON_MS;
+  const templates = await db.getAllAsync<Txn>(
+    `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
+  );
+  if (templates.length === 0) return 0;
+
+  const ids = templates.map(t => t.id);
+  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
+  let created = 0;
+
+  for (const t of templates) {
+    const rw = await loadSplits(db, t);
+    const dates = occurrenceDatesUpTo(t.date, t.recur_freq!, t.recur_interval ?? 1, now, t.recur_end);
+    const skips = skipMap.get(t.id);
+    const claimed = claimedMap.get(t.id);
+    for (const occ of dates) {
+      // Older occurrences stay virtual (still shown/counted) to avoid a huge
+      // first-run back-fill; only recent due ones become real editable rows.
+      if (occ < horizonStart) continue;
+      if (skips?.has(occ) || claimed?.has(occ)) continue;
+      const newId = uuid();
+      await db.withTransactionAsync(async () => {
+        await db.runAsync(
+          `INSERT INTO txn
+             (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
+              recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
+          [
+            newId, t.group_id, t.kind, t.entry_mode, occ, t.category, t.note,
+            t.attachment_uri, t.tags, t.adjustments, occ, t.id, now, now,
+          ],
+        );
+        for (const p of rw.payments) {
+          await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
+        }
+        for (const s of rw.shares) {
+          await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
+        }
+      });
+      created++;
+    }
+  }
+  return created;
+}
+
 /** All skipped occurrence dates (ms) for one series. */
 export async function getSkips(db: SQLite.SQLiteDatabase, seriesId: string): Promise<number[]> {
   const rows = await db.getAllAsync<{ occurrence_date: number }>(
@@ -466,6 +636,35 @@ export async function splitRecurringSeries(
   return newId;
 }
 
+/**
+ * True if a non-recurring transaction with the same category + total amount
+ * already exists in the group within ±24h — used to warn about accidental
+ * double entries before saving.
+ */
+export async function findRecentDuplicate(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  category: string,
+  amountPaise: number,
+  dateMs: number,
+): Promise<boolean> {
+  const window = 24 * 60 * 60 * 1000;
+  const rows = await db.getAllAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(p.amount),0) as total
+       FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
+      WHERE t.group_id=? AND t.category=? AND t.is_deleted=0 AND t.recur_freq IS NULL
+        AND t.date BETWEEN ? AND ?
+      GROUP BY t.id`,
+    [groupId, category, dateMs - window, dateMs + window],
+  );
+  return rows.some(r => r.total === amountPaise);
+}
+
+/** Null out every transaction's attachment reference (used by "clear all attachments"). */
+export async function clearAllAttachmentRefs(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.runAsync('UPDATE txn SET attachment_uri=NULL WHERE attachment_uri IS NOT NULL');
+}
+
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
   return db.getAllAsync<LineItem>('SELECT * FROM line_item WHERE txn_id = ?', [txnId]);
 }
@@ -477,6 +676,38 @@ export async function getTxnById(
   const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id = ?', [txnId]);
   if (!row) return null;
   return loadSplits(db, row);
+}
+
+/**
+ * Tracking streak: how many consecutive days (ending today, or yesterday if
+ * nothing logged today yet) have at least one real entry. `loggedToday` lets
+ * the UI nudge gently without breaking the streak prematurely. Read-only and
+ * tolerant — used for an encouraging dashboard chip, not for any money math.
+ */
+export async function getTrackingStreak(
+  db: SQLite.SQLiteDatabase,
+): Promise<{ count: number; loggedToday: boolean }> {
+  const rows = await db.getAllAsync<{ date: number }>(
+    'SELECT date FROM txn WHERE is_deleted = 0 AND recur_freq IS NULL ORDER BY date DESC',
+  );
+  const dayKey = (ms: number) => { const d = new Date(ms); return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate(); };
+  const days = new Set<number>();
+  for (const r of rows) days.add(dayKey(r.date));
+  if (days.size === 0) return { count: 0, loggedToday: false };
+
+  const today = new Date();
+  const todayKey = dayKey(today.getTime());
+  const loggedToday = days.has(todayKey);
+
+  // Walk back a day at a time from the anchor (today if logged, else yesterday).
+  let cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!loggedToday) cursor.setDate(cursor.getDate() - 1);
+  let count = 0;
+  while (days.has(cursor.getFullYear() * 10000 + cursor.getMonth() * 100 + cursor.getDate())) {
+    count++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return { count, loggedToday };
 }
 
 export type UpdateTxnInput = {

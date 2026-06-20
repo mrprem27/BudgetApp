@@ -31,9 +31,10 @@ export function formatAmountShort(smallestUnit: number, currency: CurrencyCode =
 }
 
 /**
- * Round to `decimals` and drop trailing zeros: "1.00L"→"1L", "1.50L"→"1.5L",
- * "1.45L" stays. Larger units carry more decimals because one decimal there is
- * too coarse (0.1L = ₹10,000) — keeps summary math honest.
+ * Round to up to `decimals` places, then drop trailing zeros:
+ * "1.00L"→"1L", "1.20L"→"1.2L", "1.24K" stays. K/L/Cr all use 2-decimal
+ * precision so summary math stays honest (0.1L = ₹10,000), but we never show
+ * padding zeros after the decimal.
  */
 function compactNum(n: number, decimals: number): string {
   let s = (Math.round(n * 10 ** decimals) / 10 ** decimals).toFixed(decimals);
@@ -62,11 +63,11 @@ export function formatCompactMajor(value: number, currency: CurrencyCode = DEFAU
   if (currency === 'INR') {
     if (abs >= 1e7) body = compactNum(abs / 1e7, 2) + 'Cr';
     else if (abs >= 1e5) body = compactNum(abs / 1e5, 2) + 'L';
-    else body = compactNum(abs / 1e3, 1) + 'K';
+    else body = compactNum(abs / 1e3, 2) + 'K';
   } else {
     if (abs >= 1e9) body = compactNum(abs / 1e9, 2) + 'B';
     else if (abs >= 1e6) body = compactNum(abs / 1e6, 2) + 'M';
-    else body = compactNum(abs / 1e3, 1) + 'K';
+    else body = compactNum(abs / 1e3, 2) + 'K';
   }
   return sign + def.symbol + body;
 }

@@ -43,12 +43,12 @@ export function SettleSheet({ visible, from, to, outstanding, onClose, onConfirm
       {from && to && (
         <View style={styles.who}>
           <View style={styles.person}>
-            <MemberAvatar name={from.name} color={from.avatar_color} size={40} />
+            <MemberAvatar name={from.name} color={from.avatar_color} size={40} imageUri={from.image_uri} />
             <Text style={styles.personName} numberOfLines={1}>{from.name}</Text>
           </View>
           <Feather name="arrow-right" size={18} color={colors.textMuted} />
           <View style={styles.person}>
-            <MemberAvatar name={to.name} color={to.avatar_color} size={40} />
+            <MemberAvatar name={to.name} color={to.avatar_color} size={40} imageUri={to.image_uri} />
             <Text style={styles.personName} numberOfLines={1}>{to.name}</Text>
           </View>
         </View>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, InteractionManager,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -18,8 +18,8 @@ import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
-import { getPoolSummary, getGoals } from '../../src/db/queries/savings';
-import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
+import { getPoolSummary, getGoals, getCashPosition } from '../../src/db/queries/savings';
+import { getTransactionsInRange, getTrackingStreak, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -35,6 +35,10 @@ import type { GroupInsight } from '../../src/lib/analytics';
 import { formatCompact } from '../../src/lib/money';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
+import { InsightText } from '../../src/components/finance/InsightText';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { computeHealthScore } from '../../src/lib/financialHealth';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -85,12 +89,14 @@ export default function DashboardScreen() {
   const [donutTotal, setDonutTotal] = useState(0);
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
   const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
+  const [cashAvailable, setCashAvailable] = useState<number | null>(null);
+  const [streak, setStreak] = useState<{ count: number; loggedToday: boolean } | null>(null);
   const [insights, setInsights] = useState<GroupInsight[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = useRefresh(() => load());
   const [loading, setLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
-  const [meInfo, setMeInfo] = useState<{ name: string; color: string } | null>(null);
+  const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
   const groups = useStore(s => s.groups);
 
   useEffect(() => {
@@ -116,7 +122,7 @@ export default function DashboardScreen() {
     const me = persons.find(p => p.is_me === 1);
     if (!me) return;
     setMeId(me.id);
-    setMeInfo({ name: me.name, color: me.avatar_color });
+    setMeInfo({ name: me.name, color: me.avatar_color, image: me.image_uri });
 
     const { from, to } = getRange(tab);
 
@@ -173,8 +179,10 @@ export default function DashboardScreen() {
     setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
 
     // Savings pool snapshot for the dashboard card.
-    const [savePool, saveGoals] = await Promise.all([getPoolSummary(db), getGoals(db)]);
+    const [savePool, saveGoals, cashPos, strk] = await Promise.all([getPoolSummary(db), getGoals(db), getCashPosition(db), getTrackingStreak(db)]);
     setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
+    setCashAvailable(cashPos.available);
+    setStreak(strk);
 
     // Build donut data (spending by category, sorted largest first)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -190,6 +198,18 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [tab]));
 
+  // One-shot: if onboarding ended with "Add my first expense", open the add flow.
+  useEffect(() => {
+    (async () => {
+      try {
+        if ((await AsyncStorage.getItem('pending_first_add')) === 'true') {
+          await AsyncStorage.removeItem('pending_first_add');
+          setTimeout(() => router.push('/add/quick'), 350);
+        }
+      } catch { /* best-effort */ }
+    })();
+  }, []);
+
   const net = income - spending;
   const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
 
@@ -203,13 +223,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm }]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
-            tintColor={colors.accent}
-          />
-        }
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
           <View>
@@ -217,10 +231,26 @@ export default function DashboardScreen() {
             <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
           </View>
           <View style={styles.headerRight}>
+            {flags.streak && streak && streak.count > 0 && (
+              <TouchableOpacity
+                onPress={() => Alert.alert(
+                  `${streak.count}-day tracking streak`,
+                  `${streak.loggedToday ? 'You’ve logged today — nice.' : 'You haven’t logged today yet.'}\n\nYour streak counts each day in a row that you log at least one entry. Miss a day and it resets. A gentle nudge to keep your money picture current — never a guilt trip.`,
+                  [{ text: 'Got it' }],
+                )}
+                hitSlop={8}
+                style={[styles.streakChip, !streak.loggedToday && styles.streakChipDim]}
+                accessibilityRole="button"
+                accessibilityLabel={`${streak.count} day tracking streak`}
+              >
+                <Feather name="zap" size={13} color={colors.accent} />
+                <Text style={styles.streakChipText}>{streak.count}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push('/reports')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Reports">
               <Feather name="bar-chart-2" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} />}
+            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} imageUri={meInfo.image} />}
           </View>
         </View>
 
@@ -277,8 +307,63 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Cash available — real, spendable liquid money (income − expenses − set-aside savings) */}
+        {flags.dashboardCash && cashAvailable !== null && (
+          <TouchableOpacity
+            style={styles.cashCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/savings' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Cash available"
+          >
+            <View style={styles.cashIcon}>
+              <Feather name="dollar-sign" size={16} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cashLabel}>Cash available</Text>
+              <Text style={styles.cashSub}>Liquid money, after savings set aside</Text>
+            </View>
+            <AmountText paise={cashAvailable} size="md" forceColor={cashAvailable >= 0 ? colors.income : colors.expense} compact />
+          </TouchableOpacity>
+        )}
+
+        {/* Financial health score — opt-in gauge from budget, savings & balances */}
+        {flags.healthScore && (() => {
+          const h = computeHealthScore({
+            budgetUtilizationPct: budgetSummary.allocated > 0 ? Math.round((budgetSummary.spent / budgetSummary.allocated) * 100) : null,
+            savingsRatePct: income > 0 ? savingsRate : null,
+            netOwed: oweTotal - owedTotal,
+            income,
+          });
+          const hColor = h.band === 'great' ? colors.income : h.band === 'good' ? colors.accent : h.band === 'fair' ? colors.healthAmber : colors.expense;
+          const hLabel = h.band === 'great' ? 'Great shape' : h.band === 'good' ? 'On track' : h.band === 'fair' ? 'Needs care' : 'Needs attention';
+          return (
+            <View style={styles.healthCard}>
+              <View style={styles.healthTop}>
+                <View style={[styles.healthRing, { borderColor: hColor }]}>
+                  <Text style={[styles.healthScore, { color: hColor }]}>{h.score}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.healthLabel}>Financial health</Text>
+                  <Text style={[styles.healthBand, { color: hColor }]}>{hLabel}</Text>
+                </View>
+              </View>
+              <View style={styles.healthFactors}>
+                {h.factors.map(f => (
+                  <View key={f.label} style={styles.healthFactor}>
+                    <Text style={styles.healthFactorLabel} numberOfLines={1}>{f.label}</Text>
+                    <View style={styles.healthBarTrack}>
+                      <View style={[styles.healthBarFill, { width: `${Math.round((f.points / f.max) * 100)}%`, backgroundColor: hColor }]} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Budget rollup — prominent, before the donut */}
-        {budgetSummary.allocated > 0 && (() => {
+        {flags.dashboardBudget && budgetSummary.allocated > 0 && (() => {
           const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
           const bLeft = budgetSummary.allocated - budgetSummary.spent;
           const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
@@ -325,7 +410,7 @@ export default function DashboardScreen() {
         })()}
 
         {/* Where it went — interactive SVG donut */}
-        {chartsReady && donutData.length > 0 && (
+        {flags.dashboardDonut && chartsReady && donutData.length > 0 && (
           <View style={styles.donutCard}>
             <Text style={styles.chartTitle}>Where it went</Text>
             <CategoryDonut
@@ -337,7 +422,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Balances */}
-        {(oweTotal > 0 || owedTotal > 0) && (
+        {flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0) && (
           <TouchableOpacity
             style={styles.balanceChip}
             onPress={() => router.push('/settle')}
@@ -355,7 +440,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Savings pool */}
-        {(savings.total > 0 || savings.goals > 0) && (
+        {flags.dashboardSavings && (savings.total > 0 || savings.goals > 0) && (
           <TouchableOpacity
             style={styles.savingsCard}
             activeOpacity={0.85}
@@ -410,7 +495,7 @@ export default function DashboardScreen() {
                       <Feather name={ins.icon} size={14} color={tint} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.insightText}>{ins.text}</Text>
+                      <InsightText text={ins.text} color={tint} style={styles.insightText} />
                       {!!ins.groupName && <Text style={styles.insightGroup}>{ins.groupName}</Text>}
                     </View>
                   </TouchableOpacity>
@@ -518,6 +603,24 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  healthCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md, gap: space.md },
+  healthTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  healthRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  healthScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  healthLabel: { ...type.label, color: colors.textSecondary },
+  healthBand: { ...type.subheading, marginTop: 2 },
+  healthFactors: { gap: space.sm },
+  healthFactor: { gap: 4 },
+  healthFactorLabel: { ...type.caption, color: colors.textMuted },
+  healthBarTrack: { height: 5, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
+  healthBarFill: { height: 5, borderRadius: 3 },
+  streakChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: space.sm, height: 30, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  streakChipDim: { opacity: 0.6 },
+  streakChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  cashCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
+  cashIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  cashLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  cashSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   balanceChip: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs, marginBottom: space.md },
   balanceLabel: { ...type.subheading, color: colors.textPrimary },
   balanceText: { ...type.body, color: colors.textSecondary },

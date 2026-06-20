@@ -23,6 +23,7 @@ import { formatCompact } from '../../src/lib/money';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
@@ -48,6 +49,7 @@ export default function GroupsScreen() {
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+  const { refreshing, onRefresh } = useRefresh(() => loadGroups());
 
   useFocusEffect(useCallback(() => {
     loadGroups();
@@ -225,7 +227,7 @@ export default function GroupsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Settle with ${f.name}`}
               >
-                <MemberAvatar name={f.name} color={f.avatarColor} size={36} />
+                <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
                   <Text style={styles.balSub}>{f.net > 0 ? 'owes you' : 'you owe'} · {f.groupCount} {f.groupCount === 1 ? 'group' : 'groups'}</Text>
@@ -248,6 +250,9 @@ export default function GroupsScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Groups</Text>
+        <TouchableOpacity style={styles.friendsBtn} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Manage friends">
+          <Feather name="users" size={18} color={colors.accent} />
+        </TouchableOpacity>
       </View>
 
       {loadError ? (
@@ -282,6 +287,7 @@ export default function GroupsScreen() {
         keyExtractor={g => g.id}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListEmptyComponent={
@@ -359,8 +365,9 @@ export default function GroupsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
+  friendsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   filterRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   filterChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs + 2, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   filterChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },

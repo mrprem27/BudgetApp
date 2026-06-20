@@ -18,7 +18,8 @@ import { SkeletonCard } from '../../../src/components/ui/Skeleton';
 import { getBudgetAnalytics, type BudgetAnalytics, type CategoryTrend } from '../../../src/lib/analytics';
 import { getGroupById } from '../../../src/db/queries/groups';
 import { categoryVisual } from '../../../src/constants/categories';
-import { formatRupees } from '../../../src/lib/money';
+import { formatCompact } from '../../../src/lib/money';
+import { InsightText } from '../../../src/components/finance/InsightText';
 
 export default function BudgetInsightsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -118,15 +119,22 @@ export default function BudgetInsightsScreen() {
               <Feather name="trending-up" size={22} color={projDelta > 0 ? colors.expense : colors.income} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.projectionTitle}>Projected month-end {formatRupees(analytics.projectedMonthEnd)}</Text>
-              <Text style={styles.projectionSub}>
-                Day {dayOfMonth} of {daysInMonth} ·{' '}
-                {projDelta > 0
-                  ? `${formatRupees(projDelta)} over budget at this pace`
-                  : projDelta < 0
-                  ? `${formatRupees(-projDelta)} under budget at this pace`
-                  : 'right on budget at this pace'}
-              </Text>
+              <InsightText
+                text={`On track to spend ${formatCompact(analytics.projectedMonthEnd)} by month-end`}
+                color={projDelta > 0 ? colors.expense : colors.income}
+                style={styles.projectionTitle}
+              />
+              <InsightText
+                text={`Day ${dayOfMonth} of ${daysInMonth} · ${
+                  projDelta > 0
+                    ? `${formatCompact(projDelta)} over your budget at this pace`
+                    : projDelta < 0
+                    ? `${formatCompact(-projDelta)} under budget — nice`
+                    : 'right on budget at this pace'
+                }`}
+                color={projDelta > 0 ? colors.expense : colors.income}
+                style={styles.projectionSub}
+              />
             </View>
           </View>
         )}
@@ -163,7 +171,9 @@ export default function BudgetInsightsScreen() {
                   <Text style={styles.trendLabel}>Biggest increase</Text>
                 </View>
                 <Text style={styles.trendCategory}>{analytics.biggestIncrease.category}</Text>
-                <Text style={styles.trendDelta}>{analytics.biggestIncrease.deltaPct !== null ? `+${Math.round(analytics.biggestIncrease.deltaPct)}% vs last month` : '—'}</Text>
+                {analytics.biggestIncrease.deltaPct !== null
+                  ? <InsightText text={`+${Math.round(analytics.biggestIncrease.deltaPct)}% more than last month`} color={colors.expense} style={styles.trendDelta} />
+                  : <Text style={styles.trendDelta}>—</Text>}
               </View>
             )}
             {analytics.biggestDecrease && (
@@ -173,7 +183,9 @@ export default function BudgetInsightsScreen() {
                   <Text style={styles.trendLabel}>Biggest decrease</Text>
                 </View>
                 <Text style={styles.trendCategory}>{analytics.biggestDecrease.category}</Text>
-                <Text style={styles.trendDelta}>{analytics.biggestDecrease.deltaPct !== null ? `${Math.round(analytics.biggestDecrease.deltaPct)}% vs last month` : '—'}</Text>
+                {analytics.biggestDecrease.deltaPct !== null
+                  ? <InsightText text={`${Math.round(analytics.biggestDecrease.deltaPct)}% less than last month`} color={colors.income} style={styles.trendDelta} />
+                  : <Text style={styles.trendDelta}>—</Text>}
               </View>
             )}
           </View>
@@ -188,7 +200,11 @@ export default function BudgetInsightsScreen() {
                 <View style={styles.recoIcon}>
                   <Feather name="alert-circle" size={14} color={colors.healthAmber} />
                 </View>
-                <Text style={styles.recoText}>Consider reducing {cat.category} spending — currently {cat.pct !== null ? `${Math.round(cat.pct)}%` : 'over'} of budget</Text>
+                <InsightText
+                  text={`Try to cut ${cat.category} — you've used ${cat.pct !== null ? `${Math.round(cat.pct)}%` : 'over 100%'} of its budget`}
+                  color={colors.expense}
+                  style={styles.recoText}
+                />
               </View>
             ))}
           </View>
@@ -210,7 +226,7 @@ export default function BudgetInsightsScreen() {
                     <Feather name={visual.icon} size={13} color={visual.color} />
                   </View>
                   <Text style={styles.catName}>{cat.category}</Text>
-                  <Text style={styles.catAmount}>{formatRupees(cat.spent)}</Text>
+                  <Text style={styles.catAmount}>{formatCompact(cat.spent)}</Text>
                 </PressableScale>
               );
             })}
@@ -239,9 +255,11 @@ function CategoryBudgetRow({ trend, isOver }: { trend: CategoryTrend; isOver?: b
         <Text style={styles.budgetSub}>
           {trend.pct !== null ? `${Math.round(trend.pct)}% used` : 'No budget'}
         </Text>
-        <Text style={styles.budgetSub}>
-          {trend.remaining >= 0 ? `${formatRupees(trend.remaining)} left` : `over by ${formatRupees(Math.abs(trend.remaining))}`}
-        </Text>
+        <InsightText
+          text={trend.remaining >= 0 ? `${formatCompact(trend.remaining)} left` : `${formatCompact(Math.abs(trend.remaining))} over`}
+          color={trend.remaining >= 0 ? colors.income : colors.expense}
+          style={styles.budgetSub}
+        />
       </View>
     </View>
   );

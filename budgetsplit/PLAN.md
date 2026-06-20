@@ -82,6 +82,68 @@ F29 increase=coral severity.
 
 ---
 
+## 3.6 — Next-Version Build Checklist (Phases A–E)  ← **ACTIVE**
+
+> Build order **A → B → C → D → E**. **Phase F parked** (months out). Gate every
+> item: `tsc` clean + tests green, then commit. A/B need no native modules; C/E
+> need a custom dev build (expo-notifications / WidgetKit). Full strategic detail
+> in root `FEATURE_ROADMAP.md` §0.
+
+### Phase A — Edit integrity & recurring model  *(P0 · no dev build)*  ✅ DONE
+- [x] **A1 — Edit itemized bills** — `updateItemizedTxn`; `add/itemized` accepts
+      `editId` (loads items/assignments/payers/adjustments); persisted `adjustments`
+      column so bills round-trip; itemized edit unlocked on `txn/[id]`.
+- [x] **A2 — Recurring occurrences become real, editable transactions** —
+      `parent_recur_id` column; `materializeDueOccurrences` catch-up on app-open +
+      foreground (AppState); `getClaimedOccurrences` dedups so the virtual generator
+      never double-counts; 92-day back-fill horizon; `occurrenceDatesUpTo` (+tests).
+- [x] **A3 — "Added by [recurring]" provenance** — "Recurring · Added by '<rule>'"
+      row on txn detail → taps to Recurring Manager and highlights the rule (`?focus=`).
+- [x] **A4 — Undo for deletes (5s toast)** — root `UndoProvider`/`UndoToast` survives
+      `router.back()`; `restoreTxn`; wired on detail + group-swipe deletes.
+      Recurring-rule delete now **asks** before removing already-logged occurrences.
+
+### Phase B — On-device smart wins  *(no dev build)*  ✅ mostly DONE
+- [x] **B1 — Goal celebration** — confetti + haptic when a goal hits 100% (`GoalCelebration`).
+- [x] **B2 — Pattern-aware "Can I afford this?"** — subtracts this month's committed bills;
+      shows cash − bills = free-to-spend (`evaluateAfford`, +tests).
+- [x] **B3 — Global transaction search** — `/search`: category/note/amount + kind chips.
+- [x] **B4 — Duplicate detection** — same category+amount within ±24h warns on add.
+- [x] **B5a — Photo size cap** — picker compresses on import (`quality 0.7`).
+- [x] **B5b — Storage management** — `/storage`: size + count + delete-all.
+- [ ] **B5c — Multi-photo (≤3)** — deferred (attachment-array refactor; marginal value).
+- [ ] **B5d — PDF attachments** — deferred to dev-build track (`expo-document-picker`).
+- [x] **B6 — Financial-health score** (0–100, opt-in dashboard gauge) · **what-if** (Reports).
+- [x] **B7 — Smart categories: learn from corrections** (`smartCategoryLearn`, +tests).
+- [x] **B8a — Pull-to-refresh** — reusable `AppRefreshControl` + `useRefresh` on
+      Dashboard / Groups / Money / Group-detail.
+- [ ] **B8b — Bulk actions** (multi-select delete / recategorize / move) — deferred;
+      a dedicated selection-mode feature, P2.
+- [x] **(bonus) Add friend** directly from the Friends screen + Groups-tab entry.
+
+### Phase C — Notifications & subscriptions  *(needs dev build — expo-notifications)*
+- [x] **C3 — Subscription auto-detect** (N2) — `detectSubscriptions` (+tests); opt-in
+      Money-tab card. ✅ *(pure on-device — no dev build)*
+- [ ] **C1 — Local notification engine** (permission, schedule, cancel) — ⛔ needs dev build (`expo-notifications`)
+- [ ] **C2 — Budget warnings** (80/100%) · **bill/renewal reminders** (N1) — ⛔ needs dev build
+- [ ] **C4 — Streak push nudge** · settlement nudges · daily digest — ⛔ needs dev build
+- [ ] **C5 — Data-gated unlocks** — N-day streak unlocks 60/90-day forecast (pure; can do next)
+
+### Phase D — Onboarding & data safety  *(no dev build)*
+- [x] **D1 — Actionable onboarding** — intro covers all features + name; ends with
+      one-tap "Add my first expense" (one-shot flag → dashboard opens Add). ✅
+- [ ] **D2 — Encrypted auto-backup** — deferred per request.
+
+### Phase E — iOS widget  *(⛔ needs dev build — WidgetKit native target)*
+- [ ] **E1 — Quick-add / dashboard widget** (N3): app-group shared JSON → SwiftUI widget.
+      Requires a custom dev build + native target — can't run in Expo Go.
+
+### Phase F — Bigger bets  *(⏸ PARKED — revisit after months)*
+- Multi-currency · cloud sync/multi-device · UPI links · net worth · data import ·
+  goal sharing · AI receipt OCR (D2). **Not in this build cycle.**
+
+---
+
 ## 4. Decisions log (locked)
 
 - **D1 — Ship current branch as v1** (PR to `main`); everything below is v2/next.
@@ -131,7 +193,46 @@ Everything in §3 is shipped. All feedback items closed:
 - **3.2** ✅ Forecast redesign (F10) — run-rate blended with prior-month actual + "needs N days" gate. Strictly offline. *(Deeper weekday/category-mix model still possible later.)*
 - **3.3 Settle & lists:** "Settle all" + completion moment; Groups filter sheet (You owe / Owes you / Settled / Archived); skeletons on group-detail + reports; empty-state CTA audit; onboarding → one-tap "Add first expense".
 
-### Phase 4 — Deferred / out of scope
+### Phase 3.5 — Current cycle (in progress)
+- ✅ Colored insight figures + plain-English copy + 2-decimal compact (drop trailing zeros).
+- ✅ Reports: clean forecast line + donut-driven category trend + current-month highlight.
+- ✅ Transfer redesign (From → To card) · editable settlements/transfers.
+- ✅ User/friend photos everywhere · Friends list screen + Groups-tab entry.
+- ✅ Dashboard Cash-available card · section-level feature toggles (simple↔complex).
+- 🔄 **Smart categories** (opt-in): type a title → category auto-fills (`smartCategory.ts`).
+- 🔄 **Smart one-screen fast entry** (amount + title, you-paid/split-equally default).
+- 🔄 Pop-up/sheet header (cancel/save) padding sweep.
+
+### Phase 5 — Next version (v2 candidates)
+> Most need a **custom dev build** (native modules) — they can't run in Expo Go.
+> Local-only where possible to keep the offline promise (D2).
+
+- **N1 — Subscription/renewal reminders (local notifications).** Opt-in per
+  recurring item: "Remind me before renewal" → a **local** `expo-notifications`
+  alert N days before the next occurrence so people can cancel unwanted
+  subscriptions. On-device only (no server) → still offline-safe. Needs a dev
+  build + notification permission + scheduling tied to `materializeInstances`.
+- **N2 — Recurring/subscription *detection*.** Heuristic over history: same
+  payee/amount/cadence repeating → surface "Looks like a subscription —
+  track it / set a reminder?" Pure on-device analysis.
+- **N3 — iOS quick-add widget / home-screen widget.** WidgetKit target + app
+  group + dev build (deferred from this cycle — sizable native work).
+- **N4 — Deeper forecast model** (weekday seasonality, category mix).
+- **N5 — Tracking streak + daily nudge.** Show a gentle "🔥 N-day streak · log
+  today" on the dashboard (on-device, buildable now). The *daily reminder* if you
+  haven't logged needs local notifications (v2 / dev build). Keep it
+  encouraging, never guilt-inducing (per §1 principle). Streak resets to day 0
+  after a gap; counts consecutive days with ≥1 entry.
+- **N6 — "Can I afford this?"** A quick check: enter a prospective purchase →
+  compare against cash-available + budget-left + upcoming recurring, show a
+  clear yes/tight/no, and offer "put it toward a goal instead" (adds to a
+  savings goal). On-device, opt-in. *(Strong fit — recommended build-now
+  candidate.)*
+- **N7 — No-spend-days tracker (maybe).** Count consecutive no-spend days
+  overall or per category. Gamified/niche — keep as a small stat at most, or
+  skip; low priority.
+
+### Phase 6 — Deferred / out of scope
 - AI receipt itemization (D2/D3) · multi-currency (D6) · recurring single-occurrence value edits (D5) · formal nav spec (D7).
 
 ---

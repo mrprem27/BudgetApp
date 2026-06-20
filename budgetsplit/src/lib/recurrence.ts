@@ -55,6 +55,30 @@ export function nextOccurrenceOnOrAfter(txn: TxnWithSplits, fromMs: number): num
   return null;
 }
 
+/**
+ * All occurrence dates (ms) of a series from its start up to and including
+ * `untilMs` (clamped to `recur_end`). Used by the materialize job to turn due
+ * occurrences into real, editable transactions. Pure — easy to test.
+ */
+export function occurrenceDatesUpTo(
+  startMs: number,
+  freq: NonNullable<Txn['recur_freq']>,
+  interval: number,
+  untilMs: number,
+  recurEnd: number | null,
+): number[] {
+  const out: number[] = [];
+  const hardEnd = recurEnd !== null ? Math.min(recurEnd, untilMs) : untilMs;
+  let cursor = new Date(startMs);
+  let safetyMax = 0;
+  while (!isAfter(cursor, new Date(hardEnd)) && safetyMax < 10000) {
+    safetyMax++;
+    out.push(cursor.getTime());
+    cursor = advance(cursor, freq, interval);
+  }
+  return out;
+}
+
 function advance(
   date: Date,
   freq: NonNullable<Txn['recur_freq']>,

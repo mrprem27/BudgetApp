@@ -91,6 +91,7 @@ export type FriendBalance = {
   personId: string;
   name: string;
   avatarColor: string;
+  imageUri: string | null;
   net: number;
   groupCount: number;
 };
@@ -99,8 +100,8 @@ export async function getFriendBalances(
   db: SQLite.SQLiteDatabase,
   meId: string,
 ): Promise<FriendBalance[]> {
-  const rows = await db.getAllAsync<{ person_id: string; name: string; avatar_color: string; group_count: number }>(
-    `SELECT p.id as person_id, p.name, p.avatar_color,
+  const rows = await db.getAllAsync<{ person_id: string; name: string; avatar_color: string; image_uri: string | null; group_count: number }>(
+    `SELECT p.id as person_id, p.name, p.avatar_color, p.image_uri,
             COUNT(DISTINCT gm2.group_id) as group_count
      FROM group_member gm1
      JOIN group_member gm2 ON gm1.group_id = gm2.group_id AND gm2.person_id != ?
@@ -125,6 +126,7 @@ export async function getFriendBalances(
       personId: r.person_id,
       name: r.name,
       avatarColor: r.avatar_color,
+      imageUri: r.image_uri,
       net: friendNet,
       groupCount: r.group_count,
     };

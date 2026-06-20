@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertItemizedTxn } from '../../src/db/queries/transactions';
+import { insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, type ItemizedAdjustment } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -95,7 +95,8 @@ function computePerPersonShares(
 }
 
 export default function ItemizedScreen() {
-  const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
+  const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
+  const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -121,8 +122,41 @@ export default function ItemizedScreen() {
 
   useEffect(() => {
     (async () => {
-      const grps = await getAllGroups(db);
       const meRow = await getMe(db);
+
+      if (editId) {
+        // Editing an existing itemized bill — load it and prefill every step.
+        const t = await getTxnById(db, editId);
+        if (t) {
+          const gid = t.group_id;
+          setSelectedGroupId(gid);
+          const [cats, mems, lineItems] = await Promise.all([
+            getCategoriesByFrequency(db, gid),
+            getGroupMembers(db, gid),
+            getLineItems(db, editId),
+          ]);
+          setCategories(cats);
+          setMembers(mems);
+          setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
+          setNote(t.note ?? '');
+          setItems(lineItems.map(li => ({
+            id: li.id,
+            name: li.name,
+            qty: String(li.qty),
+            unitPrice: (li.unit_price / 100).toString(),
+            assignedTo: (() => { try { return JSON.parse(li.assigned_to) as string[]; } catch { return []; } })(),
+          })));
+          if (t.adjustments) {
+            try { setAdjustments(JSON.parse(t.adjustments) as Adjustment[]); } catch { /* ignore */ }
+          }
+          const payerMap: Record<string, string> = {};
+          for (const p of t.payments) payerMap[p.personId] = (p.amount / 100).toString();
+          setPayerAmounts(payerMap);
+        }
+        return;
+      }
+
+      const grps = await getAllGroups(db);
       const gid = paramGroupId ?? grps[0]?.id ?? '';
       setSelectedGroupId(gid);
       if (gid) await loadGroup(gid, meRow);
@@ -210,10 +244,10 @@ export default function ItemizedScreen() {
         .map(([personId, amount]) => ({ personId, amount }))
         .filter(s => s.amount > 0);
 
-      await insertItemizedTxn(db, {
+      const payload = {
         groupId: selectedGroupId,
-        kind: 'expense',
-        entryMode: 'itemized',
+        kind: 'expense' as const,
+        entryMode: 'itemized' as const,
         date: Date.now(),
         category: selectedCategory?.name ?? 'Other',
         note: note.trim() || undefined,
@@ -225,7 +259,11 @@ export default function ItemizedScreen() {
           unitPrice: parseToPaise(i.unitPrice),
           assignedTo: i.assignedTo,
         })),
-      });
+        adjustments: adjustments as ItemizedAdjustment[],
+      };
+      if (isEditing) await updateItemizedTxn(db, editId!, payload);
+      else await insertItemizedTxn(db, payload);
+      haptic.success();
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save. Try again.');
@@ -414,7 +452,7 @@ export default function ItemizedScreen() {
                   : <View style={styles.assignedAvatars}>
                       {item.assignedTo.slice(0, 3).map(pid => {
                         const m = members.find(m => m.id === pid);
-                        return m ? <MemberAvatar key={pid} name={m.name} color={m.avatar_color} size={24} /> : null;
+                        return m ? <MemberAvatar key={pid} name={m.name} color={m.avatar_color} size={24} imageUri={m.image_uri} /> : null;
                       })}
                       {item.assignedTo.length > 3 && <Text style={styles.moreCount}>+{item.assignedTo.length - 3}</Text>}
                     </View>
@@ -425,7 +463,7 @@ export default function ItemizedScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarRow} keyboardShouldPersistTaps="handled">
                   {members.map(m => (
                     <View key={m.id} style={styles.avatarCol}>
-                      <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={item.assignedTo.includes(m.id)} onPress={() => toggleAssign(item.id, m.id)} />
+                      <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} selected={item.assignedTo.includes(m.id)} onPress={() => toggleAssign(item.id, m.id)} />
                       <Text style={styles.avatarName} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
                     </View>
                   ))}
@@ -439,7 +477,7 @@ export default function ItemizedScreen() {
               <View style={styles.card}>
                 {members.map((m, i) => (
                   <View key={m.id} style={[styles.perPersonRow, i < members.length - 1 && styles.rowBorder]}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                    <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                     <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                     <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
                   </View>
@@ -466,7 +504,7 @@ export default function ItemizedScreen() {
           <View style={styles.card}>
             {members.map((m, i) => (
               <View key={m.id} style={[styles.payerRow, i < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
                 <Text style={styles.payerName} numberOfLines={1}>{m.name}</Text>
                 <View style={styles.payerInputWrap}>
                   <Text style={styles.rupee}>₹</Text>
@@ -523,7 +561,7 @@ export default function ItemizedScreen() {
           <View style={styles.card}>
             {members.filter(m => (perPerson[m.id] ?? 0) > 0).map((m, i, arr) => (
               <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                 <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                 <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
               </View>
@@ -536,7 +574,7 @@ export default function ItemizedScreen() {
               const m = members.find(m => m.id === p.personId);
               return m ? (
                 <View key={p.personId} style={[styles.perPersonRow, i < payments.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                   <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                   <Text style={styles.perPersonAmount}>{formatRupees(p.amount)}</Text>
                 </View>
@@ -585,7 +623,7 @@ export default function ItemizedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
   title: { ...type.heading, color: colors.textPrimary },
   stepIndicator: { ...type.label, color: colors.textMuted },
   headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

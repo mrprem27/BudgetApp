@@ -49,10 +49,12 @@ CREATE TABLE IF NOT EXISTS txn (
   note           TEXT,
   attachment_uri TEXT,
   tags           TEXT,
+  adjustments    TEXT,
   recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','custom')),
   recur_interval INTEGER,
   recur_end      INTEGER,
   recur_override_date INTEGER,
+  parent_recur_id TEXT,
   recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
   tz             TEXT,
   lat            REAL,
@@ -193,6 +195,10 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE savings_goal ADD COLUMN last_auto_at INTEGER",
   // Avatar photos for the user & friends (local file path; null = use initials).
   "ALTER TABLE person ADD COLUMN image_uri TEXT",
+  // Itemized bills persist their tax/tip/discount adjustments so they round-trip on edit.
+  "ALTER TABLE txn ADD COLUMN adjustments TEXT",
+  // Recurring occurrences materialize into real rows linked back to their rule.
+  "ALTER TABLE txn ADD COLUMN parent_recur_id TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

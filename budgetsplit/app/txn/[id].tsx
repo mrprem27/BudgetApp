@@ -10,7 +10,8 @@ import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { getTxnById, softDeleteTxn, getLineItems } from '../../src/db/queries/transactions';
+import { getTxnById, softDeleteTxn, restoreTxn, getLineItems } from '../../src/db/queries/transactions';
+import { useUndo } from '../../src/components/system/UndoToast';
 import { getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getAuditLog } from '../../src/db/queries/audit';
@@ -35,6 +36,7 @@ export default function TxnDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
   const [txn, setTxn] = useState<TxnWithSplits | null>(null);
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
@@ -42,6 +44,7 @@ export default function TxnDetailScreen() {
   const [isPersonal, setIsPersonal] = useState(false);
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [parentRule, setParentRule] = useState<TxnWithSplits | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [showAttachment, setShowAttachment] = useState(false);
 
@@ -67,6 +70,7 @@ export default function TxnDetailScreen() {
       setMe(meRow);
       setHistory(hist);
       setItems(li);
+      setParentRule(t.parent_recur_id ? await getTxnById(db, t.parent_recur_id) : null);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -85,13 +89,20 @@ export default function TxnDetailScreen() {
   if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
 
   const nameOf = (pid: string) => members.find(m => m.id === pid)?.name ?? 'Someone';
+  const imageOf = (pid: string) => members.find(m => m.id === pid)?.image_uri ?? null;
   const vis = categoryVisual(txn.category);
   const total = txn.payments.reduce((s, p) => s + p.amount, 0);
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
   const isItemized = txn.entry_mode === 'itemized';
-  // Itemized bills can't be edited in the quick form (it would orphan line items).
-  const canEdit = !isSettlement && !isItemized;
+  // Everything is editable now (itemized reopens in the itemized editor;
+  // settlements/transfers in the transfer screen; the rest in quick/income).
+  const canEdit = true;
+  const editHref = isItemized
+    ? `/add/itemized?editId=${id}`
+    : isSettlement
+    ? `/add/transfer?editId=${id}`
+    : `/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
@@ -104,6 +115,10 @@ export default function TxnDetailScreen() {
         try {
           await softDeleteTxn(db, id);
           haptic.warning();
+          showUndo({
+            message: 'Transaction deleted',
+            onUndo: async () => { try { await restoreTxn(db, id); haptic.success(); } catch { /* ignore */ } },
+          });
           router.back();
         } catch {
           haptic.error();
@@ -119,7 +134,7 @@ export default function TxnDetailScreen() {
         title="Transaction"
         onBack={() => router.back()}
         right={canEdit ? (
-          <TouchableOpacity onPress={() => router.push(`/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`)} hitSlop={10} accessibilityLabel="Edit">
+          <TouchableOpacity onPress={() => router.push(editHref as never)} hitSlop={10} accessibilityLabel="Edit">
             <Feather name="edit-2" size={18} color={colors.accent} />
           </TouchableOpacity>
         ) : undefined}
@@ -157,6 +172,24 @@ export default function TxnDetailScreen() {
             <>
               <View style={styles.divider} />
               <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
+            </>
+          )}
+          {!!txn.parent_recur_id && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                style={styles.recurRow}
+                onPress={() => router.push(`/group/${parentRule?.group_id ?? txn.group_id}/recurring?focus=${txn.parent_recur_id}`)}
+                accessibilityRole="button"
+                accessibilityLabel="View the recurring rule that created this"
+              >
+                <Text style={styles.metaLabel}>Recurring</Text>
+                <View style={styles.recurValue}>
+                  <Feather name="repeat" size={13} color={colors.accent} />
+                  <Text style={styles.recurText} numberOfLines={1}>Added by “{parentRule?.category ?? txn.category}”</Text>
+                  <Feather name="chevron-right" size={15} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
             </>
           )}
           {!!txn.place_label && (
@@ -200,10 +233,10 @@ export default function TxnDetailScreen() {
             return (
               <View style={styles.card}>
                 <View style={styles.settleFlow}>
-                  <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} />
+                  <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} imageUri={imageOf(from.personId)} />
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(from.personId)}</Text>
                   <Feather name="arrow-right" size={16} color={colors.settle} />
-                  <MemberAvatar name={nameOf(to.personId)} color={colorOf(to.personId)} size={30} />
+                  <MemberAvatar name={nameOf(to.personId)} color={colorOf(to.personId)} size={30} imageUri={imageOf(to.personId)} />
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(to.personId)}</Text>
                   <Text style={styles.settleAmt}>{formatRupees(from.amount)}</Text>
                 </View>
@@ -227,7 +260,7 @@ export default function TxnDetailScreen() {
             <View style={styles.card}>
               {paidRows.map(([id, amt]) => (
                 <View key={`paid-${id}`} style={styles.splitPaidRow}>
-                  <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} />
+                  <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} imageUri={imageOf(id)} />
                   <Text style={styles.splitPaidName} numberOfLines={1}>
                     <Text style={styles.splitPaidNameBold}>{nameOf(id)}</Text> paid
                   </Text>
@@ -238,7 +271,7 @@ export default function TxnDetailScreen() {
               {oweRows.map(o => (
                 <View key={`owe-${o.id}`} style={styles.splitOweRow}>
                   <View style={styles.splitConnector} />
-                  <MemberAvatar name={nameOf(o.id)} color={colorOf(o.id)} size={22} />
+                  <MemberAvatar name={nameOf(o.id)} color={colorOf(o.id)} size={22} imageUri={imageOf(o.id)} />
                   <Text style={styles.splitOweName} numberOfLines={1}>{nameOf(o.id)} owes</Text>
                   <Text style={styles.splitOweAmt}>{formatRupees(-o.net)}</Text>
                 </View>
@@ -259,7 +292,7 @@ export default function TxnDetailScreen() {
                 </View>
               ))}
             </View>
-            <Text style={styles.itemHint}>Itemized bills can’t be edited in place — delete and re-add to change items.</Text>
+            <Text style={styles.itemHint}>Tap the edit icon to change items, splits or who paid.</Text>
           </>
         )}
 
@@ -343,6 +376,9 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   metaLabel: { ...type.label, color: colors.textSecondary },
   metaValue: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right' },
+  recurRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  recurValue: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
+  recurText: { ...type.body, color: colors.accent, flexShrink: 1 },
   locationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
   locationText: { ...type.body, color: colors.textPrimary, flex: 1, lineHeight: 20 },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.xs },

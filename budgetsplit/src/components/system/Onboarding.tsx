@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius, layout, shadow } from '../../constants/layout';
@@ -289,7 +290,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     }).start();
   }, [page, progress]);
 
-  async function finish() {
+  async function finish(addFirst = false) {
     setSaving(true);
     try {
       const trimmed = name.trim();
@@ -297,6 +298,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         const me = await getMe(db);
         if (me) await updatePersonName(db, me.id, trimmed);
       }
+      // One-shot: the dashboard opens Add on first mount if the user chose to.
+      if (addFirst) { try { await AsyncStorage.setItem('pending_first_add', 'true'); } catch { /* best-effort */ } }
       haptic.success();
     } catch {
       haptic.error();
@@ -421,12 +424,15 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               placeholderTextColor={colors.textMuted}
               returnKeyType="done"
               maxLength={30}
-              onSubmitEditing={() => name.trim() && finish()}
+              onSubmitEditing={() => name.trim() && finish(true)}
               accessibilityLabel="Your name"
             />
           </ScrollView>
           <View style={styles.footer}>
-            <PrimaryButton label="Start using BudgetSplit" onPress={finish} disabled={!name.trim()} loading={saving} />
+            <PrimaryButton label="Add my first expense" onPress={() => finish(true)} disabled={!name.trim()} loading={saving} />
+            <TouchableOpacity onPress={() => finish(false)} disabled={!name.trim() || saving} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
+              <Text style={[styles.skipText, !name.trim() && { opacity: 0.4 }]}>Skip — just explore</Text>
+            </TouchableOpacity>
           </View>
         </FadeIn>
       )}
@@ -492,6 +498,8 @@ const styles = StyleSheet.create({
 
   footer: { gap: space.md, paddingTop: space.md },
   footNote: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
+  skipBtn: { alignSelf: 'center', paddingVertical: space.xs },
+  skipText: { ...type.body, color: colors.textSecondary },
 
   nameBack: { height: 40, justifyContent: 'center', marginLeft: -6 },
   nameScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: space.xl },

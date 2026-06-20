@@ -15,6 +15,7 @@ import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { GoalCelebration } from '../../src/components/finance/GoalCelebration';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -47,6 +48,7 @@ export default function GoalDetailScreen() {
   const [unallocated, setUnallocated] = useState(0);
   const [history, setHistory] = useState<SavingsTxn[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [amt, setAmt] = useState('');
   const [loading, setLoading] = useState(true);
@@ -114,10 +116,12 @@ export default function GoalDetailScreen() {
       // Pull from the unallocated pool; top it up first if there isn't enough.
       // Both writes happen in one transaction so we never deposit without allocating.
       const shortfall = Math.max(0, a - unallocated);
+      const justCompleted = goal !== null && saved < goal.target && saved + a >= goal.target;
       await depositAndAllocate(db, id, a, shortfall);
       haptic.success();
       setAmt(''); setShowAdd(false);
       await load();
+      if (justCompleted) setCelebrate(true);
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -232,6 +236,8 @@ export default function GoalDetailScreen() {
         <Text style={styles.hint}>{formatCompact(saved)} saved · returns to your unallocated pool.</Text>
         <PrimaryButton label="Withdraw" onPress={handleWithdraw} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
+
+      <GoalCelebration visible={celebrate} goalName={goal.name} onDone={() => setCelebrate(false)} />
     </View>
   );
 }

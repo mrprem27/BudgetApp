@@ -82,9 +82,14 @@ export default function ReportsScreen() {
   const [biggestTxn, setBiggestTxn] = useState(0);
   const [pieData, setPieData] = useState<DonutSeg[]>([]);
   const [pieTotal, setPieTotal] = useState(0);
-  const [trendData, setTrendData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
-  const [forecastActual, setForecastActual] = useState<Array<{ value: number; label?: string }>>([]);
-  const [forecastProjected, setForecastProjected] = useState<Array<{ value: number; label?: string }>>([]);
+  type TrendBar = { value: number; label: string; frontColor: string; labelTextStyle?: object };
+  const [trendData, setTrendData] = useState<TrendBar[]>([]);
+  const [monthlyData, setMonthlyData] = useState<Array<{ label: string; total: number; byCat: Record<string, number> }>>([]);
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [cutPct, setCutPct] = useState(20);
+  type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
+  const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
+  const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
   const [projectedTotal, setProjectedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -164,26 +169,33 @@ export default function ReportsScreen() {
       })));
       setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
 
-      // Build 6-month spending trend bar chart
-      const trendBars: Array<{ value: number; label: string; frontColor: string }> = [];
+      // Build 6-month spending trend — overall totals + a per-category breakdown
+      // so tapping a donut wedge can re-draw the same chart for that category.
+      const months: Array<{ label: string; total: number; byCat: Record<string, number> }> = [];
       for (let i = 5; i >= 0; i--) {
         const m = subMonths(month, i);
         const mFrom = startOfMonth(m).getTime();
         const mTo = endOfMonth(m).getTime();
         const mTxns = await getTransactionsInRange(db, null, mFrom, mTo);
         let mSpend = 0;
+        const byCat: Record<string, number> = {};
         for (const t of mTxns) {
           if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
-            mSpend += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+            const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+            mSpend += amt;
+            byCat[t.category] = (byCat[t.category] ?? 0) + amt;
           }
         }
-        trendBars.push({
-          value: Math.round(mSpend / 100),
-          label: format(m, 'MMM'),
-          frontColor: i === 0 ? colors.accent : colors.accentDeep,
-        });
+        months.push({ label: format(m, 'MMM'), total: mSpend, byCat });
       }
-      setTrendData(trendBars);
+      setMonthlyData(months);
+      setSelectedCat(null);
+      setTrendData(months.map((mm, i) => ({
+        value: Math.round(mm.total / 100),
+        label: mm.label,
+        frontColor: i === months.length - 1 ? colors.accent : colors.accentDeep,
+        labelTextStyle: i === months.length - 1 ? { color: colors.accent, fontFamily: 'Inter_600SemiBold' } : { color: colors.textMuted },
+      })));
 
       // Build daily cumulative spending forecast (current month only)
       const now = new Date();
@@ -220,14 +232,28 @@ export default function ReportsScreen() {
 
         const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
         if (fc.ready) {
-          setForecastActual(dailyCumulative);
-          const projectedLine: Array<{ value: number; label?: string }> = [
-            { value: Math.round(runningTotal / 100), label: '' }, // continue from today's point
-          ];
-          for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
-            const v = projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d);
-            projectedLine.push({ value: Math.round(v / 100), label: d % 5 === 1 ? `${d}` : '' });
+          // One continuous cumulative line. Days 1..today are the solid "actual"
+          // series; today..month-end is the dashed "projected" series. Both span
+          // the full month so the x-axis stays aligned; the projected series is
+          // front-padded with hidden points that trace the actual line, so the
+          // dashed line appears to start exactly at today.
+          const actualLine = dailyCumulative.map((p, i) => ({
+            value: p.value,
+            label: p.label,
+            hideDataPoint: i !== dayOfMonth - 1, // only mark "today"
+            dataPointColor: colors.expense,
+            dataPointRadius: 5,
+          }));
+          const projectedLine: Array<{ value: number; label?: string; hideDataPoint?: boolean }> = [];
+          for (let d = 1; d <= daysInMonth; d++) {
+            if (d <= dayOfMonth) {
+              projectedLine.push({ value: dailyCumulative[d - 1].value, label: '', hideDataPoint: true });
+            } else {
+              const v = projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d);
+              projectedLine.push({ value: Math.round(v / 100), label: d % 5 === 1 ? `${d}` : '', hideDataPoint: true });
+            }
           }
+          setForecastActual(actualLine);
           setForecastProjected(projectedLine);
           setProjectedTotal(Math.round(fc.projected / 100));
         } else {
@@ -445,24 +471,42 @@ export default function ReportsScreen() {
         <>
           {/* Spending by category — selected month, ALL groups (the dashboard
               donut is current-period & personal; this is the cross-group analysis). */}
-          {pieData.length > 0 && (
+          {flags.reportsDonut && pieData.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.chartTitle}>Spending by category</Text>
               <Text style={styles.chartSub}>{format(month, 'MMMM yyyy')} · all groups</Text>
               <CategoryDonut
                 data={pieData}
                 total={pieTotal}
+                onSelect={(seg) => setSelectedCat(seg?.name ?? null)}
                 onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
               />
+              {selectedCat && <Text style={styles.donutHint}>Tap the wedge again to clear · trend below shows {selectedCat}</Text>}
             </View>
           )}
 
-          {/* 6-month Spending Trend */}
-          {trendData.length > 0 && trendData.some(b => b.value > 0) && (
+          {/* 6-month Spending Trend — overall, or the tapped category */}
+          {flags.reportsTrend && trendData.length > 0 && trendData.some(b => b.value > 0) && (() => {
+            const bars: TrendBar[] = selectedCat
+              ? monthlyData.map((mm, i) => ({
+                  value: Math.round((mm.byCat[selectedCat] ?? 0) / 100),
+                  label: mm.label,
+                  frontColor: i === monthlyData.length - 1 ? colors.accent : colors.accentDeep,
+                  labelTextStyle: i === monthlyData.length - 1 ? { color: colors.accent, fontFamily: 'Inter_600SemiBold' } : { color: colors.textMuted },
+                }))
+              : trendData;
+            return (
             <View style={styles.card}>
-              <Text style={styles.chartTitle}>6-month spending trend</Text>
+              <View style={styles.trendHeader}>
+                <Text style={styles.chartTitle}>{selectedCat ? `${selectedCat} · 6 months` : '6-month spending trend'}</Text>
+                {selectedCat && (
+                  <TouchableOpacity onPress={() => setSelectedCat(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Show all categories">
+                    <Text style={styles.trendClear}>Show all</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <BarChart
-                data={trendData}
+                data={bars}
                 barWidth={28}
                 barBorderRadius={4}
                 noOfSections={4}
@@ -477,7 +521,8 @@ export default function ReportsScreen() {
                 disableScroll
               />
             </View>
-          )}
+            );
+          })()}
 
           {/* Spending Forecast (current month only) */}
           {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
@@ -486,32 +531,27 @@ export default function ReportsScreen() {
                 <Text style={styles.chartTitle}>Month-end forecast</Text>
                 <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
               </View>
-              <Text style={styles.forecastSub}>Projected month-end total — your pace so far, anchored to last month</Text>
+              <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
               <LineChart
                 data={forecastActual}
                 data2={forecastProjected}
                 color1={colors.expense}
                 color2={colors.accent}
-                dataPointsColor1={colors.expense}
-                dataPointsColor2={colors.accent}
-                thickness={2}
+                thickness={2.5}
                 thickness2={2}
-                dashWidth={6}
-                dashGap={4}
-                startFillColor1={colors.expense + '22'}
-                endFillColor1={colors.expense + '05'}
-                areaChart
+                dashWidth={5}
+                dashGap={5}
                 noOfSections={4}
                 maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                spacing={Math.max(12, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
+                spacing={Math.max(8, 300 / Math.max(forecastProjected.length, 1))}
+                initialSpacing={8}
+                endSpacing={8}
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
                 formatYLabel={(v: string) => formatCompactMajor(Number(v))}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
                 hideRules
-                hideDataPoints
-                curved
                 isAnimated
                 disableScroll
               />
@@ -527,6 +567,31 @@ export default function ReportsScreen() {
               </View>
             </View>
           )}
+
+          {/* What-if simulator — cut your top category and see the savings */}
+          {pieData.length > 0 && pieData[0].paise > 0 && (() => {
+            const top = pieData[0];
+            const monthlySaving = Math.round((top.paise * cutPct) / 100);
+            return (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>What if…</Text>
+                <Text style={styles.whatifLead}>
+                  Cut <Text style={{ color: top.color, fontFamily: 'Inter_600SemiBold' }}>{top.name}</Text> by
+                </Text>
+                <View style={styles.whatifChips}>
+                  {[10, 20, 30].map(p => (
+                    <TouchableOpacity key={p} style={[styles.whatifChip, cutPct === p && styles.whatifChipActive]} onPress={() => setCutPct(p)} accessibilityRole="button">
+                      <Text style={[styles.whatifChipText, cutPct === p && { color: colors.bg }]}>{p}%</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.whatifResult}>
+                  <Text style={styles.whatifSave}>You’d save <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>{formatCompact(monthlySaving)}</Text>/mo</Text>
+                  <Text style={styles.whatifYear}>≈ {formatCompact(monthlySaving * 12)} a year</Text>
+                </View>
+              </View>
+            );
+          })()}
 
           {summaries.length === 0 && (
             <EmptyState
@@ -660,6 +725,17 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },
+  donutHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm },
+  trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
+  trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  whatifLead: { ...type.body, color: colors.textSecondary },
+  whatifChips: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  whatifChip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  whatifChipActive: { backgroundColor: colors.accent },
+  whatifChipText: { ...type.label, color: colors.textSecondary },
+  whatifResult: { marginTop: space.md },
+  whatifSave: { ...type.subheading, color: colors.textPrimary },
+  whatifYear: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },
@@ -679,7 +755,7 @@ const styles = StyleSheet.create({
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forecastSub: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
+  forecastSub: { ...type.caption, color: colors.textMuted },
   forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   forecastLegendLine: { width: 16, height: 3, borderRadius: 2 },
