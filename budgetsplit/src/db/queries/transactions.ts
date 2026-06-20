@@ -324,10 +324,40 @@ export async function updateItemizedTxn(
   });
 }
 
-export async function softDeleteTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+/** Restore a soft-deleted transaction (the Undo of softDeleteTxn). Pass
+ *  `cascadeOccurrences` to also restore a rule's materialized occurrences —
+ *  only when the matching delete cascaded. */
+export async function restoreTxn(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  cascadeOccurrences = false,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE id=?', [now, txnId]);
+    if (cascadeOccurrences) {
+      await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE parent_recur_id=?', [now, txnId]);
+    }
+  });
+}
+
+/**
+ * Soft-delete a transaction. For a recurring **template**, the already-logged
+ * occurrences are kept by default (they're real transactions) — pass
+ * `cascadeOccurrences` only when the user explicitly confirms deleting all
+ * occurrences too.
+ */
+export async function softDeleteTxn(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  cascadeOccurrences = false,
+): Promise<void> {
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
     await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [Date.now(), txnId]);
+    if (cascadeOccurrences && row?.recur_freq) {
+      await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE parent_recur_id=?', [Date.now(), txnId]);
+    }
     if (row) {
       const paid = await db.getFirstAsync<{ total: number }>(
         'SELECT COALESCE(SUM(amount),0) as total FROM txn_payment WHERE txn_id=?', [txnId],

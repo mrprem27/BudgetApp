@@ -17,6 +17,7 @@ import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 import { FeatureFlagsProvider } from '../src/components/system/FeatureFlagsProvider';
+import { UndoProvider } from '../src/components/system/UndoToast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 
@@ -85,6 +86,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
         <SQLiteProvider databaseName="budgetsplit.db">
           <FeatureFlagsProvider>
+          <UndoProvider>
           <StatusBar style="light" />
           <LockGate>
             <OnboardingGate>
@@ -103,6 +105,7 @@ export default function RootLayout() {
               </Stack>
             </OnboardingGate>
           </LockGate>
+          </UndoProvider>
           </FeatureFlagsProvider>
         </SQLiteProvider>
         <PrivacyScreen />

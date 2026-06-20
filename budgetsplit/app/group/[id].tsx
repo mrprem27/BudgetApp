@@ -13,7 +13,8 @@ import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
-import { getTransactionsForGroup, softDeleteTxn, insertTxn } from '../../src/db/queries/transactions';
+import { getTransactionsForGroup, softDeleteTxn, restoreTxn, insertTxn } from '../../src/db/queries/transactions';
+import { useUndo } from '../../src/components/system/UndoToast';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
@@ -76,6 +77,7 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [group, setGroup] = useState<BudgetGroup | null>(null);
@@ -131,18 +133,34 @@ export default function GroupDetailScreen() {
     await setSimplifyDebt(db, id, on);
   }
 
+  async function deleteTxn(targetId: string, cascade: boolean, message: string) {
+    await softDeleteTxn(db, targetId, cascade);
+    haptic.warning();
+    await load();
+    showUndo({
+      message,
+      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); await load(); } catch { /* ignore */ } },
+    });
+  }
+
   async function handleDelete(txnId: string) {
     const recurring = isRecurInstance(txnId);
     const targetId = recurring ? txnId.replace(/_\d+$/, '') : txnId;
+    if (!recurring) {
+      Alert.alert('Delete transaction?', undefined, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteTxn(targetId, false, 'Transaction deleted') },
+      ]);
+      return;
+    }
+    // Recurring rule: keep the already-logged occurrences unless the user asks otherwise.
     Alert.alert(
-      recurring ? 'Delete recurring transaction?' : 'Delete transaction?',
-      recurring ? 'This removes the recurring transaction and all its occurrences.' : undefined,
+      'Delete recurring rule?',
+      'Keep the transactions it has already logged, or remove them too?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => { await softDeleteTxn(db, targetId); haptic.warning(); await load(); },
-        },
+        { text: 'Delete rule only', onPress: () => deleteTxn(targetId, false, 'Recurring rule deleted') },
+        { text: 'Delete rule + all logged', style: 'destructive', onPress: () => deleteTxn(targetId, true, 'Recurring + occurrences deleted') },
       ],
     );
   }

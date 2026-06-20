@@ -10,7 +10,8 @@ import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { getTxnById, softDeleteTxn, getLineItems } from '../../src/db/queries/transactions';
+import { getTxnById, softDeleteTxn, restoreTxn, getLineItems } from '../../src/db/queries/transactions';
+import { useUndo } from '../../src/components/system/UndoToast';
 import { getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getAuditLog } from '../../src/db/queries/audit';
@@ -35,6 +36,7 @@ export default function TxnDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
   const [txn, setTxn] = useState<TxnWithSplits | null>(null);
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
@@ -113,6 +115,10 @@ export default function TxnDetailScreen() {
         try {
           await softDeleteTxn(db, id);
           haptic.warning();
+          showUndo({
+            message: 'Transaction deleted',
+            onUndo: async () => { try { await restoreTxn(db, id); haptic.success(); } catch { /* ignore */ } },
+          });
           router.back();
         } catch {
           haptic.error();
