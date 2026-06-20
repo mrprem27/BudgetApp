@@ -101,9 +101,26 @@ nothing looks like a 2010 form.
   savings ×5…) instead of the shared focused `Input` component → no focus/typing
   state, hence inconsistent. Fix = migrate forms to the shared `Input` (a sweep on
   the actively-co-edited add screens — coordinate to avoid collisions).
+- **F20** Friends — friends list + settle already on the Groups screen (co-dev);
+  still want a **Manage Friends entry/icon** (rename / photo / remove). → Phase 2.4.
+- **F21** Color where +/- matters — settlement amounts now sign-colored (✅);
+  sweep other neutral owe/owed figures for green/red. → polish.
+- **F22** Settlement line item shows who→whom — ✅ **done** (directional title +
+  correct amount in `TransactionRow`).
+- **F23** Settings — "Default budget cadence" row has a **padding mismatch**. → polish.
+- **F24** **Feature-management screen** — replace the in-Settings toggle lists with a
+  single "Feature management" row → a dedicated screen with **all** component
+  toggles, **grouped into sections**. → feature.
+- **F25** **Avatar images** — let the user & friends have a photo; `MemberAvatar`
+  uses the image when set, else the initials. (Offline: store file locally.) → feature.
+- **F26** **History (and others) spacing** — audit/fix row rhythm & padding. → polish.
 - **F8** v1 release — PR this branch to `main` (Decision D1). → Phase 1 close-out.
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
+
+> ⚠️ **Coordination:** the user is co-developing the same files (Groups, Settings,
+> add screens). To avoid collisions, agent takes contained/independent files
+> (History, lib, new screens); user owns the actively-edited ones. Confirm splits.
 
 **Working mode:** execute this queue + §6 roadmap **autonomously, one phase at a
 time, gate + commit each**. New user feedback is appended here and the work

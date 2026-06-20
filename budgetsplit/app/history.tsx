@@ -12,7 +12,7 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { getAuditLog } from '../src/db/queries/audit';
-import { formatRupeesShort } from '../src/lib/money';
+import { formatCompact } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
 
 const ACTION_ICON: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
@@ -115,14 +115,14 @@ export default function HistoryScreen() {
                 <Feather name={meta.icon} size={15} color={meta.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.summary}>{item.summary}</Text>
+                <Text style={styles.summary} numberOfLines={2}>{item.summary}</Text>
                 <Text style={styles.time}>
                   <Text style={{ color: meta.color }}>{meta.label}</Text>
                   {timeStr ? `  ·  ${timeStr}` : ''}
                 </Text>
               </View>
               {item.amount != null && (
-                <Text style={[styles.amount, { color: meta.color }]}>{formatRupeesShort(item.amount)}</Text>
+                <Text style={[styles.amount, { color: meta.color }]}>{formatCompact(item.amount)}</Text>
               )}
             </View>
           );
@@ -141,11 +141,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   filters: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
-  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.lg, marginBottom: space.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  summary: { ...type.body, color: colors.textPrimary },
-  time: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  summary: { ...type.body, color: colors.textPrimary, lineHeight: 20 },
+  time: { ...type.caption, color: colors.textMuted, marginTop: 3 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   sep: { height: 1, backgroundColor: colors.border, marginLeft: 34 + space.md },
 });
