@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forecastSub: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
+  forecastSub: { ...type.caption, color: colors.textMuted },
   forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   forecastLegendLine: { width: 16, height: 3, borderRadius: 2 },

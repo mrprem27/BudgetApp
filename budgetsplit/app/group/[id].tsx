@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
   toggleTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   toggleSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
-  ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, marginBottom: space.md, ...shadow.md },
   ovTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   ovLabel: { ...type.label, color: colors.textSecondary },
   ovSpent: { ...type.amountLG, color: colors.textPrimary, marginTop: 2 },
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
   ovStatLabel: { ...type.caption, color: colors.textMuted },
   insightPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, marginTop: space.md },
   insightText: { ...type.label, flex: 1 },
-  budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.lg, marginBottom: space.sm },
+  budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, marginBottom: space.sm },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
