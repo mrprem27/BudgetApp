@@ -85,6 +85,7 @@ export default function TxnDetailScreen() {
   if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
 
   const nameOf = (pid: string) => members.find(m => m.id === pid)?.name ?? 'Someone';
+  const imageOf = (pid: string) => members.find(m => m.id === pid)?.image_uri ?? null;
   const vis = categoryVisual(txn.category);
   const total = txn.payments.reduce((s, p) => s + p.amount, 0);
   const isSettlement = txn.kind === 'settlement';
@@ -200,10 +201,10 @@ export default function TxnDetailScreen() {
             return (
               <View style={styles.card}>
                 <View style={styles.settleFlow}>
-                  <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} />
+                  <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} imageUri={imageOf(from.personId)} />
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(from.personId)}</Text>
                   <Feather name="arrow-right" size={16} color={colors.settle} />
-                  <MemberAvatar name={nameOf(to.personId)} color={colorOf(to.personId)} size={30} />
+                  <MemberAvatar name={nameOf(to.personId)} color={colorOf(to.personId)} size={30} imageUri={imageOf(to.personId)} />
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(to.personId)}</Text>
                   <Text style={styles.settleAmt}>{formatRupees(from.amount)}</Text>
                 </View>
@@ -227,7 +228,7 @@ export default function TxnDetailScreen() {
             <View style={styles.card}>
               {paidRows.map(([id, amt]) => (
                 <View key={`paid-${id}`} style={styles.splitPaidRow}>
-                  <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} />
+                  <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} imageUri={imageOf(id)} />
                   <Text style={styles.splitPaidName} numberOfLines={1}>
                     <Text style={styles.splitPaidNameBold}>{nameOf(id)}</Text> paid
                   </Text>
@@ -238,7 +239,7 @@ export default function TxnDetailScreen() {
               {oweRows.map(o => (
                 <View key={`owe-${o.id}`} style={styles.splitOweRow}>
                   <View style={styles.splitConnector} />
-                  <MemberAvatar name={nameOf(o.id)} color={colorOf(o.id)} size={22} />
+                  <MemberAvatar name={nameOf(o.id)} color={colorOf(o.id)} size={22} imageUri={imageOf(o.id)} />
                   <Text style={styles.splitOweName} numberOfLines={1}>{nameOf(o.id)} owes</Text>
                   <Text style={styles.splitOweAmt}>{formatRupees(-o.net)}</Text>
                 </View>

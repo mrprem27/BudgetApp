@@ -225,7 +225,7 @@ export default function GroupsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Settle with ${f.name}`}
               >
-                <MemberAvatar name={f.name} color={f.avatarColor} size={36} />
+                <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
                   <Text style={styles.balSub}>{f.net > 0 ? 'owes you' : 'you owe'} · {f.groupCount} {f.groupCount === 1 ? 'group' : 'groups'}</Text>

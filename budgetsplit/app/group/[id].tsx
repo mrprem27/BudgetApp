@@ -353,7 +353,7 @@ export default function GroupDetailScreen() {
               const v = net[m.id] ?? 0;
               return (
                 <View key={m.id} style={[styles.memberNetRow, i < members.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
                   <Text style={styles.memberNetName} numberOfLines={1}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNetAmt, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
                     {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'settled up'}
@@ -492,7 +492,7 @@ export default function GroupDetailScreen() {
                   {contributions.rows.map((r, i) => (
                     <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
                       <View style={styles.contribHead}>
-                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} />
+                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
                         <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
                         <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
                         <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
@@ -579,7 +579,7 @@ export default function GroupDetailScreen() {
           <View style={styles.card}>
             {members.map((m, mi) => (
               <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={40} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNet, { color: net[m.id] > 0 ? colors.income : net[m.id] < 0 ? colors.expense : colors.textMuted }]}>

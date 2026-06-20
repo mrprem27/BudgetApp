@@ -414,7 +414,7 @@ export default function ItemizedScreen() {
                   : <View style={styles.assignedAvatars}>
                       {item.assignedTo.slice(0, 3).map(pid => {
                         const m = members.find(m => m.id === pid);
-                        return m ? <MemberAvatar key={pid} name={m.name} color={m.avatar_color} size={24} /> : null;
+                        return m ? <MemberAvatar key={pid} name={m.name} color={m.avatar_color} size={24} imageUri={m.image_uri} /> : null;
                       })}
                       {item.assignedTo.length > 3 && <Text style={styles.moreCount}>+{item.assignedTo.length - 3}</Text>}
                     </View>
@@ -425,7 +425,7 @@ export default function ItemizedScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarRow} keyboardShouldPersistTaps="handled">
                   {members.map(m => (
                     <View key={m.id} style={styles.avatarCol}>
-                      <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={item.assignedTo.includes(m.id)} onPress={() => toggleAssign(item.id, m.id)} />
+                      <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} selected={item.assignedTo.includes(m.id)} onPress={() => toggleAssign(item.id, m.id)} />
                       <Text style={styles.avatarName} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
                     </View>
                   ))}
@@ -439,7 +439,7 @@ export default function ItemizedScreen() {
               <View style={styles.card}>
                 {members.map((m, i) => (
                   <View key={m.id} style={[styles.perPersonRow, i < members.length - 1 && styles.rowBorder]}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                    <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                     <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                     <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
                   </View>
@@ -466,7 +466,7 @@ export default function ItemizedScreen() {
           <View style={styles.card}>
             {members.map((m, i) => (
               <View key={m.id} style={[styles.payerRow, i < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
                 <Text style={styles.payerName} numberOfLines={1}>{m.name}</Text>
                 <View style={styles.payerInputWrap}>
                   <Text style={styles.rupee}>₹</Text>
@@ -523,7 +523,7 @@ export default function ItemizedScreen() {
           <View style={styles.card}>
             {members.filter(m => (perPerson[m.id] ?? 0) > 0).map((m, i, arr) => (
               <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                 <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                 <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
               </View>
@@ -536,7 +536,7 @@ export default function ItemizedScreen() {
               const m = members.find(m => m.id === p.personId);
               return m ? (
                 <View key={p.personId} style={[styles.perPersonRow, i < payments.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} />
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                   <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                   <Text style={styles.perPersonAmount}>{formatRupees(p.amount)}</Text>
                 </View>

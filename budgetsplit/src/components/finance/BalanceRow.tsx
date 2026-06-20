@@ -16,9 +16,9 @@ export function BalanceRow({ from, to, amount, onPaid }: Props) {
   return (
     <View style={styles.row}>
       <View style={styles.avatars}>
-        <MemberAvatar name={from.name} color={from.avatar_color} size={36} />
+        <MemberAvatar name={from.name} color={from.avatar_color} size={36} imageUri={from.image_uri} />
         <View style={styles.avatarOverlap}>
-          <MemberAvatar name={to.name} color={to.avatar_color} size={28} />
+          <MemberAvatar name={to.name} color={to.avatar_color} size={28} imageUri={to.image_uri} />
         </View>
       </View>
       <View style={styles.names}>

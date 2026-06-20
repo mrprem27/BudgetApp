@@ -553,7 +553,7 @@ export default function QuickAddScreen() {
                 }
                 return (
                   <View key={m.id} style={styles.splitRow}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} onPress={() => {
+                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} onPress={() => {
                       setSplitMembers(prev =>
                         prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
                       );
@@ -618,7 +618,7 @@ export default function QuickAddScreen() {
         <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
         {members.map(m => (
           <View key={m.id} style={styles.payerSheetRow}>
-            <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
+            <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
             <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
             <View style={styles.payerInputWrap}>
               <Text style={styles.payerRupee}>₹</Text>

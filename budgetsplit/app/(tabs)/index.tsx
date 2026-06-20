@@ -91,7 +91,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
-  const [meInfo, setMeInfo] = useState<{ name: string; color: string } | null>(null);
+  const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
   const groups = useStore(s => s.groups);
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function DashboardScreen() {
     const me = persons.find(p => p.is_me === 1);
     if (!me) return;
     setMeId(me.id);
-    setMeInfo({ name: me.name, color: me.avatar_color });
+    setMeInfo({ name: me.name, color: me.avatar_color, image: me.image_uri });
 
     const { from, to } = getRange(tab);
 
@@ -221,7 +221,7 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => router.push('/reports')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Reports">
               <Feather name="bar-chart-2" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} />}
+            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} imageUri={meInfo.image} />}
           </View>
         </View>
 

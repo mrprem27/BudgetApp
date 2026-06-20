@@ -91,7 +91,7 @@ export function PersonPicker({
               accessibilityRole="button"
               accessibilityState={{ selected: on }}
             >
-              <MemberAvatar name={item.name} color={item.avatar_color} size={36} />
+              <MemberAvatar name={item.name} color={item.avatar_color} size={36} imageUri={item.image_uri} />
               <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_me ? ' (you)' : ''}</Text>
               {on && <Feather name="check-circle" size={20} color={colors.accent} />}
             </TouchableOpacity>
