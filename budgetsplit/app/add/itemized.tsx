@@ -585,7 +585,7 @@ export default function ItemizedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
   title: { ...type.heading, color: colors.textPrimary },
   stepIndicator: { ...type.label, color: colors.textMuted },
   headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

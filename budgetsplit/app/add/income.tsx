@@ -162,7 +162,7 @@ export default function AddIncomeScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add Income'}</Text>
@@ -334,9 +334,10 @@ export default function AddIncomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  title: { ...type.heading, color: colors.textPrimary },
-  headerSave: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
+  title: { ...type.heading, color: colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: space.sm },
+  headerSave: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
+  headerClose: { minWidth: 40, alignItems: 'flex-start' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
