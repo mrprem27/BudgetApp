@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
+import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -21,6 +22,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
 import { InsightText } from '../../src/components/finance/InsightText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { getTransactionsInRange } from '../../src/db/queries/transactions';
+import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
@@ -71,6 +74,7 @@ export default function SavingsScreen() {
   const [saved, setSaved] = useState<Record<string, number>>({});
   const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
   const [cash, setCash] = useState<CashPosition | null>(null);
+  const [subs, setSubs] = useState<DetectedSub[]>([]);
   const [personalId, setPersonalId] = useState('');
   const [insights, setInsights] = useState<Insight[]>([]);
 
@@ -100,6 +104,17 @@ export default function SavingsScreen() {
     setCash(c);
     const grps = await getAllGroups(db);
     setPersonalId(grps.find(g => g.is_personal === 1)?.id ?? '');
+
+    if (flags.subscriptions) {
+      const now = Date.now();
+      const txns = await getTransactionsInRange(db, null, now - 150 * 24 * 60 * 60 * 1000, now);
+      const expenses = txns
+        .filter(t => t.kind === 'expense' && !t.parent_recur_id && !t.recur_freq)
+        .map(t => ({ category: t.category, amount: t.payments.reduce((x, p) => x + p.amount, 0), date: t.date }));
+      setSubs(detectSubscriptions(expenses));
+    } else {
+      setSubs([]);
+    }
   }
 
   async function handleAddPool() {
@@ -165,6 +180,26 @@ export default function SavingsScreen() {
             <Text style={styles.affordBtnText}>Can I afford something?</Text>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
+        )}
+
+        {flags.subscriptions && subs.length > 0 && (
+          <View style={styles.subsCard}>
+            <View style={styles.subsHead}>
+              <Text style={styles.moneySection}>Looks like subscriptions</Text>
+              <Text style={styles.subsTotal}>{formatCompact(subs.reduce((s, x) => s + x.monthlyEquivalent, 0))}/mo</Text>
+            </View>
+            {subs.slice(0, 5).map(s => (
+              <View key={`${s.category}-${s.amount}`} style={styles.subRow}>
+                <View style={[styles.subDot, { backgroundColor: categoryVisual(s.category).color + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(s.category).icon, 'refresh-cw')} size={13} color={categoryVisual(s.category).color} />
+                </View>
+                <Text style={styles.subName} numberOfLines={1}>{s.category}</Text>
+                <Text style={styles.subCadence}>{s.cadence}</Text>
+                <Text style={styles.subAmt}>{formatCompact(s.amount)}</Text>
+              </View>
+            ))}
+            <Text style={styles.subsHint}>Spotted from charges you log regularly. Set them up as recurring to track automatically.</Text>
+          </View>
         )}
 
         {/* Personal budget & spending (the personal ledger lives here now) */}
@@ -396,6 +431,15 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
   moneySection: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
+  subsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm, gap: space.sm },
+  subsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  subsTotal: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 36 },
+  subDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  subName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  subCadence: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
+  subAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, minWidth: 56, textAlign: 'right' },
+  subsHint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 

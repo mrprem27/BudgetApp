@@ -47,6 +47,7 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
     title: 'Modules',
     rows: [
       { kind: 'flag', key: 'smartCategory', icon: 'zap', label: 'Smart categories', caption: 'Type a title (e.g. "Uber") and the category auto-fills — no picking' },
+      { kind: 'flag', key: 'subscriptions', icon: 'refresh-cw', label: 'Subscription detection', caption: 'Spot recurring charges you log manually, on the Money tab' },
       { kind: 'flag', key: 'affordCheck', icon: 'help-circle', label: 'Can I afford this?', caption: 'A quick check on the Money tab before a purchase' },
       { kind: 'flag', key: 'streak', icon: 'zap', label: 'Tracking streak', caption: 'A gentle daily-logging streak on the dashboard' },
       { kind: 'flag', key: 'healthScore', icon: 'activity', label: 'Financial health score', caption: 'A 0–100 gauge on the dashboard from budget, savings & balances' },
