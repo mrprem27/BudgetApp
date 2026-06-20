@@ -540,8 +540,10 @@ export default function GroupDetailScreen() {
                                 <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
                                   <Feather name={vis.icon} size={14} color={vis.color} />
                                 </View>
-                                <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
-                                <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
+                                  <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
+                                </View>
                                 <Text style={styles.catAmt}><Text style={{ color: healthColor(c.health) }}>{formatCompact(c.spent)}</Text> / {formatCompact(c.allocated)}</Text>
                               </View>
                               <BudgetBar pct={c.pct} health={c.health} height={6} />
@@ -731,9 +733,9 @@ const styles = StyleSheet.create({
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   catTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   catIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  catName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  catName: { ...type.body, color: colors.textPrimary },
   catAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  catCadenceTag: { ...type.caption, color: colors.textMuted, backgroundColor: colors.bgMuted, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, overflow: 'hidden' },
+  catCadenceTag: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
   catUnbudgeted: { ...type.caption, color: colors.textMuted },
 
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
