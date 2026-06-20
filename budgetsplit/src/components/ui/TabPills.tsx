@@ -18,6 +18,7 @@ type Props = {
  * anywhere a segmented choice is needed. bgMuted track, accent active fill.
  */
 export function TabPills({ tabs, active, onChange }: Props) {
+  if (tabs.length === 0) return null;
   return (
     <View style={styles.track}>
       {tabs.map(t => {
@@ -27,6 +28,7 @@ export function TabPills({ tabs, active, onChange }: Props) {
             key={t.key}
             style={[styles.pill, isActive && styles.pillActive]}
             onPress={() => onChange(t.key)}
+            hitSlop={{ top: 6, bottom: 6 }}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
           >

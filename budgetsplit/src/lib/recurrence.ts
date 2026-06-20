@@ -5,6 +5,8 @@ export function materializeInstances(
   txn: TxnWithSplits,
   fromMs: number,
   toMs: number,
+  /** Occurrence dates (ms) to omit — e.g. user-skipped occurrences. */
+  skips?: Set<number>,
 ): TxnWithSplits[] {
   if (!txn.recur_freq) return [];
 
@@ -18,12 +20,13 @@ export function materializeInstances(
 
   while (!isAfter(cursor, rangeEnd) && safetyMax < 1000) {
     safetyMax++;
-    if (!isBefore(cursor, rangeStart)) {
-      const virtualId = `${txn.id}_${cursor.getTime()}`;
+    const ms = cursor.getTime();
+    if (!isBefore(cursor, rangeStart) && !skips?.has(ms)) {
+      const virtualId = `${txn.id}_${ms}`;
       instances.push({
         ...txn,
         id: virtualId,
-        date: cursor.getTime(),
+        date: ms,
         recur_override_date: null,
       });
     }
@@ -31,6 +34,25 @@ export function materializeInstances(
   }
 
   return instances;
+}
+
+/**
+ * The next occurrence date (ms) of a series on or after `fromMs`, or null if the
+ * series has ended before then. Used as the split boundary for "this & future"
+ * edits and to identify which occurrence "Skip next" removes.
+ */
+export function nextOccurrenceOnOrAfter(txn: TxnWithSplits, fromMs: number): number | null {
+  if (!txn.recur_freq) return null;
+  let cursor = new Date(txn.date);
+  const end = txn.recur_end ? new Date(txn.recur_end) : null;
+  let safetyMax = 0;
+  while (safetyMax < 10000) {
+    safetyMax++;
+    if (end && isAfter(cursor, end)) return null;
+    if (!isBefore(cursor, new Date(fromMs))) return cursor.getTime();
+    cursor = advance(cursor, txn.recur_freq, txn.recur_interval ?? 1);
+  }
+  return null;
 }
 
 function advance(

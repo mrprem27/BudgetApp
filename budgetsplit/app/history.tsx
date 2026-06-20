@@ -9,9 +9,10 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { getAuditLog } from '../src/db/queries/audit';
-import { formatRupeesShort } from '../src/lib/money';
+import { formatCompact } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
 
 const ACTION_ICON: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
@@ -41,22 +42,29 @@ export default function HistoryScreen() {
   const [entries, setEntries] = useState<AuditLog[]>([]);
   const [action, setAction] = useState('all');
   const [range, setRange] = useState('all');
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [groupId, action, range]));
 
   async function load() {
-    const rows = await getAuditLog(db, {
-      groupId: groupId || undefined,
-      action: action === 'all' ? undefined : (action as AuditAction),
-      fromMs: rangeStart(range),
-    });
-    setEntries(rows);
+    try {
+      const rows = await getAuditLog(db, {
+        groupId: groupId || undefined,
+        action: action === 'all' ? undefined : (action as AuditAction),
+        fromMs: rangeStart(range),
+      });
+      setEntries(rows);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const sections = useMemo(() => {
     const map = new Map<string, AuditLog[]>();
     for (const e of entries) {
       const d = new Date(e.created_at);
+      if (!isFinite(d.getTime())) continue;
       const key = isSameDay(d, new Date()) ? 'Today' : format(d, 'dd MMM yyyy');
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
@@ -89,6 +97,9 @@ export default function HistoryScreen() {
         />
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <SectionList
         sections={sections}
         keyExtractor={e => e.id}
@@ -96,20 +107,22 @@ export default function HistoryScreen() {
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         renderItem={({ item }) => {
           const meta = ACTION_ICON[item.action] ?? ACTION_ICON.updated;
+          const itemDate = new Date(item.created_at);
+          const timeStr = isFinite(itemDate.getTime()) ? format(itemDate, 'h:mm a') : null;
           return (
             <View style={styles.row}>
               <View style={[styles.iconDot, { backgroundColor: meta.color + '22' }]}>
                 <Feather name={meta.icon} size={15} color={meta.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.summary}>{item.summary}</Text>
+                <Text style={styles.summary} numberOfLines={2}>{item.summary}</Text>
                 <Text style={styles.time}>
                   <Text style={{ color: meta.color }}>{meta.label}</Text>
-                  {`  ·  ${format(new Date(item.created_at), 'h:mm a')}`}
+                  {timeStr ? `  ·  ${timeStr}` : ''}
                 </Text>
               </View>
               {item.amount != null && (
-                <Text style={styles.amount}>{formatRupeesShort(item.amount)}</Text>
+                <Text style={[styles.amount, { color: meta.color }]}>{formatCompact(item.amount)}</Text>
               )}
             </View>
           );
@@ -119,6 +132,7 @@ export default function HistoryScreen() {
           <EmptyState icon="clock" title="No history yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
         }
       />
+      )}
     </View>
   );
 }
@@ -127,11 +141,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   filters: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
-  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.lg, marginBottom: space.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  summary: { ...type.body, color: colors.textPrimary },
-  time: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  summary: { ...type.body, color: colors.textPrimary, lineHeight: 20 },
+  time: { ...type.caption, color: colors.textMuted, marginTop: 3 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   sep: { height: 1, backgroundColor: colors.border, marginLeft: 34 + space.md },
 });

@@ -1,4 +1,4 @@
-import { materializeInstances } from '../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter } from '../lib/recurrence';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -32,5 +32,35 @@ describe('materializeInstances', () => {
     const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1) };
     const out = materializeInstances(t, ms(2024, 0, 1), ms(2024, 2, 31));
     expect(new Set(out.map(i => i.id)).size).toBe(out.length);
+  });
+
+  it('omits skipped occurrence dates', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1) };
+    const skips = new Set([ms(2024, 1, 1)]); // skip February
+    const out = materializeInstances(t, ms(2024, 0, 1), ms(2024, 2, 31), skips);
+    expect(out).toHaveLength(2);
+    expect(out.map(i => i.date)).not.toContain(ms(2024, 1, 1));
+  });
+});
+
+describe('nextOccurrenceOnOrAfter', () => {
+  it('returns the first occurrence on or after the given time', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1) };
+    expect(nextOccurrenceOnOrAfter(t, ms(2024, 1, 10))).toBe(ms(2024, 2, 1)); // next is March 1
+  });
+
+  it('returns the exact date when the boundary lands on an occurrence', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1) };
+    expect(nextOccurrenceOnOrAfter(t, ms(2024, 1, 1))).toBe(ms(2024, 1, 1)); // Feb 1 itself
+  });
+
+  it('returns null once the series has ended', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1), recur_end: ms(2024, 1, 1) };
+    expect(nextOccurrenceOnOrAfter(t, ms(2024, 5, 1))).toBeNull();
+  });
+
+  it('returns null when not recurring', () => {
+    const t: any = { ...base, recur_freq: null, date: ms(2024, 0, 1) };
+    expect(nextOccurrenceOnOrAfter(t, ms(2024, 0, 1))).toBeNull();
   });
 });

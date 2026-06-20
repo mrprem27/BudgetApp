@@ -48,4 +48,12 @@ export const shadow = {
     shadowRadius: 22,
     elevation: 12,
   },
+  // The FAB glows in its own coral light (design token --shadow-fab).
+  fab: {
+    shadowColor: '#FF6F61',
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
+    elevation: 8,
+  },
 } as const;

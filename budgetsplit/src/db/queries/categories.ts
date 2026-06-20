@@ -11,6 +11,7 @@ export type Category = {
   icon: string | null;
   color: string | null;
   kind: CategoryKind;
+  section: string | null;
 };
 
 export async function getCategoriesForGroup(
@@ -54,13 +55,14 @@ export async function insertCategory(
   icon: string | null,
   color: string | null,
   kind: CategoryKind = 'expense',
+  section: string | null = null,
 ): Promise<Category> {
   const id = uuid();
   await db.runAsync(
-    'INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, groupId, name, icon, color, kind],
+    'INSERT INTO category (id, group_id, name, icon, color, kind, section) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, groupId, name, icon, color, kind, section],
   );
-  return { id, group_id: groupId, name, icon, color, kind };
+  return { id, group_id: groupId, name, icon, color, kind, section };
 }
 
 export async function deleteCategory(db: SQLite.SQLiteDatabase, categoryId: string): Promise<void> {

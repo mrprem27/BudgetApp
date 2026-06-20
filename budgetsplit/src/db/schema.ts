@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { INCOME_CATEGORIES } from '../constants/categories';
+import { INCOME_CATEGORIES, CATEGORY_SECTIONS } from '../constants/categories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS person (
   is_me         INTEGER NOT NULL DEFAULT 0,
   email         TEXT,
   mobile        TEXT,
-  remote_uid    TEXT
+  remote_uid    TEXT,
+  image_uri     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS budget_group (
@@ -60,6 +61,13 @@ CREATE TABLE IF NOT EXISTS txn (
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recur_skip (
+  series_id       TEXT NOT NULL REFERENCES txn(id),
+  occurrence_date INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (series_id, occurrence_date)
 );
 
 CREATE TABLE IF NOT EXISTS txn_payment (
@@ -121,6 +129,40 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_group   ON audit_log(group_id);
+
+-- Savings Goals / Bucket List. Kept entirely separate from budgets: money lives
+-- in the Savings Pool and is earmarked to goals; it never inflates a budget.
+CREATE TABLE IF NOT EXISTS savings_goal (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  target       INTEGER NOT NULL,        -- paise
+  priority     TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('high','medium','low')),
+  category     TEXT,
+  icon         TEXT,
+  color        TEXT,
+  allocation   INTEGER NOT NULL DEFAULT 0,  -- fixed savings allocation per frequency (paise)
+  frequency    TEXT NOT NULL DEFAULT 'none' CHECK(frequency IN ('daily','weekly','monthly','yearly','none')),
+  locked       INTEGER NOT NULL DEFAULT 0,  -- protect from auto-reallocation
+  is_archived  INTEGER NOT NULL DEFAULT 0,
+  last_auto_at INTEGER,                      -- schedule anchor for auto-funding
+  created_at   INTEGER NOT NULL
+);
+
+-- Savings ledger. goal_id NULL = a pool-level deposit/withdrawal.
+--   deposit  → money into the pool (manual top-up or auto-sweep)
+--   allocate → pool → goal (earmark)
+--   withdraw → goal → pool (deallocate) or pool → out (goal_id NULL)
+CREATE TABLE IF NOT EXISTS savings_txn (
+  id          TEXT PRIMARY KEY,
+  goal_id     TEXT,
+  amount      INTEGER NOT NULL,         -- paise (positive)
+  kind        TEXT NOT NULL CHECK(kind IN ('deposit','allocate','withdraw')),
+  source      TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','auto')),
+  date        INTEGER NOT NULL,
+  note        TEXT,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_savings_txn_goal ON savings_txn(goal_id);
 `;
 
 /**
@@ -145,6 +187,12 @@ const COLUMN_MIGRATIONS = [
   // v2: multi-currency — default null means app-wide default (INR).
   "ALTER TABLE txn ADD COLUMN currency TEXT",
   "ALTER TABLE budget_group ADD COLUMN default_currency TEXT",
+  // v3: section persists where a category belongs (custom categories no longer lost).
+  "ALTER TABLE category ADD COLUMN section TEXT",
+  // Savings auto-funding: per-goal schedule anchor.
+  "ALTER TABLE savings_goal ADD COLUMN last_auto_at INTEGER",
+  // Avatar photos for the user & friends (local file path; null = use initials).
+  "ALTER TABLE person ADD COLUMN image_uri TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -187,5 +235,20 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       }
     }
   }
+
+  // Backfill section column for all categories that don't have one yet.
+  for (const sec of CATEGORY_SECTIONS) {
+    if (sec.names.length > 0) {
+      const placeholders = sec.names.map(() => '?').join(',');
+      await db.runAsync(
+        `UPDATE category SET section=? WHERE section IS NULL AND name IN (${placeholders})`,
+        [sec.title, ...sec.names],
+      );
+    }
+  }
+  await db.runAsync(
+    "UPDATE category SET section='Income' WHERE section IS NULL AND kind='income'",
+  );
+
   return db;
 }

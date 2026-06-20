@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { colors, type, space } from '../tokens';
-import { formatRupees } from '../../lib/money';
+import { formatCompact } from '../../lib/money';
 
 type Health = 'green' | 'amber' | 'red' | 'none';
 
@@ -12,16 +12,53 @@ const healthColor: Record<Health, string> = {
   none:  colors.bgMuted,
 };
 
-type Props = {
+function computeHealth(pct: number): Health {
+  if (pct > 100) return 'red';
+  if (pct >= 80) return 'amber';
+  if (pct > 0) return 'green';
+  return 'none';
+}
+
+type ExplicitProps = {
   pct: number | null;
   health: Health;
   height?: number;
-  /** Show "spent / limit" label above the bar. */
   spent?: number;
   limit?: number;
 };
 
-export function BudgetBar({ pct, health, height = 6, spent, limit }: Props) {
+type AutoProps = {
+  allocated: number;
+  spent: number;
+  height?: number;
+};
+
+type Props = ExplicitProps | AutoProps;
+
+function isAutoProps(p: Props): p is AutoProps {
+  return 'allocated' in p && !('health' in p);
+}
+
+export function BudgetBar(props: Props) {
+  let pct: number | null;
+  let health: Health;
+  let height: number;
+  let spent: number | undefined;
+  let limit: number | undefined;
+
+  if (isAutoProps(props)) {
+    const p = props.allocated > 0 ? Math.round((props.spent / props.allocated) * 100) : 0;
+    pct = p;
+    health = computeHealth(p);
+    height = props.height ?? 6;
+  } else {
+    pct = props.pct;
+    health = props.health;
+    height = props.height ?? 6;
+    spent = props.spent;
+    limit = props.limit;
+  }
+
   const target = Math.min(100, Math.max(0, pct ?? 0));
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -29,6 +66,7 @@ export function BudgetBar({ pct, health, height = 6, spent, limit }: Props) {
     Animated.timing(anim, {
       toValue: target,
       duration: 650,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
       useNativeDriver: false,
     }).start();
   }, [target, anim]);
@@ -44,8 +82,8 @@ export function BudgetBar({ pct, health, height = 6, spent, limit }: Props) {
     <View>
       {showLabel && (
         <View style={styles.labelRow}>
-          <Text style={styles.labelText}>
-            {formatRupees(spent!)} <Text style={styles.labelMuted}>/ {formatRupees(limit!)}</Text>
+          <Text style={[styles.labelText, { color: healthColor[health] }]}>
+            {formatCompact(spent!)} <Text style={styles.labelMuted}>/ {formatCompact(limit!)}</Text>
           </Text>
           <Text style={[styles.pctText, { color: healthColor[health] }]}>
             {Math.round(pct ?? 0)}%

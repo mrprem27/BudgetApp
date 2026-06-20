@@ -20,7 +20,7 @@ import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
-import { formatRupees } from '../../src/lib/money';
+import { formatCompact } from '../../src/lib/money';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
@@ -178,6 +178,29 @@ export default function GroupDetailScreen() {
     });
   }, [txns, filterKind, search]);
 
+  // "Who paid what" — sum each member's expense payments, vs the equal fair share.
+  // net > 0 means the member is ahead (the group owes them); net < 0 means they owe.
+  const contributions = useMemo(() => {
+    const paid: Record<string, number> = {};
+    let total = 0;
+    for (const t of txns) {
+      if (t.is_deleted || t.kind !== 'expense') continue;
+      for (const p of t.payments) {
+        paid[p.personId] = (paid[p.personId] ?? 0) + p.amount;
+        total += p.amount;
+      }
+    }
+    const fairShare = members.length > 0 ? Math.round(total / members.length) : 0;
+    const maxPaid = Math.max(1, ...members.map(m => paid[m.id] ?? 0));
+    return {
+      total,
+      fairShare,
+      rows: members
+        .map(m => ({ member: m, paid: paid[m.id] ?? 0, net: net[m.id] ?? 0, frac: (paid[m.id] ?? 0) / maxPaid }))
+        .sort((a, b) => b.paid - a.paid),
+    };
+  }, [txns, members, net]);
+
   const TABS: { key: TabKey; label: string }[] = isPersonal
     ? [
         { key: 'transactions', label: 'Expenses' },
@@ -222,11 +245,11 @@ export default function GroupDetailScreen() {
                 const monthStart = startOfMonth(new Date()).getTime();
                 const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
                 const myNet = net[me?.id ?? ''] ?? 0;
-                const parts: string[] = [`${formatRupees(monthSpend)} this month`];
+                const parts: string[] = [`${formatCompact(monthSpend)} this month`];
                 if (!isPersonal) {
                   parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
-                  if (myNet > 0) parts.push(`you're owed ${formatRupees(myNet)}`);
-                  else if (myNet < 0) parts.push(`you owe ${formatRupees(-myNet)}`);
+                  if (myNet > 0) parts.push(`you're owed ${formatCompact(myNet)}`);
+                  else if (myNet < 0) parts.push(`you owe ${formatCompact(-myNet)}`);
                 }
                 return parts.join(' · ');
             })()}
@@ -239,7 +262,7 @@ export default function GroupDetailScreen() {
         <View style={styles.budgetHeaderBar}>
           <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
           <Text style={styles.budgetHeaderText}>
-            {formatRupees(budgetUsage.spent)} / {formatRupees(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
+            <Text style={{ color: healthColor(budgetUsage.health) }}>{formatCompact(budgetUsage.spent)}</Text> / {formatCompact(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
           </Text>
         </View>
       )}
@@ -296,6 +319,8 @@ export default function GroupDetailScreen() {
               myId={me?.id ?? ''}
               onDelete={() => handleDelete(item.id)}
               onPress={() => handleEditTxn(item)}
+              members={members}
+              isPersonal={isPersonal}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
@@ -325,7 +350,7 @@ export default function GroupDetailScreen() {
                   <MemberAvatar name={m.name} color={m.avatar_color} size={36} />
                   <Text style={styles.memberNetName} numberOfLines={1}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNetAmt, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
-                    {v > 0 ? `is owed ${formatRupees(v)}` : v < 0 ? `owes ${formatRupees(-v)}` : 'settled up'}
+                    {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'settled up'}
                   </Text>
                 </View>
               );
@@ -387,8 +412,8 @@ export default function GroupDetailScreen() {
                   <View style={styles.ovTopRow}>
                     <View>
                       <Text style={styles.ovLabel}>Budget used</Text>
-                      <Text style={styles.ovSpent}>{formatRupees(analytics.totalSpent)}</Text>
-                      <Text style={styles.ovOf}>of {formatRupees(analytics.totalAllocated)}</Text>
+                      <Text style={[styles.ovSpent, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>{formatCompact(analytics.totalSpent)}</Text>
+                      <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
                     </View>
                     <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
                       {analytics.utilizationPct ?? 0}%
@@ -424,6 +449,56 @@ export default function GroupDetailScreen() {
                       <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
                     </View>
                   ))}
+                </View>
+              )}
+
+              {/* Driving overspend — over-budget categories worst-first, or all-clear */}
+              {analytics && analytics.totalAllocated > 0 && (
+                analytics.overBudget.length > 0 ? (
+                  <View style={styles.drivingCard}>
+                    <Text style={styles.drivingTitle}>Driving overspend</Text>
+                    {analytics.overBudget.slice(0, 4).map(t => {
+                      const vis = categoryVisual(t.category);
+                      const over = t.spent - t.allocated;
+                      return (
+                        <View key={t.category} style={styles.drivingRow}>
+                          <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
+                            <Feather name={vis.icon} size={14} color={vis.color} />
+                          </View>
+                          <Text style={styles.drivingName} numberOfLines={1}>{t.category}</Text>
+                          <Text style={styles.drivingOver}>{formatCompact(over)} over</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.allClearCard}>
+                    <Feather name="check-circle" size={16} color={colors.income} />
+                    <Text style={styles.allClearText}>Every category within budget</Text>
+                  </View>
+                )
+              )}
+
+              {/* Who paid what — shared groups only */}
+              {!isPersonal && contributions.total > 0 && (
+                <View style={styles.contribCard}>
+                  <Text style={styles.contribTitle}>Who paid what</Text>
+                  {contributions.rows.map((r, i) => (
+                    <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
+                      <View style={styles.contribHead}>
+                        <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} />
+                        <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
+                        <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
+                        <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
+                          {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.contribTrack}>
+                        <View style={[styles.contribFill, { width: `${Math.round(r.frac * 100)}%`, backgroundColor: r.member.avatar_color }]} />
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={styles.contribFoot}>Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group</Text>
                 </View>
               )}
 
@@ -463,11 +538,13 @@ export default function GroupDetailScreen() {
                             <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
                               <View style={styles.catTop}>
                                 <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
-                                  <Feather name={vis.icon as any} size={14} color={vis.color} />
+                                  <Feather name={vis.icon} size={14} color={vis.color} />
                                 </View>
-                                <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
-                                <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
-                                <Text style={styles.catAmt}>{formatRupees(c.spent)} / {formatRupees(c.allocated)}</Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
+                                  <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
+                                </View>
+                                <Text style={styles.catAmt}><Text style={{ color: healthColor(c.health) }}>{formatCompact(c.spent)}</Text> / {formatCompact(c.allocated)}</Text>
                               </View>
                               <BudgetBar pct={c.pct} health={c.health} height={6} />
                             </View>
@@ -483,7 +560,7 @@ export default function GroupDetailScreen() {
             <EmptyState
               icon="target"
               title="No budget yet"
-              body="Give a category a limit — one-time, daily, monthly or yearly — and track it live. It rolls forward automatically each period."
+              body="Give a category a limit — one-time, daily, monthly or yearly — and track it live. Each period starts fresh: the limit resets and unused amount doesn't carry over."
               actionLabel="Create budget"
               onAction={() => router.push(`/group/${id}/budget`)}
             />
@@ -500,7 +577,7 @@ export default function GroupDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
                   <Text style={[styles.memberNet, { color: net[m.id] > 0 ? colors.income : net[m.id] < 0 ? colors.expense : colors.textMuted }]}>
-                    {net[m.id] ? net[m.id] > 0 ? `Owed ${formatRupees(net[m.id])}` : `Owes ${formatRupees(-net[m.id])}` : 'Settled up'}
+                    {net[m.id] ? net[m.id] > 0 ? `Owed ${formatCompact(net[m.id])}` : `Owes ${formatCompact(-net[m.id])}` : 'Settled up'}
                   </Text>
                 </View>
               </View>
@@ -518,8 +595,11 @@ export default function GroupDetailScreen() {
         aboveTabBar={false}
         actions={[
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
-          { label: 'Income', icon: 'plus-circle', tint: colors.income, description: 'Money received', onPress: () => router.push(`/add/income?groupId=${id}`) },
-          ...(isPersonal ? [] : [{ label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between members', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
+          // Income is real money you received → personal ledger only. Shared groups
+          // move money via Transfer (settling "I owe you"), not income.
+          ...(isPersonal
+            ? [{ label: 'Income', icon: 'plus-circle' as const, tint: colors.income, description: 'Money you received', onPress: () => router.push(`/add/income?groupId=${id}`) }]
+            : [{ label: 'Transfer', icon: 'repeat' as const, tint: colors.settle, description: 'Settle who owes whom', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
           { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
         ]}
       />
@@ -628,14 +708,34 @@ const styles = StyleSheet.create({
   recList: { gap: space.sm, marginBottom: space.md },
   recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
   recText: { ...type.label, flex: 1, lineHeight: 18 },
+
+  drivingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, gap: space.sm, ...shadow.sm },
+  drivingTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 2 },
+  drivingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  drivingName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  drivingOver: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  allClearCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  allClearText: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold' },
+
+  contribCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  contribTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.md },
+  contribRow: { gap: space.xs },
+  contribRowGap: { marginBottom: space.md },
+  contribHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  contribName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  contribPaid: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
+  contribDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold', minWidth: 52, textAlign: 'right' },
+  contribTrack: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
+  contribFill: { height: 6, borderRadius: 3 },
+  contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   catRow: { paddingVertical: space.md, gap: space.sm },
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   catTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   catIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  catName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  catName: { ...type.body, color: colors.textPrimary },
   catAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  catCadenceTag: { ...type.caption, color: colors.textMuted, backgroundColor: colors.bgMuted, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, overflow: 'hidden' },
+  catCadenceTag: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
   catUnbudgeted: { ...type.caption, color: colors.textMuted },
 
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },

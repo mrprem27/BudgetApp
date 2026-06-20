@@ -36,7 +36,7 @@ export function getPriorPeriodRange(period: Period, date: Date): { from: number;
   }
 }
 
-async function getSpentInRange(
+export async function getSpentInRange(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   fromMs: number,
@@ -128,8 +128,9 @@ function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to
 /**
  * Per-category budget status. Each budgeted category is compared against
  * spending in the current window of ITS cadence (today / this month / this year
- * / all-time). Daily/monthly/yearly lines roll forward automatically every
- * period because the line itself persists; only the window moves.
+ * / all-time). Daily/monthly/yearly lines repeat each period because the line
+ * itself persists and only the window moves — the limit resets each period and
+ * unused amount does NOT carry over (no rollover).
  */
 export async function getCategoryBudgetStatus(
   db: SQLite.SQLiteDatabase,

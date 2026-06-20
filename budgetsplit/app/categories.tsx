@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, LayoutAnimation, UIManager,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -10,6 +10,8 @@ import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { ErrorState } from '../src/components/ui/ErrorState';
+import { Input } from '../src/components/ui/Input';
 import { getAllGroups } from '../src/db/queries/groups';
 import {
   getCategoriesForGroup, insertCategory, deleteCategory,
@@ -18,26 +20,17 @@ import { haptic } from '../src/lib/haptics';
 import {
   CATEGORY_SECTIONS, categorySection, DEFAULT_CATEGORIES, INCOME_CATEGORIES,
 } from '../src/constants/categories';
+import {
+  CATEGORY_ICON_CHOICES as ICON_CHOICES,
+  CATEGORY_COLOR_CHOICES as COLOR_CHOICES,
+  asFeather,
+} from '../src/constants/palette';
 import type { BudgetGroup } from '../src/db/queries/groups';
 import type { Category } from '../src/db/queries/categories';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-
-const ICON_CHOICES = [
-  'coffee', 'shopping-cart', 'home', 'zap', 'wifi', 'smartphone', 'droplet',
-  'truck', 'navigation', 'map', 'heart', 'activity', 'scissors', 'shopping-bag',
-  'tag', 'film', 'music', 'repeat', 'monitor', 'gift', 'book-open', 'briefcase',
-  'shield', 'trending-up', 'dollar-sign', 'credit-card', 'percent', 'box',
-  'file-text', 'package', 'star', 'more-horizontal',
-];
-
-const COLOR_CHOICES = [
-  '#F0A500', '#3ECF8E', '#7C6AF7', '#60A5FA', '#F472B6', '#FB923C',
-  '#F06060', '#A78BFA', '#34D399', '#22D3EE', '#FACC15', '#F43F5E',
-  '#10B981', '#818CF8', '#E879F9', '#94A3B8',
-];
 
 type KindTab = 'expense' | 'income';
 
@@ -53,17 +46,23 @@ export default function CategoriesScreen() {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState(COLOR_CHOICES[0]);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { init(); }, []));
 
   async function init() {
-    const grps = await getAllGroups(db);
-    setGroups(grps);
-    const gid = groupId || grps[0]?.id || '';
-    setGroupId(gid);
-    if (gid) {
-      const cats = await getCategoriesForGroup(db, gid, kindTab);
-      setCategories(cats);
+    try {
+      const grps = await getAllGroups(db);
+      setGroups(grps);
+      const gid = groupId || grps[0]?.id || '';
+      setGroupId(gid);
+      if (gid) {
+        const cats = await getCategoriesForGroup(db, gid, kindTab);
+        setCategories(cats);
+      }
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     }
   }
 
@@ -85,28 +84,24 @@ export default function CategoriesScreen() {
   }
 
   function getCategoriesInSection(sectionTitle: string): Category[] {
-    const sectionDef = CATEGORY_SECTIONS.find(s => s.title === sectionTitle);
-    if (!sectionDef) return [];
-    const namesInSection = new Set(sectionDef.names);
-    return categories.filter(c => {
-      if (namesInSection.has(c.name)) return true;
-      if (sectionTitle === 'Other') {
-        return categorySection(c.name) === 'Other' && !CATEGORY_SECTIONS.some(s => s.names.includes(c.name));
-      }
-      return false;
-    });
+    return categories.filter(c => (c.section ?? categorySection(c.name)) === sectionTitle);
   }
 
   async function addCategory() {
     const trimmed = name.trim();
     if (!trimmed || !groupId) return;
-    const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab);
-    haptic.success();
-    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-    setName('');
-    setIcon('tag');
-    setColor(COLOR_CHOICES[0]);
-    setAddingToSection(null);
+    try {
+      const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab, addingToSection);
+      haptic.success();
+      setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setName('');
+      setIcon('tag');
+      setColor(COLOR_CHOICES[0]);
+      setAddingToSection(null);
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   function confirmDelete(cat: Category) {
@@ -118,9 +113,14 @@ export default function CategoriesScreen() {
         {
           text: 'Delete', style: 'destructive',
           onPress: async () => {
-            await deleteCategory(db, cat.id);
-            haptic.warning();
-            setCategories(prev => prev.filter(c => c.id !== cat.id));
+            try {
+              await deleteCategory(db, cat.id);
+              haptic.warning();
+              setCategories(prev => prev.filter(c => c.id !== cat.id));
+            } catch {
+              haptic.error();
+              Alert.alert('Something went wrong', 'Please try again.');
+            }
           },
         },
       ],
@@ -146,6 +146,9 @@ export default function CategoriesScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Categories" onBack={() => router.back()} />
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); init(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Kind tab: Expense / Income */}
@@ -197,7 +200,7 @@ export default function CategoriesScreen() {
                   {catsInSection.map((c, i) => (
                     <View key={c.id} style={[styles.row, i < catsInSection.length - 1 && styles.rowBorder]}>
                       <View style={[styles.iconDot, { backgroundColor: (c.color ?? colors.accent) + '22' }]}>
-                        <Feather name={(c.icon ?? 'tag') as any} size={16} color={c.color ?? colors.accent} />
+                        <Feather name={asFeather(c.icon, 'tag')} size={16} color={c.color ?? colors.accent} />
                       </View>
                       <Text style={styles.rowName}>{c.name}</Text>
                       <TouchableOpacity
@@ -217,13 +220,14 @@ export default function CategoriesScreen() {
 
                   {isAddingHere ? (
                     <View style={styles.addForm}>
-                      <TextInput
-                        style={styles.input}
+                      <Input
                         placeholder="Category name"
-                        placeholderTextColor={colors.textMuted}
                         value={name}
                         onChangeText={setName}
                         autoFocus
+                        autoCapitalize="words"
+                        maxLength={30}
+                        style={styles.inputGap}
                       />
                       <Text style={styles.fieldLabel}>Icon</Text>
                       <View style={styles.iconGrid}>
@@ -235,7 +239,7 @@ export default function CategoriesScreen() {
                             accessibilityRole="button"
                             accessibilityLabel={ic}
                           >
-                            <Feather name={ic as any} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
+                            <Feather name={ic} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
                           </TouchableOpacity>
                         ))}
                       </View>
@@ -287,6 +291,7 @@ export default function CategoriesScreen() {
         })}
       </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }
@@ -314,7 +319,7 @@ const styles = StyleSheet.create({
   addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, marginTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   addRowText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addForm: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md },
+  inputGap: { marginBottom: space.md },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.md },
   iconOption: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },

@@ -7,11 +7,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, gradients } from '../tokens';
 import { layout } from '../../constants/layout';
+import type { FeatherName } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
 
-type Action = {
+export type Action = {
   label: string;
-  icon: string;
+  icon: FeatherName;
   onPress: () => void;
   disabled?: boolean;
   description?: string;
@@ -55,7 +56,7 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
                   accessibilityLabel={a.label}
                 >
                   <View style={[styles.actionIcon, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
-                    <Feather name={a.icon as any} size={18} color={tint} />
+                    <Feather name={a.icon} size={18} color={tint} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.actionLabel, a.disabled && { color: colors.textMuted }]}>{a.label}</Text>
@@ -73,10 +74,10 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
         style={[
           styles.fab,
           {
-            // Tab screens: clear the tab bar. Pushed screens: a small fixed gap
-            // above the home indicator — no leftover empty space below.
+            // Tab screens: clear the frosted tab bar. Pushed screens: a small
+            // fixed gap above the home indicator — no leftover empty space below.
             bottom: aboveTabBar
-              ? insets.bottom + space.sm
+              ? insets.bottom + layout.tabBarHeight + space.sm
               : insets.bottom + space.sm,
             transform: [{ scale: scaleAnim }],
           },
@@ -111,11 +112,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    elevation: 8,
-    shadowColor: colors.coral,
-    shadowOpacity: 0.45,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 14,
+    ...shadow.fab,
     zIndex: 100,
   },
   fabGradient: {
@@ -138,7 +135,6 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     ...shadow.lg,
   },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: 40 + space.md },
   handle: {
     alignSelf: 'center',
     width: 38, height: 4, borderRadius: 2,

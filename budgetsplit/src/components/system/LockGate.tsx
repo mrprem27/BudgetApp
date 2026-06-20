@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, AppState, AppStateStatus, TouchableOpacity,
+  View, Text, StyleSheet, AppState, AppStateStatus, TouchableOpacity, Image,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius } from '../../constants/layout';
+
+const LOGO = require('../../../assets/splash-icon.png');
 
 /**
  * Wraps the app. If the user has enabled biometric lock, the app locks whenever
@@ -22,12 +24,16 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   // Load the preference on mount; if enabled, start locked.
   useEffect(() => {
     (async () => {
-      const val = await AsyncStorage.getItem('biometric_enabled');
-      const on = val === 'true';
-      setEnabled(on);
-      if (on) {
-        setLocked(true);
-        authenticate();
+      try {
+        const val = await AsyncStorage.getItem('biometric_enabled');
+        const on = val === 'true';
+        setEnabled(on);
+        if (on) {
+          setLocked(true);
+          authenticate();
+        }
+      } catch {
+        setEnabled(false);
       }
     })();
   }, []);
@@ -71,6 +77,9 @@ export function LockGate({ children }: { children: React.ReactNode }) {
         fallbackLabel: 'Use passcode',
       });
       if (result.success) setLocked(false);
+    } catch {
+      // Auth threw (e.g. too many attempts / OS lockout) — stay locked; the
+      // user can retry with the Unlock button. Never crash on a rejection.
     } finally {
       setAuthing(false);
     }
@@ -81,8 +90,12 @@ export function LockGate({ children }: { children: React.ReactNode }) {
       {children}
       {enabled && locked && (
         <View style={styles.overlay}>
-          <View style={styles.iconCircle}>
-            <Feather name="lock" size={36} color={colors.accent} />
+          {/* The lock nests in the donut's centre — the logo IS the lock UI */}
+          <View style={styles.lockMark}>
+            <Image source={LOGO} style={styles.lockMarkImg} resizeMode="contain" />
+            <View style={styles.lockMarkCenter}>
+              <Feather name="lock" size={26} color={colors.accent} />
+            </View>
           </View>
           <Text style={styles.title}>BudgetSplit Locked</Text>
           <Text style={styles.subtitle}>Authenticate to continue</Text>
@@ -90,7 +103,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
             style={styles.unlockBtn}
             onPress={authenticate}
             accessibilityRole="button"
-            accessibilityLabel="Unlock with Face ID"
+            accessibilityLabel="Unlock"
           >
             <Feather name="unlock" size={18} color={colors.bg} />
             <Text style={styles.unlockText}>Unlock</Text>
@@ -110,13 +123,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: space.md,
   },
-  iconCircle: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: space.sm,
-  },
+  lockMark: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: space.lg },
+  lockMarkImg: { position: 'absolute', width: 120, height: 120 },
+  lockMarkCenter: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   title: { ...type.heading, color: colors.textPrimary },
   subtitle: { ...type.body, color: colors.textSecondary, marginBottom: space.lg },
   unlockBtn: {

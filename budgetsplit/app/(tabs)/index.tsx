@@ -8,11 +8,9 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
-  startOfYear, endOfYear, format, eachDayOfInterval,
-  eachWeekOfInterval, eachMonthOfInterval,
+  startOfYear, endOfYear,
   subDays, subMonths, subYears,
 } from 'date-fns';
-import { PieChart, LineChart } from 'react-native-gifted-charts';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
@@ -20,10 +18,12 @@ import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
-import { getTransactionsInRange } from '../../src/db/queries/transactions';
+import { getPoolSummary, getGoals } from '../../src/db/queries/savings';
+import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
-import { FAB } from '../../src/components/ui/FAB';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { FAB, type Action } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
@@ -32,8 +32,9 @@ import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics, rankInsights } from '../../src/lib/analytics';
 import type { GroupInsight } from '../../src/lib/analytics';
-import { simplify } from '../../src/lib/settle';
-import { formatRupees } from '../../src/lib/money';
+import { formatCompact } from '../../src/lib/money';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -57,6 +58,11 @@ function getPrevRange(tab: TabKey): { from: number; to: number } {
 
 const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
 
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
 const CHART_COLORS = [
   '#F0A500', '#3ECF8E', '#7C6AF7', '#F06060', '#60A5FA',
   '#FB923C', '#F472B6', '#34D399', '#A78BFA', '#8B8A99',
@@ -67,6 +73,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setPersons, setGroups } = useStore();
+  const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
   const [prevSpending, setPrevSpending] = useState(0);
@@ -74,14 +81,16 @@ export default function DashboardScreen() {
   const [oweTotal, setOweTotal] = useState(0);
   const [owedTotal, setOwedTotal] = useState(0);
   const [groupHealth, setGroupHealth] = useState<Array<{ id: string; name: string; pct: number | null; health: 'green' | 'amber' | 'red' | 'none' }>>([]);
-  const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
-  const [barData, setBarData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
+  const [donutData, setDonutData] = useState<DonutSeg[]>([]);
+  const [donutTotal, setDonutTotal] = useState(0);
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
+  const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
   const [insights, setInsights] = useState<GroupInsight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
+  const [meInfo, setMeInfo] = useState<{ name: string; color: string } | null>(null);
   const groups = useStore(s => s.groups);
 
   useEffect(() => {
@@ -107,6 +116,7 @@ export default function DashboardScreen() {
     const me = persons.find(p => p.is_me === 1);
     if (!me) return;
     setMeId(me.id);
+    setMeInfo({ name: me.name, color: me.avatar_color });
 
     const { from, to } = getRange(tab);
 
@@ -162,73 +172,20 @@ export default function DashboardScreen() {
     // Reuse the analytics we just computed — rank the top cross-group insights.
     setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
 
-    // Build pie chart data (spending by category)
+    // Savings pool snapshot for the dashboard card.
+    const [savePool, saveGoals] = await Promise.all([getPoolSummary(db), getGoals(db)]);
+    setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
+
+    // Build donut data (spending by category, sorted largest first)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-    setPieData(sorted.map(([cat, val], i) => ({
-      value: val,
+    const total = sorted.reduce((s, [, v]) => s + v, 0);
+    setDonutTotal(total);
+    setDonutData(sorted.map(([name, paise], i) => ({
+      name,
+      paise,
       color: CHART_COLORS[i % CHART_COLORS.length],
-      text: cat,
     })));
-
-    // Build bar chart data
-    const bars = buildBarData(txns, me.id, tab, from, to);
-    setBarData(bars);
     setLoading(false);
-  }
-
-  function buildBarData(
-    txns: any[],
-    myId: string,
-    tab: TabKey,
-    from: number,
-    to: number,
-  ): Array<{ value: number; label: string; frontColor: string }> {
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-
-    if (tab === 'today') {
-      // 8 three-hour buckets (0–2, 3–5, … 21–23). Every txn lands in exactly
-      // one bucket, so no spending is dropped.
-      const buckets = Array.from({ length: 8 }, (_, b) => ({ label: `${b * 3}`, value: 0 }));
-      for (const txn of txns) {
-        if (txn.kind !== 'expense') continue;
-        const h = new Date(txn.date).getHours();
-        const share = txn.shares.find((s: any) => s.personId === myId)?.amount ?? 0;
-        buckets[Math.floor(h / 3)].value += share;
-      }
-      return buckets.map(b => ({
-        label: b.label,
-        value: Math.round(b.value / 100),
-        frontColor: colors.accent,
-      }));
-    }
-
-    if (tab === 'month') {
-      const weeks = eachWeekOfInterval({ start: fromDate, end: toDate });
-      const buckets = weeks.map(w => ({ label: format(w, 'MMM d'), value: 0 }));
-      for (const txn of txns) {
-        if (txn.kind !== 'expense') continue;
-        const share = txn.shares.find((s: any) => s.personId === myId)?.amount ?? 0;
-        const txnDate = new Date(txn.date);
-        const idx = weeks.findIndex((w, i) => {
-          const next = weeks[i + 1];
-          return txnDate >= w && (!next || txnDate < next);
-        });
-        if (idx >= 0) buckets[idx].value += share;
-      }
-      return buckets.map(b => ({ ...b, value: Math.round(b.value / 100), frontColor: colors.accent }));
-    }
-
-    // year: monthly
-    const months = eachMonthOfInterval({ start: fromDate, end: toDate });
-    const buckets = months.map(m => ({ label: format(m, 'MMM'), value: 0 }));
-    for (const txn of txns) {
-      if (txn.kind !== 'expense') continue;
-      const share = txn.shares.find((s: any) => s.personId === myId)?.amount ?? 0;
-      const m = new Date(txn.date).getMonth();
-      if (buckets[m]) buckets[m].value += share;
-    }
-    return buckets.map(b => ({ ...b, value: Math.round(b.value / 100), frontColor: colors.accent }));
   }
 
   useFocusEffect(useCallback(() => { load(); }, [tab]));
@@ -255,14 +212,23 @@ export default function DashboardScreen() {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.appName}>BudgetSplit</Text>
+          <View>
+            <Text style={styles.greeting}>{greeting()}</Text>
+            <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => router.push('/reports')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Reports">
+              <Feather name="bar-chart-2" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} />}
+          </View>
         </View>
 
         <View style={styles.tabRow}>
           <TabPills
             tabs={TABS}
             active={tab}
-            onChange={(key) => setTab(key as TabKey)}
+            onChange={(key) => { setTab(key as TabKey); }}
           />
         </View>
 
@@ -278,7 +244,7 @@ export default function DashboardScreen() {
         {/* Spending card */}
         <View style={styles.spendingCard}>
           <Text style={styles.spendingLabel}>My spending</Text>
-          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} rounded />
+          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} compact zeroDash />
           {(spending > 0 || prevSpending > 0) && (() => {
             const delta = spending - prevSpending;
             const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
@@ -288,7 +254,7 @@ export default function DashboardScreen() {
               <View style={styles.deltaRow}>
                 <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={color} />
                 <Text style={[styles.deltaText, { color }]}>
-                  {pct === null ? formatRupees(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
+                  {pct === null ? formatCompact(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
                 </Text>
               </View>
             );
@@ -296,11 +262,11 @@ export default function DashboardScreen() {
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Income</Text>
-              <AmountText paise={income} size="md" forceColor={colors.income} rounded />
+              <AmountText paise={income} size="md" forceColor={colors.income} compact />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Net</Text>
-              <AmountText paise={net} size="md" rounded />
+              <AmountText paise={net} size="md" compact />
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>Savings</Text>
@@ -311,14 +277,18 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Budget rollup tiles — tap to manage the budget directly (less nesting) */}
-        {budgetSummary.allocated > 0 && (
+        {/* Budget rollup — prominent, before the donut */}
+        {budgetSummary.allocated > 0 && (() => {
+          const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
+          const bLeft = budgetSummary.allocated - budgetSummary.spent;
+          const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
+          return (
           <TouchableOpacity
-            style={styles.budgetCard}
+            style={styles.budgetHero}
             activeOpacity={0.85}
             onPress={() => {
               const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
-              if (pid) router.push(`/group/${pid}/budget`);
+              if (pid) router.push(flags.budgetInsights ? `/group/${pid}/insights` : `/group/${pid}/budget`);
             }}
             accessibilityRole="button"
             accessibilityLabel="Manage budget"
@@ -327,45 +297,102 @@ export default function DashboardScreen() {
               <Text style={styles.budgetCardTitle}>Budget</Text>
               <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </View>
-            <View style={styles.budgetTiles}>
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Budget</Text>
-                <AmountText paise={budgetSummary.allocated} size="sm" forceColor={colors.textPrimary} rounded />
-              </View>
-              <View style={styles.budgetTileDivider} />
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Spent</Text>
-                <AmountText paise={budgetSummary.spent} size="sm" forceColor={colors.textPrimary} rounded />
-              </View>
-              <View style={styles.budgetTileDivider} />
-              <View style={styles.budgetTile}>
-                <Text style={styles.budgetTileLabel}>Left</Text>
-                <AmountText paise={Math.max(0, budgetSummary.allocated - budgetSummary.spent)} size="sm" forceColor={colors.income} rounded />
+            <View style={styles.budgetHeroRow}>
+              <Text style={[styles.budgetUtil, { color: bHealth }]}>{bUtil}%</Text>
+              <View style={{ flex: 1 }}>
+                <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
+                <Text style={styles.budgetLeft}>
+                  {bLeft >= 0 ? `${formatCompact(bLeft)} left of ${formatCompact(budgetSummary.allocated)}` : `Over by ${formatCompact(-bLeft)}`}
+                </Text>
               </View>
             </View>
             {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
-              <View style={styles.budgetFlags}>
+              <View style={styles.budgetBadgeRow}>
                 {budgetSummary.over > 0 && (
-                  <View style={[styles.flagPill, { backgroundColor: '#3A1414' }]}>
-                    <Feather name="alert-triangle" size={12} color={colors.expense} />
-                    <Text style={[styles.flagText, { color: colors.expense }]}>{budgetSummary.over} over budget</Text>
+                  <View style={[styles.budgetBadge, { backgroundColor: colors.expense + '22' }]}>
+                    <Text style={[styles.budgetBadgeText, { color: colors.expense }]}>{budgetSummary.over} over</Text>
                   </View>
                 )}
                 {budgetSummary.near > 0 && (
-                  <View style={[styles.flagPill, { backgroundColor: colors.bgMuted }]}>
-                    <Feather name="clock" size={12} color={colors.healthAmber} />
-                    <Text style={[styles.flagText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
+                  <View style={[styles.budgetBadge, { backgroundColor: colors.healthAmber + '22' }]}>
+                    <Text style={[styles.budgetBadgeText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
                   </View>
                 )}
               </View>
             )}
           </TouchableOpacity>
+          );
+        })()}
+
+        {/* Where it went — interactive SVG donut */}
+        {chartsReady && donutData.length > 0 && (
+          <View style={styles.donutCard}>
+            <Text style={styles.chartTitle}>Where it went</Text>
+            <CategoryDonut
+              data={donutData}
+              total={donutTotal}
+              onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+            />
+          </View>
         )}
 
-        {/* Insights — top cross-group analytics, tap to manage that group's budget */}
-        {insights.length > 0 && (
+        {/* Balances */}
+        {(oweTotal > 0 || owedTotal > 0) && (
+          <TouchableOpacity
+            style={styles.balanceChip}
+            onPress={() => router.push('/settle')}
+            accessibilityRole="button"
+            accessibilityLabel="Settle up"
+          >
+            <Text style={styles.balanceLabel}>Balances</Text>
+            <Text style={styles.balanceText}>
+              {oweTotal > 0 ? `You owe ${formatCompact(oweTotal)}` : ''}
+              {oweTotal > 0 && owedTotal > 0 ? '\n' : ''}
+              {owedTotal > 0 ? `Owed ${formatCompact(owedTotal)}` : ''}
+            </Text>
+            <Text style={styles.settleLink}>Settle Up →</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Savings pool */}
+        {(savings.total > 0 || savings.goals > 0) && (
+          <TouchableOpacity
+            style={styles.savingsCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/savings' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Savings"
+          >
+            <View style={styles.budgetCardHead}>
+              <View style={styles.savingsTitleRow}>
+                <Feather name="target" size={15} color={colors.accent} />
+                <Text style={styles.budgetCardTitle}>Savings</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </View>
+            <View style={styles.savingsTiles}>
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Pool</Text>
+                <AmountText paise={savings.total} size="sm" forceColor={colors.textPrimary} compact />
+              </View>
+              <View style={styles.savingsTileDivider} />
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Available</Text>
+                <AmountText paise={savings.unallocated} size="sm" forceColor={colors.income} compact />
+              </View>
+              <View style={styles.savingsTileDivider} />
+              <View style={styles.savingsTile}>
+                <Text style={styles.savingsTileLabel}>Goals</Text>
+                <Text style={styles.savingsGoalCount}>{savings.goals}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Top Insights — top cross-group analytics, tap to manage that group's budget */}
+        {flags.dashboardInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
-            <Text style={styles.chartTitle}>Insights</Text>
+            <Text style={styles.chartTitle}>Top insights</Text>
             <View style={{ gap: space.sm }}>
               {insights.map(ins => {
                 const tint = ins.severity === 'warn' ? colors.expense
@@ -393,109 +420,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Owe/Owed */}
-        {(oweTotal > 0 || owedTotal > 0) && (
-          <TouchableOpacity
-            style={styles.balanceChip}
-            onPress={() => router.push('/settle')}
-            accessibilityRole="button"
-            accessibilityLabel="Settle up"
-          >
-            <Text style={styles.balanceText}>
-              {oweTotal > 0 ? `You owe ${formatRupees(oweTotal)}` : ''}
-              {oweTotal > 0 && owedTotal > 0 ? ' · ' : ''}
-              {owedTotal > 0 ? `Owed ${formatRupees(owedTotal)}` : ''}
-            </Text>
-            <Text style={styles.settleLink}>Settle Up</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Donut chart */}
-        {chartsReady && pieData.length > 0 && (
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Spending by category</Text>
-            <View style={styles.pieRow}>
-              <PieChart
-                key={`pie-${tab}`}
-                data={pieData}
-                donut
-                radius={70}
-                innerRadius={46}
-                innerCircleColor={colors.bgCard}
-                focusOnPress
-                sectionAutoFocus
-                centerLabelComponent={() => (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={styles.pieCenterNum}>{pieData.length}</Text>
-                    <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
-                  </View>
-                )}
-              />
-              <View style={styles.legend}>
-                {(() => {
-                  const totalPie = pieData.reduce((s, d) => s + d.value, 0) || 1;
-                  return pieData.slice(0, 5).map((d, i) => (
-                    <View key={i} style={styles.legendItem}>
-                      <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-                      <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
-                      <Text style={styles.legendPct}>{Math.round((d.value / totalPie) * 100)}%</Text>
-                      <Text style={styles.legendAmt}>{formatRupees(d.value)}</Text>
-                    </View>
-                  ));
-                })()}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Trend area chart */}
-        {chartsReady && barData.length > 0 && barData.some(b => b.value > 0) && (
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Spending over time</Text>
-            <LineChart
-              key={`line-${tab}`}
-              data={barData.map(b => ({ value: b.value, label: b.label }))}
-              areaChart
-              curved
-              isAnimated
-              color={colors.accent}
-              startFillColor={colors.accent}
-              endFillColor={colors.accent}
-              startOpacity={0.28}
-              endOpacity={0.02}
-              thickness={2.5}
-              hideRules
-              hideDataPoints={false}
-              dataPointsColor={colors.accent}
-              dataPointsRadius={3}
-              xAxisThickness={0}
-              yAxisThickness={0}
-              yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-              yAxisLabelPrefix="₹"
-              xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
-              noOfSections={3}
-              spacing={Math.max(28, Math.round(280 / Math.max(barData.length, 1)))}
-              initialSpacing={12}
-              endSpacing={8}
-              adjustToWidth
-              disableScroll
-              pointerConfig={{
-                pointerStripColor: colors.accent,
-                pointerStripWidth: 1,
-                pointerColor: colors.accent,
-                radius: 5,
-                pointerLabelWidth: 80,
-                pointerLabelHeight: 28,
-                pointerLabelComponent: (items: { value: number }[]) => (
-                  <View style={styles.tooltipContainer}>
-                    <Text style={styles.tooltipText}>₹{items[0]?.value ?? 0}</Text>
-                  </View>
-                ),
-              }}
-            />
-          </View>
-        )}
-
         {/* Group health */}
         {groupHealth.length > 0 && (
           <View style={styles.section}>
@@ -508,6 +432,9 @@ export default function DashboardScreen() {
                   onPress={() => router.push(`/group/${g.id}`)}
                   accessibilityLabel={g.name}
                 >
+                  <View style={[styles.groupIcon, { backgroundColor: colors.accent + '22' }]}>
+                    <Text style={styles.groupIconText}>{g.name.charAt(0).toUpperCase()}</Text>
+                  </View>
                   <View style={{ flex: 1, gap: 6 }}>
                     <Text style={styles.groupName}>{g.name}</Text>
                     {g.pct !== null && (
@@ -546,7 +473,7 @@ export default function DashboardScreen() {
           { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
           { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
           { label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between people', onPress: () => router.push('/add/transfer') },
-          { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') },
+          ...(flags.itemizedOcr ? [{ label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') }] as Action[] : []),
         ]}
       />
     </View>
@@ -557,7 +484,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.md },
+  greeting: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   appName: { ...type.title, color: colors.textPrimary },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   tabRow: { marginBottom: space.lg },
   spendingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md },
   spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
@@ -567,35 +497,33 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  budgetCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
+  budgetHeroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   budgetCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetCardTitle: { ...type.subheading, color: colors.textPrimary },
-  budgetTiles: { flexDirection: 'row', alignItems: 'center' },
-  budgetTile: { flex: 1, alignItems: 'center', gap: 2 },
-  budgetTileLabel: { ...type.caption, color: colors.textMuted },
-  budgetTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  budgetFlags: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
-  flagPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.pill },
-  flagText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  budgetUtil: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, letterSpacing: -0.5 },
+  budgetLeft: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  budgetBadgeRow: { flexDirection: 'row', gap: space.sm },
+  budgetBadge: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  budgetBadgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  savingsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm, marginBottom: space.md },
+  savingsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  savingsGoalCount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },
+  savingsTiles: { flexDirection: 'row', alignItems: 'center' },
+  savingsTile: { flex: 1, alignItems: 'center', gap: 2 },
+  savingsTileLabel: { ...type.caption, color: colors.textMuted },
+  savingsTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  donutCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  balanceChip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  balanceText: { ...type.body, color: colors.textSecondary, flex: 1 },
-  settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  chartCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  balanceChip: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs, marginBottom: space.md },
+  balanceLabel: { ...type.subheading, color: colors.textPrimary },
+  balanceText: { ...type.body, color: colors.textSecondary },
+  settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
+  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 22, color: colors.textPrimary },
-  pieCenterLabel: { ...type.caption, color: colors.textMuted },
-  legend: { flex: 1, gap: space.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
-  legendPct: { ...type.caption, color: colors.textMuted, width: 34, textAlign: 'right' },
-  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: colors.textPrimary, width: 64, textAlign: 'right' },
   section: { marginBottom: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
   groupList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
@@ -603,6 +531,6 @@ const styles = StyleSheet.create({
   groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
-  tooltipContainer: { backgroundColor: colors.bgCard, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
-  tooltipText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary },
+  groupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  groupIconText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.accent },
 });

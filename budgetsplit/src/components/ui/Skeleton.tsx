@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, ViewStyle, StyleProp, DimensionValue } from 'react-native';
+import { Animated, ViewStyle, StyleProp, DimensionValue } from 'react-native';
 import { colors, radius } from '../tokens';
 
 type Props = {
@@ -39,4 +39,3 @@ export function SkeletonCard({ height = 100, style }: { height?: number; style?:
   return <Skeleton width="100%" height={height} radius={radius.lg} style={style} />;
 }
 
-const styles = StyleSheet.create({});

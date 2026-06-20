@@ -66,6 +66,7 @@ export function FilterBar({ search, onSearch, searchPlaceholder = 'Search…', g
                   key={o.value}
                   style={[styles.chip, isActive && styles.chipActive]}
                   onPress={() => onSelect(g.key, o.value)}
+                  hitSlop={{ top: 6, bottom: 6 }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isActive }}
                 >

@@ -1,0 +1,33 @@
+<!-- @dsCard group="Brand" viewport="700x210" name="Iconography — Feather" subtitle="Feather icons in tinted category circles" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<script src="https://unpkg.com/feather-icons"></script>
+<style>
+  body { margin: 0; background: var(--bg); font-family: var(--font-ui); padding: 24px; }
+  .grid { display:grid; grid-template-columns: repeat(8, 1fr); gap: 16px; }
+  .cell { display:flex; flex-direction:column; align-items:center; gap: 8px; }
+  .circ { width: 44px; height: 44px; border-radius: 50%; display:flex; align-items:center; justify-content:center; }
+  .lbl { color: var(--text-secondary); font-size: 10px; text-align:center; }
+  svg { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+  <div class="grid" id="grid"></div>
+  <script>
+    const items = [
+      ['home','#7C6AF7','Rent'],['shopping-cart','#3ECF8E','Groceries'],['coffee','#FB923C','Eating Out'],
+      ['navigation','#FACC15','Cab'],['zap','#60A5FA','Electricity'],['wifi','#0EA5E9','WiFi'],
+      ['film','#F87171','Fun'],['trending-up','#10B981','SIP'],['credit-card','#F43F5E','EMI'],
+      ['heart','#F06060','Health'],['gift','#F9A8D4','Gifts'],['map','#F472B6','Travel'],
+      ['briefcase','#3ECF8E','Salary'],['users','#FB7185','Family'],['activity','#34D399','Gym'],['repeat','#2DD4BF','Subs'],
+    ];
+    const grid = document.getElementById('grid');
+    grid.innerHTML = items.map(([ic,c,l]) =>
+      `<div class="cell"><div class="circ" style="background:${c}22">${feather.icons[ic].toSvg({color:c,'stroke-width':2})}</div><div class="lbl">${l}</div></div>`
+    ).join('');
+  </script>
+</body>
+</html>

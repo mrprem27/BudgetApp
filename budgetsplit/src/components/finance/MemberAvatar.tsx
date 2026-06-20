@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { type, colors } from '../tokens';
 
 type Props = {
@@ -8,15 +8,21 @@ type Props = {
   size?: number;
   onPress?: () => void;
   selected?: boolean;
+  /** Optional photo; when set it replaces the colored initials circle. */
+  imageUri?: string | null;
 };
 
-export function MemberAvatar({ name, color, size = 40, onPress, selected }: Props) {
-  const initials = name
-    .split(' ')
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
+export function MemberAvatar({ name, color, size = 40, onPress, selected, imageUri }: Props) {
+  // Robust to empty / whitespace-only / multi-space names (DB-derived).
+  const initials =
+    (name ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(w => w[0])
+      .join('')
+      .toUpperCase() || '?';
 
   const content = (
     <View
@@ -26,7 +32,11 @@ export function MemberAvatar({ name, color, size = 40, onPress, selected }: Prop
         selected && { borderWidth: 2, borderColor: colors.accent },
       ]}
     >
-      <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initials}</Text>
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+      ) : (
+        <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initials}</Text>
+      )}
     </View>
   );
 

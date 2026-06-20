@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Alert,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Animated,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,12 +11,17 @@ import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
-import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup } from '../../../src/db/queries/persons';
+import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
+import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
-import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { PersonPicker } from '../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
+import { Input } from '../../../src/components/ui/Input';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
+import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 
 export default function MembersScreen() {
@@ -28,47 +33,61 @@ export default function MembersScreen() {
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
   const [showAdd, setShowAdd] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(AVATAR_COLORS[0]);
+  const [renamePerson, setRenamePerson] = useState<Person | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => { load(); }, [groupId]));
+
+  if (!groupId) { router.back(); return null; }
 
   async function load() {
-    const [m, all, n] = await Promise.all([
-      getGroupMembers(db, groupId),
-      getAllPersons(db),
-      getGroupNet(db, groupId),
-    ]);
-    setMembers(m);
-    setAllPersons(all);
-    setNet(n);
+    try {
+      const [m, all, n] = await Promise.all([
+        getGroupMembers(db, groupId),
+        getAllPersons(db),
+        getGroupNet(db, groupId),
+      ]);
+      setMembers(m);
+      setAllPersons(all);
+      setNet(n);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const memberIds = new Set(members.map(m => m.id));
-  const nonMembers = allPersons.filter(p => !memberIds.has(p.id));
 
   async function handleAdd(personId: string) {
-    await addMemberToGroup(db, groupId, personId);
-    setShowAdd(false);
-    await load();
+    try {
+      await addMemberToGroup(db, groupId, personId);
+      setShowAdd(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
-  async function handleCreateNew() {
-    if (!newName.trim()) return;
-    const existing = allPersons.find(p => p.name.toLowerCase() === newName.trim().toLowerCase());
-    if (existing) {
-      Alert.alert('Person exists', `"${existing.name}" already exists. Add them to this group?`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Add', onPress: () => handleAdd(existing.id) },
-      ]);
-      return;
+  function openRename(person: Person) {
+    setRenamePerson(person);
+    setRenameText(person.name);
+  }
+
+  async function handleRename() {
+    const trimmed = renameText.trim();
+    if (!renamePerson || !trimmed || trimmed === renamePerson.name) { setRenamePerson(null); return; }
+    try {
+      await updatePersonName(db, renamePerson.id, trimmed);
+      haptic.success();
+      setRenamePerson(null);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
     }
-    const person = await insertPerson(db, newName.trim(), newColor);
-    await addMemberToGroup(db, groupId, person.id);
-    setShowNew(false);
-    setNewName('');
-    await load();
   }
 
   async function handleRemove(person: Person) {
@@ -86,8 +105,13 @@ export default function MembersScreen() {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          await removeMemberFromGroup(db, groupId, person.id);
-          await load();
+          try {
+            await removeMemberFromGroup(db, groupId, person.id);
+            await load();
+          } catch {
+            haptic.error();
+            Alert.alert('Something went wrong', 'Please try again.');
+          }
         },
       },
     ]);
@@ -96,33 +120,66 @@ export default function MembersScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={14} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Members</Text>
       </View>
 
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={styles.list}>
         {members.length > 0 && (
           <View style={styles.membersCard}>
-            {members.map((item, index) => (
-              <View key={item.id} style={[styles.row, index < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={item.name} color={item.avatar_color} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-                  {net[item.id] !== undefined && net[item.id] !== 0 && (
-                    <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
-                      {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
-                    </Text>
-                  )}
-                </View>
-                {!item.is_me && (
-                  <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={10} accessibilityLabel={`Remove ${item.name}`}>
-                    <Feather name="user-minus" size={18} color={colors.textMuted} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+            {members.map((item, index) => {
+              const renderRightActions = () => (
+                <TouchableOpacity
+                  style={styles.swipeAction}
+                  onPress={() => { swipeableRefs.current.get(item.id)?.close(); handleRemove(item); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item.name}`}
+                >
+                  <Feather name="user-minus" size={16} color="#fff" />
+                  <Text style={styles.swipeActionText}>Remove</Text>
+                </TouchableOpacity>
+              );
+              return (
+                <Swipeable
+                  key={item.id}
+                  ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
+                  renderRightActions={item.is_me ? undefined : renderRightActions}
+                  overshootRight={false}
+                  friction={2}
+                >
+                  <View style={[styles.row, index < members.length - 1 && styles.rowBorder]}>
+                    <MemberAvatar
+                      name={item.name}
+                      color={item.avatar_color}
+                      size={36}
+                      imageUri={item.image_uri}
+                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await load(); } }}
+                    />
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      onPress={() => openRename(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rename ${item.name}`}
+                    >
+                      <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
+                      {net[item.id] !== undefined && net[item.id] !== 0 && (
+                        <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
+                          {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
+                      <Feather name="edit-2" size={15} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                </Swipeable>
+              );
+            })}
           </View>
         )}
 
@@ -131,60 +188,45 @@ export default function MembersScreen() {
             <View style={styles.addBtnIcon}>
               <Feather name="user-plus" size={16} color={colors.accent} />
             </View>
-            <Text style={styles.addBtnText}>Add existing person</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowNew(true)} accessibilityRole="button">
-            <View style={styles.addBtnIcon}>
-              <Feather name="user" size={16} color={colors.accent} />
-            </View>
-            <Text style={styles.addBtnText}>Create new person</Text>
+            <Text style={styles.addBtnText}>Add or create person</Text>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </ScrollView>
+      )}
 
-      {/* Add existing person sheet */}
+      {/* Add person sheet — search existing or create new */}
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add to group">
-        {nonMembers.length === 0
-          ? <Text style={styles.emptyText}>All existing people are already in this group.</Text>
-          : nonMembers.map(p => (
-            <TouchableOpacity key={p.id} style={styles.personRow} onPress={() => handleAdd(p.id)} accessibilityRole="button" accessibilityLabel={p.name}>
-              <MemberAvatar name={p.name} color={p.avatar_color} size={36} />
-              <Text style={styles.personName}>{p.name}</Text>
-            </TouchableOpacity>
-          ))
-        }
-        <TouchableOpacity style={styles.newPersonLink} onPress={() => { setShowAdd(false); setShowNew(true); }} accessibilityRole="button">
-          <Text style={styles.newPersonText}>+ Create new person instead</Text>
-        </TouchableOpacity>
+        <PersonPicker
+          persons={allPersons}
+          selected={members.map(m => m.id)}
+          exclude={members.map(m => m.id)}
+          onToggle={handleAdd}
+          onCreate={async (name) => {
+            const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
+            await addMemberToGroup(db, groupId, person.id);
+            setShowAdd(false);
+            await load();
+            return person;
+          }}
+          placeholder="Search or create a person…"
+        />
       </SheetModal>
 
-      {/* Create new person sheet */}
-      <SheetModal visible={showNew} onClose={() => setShowNew(false)} title="New person">
-        <TextInput
-          style={styles.input}
+      {/* Rename person sheet */}
+      <SheetModal visible={!!renamePerson} onClose={() => setRenamePerson(null)} title={renamePerson?.is_me ? 'Your name' : 'Rename'}>
+        <Input
+          value={renameText}
+          onChangeText={setRenameText}
           placeholder="Name"
-          placeholderTextColor={colors.textMuted}
-          value={newName}
-          onChangeText={setNewName}
           autoFocus
+          autoCapitalize="words"
+          maxLength={30}
+          returnKeyType="done"
+          onSubmitEditing={handleRename}
+          style={styles.renameGap}
         />
-        <Text style={styles.fieldLabel}>Avatar color</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <View style={styles.colorRow}>
-            {AVATAR_COLORS.map(c => (
-              <TouchableOpacity
-                key={c}
-                style={[styles.colorSwatch, { backgroundColor: c }, newColor === c && styles.colorSelected]}
-                onPress={() => setNewColor(c)}
-                accessibilityRole="button"
-                accessibilityLabel={c}
-              />
-            ))}
-          </View>
-        </ScrollView>
-        <PrimaryButton label="Create & Add" onPress={handleCreateNew} disabled={!newName.trim()} />
+        <PrimaryButton label="Save" onPress={handleRename} disabled={!renameText.trim()} />
       </SheetModal>
     </View>
   );
@@ -205,11 +247,14 @@ const styles = StyleSheet.create({
     ...shadow.sm,
     marginBottom: space.md,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52, backgroundColor: colors.bgCard },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   netText: { ...type.caption, marginTop: 2 },
+  swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: 4 },
+  swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
 
+  renameGap: { marginBottom: space.md },
   addButtons: { gap: space.sm },
   addBtn: {
     flexDirection: 'row',
@@ -224,20 +269,4 @@ const styles = StyleSheet.create({
   },
   addBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
-
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
-  handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.sm },
-  sheetTitle: { ...type.subheading, color: colors.textPrimary },
-  emptyText: { ...type.body, color: colors.textSecondary },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  personName: { ...type.body, color: colors.textPrimary },
-  newPersonLink: { paddingTop: space.sm },
-  newPersonText: { ...type.label, color: colors.accent },
-
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  fieldLabel: { ...type.label, color: colors.textSecondary },
-  colorRow: { flexDirection: 'row', gap: space.xs },
-  colorSwatch: { width: 32, height: 32, borderRadius: 16 },
-  colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
 });

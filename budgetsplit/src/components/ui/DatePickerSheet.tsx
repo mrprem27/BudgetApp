@@ -22,11 +22,13 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
  * can be chosen; the selected date keeps the existing time-of-day.
  */
 export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
-  const [viewMonth, setViewMonth] = useState(() => new Date(value));
+  // Guard against an invalid/NaN epoch — date-fns throws RangeError otherwise.
+  const safeValue = Number.isFinite(value) ? value : Date.now();
+  const [viewMonth, setViewMonth] = useState(() => new Date(safeValue));
 
-  useEffect(() => { if (visible) setViewMonth(new Date(value)); }, [visible, value]);
+  useEffect(() => { if (visible) setViewMonth(new Date(safeValue)); }, [visible, safeValue]);
 
-  const selected = new Date(value);
+  const selected = new Date(safeValue);
   const today = new Date();
   const gridStart = startOfWeek(startOfMonth(viewMonth));
   const gridEnd = endOfWeek(endOfMonth(viewMonth));
@@ -63,7 +65,7 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
           return (
             <TouchableOpacity
               key={day.toISOString()}
-              style={[styles.cell, isSel && styles.cellSelected]}
+              style={styles.cell}
               onPress={() => pick(day)}
               accessibilityRole="button"
               accessibilityLabel={format(day, 'd MMMM yyyy')}
@@ -95,11 +97,9 @@ const styles = StyleSheet.create({
   weekday: { flex: 1, textAlign: 'center', ...type.caption, color: colors.textMuted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.xs },
   cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  cellSelected: {},
   cellText: { ...type.body, color: colors.textPrimary, width: 36, height: 36, borderRadius: 18, textAlign: 'center', textAlignVertical: 'center', lineHeight: 36 },
   cellMuted: { color: colors.textMuted },
   cellToday: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  cellSelectedWrap: {},
   cellTextSelected: { backgroundColor: colors.accent, color: colors.bg, overflow: 'hidden', fontFamily: 'Inter_600SemiBold' },
   todayBtn: { alignSelf: 'center', paddingVertical: space.sm, paddingHorizontal: space.lg, marginTop: space.sm },
   todayText: { ...type.button, color: colors.accent },

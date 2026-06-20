@@ -9,8 +9,10 @@ import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import {
   getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
+  skipNextOccurrence, getSkipsMap,
 } from '../../../src/db/queries/transactions';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
@@ -30,10 +32,11 @@ function freqLabel(freq: string | null, interval: number | null): string {
   }
 }
 
-function nextOccurrence(rule: Rule): Date | null {
+function nextOccurrence(rule: Rule, skips?: Set<number>): Date | null {
   if (rule.recur_state !== 'active') return null;
   const interval = rule.recur_interval ?? 1;
   let cursor = new Date(rule.date);
+  if (!isFinite(cursor.getTime())) return null;
   const now = Date.now();
   let guard = 0;
   const adv = (d: Date) => {
@@ -44,6 +47,8 @@ function nextOccurrence(rule: Rule): Date | null {
     }
   };
   while (cursor.getTime() <= now && guard < 2000) { cursor = adv(cursor); guard++; }
+  // Step past any user-skipped occurrences.
+  while (skips?.has(cursor.getTime()) && guard < 2000) { cursor = adv(cursor); guard++; }
   if (rule.recur_end && cursor.getTime() > rule.recur_end) return null;
   return cursor;
 }
@@ -53,23 +58,58 @@ export default function RecurringScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const [rules, setRules] = useState<Rule[]>([]);
+  const [skips, setSkips] = useState<Map<string, Set<number>>>(new Map());
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
+  if (!id) { router.back(); return null; }
+
   async function load() {
-    setRules(await getRecurringForGroup(db, id));
+    try {
+      const rs = await getRecurringForGroup(db, id);
+      setRules(rs);
+      setSkips(await getSkipsMap(db, rs.map(r => r.id)));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  }
+
+  async function onSkipNext(r: Rule) {
+    try {
+      const skipped = await skipNextOccurrence(db, r.id);
+      if (skipped === null) { Alert.alert('Nothing to skip', 'This series has no upcoming occurrence.'); return; }
+      haptic.warning();
+      await load();
+    } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+  }
+
+  function onEditFuture(r: Rule) {
+    // "This & future" edit — past occurrences are preserved (see PENDING §6).
+    const path = r.kind === 'income' ? 'income' : 'quick';
+    router.push(`/add/${path}?recurEditId=${r.id}&groupId=${id}`);
   }
 
   function amountOf(r: Rule): number {
     return r.payments.reduce((a, p) => a + p.amount, 0);
   }
 
-  async function onPause(r: Rule) { await pauseRecurring(db, r.id); haptic.warning(); await load(); }
-  async function onResume(r: Rule) { await resumeRecurring(db, r.id); haptic.success(); await load(); }
+  async function onPause(r: Rule) {
+    try { await pauseRecurring(db, r.id); haptic.warning(); await load(); }
+    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+  }
+  async function onResume(r: Rule) {
+    try { await resumeRecurring(db, r.id); haptic.success(); await load(); }
+    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+  }
   function onEnd(r: Rule) {
     Alert.alert('End this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'End', style: 'destructive', onPress: async () => { await endRecurring(db, r.id); haptic.warning(); await load(); } },
+      { text: 'End', style: 'destructive', onPress: async () => {
+        try { await endRecurring(db, r.id); haptic.warning(); await load(); }
+        catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
+      } },
     ]);
   }
 
@@ -82,6 +122,9 @@ export default function RecurringScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Recurring" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {rules.length === 0 ? (
           <EmptyState
@@ -93,12 +136,12 @@ export default function RecurringScreen() {
           rules.map(r => {
             const vis = categoryVisual(r.category);
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;
-            const next = nextOccurrence(r);
+            const next = nextOccurrence(r, skips.get(r.id));
             return (
               <View key={r.id} style={styles.card}>
                 <View style={styles.cardTop}>
                   <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-                    <Feather name={vis.icon as any} size={18} color={vis.color} />
+                    <Feather name={vis.icon} size={18} color={vis.color} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cat} numberOfLines={1}>{r.category}</Text>
@@ -129,10 +172,19 @@ export default function RecurringScreen() {
 
                 {r.recur_state !== 'ended' && (
                   <View style={styles.actions}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => router.push(`/add/${r.kind === 'income' ? 'income' : 'quick'}?editId=${r.id}&groupId=${id}`)} accessibilityRole="button">
+                    {/* Safe ops only. Edit applies "this & future" via a series
+                        split (past occurrences preserved); Skip drops the next
+                        single occurrence. No blind template overwrite (PENDING §6). */}
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => onEditFuture(r)} accessibilityRole="button">
                       <Feather name="edit-2" size={14} color={colors.accent} />
                       <Text style={[styles.actionText, { color: colors.accent }]}>Edit</Text>
                     </TouchableOpacity>
+                    {r.recur_state === 'active' && (
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => onSkipNext(r)} accessibilityRole="button">
+                        <Feather name="skip-forward" size={14} color={colors.textSecondary} />
+                        <Text style={[styles.actionText, { color: colors.textSecondary }]}>Skip</Text>
+                      </TouchableOpacity>
+                    )}
                     {r.recur_state === 'active' ? (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onPause(r)} accessibilityRole="button">
                         <Feather name="pause" size={14} color={colors.healthAmber} />
@@ -155,6 +207,7 @@ export default function RecurringScreen() {
           })
         )}
       </ScrollView>
+      )}
     </View>
   );
 }

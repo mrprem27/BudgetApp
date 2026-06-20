@@ -4,6 +4,7 @@ import {
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -13,7 +14,8 @@ import {
   startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { PieChart, BarChart, LineChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
+import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -21,12 +23,17 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getTransactionsInRange } from '../../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { formatRupees, formatRupeesShort } from '../../src/lib/money';
+import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../../src/lib/forecast';
+import { formatRupees, formatCompact, formatCompactMajor } from '../../src/lib/money';
+import { Badge } from '../../src/components/ui/Badge';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { categoryVisual } from '../../src/constants/categories';
+import { CHART_COLORS } from '../../src/constants/palette';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 
@@ -62,7 +69,9 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
   const [month, setMonth] = useState(() => new Date());
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [summaries, setSummaries] = useState<GroupSummary[]>([]);
@@ -71,12 +80,14 @@ export default function ReportsScreen() {
   const [yearExpense, setYearExpense] = useState(0);
   const [yearTopCat, setYearTopCat] = useState('—');
   const [biggestTxn, setBiggestTxn] = useState(0);
-  const [pieData, setPieData] = useState<Array<{ value: number; color: string; text: string }>>([]);
+  const [pieData, setPieData] = useState<DonutSeg[]>([]);
+  const [pieTotal, setPieTotal] = useState(0);
   const [trendData, setTrendData] = useState<Array<{ value: number; label: string; frontColor: string }>>([]);
   const [forecastActual, setForecastActual] = useState<Array<{ value: number; label?: string }>>([]);
   const [forecastProjected, setForecastProjected] = useState<Array<{ value: number; label?: string }>>([]);
   const [projectedTotal, setProjectedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
@@ -84,6 +95,7 @@ export default function ReportsScreen() {
     setLoading(true);
     const startedAt = Date.now();
     try {
+      setLoadError(false);
       const grps = await getAllGroups(db);
       setGroups(grps);
 
@@ -139,18 +151,18 @@ export default function ReportsScreen() {
       const allMonthTxns = await getTransactionsInRange(db, null, fromMs2, toMs2);
       const fullCatMap: Record<string, number> = {};
       for (const t of allMonthTxns) {
-        if (t.kind === 'expense' && !t.is_deleted) {
+        if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
           const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
         }
       }
-      const CHART_COLORS = ['#20C4B8', '#FF6F61', '#8B7CF8', '#2BD49B', '#F5B301', '#60A5FA', '#FB923C', '#F472B6', '#A78BFA', '#8FA3A0'];
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
       setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
-        value: val,
+        name,
+        paise: val,
         color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
-        text: name,
       })));
+      setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
 
       // Build 6-month spending trend bar chart
       const trendBars: Array<{ value: number; label: string; frontColor: string }> = [];
@@ -161,7 +173,7 @@ export default function ReportsScreen() {
         const mTxns = await getTransactionsInRange(db, null, mFrom, mTo);
         let mSpend = 0;
         for (const t of mTxns) {
-          if (t.kind === 'expense' && !t.is_deleted) {
+          if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
             mSpend += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           }
         }
@@ -180,12 +192,13 @@ export default function ReportsScreen() {
       const dayOfMonth = getDate(now);
       const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
 
-      if (isCurrentMonth) {
-        // Compute daily cumulative spending for each day up to today
+      // Forecast needs a few days of signal — see forecast.ts (FORECAST_MIN_DAYS).
+      if (isCurrentMonth && dayOfMonth >= FORECAST_MIN_DAYS) {
+        // Daily cumulative spending up to today (the "actual" line).
         const dailyCumulative: Array<{ value: number; label?: string }> = [];
         let runningTotal = 0;
         const allMonthExpenses = (await getTransactionsInRange(db, null, monthStart.getTime(), endOfMonth(month).getTime()))
-          .filter(t => t.kind === 'expense' && !t.is_deleted);
+          .filter(t => t.kind === 'expense'); // soft-deleted already excluded by the query
 
         for (let d = 1; d <= dayOfMonth; d++) {
           const dayStart = addDays(monthStart, d - 1).getTime();
@@ -196,24 +209,39 @@ export default function ReportsScreen() {
           runningTotal += daySpend;
           dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 5 === 1 ? `${d}` : '' });
         }
-        setForecastActual(dailyCumulative);
 
-        // Linear projection for remaining days
-        const dailyRate = runningTotal / Math.max(1, dayOfMonth);
-        const projectedLine: Array<{ value: number; label?: string }> = [];
-        // Start projected line from the last actual point
-        projectedLine.push({ value: Math.round(runningTotal / 100), label: '' });
-        for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
-          const projected = runningTotal + dailyRate * (d - dayOfMonth);
-          projectedLine.push({ value: Math.round(projected / 100), label: d % 5 === 1 ? `${d}` : '' });
+        // Prior-month actual total anchors the projection so an early spike doesn't
+        // explode the forecast (blended model — see forecast.ts).
+        const prevStart = startOfMonth(subMonths(month, 1)).getTime();
+        const prevEnd = endOfMonth(subMonths(month, 1)).getTime();
+        const priorMonthTotal = (await getTransactionsInRange(db, null, prevStart, prevEnd))
+          .filter(t => t.kind === 'expense')
+          .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+
+        const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
+        if (fc.ready) {
+          setForecastActual(dailyCumulative);
+          const projectedLine: Array<{ value: number; label?: string }> = [
+            { value: Math.round(runningTotal / 100), label: '' }, // continue from today's point
+          ];
+          for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
+            const v = projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d);
+            projectedLine.push({ value: Math.round(v / 100), label: d % 5 === 1 ? `${d}` : '' });
+          }
+          setForecastProjected(projectedLine);
+          setProjectedTotal(Math.round(fc.projected / 100));
+        } else {
+          setForecastActual([]);
+          setForecastProjected([]);
+          setProjectedTotal(0);
         }
-        setForecastProjected(projectedLine);
-        setProjectedTotal(Math.round((runningTotal + dailyRate * (daysInMonth - dayOfMonth)) / 100));
       } else {
         setForecastActual([]);
         setForecastProjected([]);
         setProjectedTotal(0);
       }
+    } catch {
+      setLoadError(true);
     } finally {
       // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
@@ -277,7 +305,8 @@ export default function ReportsScreen() {
             const amt = t.kind === 'income'
               ? t.payments.reduce((x, p) => x + p.amount, 0)
               : t.shares.reduce((x, sh) => x + sh.amount, 0);
-            const color = t.kind === 'income' ? '#2BD49B' : '#FF6F61';
+            // Print-safe (dark-on-white) amount colors — the PDF is a light document.
+            const color = t.kind === 'income' ? '#0E7C5A' : '#C0392B';
             return `<tr>
               <td>${format(new Date(t.date), 'dd MMM')}</td>
               <td>${esc(t.category)}</td>
@@ -304,26 +333,26 @@ export default function ReportsScreen() {
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8" />
         <style>
+          /* Light document — readable on white paper and when printed (dark page
+             backgrounds are commonly dropped by PDF viewers/printers). */
           * { box-sizing: border-box; }
-          body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #0A0F11; color: #ECF3F1; padding: 40px 36px; margin: 0; }
-          h1 { font-size: 26px; margin: 0; color: #FFFFFF; font-weight: 700; letter-spacing: -0.5px; }
-          .sub { color: #20C4B8; font-size: 14px; margin: 4px 0 32px; font-weight: 500; }
-          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #1E2A2E; color: #FFFFFF; font-weight: 600; }
+          body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #FFFFFF; color: #1A1A1A; padding: 40px 36px; margin: 0; }
+          h1 { font-size: 26px; margin: 0; color: #0A0F11; font-weight: 700; letter-spacing: -0.5px; }
+          .sub { color: #0E7C5A; font-size: 14px; margin: 4px 0 32px; font-weight: 600; }
+          h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #2A3433; color: #0A0F11; font-weight: 700; }
           .totals { display: flex; gap: 12px; margin-bottom: 16px; }
-          .total-card { flex: 1; background: #131A1D; border: 1px solid #1E2A2E; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
-          .total-card.income { border-left: 3px solid #2BD49B; }
-          .total-card.expense { border-left: 3px solid #FF6F61; }
-          .total-card.net { border-left: 3px solid #20C4B8; }
-          .total-label { font-size: 11px; color: #7A8F8C; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
-          .total-value { font-size: 16px; font-weight: 700; color: #ECF3F1; font-family: 'SF Mono', monospace; }
-          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; background: #131A1D; border-radius: 10px; overflow: hidden; border: 1px solid #1E2A2E; }
-          th { text-align: left; color: #7A8F8C; font-weight: 600; padding: 10px 12px; background: #0E1517; border-bottom: 1px solid #1E2A2E; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-          td { padding: 10px 12px; border-bottom: 1px solid #1A2326; color: #ECF3F1; }
-          td.note { color: #7A8F8C; }
-          tr:last-child td { border-bottom: none; }
-          tr:hover { background: #1A2326; }
-          .empty { color: #7A8F8C; text-align: center; padding: 40px; }
-          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #4A5E5B; border-top: 1px solid #1E2A2E; padding-top: 16px; }
+          .total-card { flex: 1; background: #F2F5F4; border: 1px solid #6E7A78; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+          .total-card.income { border-left: 4px solid #0E7C5A; }
+          .total-card.expense { border-left: 4px solid #C0392B; }
+          .total-card.net { border-left: 4px solid #0E6E66; }
+          .total-label { font-size: 11px; color: #2A3433; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+          .total-value { font-size: 16px; font-weight: 700; color: #111111; font-family: 'SF Mono', monospace; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; background: #FFFFFF; border: 2px solid #2A3433; }
+          th { text-align: left; color: #111111; font-weight: 700; padding: 10px 12px; background: #E3E8E7; border: 1px solid #6E7A78; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+          td { padding: 10px 12px; border: 1px solid #6E7A78; color: #1A1A1A; }
+          td.note { color: #2A3433; }
+          .empty { color: #2A3433; text-align: center; padding: 40px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #2A3433; border-top: 2px solid #2A3433; padding-top: 16px; }
         </style></head>
         <body>
           <h1>BudgetSplit Report</h1>
@@ -342,9 +371,12 @@ export default function ReportsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={styles.title}>Reports</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={{ marginRight: space.xs, marginLeft: -6 }}>
+          <Feather name="chevron-left" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { flex: 1 }]}>Reports</Text>
         <View style={styles.exportRow}>
           <TouchableOpacity
             style={styles.exportBtn}
@@ -407,41 +439,21 @@ export default function ReportsScreen() {
           <SkeletonCard height={120} />
           <SkeletonCard height={150} />
         </View>
+      ) : loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
         <>
-          {/* Spending by Category chart */}
+          {/* Spending by category — selected month, ALL groups (the dashboard
+              donut is current-period & personal; this is the cross-group analysis). */}
           {pieData.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.chartTitle}>Spending by category</Text>
-              <View style={styles.pieRow}>
-                <PieChart
-                  data={pieData}
-                  donut
-                  radius={65}
-                  innerRadius={42}
-                  innerCircleColor={colors.bgCard}
-                  focusOnPress
-                  centerLabelComponent={() => (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={styles.pieCenterNum}>{pieData.length}</Text>
-                      <Text style={styles.pieCenterLabel}>{pieData.length === 1 ? 'category' : 'categories'}</Text>
-                    </View>
-                  )}
-                />
-                <View style={styles.legend}>
-                  {(() => {
-                    const total = pieData.reduce((s, d) => s + d.value, 0) || 1;
-                    return pieData.slice(0, 5).map((d, i) => (
-                      <View key={i} style={styles.legendItem}>
-                        <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-                        <Text style={styles.legendText} numberOfLines={1}>{d.text}</Text>
-                        <Text style={styles.legendPct}>{Math.round((d.value / total) * 100)}%</Text>
-                        <Text style={styles.legendAmt}>{formatRupeesShort(d.value)}</Text>
-                      </View>
-                    ));
-                  })()}
-                </View>
-              </View>
+              <Text style={styles.chartSub}>{format(month, 'MMMM yyyy')} · all groups</Text>
+              <CategoryDonut
+                data={pieData}
+                total={pieTotal}
+                onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+              />
             </View>
           )}
 
@@ -458,7 +470,7 @@ export default function ReportsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                yAxisLabelPrefix="₹"
+                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
                 hideRules
                 isAnimated
@@ -468,16 +480,13 @@ export default function ReportsScreen() {
           )}
 
           {/* Spending Forecast (current month only) */}
-          {forecastActual.length > 2 && (
+          {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
             <View style={styles.card}>
               <View style={styles.forecastHeader}>
                 <Text style={styles.chartTitle}>Month-end forecast</Text>
-                <View style={styles.forecastBadge}>
-                  <Feather name="trending-up" size={12} color={colors.accent} />
-                  <Text style={styles.forecastBadgeText}>₹{projectedTotal.toLocaleString('en-IN')}</Text>
-                </View>
+                <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
               </View>
-              <Text style={styles.forecastSub}>Projected total spending based on your pace so far</Text>
+              <Text style={styles.forecastSub}>Projected month-end total — your pace so far, anchored to last month</Text>
               <LineChart
                 data={forecastActual}
                 data2={forecastProjected}
@@ -493,11 +502,12 @@ export default function ReportsScreen() {
                 endFillColor1={colors.expense + '05'}
                 areaChart
                 noOfSections={4}
-                spacing={Math.max(8, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
+                maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
+                spacing={Math.max(12, 260 / Math.max(forecastActual.length + forecastProjected.length, 1))}
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                yAxisLabelPrefix="₹"
+                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
                 hideRules
                 hideDataPoints
@@ -533,17 +543,17 @@ export default function ReportsScreen() {
               <View style={styles.metricRow}>
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
-                  <AmountText paise={s.income} size="sm" forceColor={colors.income} rounded />
+                  <AmountText paise={s.income} size="sm" forceColor={colors.income} compact />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Expense</Text>
-                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} rounded />
+                  <AmountText paise={s.expense} size="sm" forceColor={colors.expense} compact />
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Net</Text>
-                  <AmountText paise={s.income - s.expense} size="sm" rounded />
+                  <AmountText paise={s.income - s.expense} size="sm" compact />
                 </View>
               </View>
 
@@ -554,7 +564,7 @@ export default function ReportsScreen() {
                   {s.topCats.map(c => (
                     <View key={c.name} style={styles.catRow}>
                       <Text style={styles.catName}>{c.name}</Text>
-                      <Text style={styles.catAmt}>{formatRupeesShort(c.amount)}</Text>
+                      <Text style={styles.catAmt}>{formatCompact(c.amount)}</Text>
                     </View>
                   ))}
                 </>
@@ -600,17 +610,17 @@ export default function ReportsScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Income</Text>
-                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} rounded />
+                <AmountText paise={yearIncome} size="sm" forceColor={colors.income} compact />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Spent</Text>
-                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} rounded />
+                <AmountText paise={yearExpense} size="sm" forceColor={colors.expense} compact />
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Saved</Text>
-                <AmountText paise={yearIncome - yearExpense} size="sm" rounded />
+                <AmountText paise={yearIncome - yearExpense} size="sm" compact />
               </View>
             </View>
 
@@ -623,7 +633,7 @@ export default function ReportsScreen() {
             <View style={styles.reviewRow}>
               <Text style={styles.reviewLabel}>Biggest expense</Text>
               <Text style={[styles.reviewValue, { fontFamily: 'SpaceMono_400Regular' }]}>
-                {formatRupeesShort(biggestTxn)}
+                {formatCompact(biggestTxn)}
               </Text>
             </View>
           </View>
@@ -649,15 +659,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  pieCenterNum: { fontFamily: 'Inter_600SemiBold', fontSize: 20, color: colors.textPrimary },
-  pieCenterLabel: { ...type.caption, color: colors.textMuted },
-  legend: { flex: 1, gap: space.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.caption, color: colors.textSecondary, flex: 1 },
-  legendPct: { ...type.caption, color: colors.textMuted, width: 30, textAlign: 'right' },
-  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: colors.textPrimary, width: 60, textAlign: 'right' },
+  chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },
@@ -677,8 +679,6 @@ const styles = StyleSheet.create({
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forecastBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 4 },
-  forecastBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.accent },
   forecastSub: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
   forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },

@@ -1,16 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { BalanceRow } from '../src/components/finance/BalanceRow';
 import { SettleSheet } from '../src/components/finance/SettleSheet';
 import { getGlobalNet } from '../src/db/queries/balances';
-import { getAllPersons, getMe } from '../src/db/queries/persons';
+import { getAllPersons } from '../src/db/queries/persons';
 import { getCommonGroupId } from '../src/db/queries/groups';
 import { insertTxn } from '../src/db/queries/transactions';
 import { simplify } from '../src/lib/settle';
@@ -20,39 +21,69 @@ import type { Person } from '../src/db/queries/persons';
 export default function GlobalSettleScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const [net, setNet] = useState<Record<string, number>>({});
   const [persons, setPersons] = useState<Person[]>([]);
   const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const autoFocused = useRef(false);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
   async function load() {
-    const [n, all] = await Promise.all([getGlobalNet(db), getAllPersons(db)]);
-    setNet(n);
-    setPersons(all);
+    try {
+      const [n, all] = await Promise.all([getGlobalNet(db), getAllPersons(db)]);
+      setNet(n);
+      setPersons(all);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   const personMap = new Map(persons.map(p => [p.id, p]));
   const settlements = simplify(net);
 
-  async function markPaid(from: Person, to: Person, amount: number) {
-    const gid = await getCommonGroupId(db, from.id, to.id);
-    if (!gid) {
-      Alert.alert('Cannot settle here', `${from.name} and ${to.name} don't share a group. Settle inside the group where the expense was logged.`);
-      return;
+  // When arriving from a specific balance row (?focus=<personId>), open that
+  // person's settlement sheet directly — once, after data has loaded.
+  useEffect(() => {
+    if (autoFocused.current || !focus || persons.length === 0) return;
+    const s = settlements.find(x => x.from === focus || x.to === focus);
+    if (!s) return;
+    const from = personMap.get(s.from);
+    const to = personMap.get(s.to);
+    if (from && to) {
+      autoFocused.current = true;
+      setSettleTarget({ from, to, amount: s.amount });
     }
-    await insertTxn(db, {
-      groupId: gid, kind: 'settlement', entryMode: 'quick', date: Date.now(), category: 'Settlement',
-      payments: [{ personId: from.id, amount }],
-      shares:   [{ personId: to.id, amount }],
-    });
-    haptic.success();
-    await load();
+  }, [focus, persons, net]);
+
+  async function markPaid(from: Person, to: Person, amount: number) {
+    try {
+      const gid = await getCommonGroupId(db, from.id, to.id);
+      if (!gid) {
+        Alert.alert('Cannot settle here', `${from.name} and ${to.name} don't share a group. Settle inside the group where the expense was logged.`);
+        return;
+      }
+      await insertTxn(db, {
+        groupId: gid, kind: 'settlement', entryMode: 'quick', date: Date.now(), category: 'Settlement',
+        payments: [{ personId: from.id, amount }],
+        shares:   [{ personId: to.id, amount }],
+      });
+      haptic.success();
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
   }
 
   return (
     <View style={styles.container}>
       <ScreenHeader title="Settle Up" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {settlements.length > 0 ? (
           <>
@@ -76,6 +107,7 @@ export default function GlobalSettleScreen() {
           <EmptyState icon="check-circle" title="All settled up" body="You don't owe anyone and no one owes you." tint={colors.income} />
         )}
       </ScrollView>
+      )}
 
       <SettleSheet
         visible={!!settleTarget}

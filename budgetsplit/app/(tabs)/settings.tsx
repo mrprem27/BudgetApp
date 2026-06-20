@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -12,12 +12,15 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
-import { getMe, updatePersonName } from '../../src/db/queries/persons';
+import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { pickAndSaveAvatar } from '../../src/lib/avatar';
+import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
-import { CURRENCIES, DEFAULT_CURRENCY, type CurrencyCode } from '../../src/constants/currencies';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 
@@ -28,6 +31,7 @@ export default function SettingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { flags, setFlag } = useFeatureFlags();
 
   const [me, setMe] = useState<Person | null>(null);
   const [showName, setShowName] = useState(false);
@@ -36,11 +40,10 @@ export default function SettingsScreen() {
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
   const [saveLocation, setSaveLocation] = useState(false);
+  const [autoSweep, setAutoSweep] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-  const [defaultCurrency, setDefaultCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
-  const [showCurrency, setShowCurrency] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -48,10 +51,9 @@ export default function SettingsScreen() {
       setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
       setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
+      setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
-      const cur = await AsyncStorage.getItem('default_currency');
-      if (cur) setDefaultCurrency(cur as CurrencyCode);
     })();
   }, []);
 
@@ -78,7 +80,7 @@ export default function SettingsScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} keyboardShouldPersistTaps="handled">
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Settings</Text>
       </View>
@@ -86,7 +88,13 @@ export default function SettingsScreen() {
       {/* Profile */}
       <Text style={styles.sectionTitle}>Account</Text>
       <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button">
-        <MemberAvatar name={me?.name ?? '?'} color={me?.avatar_color ?? colors.accent} size={44} />
+        <MemberAvatar
+          name={me?.name ?? '?'}
+          color={me?.avatar_color ?? colors.accent}
+          size={44}
+          imageUri={me?.image_uri}
+          onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
           <Text style={styles.profileSub}>{me?.email ?? 'Tap to edit your name'}</Text>
@@ -94,22 +102,22 @@ export default function SettingsScreen() {
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {/* Privacy & Security */}
-      <Text style={styles.sectionTitle}>Privacy & Security</Text>
+      {/* Security */}
+      <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
         <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
       </View>
 
-      {/* Preferences */}
-      <Text style={styles.sectionTitle}>Preferences</Text>
+      {/* Budget & Data */}
+      <Text style={styles.sectionTitle}>Budget & Data</Text>
       <View style={styles.card}>
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="dollar-sign" label="Currency" value={`${CURRENCIES.find(c => c.code === defaultCurrency)?.symbol ?? '₹'} ${CURRENCIES.find(c => c.code === defaultCurrency)?.name ?? 'Indian Rupee'}`} onPress={() => setShowCurrency(true)} />
+        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
 
       {/* Manage */}
@@ -136,7 +144,7 @@ export default function SettingsScreen() {
       </View>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
-        <TextInput style={styles.nameInput} value={nameText} onChangeText={setNameText} placeholder="Your name" placeholderTextColor={colors.textMuted} autoFocus maxLength={30} returnKeyType="done" onSubmitEditing={saveName} />
+        <Input value={nameText} onChangeText={setNameText} placeholder="Your name" autoFocus maxLength={30} autoCapitalize="words" returnKeyType="done" onSubmitEditing={saveName} style={styles.nameInputGap} />
         <PrimaryButton label="Save" onPress={saveName} disabled={!nameText.trim()} />
       </SheetModal>
 
@@ -149,19 +157,7 @@ export default function SettingsScreen() {
         ))}
       </SheetModal>
 
-      <SheetModal visible={showCurrency} onClose={() => setShowCurrency(false)} title="Default currency" scroll>
-        {CURRENCIES.map(c => (
-          <TouchableOpacity
-            key={c.code}
-            style={[styles.cadOption, defaultCurrency === c.code && styles.cadOptionActive]}
-            onPress={async () => { setDefaultCurrency(c.code); setShowCurrency(false); await AsyncStorage.setItem('default_currency', c.code); haptic.selection(); }}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.cadOptionText, defaultCurrency === c.code && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{c.symbol}  {c.name} ({c.code})</Text>
-            {defaultCurrency === c.code && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
+      {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -170,7 +166,7 @@ export default function SettingsScreen() {
 function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof Feather.glyphMap; label: string; value: boolean; onValueChange: (v: boolean) => void }) {
   return (
     <View style={styles.toggleRow}>
-      <View style={styles.toggleIcon}><Feather name={icon} size={18} color={colors.accent} /></View>
+      <View style={styles.toggleIcon}><Feather name={icon} size={16} color={colors.accent} /></View>
       <Text style={styles.toggleLabel}>{label}</Text>
       <Switch value={value} onValueChange={onValueChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={label} />
     </View>
@@ -182,7 +178,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
-  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.xs, gap: 2, ...shadow.sm },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   profileName: { ...type.subheading, color: colors.textPrimary },
@@ -190,10 +186,11 @@ const styles = StyleSheet.create({
 
   aboutText: { ...type.body, color: colors.textPrimary },
   aboutSub: { ...type.caption, color: colors.textSecondary },
-  nameInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, minHeight: 56 },
-  toggleIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  nameInputGap: { marginBottom: space.md },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
+  toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
+  featureCaption: { ...type.caption, color: colors.textMuted, marginLeft: 32 + space.md + space.md, marginTop: -space.sm, marginBottom: space.xs },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },

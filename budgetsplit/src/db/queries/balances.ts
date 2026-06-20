@@ -10,7 +10,7 @@ export async function getGroupNet(
     `SELECT tp.person_id, SUM(tp.amount) as total
      FROM txn_payment tp
      JOIN txn t ON t.id = tp.txn_id
-     WHERE t.group_id = ? AND t.is_deleted = 0
+     WHERE t.group_id = ? AND t.is_deleted = 0 AND t.kind != 'income'
      GROUP BY tp.person_id`,
     [groupId],
   );
@@ -36,7 +36,7 @@ export async function getGlobalNet(
     `SELECT tp.person_id, SUM(tp.amount) as total
      FROM txn_payment tp
      JOIN txn t ON t.id = tp.txn_id
-     WHERE t.is_deleted = 0
+     WHERE t.is_deleted = 0 AND t.kind != 'income'
      GROUP BY tp.person_id`,
   );
   const shares = await db.getAllAsync<{ person_id: string; total: number }>(
@@ -85,4 +85,48 @@ export async function getMyIncome(
     [meId, fromMs, toMs],
   );
   return row?.total ?? 0;
+}
+
+export type FriendBalance = {
+  personId: string;
+  name: string;
+  avatarColor: string;
+  net: number;
+  groupCount: number;
+};
+
+export async function getFriendBalances(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+): Promise<FriendBalance[]> {
+  const rows = await db.getAllAsync<{ person_id: string; name: string; avatar_color: string; group_count: number }>(
+    `SELECT p.id as person_id, p.name, p.avatar_color,
+            COUNT(DISTINCT gm2.group_id) as group_count
+     FROM group_member gm1
+     JOIN group_member gm2 ON gm1.group_id = gm2.group_id AND gm2.person_id != ?
+     JOIN person p ON p.id = gm2.person_id
+     JOIN budget_group bg ON bg.id = gm1.group_id AND bg.is_personal = 0 AND bg.is_archived = 0
+     WHERE gm1.person_id = ?
+     GROUP BY p.id`,
+    [meId, meId],
+  );
+
+  const net = await getGlobalNet(db);
+  const { simplify } = await import('../../lib/settle');
+  const settlements = simplify(net);
+
+  return rows.map(r => {
+    let friendNet = 0;
+    for (const s of settlements) {
+      if (s.from === meId && s.to === r.person_id) friendNet -= s.amount;
+      if (s.to === meId && s.from === r.person_id) friendNet += s.amount;
+    }
+    return {
+      personId: r.person_id,
+      name: r.name,
+      avatarColor: r.avatar_color,
+      net: friendNet,
+      groupCount: r.group_count,
+    };
+  }).filter(f => f.net !== 0 || f.groupCount > 0);
 }

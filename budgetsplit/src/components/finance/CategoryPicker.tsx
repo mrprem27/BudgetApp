@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../tokens';
+import { asFeather } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
 import type { Category } from '../../db/queries/categories';
 
@@ -52,10 +53,16 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
 
   async function create() {
     if (!onCreate) return;
-    const created = await onCreate(query.trim());
-    haptic.success();
-    onChange(created);
-    close();
+    try {
+      const created = await onCreate(query.trim());
+      haptic.success();
+      onChange(created);
+      close();
+    } catch {
+      // Create failed (e.g. duplicate name / DB error) — keep the sheet open so
+      // the user can retry, and signal the failure rather than hanging silently.
+      haptic.error();
+    }
   }
 
   return (
@@ -69,7 +76,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
         {value ? (
           <View style={styles.fieldInner}>
             <View style={[styles.iconDot, { backgroundColor: (value.color ?? colors.accent) + '22' }]}>
-              <Feather name={(value.icon ?? 'tag') as any} size={15} color={value.color ?? colors.accent} />
+              <Feather name={asFeather(value.icon, 'tag')} size={15} color={value.color ?? colors.accent} />
             </View>
             <Text style={styles.fieldValue}>{value.name}</Text>
           </View>
@@ -139,7 +146,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
                     accessibilityState={{ selected: active }}
                   >
                     <View style={[styles.tileIcon, { backgroundColor: (item.color ?? colors.accent) + '22' }]}>
-                      <Feather name={(item.icon ?? 'tag') as any} size={20} color={item.color ?? colors.accent} />
+                      <Feather name={asFeather(item.icon, 'tag')} size={20} color={item.color ?? colors.accent} />
                     </View>
                     <Text style={[styles.tileLabel, active && styles.tileLabelActive]} numberOfLines={1}>
                       {item.name}

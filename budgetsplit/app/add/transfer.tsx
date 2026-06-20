@@ -10,7 +10,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
-import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { Input } from '../../src/components/ui/Input';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -20,6 +20,32 @@ import { parseToPaise, formatRupees } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
+
+function PersonPicker({
+  label, value, onChange, exclude, members,
+}: {
+  label: string;
+  value: string;
+  onChange: (id: string) => void;
+  exclude?: string;
+  members: Person[];
+}) {
+  return (
+    <View style={{ gap: space.xs }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.peopleRow}>
+          {members.filter(m => m.id !== exclude).map(m => (
+            <TouchableOpacity key={m.id} style={styles.personChip} onPress={() => onChange(m.id)} accessibilityRole="button">
+              <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={value === m.id} />
+              <Text style={[styles.personChipName, value === m.id && { color: colors.accent }]} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
 
 export default function TransferScreen() {
   const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
@@ -37,14 +63,11 @@ export default function TransferScreen() {
 
   useEffect(() => {
     (async () => {
-      const grps = await getAllGroups(db);
-      const me = await getMe(db);
+      const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
       // Transfers need at least two people → only multi-member groups qualify.
-      const eligible: BudgetGroup[] = [];
-      for (const g of grps) {
-        const mems = await getGroupMembers(db, g.id);
-        if (mems.length >= 2) eligible.push(g);
-      }
+      // Fetch member counts in parallel, then filter (preserving group order).
+      const counts = await Promise.all(grps.map(g => getGroupMembers(db, g.id)));
+      const eligible: BudgetGroup[] = grps.filter((_, i) => counts[i].length >= 2);
       setGroups(eligible);
       const gid = (paramGroupId && eligible.some(g => g.id === paramGroupId)) ? paramGroupId : eligible[0]?.id ?? '';
       setGroupId(gid);
@@ -95,25 +118,13 @@ export default function TransferScreen() {
     );
   }
 
-  const PersonPicker = ({ label, value, onChange, exclude }: { label: string; value: string; onChange: (id: string) => void; exclude?: string }) => (
-    <View style={{ gap: space.xs }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.peopleRow}>
-          {members.filter(m => m.id !== exclude).map(m => (
-            <TouchableOpacity key={m.id} style={styles.personChip} onPress={() => onChange(m.id)} accessibilityRole="button">
-              <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={value === m.id} />
-              <Text style={[styles.personChipName, value === m.id && { color: colors.accent }]} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Transfer" onBack={() => router.back()} />
+      <ScreenHeader title="Transfer" onBack={() => router.back()} right={
+        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+        </TouchableOpacity>
+      } />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <TextInput
@@ -147,16 +158,16 @@ export default function TransferScreen() {
             </View>
           )}
 
-          <PersonPicker label="From" value={fromId} onChange={setFromId} exclude={toId} />
+          <PersonPicker label="From" value={fromId} onChange={setFromId} exclude={toId} members={members} />
           <View style={styles.arrow}><Feather name="arrow-down" size={18} color={colors.textMuted} /></View>
-          <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} />
+          <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} members={members} />
 
-          <TextInput
-            style={styles.noteInput}
+          <Input
             value={note}
             onChangeText={setNote}
             placeholder="Note (optional)"
-            placeholderTextColor={colors.textMuted}
+            accessibilityLabel="Note"
+            maxLength={80}
           />
 
           {total > 0 && fromId && toId && (
@@ -165,7 +176,6 @@ export default function TransferScreen() {
             </Text>
           )}
 
-          <PrimaryButton label="Record Transfer" onPress={handleSave} disabled={!canSave} loading={saving} style={{ marginTop: space.md }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -174,7 +184,8 @@ export default function TransferScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary },
   peopleRow: { flexDirection: 'row', gap: space.md, paddingVertical: space.xs },
@@ -184,6 +195,5 @@ const styles = StyleSheet.create({
   groupChipActive: { backgroundColor: colors.accent },
   groupChipText: { ...type.label, color: colors.textSecondary },
   arrow: { alignItems: 'center' },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   summary: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
 });

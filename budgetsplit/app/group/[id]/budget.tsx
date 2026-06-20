@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,17 +13,16 @@ import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
-import { CategoryPicker } from '../../../src/components/finance/CategoryPicker';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
 import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
-import { categoryVisual } from '../../../src/constants/categories';
-import { parseToPaise, formatRupees } from '../../../src/lib/money';
+import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
+import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/money';
 import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
-
-type Row = { category: string; cadence: BudgetCadence; amount: string };
+import type { FeatherName } from '../../../src/constants/palette';
 
 const CADENCES: { key: BudgetCadence; label: string }[] = [
   { key: 'once', label: 'One-time' },
@@ -31,6 +30,22 @@ const CADENCES: { key: BudgetCadence; label: string }[] = [
   { key: 'monthly', label: 'Monthly' },
   { key: 'yearly', label: 'Yearly' },
 ];
+
+/** Representative icon per parent section (all valid Feather names). */
+const SECTION_ICON: Record<string, FeatherName> = {
+  'Home & Living': 'home',
+  Food: 'coffee',
+  Transport: 'navigation',
+  'Bills & Utilities': 'zap',
+  Lifestyle: 'shopping-bag',
+  Health: 'heart',
+  'Money & Growth': 'trending-up',
+  Other: 'grid',
+};
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Approximate monthly cost of a line, for a single comparable headline number.
 function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
@@ -42,63 +57,104 @@ function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
   }
 }
 
+type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
+
 export default function BudgetEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [rows, setRows] = useState<Row[]>([]);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [cadences, setCadences] = useState<Record<string, BudgetCadence>>({});
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
   async function load() {
-    const [cats, budgets, dc] = await Promise.all([
-      getCategoriesByFrequency(db, id),
-      getCategoryBudgets(db, id),
-      AsyncStorage.getItem('default_cadence'),
-    ]);
-    if (dc) setDefaultCadence(dc as BudgetCadence);
-    setAllCategories(cats);
-    setRows(budgets.filter(b => b.amount > 0).map(b => ({
-      category: b.category, cadence: b.cadence, amount: (b.amount / 100).toString(),
-    })));
+    if (!id) return;
+    try {
+      const [cats, budgets, dc] = await Promise.all([
+        getCategoriesByFrequency(db, id),
+        getCategoryBudgets(db, id),
+        AsyncStorage.getItem('default_cadence'),
+      ]);
+      if (dc) setDefaultCadence(dc as BudgetCadence);
+      setAllCategories(cats);
+      const amt: Record<string, string> = {};
+      const cad: Record<string, BudgetCadence> = {};
+      for (const b of budgets) {
+        if (b.amount > 0) {
+          amt[b.category] = (b.amount / 100).toString();
+          cad[b.category] = b.cadence;
+        }
+      }
+      setAmounts(amt);
+      setCadences(cad);
+      // Collapse sections that have no budget set yet; keep the ones in use open.
+      const budgetedSections = new Set(Object.keys(amt).map(categorySection));
+      const allSections = new Set(cats.map(c => categorySection(c.name)));
+      const toCollapse = new Set([...allSections].filter(s => !budgetedSections.has(s)));
+      setCollapsed(toCollapse);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
-  const monthlyApprox = rows.reduce((s, r) => s + monthlyEquivalent(r.cadence, parseToPaise(r.amount)), 0);
-  const usedNames = new Set(rows.map(r => r.category));
-  const available = allCategories.filter(c => !usedNames.has(c.name));
+  const cadenceOf = (cat: string): BudgetCadence => cadences[cat] ?? defaultCadence;
+  const monthlyApprox = allCategories.reduce(
+    (s, c) => s + monthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0,
+  );
+  const budgetedCount = Object.values(amounts).filter(a => parseToPaise(a) > 0).length;
 
-  function addRow(name: string) {
-    if (usedNames.has(name)) return;
-    setRows(prev => [...prev, { category: name, cadence: defaultCadence, amount: '' }]);
-  }
+  // Group categories into ordered parent sections.
+  const sections: SectionGroup[] = (() => {
+    const byTitle = new Map<string, Category[]>();
+    for (const c of allCategories) {
+      const t = categorySection(c.name);
+      const arr = byTitle.get(t) ?? [];
+      arr.push(c);
+      byTitle.set(t, arr);
+    }
+    const ordered = [...SECTION_ORDER, ...[...byTitle.keys()].filter(t => !SECTION_ORDER.includes(t))];
+    return ordered
+      .filter(t => byTitle.has(t))
+      .map(t => ({ title: t, icon: SECTION_ICON[t] ?? 'grid', cats: byTitle.get(t)! }));
+  })();
+
   function setAmount(category: string, amount: string) {
-    setRows(prev => prev.map(r => r.category === category ? { ...r, amount } : r));
+    setAmounts(prev => ({ ...prev, [category]: amount }));
   }
   function setCadence(category: string, cadence: BudgetCadence) {
     haptic.selection();
-    setRows(prev => prev.map(r => r.category === category ? { ...r, cadence } : r));
+    setCadences(prev => ({ ...prev, [category]: cadence }));
   }
-  function removeRow(category: string) {
-    Alert.alert(`Remove ${category} budget?`, 'It will no longer be tracked once you save.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => setRows(prev => prev.filter(r => r.category !== category)) },
-    ]);
+  function toggleSection(title: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.has(title) ? next.delete(title) : next.add(title);
+      return next;
+    });
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const entries = rows
-        .map(r => ({ category: r.category, cadence: r.cadence, amount: parseToPaise(r.amount) }))
+      const entries = allCategories
+        .map(c => ({ category: c.name, cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? '') }))
         .filter(e => e.amount > 0);
       await setCategoryBudgets(db, id, entries);
       haptic.success();
       router.back();
+    } catch {
+      haptic.error();
+      Alert.alert("Couldn't save", 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -107,68 +163,93 @@ export default function BudgetEditorScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Set Budget" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
             <Text style={styles.totalSub}>
-              {rows.length} {rows.length === 1 ? 'category' : 'categories'} · one-time not counted
+              {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted · one-time not counted
             </Text>
           </View>
 
           <Text style={styles.explain}>
-            Pick a cadence per category. Daily, monthly and yearly budgets roll forward on their own each period; one-time doesn't repeat.
+            Open a group and type a limit on any category. Daily, monthly and yearly budgets repeat each period — the limit resets and unused amount doesn't carry over; one-time doesn't repeat.
           </Text>
 
-          {rows.length > 0 ? (
-            rows.map(r => {
-              const vis = categoryVisual(r.category);
-              return (
-                <View key={r.category} style={styles.rowCard}>
-                  <View style={styles.rowTop}>
-                    <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
-                      <Feather name={vis.icon as any} size={16} color={vis.color} />
-                    </View>
-                    <Text style={styles.rowName} numberOfLines={1}>{r.category}</Text>
-                    <View style={styles.amountWrap}>
-                      <Text style={styles.rupee}>₹</Text>
-                      <TextInput
-                        style={styles.amountInput}
-                        value={r.amount}
-                        onChangeText={v => setAmount(r.category, v)}
-                        keyboardType="decimal-pad"
-                        placeholder="0"
-                        placeholderTextColor={colors.textMuted}
-                        accessibilityLabel={`${r.category} budget`}
-                      />
-                    </View>
-                    <TouchableOpacity onPress={() => removeRow(r.category)} hitSlop={8} accessibilityLabel={`Remove ${r.category}`}>
-                      <Feather name="x" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
+          {sections.length > 0 ? sections.map(sec => {
+            const isCollapsed = collapsed.has(sec.title);
+            const secMonthly = sec.cats.reduce((s, c) => s + monthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0);
+            const secCount = sec.cats.filter(c => parseToPaise(amounts[c.name] ?? '') > 0).length;
+            return (
+              <View key={sec.title} style={styles.sectionCard}>
+                <TouchableOpacity
+                  style={styles.sectionHeader}
+                  onPress={() => toggleSection(sec.title)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${sec.title} section, ${isCollapsed ? 'collapsed' : 'expanded'}`}
+                >
+                  <View style={[styles.sectionIcon, { backgroundColor: colors.accentMuted }]}>
+                    <Feather name={sec.icon} size={16} color={colors.accent} />
                   </View>
-                  <TouchableOpacity
-                    style={styles.cadenceSelect}
-                    onPress={() => setCadenceSheetFor(r.category)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Cadence: ${CADENCES.find(c => c.key === r.cadence)?.label}`}
-                  >
-                    <Feather name="repeat" size={13} color={colors.textSecondary} />
-                    <Text style={styles.cadenceSelectText}>{CADENCES.find(c => c.key === r.cadence)?.label ?? 'Monthly'}</Text>
-                    <Feather name="chevron-down" size={14} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              );
-            })
-          ) : (
-            <EmptyState icon="target" title="No categories budgeted" body="Add a category below and choose how often its budget applies." />
-          )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>{sec.title}</Text>
+                    <Text style={styles.sectionSub}>
+                      {secCount > 0 ? `${secCount} set · ${formatCompact(secMonthly)}/mo` : `${sec.cats.length} categories`}
+                    </Text>
+                  </View>
+                  <Feather name={isCollapsed ? 'chevron-down' : 'chevron-up'} size={18} color={colors.textMuted} />
+                </TouchableOpacity>
 
-          {available.length > 0 && (
-            <>
-              <Text style={styles.addLabel}>Add a category</Text>
-              <CategoryPicker categories={available} value={null} onChange={c => addRow(c.name)} />
-            </>
+                {!isCollapsed && sec.cats.map((c, i) => {
+                  const vis = categoryVisual(c.name);
+                  const amt = amounts[c.name] ?? '';
+                  const hasAmt = parseToPaise(amt) > 0;
+                  return (
+                    <View key={c.name}>
+                      <View style={styles.divider} />
+                      <View style={styles.rowItem}>
+                        <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+                          <Feather name={vis.icon} size={15} color={vis.color} />
+                        </View>
+                        <View style={styles.rowMid}>
+                          <Text style={styles.rowName} numberOfLines={1}>{c.name}</Text>
+                          {hasAmt && (
+                            <TouchableOpacity
+                              style={styles.cadenceSelect}
+                              onPress={() => setCadenceSheetFor(c.name)}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Cadence: ${CADENCES.find(x => x.key === cadenceOf(c.name))?.label}`}
+                            >
+                              <Feather name="repeat" size={11} color={colors.textSecondary} />
+                              <Text style={styles.cadenceSelectText}>{CADENCES.find(x => x.key === cadenceOf(c.name))?.label ?? 'Monthly'}</Text>
+                              <Feather name="chevron-down" size={12} color={colors.textMuted} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        <View style={[styles.amountWrap, hasAmt && styles.amountWrapActive]}>
+                          <Text style={[styles.rupee, hasAmt && { color: colors.textSecondary }]}>₹</Text>
+                          <TextInput
+                            style={styles.amountInput}
+                            value={amt}
+                            onChangeText={v => setAmount(c.name, v)}
+                            keyboardType="decimal-pad"
+                            placeholder="0"
+                            placeholderTextColor={colors.textMuted}
+                            accessibilityLabel={`${c.name} budget`}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          }) : (
+            <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
 
           <View style={{ height: 100 }} />
@@ -178,10 +259,11 @@ export default function BudgetEditorScreen() {
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>
+      )}
 
       <SheetModal visible={!!cadenceSheetFor} onClose={() => setCadenceSheetFor(null)} title="How often?" scroll={false}>
         {CADENCES.map(c => {
-          const active = cadenceSheetFor ? rows.find(r => r.category === cadenceSheetFor)?.cadence === c.key : false;
+          const active = cadenceSheetFor ? cadenceOf(cadenceSheetFor) === c.key : false;
           return (
             <TouchableOpacity
               key={c.key}
@@ -208,18 +290,26 @@ const styles = StyleSheet.create({
   totalAmount: { ...type.amountXL, color: colors.accent },
   totalSub: { ...type.caption, color: colors.textMuted },
   explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
-  rowCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  rowName: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
-  amountWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 92 },
+
+  sectionCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md, minHeight: 56 },
+  sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  sectionSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+
+  divider: { height: 1, backgroundColor: colors.border, marginLeft: space.md + 34 + space.md },
+  rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 52 },
+  iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  rowMid: { flex: 1, gap: 4 },
+  rowName: { ...type.body, color: colors.textPrimary },
+  amountWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 96 },
+  amountWrapActive: { borderColor: colors.accent },
   rupee: { ...type.body, color: colors.textMuted },
   amountInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
-  cadenceSelect: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  cadenceSelect: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
   cadenceSelectText: { ...type.caption, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },
-  addLabel: { ...type.label, color: colors.textSecondary },
   footer: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
 });

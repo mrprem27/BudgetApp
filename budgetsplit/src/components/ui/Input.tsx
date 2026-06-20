@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, TextInput, Text, StyleSheet, ViewStyle, ReturnKeyTypeOptions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 
@@ -15,6 +15,11 @@ type Props = {
   autoFocus?: boolean;
   multiline?: boolean;
   editable?: boolean;
+  maxLength?: number;
+  returnKeyType?: ReturnKeyTypeOptions;
+  onSubmitEditing?: () => void;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  accessibilityLabel?: string;
   style?: ViewStyle;
 };
 
@@ -33,6 +38,11 @@ export function Input({
   autoFocus,
   multiline,
   editable = true,
+  maxLength,
+  returnKeyType,
+  onSubmitEditing,
+  autoCapitalize,
+  accessibilityLabel,
   style,
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -40,7 +50,7 @@ export function Input({
   return (
     <View style={style}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.wrap, focused && styles.wrapFocused, !editable && styles.wrapDisabled]}>
+      <View style={[styles.wrap, multiline && styles.wrapMultiline, focused && styles.wrapFocused, !editable && styles.wrapDisabled]}>
         {icon ? (
           <Feather name={icon} size={16} color={focused ? colors.accent : colors.textMuted} style={styles.icon} />
         ) : null}
@@ -58,6 +68,11 @@ export function Input({
           autoFocus={autoFocus}
           multiline={multiline}
           editable={editable}
+          maxLength={maxLength}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          autoCapitalize={autoCapitalize}
+          accessibilityLabel={accessibilityLabel}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
@@ -81,6 +96,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     height: 48,
     paddingHorizontal: 14,
+  },
+  wrapMultiline: {
+    height: undefined,
+    minHeight: 48,
+    alignItems: 'flex-start',
+    paddingVertical: 12,
   },
   wrapFocused: {
     borderColor: colors.borderFocus,

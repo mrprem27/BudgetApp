@@ -19,6 +19,7 @@ import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { haptic } from '../../src/lib/haptics';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -54,7 +55,7 @@ function computeAdjustedTotal(subtotal: number, adjustments: Adjustment[]): numb
 }
 
 function computeItemSubtotal(item: LineItemDraft): number {
-  const qty = parseInt(item.qty, 10) || 1;
+  const qty = Math.max(1, parseInt(item.qty, 10) || 1);
   const price = parseToPaise(item.unitPrice);
   return qty * price;
 }
@@ -165,6 +166,7 @@ export default function ItemizedScreen() {
     setNewPrice('');
   }
 
+
   function removeItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
 
   function toggleAssign(itemId: string, personId: string) {
@@ -247,7 +249,14 @@ export default function ItemizedScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{stepTitle}</Text>
         </View>
+        {/* Receipt scan hidden until true AI line-item extraction exists (the
+            old on-device OCR only read a single total). See PLAN.md. */}
         <Text style={styles.stepIndicator}>{STEPS.indexOf(step) + 1}/4</Text>
+        {step === 'review' && (
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Step progress dots */}
@@ -535,12 +544,9 @@ export default function ItemizedScreen() {
             })}
           </View>
 
-          <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
-            <PrimaryButton label="Save Bill" onPress={handleSave} loading={saving} disabled={!canSave} style={{ flex: 1 }} />
-          </View>
+          <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
+            <Text style={styles.backBtnText}>Back</Text>
+          </TouchableOpacity>
         </ScrollView>
       )}
 
@@ -582,6 +588,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   title: { ...type.heading, color: colors.textPrimary },
   stepIndicator: { ...type.label, color: colors.textMuted },
+  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   dots: { flexDirection: 'row', gap: 6, paddingHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   dot: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.bgMuted },
   dotActive: { backgroundColor: colors.accent },

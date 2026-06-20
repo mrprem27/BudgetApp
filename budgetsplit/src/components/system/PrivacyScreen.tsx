@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { AppState, View, Text, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, type, space } from '../tokens';
+
+const LOGO = require('../../../assets/splash-icon.png');
 
 /**
  * Covers the app with a branded screen whenever it leaves the foreground, so
@@ -32,9 +33,7 @@ export function PrivacyScreen() {
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.logo}>
-        <Feather name="bar-chart-2" size={40} color={colors.bg} />
-      </View>
+      <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.brand}>BudgetSplit</Text>
     </View>
   );
@@ -48,10 +47,6 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     gap: space.md,
   },
-  logo: {
-    width: 84, height: 84, borderRadius: 22,
-    backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  logo: { width: 84, height: 84 },
   brand: { ...type.title, color: colors.textPrimary },
 });
