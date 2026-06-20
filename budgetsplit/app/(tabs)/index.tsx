@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -231,6 +231,22 @@ export default function DashboardScreen() {
             <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
           </View>
           <View style={styles.headerRight}>
+            {flags.streak && streak && streak.count > 0 && (
+              <TouchableOpacity
+                onPress={() => Alert.alert(
+                  `${streak.count}-day tracking streak`,
+                  `${streak.loggedToday ? 'You’ve logged today — nice.' : 'You haven’t logged today yet.'}\n\nYour streak counts each day in a row that you log at least one entry. Miss a day and it resets. A gentle nudge to keep your money picture current — never a guilt trip.`,
+                  [{ text: 'Got it' }],
+                )}
+                hitSlop={8}
+                style={[styles.streakChip, !streak.loggedToday && styles.streakChipDim]}
+                accessibilityRole="button"
+                accessibilityLabel={`${streak.count} day tracking streak`}
+              >
+                <Feather name="zap" size={13} color={colors.accent} />
+                <Text style={styles.streakChipText}>{streak.count}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push('/reports')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Reports">
               <Feather name="bar-chart-2" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -290,33 +306,6 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
-
-        {/* Tracking streak — a gentle habit nudge, never guilt */}
-        {flags.streak && streak !== null && (
-          <View style={styles.streakCard}>
-            <View style={styles.streakIcon}>
-              <Feather name="zap" size={16} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              {streak.count > 0 ? (
-                <>
-                  <Text style={styles.streakTitle}>{streak.count}-day tracking streak</Text>
-                  <Text style={styles.streakSub}>{streak.loggedToday ? 'Logged today — nice work' : 'Add one entry today to keep it going'}</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.streakTitle}>Start a tracking streak</Text>
-                  <Text style={styles.streakSub}>Log today's first entry to begin</Text>
-                </>
-              )}
-            </View>
-            {!streak.loggedToday && (
-              <TouchableOpacity style={styles.streakBtn} onPress={() => router.push('/add/quick')} accessibilityRole="button" accessibilityLabel="Add entry">
-                <Text style={styles.streakBtnText}>Add</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
 
         {/* Cash available — real, spendable liquid money (income − expenses − set-aside savings) */}
         {flags.dashboardCash && cashAvailable !== null && (
@@ -625,12 +614,9 @@ const styles = StyleSheet.create({
   healthFactorLabel: { ...type.caption, color: colors.textMuted },
   healthBarTrack: { height: 5, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
   healthBarFill: { height: 5, borderRadius: 3 },
-  streakCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
-  streakIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  streakTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  streakSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  streakBtn: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
-  streakBtnText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  streakChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: space.sm, height: 30, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  streakChipDim: { opacity: 0.6 },
+  streakChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   cashCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
   cashIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   cashLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
