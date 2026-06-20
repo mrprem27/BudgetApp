@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { formatRupeesShort } from './money';
+import { formatCompact } from './money';
 import { estimatedCompletion } from './savings';
 import type { Priority, SavingsFrequency } from '../db/queries/savings';
 
@@ -16,7 +16,7 @@ export type InsightContext = { goals: InsightGoal[]; spend: CategorySpend[] };
 
 type Cand = Insight & { score: number };
 
-const fmt = formatRupeesShort;
+const fmt = formatCompact;
 
 /**
  * Generate psychological savings insights from real spending + goals. Builds a

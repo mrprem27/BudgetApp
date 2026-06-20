@@ -253,7 +253,7 @@ export async function getBudgetAnalytics(
   }
   if (biggestIncrease && (biggestIncrease.deltaPct ?? 0) >= 15) {
     recommendations.push({
-      id: 'increase', severity: 'info', icon: 'trending-up',
+      id: 'increase', severity: 'warn', icon: 'trending-up',
       text: `${biggestIncrease.category} spending is ${biggestIncrease.deltaPct}% higher than last month.`,
     });
   }

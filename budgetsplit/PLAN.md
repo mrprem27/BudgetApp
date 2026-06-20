@@ -70,11 +70,8 @@ color-format sweep · **D** F18 inputs + F17 spacing + F20 friends-entry + F12 b
 - **F17** Budget component spacing audit (several screens).
 - **F18** Inputs inconsistent empty-vs-typed — migrate forms (raw `<TextInput>`:
   quick ×7, itemized ×6, savings ×5…) to the shared focused `Input`.
-- **F20** Manage-friends entry (rename / photo / remove). *(Balances + settle already
-  on Groups.)*
-- **F21′** Color-where-+/--matters sweep on remaining neutral owe/owed figures.
-- **F28** Insights numbers — apply **K/L/Cr** + semantic color (figure colored by meaning).
-- **F29** Increase/decrease cues — ▲/▼ Feather icon + matching color in front of deltas.
+- **F20** Manage-friends entry (rename / remove; photo done). *(Balances + settle
+  already on Groups.)*
 
 ### ✅ Done
 F1 income-leak balances fix · F2 txn detail (paid→owes + timeline) · F3 itemized
@@ -84,7 +81,8 @@ dash · F7 Settings regroup · F9 income custom interval · F10 forecast redesig
 coloring · F15 donut deselect · F16 add-form UX · F19 donut wedge return · F21
 settlement sign-color · F22 settlement directional rows · F23 Settings padding ·
 F26 History spacing · F25 avatar photos (user + friends) · F24 feature-management
-screen · F27 Money-tab Spending/Savings sections.
+screen · F27 Money-tab Spending/Savings sections · F28 insights compact (savings) ·
+F29 increase=coral severity · F21 +/- coloring.
 
 ---
 
