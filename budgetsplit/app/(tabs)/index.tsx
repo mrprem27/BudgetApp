@@ -35,6 +35,7 @@ import type { GroupInsight } from '../../src/lib/analytics';
 import { formatCompact } from '../../src/lib/money';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
+import { InsightText } from '../../src/components/finance/InsightText';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -410,7 +411,7 @@ export default function DashboardScreen() {
                       <Feather name={ins.icon} size={14} color={tint} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.insightText}>{ins.text}</Text>
+                      <InsightText text={ins.text} color={tint} style={styles.insightText} />
                       {!!ins.groupName && <Text style={styles.insightGroup}>{ins.groupName}</Text>}
                     </View>
                   </TouchableOpacity>

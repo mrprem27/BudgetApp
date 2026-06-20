@@ -19,6 +19,7 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
+import { InsightText } from '../../src/components/finance/InsightText';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
@@ -212,7 +213,7 @@ export default function SavingsScreen() {
                   <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
                     <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
                   </View>
-                  <Text style={styles.insightText}>{ins.text}</Text>
+                  <InsightText text={ins.text} color={tint} style={styles.insightText} />
                 </View>
               );
             })}

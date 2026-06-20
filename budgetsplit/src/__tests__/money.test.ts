@@ -61,22 +61,22 @@ describe('formatCompactMajor (major units)', () => {
     expect(formatCompactMajor(999)).toBe('₹999');
     expect(formatCompactMajor(0)).toBe('₹0');
   });
-  it('uses the Indian scale for INR (K / L / Cr)', () => {
-    expect(formatCompactMajor(1240)).toBe('₹1.2K');
-    expect(formatCompactMajor(120000)).toBe('₹1.2L');
-    expect(formatCompactMajor(34000000)).toBe('₹3.4Cr');
+  it('uses the Indian scale for INR (K / L / Cr) with 2 decimals', () => {
+    expect(formatCompactMajor(1240)).toBe('₹1.24K');
+    expect(formatCompactMajor(120000)).toBe('₹1.20L');
+    expect(formatCompactMajor(34000000)).toBe('₹3.40Cr');
   });
-  it('trims a trailing .0', () => {
-    expect(formatCompactMajor(1000)).toBe('₹1K');
-    expect(formatCompactMajor(100000)).toBe('₹1L');
+  it('keeps 2 decimals on round values', () => {
+    expect(formatCompactMajor(1000)).toBe('₹1.00K');
+    expect(formatCompactMajor(100000)).toBe('₹1.00L');
   });
-  it('uses the international scale for non-INR (K / M / B)', () => {
-    expect(formatCompactMajor(3_400_000, 'USD')).toBe('$3.4M');
-    expect(formatCompactMajor(2_000_000_000, 'USD')).toBe('$2B');
-    expect(formatCompactMajor(120000, 'USD')).toBe('$120K');
+  it('uses the international scale for non-INR (K / M / B) with 2 decimals', () => {
+    expect(formatCompactMajor(3_400_000, 'USD')).toBe('$3.40M');
+    expect(formatCompactMajor(2_000_000_000, 'USD')).toBe('$2.00B');
+    expect(formatCompactMajor(120000, 'USD')).toBe('$120.00K');
   });
   it('is negative- and non-finite-safe', () => {
-    expect(formatCompactMajor(-1240)).toBe('-₹1.2K');
+    expect(formatCompactMajor(-1240)).toBe('-₹1.24K');
     expect(formatCompactMajor(NaN)).toBe('₹0');
     expect(formatCompactMajor(Infinity)).toBe('₹0');
   });
@@ -84,11 +84,11 @@ describe('formatCompactMajor (major units)', () => {
 
 describe('formatCompact (smallest unit / paise)', () => {
   it('abbreviates paise after converting to rupees', () => {
-    expect(formatCompact(124000)).toBe('₹1.2K');       // ₹1,240
-    expect(formatCompact(12000000)).toBe('₹1.2L');     // ₹1,20,000
-    expect(formatCompact(99900)).toBe('₹999');         // ₹999
+    expect(formatCompact(124000)).toBe('₹1.24K');       // ₹1,240
+    expect(formatCompact(12000000)).toBe('₹1.20L');     // ₹1,20,000
+    expect(formatCompact(99900)).toBe('₹999');          // ₹999
   });
   it('handles cents for non-INR', () => {
-    expect(formatCompact(340000000, 'USD')).toBe('$3.4M'); // $3,400,000
+    expect(formatCompact(340000000, 'USD')).toBe('$3.40M'); // $3,400,000
   });
 });
