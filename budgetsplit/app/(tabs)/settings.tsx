@@ -17,6 +17,8 @@ import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { requestNotificationPermission } from '../../src/lib/notifications';
 import { getReminderPrefs, rescheduleReminders, REMINDER_KEYS } from '../../src/lib/reminders';
+import { ComparisonFormat, formatComparison } from '../../src/lib/money';
+import { getComparisonFormat, setComparisonFormat } from '../../src/lib/displayPrefs';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -28,6 +30,12 @@ import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
+
+const COMPARE_FMT_LABELS: Record<ComparisonFormat, string> = {
+  [ComparisonFormat.Percent]: 'Percentage',
+  [ComparisonFormat.Multiple]: 'Multiple (×)',
+};
+const COMPARE_FMT_KEYS: ComparisonFormat[] = [ComparisonFormat.Percent, ComparisonFormat.Multiple];
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -46,6 +54,8 @@ export default function SettingsScreen() {
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
+  const [compareFmt, setCompareFmt] = useState<ComparisonFormat>(ComparisonFormat.Percent);
+  const [showCompareFmt, setShowCompareFmt] = useState(false);
 
   const [remindRenewals, setRemindRenewals] = useState(false);
   const [remindDaily, setRemindDaily] = useState(false);
@@ -62,6 +72,7 @@ export default function SettingsScreen() {
       setRemindDaily(prefs.daily);
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
+      setCompareFmt(await getComparisonFormat());
     })();
   }, []);
 
@@ -91,6 +102,13 @@ export default function SettingsScreen() {
     setDefaultCadence(c);
     setShowCadence(false);
     await AsyncStorage.setItem('default_cadence', c);
+  }
+
+  async function pickCompareFmt(f: ComparisonFormat) {
+    haptic.selection();
+    setCompareFmt(f);
+    setShowCompareFmt(false);
+    await setComparisonFormat(f);
   }
 
   async function saveName() {
@@ -153,6 +171,8 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
+        <SettingsRow icon="percent" label="Insight comparisons" value={COMPARE_FMT_LABELS[compareFmt]} onPress={() => setShowCompareFmt(true)} />
+        <View style={settingsRowDivider} />
         <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
@@ -199,6 +219,19 @@ export default function SettingsScreen() {
         ))}
       </SheetModal>
 
+      <SheetModal visible={showCompareFmt} onClose={() => setShowCompareFmt(false)} title="Insight comparisons" scroll={false}>
+        <Text style={styles.sheetHint}>How insights phrase a change from last month.</Text>
+        {COMPARE_FMT_KEYS.map(f => (
+          <TouchableOpacity key={f} style={[styles.cadOption, compareFmt === f && styles.cadOptionActive]} onPress={() => pickCompareFmt(f)} accessibilityRole="button">
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cadOptionText, compareFmt === f && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{COMPARE_FMT_LABELS[f]}</Text>
+              <Text style={styles.cadOptionExample}>e.g. Dining is {formatComparison(40, f)}</Text>
+            </View>
+            {compareFmt === f && <Feather name="check" size={18} color={colors.accent} />}
+          </TouchableOpacity>
+        ))}
+      </SheetModal>
+
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
     </KeyboardAvoidingView>
@@ -237,5 +270,7 @@ const styles = StyleSheet.create({
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },
+  cadOptionExample: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  sheetHint: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
 });
 

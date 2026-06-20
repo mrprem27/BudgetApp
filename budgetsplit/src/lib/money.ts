@@ -42,6 +42,32 @@ function compactNum(n: number, decimals: number): string {
   return s;
 }
 
+/** How period-over-period changes are phrased in insights. User preference. */
+export enum ComparisonFormat {
+  /** "up 40% from last month" */
+  Percent = 'percent',
+  /** "1.4× last month" */
+  Multiple = 'multiple',
+}
+
+/**
+ * Render a signed period-over-period change as a sentence fragment that slots
+ * into "<Category> is <fragment>". `deltaPct` is the % change vs the baseline
+ * (+40 = 40% higher, -30 = 30% lower).
+ *   Percent  → "up 40% from last month" / "down 30% from last month"
+ *   Multiple → "1.4× last month" / "0.7× last month"
+ * Multiples read more intuitively to some people than percentages; the choice
+ * is a single global setting. Baseline is assumed > 0 (callers gate on that).
+ */
+export function formatComparison(deltaPct: number, format: ComparisonFormat): string {
+  if (format === ComparisonFormat.Multiple) {
+    const ratio = Math.max(0, 1 + deltaPct / 100);
+    return `${compactNum(ratio, 2)}× last month`;
+  }
+  const up = deltaPct >= 0;
+  return `${up ? 'up' : 'down'} ${Math.abs(Math.round(deltaPct))}% from last month`;
+}
+
 /**
  * Abbreviate a value already in major units (rupees / dollars) — for chart
  * axis labels (chart data is stored divided by 100) and other space-tight

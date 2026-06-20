@@ -1,4 +1,4 @@
-import { parseToPaise, splitEqual, splitByPercent, splitByShares, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor } from '../lib/money';
+import { parseToPaise, splitEqual, splitByPercent, splitByShares, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, ComparisonFormat } from '../lib/money';
 
 describe('parseToPaise', () => {
   it('parses rupee strings to paise', () => {
@@ -91,5 +91,20 @@ describe('formatCompact (smallest unit / paise)', () => {
   });
   it('handles cents for non-INR', () => {
     expect(formatCompact(340000000, 'USD')).toBe('$3.4M'); // $3,400,000
+  });
+});
+
+describe('formatComparison', () => {
+  it('renders percentages with direction', () => {
+    expect(formatComparison(40, ComparisonFormat.Percent)).toBe('up 40% from last month');
+    expect(formatComparison(-30, ComparisonFormat.Percent)).toBe('down 30% from last month');
+  });
+  it('renders multiples relative to the baseline', () => {
+    expect(formatComparison(40, ComparisonFormat.Multiple)).toBe('1.4× last month');
+    expect(formatComparison(-30, ComparisonFormat.Multiple)).toBe('0.7× last month');
+    expect(formatComparison(100, ComparisonFormat.Multiple)).toBe('2× last month'); // no trailing zeros
+  });
+  it('never produces a negative multiple', () => {
+    expect(formatComparison(-150, ComparisonFormat.Multiple)).toBe('0× last month');
   });
 });

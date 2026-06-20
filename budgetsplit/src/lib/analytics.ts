@@ -7,7 +7,8 @@ import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
 import { getCategorySpending } from './budget';
-import { formatCompact } from './money';
+import { formatCompact, formatComparison, ComparisonFormat } from './money';
+import { getComparisonFormat } from './displayPrefs';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
 
@@ -153,7 +154,10 @@ export async function getBudgetAnalytics(
   db: SQLite.SQLiteDatabase,
   group: BudgetGroup,
   now = new Date(),
+  comparisonFormat?: ComparisonFormat,
 ): Promise<BudgetAnalytics> {
+  // Read the user's preferred phrasing (%, vs ×) unless a caller pins it (tests).
+  const cmpFormat = comparisonFormat ?? await getComparisonFormat();
   const budgets = await getCategoryBudgets(db, group.id);
 
   // No budgets → nothing to analyse; skip the spending queries entirely (perf).
@@ -254,13 +258,13 @@ export async function getBudgetAnalytics(
   if (biggestIncrease && (biggestIncrease.deltaPct ?? 0) >= 15) {
     recommendations.push({
       id: 'increase', severity: 'warn', icon: 'trending-up',
-      text: `${biggestIncrease.category} is up ${biggestIncrease.deltaPct}% from last month.`,
+      text: `${biggestIncrease.category} is ${formatComparison(biggestIncrease.deltaPct ?? 0, cmpFormat)}.`,
     });
   }
   if (biggestDecrease && (biggestDecrease.deltaPct ?? 0) <= -15) {
     recommendations.push({
       id: 'decrease', severity: 'good', icon: 'trending-down',
-      text: `${biggestDecrease.category} is down ${Math.abs(biggestDecrease.deltaPct ?? 0)}% from last month — nice.`,
+      text: `${biggestDecrease.category} is ${formatComparison(biggestDecrease.deltaPct ?? 0, cmpFormat)} — nice.`,
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {

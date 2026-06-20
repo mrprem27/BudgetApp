@@ -298,7 +298,7 @@ export default function TxnDetailScreen() {
 
         {/* History */}
         <Text style={styles.sectionLabel}>History</Text>
-        <View style={styles.card}>
+        <View style={[styles.card, styles.histCard]}>
           {history.length === 0 ? (
             <Text style={styles.emptyHistory}>No changes recorded.</Text>
           ) : history.map((h, i) => {
@@ -400,6 +400,7 @@ const styles = StyleSheet.create({
   settleAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.settle, marginLeft: 'auto' },
 
   // History timeline
+  histCard: { paddingTop: space.sm, paddingBottom: space.md },
   histRow: { flexDirection: 'row', gap: space.sm },
   histRail: { width: 24, alignItems: 'center', paddingTop: space.sm },
   histIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
