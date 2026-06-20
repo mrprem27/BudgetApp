@@ -20,7 +20,9 @@ export type FeatureKey =
   // Modules
   | 'itemizedOcr'
   | 'recurring'
-  | 'smartCategory';
+  | 'smartCategory'
+  | 'affordCheck'
+  | 'streak';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
@@ -39,6 +41,8 @@ const DEFAULTS: FeatureFlags = {
   itemizedOcr: true,
   recurring: true,
   smartCategory: false, // opt-in
+  affordCheck: false,   // opt-in
+  streak: false,        // opt-in
 };
 
 const PREFIX = 'feature_';

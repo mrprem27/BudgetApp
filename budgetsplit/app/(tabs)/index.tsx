@@ -19,7 +19,7 @@ import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
 import { getPoolSummary, getGoals, getCashPosition } from '../../src/db/queries/savings';
-import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
+import { getTransactionsInRange, getTrackingStreak, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -87,6 +87,7 @@ export default function DashboardScreen() {
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
   const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
   const [cashAvailable, setCashAvailable] = useState<number | null>(null);
+  const [streak, setStreak] = useState<{ count: number; loggedToday: boolean } | null>(null);
   const [insights, setInsights] = useState<GroupInsight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -175,9 +176,10 @@ export default function DashboardScreen() {
     setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
 
     // Savings pool snapshot for the dashboard card.
-    const [savePool, saveGoals, cashPos] = await Promise.all([getPoolSummary(db), getGoals(db), getCashPosition(db)]);
+    const [savePool, saveGoals, cashPos, strk] = await Promise.all([getPoolSummary(db), getGoals(db), getCashPosition(db), getTrackingStreak(db)]);
     setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
     setCashAvailable(cashPos.available);
+    setStreak(strk);
 
     // Build donut data (spending by category, sorted largest first)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -279,6 +281,33 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
+
+        {/* Tracking streak — a gentle habit nudge, never guilt */}
+        {flags.streak && streak !== null && (
+          <View style={styles.streakCard}>
+            <View style={styles.streakIcon}>
+              <Feather name="zap" size={16} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              {streak.count > 0 ? (
+                <>
+                  <Text style={styles.streakTitle}>{streak.count}-day tracking streak</Text>
+                  <Text style={styles.streakSub}>{streak.loggedToday ? 'Logged today — nice work' : 'Add one entry today to keep it going'}</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.streakTitle}>Start a tracking streak</Text>
+                  <Text style={styles.streakSub}>Log today's first entry to begin</Text>
+                </>
+              )}
+            </View>
+            {!streak.loggedToday && (
+              <TouchableOpacity style={styles.streakBtn} onPress={() => router.push('/add/quick')} accessibilityRole="button" accessibilityLabel="Add entry">
+                <Text style={styles.streakBtnText}>Add</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Cash available — real, spendable liquid money (income − expenses − set-aside savings) */}
         {flags.dashboardCash && cashAvailable !== null && (
@@ -541,6 +570,12 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  streakCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
+  streakIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  streakTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  streakSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  streakBtn: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  streakBtnText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   cashCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
   cashIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   cashLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

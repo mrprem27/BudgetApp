@@ -479,6 +479,38 @@ export async function getTxnById(
   return loadSplits(db, row);
 }
 
+/**
+ * Tracking streak: how many consecutive days (ending today, or yesterday if
+ * nothing logged today yet) have at least one real entry. `loggedToday` lets
+ * the UI nudge gently without breaking the streak prematurely. Read-only and
+ * tolerant — used for an encouraging dashboard chip, not for any money math.
+ */
+export async function getTrackingStreak(
+  db: SQLite.SQLiteDatabase,
+): Promise<{ count: number; loggedToday: boolean }> {
+  const rows = await db.getAllAsync<{ date: number }>(
+    'SELECT date FROM txn WHERE is_deleted = 0 AND recur_freq IS NULL ORDER BY date DESC',
+  );
+  const dayKey = (ms: number) => { const d = new Date(ms); return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate(); };
+  const days = new Set<number>();
+  for (const r of rows) days.add(dayKey(r.date));
+  if (days.size === 0) return { count: 0, loggedToday: false };
+
+  const today = new Date();
+  const todayKey = dayKey(today.getTime());
+  const loggedToday = days.has(todayKey);
+
+  // Walk back a day at a time from the anchor (today if logged, else yesterday).
+  let cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!loggedToday) cursor.setDate(cursor.getDate() - 1);
+  let count = 0;
+  while (days.has(cursor.getFullYear() * 10000 + cursor.getMonth() * 100 + cursor.getDate())) {
+    count++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return { count, loggedToday };
+}
+
 export type UpdateTxnInput = {
   id: string;
   groupId: string;

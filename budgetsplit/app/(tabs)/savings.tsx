@@ -157,6 +157,14 @@ export default function SavingsScreen() {
           </View>
         )}
 
+        {flags.affordCheck && (
+          <TouchableOpacity style={styles.affordBtn} onPress={() => router.push('/afford')} accessibilityRole="button" accessibilityLabel="Can I afford something?">
+            <View style={styles.affordIcon}><Feather name="help-circle" size={16} color={colors.accent} /></View>
+            <Text style={styles.affordBtnText}>Can I afford something?</Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
         {/* Personal budget & spending (the personal ledger lives here now) */}
         {!!personalId && (
           <>
@@ -358,6 +366,9 @@ const styles = StyleSheet.create({
   personalTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   personalSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  affordBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  affordIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  affordBtnText: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
   cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   cashBreakSep: { color: colors.textMuted },
