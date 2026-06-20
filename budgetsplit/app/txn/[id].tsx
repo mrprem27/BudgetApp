@@ -92,7 +92,11 @@ export default function TxnDetailScreen() {
   const isIncome = txn.kind === 'income';
   const isItemized = txn.entry_mode === 'itemized';
   // Itemized bills can't be edited in the quick form (it would orphan line items).
-  const canEdit = !isSettlement && !isItemized;
+  // Settlements/transfers edit in the transfer screen; everything else in quick/income.
+  const canEdit = !isItemized;
+  const editHref = isSettlement
+    ? `/add/transfer?editId=${id}`
+    : `/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
@@ -120,7 +124,7 @@ export default function TxnDetailScreen() {
         title="Transaction"
         onBack={() => router.back()}
         right={canEdit ? (
-          <TouchableOpacity onPress={() => router.push(`/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`)} hitSlop={10} accessibilityLabel="Edit">
+          <TouchableOpacity onPress={() => router.push(editHref as never)} hitSlop={10} accessibilityLabel="Edit">
             <Feather name="edit-2" size={18} color={colors.accent} />
           </TouchableOpacity>
         ) : undefined}

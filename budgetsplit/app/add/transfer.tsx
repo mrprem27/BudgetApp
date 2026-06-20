@@ -17,7 +17,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { InsightText } from '../../src/components/finance/InsightText';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { insertTxn } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById } from '../../src/db/queries/transactions';
 import { parseToPaise, formatCompact } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -26,7 +26,8 @@ import type { Person } from '../../src/db/queries/persons';
 type Slot = 'from' | 'to';
 
 export default function TransferScreen() {
-  const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
+  const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
+  const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
 
@@ -47,6 +48,22 @@ export default function TransferScreen() {
       const counts = await Promise.all(grps.map(g => getGroupMembers(db, g.id)));
       const eligible: BudgetGroup[] = grps.filter((_, i) => counts[i].length >= 2);
       setGroups(eligible);
+
+      // Editing an existing settlement → prefill from the stored txn.
+      if (editId) {
+        const t = await getTxnById(db, editId);
+        if (t) {
+          setGroupId(t.group_id);
+          const mems = await getGroupMembers(db, t.group_id);
+          setMembers(mems);
+          setFromId(t.payments[0]?.personId ?? '');
+          setToId(t.shares[0]?.personId ?? '');
+          setAmountText(((t.payments[0]?.amount ?? 0) / 100).toString());
+          setNote(t.note ?? '');
+          return;
+        }
+      }
+
       const gid = (paramGroupId && eligible.some(g => g.id === paramGroupId)) ? paramGroupId : eligible[0]?.id ?? '';
       setGroupId(gid);
       if (gid) await loadMembers(gid, me);
@@ -87,12 +104,22 @@ export default function TransferScreen() {
     if (!canSave) return;
     setSaving(true);
     try {
-      await insertTxn(db, {
-        groupId, kind: 'settlement', entryMode: 'quick', date: Date.now(),
-        category: 'Transfer', note: note.trim() || undefined,
-        payments: [{ personId: fromId, amount: total }],
-        shares: [{ personId: toId, amount: total }],
-      });
+      if (isEditing) {
+        await updateTxn(db, {
+          id: editId!,
+          groupId, kind: 'settlement', date: Date.now(),
+          category: 'Transfer', note: note.trim() || undefined,
+          payments: [{ personId: fromId, amount: total }],
+          shares: [{ personId: toId, amount: total }],
+        });
+      } else {
+        await insertTxn(db, {
+          groupId, kind: 'settlement', entryMode: 'quick', date: Date.now(),
+          category: 'Transfer', note: note.trim() || undefined,
+          payments: [{ personId: fromId, amount: total }],
+          shares: [{ personId: toId, amount: total }],
+        });
+      }
       haptic.success();
       router.back();
     } catch {
@@ -117,7 +144,7 @@ export default function TransferScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Transfer" onBack={() => router.back()} right={
+      <ScreenHeader title={isEditing ? 'Edit Transfer' : 'Transfer'} onBack={() => router.back()} right={
         <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
           <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
         </TouchableOpacity>
@@ -131,7 +158,7 @@ export default function TransferScreen() {
             keyboardType="decimal-pad"
             placeholder="₹0.00"
             placeholderTextColor={colors.textMuted}
-            autoFocus
+            autoFocus={!isEditing}
             accessibilityLabel="Transfer amount"
           />
 
