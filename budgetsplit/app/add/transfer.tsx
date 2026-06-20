@@ -8,44 +8,22 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
+import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Input } from '../../src/components/ui/Input';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { InsightText } from '../../src/components/finance/InsightText';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { insertTxn } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees } from '../../src/lib/money';
+import { parseToPaise, formatCompact } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 
-function PersonPicker({
-  label, value, onChange, exclude, members,
-}: {
-  label: string;
-  value: string;
-  onChange: (id: string) => void;
-  exclude?: string;
-  members: Person[];
-}) {
-  return (
-    <View style={{ gap: space.xs }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.peopleRow}>
-          {members.filter(m => m.id !== exclude).map(m => (
-            <TouchableOpacity key={m.id} style={styles.personChip} onPress={() => onChange(m.id)} accessibilityRole="button">
-              <MemberAvatar name={m.name} color={m.avatar_color} size={40} selected={value === m.id} />
-              <Text style={[styles.personChipName, value === m.id && { color: colors.accent }]} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
+type Slot = 'from' | 'to';
 
 export default function TransferScreen() {
   const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
@@ -60,12 +38,12 @@ export default function TransferScreen() {
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pickerFor, setPickerFor] = useState<Slot | null>(null);
 
   useEffect(() => {
     (async () => {
       const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
       // Transfers need at least two people → only multi-member groups qualify.
-      // Fetch member counts in parallel, then filter (preserving group order).
       const counts = await Promise.all(grps.map(g => getGroupMembers(db, g.id)));
       const eligible: BudgetGroup[] = grps.filter((_, i) => counts[i].length >= 2);
       setGroups(eligible);
@@ -84,7 +62,26 @@ export default function TransferScreen() {
   }
 
   const total = parseToPaise(amountText);
+  const fromPerson = members.find(m => m.id === fromId) ?? null;
+  const toPerson = members.find(m => m.id === toId) ?? null;
   const canSave = !!groupId && !!fromId && !!toId && fromId !== toId && total > 0 && !saving;
+
+  function swap() {
+    haptic.selection();
+    setFromId(toId);
+    setToId(fromId);
+  }
+
+  function pick(id: string) {
+    if (pickerFor === 'from') {
+      if (id === toId) setToId(fromId); // keep them distinct by swapping
+      setFromId(id);
+    } else if (pickerFor === 'to') {
+      if (id === fromId) setFromId(toId);
+      setToId(id);
+    }
+    setPickerFor(null);
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -139,28 +136,46 @@ export default function TransferScreen() {
           />
 
           {groups.length > 1 && (
-            <View style={{ gap: space.xs }}>
-              <Text style={styles.fieldLabel}>Group</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={styles.peopleRow}>
-                  {groups.map(g => (
-                    <TouchableOpacity
-                      key={g.id}
-                      style={[styles.groupChip, groupId === g.id && styles.groupChipActive]}
-                      onPress={async () => { setGroupId(g.id); await loadMembers(g.id, await getMe(db)); }}
-                      accessibilityRole="button"
-                    >
-                      <Text style={[styles.groupChipText, groupId === g.id && { color: colors.bg }]}>{g.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.groupRow}>
+              {groups.map(g => (
+                <TouchableOpacity
+                  key={g.id}
+                  style={[styles.groupChip, groupId === g.id && styles.groupChipActive]}
+                  onPress={async () => { setGroupId(g.id); await loadMembers(g.id, await getMe(db)); }}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.groupChipText, groupId === g.id && { color: colors.bg }]}>{g.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
 
-          <PersonPicker label="From" value={fromId} onChange={setFromId} exclude={toId} members={members} />
-          <View style={styles.arrow}><Feather name="arrow-down" size={18} color={colors.textMuted} /></View>
-          <PersonPicker label="To" value={toId} onChange={setToId} exclude={fromId} members={members} />
+          {/* From → To direction card */}
+          <View style={styles.dirCard}>
+            <TouchableOpacity style={styles.dirTile} onPress={() => setPickerFor('from')} accessibilityRole="button" accessibilityLabel="Choose who pays">
+              <Text style={styles.dirLabel}>FROM</Text>
+              <MemberAvatar name={fromPerson?.name ?? '?'} color={fromPerson?.avatar_color ?? colors.accent} size={56} imageUri={fromPerson?.image_uri} />
+              <Text style={styles.dirName} numberOfLines={1}>{fromPerson ? fromPerson.name.split(' ')[0] : 'Pick'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.swapBtn} onPress={swap} accessibilityRole="button" accessibilityLabel="Swap from and to">
+              <Feather name="repeat" size={16} color={colors.accent} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dirTile} onPress={() => setPickerFor('to')} accessibilityRole="button" accessibilityLabel="Choose who receives">
+              <Text style={styles.dirLabel}>TO</Text>
+              <MemberAvatar name={toPerson?.name ?? '?'} color={toPerson?.avatar_color ?? colors.accent} size={56} imageUri={toPerson?.image_uri} />
+              <Text style={styles.dirName} numberOfLines={1}>{toPerson ? toPerson.name.split(' ')[0] : 'Pick'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {total > 0 && fromPerson && toPerson && (
+            <InsightText
+              text={`${fromPerson.name.split(' ')[0]} pays ${toPerson.name.split(' ')[0]} ${formatCompact(total)}`}
+              color={colors.settle}
+              style={styles.summary}
+            />
+          )}
 
           <Input
             value={note}
@@ -169,15 +184,22 @@ export default function TransferScreen() {
             accessibilityLabel="Note"
             maxLength={80}
           />
-
-          {total > 0 && fromId && toId && (
-            <Text style={styles.summary}>
-              {members.find(m => m.id === fromId)?.name} pays {members.find(m => m.id === toId)?.name} {formatRupees(total)}
-            </Text>
-          )}
-
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Pick a person for the active slot */}
+      <SheetModal visible={pickerFor !== null} onClose={() => setPickerFor(null)} title={pickerFor === 'from' ? 'Who pays?' : 'Who receives?'} scroll={false}>
+        {members.map(m => {
+          const active = pickerFor === 'from' ? m.id === fromId : m.id === toId;
+          return (
+            <TouchableOpacity key={m.id} style={[styles.pickRow, active && styles.pickRowActive]} onPress={() => pick(m.id)} accessibilityRole="button">
+              <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
+              <Text style={styles.pickName}>{m.name}</Text>
+              {active && <Feather name="check" size={18} color={colors.accent} />}
+            </TouchableOpacity>
+          );
+        })}
+      </SheetModal>
     </View>
   );
 }
@@ -187,13 +209,20 @@ const styles = StyleSheet.create({
   headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
-  fieldLabel: { ...type.label, color: colors.textSecondary },
-  peopleRow: { flexDirection: 'row', gap: space.md, paddingVertical: space.xs },
-  personChip: { alignItems: 'center', gap: 4, width: 56 },
-  personChipName: { ...type.caption, color: colors.textSecondary, maxWidth: 56 },
+  groupRow: { flexDirection: 'row', gap: space.sm, paddingVertical: space.xs },
   groupChip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
   groupChipActive: { backgroundColor: colors.accent },
   groupChipText: { ...type.label, color: colors.textSecondary },
-  arrow: { alignItems: 'center' },
-  summary: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
+
+  dirCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  dirTile: { flex: 1, alignItems: 'center', gap: space.xs },
+  dirLabel: { ...type.label, color: colors.textMuted, letterSpacing: 0.5 },
+  dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  swapBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginHorizontal: space.sm },
+
+  summary: { ...type.subheading, color: colors.textPrimary, textAlign: 'center' },
+
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.sm, borderRadius: radius.md, minHeight: 52 },
+  pickRowActive: { backgroundColor: colors.accentMuted },
+  pickName: { ...type.body, color: colors.textPrimary, flex: 1 },
 });
