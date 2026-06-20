@@ -156,6 +156,19 @@ Everything in §3 is shipped. All feedback items closed:
 - **N3 — iOS quick-add widget / home-screen widget.** WidgetKit target + app
   group + dev build (deferred from this cycle — sizable native work).
 - **N4 — Deeper forecast model** (weekday seasonality, category mix).
+- **N5 — Tracking streak + daily nudge.** Show a gentle "🔥 N-day streak · log
+  today" on the dashboard (on-device, buildable now). The *daily reminder* if you
+  haven't logged needs local notifications (v2 / dev build). Keep it
+  encouraging, never guilt-inducing (per §1 principle). Streak resets to day 0
+  after a gap; counts consecutive days with ≥1 entry.
+- **N6 — "Can I afford this?"** A quick check: enter a prospective purchase →
+  compare against cash-available + budget-left + upcoming recurring, show a
+  clear yes/tight/no, and offer "put it toward a goal instead" (adds to a
+  savings goal). On-device, opt-in. *(Strong fit — recommended build-now
+  candidate.)*
+- **N7 — No-spend-days tracker (maybe).** Count consecutive no-spend days
+  overall or per category. Gamified/niche — keep as a small stat at most, or
+  skip; low priority.
 
 ### Phase 6 — Deferred / out of scope
 - AI receipt itemization (D2/D3) · multi-currency (D6) · recurring single-occurrence value edits (D5) · formal nav spec (D7).
