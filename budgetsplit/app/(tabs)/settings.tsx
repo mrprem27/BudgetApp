@@ -116,28 +116,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="download-cloud" label="Auto-sweep leftover budget" value={autoSweep} onValueChange={(v) => toggle(AUTO_SWEEP_KEY, v, setAutoSweep)} />
-        <Text style={styles.featureCaption}>Move unspent budget into savings at month end</Text>
-      </View>
-
-      {/* Insights */}
-      <Text style={styles.sectionTitle}>Insights</Text>
-      <View style={styles.card}>
-        <ToggleRow icon="bar-chart-2" label="Dashboard insights" value={flags.dashboardInsights} onValueChange={(v) => setFlag('dashboardInsights', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="pie-chart" label="Budget insights" value={flags.budgetInsights} onValueChange={(v) => setFlag('budgetInsights', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="target" label="Savings insights" value={flags.savingsInsights} onValueChange={(v) => setFlag('savingsInsights', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="trending-up" label="Spending forecast" value={flags.forecast} onValueChange={(v) => setFlag('forecast', v)} />
-      </View>
-
-      {/* Experimental */}
-      <Text style={styles.sectionTitle}>Experimental</Text>
-      <View style={styles.card}>
-        <ToggleRow icon="list" label="Itemized bill splitting" value={flags.itemizedOcr} onValueChange={(v) => setFlag('itemizedOcr', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="refresh-cw" label="Recurring transactions" value={flags.recurring} onValueChange={(v) => setFlag('recurring', v)} />
+        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
 
       {/* Manage */}
