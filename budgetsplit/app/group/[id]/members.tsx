@@ -11,12 +11,14 @@ import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
-import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage } from '../../../src/db/queries/persons';
+import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
+import { Input } from '../../../src/components/ui/Input';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
 import { haptic } from '../../../src/lib/haptics';
@@ -31,6 +33,8 @@ export default function MembersScreen() {
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [renamePerson, setRenamePerson] = useState<Person | null>(null);
+  const [renameText, setRenameText] = useState('');
   const [loadError, setLoadError] = useState(false);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
@@ -60,6 +64,25 @@ export default function MembersScreen() {
     try {
       await addMemberToGroup(db, groupId, personId);
       setShowAdd(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
+  }
+
+  function openRename(person: Person) {
+    setRenamePerson(person);
+    setRenameText(person.name);
+  }
+
+  async function handleRename() {
+    const trimmed = renameText.trim();
+    if (!renamePerson || !trimmed || trimmed === renamePerson.name) { setRenamePerson(null); return; }
+    try {
+      await updatePersonName(db, renamePerson.id, trimmed);
+      haptic.success();
+      setRenamePerson(null);
       await load();
     } catch {
       haptic.error();
@@ -137,14 +160,22 @@ export default function MembersScreen() {
                       imageUri={item.image_uri}
                       onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await load(); } }}
                     />
-                    <View style={{ flex: 1 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      onPress={() => openRename(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rename ${item.name}`}
+                    >
                       <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
                       {net[item.id] !== undefined && net[item.id] !== 0 && (
                         <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
                           {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
+                      <Feather name="edit-2" size={15} color={colors.textMuted} />
+                    </TouchableOpacity>
                   </View>
                 </Swipeable>
               );
@@ -181,6 +212,22 @@ export default function MembersScreen() {
           placeholder="Search or create a person…"
         />
       </SheetModal>
+
+      {/* Rename person sheet */}
+      <SheetModal visible={!!renamePerson} onClose={() => setRenamePerson(null)} title={renamePerson?.is_me ? 'Your name' : 'Rename'}>
+        <Input
+          value={renameText}
+          onChangeText={setRenameText}
+          placeholder="Name"
+          autoFocus
+          autoCapitalize="words"
+          maxLength={30}
+          returnKeyType="done"
+          onSubmitEditing={handleRename}
+          style={styles.renameGap}
+        />
+        <PrimaryButton label="Save" onPress={handleRename} disabled={!renameText.trim()} />
+      </SheetModal>
     </View>
   );
 }
@@ -207,6 +254,7 @@ const styles = StyleSheet.create({
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: 4 },
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
 
+  renameGap: { marginBottom: space.md },
   addButtons: { gap: space.sm },
   addBtn: {
     flexDirection: 'row',
