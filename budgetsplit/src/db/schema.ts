@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS person (
   is_me         INTEGER NOT NULL DEFAULT 0,
   email         TEXT,
   mobile        TEXT,
-  remote_uid    TEXT
+  remote_uid    TEXT,
+  image_uri     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS budget_group (
@@ -190,6 +191,8 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE category ADD COLUMN section TEXT",
   // Savings auto-funding: per-goal schedule anchor.
   "ALTER TABLE savings_goal ADD COLUMN last_auto_at INTEGER",
+  // Avatar photos for the user & friends (local file path; null = use initials).
+  "ALTER TABLE person ADD COLUMN image_uri TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

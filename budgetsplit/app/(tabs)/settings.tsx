@@ -12,7 +12,8 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
-import { getMe, updatePersonName } from '../../src/db/queries/persons';
+import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -86,7 +87,13 @@ export default function SettingsScreen() {
       {/* Profile */}
       <Text style={styles.sectionTitle}>Account</Text>
       <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button">
-        <MemberAvatar name={me?.name ?? '?'} color={me?.avatar_color ?? colors.accent} size={44} />
+        <MemberAvatar
+          name={me?.name ?? '?'}
+          color={me?.avatar_color ?? colors.accent}
+          size={44}
+          imageUri={me?.image_uri}
+          onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
           <Text style={styles.profileSub}>{me?.email ?? 'Tap to edit your name'}</Text>

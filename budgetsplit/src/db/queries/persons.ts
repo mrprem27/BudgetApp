@@ -11,7 +11,12 @@ export type Person = {
   email: string | null;
   mobile: string | null;
   remote_uid: string | null;
+  image_uri: string | null;
 };
+
+export async function setPersonImage(db: SQLite.SQLiteDatabase, id: string, uri: string | null): Promise<void> {
+  await db.runAsync('UPDATE person SET image_uri = ? WHERE id = ?', [uri, id]);
+}
 
 export async function getAllPersons(db: SQLite.SQLiteDatabase): Promise<Person[]> {
   return db.getAllAsync<Person>('SELECT * FROM person ORDER BY is_me DESC, name ASC');
@@ -45,7 +50,7 @@ export async function insertPerson(
     'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, 0)',
     [id, name, avatarColor],
   );
-  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null };
+  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null };
 }
 
 export async function updatePersonName(

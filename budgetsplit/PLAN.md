@@ -59,6 +59,10 @@ nothing looks like a 2010 form.
 > **compact on overviews / exact on entry** · Feather icons (no emoji) · tokens not
 > hex · ≥44pt. (See `AGENTS.md`.)
 
+### 🏗 Build phases (in order)
+**A** F25 avatars · **B** F24 feature-screen + F27 money-structure · **C** F28/F29/F21′
+color-format sweep · **D** F18 inputs + F17 spacing + F20 friends-entry + F12 budget-entry + F8 PR.
+
 ### 📋 Pending
 - **F8** Ship v1 — PR branch → `main`. *(Holding — keep iterating.)*
 - **F12** Budget **entry** redesign — collapsible parent-category sections w/ icons +
