@@ -111,8 +111,11 @@ F29 increase=coral severity.
 - [ ] **B3 — Global transaction search** + richer filters (date / amount / person range)
       → new search screen over all groups; reuse `FilterBar`
 - [ ] **B4 — Duplicate detection** — on add, warn if same amount+category within 24h
-- [ ] **B5 — Photos:** up to 3 per txn · per-photo size cap (compress on import) ·
-      storage-used + delete-old · PDF attachments
+- [x] **B5a — Photo size cap** — picker compresses on import (`quality 0.7`). ✅
+- [x] **B5b — Storage management** — `/storage`: total receipt size + count +
+      "Delete all attachments" (clears files + nulls refs). ✅
+- [ ] **B5c — Multi-photo (≤3)** — deferred (needs attachment-array refactor; marginal value).
+- [ ] **B5d — PDF attachments** — deferred to dev-build track (needs `expo-document-picker`).
 - [ ] **B6 — Financial-health score** (0–100: budget adherence + savings rate + debt) ·
       **what-if simulator** ("cut dining 20% → save ₹X")
 - [ ] **B7 — Smart categories: learn from corrections** (remember title→category overrides)

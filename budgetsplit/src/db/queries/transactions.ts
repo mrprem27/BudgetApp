@@ -660,6 +660,11 @@ export async function findRecentDuplicate(
   return rows.some(r => r.total === amountPaise);
 }
 
+/** Null out every transaction's attachment reference (used by "clear all attachments"). */
+export async function clearAllAttachmentRefs(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.runAsync('UPDATE txn SET attachment_uri=NULL WHERE attachment_uri IS NOT NULL');
+}
+
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
   return db.getAllAsync<LineItem>('SELECT * FROM line_item WHERE txn_id = ?', [txnId]);
 }

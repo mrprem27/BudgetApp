@@ -133,6 +133,8 @@ export default function SettingsScreen() {
         <SettingsRow icon="tag" label="Categories" onPress={() => { haptic.light(); router.push('/categories'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="History" onPress={() => { haptic.light(); router.push('/history'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="hard-drive" label="Storage" onPress={() => { haptic.light(); router.push('/storage'); }} />
       </View>
 
       {/* Help & Support */}

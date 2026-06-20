@@ -43,3 +43,25 @@ export async function deleteAttachment(uri: string): Promise<void> {
     if (file.exists) file.delete();
   } catch { /* best-effort */ }
 }
+
+/** Total on-device storage used by attachment files. */
+export function getAttachmentStorage(): { count: number; bytes: number } {
+  try {
+    if (!ATTACHMENT_DIR.exists) return { count: 0, bytes: 0 };
+    let count = 0, bytes = 0;
+    for (const entry of ATTACHMENT_DIR.list()) {
+      if (entry instanceof File) { count++; bytes += entry.size ?? 0; }
+    }
+    return { count, bytes };
+  } catch { return { count: 0, bytes: 0 }; }
+}
+
+/** Delete every attachment file from disk (the DB columns are cleared separately). */
+export function clearAllAttachmentFiles(): void {
+  try {
+    if (!ATTACHMENT_DIR.exists) return;
+    for (const entry of ATTACHMENT_DIR.list()) {
+      try { if (entry instanceof File) entry.delete(); } catch { /* skip */ }
+    }
+  } catch { /* best-effort */ }
+}
