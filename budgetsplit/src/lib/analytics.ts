@@ -268,12 +268,18 @@ export async function getBudgetAnalytics(
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {
-    // Overage reads best as the amount (what to claw back) plus a % for scale —
-    // a small rupee figure over a big budget is noise; over a small one it's not.
-    const overPct = Math.round(((projectedMonthEnd - monthlyBudgetTotal) / monthlyBudgetTotal) * 100);
+    // Overage reads best as the amount (what to claw back) plus a scale cue.
+    // A % is intuitive for modest overage, but "(250%) over" is widely misread —
+    // past ~100% over we switch to a multiple ("3.5× your budget"), which stays
+    // unambiguous however large the overrun gets.
+    const overAmt = projectedMonthEnd - monthlyBudgetTotal;
+    const overPct = Math.round((overAmt / monthlyBudgetTotal) * 100);
+    const scale = overPct >= 100
+      ? `about ${(projectedMonthEnd / monthlyBudgetTotal).toFixed(1).replace(/\.0$/, '')}× your budget`
+      : `${overPct}% over budget`;
     recommendations.push({
       id: 'projected', severity: 'warn', icon: 'pie-chart',
-      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(projectedMonthEnd - monthlyBudgetTotal)} (${overPct}%) over budget.`,
+      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(overAmt)}, ${scale}.`,
     });
   }
   if (recommendations.length === 0 && totalAllocated > 0) {
