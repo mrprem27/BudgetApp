@@ -60,29 +60,25 @@ nothing looks like a 2010 form.
 > hex · ≥44pt. (See `AGENTS.md`.)
 
 ### 🏗 Build phases (in order)
-**A** F25 avatars · **B** F24 feature-screen + F27 money-structure · **C** F28/F29/F21′
-color-format sweep · **D** F18 inputs + F17 spacing + F20 friends-entry + F12 budget-entry + F8 PR.
+**A** ✅ F25 avatars · **B** ✅ F24 feature-screen + F27 money-structure · **C** ✅ F28/F29/F21
+color-format sweep · **D** ✅ F18 inputs + F17 spacing + F20 friends-entry + F12 budget-entry
+→ only **F8 PR** remains.
 
 ### 📋 Pending
-- **F8** Ship v1 — PR branch → `main`. *(Holding — keep iterating.)*
-- **F12** Budget **entry** redesign — collapsible parent-category sections w/ icons +
-  faster entry. *(Needs your exact entry UX.)*
-- **F17** Budget component spacing audit (several screens).
-- **F18** Inputs inconsistent empty-vs-typed — migrate forms (raw `<TextInput>`:
-  quick ×7, itemized ×6, savings ×5…) to the shared focused `Input`.
-- **F20** Manage-friends entry (rename / remove; photo done). *(Balances + settle
-  already on Groups.)*
+- **F8** Ship v1 — PR branch → `main`. *(Final step — open on your go-ahead.)*
 
 ### ✅ Done
 F1 income-leak balances fix · F2 txn detail (paid→owes + timeline) · F3 itemized
 scan hidden · F4 dashboard Top insights · F5 donut remount/deselect · F6 zero-day
 dash · F7 Settings regroup · F9 income custom interval · F10 forecast redesign
-(+tests) · F11 compact decimals · F13 budget compact + rows + IA · F14 semantic
-coloring · F15 donut deselect · F16 add-form UX · F19 donut wedge return · F21
-settlement sign-color · F22 settlement directional rows · F23 Settings padding ·
+(+tests) · F11 compact decimals · F12 budget-entry redesign (collapsible parent
+sections + faster inline entry) · F13 budget compact + rows + IA · F14 semantic
+coloring · F15 donut deselect · F16 add-form UX · F17 budget spacing · F18 shared
+focused Input across forms · F19 donut wedge return · F20 manage-friends rename ·
+F21 settlement sign-color · F22 settlement directional rows · F23 Settings padding ·
 F26 History spacing · F25 avatar photos (user + friends) · F24 feature-management
 screen · F27 Money-tab Spending/Savings sections · F28 insights compact (savings) ·
-F29 increase=coral severity · F21 +/- coloring.
+F29 increase=coral severity.
 
 ---
 
@@ -131,8 +127,8 @@ Everything in §3 is shipped. All feedback items closed:
 - **2.5** ✅ Form-row sweep — BalanceRow overlapping avatars + sentence; budget editor single card with dividers; member rows 52pt min height + swipe-to-remove. → `BalanceRow.tsx`, `budget.tsx`, `members.tsx`.
 
 ### Phase 3 — Depth features
-- **3.1 Budget entry redesign (F12):** collapsible parent-category sections w/ icons; faster entry (smart defaults / quick-set rows).
-- **3.2 Forecast redesign (F10):** on-device model (month patterns, weekday seasonality, category mix) + "needs N days" gate. Strictly offline.
+- **3.1** ✅ Budget entry redesign (F12) — collapsible parent-category sections w/ icons; faster inline entry (type a limit on any category, no pre-add).
+- **3.2** ✅ Forecast redesign (F10) — run-rate blended with prior-month actual + "needs N days" gate. Strictly offline. *(Deeper weekday/category-mix model still possible later.)*
 - **3.3 Settle & lists:** "Settle all" + completion moment; Groups filter sheet (You owe / Owes you / Settled / Archived); skeletons on group-detail + reports; empty-state CTA audit; onboarding → one-tap "Add first expense".
 
 ### Phase 4 — Deferred / out of scope
