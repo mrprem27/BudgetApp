@@ -12,6 +12,7 @@ import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/transactions';
+import { rescheduleReminders } from '../src/lib/reminders';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
@@ -43,6 +44,7 @@ export default function RootLayout() {
         // "midnight") materializes into a real editable row the moment the app loads.
         await materializeDueOccurrences(db);
         await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
+        rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)
         if (alive) { setDbReady(true); setDbError(false); }
       } catch {
         // Never strand the user on the splash — surface a retry instead.
@@ -56,6 +58,7 @@ export default function RootLayout() {
       if (state === 'active' && dbRef) {
         materializeDueOccurrences(dbRef).catch(() => {});
         runSavingsMaintenance(dbRef).catch(() => {});
+        rescheduleReminders(dbRef).catch(() => {});
       }
     });
 

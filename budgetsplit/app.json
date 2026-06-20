@@ -47,6 +47,13 @@
         {
           "locationWhenInUsePermission": "BudgetSplit can optionally tag a transaction with where you made it. This is off by default and never leaves your device."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#20C4B8"
+        }
       ]
     ],
     "experiments": {

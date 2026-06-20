@@ -665,6 +665,14 @@ export async function clearAllAttachmentRefs(db: SQLite.SQLiteDatabase): Promise
   await db.runAsync('UPDATE txn SET attachment_uri=NULL WHERE attachment_uri IS NOT NULL');
 }
 
+/** Active recurring rules across all groups, with their splits — for reminders. */
+export async function getActiveRecurringRules(db: SQLite.SQLiteDatabase): Promise<TxnWithSplits[]> {
+  const rows = await db.getAllAsync<Txn>(
+    `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
+  );
+  return Promise.all(rows.map(t => loadSplits(db, t)));
+}
+
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
   return db.getAllAsync<LineItem>('SELECT * FROM line_item WHERE txn_id = ?', [txnId]);
 }

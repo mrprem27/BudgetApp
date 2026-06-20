@@ -15,6 +15,8 @@ import { haptic } from '../../src/lib/haptics';
 import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
+import { requestNotificationPermission } from '../../src/lib/notifications';
+import { getReminderPrefs, rescheduleReminders, REMINDER_KEYS } from '../../src/lib/reminders';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -45,6 +47,9 @@ export default function SettingsScreen() {
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
 
+  const [remindRenewals, setRemindRenewals] = useState(false);
+  const [remindDaily, setRemindDaily] = useState(false);
+
   useEffect(() => {
     (async () => {
       setMe(await getMe(db));
@@ -52,10 +57,29 @@ export default function SettingsScreen() {
       setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
       setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
+      const prefs = await getReminderPrefs();
+      setRemindRenewals(prefs.renewals);
+      setRemindDaily(prefs.daily);
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
   }, []);
+
+  // Toggling a reminder on requests permission first; either way we persist the
+  // pref and rebuild the schedule. In Expo Go this is a harmless no-op.
+  async function toggleReminder(key: string, val: boolean, setter: (v: boolean) => void) {
+    haptic.selection();
+    if (val) {
+      const ok = await requestNotificationPermission();
+      if (!ok) {
+        Alert.alert('Notifications off', 'Enable notifications for BudgetSplit in your phone’s Settings to get reminders.');
+        return;
+      }
+    }
+    setter(val);
+    await AsyncStorage.setItem(key, val ? 'true' : 'false');
+    await rescheduleReminders(db);
+  }
 
   async function toggle(key: string, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
@@ -114,6 +138,15 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
       </View>
+
+      {/* Reminders — local, on-device notifications (work in a dev build) */}
+      <Text style={styles.sectionTitle}>Reminders</Text>
+      <View style={styles.card}>
+        <ToggleRow icon="bell" label="Renewal reminders" value={remindRenewals} onValueChange={(v) => toggleReminder(REMINDER_KEYS.renewals, v, setRemindRenewals)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="calendar" label="Daily log reminder" value={remindDaily} onValueChange={(v) => toggleReminder(REMINDER_KEYS.daily, v, setRemindDaily)} />
+      </View>
+      <Text style={styles.featureCaption}>A day before a recurring charge, and a gentle evening nudge to log. All on-device — nothing leaves your phone.</Text>
 
       {/* Budget & Data */}
       <Text style={styles.sectionTitle}>Budget & Data</Text>
@@ -205,3 +238,4 @@ const styles = StyleSheet.create({
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },
 });
+
