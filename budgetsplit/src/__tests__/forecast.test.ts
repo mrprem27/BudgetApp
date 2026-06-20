@@ -44,6 +44,19 @@ describe('forecastMonthEnd', () => {
     const f = forecastMonthEnd(5000000, 28, 30, 100000);
     expect(f.projected).toBeGreaterThanOrEqual(5000000);
   });
+
+  it('uses Bühlmann credibility z = n/(n+K), K=7', () => {
+    // Day 7 → z = 7/(7+7) = 0.5: an exact 50/50 of run-rate and prior.
+    const runRate = (700000 / 7) * 30; // 3,000,000
+    const prior = 2000000;
+    const f = forecastMonthEnd(700000, 7, 30, prior);
+    expect(f.credibility).toBeCloseTo(0.5, 6);
+    expect(f.projected).toBe(Math.round(0.5 * runRate + 0.5 * prior)); // 2,500,000
+  });
+
+  it('reports zero credibility with no prior (pure run-rate)', () => {
+    expect(forecastMonthEnd(600000, 6, 30, 0).credibility).toBe(0);
+  });
 });
 
 describe('projectedAtDay', () => {
