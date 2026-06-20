@@ -13,9 +13,10 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { Input } from '../src/components/ui/Input';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
-import { getAllPersons, updatePersonName, setPersonImage } from '../src/db/queries/persons';
+import { getAllPersons, updatePersonName, setPersonImage, insertPerson } from '../src/db/queries/persons';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
 import { getMe } from '../src/db/queries/persons';
+import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
 import { formatCompact } from '../src/lib/money';
 import { haptic } from '../src/lib/haptics';
@@ -29,6 +30,8 @@ export default function FriendsScreen() {
   const [loadError, setLoadError] = useState(false);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [addName, setAddName] = useState('');
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -54,6 +57,21 @@ export default function FriendsScreen() {
     if (uri) { await setPersonImage(db, p.id, uri); haptic.success(); await load(); }
   }
 
+  async function handleAddFriend() {
+    const trimmed = addName.trim();
+    if (!trimmed) return;
+    try {
+      const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+      await insertPerson(db, trimmed, color);
+      haptic.success();
+      setAddName(''); setShowAdd(false);
+      await load();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
+  }
+
   function openRename(p: Person) {
     setRenamePerson(p);
     setRenameText(p.name);
@@ -75,14 +93,24 @@ export default function FriendsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Friends" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Friends"
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity onPress={() => { setAddName(''); setShowAdd(true); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Add friend">
+            <Feather name="user-plus" size={20} color={colors.accent} />
+          </TouchableOpacity>
+        }
+      />
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : people.length === 0 ? (
         <EmptyState
           icon="users"
           title="No friends yet"
-          body="People you add to shared groups show up here. Add a member to a group to get started."
+          body="Add the people you split with — or they appear automatically when you add them to a group."
+          actionLabel="Add a friend"
+          onAction={() => { setAddName(''); setShowAdd(true); }}
         />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
@@ -132,6 +160,21 @@ export default function FriendsScreen() {
           style={styles.renameGap}
         />
         <PrimaryButton label="Save" onPress={handleRename} disabled={!renameText.trim()} />
+      </SheetModal>
+
+      <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add a friend">
+        <Input
+          value={addName}
+          onChangeText={setAddName}
+          placeholder="Friend's name"
+          autoFocus
+          autoCapitalize="words"
+          maxLength={30}
+          returnKeyType="done"
+          onSubmitEditing={handleAddFriend}
+          style={styles.renameGap}
+        />
+        <PrimaryButton label="Add friend" onPress={handleAddFriend} disabled={!addName.trim()} />
       </SheetModal>
     </View>
   );
