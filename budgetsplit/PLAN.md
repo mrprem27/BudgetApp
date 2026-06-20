@@ -122,19 +122,21 @@ F29 increase=coral severity.
 - [x] **(bonus) Add friend** directly from the Friends screen + Groups-tab entry.
 
 ### Phase C — Notifications & subscriptions  *(needs dev build — expo-notifications)*
-- [ ] **C1 — Local notification engine** (permission, schedule, cancel) foundation
-- [ ] **C2 — Budget warnings** (80/100%) · **bill/renewal reminders** (N1, from recurring)
-- [ ] **C3 — Subscription auto-detect** (N2) → dashboard · renewal calendar · cost optimization
-- [ ] **C4 — Streak push nudge** · settlement nudges · daily digest
-- [ ] **C5 — Data-gated unlocks** — N-day streak unlocks 60/90-day forecast + pattern search
+- [x] **C3 — Subscription auto-detect** (N2) — `detectSubscriptions` (+tests); opt-in
+      Money-tab card. ✅ *(pure on-device — no dev build)*
+- [ ] **C1 — Local notification engine** (permission, schedule, cancel) — ⛔ needs dev build (`expo-notifications`)
+- [ ] **C2 — Budget warnings** (80/100%) · **bill/renewal reminders** (N1) — ⛔ needs dev build
+- [ ] **C4 — Streak push nudge** · settlement nudges · daily digest — ⛔ needs dev build
+- [ ] **C5 — Data-gated unlocks** — N-day streak unlocks 60/90-day forecast (pure; can do next)
 
 ### Phase D — Onboarding & data safety  *(no dev build)*
-- [ ] **D1 — Full interactive onboarding** covering all main features
-      (create group → add → split → budget → savings → settle)
-- [ ] **D2 — Encrypted auto-backup** to iCloud/Drive (full export already ✅)
+- [x] **D1 — Actionable onboarding** — intro covers all features + name; ends with
+      one-tap "Add my first expense" (one-shot flag → dashboard opens Add). ✅
+- [ ] **D2 — Encrypted auto-backup** — deferred per request.
 
-### Phase E — iOS widget  *(needs dev build — WidgetKit)*
-- [ ] **E1 — Quick-add / dashboard widget** (N3): app-group shared JSON → SwiftUI widget
+### Phase E — iOS widget  *(⛔ needs dev build — WidgetKit native target)*
+- [ ] **E1 — Quick-add / dashboard widget** (N3): app-group shared JSON → SwiftUI widget.
+      Requires a custom dev build + native target — can't run in Expo Go.
 
 ### Phase F — Bigger bets  *(⏸ PARKED — revisit after months)*
 - Multi-currency · cloud sync/multi-device · UPI links · net worth · data import ·
