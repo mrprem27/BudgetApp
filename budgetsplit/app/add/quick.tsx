@@ -14,6 +14,7 @@ import { getCurrentPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
 import { matchCategory } from '../../src/lib/smartCategory';
+import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../../src/lib/smartCategoryLearn';
 import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -56,12 +57,14 @@ export default function QuickAddScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [catManual, setCatManual] = useState(false); // user overrode the smart guess
+  const [learned, setLearned] = useState<LearnedMap>({});
 
   // Smart categories: typing a title auto-picks a category (until the user overrides).
+  // Learned corrections take priority over the built-in keyword rules.
   function onTitleChange(text: string) {
     setNote(text);
     if (flags.smartCategory && !catManual) {
-      const name = matchCategory(text, categories);
+      const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories);
       if (name) {
         const c = categories.find(cat => cat.name === name);
         if (c) setSelectedCategory(c);
@@ -96,6 +99,7 @@ export default function QuickAddScreen() {
       setGroups(grps);
       const meRow = await getMe(db);
       setMe(meRow);
+      loadLearned().then(setLearned).catch(() => {});
       const savedCur = await AsyncStorage.getItem('default_currency');
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
@@ -388,7 +392,12 @@ export default function QuickAddScreen() {
                 <CategoryPicker
                   categories={categories}
                   value={selectedCategory}
-                  onChange={(c) => { setSelectedCategory(c); setCatManual(true); }}
+                  onChange={(c) => {
+                    setSelectedCategory(c);
+                    setCatManual(true);
+                    // Learn from the correction so this title picks `c` next time.
+                    if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
+                  }}
                   onCreate={async (name) => {
                     const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
                     setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
