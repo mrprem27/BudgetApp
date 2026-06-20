@@ -1,21 +1,40 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Each insight surface owns its own flag so it can be toggled independently.
+// Each surface owns its own flag so it can be toggled independently — letting a
+// user make the app as minimal or as rich as they want.
 export type FeatureKey =
+  // Dashboard sections
+  | 'dashboardCash'
+  | 'dashboardBudget'
+  | 'dashboardDonut'
+  | 'dashboardBalances'
+  | 'dashboardSavings'
   | 'dashboardInsights'
+  // Reports sections
+  | 'reportsDonut'
+  | 'reportsTrend'
+  | 'forecast'
+  // Other insight surfaces
   | 'budgetInsights'
   | 'savingsInsights'
-  | 'forecast'
+  // Modules
   | 'itemizedOcr'
   | 'recurring';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
 const DEFAULTS: FeatureFlags = {
+  dashboardCash: true,
+  dashboardBudget: true,
+  dashboardDonut: true,
+  dashboardBalances: true,
+  dashboardSavings: true,
   dashboardInsights: true,
+  reportsDonut: true,
+  reportsTrend: true,
+  forecast: true,
   budgetInsights: true,
   savingsInsights: true,
-  forecast: true,
   itemizedOcr: true,
   recurring: true,
 };

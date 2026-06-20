@@ -18,12 +18,29 @@ type Row =
 
 const SECTIONS: { title: string; rows: Row[] }[] = [
   {
+    title: 'Dashboard',
+    rows: [
+      { kind: 'flag', key: 'dashboardCash', icon: 'dollar-sign', label: 'Cash available', caption: 'Your liquid, spendable money card' },
+      { kind: 'flag', key: 'dashboardBudget', icon: 'shield', label: 'Budget summary', caption: 'Budget-used rollup on the dashboard' },
+      { kind: 'flag', key: 'dashboardDonut', icon: 'pie-chart', label: 'Where it went', caption: 'Category spending donut' },
+      { kind: 'flag', key: 'dashboardBalances', icon: 'users', label: 'Balances', caption: 'Who you owe / owes you, with Settle up' },
+      { kind: 'flag', key: 'dashboardSavings', icon: 'target', label: 'Savings summary', caption: 'Pool · available · goals card' },
+      { kind: 'flag', key: 'dashboardInsights', icon: 'bar-chart-2', label: 'Top insights', caption: 'Cross-group spending insights' },
+    ],
+  },
+  {
+    title: 'Reports',
+    rows: [
+      { kind: 'flag', key: 'reportsDonut', icon: 'pie-chart', label: 'Spending by category', caption: 'Interactive donut on Reports' },
+      { kind: 'flag', key: 'reportsTrend', icon: 'bar-chart-2', label: '6-month trend', caption: 'Monthly spending bars (tap a wedge to filter)' },
+      { kind: 'flag', key: 'forecast', icon: 'trending-up', label: 'Spending forecast', caption: 'Month-end projection line' },
+    ],
+  },
+  {
     title: 'Insights',
     rows: [
-      { kind: 'flag', key: 'dashboardInsights', icon: 'bar-chart-2', label: 'Dashboard insights', caption: 'Cross-group spending insights on the dashboard' },
       { kind: 'flag', key: 'budgetInsights', icon: 'pie-chart', label: 'Budget insights', caption: 'Analytics & projections on group budgets' },
       { kind: 'flag', key: 'savingsInsights', icon: 'target', label: 'Savings insights', caption: 'Opportunity-cost nudges on the Money tab' },
-      { kind: 'flag', key: 'forecast', icon: 'trending-up', label: 'Spending forecast', caption: 'Month-end projection on Reports' },
     ],
   },
   {

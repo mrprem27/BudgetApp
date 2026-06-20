@@ -18,7 +18,7 @@ import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
-import { getPoolSummary, getGoals } from '../../src/db/queries/savings';
+import { getPoolSummary, getGoals, getCashPosition } from '../../src/db/queries/savings';
 import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
@@ -86,6 +86,7 @@ export default function DashboardScreen() {
   const [donutTotal, setDonutTotal] = useState(0);
   const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
   const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
+  const [cashAvailable, setCashAvailable] = useState<number | null>(null);
   const [insights, setInsights] = useState<GroupInsight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -174,8 +175,9 @@ export default function DashboardScreen() {
     setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
 
     // Savings pool snapshot for the dashboard card.
-    const [savePool, saveGoals] = await Promise.all([getPoolSummary(db), getGoals(db)]);
+    const [savePool, saveGoals, cashPos] = await Promise.all([getPoolSummary(db), getGoals(db), getCashPosition(db)]);
     setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
+    setCashAvailable(cashPos.available);
 
     // Build donut data (spending by category, sorted largest first)
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
@@ -278,8 +280,28 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Cash available — real, spendable liquid money (income − expenses − set-aside savings) */}
+        {flags.dashboardCash && cashAvailable !== null && (
+          <TouchableOpacity
+            style={styles.cashCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/savings' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Cash available"
+          >
+            <View style={styles.cashIcon}>
+              <Feather name="dollar-sign" size={16} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cashLabel}>Cash available</Text>
+              <Text style={styles.cashSub}>Liquid money, after savings set aside</Text>
+            </View>
+            <AmountText paise={cashAvailable} size="md" forceColor={cashAvailable >= 0 ? colors.income : colors.expense} compact />
+          </TouchableOpacity>
+        )}
+
         {/* Budget rollup — prominent, before the donut */}
-        {budgetSummary.allocated > 0 && (() => {
+        {flags.dashboardBudget && budgetSummary.allocated > 0 && (() => {
           const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
           const bLeft = budgetSummary.allocated - budgetSummary.spent;
           const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
@@ -326,7 +348,7 @@ export default function DashboardScreen() {
         })()}
 
         {/* Where it went — interactive SVG donut */}
-        {chartsReady && donutData.length > 0 && (
+        {flags.dashboardDonut && chartsReady && donutData.length > 0 && (
           <View style={styles.donutCard}>
             <Text style={styles.chartTitle}>Where it went</Text>
             <CategoryDonut
@@ -338,7 +360,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Balances */}
-        {(oweTotal > 0 || owedTotal > 0) && (
+        {flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0) && (
           <TouchableOpacity
             style={styles.balanceChip}
             onPress={() => router.push('/settle')}
@@ -356,7 +378,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Savings pool */}
-        {(savings.total > 0 || savings.goals > 0) && (
+        {flags.dashboardSavings && (savings.total > 0 || savings.goals > 0) && (
           <TouchableOpacity
             style={styles.savingsCard}
             activeOpacity={0.85}
@@ -519,6 +541,10 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  cashCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
+  cashIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  cashLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  cashSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   balanceChip: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs, marginBottom: space.md },
   balanceLabel: { ...type.subheading, color: colors.textPrimary },
   balanceText: { ...type.body, color: colors.textSecondary },

@@ -470,7 +470,7 @@ export default function ReportsScreen() {
         <>
           {/* Spending by category — selected month, ALL groups (the dashboard
               donut is current-period & personal; this is the cross-group analysis). */}
-          {pieData.length > 0 && (
+          {flags.reportsDonut && pieData.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.chartTitle}>Spending by category</Text>
               <Text style={styles.chartSub}>{format(month, 'MMMM yyyy')} · all groups</Text>
@@ -485,7 +485,7 @@ export default function ReportsScreen() {
           )}
 
           {/* 6-month Spending Trend — overall, or the tapped category */}
-          {trendData.length > 0 && trendData.some(b => b.value > 0) && (() => {
+          {flags.reportsTrend && trendData.length > 0 && trendData.some(b => b.value > 0) && (() => {
             const bars: TrendBar[] = selectedCat
               ? monthlyData.map((mm, i) => ({
                   value: Math.round((mm.byCat[selectedCat] ?? 0) / 100),
