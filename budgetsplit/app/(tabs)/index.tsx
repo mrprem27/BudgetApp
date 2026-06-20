@@ -36,6 +36,7 @@ import { formatCompact } from '../../src/lib/money';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { InsightText } from '../../src/components/finance/InsightText';
+import { computeHealthScore } from '../../src/lib/financialHealth';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -329,6 +330,41 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Financial health score — opt-in gauge from budget, savings & balances */}
+        {flags.healthScore && (() => {
+          const h = computeHealthScore({
+            budgetUtilizationPct: budgetSummary.allocated > 0 ? Math.round((budgetSummary.spent / budgetSummary.allocated) * 100) : null,
+            savingsRatePct: income > 0 ? savingsRate : null,
+            netOwed: oweTotal - owedTotal,
+            income,
+          });
+          const hColor = h.band === 'great' ? colors.income : h.band === 'good' ? colors.accent : h.band === 'fair' ? colors.healthAmber : colors.expense;
+          const hLabel = h.band === 'great' ? 'Great shape' : h.band === 'good' ? 'On track' : h.band === 'fair' ? 'Needs care' : 'Needs attention';
+          return (
+            <View style={styles.healthCard}>
+              <View style={styles.healthTop}>
+                <View style={[styles.healthRing, { borderColor: hColor }]}>
+                  <Text style={[styles.healthScore, { color: hColor }]}>{h.score}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.healthLabel}>Financial health</Text>
+                  <Text style={[styles.healthBand, { color: hColor }]}>{hLabel}</Text>
+                </View>
+              </View>
+              <View style={styles.healthFactors}>
+                {h.factors.map(f => (
+                  <View key={f.label} style={styles.healthFactor}>
+                    <Text style={styles.healthFactorLabel} numberOfLines={1}>{f.label}</Text>
+                    <View style={styles.healthBarTrack}>
+                      <View style={[styles.healthBarFill, { width: `${Math.round((f.points / f.max) * 100)}%`, backgroundColor: hColor }]} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Budget rollup — prominent, before the donut */}
         {flags.dashboardBudget && budgetSummary.allocated > 0 && (() => {
           const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
@@ -570,6 +606,17 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  healthCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md, gap: space.md },
+  healthTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  healthRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  healthScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  healthLabel: { ...type.label, color: colors.textSecondary },
+  healthBand: { ...type.subheading, marginTop: 2 },
+  healthFactors: { gap: space.sm },
+  healthFactor: { gap: 4 },
+  healthFactorLabel: { ...type.caption, color: colors.textMuted },
+  healthBarTrack: { height: 5, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
+  healthBarFill: { height: 5, borderRadius: 3 },
   streakCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
   streakIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   streakTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

@@ -86,6 +86,7 @@ export default function ReportsScreen() {
   const [trendData, setTrendData] = useState<TrendBar[]>([]);
   const [monthlyData, setMonthlyData] = useState<Array<{ label: string; total: number; byCat: Record<string, number> }>>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [cutPct, setCutPct] = useState(20);
   type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
   const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
   const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
@@ -567,6 +568,31 @@ export default function ReportsScreen() {
             </View>
           )}
 
+          {/* What-if simulator — cut your top category and see the savings */}
+          {pieData.length > 0 && pieData[0].paise > 0 && (() => {
+            const top = pieData[0];
+            const monthlySaving = Math.round((top.paise * cutPct) / 100);
+            return (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>What if…</Text>
+                <Text style={styles.whatifLead}>
+                  Cut <Text style={{ color: top.color, fontFamily: 'Inter_600SemiBold' }}>{top.name}</Text> by
+                </Text>
+                <View style={styles.whatifChips}>
+                  {[10, 20, 30].map(p => (
+                    <TouchableOpacity key={p} style={[styles.whatifChip, cutPct === p && styles.whatifChipActive]} onPress={() => setCutPct(p)} accessibilityRole="button">
+                      <Text style={[styles.whatifChipText, cutPct === p && { color: colors.bg }]}>{p}%</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.whatifResult}>
+                  <Text style={styles.whatifSave}>You’d save <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>{formatCompact(monthlySaving)}</Text>/mo</Text>
+                  <Text style={styles.whatifYear}>≈ {formatCompact(monthlySaving * 12)} a year</Text>
+                </View>
+              </View>
+            );
+          })()}
+
           {summaries.length === 0 && (
             <EmptyState
               icon="bar-chart-2"
@@ -702,6 +728,14 @@ const styles = StyleSheet.create({
   donutHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm },
   trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
   trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  whatifLead: { ...type.body, color: colors.textSecondary },
+  whatifChips: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  whatifChip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  whatifChipActive: { backgroundColor: colors.accent },
+  whatifChipText: { ...type.label, color: colors.textSecondary },
+  whatifResult: { marginTop: space.md },
+  whatifSave: { ...type.subheading, color: colors.textPrimary },
+  whatifYear: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },

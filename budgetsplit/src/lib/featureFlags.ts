@@ -22,7 +22,8 @@ export type FeatureKey =
   | 'recurring'
   | 'smartCategory'
   | 'affordCheck'
-  | 'streak';
+  | 'streak'
+  | 'healthScore';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
@@ -43,6 +44,7 @@ const DEFAULTS: FeatureFlags = {
   smartCategory: false, // opt-in
   affordCheck: false,   // opt-in
   streak: false,        // opt-in
+  healthScore: false,   // opt-in
 };
 
 const PREFIX = 'feature_';

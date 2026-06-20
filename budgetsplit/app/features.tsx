@@ -49,6 +49,7 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
       { kind: 'flag', key: 'smartCategory', icon: 'zap', label: 'Smart categories', caption: 'Type a title (e.g. "Uber") and the category auto-fills — no picking' },
       { kind: 'flag', key: 'affordCheck', icon: 'help-circle', label: 'Can I afford this?', caption: 'A quick check on the Money tab before a purchase' },
       { kind: 'flag', key: 'streak', icon: 'zap', label: 'Tracking streak', caption: 'A gentle daily-logging streak on the dashboard' },
+      { kind: 'flag', key: 'healthScore', icon: 'activity', label: 'Financial health score', caption: 'A 0–100 gauge on the dashboard from budget, savings & balances' },
       { kind: 'flag', key: 'itemizedOcr', icon: 'list', label: 'Itemized bills', caption: 'Split a bill line by line' },
       { kind: 'flag', key: 'recurring', icon: 'refresh-cw', label: 'Recurring transactions', caption: 'Auto-repeat schedules for expenses & income' },
     ],
