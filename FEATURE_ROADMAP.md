@@ -1,14 +1,15 @@
 # BudgetSplit — Multi-Version Feature Roadmap
 
 **World-Class Budget & Expense Splitting App**
-**Document Version:** 2.0 | **Last Updated:** 2026-06-20
+**Document Version:** 2.1 | **Last Updated:** 2026-06-21
 **Benchmark:** Splitwise · YNAB · Monarch Money · Tricount · Copilot Money · PocketGuard · Honeydue
 
-> **Status note (2026-06-20):** v1 shipped to `main`; a large polish + smart-money
-> cycle is on `feat/design-adoption-bugfixes-toggles`. Many features once planned
-> for v2.0 / v2.5 below are **already built** — see §1 for the live inventory.
-> Day-to-day working log lives in `budgetsplit/PLAN.md`; this doc is the
-> strategic multi-version view.
+> **Status note (2026-06-21):** v1 + the full polish/smart-money cycle are merged
+> to `main`. The **notifications track** (local reminders) plus a round of
+> engine + UX upgrades are on `feat/dev-build-notifications`. Phases A, B and C
+> below are now essentially **done** — see §0.1 for what shipped this cycle and
+> §1 for the live inventory. Day-to-day working log lives in
+> `budgetsplit/PLAN.md`; this doc is the strategic multi-version view.
 
 ---
 
@@ -19,30 +20,31 @@
 > need a **custom dev build**. Each item links to its detailed row above.
 > Legend: ✅ done · 🟡 partial · 📋 planned · ❌ open.
 
-### Phase A — Edit integrity & recurring model *(P0 · no native deps)*
-- [ ] **Edit itemized bills** — reopen an itemized txn in the itemized editor (no orphaned line items) *(2.0.6)*
-- [ ] **Recurring → real editable txns** — materialize a due rule into an actual transaction at midnight + app-open catch-up; add `parent_recur_id` *(2.0.6)*
-- [ ] **"Added by [recurring]" provenance** on each occurrence → tap jumps to the rule and **highlights** it *(2.0.6)*
-- [ ] **Undo for deletes** — 5s "Undo" toast on every delete *(2.0.4)*
+### Phase A — Edit integrity & recurring model *(P0 · no native deps)* ✅ DONE
+- [x] **Edit itemized bills** — reopen an itemized txn in the itemized editor (no orphaned line items) *(2.0.6)*
+- [x] **Recurring → real editable txns** — materialize a due rule into an actual transaction at midnight + app-open catch-up; add `parent_recur_id` *(2.0.6)*
+- [x] **"Added by [recurring]" provenance** on each occurrence → tap jumps to the rule and **highlights** it *(2.0.6)*
+- [x] **Undo for deletes** — 5s "Undo" toast on every delete *(2.0.4)*
 - ✅ Already done: editable settlements/transfers · partial settlements · transaction notes.
 
-### Phase B — On-device smart wins *(no native deps)*
-- [ ] **Goal celebration** — confetti + haptic when a goal is reached *(2.5.1)*
-- [ ] **Pattern-aware "Can I afford this?"** — factor projected month-end pace + upcoming recurring + category averages *(2.5.6)*
-- [ ] **Global transaction search** + richer filters (date / amount / person range) *(2.0.1)*
-- [ ] **Duplicate detection** — warn on same amount+date+category within 24h *(2.0.1)*
-- [ ] **Photos:** up to 3 per txn · per-photo size cap (compress) · storage management · PDF receipts *(2.0.3)*
-- [ ] **Financial-health score** (0–100) · **what-if simulator** *(2.5.3)*
-- [ ] **Smart categories — learn from corrections** *(2.5.4)*
-- [ ] **Pull-to-refresh** on list screens *(2.0.4)*
-- [ ] **Bulk actions** — multi-select delete / re-categorize / move *(2.0.1)*
+### Phase B — On-device smart wins *(no native deps)* ✅ DONE (2 items deferred)
+- [x] **Goal celebration** — confetti + haptic when a goal is reached *(2.5.1)*
+- [x] **Pattern-aware "Can I afford this?"** — 4-axis engine: cash gate · 15% buffer · category budget OR your own 30-day norm · income share *(2.5.6)*
+- [x] **Global transaction search** + richer filters (date / amount / person range) *(2.0.1)*
+- [x] **Duplicate detection** — warn on same amount+date+category within 24h *(2.0.1)*
+- 🟡 **Photos:** single receipt photo + full-screen viewer ✅; up to 3 per txn · per-photo size cap · PDF receipts ❌ deferred *(2.0.3)*
+- [x] **Financial-health score** (0–100) · **what-if simulator** *(2.5.3)*
+- [x] **Smart categories — learn from corrections** (+ word-boundary matcher, India keyword catalog, "Other" fallback) *(2.5.4)*
+- [x] **Pull-to-refresh** on list screens *(2.0.4)*
+- [ ] **Bulk actions** — multi-select delete / re-categorize / move ❌ deferred *(2.0.1)*
 
-### Phase C — Notifications & subscriptions *(needs dev build — expo-notifications)*
-- [ ] **Local notification engine** (on-device scheduling foundation) *(2.0.5)*
-- [ ] **Budget warnings** (80% / 100%) · **bill/renewal reminders** (N1) *(2.0.5)*
-- [ ] **Subscription auto-detect** (N2) → dashboard · renewal calendar · cost optimization *(2.5.2)*
-- [ ] **Streak daily push nudge** (in-app chip already ✅) · settlement nudges · daily digest *(2.0.5)*
-- [ ] **Data-gated unlocks** — N-day streak unlocks 60/90-day forecasting & pattern search *(2.5.7)*
+### Phase C — Notifications & subscriptions *(dev build — expo-notifications, local only)* ✅ DONE
+- [x] **Local notification engine** (on-device scheduling foundation) *(2.0.5)*
+- [x] **Bill/renewal reminders** (N1) — configurable lead-days (1–7) + exact time; daily log nudge; "send a test reminder" *(2.0.5)*
+- [x] **Subscription auto-detect** (N2) → dashboard card (median-gap + regularity check) *(2.5.2)*
+- [x] **Streak daily nudge** (in-app chip + daily reminder) *(2.0.5)*
+- [ ] **Budget warnings** (80% / 100% push) · settlement nudges · daily digest 📋 next *(2.0.5)*
+- [ ] **Data-gated unlocks** — N-day streak unlocks 60/90-day forecasting & pattern search 📋 *(2.5.7)*
 
 ### Phase D — Onboarding & data safety
 - [ ] **Full interactive onboarding** covering all main features (groups → add → split → budget → savings → settle) *(2.0.4)*
@@ -57,8 +59,28 @@
 - [ ] AI receipt OCR / NL entry — **deferred** (breaks offline promise, D2)
 
 **Build order now:** A → B → C → D → E. **Phase F is parked** (revisit after
-months). A and B ship on the current no-dev-build track; C and E open a
-dev-build track in parallel when ready.
+months). A, B, C are done; **D (onboarding/backup) is next**, then E (widget,
+needs a paid Apple account for App Groups).
+
+### 0.1 — Shipped this cycle (2026-06-21, `feat/dev-build-notifications`)
+
+Items beyond the original phase list, or that materially upgraded an existing one:
+
+- **Configurable reminders** — choose how many days before a charge to start
+  (1–7) and the **exact time**; daily-nudge time; "send a test reminder" button.
+  Auto defaults (9 AM / 1 day before; 8 PM daily). Capped at 50 pending (iOS limit).
+- **Pattern-aware afford engine** — rebuilt as a 4-axis model (was cash − bills):
+  cash gate · 15% buffer · category budget OR your own 30-day norm · income share,
+  each surfacing a specific reason. `getAffordSnapshot()` gathers all inputs.
+- **Insight comparison format** — Settings choice: phrase changes as **% or ×N**
+  ("up 40%" vs "1.4× last month"); over-budget switches to a multiple past ~100%
+  to avoid the confusing "250% over".
+- **Stronger category matcher** — word-boundary (not substring) matching, phrase >
+  single-word specificity scoring, big India-first keyword catalog, vote-based
+  learning, unmatched → "Other".
+- **Bug fixes** — forecast x-axis now spans the full month · no phantom
+  "balance out" when editing a personal-group expense · receipt image opens in
+  the full-screen viewer · transaction History padding · settings caption.
 
 ---
 
@@ -144,14 +166,15 @@ dev-build track in parallel when ready.
 | Smart categorization (rule-based, on-device) | — | — | ✅ | — | ✅ Done (Smart categories) |
 | AI-powered categorization | — | — | ✅ | — | ❌ Deferred (breaks offline promise, D2) |
 | Transaction **filters** (group / budget status) | ✅ Pro | ✅ | ✅ | — | ✅ Done |
-| Transaction **global search** (find any past txn) | ✅ Pro | ✅ | ✅ | — | 📋 Planned |
+| Transaction **global search** (find any past txn) | ✅ Pro | ✅ | ✅ | — | ✅ Done |
 | Money position — cash-available + savings | — | ✅ | ✅ | — | ✅ Done |
 | Net worth — assets/liabilities (FD/MF/property/loans) | — | ✅ | ✅ | — | ❌ Not started (v4.0) |
 | Data **export** (CSV / PDF) | — | ✅ | ✅ | ✅ | ✅ Done |
 | Data **import** (Splitwise / CSV / bank) | — | ✅ | ✅ | ✅ | ❌ Not started (v4.0) |
-| Subscription **detection** | — | — | ✅ | — | 📋 Planned (N2) |
-| Subscription **renewal reminders** | — | — | ✅ | — | 📋 Planned (N1, local notif) |
-| Push notifications & reminders (engine) | ✅ | ✅ | ✅ | ✅ | 📋 Planned (needs dev build) |
+| Subscription **detection** | — | — | ✅ | — | ✅ Done (N2, on-device) |
+| Subscription **renewal reminders** | — | — | ✅ | — | ✅ Done (N1 — configurable lead-days + time) |
+| **Local** notifications & reminders (engine) | ✅ | ✅ | ✅ | ✅ | ✅ Done (dev build; local-only on free Apple acct) |
+| Push (remote) notifications | ✅ | ✅ | ✅ | ✅ | ❌ Not started (needs paid Apple acct) |
 | Multi-currency support | ✅ | ✅ | ✅ | ✅ | 🟡 Infra dormant, INR-only (D6) |
 | Cloud sync / multi-device | ✅ | ✅ | ✅ | ✅ | ❌ Not started (v3.0) |
 | Widgets (home screen) | ✅ | ✅ | ✅ | — | 📋 Planned (N3 — needs dev build) |
@@ -225,13 +248,14 @@ dev-build track in parallel when ready.
 | **Pull-to-refresh** | On all list screens | P1 | 📋 planned |
 | **Amount input calculator** | Keypad with +/−/×/÷ | P2 | ❌ not started |
 
-### 2.0.5 — Notifications & Reminders  *(📋 all need a custom dev build — expo-notifications, can't run in Expo Go)*
+### 2.0.5 — Notifications & Reminders  *(need a custom dev build — expo-notifications, **local** only; can't run in Expo Go)*
 | Feature | Description | Priority | Status |
 |---------|-------------|----------|--------|
-| **Local notifications engine** | On-device scheduling foundation | P0 | 📋 planned |
-| **Budget limit warnings** | 80% / 100% threshold alerts | P0 | 📋 planned |
-| **Bill / renewal reminders** | "Rent due tomorrow" from recurring txns (N1) | P0 | 📋 planned |
-| **Streak daily nudge** | "Log today to keep your streak" (in-app chip ✅; push 📋) | P1 | 🟡 in-app done |
+| **Local notifications engine** | On-device scheduling foundation | P0 | ✅ done |
+| **Bill / renewal reminders** | From recurring txns (N1) — choose lead-days (1–7) + exact time | P0 | ✅ done |
+| **Streak daily nudge** | "Log today to keep your streak" — in-app chip + daily reminder at chosen time | P1 | ✅ done |
+| **Test reminder** | "Send a test reminder" button to verify notifications fire | P1 | ✅ done |
+| **Budget limit warnings** | 80% / 100% threshold push alerts | P0 | 📋 planned (next) |
 | **Settlement nudges** | Weekly reminder if someone owes you > ₹500 | P1 | 📋 planned |
 | **Daily spend digest** | Optional evening "You spent ₹X today" | P2 | 📋 planned |
 

@@ -42,7 +42,10 @@ Prereqs: a **Mac with Xcode** installed, your iPhone, and a USB cable.
 
 5. **Turn on reminders**
    In the app: **Settings → Reminders** → toggle *Renewal reminders* / *Daily log
-   reminder* → tap **Allow** when iOS asks for notification permission.
+   reminder* → tap **Allow** when iOS asks for notification permission. You can
+   set **how many days before** a charge to start (1–7) and the **exact time**
+   for each (defaults: 9 AM, 1 day before · 8 PM daily). Tap **Send a test
+   reminder** to see one fire in ~5 seconds.
 
 ## Every ~7 days (free account only)
 
