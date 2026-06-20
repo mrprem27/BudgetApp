@@ -12,6 +12,55 @@
 
 ---
 
+## 0. Next Version — Phased Build Plan (the "what's next", nothing missed)
+
+> Everything **not yet done** (fixes + features), ordered by dependency and
+> value. Phases A–B need **no native modules** (work in Expo Go). Phases C & E
+> need a **custom dev build**. Each item links to its detailed row above.
+> Legend: ✅ done · 🟡 partial · 📋 planned · ❌ open.
+
+### Phase A — Edit integrity & recurring model *(P0 · no native deps)*
+- [ ] **Edit itemized bills** — reopen an itemized txn in the itemized editor (no orphaned line items) *(2.0.6)*
+- [ ] **Recurring → real editable txns** — materialize a due rule into an actual transaction at midnight + app-open catch-up; add `parent_recur_id` *(2.0.6)*
+- [ ] **"Added by [recurring]" provenance** on each occurrence → tap jumps to the rule and **highlights** it *(2.0.6)*
+- [ ] **Undo for deletes** — 5s "Undo" toast on every delete *(2.0.4)*
+- ✅ Already done: editable settlements/transfers · partial settlements · transaction notes.
+
+### Phase B — On-device smart wins *(no native deps)*
+- [ ] **Goal celebration** — confetti + haptic when a goal is reached *(2.5.1)*
+- [ ] **Pattern-aware "Can I afford this?"** — factor projected month-end pace + upcoming recurring + category averages *(2.5.6)*
+- [ ] **Global transaction search** + richer filters (date / amount / person range) *(2.0.1)*
+- [ ] **Duplicate detection** — warn on same amount+date+category within 24h *(2.0.1)*
+- [ ] **Photos:** up to 3 per txn · per-photo size cap (compress) · storage management · PDF receipts *(2.0.3)*
+- [ ] **Financial-health score** (0–100) · **what-if simulator** *(2.5.3)*
+- [ ] **Smart categories — learn from corrections** *(2.5.4)*
+- [ ] **Pull-to-refresh** on list screens *(2.0.4)*
+- [ ] **Bulk actions** — multi-select delete / re-categorize / move *(2.0.1)*
+
+### Phase C — Notifications & subscriptions *(needs dev build — expo-notifications)*
+- [ ] **Local notification engine** (on-device scheduling foundation) *(2.0.5)*
+- [ ] **Budget warnings** (80% / 100%) · **bill/renewal reminders** (N1) *(2.0.5)*
+- [ ] **Subscription auto-detect** (N2) → dashboard · renewal calendar · cost optimization *(2.5.2)*
+- [ ] **Streak daily push nudge** (in-app chip already ✅) · settlement nudges · daily digest *(2.0.5)*
+- [ ] **Data-gated unlocks** — N-day streak unlocks 60/90-day forecasting & pattern search *(2.5.7)*
+
+### Phase D — Onboarding & data safety
+- [ ] **Full interactive onboarding** covering all main features (groups → add → split → budget → savings → settle) *(2.0.4)*
+- [ ] **Data backup** — encrypted auto-backup to iCloud/Drive (full export already ✅) *(Known Issues #10)*
+
+### Phase E — iOS widget *(needs dev build — WidgetKit)*
+- [ ] **Quick-add / dashboard widget** (N3)
+
+### Phase F — Bigger bets (v3.0+)
+- [ ] Multi-currency (D6) · cloud sync / multi-device · real-time collaboration · UPI payment links
+- [ ] Net worth (assets/liabilities) · data import (Splitwise/CSV/bank) · goal sharing
+- [ ] AI receipt OCR / NL entry — **deferred** (breaks offline promise, D2)
+
+**Suggested order:** A → B → C → D → E → F. A and B can ship in the current
+(no-dev-build) track; C and E start a dev-build track in parallel when you're ready.
+
+---
+
 ## Table of Contents
 
 1. [Current State Assessment](#current-state-assessment)
@@ -70,10 +119,14 @@
 ### Partially done / still open
 | Feature | Status | Gap |
 |---------|--------|-----|
-| Settlement recording | 🟡 | No partial payments yet |
-| Onboarding | 🟡 | Basic; no interactive tutorial |
-| Transaction search/filter | 🟡 | Groups/budget filters exist; no global txn search |
-| Multi-currency | 🟡 | Infra dormant, INR-only (Decision D6) |
+| Onboarding | 🟡 | Welcome gate only; no full interactive tutorial |
+| Transaction search/filter | 🟡 | Group/budget filters exist; no global txn search |
+| Universal edit | 🟡 | Goal: **edit every txn except recurring templates.** Itemized edit is the last gap (planned). |
+
+> **Notes:** Settlements **do** support partial payments — the record-payment
+> sheet pre-fills the outstanding amount but it's editable (caps at outstanding). ✅
+> Multi-currency is a deliberate deferral (INR-only, Decision D6), not in-progress —
+> tracked under §3 / v2.0.2.
 
 ---
 
@@ -127,15 +180,16 @@
 | Feature | Description | Priority | Status |
 |---------|-------------|----------|--------|
 | **Transfer transactions** | Money transfer UI between people (not counted as spend) | P0 | ✅ done |
-| **Editable transactions** | Edit any txn incl. settlements/transfers (itemized excepted) | P0 | ✅ done |
+| **Editable transactions** | Edit settlements/transfers/expense/income | P0 | ✅ done |
+| **Partial settlements** | Record partial payments (editable amount, caps at outstanding) | P0 | ✅ done |
 | **Transaction notes** | Free-text note on any transaction | P1 | ✅ done |
 | **Split methods** | Split by %, shares, exact amounts | P0 | ✅ done |
-| **Partial settlements** | Record partial payments against debts (₹500 of ₹2000 owed) | P0 | ❌ not started |
 | **Transaction filters** — group / budget status | Filter group list & budget categories | P0 | ✅ done |
+| **Edit itemized bills** | Open an itemized txn back into the itemized editor (re-load items, no orphans) | P1 | 📋 planned (approved) |
 | **Transaction filters** — date / amount / person range | Richer filtering across all txns | P1 | 📋 planned |
-| **Transaction global search** | Full-text search across all txns | P0 | 📋 planned |
-| **Bulk actions** | Multi-select → delete / re-categorize / move | P1 | ❌ not started |
-| **Duplicate detection** | Warn if similar amount + date + category within 24h | P1 | ❌ not started |
+| **Transaction global search** | Full-text search across all txns | P1 | 📋 planned |
+| **Duplicate detection** | Warn if similar amount + date + category within 24h | P2 | 📋 planned |
+| **Bulk actions** | Multi-select → delete / re-categorize / move | P2 | 📋 planned |
 
 ### 2.0.2 — Multi-Currency Support  *(🟡 infra dormant — INR-only for now, Decision D6)*
 | Feature | Description | Priority | Status |
@@ -151,9 +205,10 @@
 |---------|-------------|----------|--------|
 | **Receipt photos** | Attach a photo per transaction (camera or gallery) | P0 | ✅ done |
 | **Photo viewer** | Full-screen pinch-zoom photo view | P1 | ✅ done |
-| **Multi-photo (1–3)** | More than one photo per transaction | P2 | ❌ not started |
-| **Storage management** | Total storage used, compress/delete old photos | P2 | ❌ not started |
-| **PDF receipts** | Attach PDF documents (bills, invoices) | P2 | ❌ not started |
+| **Multi-photo (max 3)** | Up to 3 photos per transaction | P2 | 📋 planned |
+| **Per-photo size limit** | Cap each attachment's file size (compress on import) | P2 | 📋 planned |
+| **Storage management** | Total storage used + compress/delete old photos | P2 | 📋 planned |
+| **PDF receipts** | Attach PDF documents (bills, invoices) | P2 | 📋 planned |
 
 ### 2.0.4 — UX Polish
 | Feature | Description | Priority | Status |
@@ -164,9 +219,9 @@
 | **Skeleton loading** | Shimmer placeholders for list/chart views | P1 | ✅ done |
 | **Keyboard avoidance** | Keyboard-aware scroll on all input screens | P1 | ✅ done |
 | **Date picker** | Date-picker sheet | P2 | ✅ done |
-| **Undo/redo** | Toast with "Undo" for delete actions (5s window) | P0 | ❌ not started |
-| **Pull-to-refresh** | On all list screens | P1 | ❌ not started |
-| **Onboarding — interactive tutorial** | Guided create-group → add → see-balance | P1 | 🟡 basic only |
+| **Undo for deletes** | Toast with "Undo" (5s window) on delete actions | P0 | 📋 planned (approved) |
+| **Onboarding — full tutorial** | Interactive walkthrough covering **all main features** (groups, add, split, budget, savings, settle) | P1 | 📋 planned (approved) |
+| **Pull-to-refresh** | On all list screens | P1 | 📋 planned |
 | **Amount input calculator** | Keypad with +/−/×/÷ | P2 | ❌ not started |
 
 ### 2.0.5 — Notifications & Reminders  *(📋 all need a custom dev build — expo-notifications, can't run in Expo Go)*
@@ -178,6 +233,26 @@
 | **Streak daily nudge** | "Log today to keep your streak" (in-app chip ✅; push 📋) | P1 | 🟡 in-app done |
 | **Settlement nudges** | Weekly reminder if someone owes you > ₹500 | P1 | 📋 planned |
 | **Daily spend digest** | Optional evening "You spent ₹X today" | P2 | 📋 planned |
+
+### 2.0.6 — Recurring model & universal edit
+> Direction: **everything is editable except recurring *templates*.** Recurring
+> rules live in the Recurring Manager; occurrences become **real, editable
+> transactions** the moment they're due — and each one points back to the rule
+> that created it.
+
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Recurring occurrences = real txns** | At midnight (and on app-open catch-up) a due rule **materializes** an actual transaction, instead of being computed on the fly | P0 | 📋 planned |
+| **Edit a materialized occurrence** | The created transaction is fully editable like any other (amount, split, note, date) | P0 | 📋 planned |
+| **"Added by [recurring]" provenance** | Each occurrence shows which rule created it | P1 | 📋 planned |
+| **Tap → jump to the rule** | Tapping the provenance opens the Recurring Manager and **highlights that exact rule** | P1 | 📋 planned |
+| **Edit itemized bills** | Re-open itemized txns in the itemized editor (no orphaned line items) | P1 | 📋 planned (approved) |
+| **Recurring templates stay edit-locked** | Only the *rule* is managed in the Recurring Manager (skip/pause/end/this-&-future) — already shipped | — | ✅ done |
+
+> ⚠️ Architecture note: today occurrences are computed on the fly (`materializeInstances`)
+> and **not** stored (see Decision D5). Making them real rows is a meaningful
+> change — needs a dedup/catch-up job, a `parent_recur_id` link, and care that
+> editing one occurrence never mutates the rule. Sequence after v2.0 polish.
 
 ---
 
@@ -197,8 +272,8 @@
 | **Auto-allocation** | Fixed allocation per period to goals | P1 | ✅ done |
 | **Opt-in budget sweep** | Move leftover budget into savings | P1 | ✅ done |
 | **Goal target date** | Deadline + days-remaining | P1 | 🟡 est. completion only |
-| **Goal celebration** | Confetti + haptic when reached | P1 | ❌ not started |
-| **Goal sharing** | Share progress with group members | P2 | ❌ not started |
+| **Goal celebration** | Confetti + haptic when reached | P1 | 📋 planned (approved) |
+| **Goal sharing** | Share progress with group members | P2 | 📋 planned (needs sync, v3.0) |
 
 ### 2.5.2 — Subscription Tracker
 | Feature | Description | Priority | Status |
@@ -208,7 +283,7 @@
 | **Subscription dashboard** | All active subs + monthly/yearly total | P0 | 📋 planned |
 | **Renewal calendar** | Upcoming renewal dates | P1 | 📋 planned |
 | **Cancel/renewal reminder** | Alert X days before renewal (N1, local notif) | P1 | 📋 planned |
-| **Cost optimization** | "₹12,000/yr on subs — 3 unused this month" | P2 | ❌ not started |
+| **Cost optimization** | "₹12,000/yr on subs — 3 unused this month" | P2 | 📋 planned |
 
 ### 2.5.3 — Advanced Analytics
 | Feature | Description | Priority | Status |
@@ -219,8 +294,8 @@
 | **Cash-flow forecast** | Project month-end from run-rate + prior month | P1 | ✅ done |
 | **Year-in-review** | Annual summary card | P1 | ✅ done |
 | **Cash-flow forecast — 60/90-day** | Deeper multi-month projection (gated by streak) | P1 | 📋 planned (N4/2.5.7) |
-| **Financial health score** | Composite 0–100 (adherence, savings, debt) | P1 | ❌ not started |
-| **What-if simulator** | "Cut dining 20% → save ₹X/mo" | P2 | ❌ not started |
+| **Financial health score** | Composite 0–100 (adherence, savings, debt) | P1 | 📋 planned |
+| **What-if simulator** | "Cut dining 20% → save ₹X/mo" | P2 | 📋 planned |
 | **Peer comparison** | Anonymous benchmarks | P2 | ❌ not started |
 
 ### 2.5.4 — Smart Categorization
