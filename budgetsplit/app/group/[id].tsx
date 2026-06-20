@@ -15,6 +15,7 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
 import { getTransactionsForGroup, softDeleteTxn, restoreTxn, insertTxn } from '../../src/db/queries/transactions';
 import { useUndo } from '../../src/components/system/UndoToast';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
@@ -78,6 +79,7 @@ export default function GroupDetailScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
+  const { refreshing, onRefresh } = useRefresh(() => load());
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [group, setGroup] = useState<BudgetGroup | null>(null);
@@ -312,6 +314,7 @@ export default function GroupDetailScreen() {
           sections={groupTxnsByDate(filteredTxns)}
           keyExtractor={t => t.id}
           contentContainerStyle={styles.listContent}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
             txns.length > 0 ? (
               <View style={{ marginBottom: space.sm }}>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, InteractionManager,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -37,6 +37,7 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { InsightText } from '../../src/components/finance/InsightText';
 import { computeHealthScore } from '../../src/lib/financialHealth';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -90,7 +91,7 @@ export default function DashboardScreen() {
   const [cashAvailable, setCashAvailable] = useState<number | null>(null);
   const [streak, setStreak] = useState<{ count: number; loggedToday: boolean } | null>(null);
   const [insights, setInsights] = useState<GroupInsight[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = useRefresh(() => load());
   const [loading, setLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
   const [meId, setMeId] = useState('');
@@ -209,13 +210,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm }]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
-            tintColor={colors.accent}
-          />
-        }
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
           <View>

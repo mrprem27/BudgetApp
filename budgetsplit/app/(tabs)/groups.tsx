@@ -23,6 +23,7 @@ import { formatCompact } from '../../src/lib/money';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AmountText } from '../../src/components/ui/AmountText';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
@@ -48,6 +49,7 @@ export default function GroupsScreen() {
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+  const { refreshing, onRefresh } = useRefresh(() => loadGroups());
 
   useFocusEffect(useCallback(() => {
     loadGroups();
@@ -285,6 +287,7 @@ export default function GroupsScreen() {
         keyExtractor={g => g.id}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
         ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
         ListEmptyComponent={

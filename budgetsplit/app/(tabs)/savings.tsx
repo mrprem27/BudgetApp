@@ -20,6 +20,7 @@ import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
 import { InsightText } from '../../src/components/finance/InsightText';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
@@ -87,6 +88,7 @@ export default function SavingsScreen() {
   const [frequency, setFrequency] = useState<SavingsFrequency>('none');
 
   useFocusEffect(useCallback(() => { load(); }, []));
+  const { refreshing, onRefresh } = useRefresh(() => load());
 
   async function load() {
     await runSavingsMaintenance(db); // sweep + schedule + reconcile
@@ -141,7 +143,7 @@ export default function SavingsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Money" large />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Cash available — your real money */}
         {cash && (
           <View style={styles.cashCard}>
