@@ -95,8 +95,12 @@ nothing looks like a 2010 form.
 - **F17** Budget components mis-spaced in several places — pad/align audit. → polish.
 - **F18** Input fields inconsistent empty vs typed (border/bg/placeholder state) —
   standardize a focused/filled input style. → polish.
-- **F19** Donut wedges don't return to place on release (pop-out doesn't restore;
-  some selection/animation logic issue). → bug.
+- **F19** Donut wedges don't return on release — ✅ **fixed** (react-native-svg
+  ignores a transform reset to `undefined`; use explicit `translate(0,0)`).
+- **F18 root cause:** forms use raw `<TextInput>` (quick.tsx ×7, itemized ×6,
+  savings ×5…) instead of the shared focused `Input` component → no focus/typing
+  state, hence inconsistent. Fix = migrate forms to the shared `Input` (a sweep on
+  the actively-co-edited add screens — coordinate to avoid collisions).
 - **F8** v1 release — PR this branch to `main` (Decision D1). → Phase 1 close-out.
 
 (These feed the v2-P0 "premium pass" workstreams in §6.)
