@@ -103,23 +103,23 @@ F29 increase=coral severity.
       `router.back()`; `restoreTxn`; wired on detail + group-swipe deletes.
       Recurring-rule delete now **asks** before removing already-logged occurrences.
 
-### Phase B — On-device smart wins  *(no dev build)*
-- [ ] **B1 — Goal celebration** — confetti + `haptic.success` when a goal hits 100%
-      (fires once per goal completion; guard re-trigger)
-- [ ] **B2 — Pattern-aware "Can I afford this?"** — factor projected month-end pace +
-      remaining recurring this month + category avg into the verdict; show the math
-- [ ] **B3 — Global transaction search** + richer filters (date / amount / person range)
-      → new search screen over all groups; reuse `FilterBar`
-- [ ] **B4 — Duplicate detection** — on add, warn if same amount+category within 24h
-- [x] **B5a — Photo size cap** — picker compresses on import (`quality 0.7`). ✅
-- [x] **B5b — Storage management** — `/storage`: total receipt size + count +
-      "Delete all attachments" (clears files + nulls refs). ✅
-- [ ] **B5c — Multi-photo (≤3)** — deferred (needs attachment-array refactor; marginal value).
-- [ ] **B5d — PDF attachments** — deferred to dev-build track (needs `expo-document-picker`).
-- [ ] **B6 — Financial-health score** (0–100: budget adherence + savings rate + debt) ·
-      **what-if simulator** ("cut dining 20% → save ₹X")
-- [ ] **B7 — Smart categories: learn from corrections** (remember title→category overrides)
-- [ ] **B8 — Pull-to-refresh** on list screens · **bulk actions** (multi-select)
+### Phase B — On-device smart wins  *(no dev build)*  ✅ mostly DONE
+- [x] **B1 — Goal celebration** — confetti + haptic when a goal hits 100% (`GoalCelebration`).
+- [x] **B2 — Pattern-aware "Can I afford this?"** — subtracts this month's committed bills;
+      shows cash − bills = free-to-spend (`evaluateAfford`, +tests).
+- [x] **B3 — Global transaction search** — `/search`: category/note/amount + kind chips.
+- [x] **B4 — Duplicate detection** — same category+amount within ±24h warns on add.
+- [x] **B5a — Photo size cap** — picker compresses on import (`quality 0.7`).
+- [x] **B5b — Storage management** — `/storage`: size + count + delete-all.
+- [ ] **B5c — Multi-photo (≤3)** — deferred (attachment-array refactor; marginal value).
+- [ ] **B5d — PDF attachments** — deferred to dev-build track (`expo-document-picker`).
+- [x] **B6 — Financial-health score** (0–100, opt-in dashboard gauge) · **what-if** (Reports).
+- [x] **B7 — Smart categories: learn from corrections** (`smartCategoryLearn`, +tests).
+- [x] **B8a — Pull-to-refresh** — reusable `AppRefreshControl` + `useRefresh` on
+      Dashboard / Groups / Money / Group-detail.
+- [ ] **B8b — Bulk actions** (multi-select delete / recategorize / move) — deferred;
+      a dedicated selection-mode feature, P2.
+- [x] **(bonus) Add friend** directly from the Friends screen + Groups-tab entry.
 
 ### Phase C — Notifications & subscriptions  *(needs dev build — expo-notifications)*
 - [ ] **C1 — Local notification engine** (permission, schedule, cancel) foundation
