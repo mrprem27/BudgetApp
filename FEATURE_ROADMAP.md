@@ -80,20 +80,28 @@
 ## 2. Gap Analysis vs. World-Class Apps <a name="gap-analysis"></a>
 
 ### Critical Missing Features (Every top app has these)
+
+> **Legend:** ✅ Done · 🟡 Partial · 📋 Planned (in roadmap) · ❌ Not yet
+
 | Feature | Splitwise | YNAB | Monarch | Tricount | BudgetSplit |
 |---------|-----------|------|---------|----------|-------------|
-| Multi-currency support | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Receipt/photo attachments | ✅ Pro | — | ✅ | ✅ | ❌ |
-| Cloud sync / multi-device | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Push notifications & reminders | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Search & filter transactions | ✅ Pro | ✅ | ✅ | — | ❌ |
-| Net worth tracking | — | ✅ | ✅ | — | ❌ |
-| Savings goals | — | ✅ | ✅ | — | ❌ |
-| Widgets (home screen) | ✅ | ✅ | ✅ | — | ❌ |
-| Payment request links | ✅ | — | — | ✅ | ❌ |
-| AI-powered categorization | — | — | ✅ | — | ❌ |
-| Subscription tracking | — | — | ✅ | — | ❌ |
-| Data import (Splitwise/CSV) | — | ✅ | ✅ | ✅ | ❌ |
+| Receipt/photo attachments | ✅ Pro | — | ✅ | ✅ | ✅ Done |
+| Savings goals | — | ✅ | ✅ | — | ✅ Done |
+| Smart categorization (rule-based, on-device) | — | — | ✅ | — | ✅ Done (Smart categories) |
+| AI-powered categorization | — | — | ✅ | — | ❌ Deferred (breaks offline promise, D2) |
+| Transaction **filters** (group / budget status) | ✅ Pro | ✅ | ✅ | — | ✅ Done |
+| Transaction **global search** (find any past txn) | ✅ Pro | ✅ | ✅ | — | 📋 Planned |
+| Money position — cash-available + savings | — | ✅ | ✅ | — | ✅ Done |
+| Net worth — assets/liabilities (FD/MF/property/loans) | — | ✅ | ✅ | — | ❌ Not started (v4.0) |
+| Data **export** (CSV / PDF) | — | ✅ | ✅ | ✅ | ✅ Done |
+| Data **import** (Splitwise / CSV / bank) | — | ✅ | ✅ | ✅ | ❌ Not started (v4.0) |
+| Subscription **detection** | — | — | ✅ | — | 📋 Planned (N2) |
+| Subscription **renewal reminders** | — | — | ✅ | — | 📋 Planned (N1, local notif) |
+| Push notifications & reminders (engine) | ✅ | ✅ | ✅ | ✅ | 📋 Planned (needs dev build) |
+| Multi-currency support | ✅ | ✅ | ✅ | ✅ | 🟡 Infra dormant, INR-only (D6) |
+| Cloud sync / multi-device | ✅ | ✅ | ✅ | ✅ | ❌ Not started (v3.0) |
+| Widgets (home screen) | ✅ | ✅ | ✅ | — | 📋 Planned (N3 — needs dev build) |
+| Payment request links (UPI) | ✅ | — | — | ✅ | ❌ Not started (v3.0) |
 
 ### Differentiators BudgetSplit Could Own
 | Opportunity | Why It Matters |
@@ -112,63 +120,64 @@
 **Theme:** Complete the core, fix UX gaps, world-class polish
 **Timeline:** 4-6 weeks
 
-> **✅ Shipped from this version already:** Transfer txn UI · transaction notes ·
-> split methods (%/shares/exact) · receipt photos + full-screen viewer ·
-> interactive onboarding · destructive confirmations · empty-state CTAs ·
-> skeleton loading · keyboard avoidance · date-picker sheet · smart categories.
-> **Still open:** partial settlements · transaction search/filter · bulk actions ·
-> duplicate detection · multi-currency · local notifications (needs dev build) ·
-> undo/redo · home-screen widgets.
+> Legend: ✅ done · 🟡 partial · 📋 planned · ❌ not started. Status is the **last
+> column** of each table; half-built items are split into separate rows.
 
 ### 2.0.1 — Transaction Completeness
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Transfer transactions** | Complete UI for money transfers between people (not counted as spend) | P0 |
-| **Partial settlements** | Record partial payments against debts (₹500 of ₹2000 owed) | P0 |
-| **Transaction search** | Full-text search across all txns (description, amount, category, person) | P0 |
-| **Transaction filters** | Filter by: date range, amount range, category, person, group, type | P0 |
-| **Bulk actions** | Multi-select → bulk delete, bulk re-categorize, bulk move to group | P1 |
-| **Duplicate detection** | Warn if similar amount + date + category exists within 24h | P1 |
-| **Transaction notes** | Free-text notes field on any transaction | P1 |
-| **Split methods** | Add: split by percentages, split by shares, split by exact amounts | P0 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Transfer transactions** | Money transfer UI between people (not counted as spend) | P0 | ✅ done |
+| **Editable transactions** | Edit any txn incl. settlements/transfers (itemized excepted) | P0 | ✅ done |
+| **Transaction notes** | Free-text note on any transaction | P1 | ✅ done |
+| **Split methods** | Split by %, shares, exact amounts | P0 | ✅ done |
+| **Partial settlements** | Record partial payments against debts (₹500 of ₹2000 owed) | P0 | ❌ not started |
+| **Transaction filters** — group / budget status | Filter group list & budget categories | P0 | ✅ done |
+| **Transaction filters** — date / amount / person range | Richer filtering across all txns | P1 | 📋 planned |
+| **Transaction global search** | Full-text search across all txns | P0 | 📋 planned |
+| **Bulk actions** | Multi-select → delete / re-categorize / move | P1 | ❌ not started |
+| **Duplicate detection** | Warn if similar amount + date + category within 24h | P1 | ❌ not started |
 
-### 2.0.2 — Multi-Currency Support
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Currency per group** | Each group has a base currency (INR, USD, EUR, etc.) | P0 |
-| **Foreign expense entry** | Enter amount in foreign currency, auto-convert to group base | P0 |
-| **Exchange rate source** | Fetch rates from free API (exchangerate.host) with offline cache | P1 |
-| **Manual rate override** | User can set custom exchange rate per transaction | P1 |
-| **Multi-currency reports** | Show spending in original + converted currencies | P2 |
+### 2.0.2 — Multi-Currency Support  *(🟡 infra dormant — INR-only for now, Decision D6)*
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Currency per group** | Each group has a base currency (INR, USD, EUR, etc.) | P0 | 🟡 infra only |
+| **Foreign expense entry** | Enter in foreign currency, auto-convert to group base | P0 | ❌ not started |
+| **Exchange rate source** | Free API (exchangerate.host) + offline cache | P1 | ❌ not started |
+| **Manual rate override** | Custom exchange rate per transaction | P1 | ❌ not started |
+| **Multi-currency reports** | Spending in original + converted currencies | P2 | ❌ not started |
 
 ### 2.0.3 — Media & Attachments
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Receipt photos** | Attach 1-3 photos per transaction (camera or gallery) | P0 |
-| **Photo viewer** | Full-screen pinch-zoom photo view | P1 |
-| **Storage management** | Show total storage used, option to compress/delete old photos | P2 |
-| **PDF receipts** | Attach PDF documents (bills, invoices) | P2 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Receipt photos** | Attach a photo per transaction (camera or gallery) | P0 | ✅ done |
+| **Photo viewer** | Full-screen pinch-zoom photo view | P1 | ✅ done |
+| **Multi-photo (1–3)** | More than one photo per transaction | P2 | ❌ not started |
+| **Storage management** | Total storage used, compress/delete old photos | P2 | ❌ not started |
+| **PDF receipts** | Attach PDF documents (bills, invoices) | P2 | ❌ not started |
 
 ### 2.0.4 — UX Polish
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Interactive onboarding** | 3-step tutorial: create group → add expense → see balance | P0 |
-| **Undo/redo** | Toast with "Undo" button for delete actions (5s window) | P0 |
-| **Destructive confirmations** | Bottom sheet confirm for: delete txn, remove member, archive group | P0 |
-| **Empty state improvements** | Contextual empty states with quick-action CTAs | P1 |
-| **Skeleton loading** | Shimmer placeholders for all list/chart views | P1 |
-| **Pull-to-refresh** | On all list screens | P1 |
-| **Keyboard avoidance** | Proper keyboard-aware scroll on all input screens | P1 |
-| **Date picker upgrade** | Calendar view with marked expense days | P2 |
-| **Amount input** | Calculator-style keypad with +/−/×/÷ | P2 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Interactive onboarding** | Welcome gate / intro tour | P0 | ✅ done |
+| **Destructive confirmations** | Confirm delete txn / remove member / archive group | P0 | ✅ done |
+| **Empty state improvements** | Contextual empty states with quick-action CTAs | P1 | ✅ done |
+| **Skeleton loading** | Shimmer placeholders for list/chart views | P1 | ✅ done |
+| **Keyboard avoidance** | Keyboard-aware scroll on all input screens | P1 | ✅ done |
+| **Date picker** | Date-picker sheet | P2 | ✅ done |
+| **Undo/redo** | Toast with "Undo" for delete actions (5s window) | P0 | ❌ not started |
+| **Pull-to-refresh** | On all list screens | P1 | ❌ not started |
+| **Onboarding — interactive tutorial** | Guided create-group → add → see-balance | P1 | 🟡 basic only |
+| **Amount input calculator** | Keypad with +/−/×/÷ | P2 | ❌ not started |
 
-### 2.0.5 — Notifications & Reminders
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Local notifications** | Budget limit warnings (80%, 100% thresholds) | P0 |
-| **Bill reminders** | "Rent due tomorrow" based on recurring txns | P0 |
-| **Settlement nudges** | Weekly reminder if someone owes you > ₹500 | P1 |
-| **Daily spend digest** | Optional evening notification: "You spent ₹X today" | P2 |
+### 2.0.5 — Notifications & Reminders  *(📋 all need a custom dev build — expo-notifications, can't run in Expo Go)*
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Local notifications engine** | On-device scheduling foundation | P0 | 📋 planned |
+| **Budget limit warnings** | 80% / 100% threshold alerts | P0 | 📋 planned |
+| **Bill / renewal reminders** | "Rent due tomorrow" from recurring txns (N1) | P0 | 📋 planned |
+| **Streak daily nudge** | "Log today to keep your streak" (in-app chip ✅; push 📋) | P1 | 🟡 in-app done |
+| **Settlement nudges** | Weekly reminder if someone owes you > ₹500 | P1 | 📋 planned |
+| **Daily spend digest** | Optional evening "You spent ₹X today" | P2 | 📋 planned |
 
 ---
 
@@ -177,75 +186,74 @@
 **Theme:** Intelligent features that make users financially smarter
 **Timeline:** 4-6 weeks after v2.0
 
-> **✅ Shipped already:** full Savings Goals module (create/track/contribute,
-> auto-allocation, opt-in sweep) · spending velocity/pace (forecast) · category
-> trends (6-mo, donut-driven) · savings rate · cash-flow forecast (30-day pace) ·
-> year-in-review · smart categorization (title→category) · EMI/loan + household-help
-> categories · **"Can I afford this?"** v1 · gentle **tracking streak**.
-> **Still open / next:** subscription auto-detect + renewal reminders (N1/N2),
-> financial-health score, what-if simulator, debt tracker, learn-from-corrections.
-
-### 2.5.6 — Smart "Can I afford this?" engine *(evolve the v1 checker)*
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Pattern-aware verdict** | Move beyond current cash → factor projected month-end pace, upcoming recurring/bills, and average category spend before saying yes/tight/no | P1 |
-| **Insight-driven** | A small on-device engine over the user's own history (run-rate, recurring load, category mix) — no cloud, no AI service | P1 |
-| **Save-instead nudge** | If "tight/no", one-tap create or top up a goal for the item | P1 |
-
-### 2.5.7 — Data-gated unlocks (retention loop)
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Tracking-streak unlocks** | Advanced analysis (deeper forecasting, weekly/2-month projections, pattern search) "unlocks" after N continuous days of tracking (e.g. 30) — both a quality gate (enough data to be accurate) and a reason to come back | P1 |
-| **Honest gating copy** | "3 more days of tracking unlocks 2-month forecasting" — never fake; the gate reflects real data sufficiency | P1 |
-| **Progress visibility** | Show how close they are to the next unlock on the dashboard/streak chip | P2 |
+> Legend: ✅ done · 🟡 partial · 📋 planned · ❌ not started.
 
 ### 2.5.1 — Savings Goals
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Goal creation** | Name, target amount, target date, icon, color | P0 |
-| **Goal tracking** | Progress bar, days remaining, required daily/monthly savings | P0 |
-| **Goal contributions** | Manually add money toward a goal | P0 |
-| **Auto-allocation** | Set % of income to auto-allocate to goals | P1 |
-| **Goal categories** | Emergency fund, vacation, gadget, wedding, education | P1 |
-| **Goal sharing** | Share goal progress with group members | P2 |
-| **Goal celebration** | Confetti + haptic when goal reached | P1 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Goal creation** | Name, target, icon, color | P0 | ✅ done |
+| **Goal tracking** | Progress bar, est. completion, required savings | P0 | ✅ done |
+| **Goal contributions** | Add / withdraw money toward a goal | P0 | ✅ done |
+| **Auto-allocation** | Fixed allocation per period to goals | P1 | ✅ done |
+| **Opt-in budget sweep** | Move leftover budget into savings | P1 | ✅ done |
+| **Goal target date** | Deadline + days-remaining | P1 | 🟡 est. completion only |
+| **Goal celebration** | Confetti + haptic when reached | P1 | ❌ not started |
+| **Goal sharing** | Share progress with group members | P2 | ❌ not started |
 
 ### 2.5.2 — Subscription Tracker
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Auto-detect subscriptions** | Flag recurring same-amount transactions as subscriptions | P0 |
-| **Subscription dashboard** | List all active subs with monthly/yearly total | P0 |
-| **Renewal calendar** | Show upcoming renewal dates | P1 |
-| **Cancel reminder** | Set reminder X days before free trial/renewal | P1 |
-| **Cost optimization** | "You pay ₹12,000/yr on subscriptions — 3 unused this month" | P2 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Recurring transactions** | Repeat schedules for expenses/income | P0 | ✅ done |
+| **Auto-detect subscriptions** | Flag recurring same-amount txns (N2) | P0 | 📋 planned |
+| **Subscription dashboard** | All active subs + monthly/yearly total | P0 | 📋 planned |
+| **Renewal calendar** | Upcoming renewal dates | P1 | 📋 planned |
+| **Cancel/renewal reminder** | Alert X days before renewal (N1, local notif) | P1 | 📋 planned |
+| **Cost optimization** | "₹12,000/yr on subs — 3 unused this month" | P2 | ❌ not started |
 
 ### 2.5.3 — Advanced Analytics
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Spending velocity** | "Pace" indicator — spending too fast/slow vs. budget | P0 |
-| **Category trends** | 3/6/12 month trend lines per category | P0 |
-| **Peer comparison** | "You spend X% more on dining than avg" (anonymous benchmarks) | P2 |
-| **Savings rate** | Income vs expenses ratio with monthly trend | P0 |
-| **Financial health score** | Composite score (0-100) based on budget adherence, savings rate, debt | P1 |
-| **Cash flow forecast** | Project next 30/60/90 days based on recurring + averages | P1 |
-| **What-if simulator** | "If I cut dining by 20%, I save ₹X/month" | P2 |
-| **Year-in-review** | Annual summary card: total earned, spent, saved, top categories | P1 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Spending velocity / pace** | Spending too fast/slow vs budget | P0 | ✅ done (forecast) |
+| **Category trends** | Multi-month trend per category (donut-driven) | P0 | ✅ done |
+| **Savings rate** | Income vs expense ratio + trend | P0 | ✅ done |
+| **Cash-flow forecast** | Project month-end from run-rate + prior month | P1 | ✅ done |
+| **Year-in-review** | Annual summary card | P1 | ✅ done |
+| **Cash-flow forecast — 60/90-day** | Deeper multi-month projection (gated by streak) | P1 | 📋 planned (N4/2.5.7) |
+| **Financial health score** | Composite 0–100 (adherence, savings, debt) | P1 | ❌ not started |
+| **What-if simulator** | "Cut dining 20% → save ₹X/mo" | P2 | ❌ not started |
+| **Peer comparison** | Anonymous benchmarks | P2 | ❌ not started |
 
 ### 2.5.4 — Smart Categorization
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Auto-suggest category** | Based on amount patterns + time of day + location | P1 |
-| **Learn from corrections** | When user re-categorizes, learn for future | P1 |
-| **Category rules** | "Amounts ₹100-200 at 8-9am → Breakfast" | P2 |
-| **Split suggestions** | Remember frequent split patterns per group | P1 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Auto-suggest category** | Title → category (rule-based, on-device) | P1 | ✅ done (Smart categories) |
+| **Learn from corrections** | Adapt when user re-categorizes | P1 | ❌ not started |
+| **Category rules** | "₹100–200 at 8–9am → Breakfast" | P2 | ❌ not started |
+| **Split suggestions** | Remember frequent split patterns per group | P1 | ❌ not started |
 
 ### 2.5.5 — Debt Management
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Debt tracker** | Track loans given/taken outside of bill splits | P0 |
-| **Interest calculator** | Simple/compound interest on debts over time | P1 |
-| **Payoff planner** | Snowball vs avalanche debt payoff strategies | P2 |
-| **Payment schedule** | EMI-style scheduled payments with reminders | P1 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **EMI/loan category + budget** | Track EMIs as a budgeted category | P0 | ✅ done (category) |
+| **Debt tracker** | Loans given/taken outside bill splits | P0 | ❌ not started |
+| **Interest calculator** | Simple/compound interest over time | P1 | ❌ not started |
+| **Payment schedule** | EMI-style scheduled payments + reminders | P1 | ❌ not started |
+| **Payoff planner** | Snowball vs avalanche strategies | P2 | ❌ not started |
+
+### 2.5.6 — Smart "Can I afford this?" engine *(evolve the v1 checker)*
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Basic verdict vs cash** | Yes/tight/no against spendable cash + save-to-goal | P1 | ✅ done (v1) |
+| **Pattern-aware verdict** | Factor projected month-end pace, upcoming recurring/bills, avg category spend | P1 | 📋 planned |
+| **Insight engine** | Small on-device engine over own history (run-rate, recurring load, mix) — no cloud/AI | P1 | 📋 planned |
+
+### 2.5.7 — Data-gated unlocks (retention loop)
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Tracking streak (in-app)** | Gentle daily-logging streak chip | P1 | ✅ done |
+| **Streak-gated analysis** | Deeper forecasting / 2-month / pattern search unlocks after N continuous days (e.g. 30) — quality gate + reason to return | P1 | 📋 planned |
+| **Honest gating copy** | "3 more days unlocks 2-month forecasting" — reflects real data sufficiency | P1 | 📋 planned |
+| **Unlock progress** | Show distance to next unlock on the streak chip | P2 | 📋 planned |
 
 ---
 
@@ -481,30 +489,29 @@ HIGH IMPACT
 
 ### Critical Bugs / UX Issues to Fix in v2.0
 
-> **✅ Resolved since this list was written:** #1 transfer UI · #5 destructive
-> confirmations · #6 budget cadence picker (now a sheet) · #7 date picker (sheet) ·
-> #8 transaction notes · #9 onboarding (interactive gate) · #14 receipt capture.
-> Also fixed: income-leak in balances, donut deselect, settlement direction.
-> **Still open:** #2 partial settlements · #3 search · #4 undo · #10 backup ·
-> #11 multi-currency · #12 multi-device · #13 notifications · #15 widgets.
+> Legend: ✅ fixed · 🟡 partial · 📋 planned · ❌ open. Status is the last column.
 
-| # | Issue | Severity | Category |
-|---|-------|----------|----------|
-| 1 | **Transfer txn UI incomplete** — schema supports it but no proper flow | High | Feature Gap |
-| 2 | **No partial settlements** — can only settle full debt | High | Feature Gap |
-| 3 | **No transaction search** — impossible to find old expenses | High | UX |
-| 4 | **No undo for deletes** — accidental delete is permanent | High | UX |
-| 5 | **No destructive action confirmations** — can delete txn with single tap | High | UX Safety |
-| 6 | **Budget cadence picker UX** — needs dropdown instead of cycling | Medium | UX |
-| 7 | **Date picker limitations** — no calendar view, hard to pick past dates | Medium | UX |
-| 8 | **No transaction notes** — can't add context to expenses | Medium | Feature Gap |
-| 9 | **Onboarding is too basic** — doesn't explain key concepts | Medium | UX |
-| 10 | **No data backup** — phone loss = all data lost | Critical | Data Safety |
-| 11 | **No multi-currency** — unusable for international trips | High | Feature Gap |
-| 12 | **Single-device only** — no way to access data elsewhere | High | Architecture |
-| 13 | **No push notifications** — miss budget warnings | Medium | Engagement |
-| 14 | **No receipt capture** — can't attach proof of payment | Medium | Feature Gap |
-| 15 | **No widgets** — must open app to check budget | Low | Convenience |
+| # | Issue | Severity | Category | Status |
+|---|-------|----------|----------|--------|
+| 1 | **Transfer txn UI** — needed a proper flow | High | Feature Gap | ✅ fixed |
+| 5 | **Destructive action confirmations** — single-tap delete | High | UX Safety | ✅ fixed |
+| 6 | **Budget cadence picker** — cycling instead of a picker | Medium | UX | ✅ fixed (sheet) |
+| 7 | **Date picker** — no easy past-date pick | Medium | UX | ✅ fixed (sheet) |
+| 8 | **Transaction notes** — no context on expenses | Medium | Feature Gap | ✅ fixed |
+| 14 | **Receipt capture** — no proof of payment | Medium | Feature Gap | ✅ fixed |
+| 9 | **Onboarding too basic** — doesn't explain concepts | Medium | UX | 🟡 gate done; interactive tutorial open |
+| 2 | **Partial settlements** — can only settle full debt | High | Feature Gap | ❌ open |
+| 3 | **Transaction search** — can't find old expenses | High | UX | 📋 planned |
+| 4 | **Undo for deletes** — accidental delete is permanent | High | UX | ❌ open |
+| 10 | **Data backup** — phone loss = all data lost | Critical | Data Safety | ❌ open (export exists; auto-backup 📋) |
+| 11 | **Multi-currency** — unusable for international trips | High | Feature Gap | 🟡 infra dormant (D6) |
+| 12 | **Single-device only** — no access elsewhere | High | Architecture | ❌ open (v3.0) |
+| 13 | **Push notifications** — miss budget warnings | Medium | Engagement | 📋 planned (needs dev build) |
+| 15 | **Widgets** — must open app to check budget | Low | Convenience | 📋 planned (N3) |
+
+> Also fixed this cycle (not in the original list): income-leak in balances,
+> donut wedge deselect, settlement direction + sign-coloring, settings/budget
+> padding, insight number coloring, forecast chart readability.
 
 ### Architecture Concerns
 | # | Issue | Impact |
