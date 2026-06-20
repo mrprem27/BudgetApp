@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Modal, Pressable,
+  View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder, Dimensions,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, shadow } from '../tokens';
+
+const SCREEN_H = Dimensions.get('window').height;
+const DISMISS_DY = 120;   // drag distance past which we close
+const DISMISS_VY = 0.8;   // …or a fast flick
 
 type Props = {
   visible: boolean;
@@ -16,25 +20,56 @@ type Props = {
 };
 
 /**
- * The single bottom-sheet used across the app. Handles:
- * - keyboard avoidance (inputs never hide under the keyboard)
- * - tap-outside / backdrop to dismiss
- * - drag handle, rounded top, safe-area bottom padding
- * Use this instead of hand-rolling Modal + Pressable per screen.
+ * The single bottom-sheet used across the app:
+ * - spring-in on open, **drag the handle down to dismiss** (snaps back if you
+ *   don't pull far enough), backdrop fades with the drag
+ * - keyboard avoidance, tap-backdrop to dismiss, rounded top, safe-area padding
+ * Improving this lifts every sheet in the app.
  */
 export function SheetModal({ visible, onClose, title, children, scroll = true }: Props) {
   const insets = useSafeAreaInsets();
+  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+
+  const animateClose = (cb: () => void) => {
+    Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(({ finished }) => { if (finished) cb(); });
+  };
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(SCREEN_H);
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 2, speed: 14 }).start();
+    }
+  }, [visible]);
+
+  // Drag handle (grabber) → follow the finger downward; release decides.
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > DISMISS_DY || g.vy > DISMISS_VY) animateClose(onClose);
+        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 0, speed: 16 }).start();
+      },
+    }),
+  ).current;
+
+  const backdropOpacity = translateY.interpolate({ inputRange: [0, SCREEN_H], outputRange: [1, 0], extrapolate: 'clamp' });
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => animateClose(onClose)}>
+      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => animateClose(onClose)} accessibilityRole="button" accessibilityLabel="Close" />
+      </Animated.View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.wrap}
         pointerEvents="box-none"
       >
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + space.md }]}>
-          <View style={styles.handle} />
-          {title ? <Text style={styles.title}>{title}</Text> : null}
+        <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.md, transform: [{ translateY }] }]}>
+          <View {...pan.panHandlers} style={styles.grabber}>
+            <View style={styles.handle} />
+            {title ? <Text style={styles.title}>{title}</Text> : null}
+          </View>
           {scroll ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -46,7 +81,7 @@ export function SheetModal({ visible, onClose, title, children, scroll = true }:
           ) : (
             <View style={styles.content}>{children}</View>
           )}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -61,10 +96,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.lg,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
-    maxHeight: '85%',
+    maxHeight: '88%',
     ...shadow.lg,
   },
-  handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.sm },
-  title: { ...type.subheading, color: colors.textPrimary, marginBottom: space.md },
-  content: { gap: space.md },
+  grabber: { paddingBottom: space.xs },
+  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border, marginBottom: space.sm },
+  title: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
+  content: { gap: space.md, paddingTop: space.xs },
 });
