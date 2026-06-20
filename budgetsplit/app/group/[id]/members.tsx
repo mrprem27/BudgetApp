@@ -11,7 +11,8 @@ import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
-import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup } from '../../../src/db/queries/persons';
+import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage } from '../../../src/db/queries/persons';
+import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
@@ -129,7 +130,13 @@ export default function MembersScreen() {
                   friction={2}
                 >
                   <View style={[styles.row, index < members.length - 1 && styles.rowBorder]}>
-                    <MemberAvatar name={item.name} color={item.avatar_color} size={36} />
+                    <MemberAvatar
+                      name={item.name}
+                      color={item.avatar_color}
+                      size={36}
+                      imageUri={item.image_uri}
+                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await load(); } }}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
                       {net[item.id] !== undefined && net[item.id] !== 0 && (
