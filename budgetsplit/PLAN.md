@@ -52,88 +52,40 @@ nothing looks like a 2010 form.
 
 ---
 
-## 3.5 Feedback queue (live)
+## 3.5 Feedback log — Pending / Done
 
-> Standing rule: apply the **Splitwise reference-screenshot taste** (inline
-> "Paid by · split" sentence, owes-tree, "you lent/you borrowed", colored
-> activity, clean detail) to everything here. Each item: gate + commit, then move on.
+> Mode: autonomous, **one item at a time, gate + commit, then move it Pending → Done**.
+> Conventions: Splitwise-screenshot taste · enums for finite states · paise money,
+> **compact on overviews / exact on entry** · Feather icons (no emoji) · tokens not
+> hex · ≥44pt. (See `AGENTS.md`.)
 
-**✅ Shipped (this polish session)**
-- **F1** Balances bug — income leaked into net → excluded `kind='income'` (`balances.ts`).
-- **F2** Transaction detail → paid→owes summary + history timeline (no form rows).
-- **F3** Itemized scan hidden (on-device OCR can't itemize; Decision D2/D3).
-- **F4** Dashboard leads with **Top insights**; Recent activity removed.
-- **F6** Zero day shows a quiet `—` (AmountText `zeroDash`), not an animated ₹0.
-- **F9** Income recurring gains a **Custom "every N days"** interval.
-- **F11** Compact decimals — 1 dp for K, 2 dp for L/Cr/M/B (summary math reads right).
-- **F13a** Compact K/L/Cr across the Budget tab + group header/balances.
-- **F14** Semantic coloring pass — health-colored budget spent amounts (BudgetBar,
-  group detail header, category rows, utilization hero); action-colored history
-  amounts; compact K/L/Cr in insight recommendations (`analytics.ts`).
-- **F15** Donut fix — tap-to-deselect (was: tap-again navigated away, dimmed state
-  stuck); selection resets on tab/data change.
-- **F16** Add-form UX — top-right Save button (quick/income/transfer/itemized review);
-  schedule toggle simplified to label+switch (no icon row); Never button bigger
-  with accent color.
-- **F13b/c** Budget IA — promoted Budget tile to hero position on dashboard (above
-  donut, health-colored %, over/near badges); groups list cards now show
-  category-level budget data + "X over" badge; balances card standalone.
-- **F7** Settings UI — regrouped into Security / Budget & Data / Insights /
-  Experimental / Manage / Help; killed the sparse Preferences section + long
-  flat Features list; removed per-toggle captions (labels are self-explanatory).
-- **F5** Navigation flicker — donut deselect fix covers the main visible issue;
-  broader focus-refetch flicker noted, deferred to device repro.
+### 📋 Pending
+- **F8** Ship v1 — PR branch → `main`. *(Holding — keep iterating.)*
+- **F12** Budget **entry** redesign — collapsible parent-category sections w/ icons +
+  faster entry. *(Needs your exact entry UX.)*
+- **F17** Budget component spacing audit (several screens).
+- **F18** Inputs inconsistent empty-vs-typed — migrate forms (raw `<TextInput>`:
+  quick ×7, itemized ×6, savings ×5…) to the shared focused `Input`.
+- **F20** Manage-friends entry (rename / photo / remove). *(Balances + settle already
+  on Groups.)*
+- **F21′** Color-where-+/--matters sweep on remaining neutral owe/owed figures.
+- **F24** Feature-management screen — one Settings row → dedicated, **sectioned**
+  toggle screen for every component.
+- **F25** Avatar photos for user & friends — `MemberAvatar` uses the image when set,
+  else initials (offline: local file).
+- **F27** Money tab — clearer Personal-ledger / expense-management section (it's
+  buried among savings).
+- **F28** Insights numbers — apply **K/L/Cr** + semantic color (figure colored by meaning).
+- **F29** Increase/decrease cues — ▲/▼ Feather icon + matching color in front of deltas.
 
-**🔨 Active**
-- **F8** v1 release — PR `feat/design-adoption-bugfixes-toggles` → `main`.
-
-**📋 Queued → mapped to phases in §6**
-- **F10** Forecast redesign — ✅ **done**: pure `forecast.ts` (run-rate blended with
-  last month's actual; `FORECAST_MIN_DAYS` gate) + tests; wired into Reports. → Phase 3.2.
-- **F12** Budget *entry* redesign — collapsible parent-category sections w/ icons +
-  faster entry (smart defaults / quick-set). *(User refining exact UX.)* → Phase 3.1.
-- **F17** Budget components mis-spaced in several places — pad/align audit. → polish.
-- **F18** Input fields inconsistent empty vs typed (border/bg/placeholder state) —
-  standardize a focused/filled input style. → polish.
-- **F19** Donut wedges don't return on release — ✅ **fixed** (react-native-svg
-  ignores a transform reset to `undefined`; use explicit `translate(0,0)`).
-- **F18 root cause:** forms use raw `<TextInput>` (quick.tsx ×7, itemized ×6,
-  savings ×5…) instead of the shared focused `Input` component → no focus/typing
-  state, hence inconsistent. Fix = migrate forms to the shared `Input` (a sweep on
-  the actively-co-edited add screens — coordinate to avoid collisions).
-- **F20** Friends — friends list + settle already on the Groups screen (co-dev);
-  still want a **Manage Friends entry/icon** (rename / photo / remove). → Phase 2.4.
-- **F21** Color where +/- matters — settlement amounts now sign-colored (✅);
-  sweep other neutral owe/owed figures for green/red. → polish.
-- **F22** Settlement line item shows who→whom — ✅ **done** (directional title +
-  correct amount in `TransactionRow`).
-- **F23** Settings — "Default budget cadence" row has a **padding mismatch**. → polish.
-- **F24** **Feature-management screen** — replace the in-Settings toggle lists with a
-  single "Feature management" row → a dedicated screen with **all** component
-  toggles, **grouped into sections**. → feature.
-- **F25** **Avatar images** — let the user & friends have a photo; `MemberAvatar`
-  uses the image when set, else the initials. (Offline: store file locally.) → feature.
-- **F26** **History (and others) spacing** — audit/fix row rhythm & padding. → polish.
-- **F8** v1 release — PR this branch to `main` (Decision D1). → Phase 1 close-out.
-
-(These feed the v2-P0 "premium pass" workstreams in §6.)
-
-> ⚠️ **Coordination:** the user is co-developing the same files (Groups, Settings,
-> add screens). To avoid collisions, agent takes contained/independent files
-> (History, lib, new screens); user owns the actively-edited ones. Confirm splits.
-
-**Working mode:** execute this queue + §6 roadmap **autonomously, one phase at a
-time, gate + commit each**. New user feedback is appended here and the work
-continues without pausing to ask. Standing rule: apply the Splitwise-screenshot
-taste throughout.
-
-**Conventions (standing):**
-- **Use enums / named constants for states & options** — no bare magic strings
-  for finite sets (status, kind, frequency, split type, etc.). New code uses a TS
-  `enum` (or a single `as const` map) so states are referenced by name; retrofit
-  opportunistically when touching a file.
-- Money = paise; compact on overviews, exact on entry/rows; Feather icons only;
-  tokens not raw hex; ≥44pt targets (per `AGENTS.md`).
+### ✅ Done
+F1 income-leak balances fix · F2 txn detail (paid→owes + timeline) · F3 itemized
+scan hidden · F4 dashboard Top insights · F5 donut remount/deselect · F6 zero-day
+dash · F7 Settings regroup · F9 income custom interval · F10 forecast redesign
+(+tests) · F11 compact decimals · F13 budget compact + rows + IA · F14 semantic
+coloring · F15 donut deselect · F16 add-form UX · F19 donut wedge return · F21
+settlement sign-color · F22 settlement directional rows · F23 Settings padding ·
+F26 History spacing.
 
 ---
 
