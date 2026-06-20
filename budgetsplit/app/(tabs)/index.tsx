@@ -36,6 +36,7 @@ import { formatCompact } from '../../src/lib/money';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { InsightText } from '../../src/components/finance/InsightText';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { computeHealthScore } from '../../src/lib/financialHealth';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 
@@ -196,6 +197,18 @@ export default function DashboardScreen() {
   }
 
   useFocusEffect(useCallback(() => { load(); }, [tab]));
+
+  // One-shot: if onboarding ended with "Add my first expense", open the add flow.
+  useEffect(() => {
+    (async () => {
+      try {
+        if ((await AsyncStorage.getItem('pending_first_add')) === 'true') {
+          await AsyncStorage.removeItem('pending_first_add');
+          setTimeout(() => router.push('/add/quick'), 350);
+        }
+      } catch { /* best-effort */ }
+    })();
+  }, []);
 
   const net = income - spending;
   const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
