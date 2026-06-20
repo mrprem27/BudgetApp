@@ -15,6 +15,7 @@ export type Txn = {
   note: string | null;
   attachment_uri: string | null;
   tags: string | null;
+  adjustments: string | null;
   recur_freq: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
   recur_interval: number | null;
   recur_end: number | null;
@@ -214,6 +215,8 @@ export async function insertTxn(
   return id;
 }
 
+export type ItemizedAdjustment = { label: string; type: 'tax' | 'tip' | 'discount'; mode: 'flat' | 'percent'; value: string };
+
 export type InsertItemizedTxnInput = InsertTxnInput & {
   items: Array<{
     name: string;
@@ -221,6 +224,8 @@ export type InsertItemizedTxnInput = InsertTxnInput & {
     unitPrice: number;
     assignedTo: string[];
   }>;
+  /** Persisted so an itemized bill round-trips on edit (tax/tip/discount). */
+  adjustments?: ItemizedAdjustment[];
 };
 
 export async function insertItemizedTxn(
@@ -233,13 +238,14 @@ export async function insertItemizedTxn(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO txn
-         (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
+         (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
           recur_freq,recur_interval,recur_end,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
+        input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, now, now,
       ],
     );
@@ -271,6 +277,48 @@ export async function insertItemizedTxn(
   });
 
   return id;
+}
+
+/** Edit an itemized bill in place: rewrite the txn row + its line items, payments
+ *  and shares atomically (delete-then-reinsert, so no orphaned line_item rows). */
+export async function updateItemizedTxn(
+  db: SQLite.SQLiteDatabase,
+  id: string,
+  input: InsertItemizedTxnInput,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, updated_at=? WHERE id=?`,
+      [
+        input.category, input.note ?? null, input.attachmentUri ?? null,
+        input.tags ? JSON.stringify(input.tags) : null,
+        input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
+        input.date, now, id,
+      ],
+    );
+    await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
+    await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
+    await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
+    for (const item of input.items) {
+      await db.runAsync(
+        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo)],
+      );
+    }
+    for (const p of input.payments) {
+      await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, p.personId, p.amount]);
+    }
+    for (const s of input.shares) {
+      await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, s.personId, s.amount]);
+    }
+    const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
+    await logAudit(db, {
+      entityType: 'txn', entityId: id, groupId: input.groupId,
+      action: 'updated', amount: totalPaid,
+      summary: `Edited itemized bill ${formatRupees(totalPaid)} · ${input.category}`,
+    });
+  });
 }
 
 export async function softDeleteTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {

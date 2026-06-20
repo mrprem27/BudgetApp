@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertItemizedTxn } from '../../src/db/queries/transactions';
+import { insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, type ItemizedAdjustment } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual } from '../../src/lib/money';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -95,7 +95,8 @@ function computePerPersonShares(
 }
 
 export default function ItemizedScreen() {
-  const { groupId: paramGroupId } = useLocalSearchParams<{ groupId?: string }>();
+  const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
+  const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -121,8 +122,41 @@ export default function ItemizedScreen() {
 
   useEffect(() => {
     (async () => {
-      const grps = await getAllGroups(db);
       const meRow = await getMe(db);
+
+      if (editId) {
+        // Editing an existing itemized bill — load it and prefill every step.
+        const t = await getTxnById(db, editId);
+        if (t) {
+          const gid = t.group_id;
+          setSelectedGroupId(gid);
+          const [cats, mems, lineItems] = await Promise.all([
+            getCategoriesByFrequency(db, gid),
+            getGroupMembers(db, gid),
+            getLineItems(db, editId),
+          ]);
+          setCategories(cats);
+          setMembers(mems);
+          setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
+          setNote(t.note ?? '');
+          setItems(lineItems.map(li => ({
+            id: li.id,
+            name: li.name,
+            qty: String(li.qty),
+            unitPrice: (li.unit_price / 100).toString(),
+            assignedTo: (() => { try { return JSON.parse(li.assigned_to) as string[]; } catch { return []; } })(),
+          })));
+          if (t.adjustments) {
+            try { setAdjustments(JSON.parse(t.adjustments) as Adjustment[]); } catch { /* ignore */ }
+          }
+          const payerMap: Record<string, string> = {};
+          for (const p of t.payments) payerMap[p.personId] = (p.amount / 100).toString();
+          setPayerAmounts(payerMap);
+        }
+        return;
+      }
+
+      const grps = await getAllGroups(db);
       const gid = paramGroupId ?? grps[0]?.id ?? '';
       setSelectedGroupId(gid);
       if (gid) await loadGroup(gid, meRow);
@@ -210,10 +244,10 @@ export default function ItemizedScreen() {
         .map(([personId, amount]) => ({ personId, amount }))
         .filter(s => s.amount > 0);
 
-      await insertItemizedTxn(db, {
+      const payload = {
         groupId: selectedGroupId,
-        kind: 'expense',
-        entryMode: 'itemized',
+        kind: 'expense' as const,
+        entryMode: 'itemized' as const,
         date: Date.now(),
         category: selectedCategory?.name ?? 'Other',
         note: note.trim() || undefined,
@@ -225,7 +259,11 @@ export default function ItemizedScreen() {
           unitPrice: parseToPaise(i.unitPrice),
           assignedTo: i.assignedTo,
         })),
-      });
+        adjustments: adjustments as ItemizedAdjustment[],
+      };
+      if (isEditing) await updateItemizedTxn(db, editId!, payload);
+      else await insertItemizedTxn(db, payload);
+      haptic.success();
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save. Try again.');

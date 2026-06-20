@@ -91,10 +91,12 @@ export default function TxnDetailScreen() {
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
   const isItemized = txn.entry_mode === 'itemized';
-  // Itemized bills can't be edited in the quick form (it would orphan line items).
-  // Settlements/transfers edit in the transfer screen; everything else in quick/income.
-  const canEdit = !isItemized;
-  const editHref = isSettlement
+  // Everything is editable now (itemized reopens in the itemized editor;
+  // settlements/transfers in the transfer screen; the rest in quick/income).
+  const canEdit = true;
+  const editHref = isItemized
+    ? `/add/itemized?editId=${id}`
+    : isSettlement
     ? `/add/transfer?editId=${id}`
     : `/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
@@ -264,7 +266,7 @@ export default function TxnDetailScreen() {
                 </View>
               ))}
             </View>
-            <Text style={styles.itemHint}>Itemized bills can’t be edited in place — delete and re-add to change items.</Text>
+            <Text style={styles.itemHint}>Tap the edit icon to change items, splits or who paid.</Text>
           </>
         )}
 
