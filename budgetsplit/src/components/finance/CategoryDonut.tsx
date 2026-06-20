@@ -100,7 +100,10 @@ export function CategoryDonut({ data, total, onOpen }: Props) {
             return (
               <AG key={seg.name} opacity={anim}>
                 <G
-                  transform={isSel ? `translate(${tx},${ty})` : undefined}
+                  // Explicit translate(0,0) on deselect — passing `undefined` doesn't
+                  // clear a prior transform in react-native-svg, so the popped-out
+                  // wedge would otherwise never return to place (F19).
+                  transform={isSel ? `translate(${tx},${ty})` : 'translate(0,0)'}
                   onPress={() => handleWedgePress(i)}
                 >
                   <Path d={wedgePath(seg, isSel)} fill={seg.color} />
