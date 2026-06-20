@@ -15,7 +15,7 @@ import { haptic } from '../../src/lib/haptics';
 import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
-import { requestNotificationPermission } from '../../src/lib/notifications';
+import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
 import { getReminderPrefs, rescheduleReminders, REMINDER_KEYS } from '../../src/lib/reminders';
 import { ComparisonFormat, formatComparison } from '../../src/lib/money';
 import { getComparisonFormat, setComparisonFormat } from '../../src/lib/displayPrefs';
@@ -111,6 +111,18 @@ export default function SettingsScreen() {
     await setComparisonFormat(f);
   }
 
+  async function onTestReminder() {
+    haptic.light();
+    const res = await sendTestReminder();
+    if (res === 'scheduled') {
+      Alert.alert('Test sent', 'A reminder will appear in about 5 seconds. Lock your phone or switch apps to see the banner.');
+    } else if (res === 'denied') {
+      Alert.alert('Notifications off', 'Allow notifications for BudgetSplit in your phone’s Settings, then try again.');
+    } else {
+      Alert.alert('Not available here', 'Test reminders need a dev build (they don’t fire in Expo Go).');
+    }
+  }
+
   async function saveName() {
     const trimmed = nameText.trim();
     if (!trimmed || !me) return;
@@ -163,6 +175,8 @@ export default function SettingsScreen() {
         <ToggleRow icon="bell" label="Renewal reminders" value={remindRenewals} onValueChange={(v) => toggleReminder(REMINDER_KEYS.renewals, v, setRemindRenewals)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="calendar" label="Daily log reminder" value={remindDaily} onValueChange={(v) => toggleReminder(REMINDER_KEYS.daily, v, setRemindDaily)} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
       </View>
       <Text style={styles.featureCaption}>A day before a recurring charge, and a gentle evening nudge to log. All on-device — nothing leaves your phone.</Text>
 

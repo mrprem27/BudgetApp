@@ -83,6 +83,31 @@ export async function scheduleDailyReminder(id: string, hour: number, minute: nu
   } catch { /* best-effort */ }
 }
 
+export type TestReminderResult = 'scheduled' | 'denied' | 'unavailable';
+
+/**
+ * Fire a one-off test reminder a few seconds out so the user can SEE what
+ * renewal / daily nudges look like and confirm notifications work. Requests
+ * permission if needed. Returns why it couldn't, for a friendly message.
+ */
+export async function sendTestReminder(): Promise<TestReminderResult> {
+  try {
+    ensureHandler();
+    const granted = await requestNotificationPermission();
+    if (!granted) return 'denied';
+    await ensureAndroidChannel();
+    await scheduleReminderAt(
+      'test_reminder',
+      new Date(Date.now() + 5000),
+      'Reminders are working',
+      'This is a test nudge. Renewal and daily reminders will arrive just like this.',
+    );
+    return 'scheduled';
+  } catch {
+    return 'unavailable';
+  }
+}
+
 /** Android needs a channel before notifications show. Safe/no-op elsewhere. */
 export async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;

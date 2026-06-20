@@ -60,15 +60,15 @@ export default function QuickAddScreen() {
   const [learned, setLearned] = useState<LearnedMap>({});
 
   // Smart categories: typing a title auto-picks a category (until the user overrides).
-  // Learned corrections take priority over the built-in keyword rules.
+  // Learned corrections take priority over the built-in keyword rules; anything
+  // we can't confidently place falls back to "Other" (the catch-all) rather than
+  // silently leaving whatever was preselected.
   function onTitleChange(text: string) {
     setNote(text);
-    if (flags.smartCategory && !catManual) {
-      const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories);
-      if (name) {
-        const c = categories.find(cat => cat.name === name);
-        if (c) setSelectedCategory(c);
-      }
+    if (flags.smartCategory && !catManual && text.trim()) {
+      const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories) ?? 'Other';
+      const c = categories.find(cat => cat.name === name);
+      if (c) setSelectedCategory(c);
     }
   }
   const [members, setMembers] = useState<Person[]>([]);

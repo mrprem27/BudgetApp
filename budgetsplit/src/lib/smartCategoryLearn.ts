@@ -19,16 +19,24 @@ export function wordsOf(title: string): string[] {
 }
 
 /**
- * A learned category for this title, or null. Checks the title's words against
- * the learned map and only returns a category that still exists in `available`.
+ * A learned category for this title, or null. Tallies a vote across the title's
+ * words: each word that maps to a still-existing category casts one vote, and
+ * the category with the most votes wins (ties broken by first appearance). This
+ * is sturdier than taking the first match — e.g. "swiggy office lunch" where two
+ * words learned "Food Delivery" and one learned something stale outvotes cleanly.
  */
 export function learnedMatch(title: string, learned: LearnedMap, available: { name: string }[]): string | null {
   const names = new Set(available.map(c => c.name));
+  const votes = new Map<string, number>();
+  let best: { cat: string; n: number } | null = null;
   for (const w of wordsOf(title)) {
     const cat = learned[w];
-    if (cat && names.has(cat)) return cat;
+    if (!cat || !names.has(cat)) continue;
+    const n = (votes.get(cat) ?? 0) + 1;
+    votes.set(cat, n);
+    if (!best || n > best.n) best = { cat, n }; // first to reach the new max keeps it
   }
-  return null;
+  return best ? best.cat : null;
 }
 
 export async function loadLearned(): Promise<LearnedMap> {
