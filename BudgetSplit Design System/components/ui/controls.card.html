@@ -1,0 +1,48 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Inputs, Rows & Empty State" subtitle="Input, TabPills, Switch, Card + SettingsRow, EmptyState" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../styles.css" />
+<script src="https://unpkg.com/feather-icons"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { margin: 0; background: var(--bg); font-family: var(--font-ui); padding: 24px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items:start; }
+  .stack { display:flex; flex-direction:column; gap: 14px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { Input, TabPills, Switch, Card, Divider, SettingsRow, EmptyState } = window.BudgetSplitDesignSystem_f6e8de;
+  function Demo() {
+    const [tab, setTab] = React.useState('month');
+    const [on, setOn] = React.useState(true);
+    return (
+      <div className="grid">
+        <div className="stack">
+          <TabPills tabs={[{key:'today',label:'Today'},{key:'month',label:'Month'},{key:'year',label:'Year'}]} value={tab} onChange={setTab} />
+          <Input icon="search" placeholder="Search transactions" />
+          <Input type="amount" prefix="₹" placeholder="0" />
+          <Card padded={false}>
+            <SettingsRow icon="repeat" label="Default cadence" value="Monthly" onClick={()=>{}} />
+            <Divider inset={64} />
+            <SettingsRow icon="lock" label="Face ID lock" right={<Switch checked={on} onChange={setOn} />} />
+            <Divider inset={64} />
+            <SettingsRow icon="trash-2" label="Delete account" danger onClick={()=>{}} />
+          </Card>
+        </div>
+        <Card>
+          <EmptyState icon="users" title="No groups yet" body="Create a group to track shared expenses with friends, family or roommates." actionLabel="New Group" onAction={()=>{}} />
+        </Card>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

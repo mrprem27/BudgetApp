@@ -1,0 +1,544 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
+  KeyboardAvoidingView, Platform,
+} from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { colors } from '../../src/constants/colors';
+import { asFeather } from '../../src/constants/palette';
+import { categoryVisual } from '../../src/constants/categories';
+import { type } from '../../src/constants/typography';
+import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { AmountText } from '../../src/components/ui/AmountText';
+import { BudgetBar } from '../../src/components/finance/BudgetBar';
+import { EmptyState } from '../../src/components/ui/EmptyState';
+import { PressableScale } from '../../src/components/ui/PressableScale';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Input } from '../../src/components/ui/Input';
+import { InsightText } from '../../src/components/finance/InsightText';
+import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { getTransactionsInRange } from '../../src/db/queries/transactions';
+import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
+import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
+import { goalProgress } from '../../src/lib/savings';
+import { haptic } from '../../src/lib/haptics';
+import {
+  getGoals, getGoalSavedMap, getPoolSummary, getCashPosition, addToPool, withdrawFromPool, insertGoal, runSavingsMaintenance, buildSavingsInsights,
+  type SavingsGoal, type PoolSummary, type Priority, type SavingsFrequency,
+} from '../../src/db/queries/savings';
+import { getAllGroups } from '../../src/db/queries/groups';
+import type { Insight } from '../../src/lib/savingsInsights';
+import type { CashPosition } from '../../src/lib/cash';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+
+const GOAL_ICONS = ['smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield', 'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target'];
+const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060'];
+
+const PRIORITIES: { key: Priority; label: string }[] = [
+  { key: 'high', label: 'High' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'low', label: 'Low' },
+];
+const FREQS: { key: SavingsFrequency; label: string }[] = [
+  { key: 'none', label: 'None' },
+  { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
+];
+
+export function priorityColor(p: Priority): string {
+  return p === 'high' ? colors.coral : p === 'medium' ? colors.healthAmber : colors.textMuted;
+}
+
+function insightTint(tone: Insight['tone']): string {
+  switch (tone) {
+    case 'achieve': return colors.income;
+    case 'warn': return colors.healthAmber;
+    case 'progress': return colors.income;
+    default: return colors.accent; // motivate, compare
+  }
+}
+
+export default function SavingsScreen() {
+  const db = useSQLiteContext();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const [saved, setSaved] = useState<Record<string, number>>({});
+  const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
+  const [cash, setCash] = useState<CashPosition | null>(null);
+  const [subs, setSubs] = useState<DetectedSub[]>([]);
+  const [personalId, setPersonalId] = useState('');
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [whatIfCat, setWhatIfCat] = useState<{ name: string; monthly: number } | null>(null);
+  const [whatIfPct, setWhatIfPct] = useState(20);
+
+  const [showAddPool, setShowAddPool] = useState(false);
+  const [showWithdrawPool, setShowWithdrawPool] = useState(false);
+  const [poolAmt, setPoolAmt] = useState('');
+
+  const [showNew, setShowNew] = useState(false);
+  const [name, setName] = useState('');
+  const [target, setTarget] = useState('');
+  const [priority, setPriority] = useState<Priority>('medium');
+  const [icon, setIcon] = useState(GOAL_ICONS[0]);
+  const [color, setColor] = useState(GOAL_COLORS[0]);
+  const [allocation, setAllocation] = useState('');
+  const [frequency, setFrequency] = useState<SavingsFrequency>('none');
+
+  useFocusEffect(useCallback(() => { load(); }, []));
+  const { refreshing, onRefresh } = useRefresh(() => load());
+
+  async function load() {
+    await runSavingsMaintenance(db); // sweep + schedule + reconcile
+    const [g, s, p, ins, c] = await Promise.all([getGoals(db), getGoalSavedMap(db), getPoolSummary(db), buildSavingsInsights(db), getCashPosition(db)]);
+    setGoals(g);
+    setSaved(s);
+    setPool(p);
+    setInsights(ins);
+    setCash(c);
+    const grps = await getAllGroups(db);
+    setPersonalId(grps.find(g => g.is_personal === 1)?.id ?? '');
+
+    if (flags.subscriptions) {
+      const now = Date.now();
+      const txns = await getTransactionsInRange(db, null, now - 150 * 24 * 60 * 60 * 1000, now);
+      const expenses = txns
+        .filter(t => t.kind === 'expense' && !t.parent_recur_id && !t.recur_freq)
+        .map(t => ({ category: t.category, amount: t.payments.reduce((x, p) => x + p.amount, 0), date: t.date }));
+      setSubs(detectSubscriptions(expenses));
+    } else {
+      setSubs([]);
+    }
+
+    // Load current month's top spending category for the what-if simulator.
+    const monthStart = new Date();
+    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const monthTxns = await getTransactionsInRange(db, null, monthStart.getTime(), Date.now());
+    const catMap: Record<string, number> = {};
+    for (const t of monthTxns) {
+      if (t.kind === 'expense') {
+        const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+        catMap[t.category] = (catMap[t.category] ?? 0) + amt;
+      }
+    }
+    const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
+    setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
+  }
+
+  async function handleAddPool() {
+    const amt = parseToPaise(poolAmt);
+    if (amt <= 0) return;
+    await addToPool(db, amt);
+    haptic.success();
+    setPoolAmt('');
+    setShowAddPool(false);
+    await load();
+  }
+
+  async function handleWithdrawPool() {
+    const amt = Math.min(parseToPaise(poolAmt), pool.unallocated);
+    if (amt <= 0) return;
+    await withdrawFromPool(db, amt);
+    haptic.success();
+    setPoolAmt('');
+    setShowWithdrawPool(false);
+    await load();
+  }
+
+  function resetNew() {
+    setName(''); setTarget(''); setPriority('medium'); setIcon(GOAL_ICONS[0]);
+    setColor(GOAL_COLORS[0]); setAllocation(''); setFrequency('none');
+  }
+
+  async function handleCreate() {
+    const t = parseToPaise(target);
+    if (!name.trim() || t <= 0) return;
+    await insertGoal(db, {
+      name: name.trim(), target: t, priority, icon, color, category: name.trim(),
+      allocation: parseToPaise(allocation), frequency,
+    });
+    haptic.success();
+    setShowNew(false);
+    resetNew();
+    await load();
+  }
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader
+        title="Money"
+        large
+        right={
+          <TouchableOpacity
+            onPress={() => router.push('/afford')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Can I afford something?"
+            style={styles.headerAction}
+          >
+            <Feather name="help-circle" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
+        }
+      />
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {/* Cash available — your real money */}
+        {cash && (
+          <View style={styles.cashCard}>
+            <Text style={styles.cashLabel}>Cash available</Text>
+            <AmountText paise={cash.available} size="xl" forceColor={cash.available >= 0 ? colors.textPrimary : colors.expense} compact />
+            <Text style={styles.cashBreak}>
+              <Text style={{ color: colors.income }}>{formatCompact(cash.income)} in</Text>
+              <Text style={styles.cashBreakSep}> · </Text>
+              <Text style={{ color: colors.expense }}>{formatCompact(cash.paidExpenses + cash.settledOut)} out</Text>
+              <Text style={styles.cashBreakSep}> · </Text>
+              <Text style={{ color: colors.accent }}>{formatCompact(cash.savings)} saved</Text>
+            </Text>
+          </View>
+        )}
+
+        {flags.affordCheck && (
+          <TouchableOpacity style={styles.affordBtn} onPress={() => router.push('/afford')} accessibilityRole="button" accessibilityLabel="Can I afford something?">
+            <View style={styles.affordIcon}><Feather name="help-circle" size={16} color={colors.accent} /></View>
+            <Text style={styles.affordBtnText}>Can I afford something?</Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
+        {flags.subscriptions && subs.length > 0 && (
+          <View style={styles.subsCard}>
+            <View style={styles.subsHead}>
+              <Text style={styles.moneySection}>Looks like subscriptions</Text>
+              <Text style={styles.subsTotal}>{formatCompact(subs.reduce((s, x) => s + x.monthlyEquivalent, 0))}/mo</Text>
+            </View>
+            {subs.slice(0, 5).map(s => (
+              <View key={`${s.category}-${s.amount}`} style={styles.subRow}>
+                <View style={[styles.subDot, { backgroundColor: categoryVisual(s.category).color + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(s.category).icon, 'refresh-cw')} size={13} color={categoryVisual(s.category).color} />
+                </View>
+                <Text style={styles.subName} numberOfLines={1}>{s.category}</Text>
+                <Text style={styles.subCadence}>{s.cadence}</Text>
+                <Text style={styles.subAmt}>{formatCompact(s.amount)}</Text>
+              </View>
+            ))}
+            <Text style={styles.subsHint}>Spotted from charges you log regularly. Set them up as recurring to track automatically.</Text>
+          </View>
+        )}
+
+        {/* Personal budget & spending (the personal ledger lives here now) */}
+        {!!personalId && (
+          <>
+            <Text style={styles.moneySection}>Spending & budget</Text>
+            <TouchableOpacity style={styles.personalCard} onPress={() => router.push(`/group/${personalId}` as any)} accessibilityRole="button" accessibilityLabel="Personal budget and spending">
+              <View style={styles.personalIcon}><Feather name="book" size={18} color={colors.accent} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personalTitle}>Personal budget & spending</Text>
+                <Text style={styles.personalSub}>Your ledger, categories & limits</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Savings pool */}
+        <Text style={styles.moneySection}>Savings</Text>
+        <View style={styles.poolCard}>
+          <Text style={styles.poolLabel}>Savings Pool</Text>
+          <AmountText paise={pool.total} size="xl" forceColor={colors.textPrimary} compact />
+          <View style={styles.poolRow}>
+            <View style={styles.poolStat}>
+              <Text style={styles.poolStatLabel}>Allocated</Text>
+              <AmountText paise={pool.allocated} size="sm" forceColor={colors.accent} compact />
+            </View>
+            <View style={styles.poolDivider} />
+            <View style={styles.poolStat}>
+              <Text style={styles.poolStatLabel}>Available</Text>
+              <AmountText paise={pool.unallocated} size="sm" forceColor={colors.income} compact />
+            </View>
+          </View>
+          <View style={styles.poolActions}>
+            <TouchableOpacity style={styles.addPoolBtn} onPress={() => { setPoolAmt(''); setShowAddPool(true); }} accessibilityRole="button">
+              <Feather name="plus" size={16} color={colors.accent} />
+              <Text style={styles.addPoolText}>Add</Text>
+            </TouchableOpacity>
+            {pool.unallocated > 0 && (
+              <TouchableOpacity style={styles.withdrawPoolBtn} onPress={() => { setPoolAmt(''); setShowWithdrawPool(true); }} accessibilityRole="button">
+                <Feather name="arrow-up" size={16} color={colors.textSecondary} />
+                <Text style={styles.withdrawPoolText}>Withdraw</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Insights */}
+        {flags.savingsInsights && insights.length > 0 && (
+          <View style={styles.insightsCard}>
+            <Text style={styles.insightsTitle}>Insights</Text>
+            {insights.map((ins, i) => {
+              const tint = insightTint(ins.tone);
+              return (
+                <View key={ins.text} style={[styles.insightRow, i > 0 && styles.insightBorder]}>
+                  <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
+                    <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
+                  </View>
+                  <InsightText text={ins.text} color={tint} style={styles.insightText} />
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* What if — cut top category and see savings */}
+        {whatIfCat && (
+          <View style={styles.whatIfCard}>
+            <Text style={styles.moneySection}>What if…</Text>
+            <Text style={styles.whatIfLead}>
+              Cut <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold' }}>{whatIfCat.name}</Text> by
+            </Text>
+            <View style={styles.whatIfChips}>
+              {[10, 20, 30].map(p => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.whatIfChip, whatIfPct === p && styles.whatIfChipActive]}
+                  onPress={() => setWhatIfPct(p)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.whatIfChipText, whatIfPct === p && { color: colors.bg }]}>{p}%</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.whatIfResult}>
+              <Text style={styles.whatIfSave}>
+                You'd save{' '}
+                <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>
+                  {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100))}
+                </Text>
+                /mo
+              </Text>
+              <Text style={styles.whatIfYear}>
+                ≈ {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100) * 12)} a year
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Goals */}
+        {goals.length > 0 ? (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>Goals</Text>
+              <TouchableOpacity style={styles.newPill} onPress={() => { resetNew(); setShowNew(true); }} accessibilityRole="button">
+                <Feather name="plus" size={13} color={colors.accent} />
+                <Text style={styles.newPillText}>New</Text>
+              </TouchableOpacity>
+            </View>
+            {goals.map(g => {
+              const p = goalProgress(saved[g.id] ?? 0, g.target);
+              return (
+                <PressableScale key={g.id} style={styles.goalCard} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityLabel={g.name}>
+                  <View style={styles.goalTop}>
+                    <View style={[styles.goalIcon, { backgroundColor: (g.color ?? colors.accent) + '22' }]}>
+                      <Feather name={asFeather(g.icon, 'target')} size={18} color={g.color ?? colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.goalName} numberOfLines={1}>{g.name}</Text>
+                      <Text style={styles.goalSub}>{formatCompact(p.saved)} <Text style={styles.goalSubMuted}>of {formatCompact(p.target)}</Text></Text>
+                    </View>
+                    <View style={[styles.prioChip, { backgroundColor: priorityColor(g.priority) + '22' }]}>
+                      <Text style={[styles.prioText, { color: priorityColor(g.priority) }]}>{g.priority}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.goalBarRow}>
+                    <View style={{ flex: 1 }}>
+                      <BudgetBar pct={p.pct} health={p.done ? 'green' : 'green'} height={6} />
+                    </View>
+                    <Text style={styles.goalPct}>{p.pct}%</Text>
+                  </View>
+                </PressableScale>
+              );
+            })}
+          </>
+        ) : (
+          <EmptyState
+            icon="target"
+            title="No savings goals yet"
+            body="Turn unused money into something you want — a phone, a trip, an emergency fund. Create your first goal."
+            actionLabel="New goal"
+            onAction={() => { resetNew(); setShowNew(true); }}
+          />
+        )}
+
+        <View style={{ height: space.lg }} />
+      </ScrollView>
+
+      {/* Add to pool sheet */}
+      <SheetModal visible={showAddPool} onClose={() => setShowAddPool(false)} title="Add to savings">
+        <TextInput
+          style={styles.amountInput}
+          value={poolAmt}
+          onChangeText={setPoolAmt}
+          keyboardType="decimal-pad"
+          placeholder="₹0"
+          placeholderTextColor={colors.textMuted}
+          autoFocus
+          accessibilityLabel="Amount"
+        />
+        <Text style={styles.hint}>Money goes to your unallocated pool — assign it to goals anytime.</Text>
+        <PrimaryButton label="Add" onPress={handleAddPool} disabled={parseToPaise(poolAmt) <= 0} />
+      </SheetModal>
+
+      {/* Withdraw from pool sheet */}
+      <SheetModal visible={showWithdrawPool} onClose={() => setShowWithdrawPool(false)} title="Withdraw from savings">
+        <TextInput
+          style={styles.amountInput}
+          value={poolAmt}
+          onChangeText={setPoolAmt}
+          keyboardType="decimal-pad"
+          placeholder="₹0"
+          placeholderTextColor={colors.textMuted}
+          autoFocus
+          accessibilityLabel="Amount"
+        />
+        <Text style={styles.hint}>{formatCompact(pool.unallocated)} available · returns to your spending money.</Text>
+        <PrimaryButton label="Withdraw" onPress={handleWithdrawPool} disabled={parseToPaise(poolAmt) <= 0} />
+      </SheetModal>
+
+      {/* New goal sheet */}
+      <SheetModal visible={showNew} onClose={() => setShowNew(false)} title="New goal">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Input value={name} onChangeText={setName} placeholder="Goal name (e.g. New Phone)" autoCapitalize="words" maxLength={40} style={styles.inputGap} />
+
+          <Text style={styles.fieldLabel}>Target amount</Text>
+          <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" style={styles.inputGap} />
+
+          <Text style={styles.fieldLabel}>Priority</Text>
+          <View style={styles.segRow}>
+            {PRIORITIES.map(p => (
+              <TouchableOpacity key={p.key} style={[styles.seg, priority === p.key && { backgroundColor: priorityColor(p.key) + '22', borderColor: priorityColor(p.key) }]} onPress={() => setPriority(p.key)} accessibilityRole="button">
+                <Text style={[styles.segText, priority === p.key && { color: priorityColor(p.key), fontFamily: 'Inter_600SemiBold' }]}>{p.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>Icon</Text>
+          <View style={styles.iconGrid}>
+            {GOAL_ICONS.map(ic => (
+              <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
+                <Feather name={asFeather(ic, 'tag')} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.colorRow}>
+            {GOAL_COLORS.map(c => (
+              <TouchableOpacity key={c} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} onPress={() => setColor(c)} accessibilityRole="button" accessibilityLabel={c} />
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>Fixed allocation (optional)</Text>
+          <Input value={allocation} onChangeText={setAllocation} keyboardType="decimal-pad" placeholder="₹0 per period" style={styles.inputGap} />
+          <View style={styles.segRow}>
+            {FREQS.map(f => (
+              <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button">
+                <Text style={[styles.segText, frequency === f.key && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <PrimaryButton label="Create goal" onPress={handleCreate} disabled={!name.trim() || parseToPaise(target) <= 0} style={{ marginTop: space.md }} />
+        </KeyboardAvoidingView>
+      </SheetModal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+
+  personalCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  personalIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  personalTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  personalSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  affordBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  affordIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  affordBtnText: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
+  cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
+  cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  cashBreakSep: { color: colors.textMuted },
+  poolCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  poolLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
+  poolRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
+  poolStat: { flex: 1, alignItems: 'center', gap: 2 },
+  poolStatLabel: { ...type.caption, color: colors.textMuted },
+  poolDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  poolActions: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  addPoolBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent },
+  addPoolText: { ...type.button, color: colors.accent },
+  withdrawPoolBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  withdrawPoolText: { ...type.button, color: colors.textSecondary },
+
+  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm, ...shadow.sm },
+  insightsTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.xs, marginBottom: space.xs },
+  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.sm },
+  insightBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  insightText: { ...type.body, color: colors.textSecondary, flex: 1, lineHeight: 20 },
+
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
+  sectionTitle: { ...type.subheading, color: colors.textPrimary },
+  moneySection: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
+  subsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm, gap: space.sm },
+  subsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  subsTotal: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 36 },
+  subDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  subName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  subCadence: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
+  subAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, minWidth: 56, textAlign: 'right' },
+  subsHint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
+  newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+
+  goalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  goalTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  goalIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  goalName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  goalSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
+  goalSubMuted: { color: colors.textMuted },
+  prioChip: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  prioText: { ...type.caption, fontFamily: 'Inter_600SemiBold', textTransform: 'capitalize' },
+  goalBarRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  goalPct: { ...type.caption, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
+
+  headerAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  whatIfCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
+  whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
+  whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
+  whatIfChipActive: { backgroundColor: colors.accent },
+  whatIfChipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
+  whatIfResult: { gap: 2 },
+  whatIfSave: { ...type.body, color: colors.textPrimary },
+  whatIfYear: { ...type.caption, color: colors.textMuted },
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
+  hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
+  inputGap: { marginBottom: space.sm },
+  fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
+  segRow: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
+  seg: { flex: 1, minWidth: 80, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  segSm: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  segText: { ...type.label, color: colors.textSecondary },
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
+  iconOpt: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  swatch: { width: 28, height: 28, borderRadius: 14 },
+  swatchActive: { borderWidth: 3, borderColor: colors.textPrimary },
+});

@@ -1,0 +1,25 @@
+/* BudgetSplit type scale.
+   Two families, strict division of labour:
+   - Inter for ALL words (headings, body, labels, buttons).
+   - Space Mono for ALL money amounts (the ledger feel is the brand signature).
+   Max 3 text sizes per screen: heading → body → caption. The hero number always
+   wins. Money amounts use the --amount-* tokens (Space Mono). */
+:root {
+  /* ---- Money amounts (Space Mono) ---- */
+  --amount-xl-size: 36px; --amount-xl-spacing: -0.5px;  /* dashboard hero */
+  --amount-lg-size: 24px; --amount-lg-spacing: -0.3px;  /* card totals */
+  --amount-md-size: 18px; --amount-md-spacing: 0;       /* stat values */
+  --amount-sm-size: 14px; --amount-sm-spacing: 0;       /* row amounts */
+
+  /* ---- Words (Inter) ---- */
+  --title-size:      28px; --title-spacing: -0.4px; --title-weight: 600;  /* screen / tab titles */
+  --heading-size:    20px; --heading-weight: 600;                          /* modal headers */
+  --subheading-size: 16px; --subheading-weight: 600;                       /* card titles, group names */
+  --body-size:       15px; --body-weight: 400;                             /* default body text */
+  --label-size:      13px; --label-weight: 400;                            /* labels, section caps */
+  --caption-size:    11px; --caption-weight: 400;                          /* captions, hints */
+  --button-size:     15px; --button-weight: 600;                           /* button text */
+
+  --line-tight:  1.2; /* @kind font */
+  --line-body:   1.5; /* @kind font */
+}

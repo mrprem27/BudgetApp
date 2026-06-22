@@ -1,0 +1,23 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Spacing Scale" subtitle="4 · 8 · 16 · 24 · 32 · 48" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: var(--bg); font-family: var(--font-ui); padding: 22px; display:flex; gap: 22px; align-items:flex-end; }
+  .col { display:flex; flex-direction:column; align-items:flex-start; gap: 8px; }
+  .bar { background: var(--accent); border-radius: 3px; height: 16px; }
+  .name { color: var(--text-primary); font-size: 12px; font-weight:600; }
+  .val { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="col"><div class="bar" style="width:var(--space-xs)"></div><div class="name">xs</div><div class="val">4px</div></div>
+  <div class="col"><div class="bar" style="width:var(--space-sm)"></div><div class="name">sm</div><div class="val">8px</div></div>
+  <div class="col"><div class="bar" style="width:var(--space-md)"></div><div class="name">md</div><div class="val">16px</div></div>
+  <div class="col"><div class="bar" style="width:var(--space-lg)"></div><div class="name">lg</div><div class="val">24px</div></div>
+  <div class="col"><div class="bar" style="width:var(--space-xl)"></div><div class="name">xl</div><div class="val">32px</div></div>
+  <div class="col"><div class="bar" style="width:var(--space-xxl)"></div><div class="name">xxl</div><div class="val">48px</div></div>
+</body>
+</html>

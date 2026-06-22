@@ -1,0 +1,25 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Surfaces" subtitle="Near-black, teal-tinted, layered for elevation" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: var(--bg); font-family: var(--font-ui); padding: 20px; }
+  .row { display: flex; gap: 14px; }
+  .sw { flex: 1; }
+  .chip { height: 64px; border-radius: var(--radius-md); border: 1px solid var(--border); }
+  .name { color: var(--text-primary); font-size: 12px; font-weight: 600; margin-top: 10px; }
+  .hex { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--bg)"></div><div class="name">bg</div><div class="hex">#0A0F11</div></div>
+    <div class="sw"><div class="chip" style="background:var(--bg-card)"></div><div class="name">bg-card</div><div class="hex">#13201F</div></div>
+    <div class="sw"><div class="chip" style="background:var(--bg-input)"></div><div class="name">bg-input</div><div class="hex">#162825</div></div>
+    <div class="sw"><div class="chip" style="background:var(--bg-muted)"></div><div class="name">bg-muted</div><div class="hex">#1B302D</div></div>
+    <div class="sw"><div class="chip" style="background:var(--bg-elevated)"></div><div class="name">bg-elevated</div><div class="hex">#1E3633</div></div>
+  </div>
+</body>
+</html>

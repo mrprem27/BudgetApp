@@ -1,0 +1,13 @@
+/* BudgetSplit webfonts.
+   The app ships Inter (UI) and Space Mono (money amounts) — both available
+   on Google Fonts, loaded here via CDN. If you need self-hosted binaries,
+   drop the .woff2 files in assets/fonts/ and replace these @import lines
+   with @font-face rules. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  /* Inter carries every piece of UI text. Space Mono is reserved for money
+     amounts only — the tabular, ledger-like feel is intentional. */
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Space Mono', 'SF Mono', ui-monospace, 'Roboto Mono', monospace;
+}

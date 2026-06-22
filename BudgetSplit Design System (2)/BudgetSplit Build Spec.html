@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BudgetSplit — Build Spec &amp; Handoff</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://unpkg.com/feather-icons"></script>
+<style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text-primary);
+    font-family: var(--font-ui); font-size: var(--body-size); line-height: var(--line-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: var(--font-mono); }
+
+  /* Cover */
+  .cover { padding: 92px 0 60px; border-bottom: 1px solid var(--border); }
+  .badge { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:var(--radius-pill);
+    background: var(--accent-muted); color: var(--accent); font-size: var(--label-size); font-weight:600; }
+  .cover h1 { font-size: 54px; font-weight: 700; letter-spacing: -1.2px; margin: 24px 0 0; line-height: 1.05; }
+  .cover h1 b { color: var(--accent); }
+  .cover .sub { color: var(--text-secondary); font-size: 18px; max-width: 660px; margin-top: 18px; line-height:1.55; }
+  .cover-logo { display:flex; align-items:center; gap:14px; }
+  .cover-logo img { width: 50px; height: 50px; border-radius: 14px; }
+  .cover-logo span { font-size: 20px; font-weight: 700; letter-spacing:-0.4px; }
+  .cover-logo b { color: var(--accent); }
+  .cover-meta { display:flex; gap: 40px; margin-top: 40px; flex-wrap: wrap; }
+  .cover-meta div { display:flex; flex-direction:column; gap:3px; }
+  .cover-meta .k { font-size: var(--caption-size); text-transform:uppercase; letter-spacing:0.6px; color: var(--text-muted); }
+  .cover-meta .v { font-size: var(--body-size); color: var(--text-primary); }
+
+  /* TOC */
+  .toc { display:grid; grid-template-columns: repeat(3, 1fr); gap: 4px 28px; padding: 32px 0; border-bottom:1px solid var(--border); }
+  .toc a { display:flex; align-items:baseline; gap:11px; color: var(--text-secondary); text-decoration:none; padding: 9px 0; transition: color 140ms ease; }
+  .toc a:hover { color: var(--accent); }
+  .toc a .n { font-family: var(--font-mono); font-size: 12px; color: var(--accent); width: 24px; }
+  .toc a .t { font-size: 14.5px; color: inherit; }
+
+  section.block { padding: 60px 0; border-bottom: 1px solid var(--border); }
+  .eyebrow { display:flex; align-items:center; gap:10px; color: var(--accent); font-size: var(--label-size); font-weight:600; text-transform:uppercase; letter-spacing:0.8px; }
+  .eyebrow .num { font-family: var(--font-mono); }
+  h2.sec { font-size: 32px; font-weight: 700; letter-spacing:-0.6px; margin: 14px 0 8px; }
+  .lead { color: var(--text-secondary); font-size: 17px; max-width: 740px; margin-bottom: 28px; line-height:1.55; }
+  h3 { font-size: 18px; font-weight: 600; margin: 34px 0 14px; letter-spacing:-0.2px; }
+  h3:first-of-type { margin-top: 8px; }
+  p { color: var(--text-secondary); }
+  p strong, li strong { color: var(--text-primary); font-weight: 600; }
+
+  /* Cards */
+  .card { background: var(--bg-card); border:1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-sm); }
+  .grid2 { display:grid; grid-template-columns: repeat(2,1fr); gap:16px; }
+  .grid3 { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; }
+  .grid4 { display:grid; grid-template-columns: repeat(4,1fr); gap:14px; }
+  @media (max-width: 860px){ .grid2,.grid3,.grid4,.toc{ grid-template-columns:1fr; } .cover h1{ font-size:38px; } }
+
+  .stat .big { font-family: var(--font-mono); font-size: 38px; color: var(--accent); letter-spacing:-1px; }
+  .stat .lbl { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+  /* Clean editorial spec list — NO per-line icons */
+  ul.spec { list-style:none; padding:0; margin:0; }
+  ul.spec li { padding: 13px 0; border-bottom:1px solid var(--border); color: var(--text-secondary); line-height:1.5; }
+  ul.spec li:first-child { padding-top: 0; }
+  ul.spec li:last-child { border-bottom:none; padding-bottom:0; }
+  ul.spec .term { color: var(--text-primary); font-weight:600; }
+
+  /* Numbered step list */
+  ol.steps { list-style:none; counter-reset: s; padding:0; margin:0; }
+  ol.steps li { counter-increment:s; position:relative; padding: 0 0 18px 42px; color:var(--text-secondary); line-height:1.55; }
+  ol.steps li:last-child { padding-bottom:0; }
+  ol.steps li::before { content: counter(s); position:absolute; left:0; top:-2px; width:28px; height:28px; border-radius:50%;
+    background: var(--accent-muted); color: var(--accent); font-family:var(--font-mono); font-size:13px; display:flex; align-items:center; justify-content:center; }
+
+  table { width:100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align:left; padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; font-size: 11px; }
+  td { color: var(--text-secondary); }
+  td .pill { display:inline-block; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; }
+
+  .tag { display:inline-block; padding:4px 10px; border-radius:var(--radius-pill); font-size:12px; font-weight:600; background: var(--bg-muted); color: var(--text-secondary); }
+  .tag.ok { background: color-mix(in srgb, var(--income) 16%, transparent); color: var(--income); }
+  .tag.new { background: var(--accent-muted); color: var(--accent); }
+  .tag.warn { background: color-mix(in srgb, var(--health-amber) 18%, transparent); color: var(--health-amber); }
+
+  .note { display:flex; gap:14px; padding:16px 18px; border-radius: var(--radius-md); background: var(--accent-muted); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text-secondary); margin: 22px 0; line-height:1.55; }
+  .note .ic { color: var(--accent); flex-shrink:0; }
+
+  .swatch { height: 52px; border-radius: 10px; border:1px solid var(--border); }
+
+  /* Screen spec block */
+  .screen { padding: 0; margin-bottom: 16px; overflow:hidden; }
+  .screen .head { display:flex; align-items:center; gap:14px; padding: 18px 22px; border-bottom:1px solid var(--border); }
+  .screen .head .dot { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .screen .head .title { font-size:17px; font-weight:600; color:var(--text-primary); }
+  .screen .head .route { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-top:1px; }
+  .screen .body { padding: 18px 22px; }
+  .screen .row { display:grid; grid-template-columns: 130px 1fr; gap: 14px; padding: 9px 0; border-bottom:1px dashed var(--border); }
+  .screen .row:last-child { border-bottom:none; padding-bottom:0; }
+  .screen .row .lk { font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); padding-top:1px; }
+  .screen .row .vl { color:var(--text-secondary); line-height:1.5; }
+  @media (max-width:680px){ .screen .row{ grid-template-columns:1fr; gap:3px; } }
+
+  footer { padding: 48px 0 80px; color: var(--text-muted); font-size: 13px; line-height:1.6; }
+
+  @media print {
+    body { background:#fff; color:#111; }
+    .toc a, section.block { border-color:#ddd; }
+    .card, .screen { box-shadow:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- COVER -->
+  <header class="cover">
+    <div class="cover-logo"><img src="assets/logo-icon.png" alt="" /><span>Budget<b>Split</b></span></div>
+    <div class="badge" style="margin-top:26px;"><span data-feather="layout"></span> Build Spec &amp; Developer Handoff</div>
+    <h1>The complete build spec<br>for <b>BudgetSplit</b>.</h1>
+    <p class="sub">Everything needed to implement the app: design tokens, components, every screen with its interaction model, and a prioritised feature roadmap. The interactive HTML prototype in the <strong>BudgetSplit App</strong> tab is the visual source of truth — this document is how you turn it into shipped product.</p>
+    <div class="cover-meta">
+      <div><span class="k">Product</span><span class="v">BudgetSplit — offline budgeting &amp; bill-splitting</span></div>
+      <div><span class="k">Platform</span><span class="v">iOS + Android · portrait phone</span></div>
+      <div><span class="k">Fidelity</span><span class="v">High — pixel-level</span></div>
+      <div><span class="k">Updated</span><span class="v">16 Jun 2026</span></div>
+    </div>
+  </header>
+
+  <!-- TOC -->
+  <nav class="toc">
+    <a href="#start"><span class="n">01</span><span class="t">How to build this</span></a>
+    <a href="#principles"><span class="n">02</span><span class="t">Design principles</span></a>
+    <a href="#tokens"><span class="n">03</span><span class="t">Design tokens</span></a>
+    <a href="#components"><span class="n">04</span><span class="t">Component library</span></a>
+    <a href="#screens"><span class="n">05</span><span class="t">Screen specs</span></a>
+    <a href="#interactions"><span class="n">06</span><span class="t">Signature interactions</span></a>
+    <a href="#motion"><span class="n">07</span><span class="t">Motion &amp; a11y</span></a>
+    <a href="#roadmap"><span class="n">08</span><span class="t">Feature roadmap</span></a>
+    <a href="#data"><span class="n">09</span><span class="t">Data model</span></a>
+  </nav>
+
+  <!-- 01 HOW TO BUILD -->
+  <section class="block" id="start">
+    <div class="eyebrow"><span class="num">01</span> How to build this</div>
+    <h2 class="sec">Read this first</h2>
+    <p class="lead">The HTML files in this handoff are <strong>design references</strong> — prototypes showing the intended look and behaviour, not production code to copy. Your job is to recreate them in the target environment (React Native / Expo is the assumed stack) using its established patterns, then wire them to the local data layer.</p>
+    <ol class="steps">
+      <li><strong>Recreate, don't transplant.</strong> Rebuild each screen with native components (View/Text/Pressable, FlatList, Reanimated). The HTML/React prototype demonstrates layout, hierarchy and motion — match it pixel-for-pixel, but in idiomatic platform code.</li>
+      <li><strong>Tokens are the contract.</strong> Port the values in §03 into <span class="mono">constants/{colors,typography,layout}.ts</span> and reference them everywhere — never raw hex in product code.</li>
+      <li><strong>Build the component library first (§04),</strong> then compose screens from it. Every screen in §05 is assembled from these 17 primitives — no bespoke one-off layouts.</li>
+      <li><strong>Money is integer paise end-to-end.</strong> Parse and store as <span class="mono">paise</span> (₹1 = 100); format only at the view layer. Never use floats for money.</li>
+      <li><strong>Match the interaction model (§06).</strong> The donut, the trend chart and the budget-impact preview are the product's signature moments — get the tap-to-reveal behaviour right, not just the static look.</li>
+    </ol>
+    <div class="note"><span class="ic" data-feather="play"></span><div>Open the <strong>BudgetSplit App</strong> tab and click through every flow before you start — the spec describes behaviour, but the prototype <em>is</em> the behaviour.</div></div>
+  </section>
+
+  <!-- 02 PRINCIPLES -->
+  <section class="block" id="principles">
+    <div class="eyebrow"><span class="num">02</span> Design principles</div>
+    <h2 class="sec">Five rules that hold the app together</h2>
+    <div class="grid2">
+      <div class="card">
+        <ul class="spec">
+          <li><span class="term">One hero per screen.</span> Each screen opens with a single dominant element — a spending figure, a net balance, a trend. Everything else is secondary and quieter.</li>
+          <li><span class="term">Progressive disclosure.</span> Show the summary; reveal detail on tap. The donut, trend bars and category rows all start collapsed and expand into specifics — never a wall of numbers up front.</li>
+          <li><span class="term">Money has its own voice.</span> Every amount is Space Mono, sign-coloured (green income / coral expense), and never decorative.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <ul class="spec">
+          <li><span class="term">Cards group, hairlines divide.</span> Content lives in bordered cards on a near-black canvas; depth comes from soft black halos, not heavy shadows.</li>
+          <li><span class="term">Motion confirms, never decorates.</span> Every animation answers “did my tap register?” or “where did this come from?” No idle loops, no parallax.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 TOKENS -->
+  <section class="block" id="tokens">
+    <div class="eyebrow"><span class="num">03</span> Design tokens</div>
+    <h2 class="sec">Foundations</h2>
+    <p class="lead">A dark, near-black canvas with a subtle teal tint, layered into surface steps for elevation. One brand accent (teal) carries all primary action; coral is the spark. Full live specimens are in the <strong>Design System</strong> tab.</p>
+
+    <h3>Core colours</h3>
+    <div class="grid4" style="margin-bottom:14px;">
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--bg);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">bg</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#0A0F11</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--bg-card);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">bg-card</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#13201F</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--accent);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">accent</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#20C4B8</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--coral);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">coral</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#FF6F61</div></div>
+    </div>
+    <div class="grid4" style="margin-bottom:8px;">
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--income);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">income</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#2BD49B</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--expense);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">expense</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#FF6F61</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--settle);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">settle</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#8B7CF8</div></div>
+      <div class="card" style="padding:14px;"><div class="swatch" style="background:var(--health-amber);"></div><div style="margin-top:8px;font-size:13px;font-weight:600;">health-amber</div><div class="mono" style="font-size:11px;color:var(--text-muted);">#F5B301</div></div>
+    </div>
+    <p class="mono" style="font-size:12.5px;color:var(--text-muted);">Category icons are the one place a wide hue palette appears — each glyph sits in a circle of its own colour at ~13% opacity.</p>
+
+    <div class="grid2" style="margin-top:24px;">
+      <div class="card">
+        <h3 style="margin-top:0;">Typography</h3>
+        <p style="margin-bottom:16px;">Two families, strict roles: <strong>Inter</strong> for every word, <strong>Space Mono</strong> for every money amount. Max three sizes per screen.</p>
+        <ul class="spec">
+          <li><span class="term">Title</span> — 28 / 600 / -0.4px · screen headers</li>
+          <li><span class="term">Heading</span> — 20 / 600 · pushed-screen titles</li>
+          <li><span class="term">Body</span> — 15 / 400 · all running copy</li>
+          <li><span class="term">Caption</span> — 12–13 / 400 · meta, muted</li>
+          <li><span class="term">Amount</span> — Space Mono, 18–44 / -0.5px · hero figures</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Spacing, radius &amp; elevation</h3>
+        <ul class="spec">
+          <li><span class="term">Spacing</span> — 4 · 8 · 16 · 24 · 32 · 48. Card padding 16–22; gutters 16.</li>
+          <li><span class="term">Radius</span> — inputs/buttons 12, cards 16–20, pills 999.</li>
+          <li><span class="term">Elevation</span> — shadow-sm (cards/rows) → shadow-md (hero card) → shadow-lg (sheets/modals). Soft black halos, not hard drop-shadows.</li>
+          <li><span class="term">FAB</span> — teal→coral gradient with its own coral glow.</li>
+          <li><span class="term">Hairline</span> — 1px <span class="mono">#21302E</span> border between grouped rows.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 COMPONENTS -->
+  <section class="block" id="components">
+    <div class="eyebrow"><span class="num">04</span> Component library</div>
+    <h2 class="sec">17 primitives — build these first</h2>
+    <p class="lead">Every screen is composed from these. Each is live in the <strong>Design System</strong> tab with its full prop API and states. Build them once, to spec, then compose.</p>
+    <table>
+      <thead><tr><th>Component</th><th>Group</th><th>Variants / key props</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Button</strong></td><td>ui</td><td>primary · secondary · ghost · destructive × sm/md/lg · fullWidth · disabled · loading</td></tr>
+        <tr><td><strong>Input</strong></td><td>ui</td><td>text · amount (mono, right-aligned) · with-icon · prefix · focus / error</td></tr>
+        <tr><td><strong>Switch</strong></td><td>ui</td><td>on · off · disabled — thumb springs, track fades</td></tr>
+        <tr><td><strong>TabPills</strong></td><td>ui</td><td>segmented selector — Month / Year, Today / Week</td></tr>
+        <tr><td><strong>SettingsRow</strong></td><td>ui</td><td>value · chevron · switch · danger</td></tr>
+        <tr><td><strong>Card / Divider</strong></td><td>ui</td><td>padded · flush list (padded=false) · tappable (onClick) · inset divider</td></tr>
+        <tr><td><strong>EmptyState</strong></td><td>ui</td><td>icon-circle + title + body + CTA</td></tr>
+        <tr><td><strong>Icon / IconCircle</strong></td><td>ui</td><td>Feather glyph · tinted circle (size + iconSize) — the core motif</td></tr>
+        <tr><td><strong>AmountText</strong></td><td>finance</td><td>xl / lg / md / sm · sign-coloured · forceColor · rounded</td></tr>
+        <tr><td><strong>TransactionRow</strong></td><td>finance</td><td>expense · income · settlement · onClick</td></tr>
+        <tr><td><strong>BudgetBar</strong></td><td>finance</td><td>green / amber / red · animated fill · height</td></tr>
+        <tr><td><strong>CategoryChip</strong></td><td>finance</td><td>default · selected</td></tr>
+        <tr><td><strong>Badge</strong></td><td>finance</td><td>neutral · accent · income · expense · amber · settle · icon</td></tr>
+        <tr><td><strong>MemberAvatar</strong></td><td>finance</td><td>initials · colour · selected ring · overlap stack</td></tr>
+        <tr><td><strong>FAB</strong></td><td>finance</td><td>teal→coral gradient + add sheet trigger</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 05 SCREENS -->
+  <section class="block" id="screens">
+    <div class="eyebrow"><span class="num">05</span> Screen specs</div>
+    <h2 class="sec">Every screen, as built</h2>
+    <p class="lead">Each screen below reflects the <strong>current prototype</strong>, including the interactive redesigns. Layout is top-to-bottom; “Hero” is the dominant opening element. Components in <span class="mono">code</span> map 1:1 to §04.</p>
+
+    <!-- Onboarding -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="zap" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Onboarding</div><div class="route">system/onboarding</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Hero</div><div class="vl">Glowing logo tile (96×96, radius 26, teal halo) → wordmark “BudgetSplit” (36/600) → one-line value prop.</div></div>
+        <div class="row"><div class="lk">Body</div><div class="vl">Three feature highlights as <span class="mono">IconCircle</span> + title + caption rows: <strong>See where it goes</strong> (pie-chart), <strong>Split bills fairly</strong> (users), <strong>Settle in a tap</strong> (check-circle). Left-aligned, 320px max.</div></div>
+        <div class="row"><div class="lk">Footer</div><div class="vl">Full-width primary <span class="mono">Button</span> “Get Started” + caption “Takes 20 seconds · no sign-up”.</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">First-run only.</div></div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="home" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Dashboard <span class="tag new" style="margin-left:6px;">redesigned</span></div><div class="route">(tabs)/index</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Header</div><div class="vl">“Good evening / {firstName}” greeting + <span class="mono">MemberAvatar</span>.</div></div>
+        <div class="row"><div class="lk">Hero</div><div class="vl">Spending card (shadow-md): “My spending · this month” → <span class="mono">AmountText xl</span> → ▲/▼ % vs last month → three sub-stats (Income / Net / Saved %).</div></div>
+        <div class="row"><div class="lk">Centerpiece</div><div class="vl"><strong>Interactive category donut</strong> (“Where it went”). Tap a wedge → it pops out, others dim, centre morphs to that category’s readout with a “View →” drill-in. Quick-pick chips below mirror selection. Replaces the old dense legend. See §06.</div></div>
+        <div class="row"><div class="lk">Tiles</div><div class="vl">Two compact cards: <strong>Budget</strong> (utilisation %, BudgetBar, ₹ left → opens Budget &amp; Insights) and <strong>Balances</strong> (you owe, person count → opens Settle).</div></div>
+        <div class="row"><div class="lk">Lists</div><div class="vl">Recent (3 <span class="mono">TransactionRow</span>s) → Groups (name + BudgetBar + %).</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · loading (skeleton cards) · empty (no transactions → EmptyState).</div></div>
+      </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="bar-chart-2" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Reports <span class="tag new" style="margin-left:6px;">redesigned</span></div><div class="route">(tabs)/reports</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Control</div><div class="vl"><span class="mono">TabPills</span> Month / Year — switching resets any bar selection.</div></div>
+        <div class="row"><div class="lk">Hero</div><div class="vl"><strong>Interactive trend chart</strong>: total spent + over/under-budget delta, then bars with a dashed <strong>budget overlay line</strong>. Over-budget bars render amber. Tap a bar → it lifts, others dim, and a detail panel reveals that period’s total, an over/under chip, and its top categories (each tappable → category drill-in).</div></div>
+        <div class="row"><div class="lk">Summary</div><div class="vl">When nothing is selected: avg/period, budget, over/under tri-stat row.</div></div>
+        <div class="row"><div class="lk">Breakdown</div><div class="vl">“By category · tap to explore” — progressive rows (IconCircle + amount + % + share bar), each drills into Category Detail. Replaces the old static table.</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · empty (no data) · loading.</div></div>
+      </div>
+    </div>
+
+    <!-- Groups -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="users" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Groups <span class="tag new" style="margin-left:6px;">redesigned</span></div><div class="route">(tabs)/groups</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Hero</div><div class="vl"><strong>Balances hero</strong> (shadow-md): net position (±, sign-coloured) + “you owe overall / in your favour”, with a split footer — You owe / You're owed.</div></div>
+        <div class="row"><div class="lk">Settle</div><div class="vl">“Settle up · tap a person” — rows of <span class="mono">MemberAvatar</span> + name + owes-you/you-owe + amount; tap → Settle flow for that person.</div></div>
+        <div class="row"><div class="lk">List</div><div class="vl">“Your groups” — group cards: icon tile + name + spend + members + health BudgetBar → opens Group Detail.</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · empty (CTA to create a group) · loading.</div></div>
+      </div>
+    </div>
+
+    <!-- Group Detail -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="pie-chart" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Group Detail — incl. Group Budget <span class="tag new" style="margin-left:6px;">new</span></div><div class="route">group/[id]</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Header</div><div class="vl">Back chevron + group name. Members stack (overlapping avatars) + balance banner + “Settle Up” button.</div></div>
+        <div class="row"><div class="lk">Group budget</div><div class="vl"><strong>Group-scoped insights</strong> (only for shared groups): utilisation hero (% + spent/allocated + BudgetBar + over/near/on-track badges + rollover rule).</div></div>
+        <div class="row"><div class="lk">Who paid what</div><div class="vl">Per-member contribution bars with a net delta — <span style="color:var(--income)">+ ahead</span> / <span style="color:var(--expense)">− owes the group</span> vs an even fair share. Surfaces who’s carrying the group.</div></div>
+        <div class="row"><div class="lk">Overspend</div><div class="vl">“Driving overspend” — over-budget category lines sorted worst-first (amount over + BudgetBar). Falls back to a positive “all within budget” card.</div></div>
+        <div class="row"><div class="lk">Ledger</div><div class="vl">All category lines, then the date-sectioned transaction ledger (Today / Yesterday / date).</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · empty ledger · personal group (budget block hidden — uses personal Insights instead).</div></div>
+      </div>
+    </div>
+
+    <!-- Add: Expense -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--coral-muted);"><span data-feather="minus-circle" style="color:var(--expense);width:18px;height:18px;"></span></span><div><div class="title">Add Expense / Income <span class="tag new" style="margin-left:6px;">enhanced</span></div><div class="route">add/quick · add/income</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Surface</div><div class="vl">Full-screen slide-up (FlowShell) with header + custom numeric Keypad in the footer (no OS keyboard).</div></div>
+        <div class="row"><div class="lk">Hero</div><div class="vl">Live amount in Space Mono (44px), green for income. Caption echoes the picked category.</div></div>
+        <div class="row"><div class="lk">Category</div><div class="vl">4-column icon grid; selected glyph fills with its colour + ring.</div></div>
+        <div class="row"><div class="lk">Budget impact</div><div class="vl"><strong>Live insight card</strong>: once a budgeted category is picked, shows how this expense moves its budget — “{cat} budget · ₹new of ₹allocated”, a BudgetBar at the projected level, and <span class="mono">curPct → newPct</span> (health-coloured). Connects entry to analytics.</div></div>
+        <div class="row"><div class="lk">Note + CTA</div><div class="vl">Optional note input → primary “Add ₹{amount}”, disabled until amount &gt; 0 and a category is chosen.</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · disabled · success (spring checkmark overlay).</div></div>
+      </div>
+    </div>
+
+    <!-- Add: Itemized -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--accent-muted);"><span data-feather="users" style="color:var(--accent);width:18px;height:18px;"></span></span><div><div class="title">Split a Bill (itemized)</div><div class="route">add/itemized</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Who's in</div><div class="vl">Tappable member avatars (selected ring); out-members dim to 40%.</div></div>
+        <div class="row"><div class="lk">Items</div><div class="vl">Per-item card: name + ₹ amount inputs + a row of assignable avatars (“tap avatars to assign”). Dashed “Add item” button.</div></div>
+        <div class="row"><div class="lk">Live split</div><div class="vl">“Each person pays” updates in real time as items/assignments change. Footer shows running bill total + “Save split”.</div></div>
+        <div class="row"><div class="lk">On save</div><div class="vl">Your share posts as an expense; each other member’s share is added to their balance (they owe you).</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">Default · partial (unassigned item) · success.</div></div>
+      </div>
+    </div>
+
+    <!-- Settle -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:color-mix(in srgb, var(--settle) 16%, transparent);"><span data-feather="check-circle" style="color:var(--settle);width:18px;height:18px;"></span></span><div><div class="title">Settle Up / Record Payment</div><div class="route">settle</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Summary</div><div class="vl">Two tiles — You owe (coral) / You're owed (green).</div></div>
+        <div class="row"><div class="lk">Balances</div><div class="vl">Per-person rows: avatar + name + “you owe / owes you / all settled” + “Settle” button (or check when zero).</div></div>
+        <div class="row"><div class="lk">Pay step</div><div class="vl">Pick a person → amount autofills to outstanding (editable via Keypad). “Outstanding ₹X · tap to fill” chip. → “Record payment” reduces the balance &amp; logs a settlement.</div></div>
+        <div class="row"><div class="lk">States</div><div class="vl">List · pay · partial · success. Footer reminder: BudgetSplit never moves real money.</div></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card screen">
+      <div class="head"><span class="dot" style="background:var(--bg-muted);"><span data-feather="settings" style="color:var(--text-secondary);width:18px;height:18px;"></span></span><div><div class="title">Settings</div><div class="route">(tabs)/settings</div></div></div>
+      <div class="body">
+        <div class="row"><div class="lk">Sections</div><div class="vl">Account (avatar + name) · Privacy &amp; Security (Face ID, privacy screen, location toggles) · Preferences (cadence, currency) · Manage (Categories, History, Help) · About (version + “Offline-first · No accounts · No tracking”).</div></div>
+        <div class="row"><div class="lk">Pattern</div><div class="vl">Grouped <span class="mono">SettingsRow</span>s in flush cards with inset dividers; <span class="mono">Switch</span> on the right for toggles.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 INTERACTIONS -->
+  <section class="block" id="interactions">
+    <div class="eyebrow"><span class="num">06</span> Signature interactions</div>
+    <h2 class="sec">The three moments that define the app</h2>
+    <p class="lead">These tap-to-reveal interactions are the product’s personality. Implement the <em>behaviour</em>, not just the static frame.</p>
+    <div class="grid3">
+      <div class="card">
+        <h3 style="margin-top:0;">Category donut</h3>
+        <p style="margin:0;">Idle: ring + centre total + “tap a slice”. Tap a wedge → it translates outward ~7px and grows, siblings drop to 0.32 opacity, centre cross-fades to the category’s name + amount + “{pct}% · View →”. Tap centre or wedge again → drill into Category Detail. Chips below mirror the selection. Easing: spring <span class="mono">cubic-bezier(0.34,1.56,0.64,1)</span>.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Trend chart</h3>
+        <p style="margin:0;">Bars sized to value against a dashed budget line; over-budget bars are amber. Tap a bar → lift + glow, siblings dim to 0.3, a detail card fades in with the period total, an over/under <span class="mono">Badge</span>, and tappable top-category rows. Re-tap to deselect. Month/Year switch animates bar heights and clears selection.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Budget impact</h3>
+        <p style="margin:0;">In Add Expense, choosing a budgeted category reveals a live card: the projected spend vs allocation, a BudgetBar at the new level, and <span class="mono">curPct → newPct</span> in health colour. The user sees the consequence of the expense <em>before</em> saving — entry meets analytics.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 MOTION -->
+  <section class="block" id="motion">
+    <div class="eyebrow"><span class="num">07</span> Motion &amp; accessibility</div>
+    <h2 class="sec">Restrained, physical, additive</h2>
+    <table>
+      <thead><tr><th>Interaction</th><th>Motion</th><th>Timing / easing</th></tr></thead>
+      <tbody>
+        <tr><td>Card / row press</td><td>Spring scale → 0.97</td><td>spring, ~120ms</td></tr>
+        <tr><td>FAB press</td><td>Scale → 0.9, spring back</td><td>cubic-bezier(0.34,1.56,0.64,1)</td></tr>
+        <tr><td>Wedge / bar select</td><td>Translate + grow / lift + glow; siblings dim</td><td>220–260ms ease</td></tr>
+        <tr><td>Detail panel reveal</td><td>Fade in</td><td>220–240ms ease</td></tr>
+        <tr><td>Budget bar fill</td><td>Width 0 → value on mount</td><td>~650ms ease-out</td></tr>
+        <tr><td>Add sheet / flow</td><td>Slide up over scrim</td><td>280–300ms cubic-bezier(0.22,1,0.36,1)</td></tr>
+        <tr><td>Success</td><td>Spring checkmark pop</td><td>420ms cubic-bezier(0.34,1.56,0.64,1)</td></tr>
+        <tr><td>Tab switch</td><td>Cross-fade</td><td>&lt; 200ms</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><span class="ic" data-feather="alert-triangle"></span><div><strong>Critical:</strong> entrance animations must be <em>additive over a visible end-state</em> — never gate the resting visual on an animation clock (it can be paused/throttled, leaving content invisible). Respect <span class="mono">prefers-reduced-motion</span>. Pair budget-health colour with a label/icon for colour-blind users, give icon-only buttons (FAB, chevrons) a11y labels, and keep touch targets ≥ 44pt.</div></div>
+  </section>
+
+  <!-- 08 ROADMAP -->
+  <section class="block" id="roadmap">
+    <div class="eyebrow"><span class="num">08</span> Feature roadmap</div>
+    <h2 class="sec">What to build next — ranked</h2>
+    <p class="lead">In-scope extensions of the current model — no backend, no AI. Build tier 1 first: each reuses existing components and removes a real daily friction.</p>
+
+    <h3>Tier 1 · build first <span class="tag ok" style="margin-left:6px;">high impact · low effort</span></h3>
+    <div class="grid3">
+      <div class="card"><h3 style="margin:0 0 6px;">Recurring auto-post</h3><p style="margin:0;">Auto-create transactions on their due date with a “review” nudge. Recurring lines &amp; cadence already modelled. Reuses TransactionRow + Badge.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">CSV / PDF export</h3><p style="margin:0;">One “Export” row in Settings → share sheet. Pure local read of the data — no new model. Offline users want portability.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">Smart settle-up</h3><p style="margin:0;">Debt simplification — minimise the number of payments to square a group. Logic only; the “Who paid what” + Settle UI already exist.</p></div>
+    </div>
+
+    <h3>Tier 2 · strong follow-ups <span class="tag warn" style="margin-left:6px;">med effort</span></h3>
+    <div class="grid3">
+      <div class="card"><h3 style="margin:0 0 6px;">Budget rollover &amp; alerts</h3><p style="margin:0;">Carry unspent budget to next cadence (rollover rules already shown per group); local notification at 80% / 100% utilisation.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">Encrypted local backup</h3><p style="margin:0;">Export an encrypted file to the user’s own storage &amp; restore — protects the no-cloud promise against phone changes.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">Search across transactions</h3><p style="margin:0;">A search field on History over note / category / amount. High everyday utility, small surface.</p></div>
+    </div>
+
+    <h3>Tier 3 · extend the new analytics <span class="tag new" style="margin-left:6px;">grows the redesign</span></h3>
+    <div class="grid3">
+      <div class="card"><h3 style="margin:0 0 6px;">Trend ↔ donut linking</h3><p style="margin:0;">Tapping a trend period filters the donut to that week — one continuous analytic story across Reports and the dashboard.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">“Safe to spend” chip</h3><p style="margin:0;">Daily allowance from remaining budget ÷ days left, shown on the dashboard hero — turns the budget-impact insight into forward guidance.</p></div>
+      <div class="card"><h3 style="margin:0 0 6px;">Member nudges</h3><p style="margin:0;">From “Who paid what”, a one-tap reminder to whoever owes the group most — closes the settle loop.</p></div>
+    </div>
+  </section>
+
+  <!-- 09 DATA -->
+  <section class="block" id="data">
+    <div class="eyebrow"><span class="num">09</span> Data model</div>
+    <h2 class="sec">Local, offline, integer paise</h2>
+    <p class="lead">On-device SQLite, no backend. Money is always integer paise. The prototype’s <span class="mono">data.js</span> mirrors these shapes — use it as the seed contract.</p>
+    <div class="grid2">
+      <div class="card">
+        <ul class="spec">
+          <li><span class="term">person</span> — name, colour, (email, mobile optional)</li>
+          <li><span class="term">group</span> — id, name, icon, colour, members, health, allocated/spent</li>
+          <li><span class="term">txn</span> — kind (expense / income / transfer / settlement), category, note, icon, colour, paise, when, (tz, lat/lng/place optional)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <ul class="spec">
+          <li><span class="term">budget_line</span> — name, icon, colour, allocated, spent, cadence</li>
+          <li><span class="term">category</span> — name, icon, colour (master catalog)</li>
+          <li><span class="term">balance</span> — per person net paise (− you owe, + owes you)</li>
+          <li><span class="term">reports</span> — trend series (bars w/ top categories) + budget overlay</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><span class="ic" data-feather="info"></span><div>Format only at the view layer (<span class="mono">formatRupees</span> / <span class="mono">formatRupeesShort</span>). Wrap multi-table writes in a transaction. Icons are Feather (2px stroke); Inter + Space Mono load from Google Fonts — self-host woff2 for true offline parity.</div></div>
+  </section>
+
+  <footer>
+    BudgetSplit — Build Spec &amp; Developer Handoff · The interactive prototype (BudgetSplit App tab) is the visual source of truth; this document is the implementation contract. Recreate the HTML references in the target environment using its own patterns — do not ship the HTML directly.
+  </footer>
+
+</div>
+<script>feather.replace();</script>
+</body>
+</html>
