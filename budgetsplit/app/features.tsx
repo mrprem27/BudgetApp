@@ -82,9 +82,9 @@ export default function FeaturesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Feature management" onBack={() => router.back()} />
+      <ScreenHeader title="Sections" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.intro}>Turn parts of the app on or off so it shows only what you use.</Text>
+        <Text style={styles.intro}>Turn sections on or off so the app shows only what you use.</Text>
         {SECTIONS.map(section => (
           <View key={section.title}>
             <Text style={styles.sectionTitle}>{section.title}</Text>

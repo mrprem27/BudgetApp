@@ -63,6 +63,7 @@ export default function SettingsScreen() {
 
   const [reminders, setReminders] = useState<ReminderPrefs | null>(null);
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
+  const [devTaps, setDevTaps] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -223,7 +224,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Sections" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
 
       {/* Manage */}
@@ -234,8 +235,6 @@ export default function SettingsScreen() {
         <SettingsRow icon="tag" label="Categories" onPress={() => { haptic.light(); router.push('/categories'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="History" onPress={() => { haptic.light(); router.push('/history'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="hard-drive" label="Storage" onPress={() => { haptic.light(); router.push('/storage'); }} />
       </View>
 
       {/* Help & Support */}
@@ -246,11 +245,25 @@ export default function SettingsScreen() {
         <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await AsyncStorage.removeItem('onboarding_done'); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
       </View>
 
-      {/* About */}
+      {/* About — tap version 7× to open developer storage screen */}
       <Text style={styles.sectionTitle}>About</Text>
       <View style={styles.card}>
-        <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
-        <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+        <TouchableOpacity
+          onPress={() => {
+            const next = devTaps + 1;
+            setDevTaps(next);
+            if (next >= 7) {
+              setDevTaps(0);
+              haptic.success();
+              router.push('/storage');
+            }
+          }}
+          activeOpacity={0.7}
+          accessibilityLabel="App version"
+        >
+          <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
+          <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+        </TouchableOpacity>
       </View>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">

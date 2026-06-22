@@ -22,10 +22,15 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
 import { InsightText } from '../../src/components/finance/InsightText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
-import { getTransactionsInRange } from '../../src/db/queries/transactions';
+import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress } from '../../src/lib/savings';
+import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
+import { getMe } from '../../src/db/queries/persons';
+import { getDate, getDaysInMonth } from 'date-fns';
+import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { haptic } from '../../src/lib/haptics';
 import {
   getGoals, getGoalSavedMap, getPoolSummary, getCashPosition, addToPool, withdrawFromPool, insertGoal, runSavingsMaintenance, buildSavingsInsights,
@@ -79,6 +84,9 @@ export default function SavingsScreen() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [whatIfCat, setWhatIfCat] = useState<{ name: string; monthly: number } | null>(null);
   const [whatIfPct, setWhatIfPct] = useState(20);
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
+  const [forecastBudget, setForecastBudget] = useState(0);
 
   const [showAddPool, setShowAddPool] = useState(false);
   const [showWithdrawPool, setShowWithdrawPool] = useState(false);
@@ -131,6 +139,26 @@ export default function SavingsScreen() {
     }
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
     setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
+
+    // Month-end spend forecast based on daily pace.
+    const today2 = new Date();
+    const dayOfMonth = getDate(today2);
+    const daysInMonth = getDaysInMonth(today2);
+    const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
+    setForecastMonthEnd(dayOfMonth > 0 ? Math.round((totalMonthSpend / dayOfMonth) * daysInMonth) : null);
+
+    // Budget total across all groups for the forecast over/under line.
+    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
+    let bTotal = 0;
+    for (const a of analyticsAll) bTotal += a.totalAllocated;
+    setForecastBudget(bTotal);
+
+    // Upcoming recurring bills across all groups.
+    const me2 = await getMe(db);
+    if (me2) {
+      const recurring = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+      setUpcoming(buildUpcoming(recurring.flat(), me2.id, Date.now(), 5));
+    }
   }
 
   async function handleAddPool() {
@@ -174,7 +202,7 @@ export default function SavingsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="Money"
+        title="Plan"
         large
         right={
           <TouchableOpacity
@@ -375,6 +403,34 @@ export default function SavingsScreen() {
           />
         )}
 
+        {/* Upcoming recurring bills across all groups */}
+        {upcoming.length > 0 && (
+          <>
+            <Text style={styles.moneySection}>Upcoming this month</Text>
+            <ComingUpList items={upcoming} />
+          </>
+        )}
+
+        {/* Month-end spend forecast */}
+        {forecastMonthEnd !== null && (
+          <View style={styles.forecastCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.forecastLabel}>Month-end forecast</Text>
+              <Text style={styles.forecastSub}>At current pace</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.forecastAmt}>{formatCompact(forecastMonthEnd)}</Text>
+              {forecastBudget > 0 && (
+                <Text style={[styles.forecastDelta, { color: forecastMonthEnd > forecastBudget ? colors.expense : colors.income }]}>
+                  {forecastMonthEnd > forecastBudget
+                    ? `${formatCompact(forecastMonthEnd - forecastBudget)} over budget`
+                    : `${formatCompact(forecastBudget - forecastMonthEnd)} under budget`}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         <View style={{ height: space.lg }} />
       </ScrollView>
 
@@ -541,4 +597,9 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   swatch: { width: 28, height: 28, borderRadius: 14 },
   swatchActive: { borderWidth: 3, borderColor: colors.textPrimary },
+  forecastCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', padding: space.md, flexDirection: 'row', alignItems: 'center', ...shadow.sm },
+  forecastLabel: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  forecastSub: { ...type.caption, color: colors.textMuted },
+  forecastAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, color: colors.textPrimary, letterSpacing: -0.5 },
+  forecastDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
 });

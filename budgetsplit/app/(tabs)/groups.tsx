@@ -15,7 +15,7 @@ import { useStore } from '../../src/store';
 import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { getMe, getGroupMembers, getAllPersons } from '../../src/db/queries/persons';
+import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
 import { getGlobalNet, getFriendBalances, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
@@ -55,6 +55,7 @@ export default function GroupsScreen() {
   const [loadError, setLoadError] = useState(false);
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
+  const [memberMap, setMemberMap] = useState<Record<string, Person[]>>({});
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   const { refreshing, onRefresh } = useRefresh(() => loadGroups());
 
@@ -69,6 +70,7 @@ export default function GroupsScreen() {
       setArchived(await getArchivedGroups(db));
       // Per-group usage + member counts in parallel rather than serially.
       const h: typeof health = {};
+      const mm: Record<string, Person[]> = {};
       await Promise.all(grps.map(async g => {
         const [analytics, mems] = await Promise.all([
           getBudgetAnalytics(db, g),
@@ -77,8 +79,10 @@ export default function GroupsScreen() {
         const pct = analytics.utilizationPct;
         const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
         h[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length };
+        mm[g.id] = mems;
       }));
       setHealth(h);
+      setMemberMap(mm);
 
       // Balances hero — who-owes-whom across all shared groups, from my view.
       const [net, persons, me] = await Promise.all([getGlobalNet(db), getAllPersons(db), getMe(db)]);
@@ -175,9 +179,21 @@ export default function GroupsScreen() {
               <Text style={styles.groupSub} numberOfLines={1}>
                 {isArchivedView
                   ? 'Archived — tap to restore'
-                  : `${formatCompact(h?.spent ?? 0)} this month${item.is_personal !== 1 && h ? ` · ${h.members} member${h.members === 1 ? '' : 's'}` : ''}`
+                  : `${formatCompact(h?.spent ?? 0)} this month`
                 }
               </Text>
+              {!isArchivedView && item.is_personal !== 1 && (memberMap[item.id]?.length ?? 0) > 0 && (
+                <View style={styles.stackRow}>
+                  {(memberMap[item.id] ?? []).slice(0, 3).map((m, i) => (
+                    <View key={m.id} style={[styles.stackAvatar, { marginLeft: i === 0 ? 0 : -7, zIndex: 10 - i }]}>
+                      <MemberAvatar name={m.name} color={m.avatar_color} size={22} imageUri={m.image_uri} />
+                    </View>
+                  ))}
+                  {(memberMap[item.id]?.length ?? 0) > 3 && (
+                    <Text style={styles.stackMore}>+{(memberMap[item.id]?.length ?? 0) - 3}</Text>
+                  )}
+                </View>
+              )}
               {!isArchivedView && h && h.pct !== null && (
                 <View style={styles.budgetRow}>
                   <View style={{ flex: 1 }}>
@@ -200,55 +216,36 @@ export default function GroupsScreen() {
   const activeGroups = groups.filter(g => g.is_personal !== 1);
 
   function renderBalances() {
-    if (!bal || bal.rows.length === 0) return null;
     const activeFriends = friends.filter(f => f.net !== 0);
+    if (activeFriends.length === 0) return null;
     return (
       <View style={styles.balancesWrap}>
-        <View style={styles.balHero}>
-          <Text style={styles.balCaption}>Net balance · {bal.rows.length} {bal.rows.length === 1 ? 'person' : 'people'}</Text>
-          <AmountText paise={bal.net} size="xl" forceColor={bal.net < 0 ? colors.expense : colors.income} compact />
-          <View style={styles.balSplit}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.balCaption}>You owe</Text>
-              <AmountText paise={bal.youOwe} size="md" forceColor={colors.expense} compact />
-            </View>
-            <View style={styles.balDivider} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.balCaption}>You're owed</Text>
-              <AmountText paise={bal.youAreOwed} size="md" forceColor={colors.income} compact />
-            </View>
-          </View>
-        </View>
-
-        {/* People section */}
-        <Text style={styles.balListLabel}>
-          People{activeFriends.length > 0 ? ` · ${activeFriends.length} ${activeFriends.length === 1 ? 'friend' : 'friends'}` : ''}
-        </Text>
-        {activeFriends.length > 0 ? (
-          <View style={styles.balList}>
-            {activeFriends.map((f, i) => (
+        <Text style={styles.balListLabel}>People</Text>
+        <View style={styles.balList}>
+          {activeFriends.map((f, i) => (
+            <View
+              key={f.personId}
+              style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
+            >
+              <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
+                <Text style={[styles.balSub, { color: f.net > 0 ? colors.income : colors.expense }]}>
+                  {f.net > 0 ? 'owes you' : 'you owe'} {formatCompact(Math.abs(f.net))}
+                </Text>
+              </View>
               <TouchableOpacity
-                key={f.personId}
-                style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
+                style={styles.settleChip}
                 onPress={() => router.push(`/settle?focus=${f.personId}`)}
                 accessibilityRole="button"
                 accessibilityLabel={`Settle with ${f.name}`}
               >
-                <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
-                  <Text style={styles.balSub}>{f.net > 0 ? 'owes you' : 'you owe'} · {f.groupCount} {f.groupCount === 1 ? 'group' : 'groups'}</Text>
-                </View>
-                <Text style={[styles.balAmt, { color: f.net > 0 ? colors.income : colors.expense }]}>{formatCompact(Math.abs(f.net))}</Text>
-                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                <Text style={styles.settleChipText}>Settle</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.allSettled}>All settled up</Text>
-        )}
-
-        <Text style={styles.balListLabel}>Your groups</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={styles.balListLabel}>My groups</Text>
       </View>
     );
   }
@@ -480,4 +477,9 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   colorSwatch: { width: 32, height: 32, borderRadius: 16 },
   colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
+  stackRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  stackAvatar: { borderRadius: 11, borderWidth: 1.5, borderColor: colors.bgCard, overflow: 'hidden' },
+  stackMore: { ...type.caption, color: colors.textMuted, marginLeft: 4 },
+  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: colors.accent + '44' },
+  settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

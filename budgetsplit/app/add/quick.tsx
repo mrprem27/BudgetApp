@@ -23,7 +23,8 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
+import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
+import { getAffordSnapshot, type AffordSnapshot } from '../../src/db/queries/savings';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -92,6 +93,7 @@ export default function QuickAddScreen() {
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
+  const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -100,6 +102,7 @@ export default function QuickAddScreen() {
       const meRow = await getMe(db);
       setMe(meRow);
       loadLearned().then(setLearned).catch(() => {});
+      getAffordSnapshot(db).then(setSnapshot).catch(() => {});
       const savedCur = await AsyncStorage.getItem('default_currency');
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
@@ -209,6 +212,12 @@ export default function QuickAddScreen() {
   const paymentsTotal = payments.reduce((s, x) => s + x.amount, 0);
   const remainder = total - sharesTotal;
   const paymentRemainder = total - paymentsTotal;
+
+  // BudgetNudge: how much budget remains in the selected category this month.
+  const nudgeStat = selectedCategory ? snapshot?.byCategory[selectedCategory.name] : null;
+  const nudgeRemaining = nudgeStat?.budget != null ? nudgeStat.budget - nudgeStat.spentThisMonth : null;
+  const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
+  const nudgeColor = nudgePct == null ? null : nudgePct > 0.2 ? colors.income : nudgePct > 0 ? colors.healthAmber : colors.expense;
 
   const canSave = total > 0
     && selectedCategory !== null
@@ -337,6 +346,25 @@ export default function QuickAddScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Income has its own dedicated screen (add/income); this screen is expense-only. */}
 
+        {/* Expense / Income toggle — only on new transactions (kind is locked when editing) */}
+        {!isEditing && !isRecurEdit && (
+          <View style={styles.kindRow}>
+            {(['expense', 'income'] as const).map(k => (
+              <TouchableOpacity
+                key={k}
+                style={[styles.kindBtn, kind === k && styles.kindBtnActive]}
+                onPress={() => { setKind(k); haptic.selection(); }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: kind === k }}
+              >
+                <Text style={[styles.kindLabel, kind === k && styles.kindLabelActive]}>
+                  {k === 'expense' ? 'Expense' : 'Income'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         <View style={styles.amountRow}>
           {/* INR-only for v1 — currency picker hidden; static symbol. */}
           <View style={styles.currencyBadge}>
@@ -438,6 +466,18 @@ export default function QuickAddScreen() {
               maxLength={80}
             />
           </>
+        )}
+
+        {/* BudgetNudge: how much is left in this category's monthly budget */}
+        {kind === 'expense' && nudgeColor != null && nudgeRemaining != null && (
+          <View style={[styles.nudge, { borderColor: nudgeColor + '44', backgroundColor: nudgeColor + '11' }]}>
+            <Feather name={nudgeRemaining >= 0 ? 'bar-chart-2' : 'alert-circle'} size={13} color={nudgeColor} />
+            <Text style={[styles.nudgeText, { color: nudgeColor }]}>
+              {nudgeRemaining >= 0
+                ? `${formatCompact(nudgeRemaining)} left in ${selectedCategory!.name} this month`
+                : `${formatCompact(-nudgeRemaining)} over budget in ${selectedCategory!.name}`}
+            </Text>
+          </View>
         )}
 
         {attachmentUri ? (
@@ -813,4 +853,11 @@ const styles = StyleSheet.create({
   endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   doneBtnText: { ...type.button, color: colors.bg },
+  kindRow: { flexDirection: 'row', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3, marginBottom: space.md },
+  kindBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm },
+  kindBtnActive: { backgroundColor: colors.accent },
+  kindLabel: { ...type.body, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
+  kindLabelActive: { color: colors.bg },
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: space.xs, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: space.md, paddingVertical: space.sm },
+  nudgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold', flex: 1 },
 });

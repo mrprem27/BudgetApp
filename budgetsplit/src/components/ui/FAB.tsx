@@ -21,15 +21,20 @@ export type Action = {
 };
 
 type Props = {
-  actions: Action[];
+  /** Multi-action fan-out menu. Ignored when `onPress` is given. */
+  actions?: Action[];
+  /** Single-tap action — fires directly, no menu. Takes precedence over `actions`. */
+  onPress?: () => void;
   /** Lift the FAB above the tab bar. Set false on pushed screens (no tab bar). */
   aboveTabBar?: boolean;
 };
 
-export function FAB({ actions, aboveTabBar = true }: Props) {
+export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
   const [open, setOpen] = React.useState(false);
   const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  // Single-tap mode when an onPress is supplied; otherwise fan out the menu.
+  const single = typeof onPress === 'function';
 
   function pressIn() {
     Animated.spring(scaleAnim, { toValue: 0.9, useNativeDriver: true, speed: 40 }).start();
@@ -40,11 +45,12 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
 
   return (
     <>
+      {!single && (
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
             <View style={styles.handle} />
-            {actions.map((a) => {
+            {(actions ?? []).map((a) => {
               const tint = a.disabled ? colors.textMuted : (a.tint ?? colors.accent);
               return (
                 <TouchableOpacity
@@ -69,6 +75,7 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
           </View>
         </Pressable>
       </Modal>
+      )}
 
       <Animated.View
         style={[
@@ -87,9 +94,9 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
           activeOpacity={0.9}
           onPressIn={pressIn}
           onPressOut={pressOut}
-          onPress={() => { haptic.light(); setOpen(true); }}
+          onPress={() => { haptic.light(); if (single) { onPress!(); } else { setOpen(true); } }}
           accessibilityRole="button"
-          accessibilityLabel="Add transaction"
+          accessibilityLabel="Add expense"
         >
           <LinearGradient
             colors={gradients.brand}

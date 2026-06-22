@@ -55,9 +55,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="savings"
         options={{
-          title: 'Money',
-          tabBarIcon: ({ color }) => <Feather name="dollar-sign" size={22} color={color} />,
-          tabBarAccessibilityLabel: 'Money',
+          title: 'Plan',
+          tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} />,
+          tabBarAccessibilityLabel: 'Plan',
         }}
       />
       {/* Reports folds into Home — reachable from the dashboard, not a tab. */}

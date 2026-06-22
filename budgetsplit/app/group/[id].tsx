@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, SectionList, StyleSheet, TouchableOpacity, Alert, ScrollView, Switch,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -40,7 +39,7 @@ import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-type TabKey = 'transactions' | 'balances' | 'budget' | 'members';
+type TabKey = 'transactions' | 'balances' | 'budget' | 'members' | 'insights';
 
 function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
@@ -236,63 +235,99 @@ export default function GroupDetailScreen() {
       ]
     : [
         { key: 'transactions', label: 'Expenses' },
-        { key: 'balances', label: 'Balances' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
+        { key: 'insights', label: 'Insights' },
       ];
 
   if (!group) return null;
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[group.color + '22', colors.bg]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.gradientHeader}
-      >
-        <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity onPress={() => router.push(`/group/${id}/recurring`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage recurring transactions" style={styles.headerAction}>
-            <Feather name="repeat" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-          {!isPersonal && (
-            <TouchableOpacity onPress={() => router.push(`/group/${id}/members`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage members" style={styles.headerAction}>
-              <Feather name="users" size={21} color={colors.textPrimary} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+      {/* Breadcrumb header */}
+      <View style={[styles.header, { paddingTop: insets.top + space.xs }]}>
+        <TouchableOpacity
+          style={styles.breadcrumb}
+          onPress={() => router.back()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Groups"
+        >
+          <Feather name="chevron-left" size={18} color={colors.accent} />
+          <Text style={styles.breadcrumbBack}>Groups</Text>
+          <Text style={styles.breadcrumbSep}>›</Text>
+          <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{group.name}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
+          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
-        {/* Group hero — themed by the group's colour */}
-        <View style={styles.hero}>
-          <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
-            <Feather name={asFeather(group.icon, 'credit-card')} size={22} color={group.color} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
-            <Text style={styles.heroSub} numberOfLines={1}>
-              {(() => {
-                const monthStart = startOfMonth(new Date()).getTime();
-                const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
-                const myNet = net[me?.id ?? ''] ?? 0;
-                const parts: string[] = [`${formatCompact(monthSpend)} this month`];
-                if (!isPersonal) {
-                  parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
-                  if (myNet > 0) parts.push(`you're owed ${formatCompact(myNet)}`);
-                  else if (myNet < 0) parts.push(`you owe ${formatCompact(-myNet)}`);
-                }
-                return parts.join(' · ');
+      {/* Group hero */}
+      <View style={styles.hero}>
+        <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
+          <Feather name={asFeather(group.icon, 'credit-card')} size={22} color={group.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
+          <Text style={styles.heroSub} numberOfLines={1}>
+            {(() => {
+              const monthStart = startOfMonth(new Date()).getTime();
+              const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
+              const parts: string[] = [`${formatCompact(monthSpend)} this month`];
+              if (!isPersonal) parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
+              return parts.join(' · ');
             })()}
           </Text>
         </View>
       </View>
-      </LinearGradient>
+
+      {/* Balance card — only for non-personal groups with outstanding balance */}
+      {!isPersonal && (() => {
+        const myNet = net[me?.id ?? ''] ?? 0;
+        if (myNet === 0) return null;
+        const mySettles = simplify(net);
+        const isOwe = myNet < 0;
+        const primarySettle = isOwe
+          ? mySettles.find(s => s.from === me?.id)
+          : mySettles.find(s => s.to === me?.id);
+        const primaryPerson = primarySettle
+          ? personMap.get(isOwe ? primarySettle.to : primarySettle.from)
+          : null;
+        const balColor = isOwe ? colors.expense : colors.income;
+        return (
+          <View style={[styles.balCard, {
+            backgroundColor: isOwe ? '#2A1714' : '#14271F',
+            borderColor: isOwe ? '#3A1F1C' : '#1A3527',
+          }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.balCardLabel, { color: balColor }]}>
+                {isOwe ? 'YOU OWE' : 'OWED TO YOU'}
+              </Text>
+              <Text style={[styles.balCardAmt, { color: balColor }]}>
+                {formatCompact(Math.abs(myNet))}
+              </Text>
+              {primaryPerson && (
+                <Text style={styles.balCardSub}>{isOwe ? 'to' : 'by'} {primaryPerson.name}</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.balCardBtn}
+              onPress={() => {
+                if (primarySettle && me && primaryPerson) {
+                  const fromP = isOwe ? me : primaryPerson;
+                  const toP = isOwe ? primaryPerson : me;
+                  setSettleTarget({ from: fromP, to: toP, amount: primarySettle.amount });
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Settle up"
+            >
+              <Text style={styles.balCardBtnText}>Settle up</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      })()}
 
       {budgetUsage && budgetUsage.pct !== null && (
         <View style={styles.budgetHeaderBar}>
@@ -628,6 +663,45 @@ export default function GroupDetailScreen() {
         </ScrollView>
       )}
 
+      {activeTab === 'insights' && !isPersonal && (
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {analytics && analytics.recommendations.length > 0 && (
+            <View style={styles.recList}>
+              {analytics.recommendations.map(r => (
+                <View key={r.id} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
+                  <Feather name={r.icon} size={15} color={recColor(r.severity)} />
+                  <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {contributions.total > 0 && (
+            <View style={styles.contribCard}>
+              <Text style={styles.contribTitle}>Who paid what</Text>
+              {contributions.rows.map((r, i) => (
+                <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
+                  <View style={styles.contribHead}>
+                    <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
+                    <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
+                    <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
+                    <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
+                      {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.contribTrack}>
+                    <View style={[styles.contribFill, { width: `${Math.round(r.frac * 100)}%`, backgroundColor: r.member.avatar_color }]} />
+                  </View>
+                </View>
+              ))}
+              <Text style={styles.contribFoot}>Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group</Text>
+            </View>
+          )}
+          {(!analytics || analytics.recommendations.length === 0) && contributions.total === 0 && (
+            <EmptyState icon="bar-chart-2" title="No insights yet" body="Add expenses to see analytics and spending patterns." tint={colors.textSecondary} />
+          )}
+        </ScrollView>
+      )}
+
       <FAB
         aboveTabBar={false}
         actions={[
@@ -694,8 +768,7 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  gradientHeader: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   headerAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgCard + 'AA', alignItems: 'center', justifyContent: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
   heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -787,4 +860,14 @@ const styles = StyleSheet.create({
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  breadcrumbBack: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  breadcrumbSep: { ...type.body, color: colors.border, marginHorizontal: 1 },
+  breadcrumbCurrent: { ...type.label, color: colors.textSecondary, flex: 1 },
+  balCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, borderRadius: radius.lg, padding: space.md, marginBottom: space.sm, borderWidth: 1 },
+  balCardLabel: { ...type.caption, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 },
+  balCardAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, letterSpacing: -1, lineHeight: 32 },
+  balCardSub: { ...type.caption, color: colors.textMuted, marginTop: 3 },
+  balCardBtn: { paddingHorizontal: space.md + 2, paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent },
+  balCardBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });
