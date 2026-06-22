@@ -96,9 +96,9 @@ export default function TxnDetailScreen() {
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
   const isItemized = txn.entry_mode === 'itemized';
-  // Everything is editable now (itemized reopens in the itemized editor;
-  // settlements/transfers in the transfer screen; the rest in quick/income).
-  const canEdit = true;
+  // Materialized recurring occurrences are read-only — manage the series from
+  // the Recurring screen instead.
+  const canEdit = !txn.parent_recur_id;
   const editHref = isItemized
     ? `/add/itemized?editId=${id}`
     : isSettlement
@@ -182,12 +182,16 @@ export default function TxnDetailScreen() {
                 style={styles.recurRow}
                 onPress={() => router.push(`/group/${parentRule?.group_id ?? txn.group_id}/recurring?focus=${txn.parent_recur_id}`)}
                 accessibilityRole="button"
-                accessibilityLabel="View the recurring rule that created this"
+                accessibilityLabel="View the recurring schedule that created this"
               >
                 <Text style={styles.metaLabel}>Recurring</Text>
                 <View style={styles.recurValue}>
                   <Feather name="repeat" size={13} color={colors.accent} />
-                  <Text style={styles.recurText} numberOfLines={1}>Added by “{parentRule?.category ?? txn.category}”</Text>
+                  <Text style={styles.recurText} numberOfLines={1}>
+                    {parentRule
+                      ? `Schedule started ${format(new Date(parentRule.date), 'dd MMM yyyy')}`
+                      : `Created by recurring schedule`}
+                  </Text>
                   <Feather name="chevron-right" size={15} color={colors.textMuted} />
                 </View>
               </TouchableOpacity>

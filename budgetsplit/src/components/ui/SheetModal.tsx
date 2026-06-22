@@ -1,14 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder, Dimensions,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, Platform, ScrollView, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, shadow } from '../tokens';
 
 const SCREEN_H = Dimensions.get('window').height;
-const DISMISS_DY = 120;   // drag distance past which we close
-const DISMISS_VY = 0.8;   // …or a fast flick
+const DISMISS_DY = 120;
+const DISMISS_VY = 0.8;
 
 type Props = {
   visible: boolean;
@@ -21,14 +21,21 @@ type Props = {
 
 /**
  * The single bottom-sheet used across the app:
- * - spring-in on open, **drag the handle down to dismiss** (snaps back if you
- *   don't pull far enough), backdrop fades with the drag
- * - keyboard avoidance, tap-backdrop to dismiss, rounded top, safe-area padding
- * Improving this lifts every sheet in the app.
+ * - spring-in on open, drag the handle down to dismiss
+ * - keyboard avoidance: when keyboard appears the sheet lifts and the button
+ *   hugs the keyboard with minimum clearance (no dead space)
+ * - tap-backdrop to dismiss, rounded top, safe-area padding
  */
 export function SheetModal({ visible, onClose, title, children, scroll = true }: Props) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  const [kbVisible, setKbVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKbVisible(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKbVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const animateClose = (cb: () => void) => {
     Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(({ finished }) => { if (finished) cb(); });
@@ -41,7 +48,6 @@ export function SheetModal({ visible, onClose, title, children, scroll = true }:
     }
   }, [visible]);
 
-  // Drag handle (grabber) → follow the finger downward; release decides.
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
@@ -55,6 +61,11 @@ export function SheetModal({ visible, onClose, title, children, scroll = true }:
 
   const backdropOpacity = translateY.interpolate({ inputRange: [0, SCREEN_H], outputRange: [1, 0], extrapolate: 'clamp' });
 
+  // When keyboard is visible the KAV has already lifted the sheet above the
+  // keyboard — so bottom padding only needs a tiny clearance, not the full
+  // safe-area + margin that applies when keyboard is hidden.
+  const bottomPad = kbVisible ? space.xs : insets.bottom + space.md;
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={() => animateClose(onClose)}>
       <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
@@ -65,7 +76,7 @@ export function SheetModal({ visible, onClose, title, children, scroll = true }:
         style={styles.wrap}
         pointerEvents="box-none"
       >
-        <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.md, transform: [{ translateY }] }]}>
+        <Animated.View style={[styles.sheet, { paddingBottom: bottomPad, transform: [{ translateY }] }]}>
           <View {...pan.panHandlers} style={styles.grabber}>
             <View style={styles.handle} />
             {title ? <Text style={styles.title}>{title}</Text> : null}

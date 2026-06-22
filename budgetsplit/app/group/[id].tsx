@@ -51,6 +51,13 @@ function utilHealth(pct: number | null): 'green' | 'amber' | 'red' | 'none' {
   return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
 }
 
+// Over 100 %: show as a multiplier (e.g. 2.5X) — more intuitive than 250 %.
+function utilLabel(pct: number | null): string {
+  if (pct === null) return '—';
+  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
+  return `${pct}%`;
+}
+
 function recBg(sev: 'warn' | 'info' | 'good'): string {
   return sev === 'warn' ? '#3A1414' : sev === 'good' ? colors.accentMuted : colors.bgMuted;
 }
@@ -249,6 +256,9 @@ export default function GroupDetailScreen() {
             <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => router.push(`/group/${id}/recurring`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage recurring transactions" style={styles.headerAction}>
+            <Feather name="repeat" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
           {!isPersonal && (
             <TouchableOpacity onPress={() => router.push(`/group/${id}/members`)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Manage members" style={styles.headerAction}>
               <Feather name="users" size={21} color={colors.textPrimary} />
@@ -288,7 +298,7 @@ export default function GroupDetailScreen() {
         <View style={styles.budgetHeaderBar}>
           <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
           <Text style={styles.budgetHeaderText}>
-            <Text style={{ color: healthColor(budgetUsage.health) }}>{formatCompact(budgetUsage.spent)}</Text> / {formatCompact(budgetUsage.limit ?? 0)} ({budgetUsage.pct}%)
+            <Text style={{ color: healthColor(budgetUsage.health) }}>{formatCompact(budgetUsage.spent)}</Text> / {formatCompact(budgetUsage.limit ?? 0)} ({utilLabel(budgetUsage.pct)})
           </Text>
         </View>
       )}
@@ -443,7 +453,7 @@ export default function GroupDetailScreen() {
                       <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
                     </View>
                     <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
-                      {analytics.utilizationPct ?? 0}%
+                      {utilLabel(analytics.utilizationPct ?? 0)}
                     </Text>
                   </View>
                   <View style={{ marginTop: space.md }}>

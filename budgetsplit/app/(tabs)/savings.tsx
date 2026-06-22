@@ -77,6 +77,8 @@ export default function SavingsScreen() {
   const [subs, setSubs] = useState<DetectedSub[]>([]);
   const [personalId, setPersonalId] = useState('');
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [whatIfCat, setWhatIfCat] = useState<{ name: string; monthly: number } | null>(null);
+  const [whatIfPct, setWhatIfPct] = useState(20);
 
   const [showAddPool, setShowAddPool] = useState(false);
   const [showWithdrawPool, setShowWithdrawPool] = useState(false);
@@ -115,6 +117,20 @@ export default function SavingsScreen() {
     } else {
       setSubs([]);
     }
+
+    // Load current month's top spending category for the what-if simulator.
+    const monthStart = new Date();
+    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const monthTxns = await getTransactionsInRange(db, null, monthStart.getTime(), Date.now());
+    const catMap: Record<string, number> = {};
+    for (const t of monthTxns) {
+      if (t.kind === 'expense') {
+        const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+        catMap[t.category] = (catMap[t.category] ?? 0) + amt;
+      }
+    }
+    const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
+    setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
   }
 
   async function handleAddPool() {
@@ -157,7 +173,21 @@ export default function SavingsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Money" large />
+      <ScreenHeader
+        title="Money"
+        large
+        right={
+          <TouchableOpacity
+            onPress={() => router.push('/afford')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Can I afford something?"
+            style={styles.headerAction}
+          >
+            <Feather name="help-circle" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
+        }
+      />
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Cash available — your real money */}
         {cash && (
@@ -262,6 +292,40 @@ export default function SavingsScreen() {
                 </View>
               );
             })}
+          </View>
+        )}
+
+        {/* What if — cut top category and see savings */}
+        {whatIfCat && (
+          <View style={styles.whatIfCard}>
+            <Text style={styles.moneySection}>What if…</Text>
+            <Text style={styles.whatIfLead}>
+              Cut <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold' }}>{whatIfCat.name}</Text> by
+            </Text>
+            <View style={styles.whatIfChips}>
+              {[10, 20, 30].map(p => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.whatIfChip, whatIfPct === p && styles.whatIfChipActive]}
+                  onPress={() => setWhatIfPct(p)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.whatIfChipText, whatIfPct === p && { color: colors.bg }]}>{p}%</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.whatIfResult}>
+              <Text style={styles.whatIfSave}>
+                You'd save{' '}
+                <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>
+                  {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100))}
+                </Text>
+                /mo
+              </Text>
+              <Text style={styles.whatIfYear}>
+                ≈ {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100) * 12)} a year
+              </Text>
+            </View>
           </View>
         )}
 
@@ -454,6 +518,16 @@ const styles = StyleSheet.create({
   goalBarRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   goalPct: { ...type.caption, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
 
+  headerAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  whatIfCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
+  whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
+  whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
+  whatIfChipActive: { backgroundColor: colors.accent },
+  whatIfChipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
+  whatIfResult: { gap: 2 },
+  whatIfSave: { ...type.body, color: colors.textPrimary },
+  whatIfYear: { ...type.caption, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },

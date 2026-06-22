@@ -33,6 +33,12 @@ import { haptic } from '../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
+function utilLabel(pct: number | null): string {
+  if (pct === null) return '—';
+  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
+  return `${pct}%`;
+}
+
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -45,6 +51,7 @@ export default function GroupsScreen() {
   const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+  const [listMode, setListMode] = useState<'groups' | 'budget'>('groups');
   const [loadError, setLoadError] = useState(false);
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
@@ -176,7 +183,7 @@ export default function GroupsScreen() {
                   <View style={{ flex: 1 }}>
                     <BudgetBar pct={h.pct} health={h.health} height={5} />
                   </View>
-                  <Text style={styles.budgetPct}>{h.pct}%</Text>
+                  <Text style={[styles.budgetPct, (h.pct ?? 0) > 100 && { color: colors.expense }]}>{utilLabel(h.pct)}</Text>
                   {h.over > 0 && <Text style={styles.overBadge}>{h.over} over</Text>}
                 </View>
               )}
@@ -250,17 +257,28 @@ export default function GroupsScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Groups</Text>
-        <TouchableOpacity style={styles.friendsBtn} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Manage friends">
-          <Feather name="users" size={18} color={colors.accent} />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, listMode === 'budget' && styles.headerIconBtnActive]}
+            onPress={() => setListMode(m => m === 'groups' ? 'budget' : 'groups')}
+            accessibilityRole="button"
+            accessibilityLabel={listMode === 'budget' ? 'Show groups view' : 'Show budget overview'}
+            hitSlop={8}
+          >
+            <Feather name="bar-chart-2" size={18} color={listMode === 'budget' ? colors.accent : colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.friendsBtn} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Manage friends">
+            <Feather name="users" size={18} color={colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
       ) : (
         <>
-      {/* Filter chips */}
-      {archived.length > 0 && (
+      {/* Filter chips — only in groups list mode */}
+      {listMode === 'groups' && archived.length > 0 && (
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[styles.filterChip, viewMode === 'active' && styles.filterChipActive]}
@@ -282,33 +300,79 @@ export default function GroupsScreen() {
         </View>
       )}
 
-      <FlatList
-        data={viewMode === 'active' ? activeGroups : archived}
-        keyExtractor={g => g.id}
-        renderItem={renderGroup}
-        contentContainerStyle={styles.list}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
-        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
-        ListEmptyComponent={
-          viewMode === 'active' ? (
+      {listMode === 'budget' ? (
+        <FlatList
+          data={activeGroups
+            .filter(g => health[g.id]?.pct !== null && health[g.id]?.pct !== undefined)
+            .sort((a, b) => (health[b.id]?.pct ?? 0) - (health[a.id]?.pct ?? 0))}
+          keyExtractor={g => g.id}
+          contentContainerStyle={styles.list}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={<Text style={styles.budgetOverviewHeader}>Budget overview</Text>}
+          ItemSeparatorComponent={() => <View style={{ height: space.xs }} />}
+          ListEmptyComponent={
             <EmptyState
-              icon="users"
-              title="No groups yet"
-              body="Create a group to track shared expenses with friends, family or roommates."
-              actionLabel="New Group"
-              onAction={() => setShowCreate(true)}
-            />
-          ) : (
-            <EmptyState
-              icon="archive"
-              title="No archived groups"
-              body="Swipe left on a group to archive it. Archived groups are hidden but data is preserved."
+              icon="bar-chart-2"
+              title="No budgets set"
+              body="Set budgets for your groups to track spending here."
               tint={colors.textSecondary}
             />
-          )
-        }
-      />
+          }
+          renderItem={({ item }) => {
+            const h = health[item.id];
+            if (!h || h.pct === null) return null;
+            const hColor = h.health === 'red' ? colors.expense : h.health === 'amber' ? colors.healthAmber : colors.income;
+            return (
+              <FadeIn>
+                <PressableScale
+                  style={styles.budgetOverviewRow}
+                  onPress={() => router.push(`/group/${item.id}/budget` as any)}
+                  accessibilityLabel={item.name}
+                >
+                  <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
+                    <Feather name={asFeather(item.icon, 'credit-card')} size={18} color={item.color} />
+                  </View>
+                  <View style={styles.budgetOverviewInfo}>
+                    <View style={styles.budgetOverviewNameRow}>
+                      <Text style={styles.budgetOverviewName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={[styles.budgetOverviewPct, { color: hColor }]}>{utilLabel(h.pct)}</Text>
+                    </View>
+                    <BudgetBar pct={h.pct} health={h.health} height={6} />
+                  </View>
+                </PressableScale>
+              </FadeIn>
+            );
+          }}
+        />
+      ) : (
+        <FlatList
+          data={viewMode === 'active' ? activeGroups : archived}
+          keyExtractor={g => g.id}
+          renderItem={renderGroup}
+          contentContainerStyle={styles.list}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
+          ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
+          ListEmptyComponent={
+            viewMode === 'active' ? (
+              <EmptyState
+                icon="users"
+                title="No groups yet"
+                body="Create a group to track shared expenses with friends, family or roommates."
+                actionLabel="New Group"
+                onAction={() => setShowCreate(true)}
+              />
+            ) : (
+              <EmptyState
+                icon="archive"
+                title="No archived groups"
+                body="Swipe left on a group to archive it. Archived groups are hidden but data is preserved."
+                tint={colors.textSecondary}
+              />
+            )
+          }
+        />
+      )}
         </>
       )}
 
@@ -398,6 +462,15 @@ const styles = StyleSheet.create({
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted },
+  headerIconBtnActive: { backgroundColor: colors.accentMuted },
+  budgetOverviewHeader: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm },
+  budgetOverviewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  budgetOverviewInfo: { flex: 1, gap: space.xs },
+  budgetOverviewNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetOverviewName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  budgetOverviewPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13 },
   overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary },

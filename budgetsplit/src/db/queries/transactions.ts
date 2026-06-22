@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
+import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 
@@ -53,27 +53,14 @@ export async function getTransactionsForGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
 ): Promise<TxnWithSplits[]> {
-  const now = Date.now();
-
-  const nonRecurringTxns = await db.getAllAsync<Txn>(
+  // Only real rows: one-time entries + materialized recurring occurrences.
+  // Future occurrences are never pre-calculated — they appear only after midnight
+  // when materializeDueOccurrences() runs on app open.
+  const rows = await db.getAllAsync<Txn>(
     `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NULL ORDER BY date DESC, created_at DESC`,
     [groupId],
   );
-  const nonRecurring = await Promise.all(nonRecurringTxns.map(t => loadSplits(db, t)));
-
-  const recurTxns = await db.getAllAsync<Txn>(
-    `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL`,
-    [groupId],
-  );
-  const ids = recurTxns.map(t => t.id);
-  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
-  const instances: TxnWithSplits[] = [];
-  for (const rt of recurTxns) {
-    const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, rt.date, now, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
-  }
-
-  return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date || b.created_at - a.created_at);
+  return Promise.all(rows.map(t => loadSplits(db, t)));
 }
 
 export async function getTransactionsInRange(
@@ -82,7 +69,7 @@ export async function getTransactionsInRange(
   fromMs: number,
   toMs: number,
 ): Promise<TxnWithSplits[]> {
-  // Non-recurring txns in range
+  // Only real rows in range — one-time entries + materialized recurring occurrences.
   const args: (string | number)[] = [fromMs, toMs];
   let where = 'WHERE t.date >= ? AND t.date <= ? AND t.is_deleted = 0 AND t.recur_freq IS NULL';
   if (groupId) {
@@ -93,28 +80,7 @@ export async function getTransactionsInRange(
     `SELECT t.* FROM txn t ${where} ORDER BY t.date DESC`,
     args,
   );
-  const nonRecurring = await Promise.all(txns.map(t => loadSplits(db, t)));
-
-  // Recurring parent txns that could have instances in the range
-  const recurArgs: (string | number)[] = [fromMs];
-  let recurWhere = 'WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND (t.recur_end IS NULL OR t.recur_end >= ?)';
-  if (groupId) {
-    recurWhere += ' AND t.group_id = ?';
-    recurArgs.push(groupId);
-  }
-  const recurTxns = await db.getAllAsync<Txn>(
-    `SELECT t.* FROM txn t ${recurWhere}`,
-    recurArgs,
-  );
-  const ids = recurTxns.map(t => t.id);
-  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
-  const instances: TxnWithSplits[] = [];
-  for (const rt of recurTxns) {
-    const rw = await loadSplits(db, rt);
-    instances.push(...materializeInstances(rw, fromMs, toMs, mergedOmit(skipMap.get(rt.id), claimedMap.get(rt.id))));
-  }
-
-  return [...nonRecurring, ...instances].sort((a, b) => b.date - a.date);
+  return Promise.all(txns.map(t => loadSplits(db, t)));
 }
 
 async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<TxnWithSplits> {
@@ -591,6 +557,24 @@ export async function skipNextOccurrence(db: SQLite.SQLiteDatabase, seriesId: st
     });
   });
   return date;
+}
+
+/**
+ * Undo the next upcoming skip for a series (the earliest skipped date ≥ now).
+ * Returns the un-skipped occurrence date (ms), or null if no upcoming skip found.
+ */
+export async function undoNextSkip(db: SQLite.SQLiteDatabase, seriesId: string): Promise<number | null> {
+  const now = Date.now();
+  const row = await db.getFirstAsync<{ occurrence_date: number }>(
+    'SELECT occurrence_date FROM recur_skip WHERE series_id = ? AND occurrence_date >= ? ORDER BY occurrence_date ASC LIMIT 1',
+    [seriesId, now],
+  );
+  if (!row) return null;
+  await db.runAsync(
+    'DELETE FROM recur_skip WHERE series_id = ? AND occurrence_date = ?',
+    [seriesId, row.occurrence_date],
+  );
+  return row.occurrence_date;
 }
 
 /**

@@ -37,6 +37,18 @@ import { CHART_COLORS } from '../../src/constants/palette';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 
+/** Y-axis label: always whole numbers, no decimal K/L/Cr values. */
+function fmtY(v: string): string {
+  const n = Math.round(Number(v));
+  if (!isFinite(n)) return '₹0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs < 1000) return sign + '₹' + abs;
+  if (abs < 100000) return sign + '₹' + Math.round(abs / 1000) + 'K';
+  if (abs < 10000000) return sign + '₹' + Math.round(abs / 100000) + 'L';
+  return sign + '₹' + Math.round(abs / 10000000) + 'Cr';
+}
+
 type GroupSummary = {
   group: BudgetGroup;
   income: number;
@@ -219,7 +231,7 @@ export default function ReportsScreen() {
             .filter(t => t.date >= dayStart && t.date <= dayEnd)
             .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
           runningTotal += daySpend;
-          dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 5 === 1 ? `${d}` : '' });
+          dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 2 === 1 ? `${d}` : '' });
         }
 
         // Prior-month actual total anchors the projection so an early spike doesn't
@@ -232,11 +244,8 @@ export default function ReportsScreen() {
 
         const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
         if (fc.ready) {
-          // X-axis labels: always anchor day 1 and the month's LAST day so the
-          // axis visibly spans the whole month, plus evenly-spaced midpoints
-          // (suppressed near the end so they don't collide with the last label).
-          const labelForDay = (d: number) =>
-            (d === 1 || d === daysInMonth || (d % 5 === 0 && d <= daysInMonth - 3)) ? `${d}` : '';
+          // X-axis: every odd day (1, 3, 5, … 31) so all alternate days are visible.
+          const labelForDay = (d: number) => (d % 2 === 1) ? `${d}` : '';
 
           // The PROJECTED line spans the full month (days 1..month-end) and is the
           // chart's primary series, so it owns the x-axis labels — that's what
@@ -521,7 +530,7 @@ export default function ReportsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
+                formatYLabel={fmtY}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
                 hideRules
                 isAnimated
@@ -555,11 +564,32 @@ export default function ReportsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={(v: string) => formatCompactMajor(Number(v))}
+                formatYLabel={fmtY}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
                 hideRules
                 isAnimated
                 disableScroll
+                pointerConfig={{
+                  pointerStripUptoDataPoint: true,
+                  pointerStripColor: colors.textMuted + '60',
+                  pointerStripWidth: 1,
+                  pointerColor: colors.accent,
+                  radius: 5,
+                  pointerLabelWidth: 76,
+                  pointerLabelHeight: 32,
+                  activatePointersOnLongPress: false,
+                  autoAdjustPointerLabelPosition: true,
+                  pointerLabelComponent: (items: Array<{ value: number }>) => {
+                    const val = items[0]?.value ?? 0;
+                    return (
+                      <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
+                        <Text style={{ color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', fontSize: 11 }}>
+                          {fmtY(String(val))}
+                        </Text>
+                      </View>
+                    );
+                  },
+                }}
               />
               <View style={styles.forecastLegend}>
                 <View style={styles.forecastLegendItem}>
@@ -649,7 +679,9 @@ export default function ReportsScreen() {
                     <View style={styles.sep} />
                     <View style={styles.utilRow}>
                       <Text style={styles.catTitle}>Budget used</Text>
-                      <Text style={styles.utilPct}>{an.utilizationPct ?? 0}%</Text>
+                      <Text style={[styles.utilPct, (an.utilizationPct ?? 0) > 100 && { color: colors.expense }]}>
+                        {(an.utilizationPct ?? 0) > 100 ? `${((an.utilizationPct ?? 0) / 100).toFixed(1)}X` : `${an.utilizationPct ?? 0}%`}
+                      </Text>
                     </View>
                     <BudgetBar
                       pct={an.utilizationPct}

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager, Alert,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -10,6 +11,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   startOfYear, endOfYear,
   subDays, subMonths, subYears,
+  getDate, getDaysInMonth,
 } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -31,13 +33,16 @@ import { PressableScale } from '../../src/components/ui/PressableScale';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics, rankInsights } from '../../src/lib/analytics';
-import type { GroupInsight } from '../../src/lib/analytics';
+import type { GroupInsight, CategoryTrend } from '../../src/lib/analytics';
+import { categoryVisual } from '../../src/constants/categories';
+import { asFeather } from '../../src/constants/palette';
 import { formatCompact } from '../../src/lib/money';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
 import { InsightText } from '../../src/components/finance/InsightText';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { computeHealthScore } from '../../src/lib/financialHealth';
+import { computeHealthScore, type HealthResult, type HealthDimension } from '../../src/lib/financialHealth';
+import { SheetModal } from '../../src/components/ui/SheetModal';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 
 type TabKey = 'today' | 'month' | 'year';
@@ -72,6 +77,12 @@ const CHART_COLORS = [
   '#FB923C', '#F472B6', '#34D399', '#A78BFA', '#8B8A99',
 ];
 
+function utilLabel(pct: number | null): string {
+  if (pct === null) return '—';
+  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
+  return `${pct}%`;
+}
+
 export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -87,10 +98,14 @@ export default function DashboardScreen() {
   const [groupHealth, setGroupHealth] = useState<Array<{ id: string; name: string; pct: number | null; health: 'green' | 'amber' | 'red' | 'none' }>>([]);
   const [donutData, setDonutData] = useState<DonutSeg[]>([]);
   const [donutTotal, setDonutTotal] = useState(0);
-  const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number }>({ allocated: 0, spent: 0, over: 0, near: 0 });
+  const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number; onTrack: number }>({ allocated: 0, spent: 0, over: 0, near: 0, onTrack: 0 });
+  const [budgetTopCats, setBudgetTopCats] = useState<CategoryTrend[]>([]);
+  const [showBudgetSheet, setShowBudgetSheet] = useState(false);
   const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
   const [cashAvailable, setCashAvailable] = useState<number | null>(null);
   const [streak, setStreak] = useState<{ count: number; loggedToday: boolean } | null>(null);
+  const [health, setHealth] = useState<HealthResult | null>(null);
+  const [selectedDim, setSelectedDim] = useState<HealthDimension | null>(null);
   const [insights, setInsights] = useState<GroupInsight[]>([]);
   const { refreshing, onRefresh } = useRefresh(() => load());
   const [loading, setLoading] = useState(true);
@@ -169,11 +184,44 @@ export default function DashboardScreen() {
     );
     setGroupHealth(health);
 
-    // Budget rollup across all groups for the dashboard tiles.
+    // Budget rollup across all groups for the dashboard tiles + health score.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
-    let bAlloc = 0, bSpent = 0, over = 0, near = 0;
-    for (const a of analyticsAll) { bAlloc += a.totalAllocated; bSpent += a.totalSpent; over += a.overBudget.length; near += a.nearLimit.length; }
-    setBudgetSummary({ allocated: bAlloc, spent: bSpent, over, near });
+    let bAlloc = 0, bSpent = 0, over = 0, near = 0, totalBudgeted = 0;
+    for (const a of analyticsAll) {
+      bAlloc += a.totalAllocated;
+      bSpent += a.totalSpent;
+      over += a.overBudget.length;
+      near += a.nearLimit.length;
+      totalBudgeted += a.overBudget.length + a.nearLimit.length + a.underBudget.length;
+    }
+    const onTrack = analyticsAll.reduce((s, a) => s + a.underBudget.length, 0);
+    setBudgetSummary({ allocated: bAlloc, spent: bSpent, over, near, onTrack });
+    const topBudgetCats = [...analyticsAll.flatMap(a => a.overBudget), ...analyticsAll.flatMap(a => a.nearLimit)]
+      .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))
+      .slice(0, 5);
+    setBudgetTopCats(topBudgetCats);
+
+    // Worst single category across all groups (for the health engine).
+    const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
+    allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+    const worstCat = allBudgetedCats[0] ?? null;
+
+    const now2 = new Date();
+    setHealth(computeHealthScore({
+      spendPaise: sp,
+      incomePaise: inc,
+      prevSpendPaise: prevSp,
+      budgetAllocated: bAlloc,
+      budgetSpent: bSpent,
+      categoriesOver: over,
+      categoriesNear: near,
+      totalBudgeted,
+      worstCategoryPct: worstCat?.pct ?? null,
+      worstCategoryName: worstCat?.category ?? null,
+      netOwedPaise: oweTotal - owedTotal,
+      dayOfMonth: getDate(now2),
+      daysInMonth: getDaysInMonth(now2),
+    }));
 
     // Reuse the analytics we just computed — rank the top cross-group insights.
     setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
@@ -307,56 +355,88 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Cash available — real, spendable liquid money (income − expenses − set-aside savings) */}
-        {flags.dashboardCash && cashAvailable !== null && (
-          <TouchableOpacity
-            style={styles.cashCard}
-            activeOpacity={0.85}
-            onPress={() => router.push('/savings' as any)}
-            accessibilityRole="button"
-            accessibilityLabel="Cash available"
-          >
-            <View style={styles.cashIcon}>
-              <Feather name="dollar-sign" size={16} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cashLabel}>Cash available</Text>
-              <Text style={styles.cashSub}>Liquid money, after savings set aside</Text>
-            </View>
-            <AmountText paise={cashAvailable} size="md" forceColor={cashAvailable >= 0 ? colors.income : colors.expense} compact />
-          </TouchableOpacity>
+        {/* Cash + Balances — side by side mini cards */}
+        {((flags.dashboardCash && cashAvailable !== null) || (flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0))) && (
+          <View style={styles.cashBalRow}>
+            {flags.dashboardCash && cashAvailable !== null && (
+              <TouchableOpacity
+                style={styles.miniCard}
+                activeOpacity={0.85}
+                onPress={() => router.push('/savings' as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Cash available"
+              >
+                <Text style={styles.miniCardLabel}>Cash</Text>
+                <AmountText paise={cashAvailable} size="md" forceColor={cashAvailable >= 0 ? colors.income : colors.expense} compact />
+                <Text style={styles.miniCardSub}>liquid funds</Text>
+              </TouchableOpacity>
+            )}
+            {flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0) && (
+              <TouchableOpacity
+                style={styles.miniCard}
+                onPress={() => router.push('/settle')}
+                accessibilityRole="button"
+                accessibilityLabel="Settle up"
+              >
+                <Text style={styles.miniCardLabel}>Balances</Text>
+                {oweTotal > 0 && <Text style={[styles.miniCardAmt, { color: colors.expense }]}>Owe {formatCompact(oweTotal)}</Text>}
+                {owedTotal > 0 && <Text style={[styles.miniCardAmt, { color: colors.income }]}>Owed {formatCompact(owedTotal)}</Text>}
+                <Text style={styles.miniCardSettle}>Settle Up →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
-        {/* Financial health score — opt-in gauge from budget, savings & balances */}
-        {flags.healthScore && (() => {
-          const h = computeHealthScore({
-            budgetUtilizationPct: budgetSummary.allocated > 0 ? Math.round((budgetSummary.spent / budgetSummary.allocated) * 100) : null,
-            savingsRatePct: income > 0 ? savingsRate : null,
-            netOwed: oweTotal - owedTotal,
-            income,
-          });
+        {/* Financial health — 3 circular rings, each grouping related signals */}
+        {flags.healthScore && health && (() => {
+          const h = health;
           const hColor = h.band === 'great' ? colors.income : h.band === 'good' ? colors.accent : h.band === 'fair' ? colors.healthAmber : colors.expense;
           const hLabel = h.band === 'great' ? 'Great shape' : h.band === 'good' ? 'On track' : h.band === 'fair' ? 'Needs care' : 'Needs attention';
+          const sevColor = (sev: string) =>
+            sev === 'good' ? colors.income : sev === 'bad' ? colors.expense : sev === 'warn' ? colors.healthAmber : colors.textMuted;
+          const R = 30;
+          const CIRC = 2 * Math.PI * R;
           return (
             <View style={styles.healthCard}>
-              <View style={styles.healthTop}>
-                <View style={[styles.healthRing, { borderColor: hColor }]}>
-                  <Text style={[styles.healthScore, { color: hColor }]}>{h.score}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.healthLabel}>Financial health</Text>
-                  <Text style={[styles.healthBand, { color: hColor }]}>{hLabel}</Text>
+              <View style={styles.healthCardHead}>
+                <Text style={styles.healthLabel}>Financial health</Text>
+                <View style={[styles.healthBandChip, { backgroundColor: hColor + '22' }]}>
+                  <Text style={[styles.healthBandText, { color: hColor }]}>{hLabel}</Text>
                 </View>
               </View>
-              <View style={styles.healthFactors}>
-                {h.factors.map(f => (
-                  <View key={f.label} style={styles.healthFactor}>
-                    <Text style={styles.healthFactorLabel} numberOfLines={1}>{f.label}</Text>
-                    <View style={styles.healthBarTrack}>
-                      <View style={[styles.healthBarFill, { width: `${Math.round((f.points / f.max) * 100)}%`, backgroundColor: hColor }]} />
-                    </View>
-                  </View>
-                ))}
+              <View style={styles.healthDimRow}>
+                {h.dimensions.map(dim => {
+                  const dc = sevColor(dim.severity);
+                  const offset = CIRC * (1 - dim.pct / 100);
+                  return (
+                    <TouchableOpacity
+                      key={dim.label}
+                      style={styles.healthDimWrap}
+                      onPress={() => setSelectedDim(dim)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${dim.label}: ${dim.score} of ${dim.max}`}
+                    >
+                      <View style={styles.healthDimRing}>
+                        <Svg width={76} height={76} viewBox="0 0 76 76">
+                          <Circle cx={38} cy={38} r={R} stroke={colors.bgMuted} strokeWidth={6} fill="none" />
+                          <Circle
+                            cx={38} cy={38} r={R}
+                            stroke={dc} strokeWidth={6} fill="none"
+                            strokeDasharray={`${CIRC} ${CIRC}`}
+                            strokeDashoffset={offset}
+                            strokeLinecap="round"
+                            rotation={-90}
+                            origin="38, 38"
+                          />
+                        </Svg>
+                        <View style={[StyleSheet.absoluteFill, styles.healthDimCenter]}>
+                          <Text style={[styles.healthDimScore, { color: dc }]}>{dim.score}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.healthDimLabel}>{dim.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           );
@@ -371,19 +451,16 @@ export default function DashboardScreen() {
           <TouchableOpacity
             style={styles.budgetHero}
             activeOpacity={0.85}
-            onPress={() => {
-              const pid = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id;
-              if (pid) router.push(flags.budgetInsights ? `/group/${pid}/insights` : `/group/${pid}/budget`);
-            }}
+            onPress={() => setShowBudgetSheet(true)}
             accessibilityRole="button"
-            accessibilityLabel="Manage budget"
+            accessibilityLabel="Budget details"
           >
             <View style={styles.budgetCardHead}>
               <Text style={styles.budgetCardTitle}>Budget</Text>
               <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </View>
             <View style={styles.budgetHeroRow}>
-              <Text style={[styles.budgetUtil, { color: bHealth }]}>{bUtil}%</Text>
+              <Text style={[styles.budgetUtil, { color: bHealth }]}>{utilLabel(bUtil)}</Text>
               <View style={{ flex: 1 }}>
                 <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
                 <Text style={styles.budgetLeft}>
@@ -421,23 +498,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Balances */}
-        {flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0) && (
-          <TouchableOpacity
-            style={styles.balanceChip}
-            onPress={() => router.push('/settle')}
-            accessibilityRole="button"
-            accessibilityLabel="Settle up"
-          >
-            <Text style={styles.balanceLabel}>Balances</Text>
-            <Text style={styles.balanceText}>
-              {oweTotal > 0 ? `You owe ${formatCompact(oweTotal)}` : ''}
-              {oweTotal > 0 && owedTotal > 0 ? '\n' : ''}
-              {owedTotal > 0 ? `Owed ${formatCompact(owedTotal)}` : ''}
-            </Text>
-            <Text style={styles.settleLink}>Settle Up →</Text>
-          </TouchableOpacity>
-        )}
 
         {/* Savings pool */}
         {flags.dashboardSavings && (savings.total > 0 || savings.goals > 0) && (
@@ -527,7 +587,9 @@ export default function DashboardScreen() {
                         <View style={{ flex: 1 }}>
                           <BudgetBar pct={g.pct} health={g.health} height={4} />
                         </View>
-                        <Text style={styles.groupPct}>{g.pct}%</Text>
+                        <Text style={[styles.groupPct, g.pct > 100 && { color: colors.expense }]}>
+                          {g.pct > 100 ? `${(g.pct / 100).toFixed(1)}X` : `${g.pct}%`}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -561,6 +623,94 @@ export default function DashboardScreen() {
           ...(flags.itemizedOcr ? [{ label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') }] as Action[] : []),
         ]}
       />
+
+      {/* Budget detail sheet */}
+      <SheetModal visible={showBudgetSheet} onClose={() => setShowBudgetSheet(false)} title="Budget">
+        {(() => {
+          const bUtil = budgetSummary.allocated > 0 ? Math.round((budgetSummary.spent / budgetSummary.allocated) * 100) : 0;
+          const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
+          const bLeft = budgetSummary.allocated - budgetSummary.spent;
+          return (
+            <>
+              <View style={styles.bsUtilRow}>
+                <Text style={[styles.bsUtilBig, { color: bHealth }]}>{utilLabel(bUtil)}</Text>
+                <View style={{ flex: 1 }}>
+                  <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
+                  <Text style={styles.bsUtilSub}>
+                    {bLeft >= 0 ? `${formatCompact(bLeft)} left of ${formatCompact(budgetSummary.allocated)}` : `Over by ${formatCompact(-bLeft)}`}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.bsChips}>
+                {budgetSummary.over > 0 && (
+                  <View style={[styles.bsChip, { backgroundColor: colors.expense + '22' }]}>
+                    <Text style={[styles.bsChipText, { color: colors.expense }]}>{budgetSummary.over} over</Text>
+                  </View>
+                )}
+                {budgetSummary.near > 0 && (
+                  <View style={[styles.bsChip, { backgroundColor: colors.healthAmber + '22' }]}>
+                    <Text style={[styles.bsChipText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
+                  </View>
+                )}
+                {budgetSummary.onTrack > 0 && (
+                  <View style={[styles.bsChip, { backgroundColor: colors.income + '22' }]}>
+                    <Text style={[styles.bsChipText, { color: colors.income }]}>{budgetSummary.onTrack} on track</Text>
+                  </View>
+                )}
+              </View>
+              {budgetTopCats.length > 0 && (
+                <View style={styles.bsCatList}>
+                  {budgetTopCats.map(c => {
+                    const vis = categoryVisual(c.category);
+                    const fc = c.status === 'over' ? colors.expense : colors.healthAmber;
+                    return (
+                      <View key={c.category} style={styles.bsCatRow}>
+                        <View style={[styles.bsCatIcon, { backgroundColor: vis.color + '22' }]}>
+                          <Feather name={asFeather(vis.icon, 'tag')} size={13} color={vis.color} />
+                        </View>
+                        <Text style={styles.bsCatName} numberOfLines={1}>{c.category}</Text>
+                        <Text style={[styles.bsCatPct, { color: fc }]}>{utilLabel(c.pct)}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.bsReportLink}
+                onPress={() => { setShowBudgetSheet(false); router.push('/reports' as any); }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.bsReportLinkText}>View full report</Text>
+                <Feather name="chevron-right" size={14} color={colors.accent} />
+              </TouchableOpacity>
+            </>
+          );
+        })()}
+      </SheetModal>
+
+      {/* Health dimension detail sheet — shown when user taps a ring */}
+      <SheetModal
+        visible={!!selectedDim}
+        onClose={() => setSelectedDim(null)}
+        title={selectedDim?.label ?? ''}
+      >
+        {selectedDim?.factors.map(f => {
+          const fc = f.severity === 'good' ? colors.income : f.severity === 'bad' ? colors.expense : f.severity === 'warn' ? colors.healthAmber : colors.textMuted;
+          const fi: keyof typeof Feather.glyphMap = f.severity === 'good' ? 'check-circle' : f.severity === 'bad' ? 'x-circle' : f.severity === 'warn' ? 'alert-triangle' : 'minus';
+          return (
+            <View key={f.label} style={styles.dimFactorRow}>
+              <View style={[styles.dimFactorIcon, { backgroundColor: fc + '22' }]}>
+                <Feather name={fi} size={14} color={fc} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dimFactorLabel}>{f.label}</Text>
+                <Text style={styles.dimFactorDetail}>{f.detail}</Text>
+              </View>
+              <Text style={[styles.dimFactorPts, { color: fc }]}>{f.points}/{f.max}</Text>
+            </View>
+          );
+        })}
+      </SheetModal>
     </View>
   );
 }
@@ -603,28 +753,31 @@ const styles = StyleSheet.create({
   insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
   insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  healthCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md, gap: space.md },
-  healthTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  healthRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  healthScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  healthCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
+  healthCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   healthLabel: { ...type.label, color: colors.textSecondary },
-  healthBand: { ...type.subheading, marginTop: 2 },
-  healthFactors: { gap: space.sm },
-  healthFactor: { gap: 4 },
-  healthFactorLabel: { ...type.caption, color: colors.textMuted },
-  healthBarTrack: { height: 5, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
-  healthBarFill: { height: 5, borderRadius: 3 },
+  healthBandChip: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  healthBandText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  healthDimRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  healthDimWrap: { alignItems: 'center', gap: space.xs },
+  healthDimRing: { width: 76, height: 76, position: 'relative' },
+  healthDimCenter: { alignItems: 'center', justifyContent: 'center' },
+  healthDimScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
+  healthDimLabel: { ...type.caption, color: colors.textSecondary, textAlign: 'center' },
+  dimFactorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.xs },
+  dimFactorIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  dimFactorLabel: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  dimFactorDetail: { ...type.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 16 },
+  dimFactorPts: { ...type.caption, fontFamily: 'SpaceMono_400Regular', fontSize: 11, marginTop: 3 },
   streakChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: space.sm, height: 30, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
   streakChipDim: { opacity: 0.6 },
   streakChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  cashCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
-  cashIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  cashLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  cashSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  balanceChip: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs, marginBottom: space.md },
-  balanceLabel: { ...type.subheading, color: colors.textPrimary },
-  balanceText: { ...type.body, color: colors.textSecondary },
-  settleLink: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
+  cashBalRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  miniCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs },
+  miniCardLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  miniCardSub: { ...type.caption, color: colors.textMuted },
+  miniCardAmt: { ...type.body, fontFamily: 'Inter_600SemiBold' },
+  miniCardSettle: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
   insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
   section: { marginBottom: space.md },
@@ -636,4 +789,17 @@ const styles = StyleSheet.create({
   groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
   groupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   groupIconText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.accent },
+  bsUtilRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
+  bsUtilBig: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, letterSpacing: -0.5 },
+  bsUtilSub: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  bsChips: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md },
+  bsChip: { paddingHorizontal: space.md, paddingVertical: space.xs + 2, borderRadius: radius.pill },
+  bsChipText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  bsCatList: { gap: space.xs, marginBottom: space.md },
+  bsCatRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
+  bsCatIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  bsCatName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  bsCatPct: { ...type.label, fontFamily: 'Inter_600SemiBold' },
+  bsReportLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.xs, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  bsReportLinkText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

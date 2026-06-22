@@ -236,13 +236,16 @@ export async function getBudgetAnalytics(
   const projectedMonthEnd = Math.round((totalMonthSpent / Math.max(1, dayOfMonth)) * daysInMonth);
   const monthlyBudgetTotal = budgets.filter(b => b.cadence === 'monthly').reduce((s, b) => s + b.amount, 0);
 
+  const utilLabel = (pct: number | null) =>
+    pct !== null && pct > 100 ? `${(pct / 100).toFixed(1)}X` : `${pct ?? '?'}%`;
+
   // --- Rule-based recommendations ---
   const recommendations: Recommendation[] = [];
   for (const t of overBudget.slice(0, 3)) {
     recommendations.push({
       id: `over-${t.category}`,
       severity: 'warn', icon: 'alert-triangle',
-      text: `You're ${formatCompact(t.spent - t.allocated)} over on ${t.category} (${t.pct}% used).`,
+      text: `You're ${formatCompact(t.spent - t.allocated)} over on ${t.category} (${utilLabel(t.pct)} used).`,
     });
   }
   for (const t of nearLimit.slice(0, 3)) {
@@ -252,7 +255,7 @@ export async function getBudgetAnalytics(
     recommendations.push({
       id: `near-${t.category}`,
       severity: 'warn', icon: 'clock',
-      text: `${t.category} is ${t.pct}% used${tail}.`,
+      text: `${t.category} is ${utilLabel(t.pct)} used${tail}.`,
     });
   }
   if (biggestIncrease && (biggestIncrease.deltaPct ?? 0) >= 15) {

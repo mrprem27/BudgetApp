@@ -12,7 +12,7 @@ import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import {
   getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
-  skipNextOccurrence, getSkipsMap,
+  skipNextOccurrence, undoNextSkip, getSkipsMap,
 } from '../../../src/db/queries/transactions';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
@@ -64,7 +64,6 @@ export default function RecurringScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
-  // Briefly highlight the rule we arrived to view (from a transaction's "Recurring" row).
   useEffect(() => {
     if (!focus) return;
     setHighlightId(focus);
@@ -94,10 +93,13 @@ export default function RecurringScreen() {
     } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
 
-  function onEditFuture(r: Rule) {
-    // "This & future" edit — past occurrences are preserved (see PENDING §6).
-    const path = r.kind === 'income' ? 'income' : 'quick';
-    router.push(`/add/${path}?recurEditId=${r.id}&groupId=${id}`);
+  async function onUndoSkip(r: Rule) {
+    try {
+      const restored = await undoNextSkip(db, r.id);
+      if (restored === null) { Alert.alert('No skips to undo', 'There are no upcoming skipped occurrences.'); return; }
+      haptic.success();
+      await load();
+    } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
 
   function amountOf(r: Rule): number {
@@ -113,9 +115,9 @@ export default function RecurringScreen() {
     catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
   function onEnd(r: Rule) {
-    Alert.alert('End this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
+    Alert.alert('Stop this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'End', style: 'destructive', onPress: async () => {
+      { text: 'Stop', style: 'destructive', onPress: async () => {
         try { await endRecurring(db, r.id); haptic.warning(); await load(); }
         catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
       } },
@@ -145,7 +147,12 @@ export default function RecurringScreen() {
           rules.map(r => {
             const vis = categoryVisual(r.category);
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;
-            const next = nextOccurrence(r, skips.get(r.id));
+            const seriesSkips = skips.get(r.id);
+            const next = nextOccurrence(r, seriesSkips);
+            const hasUpcomingSkips = (seriesSkips?.size ?? 0) > 0;
+            // When active but no future occurrence exists (all past endDate), only allow Stop or Undo Skip.
+            const hasFutureOccurrence = next !== null;
+
             return (
               <View key={r.id} style={[styles.card, highlightId === r.id && styles.cardHighlight]}>
                 <View style={styles.cardTop}>
@@ -170,44 +177,59 @@ export default function RecurringScreen() {
                     <Text style={styles.metaVal}>{format(new Date(r.date), 'dd MMM yyyy')}</Text>
                   </View>
                   <View style={styles.metaItem}>
-                    <Text style={styles.metaLabel}>{r.recur_state === 'active' ? 'Next' : r.recur_state === 'paused' ? 'Paused' : 'Ended'}</Text>
+                    <Text style={styles.metaLabel}>
+                      {r.recur_state === 'active' ? (hasFutureOccurrence ? 'Next' : 'No more occurrences') : r.recur_state === 'paused' ? 'Paused' : 'Ended'}
+                    </Text>
                     <Text style={styles.metaVal}>
                       {r.recur_state === 'active'
-                        ? (next ? format(next, 'dd MMM yyyy') : '—')
+                        ? (next ? format(next, 'dd MMM yyyy') : r.recur_end ? format(new Date(r.recur_end), 'dd MMM yyyy') : '—')
                         : r.recur_end ? format(new Date(r.recur_end), 'dd MMM yyyy') : '—'}
                     </Text>
                   </View>
                 </View>
 
+                {hasUpcomingSkips && (
+                  <View style={styles.skipBanner}>
+                    <Feather name="skip-forward" size={12} color={colors.healthAmber} />
+                    <Text style={styles.skipBannerText}>
+                      {(seriesSkips?.size ?? 0) === 1 ? '1 upcoming occurrence skipped' : `${seriesSkips?.size} upcoming occurrences skipped`}
+                    </Text>
+                  </View>
+                )}
+
                 {r.recur_state !== 'ended' && (
                   <View style={styles.actions}>
-                    {/* Safe ops only. Edit applies "this & future" via a series
-                        split (past occurrences preserved); Skip drops the next
-                        single occurrence. No blind template overwrite (PENDING §6). */}
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => onEditFuture(r)} accessibilityRole="button">
-                      <Feather name="edit-2" size={14} color={colors.accent} />
-                      <Text style={[styles.actionText, { color: colors.accent }]}>Edit</Text>
-                    </TouchableOpacity>
-                    {r.recur_state === 'active' && (
+                    {/* Skip: only available when there's a real future occurrence within the series end date */}
+                    {r.recur_state === 'active' && hasFutureOccurrence && (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onSkipNext(r)} accessibilityRole="button">
                         <Feather name="skip-forward" size={14} color={colors.textSecondary} />
                         <Text style={[styles.actionText, { color: colors.textSecondary }]}>Skip</Text>
                       </TouchableOpacity>
                     )}
-                    {r.recur_state === 'active' ? (
+
+                    {/* Undo Skip: only available when there are upcoming skipped occurrences */}
+                    {hasUpcomingSkips && (
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => onUndoSkip(r)} accessibilityRole="button">
+                        <Feather name="rotate-ccw" size={14} color={colors.accent} />
+                        <Text style={[styles.actionText, { color: colors.accent }]}>Undo Skip</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {r.recur_state === 'active' && hasFutureOccurrence ? (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onPause(r)} accessibilityRole="button">
                         <Feather name="pause" size={14} color={colors.healthAmber} />
                         <Text style={[styles.actionText, { color: colors.healthAmber }]}>Pause</Text>
                       </TouchableOpacity>
-                    ) : (
+                    ) : r.recur_state === 'paused' ? (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => onResume(r)} accessibilityRole="button">
                         <Feather name="play" size={14} color={colors.income} />
                         <Text style={[styles.actionText, { color: colors.income }]}>Resume</Text>
                       </TouchableOpacity>
-                    )}
+                    ) : null}
+
                     <TouchableOpacity style={styles.actionBtn} onPress={() => onEnd(r)} accessibilityRole="button">
                       <Feather name="x-circle" size={14} color={colors.expense} />
-                      <Text style={[styles.actionText, { color: colors.expense }]}>End</Text>
+                      <Text style={[styles.actionText, { color: colors.expense }]}>Stop</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -237,6 +259,8 @@ const styles = StyleSheet.create({
   metaItem: { flex: 1 },
   metaLabel: { ...type.caption, color: colors.textMuted },
   metaVal: { ...type.label, color: colors.textPrimary, marginTop: 2 },
+  skipBanner: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '18', borderRadius: radius.sm },
+  skipBannerText: { ...type.caption, color: colors.healthAmber },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
   actionText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
