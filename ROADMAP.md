@@ -1,16 +1,22 @@
 # BudgetSplit — Product Roadmap
 
-**Version:** 3.0 (Master Plan)  
-**Last Updated:** June 22, 2026  
-**Status:** v1.0 (Local Solo) — Planning Phase
+**Version:** 3.1 (Master Plan — v1 scope cut per Opus 4.8 review)
+**Last Updated:** June 22, 2026
+**Status:** v1.0 **prototype** (local, feel-the-product build) — Planning Phase
+
+> **⚠️ Scope cut:** After architecture review (`REVISED_ARCHITECTURE.md`), v1
+> was reduced from ~19 features / 10 milestones to **~10 features / 6 milestones
+> (M0–M5)** to ship in ~8 weeks. This local build is a **prototype to feel the
+> product**; a **proper backend (accounts + sync) is the real destination (v2)**.
+> Deferred features are sequenced into v1.1 and v2 — not abandoned.
 
 ---
 
 ## Vision
 
-BudgetSplit is a ledger-first budget and split-expense app for iOS. It lets you manage unlimited budget groups, track income and expenses, split bills with precision down to the rupee, and see your global financial picture—all without ever connecting to the internet.
+BudgetSplit is a ledger-first budget and split-expense app for iOS. It lets you manage budget groups, track income and expenses, split bills with precision down to the rupee, and see your financial picture. The v1 prototype is local-only to validate the *feel*; the production version runs on a real backend with multi-user sync.
 
-**Core differentiator:** Exact rupee (paise) accounting with zero-error debt simplification.
+**Core differentiator:** Exact rupee (paise) accounting + frictionless bill splitting for small, known groups.
 
 ---
 
@@ -18,104 +24,79 @@ BudgetSplit is a ledger-first budget and split-expense app for iOS. It lets you 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ v1.0 (Local Solo)      Q3 2026      [CURRENT]           │
-│ Offline-first, single user, unlimited groups            │
+│ v1.0 PROTOTYPE (local)   ~8 weeks    [CURRENT]          │
+│ Feel-the-product build: groups, split, balances, budget │
 ├─────────────────────────────────────────────────────────┤
-│ v2.0 (Live Multi-User) Q4 2026-Q1 2027                  │
-│ Supabase sync, real-time collaboration, join codes      │
+│ v1.1 (local, polish)     +4-6 weeks                     │
+│ Settle-up, reports/export, notifications, recurrence    │
 ├─────────────────────────────────────────────────────────┤
-│ v3.0 (Smart Features)  Q2-Q3 2027                       │
+│ v2.0 (REAL BACKEND)      Q4 2026-Q1 2027                │
+│ Accounts + sync (Supabase), shared groups, join codes   │
+├─────────────────────────────────────────────────────────┤
+│ v3.0 (Smart Features)    Q2-Q3 2027                     │
 │ OCR receipts, multi-currency, widgets, AI insights      │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## v1.0: Local Solo (Target: August 2026)
+## v1.0: Prototype (Target: ~8 weeks from M0 start)
 
-**Tagline:** "A ledger in your pocket."
+**Tagline:** "Feel the product before building the backend."
 
 ### Philosophy
 
-v1 is fully offline. Zero network calls. Perfect for the solo user and small groups who want a private ledger without cloud lockdown.
+v1 is a **local-only prototype to validate the feel** — flows, the share-vs-paid
+mental model, the split UX. It is **not** the final product; the production app
+runs on a real backend (v2). So build lean: don't perfect local-only machinery
+the backend will own. **v1 user = 1–4 known people, all on one device, no accounts.**
 
-### Feature Set
+### v1 Feature Set (the cut — authoritative in `REVISED_ARCHITECTURE.md` §3)
 
-#### Core
-- ✅ Unlimited budget groups (Personal, Me & GF, Trip, etc.)
-- ✅ Add members to a group (real people or aliases)
-- ✅ Income and expense tracking
-- ✅ Four split types: equal, exact, percentage, ratio
-- ✅ Itemized bill entry with per-item assignment
-- ✅ Debt simplification (greedy algorithm → minimum payments)
-- ✅ Settle-up flow (mark payments as paid → settlement txns)
-
-#### Tracking & Insights
-- ✅ Global dashboard: 3 tabs (Today / Month / Year)
-- ✅ Spending by category (donut chart)
-- ✅ Income, spending, net, savings rate metrics
-- ✅ Group budget health indicators (progress bars)
-- ✅ Per-group and global settle-up
-
-#### Budget Management
-- ✅ Optional daily, monthly, yearly limits (per group)
-- ✅ Carry-over: unused budget rolls to next period
-- ✅ Local notifications at 80% and 100% thresholds
-- ✅ Budget progress bar on group cards and group detail
-
-#### Advanced Transactions
-- ✅ Recurring expenses (daily, weekly, monthly, custom interval)
-- ✅ Lazy materialization (future instances appear as needed, not pre-generated)
-- ✅ Edit-this-instance-only or edit-all-future flows
-- ✅ Tags for cross-group filtering (e.g., #trip, #food)
-- ✅ Receipt photo attachment
-
-#### Reporting & Export
-- ✅ Per-group monthly summary (income, expense, net, top categories)
-- ✅ Year-in-review screen
-- ✅ Export as CSV and PDF
-- ✅ Date range filter for custom reports
-- ✅ Share to email, AirDrop, print, more
-
-#### Personalization & Security
-- ✅ Dark mode (full theme support)
-- ✅ Face ID / Touch ID lock (optional)
+**SHIPS in v1:**
+- ✅ Budget groups + members (local people)
+- ✅ Income + expense tracking, edit, soft-delete
+- ✅ Split: **Equal + Exact + Itemized** (itemized → exact shares)
+- ✅ Invariant enforcement (`Σ paid == Σ share`)
+- ✅ **Net balance display** per person ("You owe Kavya ₹450")
+- ✅ One **monthly** budget limit/group + optional global monthly limit
+- ✅ Home (merged dashboard+groups): share-based metrics + category donut
 - ✅ Custom categories per group
-- ✅ Custom colors and icons for groups
-- ✅ Avatar colors for people
-- ✅ Account-less (no signup, no password, no tracking)
+- ✅ Dark mode (it's the default theme)
+- ✅ Integer-paise money + deterministic rounding
 
-### Milestones (see PENDING.md)
+**DEFERRED to v1.1:** Settle-Up screen + settlement txns + debt simplification,
+Percentage split, carry-over + daily/yearly limits, notifications, Reports +
+CSV/PDF, "Repeat" button, tags, receipt photos, Face ID, Today tab.
 
-1. **M1 — Foundation** (DB + Navigation)
-2. **M2 — Quick Entry** (Solo expenses)
-3. **M3 — Split Engine** (Core splitting logic)
-4. **M4 — Settle Up** (Debt simplification)
-5. **M5 — Itemized Bills** (Multi-item bills)
-6. **M6 — Dashboard** (Insights & charts)
-7. **M7 — Budget** (Limits, carry-over, notifications)
-8. **M8 — Recurring** (Auto-expenses)
-9. **M9 — Reports** (Export, summaries)
-10. **M10 — Polish** (Dark mode, Face ID, accessibility)
+**DEFERRED to v2 (the real backend):** accounts/sync/join-codes/E2E, true
+recurring (lazy materialization), Ratio split, global cross-group settle-up.
+
+### Milestones (see PENDING.md for tasks)
+
+0. **M0 — Environment spike** (Xcode + dev build + SQLite round-trip) 🔴 first
+1. **M1 — Foundation** (schema + seed + 3-tab Home shell + CRUD)
+2. **M2 — Quick Entry** (expense + income + list + soft-delete)
+3. **M3 — Split Engine** (Equal + Exact + invariant)
+4. **M4 — Itemized + Balances** (line items → exact shares; net balances)
+5. **M5 — Budget + Home + Polish** (monthly limit, metrics, donut, dark mode)
 
 ### Success Criteria
 
-- [ ] App launches and shows dashboard in <1s
-- [ ] Save a transaction in <200ms
-- [ ] Settle-up computation for 50 people in <100ms
-- [ ] All data persists across app restarts
-- [ ] No floating-point errors in money calculations
-- [ ] Dark mode passes WCAG AA contrast
-- [ ] Face ID lock works reliably
-- [ ] Able to sideload on iPhone via AltStore
+- [ ] M0 proves the toolchain: SQLite round-trip on a real iPhone
+- [ ] App launches to Home in <1s; save txn <200ms
+- [ ] Split a bill 3 ways with exact paise (no float errors); save blocked if unbalanced
+- [ ] Net balances correct for a 2–4 person group
+- [ ] Data persists across restarts; dark mode looks good
+- [ ] **You've used it for 2 weeks and know what v1.1 actually needs**
 
-### Go-Live Checklist
+### Go-Live Checklist (prototype)
 
-- [ ] All M1–M10 tasks complete
-- [ ] Manual testing on device (iPhone 12+)
-- [ ] No high-severity bugs
-- [ ] README updated with build instructions
-- [ ] Spec matches actual behavior
+- [ ] M0–M5 complete
+- [ ] Manual testing on your own device (iPhone 12+)
+- [ ] No high-severity bugs in the core add→split→balance loop
+- [ ] Sideloaded via AltStore and surviving daily use
+- [ ] Notes captured on what felt wrong → feeds v1.1 + backend design
 
 ---
 

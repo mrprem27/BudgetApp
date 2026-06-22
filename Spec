@@ -8,6 +8,34 @@
 
 -----
 
+> ## ⚠️ SCOPE NOTICE — read `REVISED_ARCHITECTURE.md` first
+>
+> This spec (v3.0) is the **full aspirational design**. After an architecture
+> review (Opus 4.8, 2026-06-22), the **buildable v1 scope has been cut roughly
+> in half** to ship a usable prototype in ~8 weeks instead of ~6 months.
+>
+> **This local build is a "feel-like-a-user" prototype. A real backend (sync,
+> accounts) is the destination (v2).** Build the prototype lean; don't perfect
+> local-only machinery the backend will replace.
+>
+> **What changed (authoritative list in `REVISED_ARCHITECTURE.md`):**
+> - v1 user = **1–4 people on one device, no accounts** (kills solo/split identity crisis)
+> - v1 split types = **Equal + Exact + Itemized** only (Percentage → v1.1, Ratio → v2)
+> - **Settle-Up screen + settlement txns → v1.1.** v1 shows *net balances* only.
+> - **Recurring lazy-materialization → v2.** v1 gets a "Repeat" button instead.
+> - **Carry-over + daily/yearly limits → v1.1.** v1 = one monthly limit/group.
+> - **Reports/CSV/PDF, notifications, tags, photos, Face ID → v1.1.**
+> - Navigation: **3 tabs** (Home / Reports[stub] / Settings), Home merges old
+>   Dashboard+Groups. Group detail = 3 sub-tabs. FAB = Expense + Income only.
+> - **New `M0` (environment spike) precedes all feature work** — `expo-sqlite`
+>   needs a dev build; the toolchain is the #1 project risk.
+> - Schema (§3) is **kept intact** (forward-compatible); only v1 *logic* is cut.
+>
+> Sections below describe the full design. Where a section conflicts with the
+> revised scope, **`REVISED_ARCHITECTURE.md` wins for v1.**
+
+-----
+
 ## 0. What this app does (one paragraph)
 
 BudgetSplit lets a single user manage unlimited budget groups (e.g. “Personal”, “Me & GF”, “Mussoorie Trip”), track income and expenses in each, split bills among group members with item-level control, and see a global financial picture across all groups. Debt simplification reduces multi-person balances to the fewest possible payments. v1 is fully offline with no accounts. v2 adds live sync so real people on other phones can share a group.
@@ -538,22 +566,33 @@ add/itemized          → Itemized Bill (items → assign → payers → review 
 
 -----
 
-## 13. v1 milestone build order
+## 13. v1 milestone build order  — ⚠️ REVISED (see `REVISED_ARCHITECTURE.md` §6)
 
+The original 10-milestone plan (preserved below as "v1.1+ backlog") was cut to
+**6 milestones (M0–M5)** to ship a feel-the-product prototype in ~8 weeks.
 Build in this exact order — each milestone is independently testable:
 
-|Milestone|What to build                                                             |Done when                                         |
-|---------|--------------------------------------------------------------------------|--------------------------------------------------|
-|**M1**   |DB schema + seed + person/group CRUD + navigation shell                   |Can create a group, add members, see empty screens|
-|**M2**   |Quick expense (no split), income, transaction list, soft-delete           |Can log a solo expense and see it in the list     |
-|**M3**   |Split engine: equal + exact + %, invariant enforcement, paise rounding    |Can split a bill, save is blocked if unbalanced   |
-|**M4**   |Balance computation + debt simplification + Settle Up flow                |Can see who owes whom and mark settled            |
-|**M5**   |Itemized bill entry: items, tax/tip, quick-assign, per-person totals      |Can enter a restaurant bill and assign items      |
-|**M6**   |Global dashboard: tabs, spending (share-based), charts, owe/owed          |Dashboard shows correct numbers across all groups |
-|**M7**   |Budget limits, carry-over, progress bars, local notifications             |Can set a monthly limit and get notified at 80%   |
-|**M8**   |Recurring transactions (lazy materialization), edit-instance vs all-future|Can set a monthly rent that auto-appears          |
-|**M9**   |Reports, CSV/PDF export, date filter, year-in-review                      |Can export a month’s transactions as CSV          |
-|**M10**  |Face ID lock, dark mode, accessibility pass, polish                       |App locks on background; looks good in dark mode  |
+|Milestone|What to build                                                                       |Done when                                          |Est.|
+|---------|------------------------------------------------------------------------------------|---------------------------------------------------|----|
+|**M0**   |**Environment spike**: Xcode, Apple ID, `expo run:ios`, SQLite write→read on device |One row written + read back on your physical iPhone |2–4d|
+|**M1**   |DB schema + seed + person/group CRUD + **Home shell** (3-tab nav)                   |Can create a group, add members, see empty Home     |1wk |
+|**M2**   |Quick expense (no split) + income + txn list + soft-delete + paise helpers          |Can log a solo expense, see it, delete it           |1wk |
+|**M3**   |Split engine: **Equal + Exact** + invariant enforcement + paise rounding            |Can split a bill 3 ways, save blocked if unbalanced |1.5w|
+|**M4**   |**Itemized toggle** (items, tax/tip, quick-assign → exact shares) + **net balances**|Enter a restaurant bill, see who owes whom          |1.5w|
+|**M5**   |Monthly budget limit + Home metrics (share-based) + category donut + dark-mode polish|Set a limit; Home shows correct totals; looks good  |1wk |
+
+### v1.1+ backlog (deferred from original M4/M6–M10 — DO NOT build in v1)
+
+|Was|Deferred item                                                              |Target|
+|---|---------------------------------------------------------------------------|------|
+|M3 |Percentage split                                                           |v1.1  |
+|M4 |Debt simplification *screen* + Settle-Up + settlement txns + "Mark as Paid"|v1.1  |
+|M7 |Carry-over, daily/yearly limits, local notifications (80%/100%)            |v1.1  |
+|M8 |Recurring lazy-materialization, edit-instance vs all-future                |v2    |
+|M9 |Reports, CSV/PDF export, date filter, year-in-review                       |v1.1  |
+|M10|Face ID lock, accessibility pass                                           |v1.1  |
+|—  |Ratio split; global cross-group settle-up; 50-member perf target           |v2    |
+|—  |Supabase auth/sync/join-codes/E2E (the "proper backend")                   |v2    |
 
 -----
 
