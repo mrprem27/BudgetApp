@@ -29,7 +29,7 @@ import { goalProgress } from '../../src/lib/savings';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { getMe } from '../../src/db/queries/persons';
-import { getDate, getDaysInMonth } from 'date-fns';
+import { getDate, getDaysInMonth, format } from 'date-fns';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { haptic } from '../../src/lib/haptics';
 import {
@@ -205,15 +205,21 @@ export default function SavingsScreen() {
         title="Plan"
         large
         right={
-          <TouchableOpacity
-            onPress={() => router.push('/afford')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Can I afford something?"
-            style={styles.headerAction}
-          >
-            <Feather name="help-circle" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <View style={styles.monthPill}>
+              <Text style={styles.monthPillText}>{format(new Date(), 'MMMM yyyy')}</Text>
+            </View>
+            {flags.affordCheck && (
+              <TouchableOpacity
+                onPress={() => router.push('/afford')}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Can I afford something?"
+              >
+                <Feather name="help-circle" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
         }
       />
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
@@ -575,6 +581,9 @@ const styles = StyleSheet.create({
   goalPct: { ...type.caption, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
 
   headerAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  monthPill: { backgroundColor: colors.bgMuted, borderRadius: 100, paddingVertical: 7, paddingHorizontal: 14 },
+  monthPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
   whatIfCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
   whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
   whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },

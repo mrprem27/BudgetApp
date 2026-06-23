@@ -18,7 +18,6 @@ import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
-import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { FAB } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -61,8 +60,8 @@ const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last mo
 const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', month: 'SPENT THIS MONTH', year: 'SPENT THIS YEAR' };
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'today', label: 'Today' },
   { key: 'month', label: 'Month' },
+  { key: 'today', label: 'Today' },
   { key: 'year',  label: 'Year' },
 ];
 
@@ -208,10 +207,10 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
               <Feather name="search" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/history')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="History">
-              <Feather name="clock" size={18} color={colors.textSecondary} />
+            <TouchableOpacity onPress={() => router.push('/history')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Notifications">
+              <Feather name="bell" size={18} color={colors.textSecondary} />
+              <View style={styles.notifDot} />
             </TouchableOpacity>
-            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} imageUri={meInfo.image} />}
           </View>
         </View>
 
@@ -283,8 +282,9 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
   greeting: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
-  appName: { ...type.title, color: colors.textPrimary },
+  appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  notifDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.expense, borderWidth: 1.5, borderColor: colors.bgMuted },
   tabRow: { marginBottom: space.md },
 });

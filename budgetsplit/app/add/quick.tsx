@@ -92,6 +92,7 @@ export default function QuickAddScreen() {
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
 
@@ -336,51 +337,99 @@ export default function QuickAddScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
-        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
-          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : 'Add entry'}</Text>
+        {/* Expense / Income toggle in header */}
+        {!isEditing && !isRecurEdit ? (
+          <View style={styles.kindRow}>
+            <TouchableOpacity
+              style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExpenseActive]}
+              onPress={() => { setKind('expense'); haptic.selection(); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'expense' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'expense' && styles.kindLabelActive]}>Expense</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
+              onPress={() => { setKind('income'); haptic.selection(); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'income' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'income' && styles.kindLabelIncomeActive]}>Income</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save" style={{ minWidth: 44 }}>
+            <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Income has its own dedicated screen (add/income); this screen is expense-only. */}
 
-        {/* Expense / Income toggle — only on new transactions (kind is locked when editing) */}
-        {!isEditing && !isRecurEdit && (
-          <View style={styles.kindRow}>
-            {(['expense', 'income'] as const).map(k => (
-              <TouchableOpacity
-                key={k}
-                style={[styles.kindBtn, kind === k && styles.kindBtnActive]}
-                onPress={() => { setKind(k); haptic.selection(); }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: kind === k }}
-              >
-                <Text style={[styles.kindLabel, kind === k && styles.kindLabelActive]}>
-                  {k === 'expense' ? 'Expense' : 'Income'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.amountRow}>
-          {/* INR-only for v1 — currency picker hidden; static symbol. */}
-          <View style={styles.currencyBadge}>
-            <Text style={styles.currencyBadgeText}>{CURRENCY_MAP[currency].symbol}</Text>
-          </View>
+        {/* Large centered amount */}
+        <View style={styles.amountBlock}>
           <TextInput
-            style={styles.amountInput}
+            style={[styles.amountInput, { color: kind === 'income' ? colors.income : colors.textPrimary }]}
             value={amountText}
             onChangeText={setAmountText}
             keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor={colors.textMuted}
+            placeholder={`₹0`}
+            placeholderTextColor={kind === 'income' ? colors.income + '55' : colors.textMuted}
             accessibilityLabel="Amount"
             autoFocus={!isEditing}
           />
+          <View style={[styles.amountCursor, { backgroundColor: kind === 'income' ? colors.income : colors.accent }]} />
         </View>
+
+        {/* Category + Date pills row */}
+        <View style={styles.pillsRow}>
+          <TouchableOpacity
+            style={styles.catPill}
+            onPress={() => { haptic.light(); setShowCatPicker(true); }}
+            accessibilityRole="button"
+            accessibilityLabel={selectedCategory ? `Category: ${selectedCategory.name}` : 'Choose category'}
+          >
+            {selectedCategory ? (
+              <>
+                <View style={[styles.catPillDot, { backgroundColor: (selectedCategory.color ?? colors.accent) + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={selectedCategory.color ?? colors.accent} />
+                </View>
+                <Text style={styles.catPillText}>{selectedCategory.name}</Text>
+              </>
+            ) : (
+              <Text style={styles.catPillPlaceholder}>Category</Text>
+            )}
+            <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.datePill} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
+            <Text style={styles.datePillText}>
+              {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'dd MMM')}
+            </Text>
+            <Feather name="chevron-down" size={12} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Hidden CategoryPicker controlled by showCatPicker pill */}
+        <CategoryPicker
+          categories={categories}
+          value={selectedCategory}
+          hideTrigger
+          forceOpen={showCatPicker}
+          onClose={() => setShowCatPicker(false)}
+          onChange={(c) => {
+            setSelectedCategory(c);
+            setCatManual(true);
+            setShowCatPicker(false);
+            if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
+          }}
+          onCreate={async (name) => {
+            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+            setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+            return created;
+          }}
+        />
 
         {groups.length > 1 && (() => {
           const selectedGroup = groups.find(g => g.id === selectedGroupId);
@@ -403,75 +452,24 @@ export default function QuickAddScreen() {
           );
         })()}
 
-        {flags.smartCategory ? (
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>What for?</Text>
-            <Input
-              value={note}
-              onChangeText={onTitleChange}
-              placeholder="e.g. Uber, Groceries, Netflix"
-              accessibilityLabel="Title"
-              autoCapitalize="sentences"
-              maxLength={80}
-            />
-            {!catManual && selectedCategory ? (
-              <TouchableOpacity style={styles.smartCatChip} onPress={() => setCatManual(true)} accessibilityRole="button" accessibilityLabel="Change category">
-                <View style={[styles.smartCatDot, { backgroundColor: categoryVisual(selectedCategory.name).color + '22' }]}>
-                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={categoryVisual(selectedCategory.name).color} />
-                </View>
-                <Text style={styles.smartCatName}>{selectedCategory.name}</Text>
-                <Text style={styles.smartCatHint}>auto · tap to change</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ marginTop: space.sm }}>
-                <CategoryPicker
-                  categories={categories}
-                  value={selectedCategory}
-                  onChange={(c) => {
-                    setSelectedCategory(c);
-                    setCatManual(true);
-                    // Learn from the correction so this title picks `c` next time.
-                    if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
-                  }}
-                  onCreate={async (name) => {
-                    const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-                    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-                    return created;
-                  }}
-                />
-              </View>
-            )}
-          </View>
-        ) : (
-          <>
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Category</Text>
-              <CategoryPicker
-                categories={categories}
-                value={selectedCategory}
-                onChange={setSelectedCategory}
-                onCreate={async (name) => {
-                  const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-                  setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-                  return created;
-                }}
-              />
-            </View>
+        {/* Note field */}
+        <View style={styles.noteCard}>
+          <TextInput
+            style={styles.noteCardInput}
+            value={note}
+            onChangeText={flags.smartCategory ? onTitleChange : setNote}
+            placeholder={flags.smartCategory ? 'e.g. Uber, Groceries, Netflix' : 'Note (optional)'}
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel="Note"
+            autoCapitalize="sentences"
+            maxLength={80}
+          />
+        </View>
 
-            <Input
-              value={note}
-              onChangeText={setNote}
-              placeholder="Note (optional)"
-              accessibilityLabel="Note"
-              maxLength={80}
-            />
-          </>
-        )}
-
-        {/* BudgetNudge: how much is left in this category's monthly budget */}
+        {/* Budget nudge — dot + text (green = remaining, red = over) */}
         {kind === 'expense' && nudgeColor != null && nudgeRemaining != null && (
-          <View style={[styles.nudge, { borderColor: nudgeColor + '44', backgroundColor: nudgeColor + '11' }]}>
-            <Feather name={nudgeRemaining >= 0 ? 'bar-chart-2' : 'alert-circle'} size={13} color={nudgeColor} />
+          <View style={styles.nudge}>
+            <View style={[styles.nudgeDot, { backgroundColor: nudgeColor }]} />
             <Text style={[styles.nudgeText, { color: nudgeColor }]}>
               {nudgeRemaining >= 0
                 ? `${formatCompact(nudgeRemaining)} left in ${selectedCategory!.name} this month`
@@ -512,14 +510,16 @@ export default function QuickAddScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.fieldLabel}>{recurEnabled ? 'Starts on' : 'Date'}</Text>
-        <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
-          <Feather name="calendar" size={16} color={colors.accent} />
-          <Text style={styles.dateText}>
-            {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'EEE, dd MMM yyyy')}
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
+        {/* Recurring toggle shows "starts on" label — keep hidden date field for recurring use */}
+        {recurEnabled && (
+          <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Starts on">
+            <Feather name="calendar" size={16} color={colors.accent} />
+            <Text style={styles.dateText}>
+              Starts {isSameDay(new Date(txnDate), new Date()) ? 'today' : format(new Date(txnDate), 'EEE, dd MMM yyyy')}
+            </Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {!isEditing && flags.recurring && (
         <View style={styles.scheduleRow}>
@@ -615,6 +615,24 @@ export default function QuickAddScreen() {
           </Text>
         )}
 
+        {/* Teal/green CTA — "Log expense" / "Log income" */}
+        <TouchableOpacity
+          style={[
+            styles.logCta,
+            { backgroundColor: kind === 'income' ? colors.income : colors.accent },
+            (!canSave || saving) && { opacity: 0.5 },
+          ]}
+          onPress={handleSave}
+          disabled={!canSave || saving}
+          accessibilityRole="button"
+          accessibilityLabel={total > 0 ? `Log ${formatRupees(total)} ${kind}` : `Log ${kind}`}
+        >
+          <Text style={styles.logCtaText}>
+            {saving ? 'Saving…' : isEditing ? 'Save changes' : total > 0 ? `Log ${formatRupees(total)} ${kind}` : `Log ${kind}`}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 32 }} />
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -784,15 +802,46 @@ export default function QuickAddScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
-  title: { ...type.heading, color: colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 52 },
+  title: { ...type.heading, color: colors.textPrimary },
   headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
-  headerClose: { minWidth: 40, alignItems: 'flex-start' },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
-  currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
+  headerClose: { minWidth: 44, alignItems: 'flex-start', justifyContent: 'center', height: 44 },
+  // Header kind toggle
+  kindRow: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border },
+  kindBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
+  kindBtnExpenseActive: { backgroundColor: colors.accent },
+  kindBtnIncomeActive: { backgroundColor: colors.income },
+  kindLabel: { fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_400Regular' },
+  kindLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  kindLabelIncomeActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+  // Large centered amount
+  amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: colors.border + '55' },
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 48, textAlign: 'center', letterSpacing: -2, lineHeight: 56 },
+  amountCursor: { width: 60, height: 2, borderRadius: 1, marginTop: 6 },
+
+  // Category + date pills row
+  pillsRow: { flexDirection: 'row', gap: space.sm },
+  catPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  catPillDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  catPillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  catPillPlaceholder: { fontSize: 13, color: colors.textMuted, flex: 1 },
+  datePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
+
+  // Note card
+  noteCard: { backgroundColor: colors.bgCard, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  noteCardInput: { ...type.body, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
+
+  // Budget nudge dot style
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  nudgeDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
+  nudgeText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
+
+  // Log CTA
+  logCta: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: space.sm },
+  logCtaText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.bg },
   field: { gap: space.xs },
   smartCatChip: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.xs },
   smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
@@ -853,11 +902,4 @@ const styles = StyleSheet.create({
   endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   doneBtnText: { ...type.button, color: colors.bg },
-  kindRow: { flexDirection: 'row', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3, marginBottom: space.md },
-  kindBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm },
-  kindBtnActive: { backgroundColor: colors.accent },
-  kindLabel: { ...type.body, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  kindLabelActive: { color: colors.bg },
-  nudge: { flexDirection: 'row', alignItems: 'center', gap: space.xs, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: space.md, paddingVertical: space.sm },
-  nudgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold', flex: 1 },
 });

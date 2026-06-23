@@ -16,6 +16,12 @@ type Props = {
   onChange: (c: Category) => void;
   /** When provided, lets the user create a new category from the search text. */
   onCreate?: (name: string) => Promise<Category>;
+  /** When true, forces the picker sheet open (controlled externally). */
+  forceOpen?: boolean;
+  /** Called when the sheet closes (used with forceOpen). */
+  onClose?: () => void;
+  /** When true, hides the trigger button (useful when using forceOpen). */
+  hideTrigger?: boolean;
 };
 
 /**
@@ -23,10 +29,11 @@ type Props = {
  * bottom-sheet of all categories. Typing filters the grid; if the text matches
  * no existing category, an inline "Create" action appears.
  */
-export function CategoryPicker({ categories, value, onChange, onCreate }: Props) {
+export function CategoryPicker({ categories, value, onChange, onCreate, forceOpen, onClose, hideTrigger }: Props) {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const isOpen = open || !!forceOpen;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -43,6 +50,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
   function close() {
     setOpen(false);
     setQuery('');
+    onClose?.();
   }
 
   function pick(c: Category) {
@@ -67,6 +75,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
 
   return (
     <>
+      {!hideTrigger && (
       <TouchableOpacity
         style={styles.field}
         onPress={() => { haptic.light(); setOpen(true); }}
@@ -85,8 +94,9 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: Props)
         )}
         <Feather name="chevron-down" size={18} color={colors.textMuted} />
       </TouchableOpacity>
+      )}
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
+      <Modal visible={isOpen} transparent animationType="slide" onRequestClose={close}>
         <Pressable style={styles.backdrop} onPress={close} />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

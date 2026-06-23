@@ -12,7 +12,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
-import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
@@ -50,6 +50,7 @@ export default function SettingsScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
+  const [contactCount, setContactCount] = useState(0);
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
@@ -68,6 +69,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     (async () => {
       setMe(await getMe(db));
+      const allPersons = await getAllPersons(db);
+      setContactCount(allPersons.filter(p => !p.is_me).length);
       setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
       setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
@@ -148,29 +151,75 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
       </View>
 
-      {/* Profile */}
-      <Text style={styles.sectionTitle}>Account</Text>
-      <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button">
-        <View>
+      {/* Profile card — hero */}
+      <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
+        <TouchableOpacity
+          onPress={me ? async () => {
+            const uri = await pickAndSaveAvatar(me.id);
+            if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); }
+          } : undefined}
+          accessibilityLabel="Change avatar"
+          hitSlop={4}
+        >
           <MemberAvatar
             name={me?.name ?? '?'}
             color={me?.avatar_color ?? colors.accent}
-            size={44}
+            size={56}
             imageUri={me?.image_uri}
-            onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
           />
           <View style={styles.cameraBadge} pointerEvents="none">
             <Feather name="camera" size={10} color={colors.bg} />
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
-          <Text style={styles.profileSub}>Tap photo to change · name to rename</Text>
+          <Text style={styles.profileSub}>Offline-first · no accounts</Text>
         </View>
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {/* Security */}
+      {/* MANAGE */}
+      <Text style={styles.sectionTitle}>Manage</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon="users"
+          label="People"
+          value={contactCount > 0 ? `${contactCount} contact${contactCount !== 1 ? 's' : ''}` : undefined}
+          onPress={() => { haptic.light(); router.push('/friends'); }}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="tag"
+          label="Categories"
+          onPress={() => { haptic.light(); router.push('/categories'); }}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="target"
+          label="Budgets & Goals"
+          onPress={() => { haptic.light(); router.push('/savings'); }}
+        />
+      </View>
+
+      {/* PREFERENCES */}
+      <Text style={styles.sectionTitle}>Preferences</Text>
+      <View style={styles.card}>
+        <SettingsRow icon="globe" label="Currency" value="INR" onPress={undefined} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="percent" label="Insight comparisons" value={COMPARE_FMT_LABELS[compareFmt]} onPress={() => setShowCompareFmt(true)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="activity" label="Health score" value={!!flags.healthScore} onValueChange={(v) => setFlag('healthScore', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="credit-card" label="Subscription detection" value={!!flags.subscriptions} onValueChange={(v) => setFlag('subscriptions', v)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="sliders" label="Sections" onPress={() => { haptic.light(); router.push('/features'); }} />
+      </View>
+
+      {/* SECURITY */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
         <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
@@ -178,7 +227,7 @@ export default function SettingsScreen() {
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
       </View>
 
-      {/* Reminders — local, on-device notifications (work in a dev build) */}
+      {/* REMINDERS */}
       <Text style={styles.sectionTitle}>Reminders</Text>
       <View style={styles.card}>
         <ToggleRow icon="bell" label="Renewal reminders" value={!!reminders?.renewals} onValueChange={(v) => updateReminders({ renewals: v }, v)} />
@@ -213,36 +262,18 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
       </View>
-      <Text style={styles.featureCaption}>Pick how many days before a charge to start, and the exact time. All on-device — nothing leaves your phone.</Text>
+      <Text style={styles.featureCaption}>All on-device — nothing leaves your phone.</Text>
 
-      {/* Budget & Data */}
-      <Text style={styles.sectionTitle}>Budget & Data</Text>
+      {/* DATA & HELP */}
+      <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
+        <SettingsRow icon="download" label="Export PDF" onPress={() => { haptic.light(); Alert.alert('Coming soon', 'PDF export will be available in a future update.'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="percent" label="Insight comparisons" value={COMPARE_FMT_LABELS[compareFmt]} onPress={() => setShowCompareFmt(true)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Sections" onPress={() => { haptic.light(); router.push('/features'); }} />
-      </View>
-
-      {/* Manage */}
-      <Text style={styles.sectionTitle}>Manage</Text>
-      <View style={styles.card}>
-        <SettingsRow icon="search" label="Search transactions" onPress={() => { haptic.light(); router.push('/search'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="tag" label="Categories" onPress={() => { haptic.light(); router.push('/categories'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="clock" label="History" onPress={() => { haptic.light(); router.push('/history'); }} />
-      </View>
-
-      {/* Help & Support */}
-      <Text style={styles.sectionTitle}>Help & Support</Text>
-      <View style={styles.card}>
-        <SettingsRow icon="help-circle" label="Help & Guide" onPress={() => { haptic.light(); router.push('/help'); }} />
+        <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await AsyncStorage.removeItem('onboarding_done'); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="clock" label="History & Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
       </View>
 
       {/* About — tap version 7× to open developer storage screen */}
@@ -326,9 +357,9 @@ const styles = StyleSheet.create({
   title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  profileName: { ...type.subheading, color: colors.textPrimary },
-  profileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.lg, ...shadow.sm },
+  profileName: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  profileSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.textMuted, marginTop: 2 },
   cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
 
   aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },

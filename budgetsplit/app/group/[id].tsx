@@ -338,18 +338,17 @@ export default function GroupDetailScreen() {
         </View>
       )}
 
-      {/* Modern underline tab strip (replaces the boxed segmented control) */}
+      {/* Pill/boxed segmented tabs — matches design */}
       <View style={styles.tabStrip}>
         {TABS.map(t => (
           <TouchableOpacity
             key={t.key}
-            style={styles.tab}
-            onPress={() => setActiveTab(t.key)}
+            style={[styles.tab, activeTab === t.key && styles.tabActive]}
+            onPress={() => { setActiveTab(t.key); haptic.selection(); }}
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === t.key }}
           >
             <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>{t.label}</Text>
-            <View style={[styles.tabUnderline, activeTab === t.key && { backgroundColor: group.color }]} />
           </TouchableOpacity>
         ))}
       </View>
@@ -642,24 +641,81 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'members' && !isPersonal && (
         <ScrollView contentContainerStyle={styles.listContent}>
-          <View style={styles.card}>
-            {members.map((m, mi) => (
-              <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
-                  <Text style={[styles.memberNet, { color: net[m.id] > 0 ? colors.income : net[m.id] < 0 ? colors.expense : colors.textMuted }]}>
-                    {net[m.id] ? net[m.id] > 0 ? `Owed ${formatCompact(net[m.id])}` : `Owes ${formatCompact(-net[m.id])}` : 'Settled up'}
+          {/* GROUP BALANCES summary */}
+          {(() => {
+            const totalSpent = txns.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + (t.shares.reduce((a, x) => a + x.amount, 0)), 0);
+            const myNet = net[me?.id ?? ''] ?? 0;
+            return (
+              <View style={styles.groupBalCard}>
+                <View style={styles.groupBalItem}>
+                  <Text style={styles.groupBalLabel}>Total spent</Text>
+                  <Text style={styles.groupBalAmt}>{formatCompact(totalSpent)}</Text>
+                </View>
+                <View style={styles.groupBalDivider} />
+                <View style={styles.groupBalItem}>
+                  <Text style={styles.groupBalLabel}>Your balance</Text>
+                  <Text style={[styles.groupBalAmt, { color: myNet > 0 ? colors.income : myNet < 0 ? colors.expense : colors.textMuted }]}>
+                    {myNet > 0 ? `+${formatCompact(myNet)}` : myNet < 0 ? `−${formatCompact(-myNet)}` : '—'}
                   </Text>
                 </View>
               </View>
-            ))}
+            );
+          })()}
+
+          {/* Member list */}
+          <View style={styles.card}>
+            {members.map((m, mi) => {
+              const v = net[m.id] ?? 0;
+              const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
+              return (
+                <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
+                    <Text style={[styles.memberNet, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
+                      {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'Settled up'}
+                    </Text>
+                    {isLargest && !m.is_me && (
+                      <Text style={styles.largestTag}>Largest contributor</Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
-          <TouchableOpacity style={styles.linkBtn} onPress={() => router.push(`/group/${id}/members`)} accessibilityRole="button">
-            <View style={styles.linkBtnIcon}><Feather name="user-plus" size={16} color={colors.accent} /></View>
-            <Text style={styles.linkBtnText}>Manage members</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+
+          {/* Invite */}
+          <TouchableOpacity style={styles.inviteBtn} onPress={() => router.push(`/group/${id}/members`)} accessibilityRole="button">
+            <Feather name="user-plus" size={16} color={colors.accent} />
+            <Text style={styles.inviteBtnText}>Invite someone</Text>
           </TouchableOpacity>
+
+          {/* Settle group CTA */}
+          {(() => {
+            const owersCount = members.filter(m => (net[m.id] ?? 0) < 0).length;
+            const owedCount  = members.filter(m => (net[m.id] ?? 0) > 0).length;
+            if (owersCount === 0 && owedCount === 0) return null;
+            return (
+              <TouchableOpacity
+                style={styles.settleGroupCta}
+                onPress={() => router.push('/settle')}
+                accessibilityRole="button"
+                accessibilityLabel="Settle group balances"
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settleGroupTitle}>Settle group balances</Text>
+                  <Text style={styles.settleGroupSub}>
+                    {owersCount > 0 ? `${owersCount} member${owersCount > 1 ? 's' : ''} owe` : ''}
+                    {owersCount > 0 && owedCount > 0 ? ' · ' : ''}
+                    {owedCount > 0 ? `${owedCount} is owed` : ''}
+                  </Text>
+                </View>
+                <View style={styles.settleGroupBtn}>
+                  <Text style={styles.settleGroupBtnText}>Settle up</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })()}
         </ScrollView>
       )}
 
@@ -776,11 +832,11 @@ const styles = StyleSheet.create({
   heroSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: 4, marginBottom: space.sm },
   budgetHeaderText: { ...type.caption, color: colors.textMuted },
-  tabStrip: { flexDirection: 'row', paddingHorizontal: layout.screenPaddingH, gap: space.lg, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: space.md },
-  tab: { paddingBottom: space.sm, alignItems: 'center' },
-  tabLabel: { ...type.subheading, fontSize: 15, color: colors.textMuted },
-  tabLabelActive: { color: colors.textPrimary },
-  tabUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent', marginTop: space.sm },
+  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
+  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 8 },
+  tabActive: { backgroundColor: colors.accent },
+  tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
+  tabLabelActive: { color: colors.bg },
   listContent: { padding: layout.screenPaddingH, paddingBottom: 120 },
   sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   sep: { height: 1, backgroundColor: colors.border },
@@ -870,4 +926,17 @@ const styles = StyleSheet.create({
   balCardSub: { ...type.caption, color: colors.textMuted, marginTop: 3 },
   balCardBtn: { paddingHorizontal: space.md + 2, paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent },
   balCardBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  groupBalItem: { flex: 1, alignItems: 'center', paddingVertical: space.md, gap: 3 },
+  groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
+  groupBalLabel: { ...type.caption, color: colors.textMuted },
+  groupBalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
+  largestTag: { ...type.caption, color: colors.textMuted, marginTop: 1, fontSize: 10 },
+  inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.lg, paddingVertical: space.md, marginBottom: space.md },
+  inviteBtnText: { ...type.body, color: colors.accent },
+  settleGroupCta: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.settle + '18', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', padding: space.md, gap: space.md },
+  settleGroupTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  settleGroupSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  settleGroupBtn: { backgroundColor: colors.settle, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
+  settleGroupBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#fff' },
 });

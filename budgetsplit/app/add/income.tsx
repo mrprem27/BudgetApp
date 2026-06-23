@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch,
   KeyboardAvoidingView, Platform,
@@ -16,7 +16,8 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries } from '../../src/db/queries/transactions';
-import { parseToPaise } from '../../src/lib/money';
+import { parseToPaise, formatRupees } from '../../src/lib/money';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { Input } from '../../src/components/ui/Input';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -28,6 +29,13 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
+
+const SOURCE_CHIPS = [
+  { label: 'Salary',     emoji: '💼' },
+  { label: 'Freelance',  emoji: '🧑‍💻' },
+  { label: 'Investment', emoji: '📈' },
+  { label: 'Other',      emoji: '💰' },
+];
 
 type Freq = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 const FREQS: { key: Freq; label: string }[] = [
@@ -53,6 +61,10 @@ export default function AddIncomeScreen() {
   const [amountText, setAmountText] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState<Category | null>(null);
+  const [sourceChip, setSourceChip] = useState<string>('Salary');
+  const [budgetAllocated, setBudgetAllocated] = useState(0);
+  const [budgetSpent, setBudgetSpent] = useState(0);
+  const amtRef = useRef<TextInput>(null);
   const [note, setNote] = useState('');
   const [date, setDate] = useState(Date.now());
   const [showDate, setShowDate] = useState(false);
@@ -105,7 +117,15 @@ export default function AddIncomeScreen() {
       }
       const gid = (paramGroupId && personal.some(g => g.id === paramGroupId)) ? paramGroupId : personal[0]?.id ?? '';
       setSelectedGroupId(gid);
-      if (gid) await loadCats(gid);
+      if (gid) {
+        await loadCats(gid);
+        const grpObj = grps.find(g => g.id === gid);
+        if (grpObj) {
+          const analytics = await getBudgetAnalytics(db, grpObj);
+          setBudgetAllocated(analytics.totalAllocated);
+          setBudgetSpent(analytics.totalSpent);
+        }
+      }
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -159,16 +179,24 @@ export default function AddIncomeScreen() {
     }
   }
 
+  const surplus = total + (budgetAllocated - budgetSpent);
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add Income'}</Text>
-        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
-          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>{isEditing ? 'Save' : 'Add'}</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add entry'}</Text>
+        {/* Expense / Income toggle */}
+        <View style={styles.modeToggle}>
+          <TouchableOpacity onPress={() => router.replace('/add/quick?kind=expense')} style={styles.modeBtn} accessibilityRole="button">
+            <Text style={styles.modeBtnText}>Expense</Text>
+          </TouchableOpacity>
+          <View style={styles.modeBtnActive}>
+            <Text style={styles.modeBtnActiveText}>Income</Text>
+          </View>
+        </View>
       </View>
 
       {loadError ? (
@@ -176,21 +204,93 @@ export default function AddIncomeScreen() {
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {/* Amount */}
-          <View style={styles.amountWrap}>
-            <Feather name="trending-up" size={20} color={colors.income} />
+
+          {/* Large amount display */}
+          <TouchableOpacity style={styles.amountWrap} onPress={() => amtRef.current?.focus()} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Edit amount">
             <TextInput
+              ref={amtRef}
               style={styles.amountInput}
               value={amountText}
               onChangeText={setAmountText}
               keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              placeholderTextColor={colors.textMuted}
+              placeholder="₹0"
+              placeholderTextColor={colors.income + '66'}
               autoFocus={!isEditing}
               accessibilityLabel="Amount"
             />
+            <Text style={styles.amountHint}>tap to edit</Text>
+          </TouchableOpacity>
+
+          {/* Source + date row */}
+          <View style={styles.sourceRow}>
+            <TouchableOpacity style={styles.sourcePill} onPress={() => {}} accessibilityRole="button" accessibilityLabel="Select source">
+              <Text style={styles.sourcePillEmoji}>{SOURCE_CHIPS.find(s => s.label === sourceChip)?.emoji ?? '💼'}</Text>
+              <Text style={styles.sourcePillText}>{sourceChip}</Text>
+              <Feather name="chevron-down" size={12} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.datePill} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Select date">
+              <Text style={styles.datePillText}>
+                {isSameDay(new Date(date), new Date()) ? 'Today' : format(new Date(date), 'dd MMM')}
+              </Text>
+            </TouchableOpacity>
           </View>
 
+          {/* Note */}
+          <View style={styles.noteWrap}>
+            <TextInput
+              style={styles.noteInput}
+              value={note}
+              onChangeText={setNote}
+              placeholder="Note (optional)"
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel="Note"
+              maxLength={80}
+            />
+          </View>
+
+          {/* Budget impact nudge */}
+          {budgetAllocated > 0 && total > 0 && (
+            <View style={styles.nudgeCard}>
+              <View style={styles.nudgeDot} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nudgeTitle}>
+                  {surplus > 0
+                    ? `Month covered + ${formatRupees(surplus)} surplus`
+                    : `${formatRupees(Math.abs(surplus))} short of monthly budget`}
+                </Text>
+                <Text style={styles.nudgeSub}>
+                  Based on {formatRupees(budgetAllocated)} budget · {formatRupees(budgetSpent)} spent so far
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* SOURCE chips */}
+          <View style={styles.sourceChipsWrap}>
+            <Text style={styles.sourceChipsLabel}>SOURCE</Text>
+            <View style={styles.sourceChipsRow}>
+              {SOURCE_CHIPS.map(s => (
+                <TouchableOpacity
+                  key={s.label}
+                  style={[styles.sourceChip, sourceChip === s.label && styles.sourceChipActive]}
+                  onPress={() => {
+                    setSourceChip(s.label);
+                    haptic.selection();
+                    // Sync to matching category if it exists
+                    const match = categories.find(c => c.name.toLowerCase() === s.label.toLowerCase());
+                    if (match) setCategory(match);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: sourceChip === s.label }}
+                >
+                  <Text style={styles.sourceChipEmoji}>{s.emoji}</Text>
+                  <Text style={[styles.sourceChipText, sourceChip === s.label && styles.sourceChipTextActive]}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Group selector (multi-account) */}
           {groups.length > 1 && (() => {
             const selectedGroup = groups.find(g => g.id === selectedGroupId);
             return (
@@ -212,38 +312,7 @@ export default function AddIncomeScreen() {
             );
           })()}
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Source</Text>
-            <CategoryPicker
-              categories={categories}
-              value={category}
-              onChange={setCategory}
-              onCreate={async (name) => {
-                const created = await insertCategory(db, selectedGroupId, name, 'plus-circle', colors.income, 'income', 'Income');
-                setCategories(prev => [...prev, created]);
-                return created;
-              }}
-            />
-          </View>
-
-          <Input
-            value={note}
-            onChangeText={setNote}
-            placeholder="Note (optional)"
-            accessibilityLabel="Note"
-            maxLength={80}
-          />
-
-          <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button">
-            <Feather name="calendar" size={16} color={colors.income} />
-            <Text style={styles.dateText}>
-              {Number.isFinite(date)
-                ? (isSameDay(new Date(date), new Date()) ? 'Today' : format(new Date(date), 'EEE, dd MMM yyyy'))
-                : 'Pick a date'}
-            </Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-
+          {/* Recurring toggle */}
           {!isEditing && flags.recurring && (
             <>
               <View style={styles.scheduleRow}>
@@ -305,6 +374,20 @@ export default function AddIncomeScreen() {
             </>
           )}
 
+          {/* Green CTA */}
+          <TouchableOpacity
+            style={[styles.incomeCta, (!canSave || saving) && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={!canSave || saving}
+            accessibilityRole="button"
+            accessibilityLabel={total > 0 ? `Log ${formatRupees(total)} income` : 'Log income'}
+          >
+            <Text style={styles.incomeCtaText}>
+              {saving ? 'Saving…' : total > 0 ? `Log ${formatRupees(total)} income` : isEditing ? 'Save' : 'Log income'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 32 }} />
         </ScrollView>
       </KeyboardAvoidingView>
       )}
@@ -334,27 +417,68 @@ export default function AddIncomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
-  title: { ...type.heading, color: colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: space.sm },
-  headerSave: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
-  headerClose: { minWidth: 40, alignItems: 'flex-start' },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
-  amountWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
-  amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 52 },
+  title: { ...type.heading, color: colors.textPrimary },
+  headerClose: { minWidth: 44, alignItems: 'flex-start', justifyContent: 'center', height: 44 },
+
+  // Mode toggle pill
+  modeToggle: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border, gap: 2 },
+  modeBtn: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 100 },
+  modeBtnText: { fontSize: 12, color: colors.textMuted, fontFamily: 'Inter_400Regular' },
+  modeBtnActive: { paddingVertical: 5, paddingHorizontal: 12, backgroundColor: colors.income, borderRadius: 100 },
+  modeBtnActiveText: { fontSize: 12, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+
+  // Amount — large centered display
+  amountWrap: { alignItems: 'center', borderBottomWidth: 1, borderColor: colors.border + '66', paddingBottom: space.md },
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 44, color: colors.income, textAlign: 'center', letterSpacing: -2, lineHeight: 52 },
+  amountHint: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+
+  // Source + date row
+  sourceRow: { flexDirection: 'row', gap: space.sm },
+  sourcePill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
+  sourcePillEmoji: { fontSize: 14 },
+  sourcePillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
+  datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
+
+  // Note
+  noteWrap: { backgroundColor: colors.bgCard, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  noteInput: { ...type.body, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
+
+  // Budget nudge
+  nudgeCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  nudgeDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.income, marginTop: 3, flexShrink: 0 },
+  nudgeTitle: { fontSize: 12, color: colors.income, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  nudgeSub: { fontSize: 11, color: colors.textMuted, lineHeight: 15 },
+
+  // Source chips
+  sourceChipsWrap: { gap: 8 },
+  sourceChipsLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold' },
+  sourceChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  sourceChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: colors.bgCard, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
+  sourceChipActive: { backgroundColor: colors.income, borderColor: colors.income },
+  sourceChipEmoji: { fontSize: 13 },
+  sourceChipText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
+  sourceChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+
+  // Green CTA
+  incomeCta: { backgroundColor: colors.income, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: space.sm },
+  incomeCtaText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.bg },
+
   field: { gap: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
-  scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
+  endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '44' },
   endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   freqRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
+  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgCard, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
   freqChip: { flex: 1, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   freqChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.income },
   freqText: { ...type.caption, color: colors.textSecondary },
