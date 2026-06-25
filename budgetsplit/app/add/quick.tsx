@@ -32,6 +32,7 @@ import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { SplitSheet } from '../../src/components/finance/add/SplitSheet';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
 import { MoreOptions } from '../../src/components/ui/MoreOptions';
@@ -918,103 +919,23 @@ export default function QuickAddScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={showSplit} transparent animationType="slide" onRequestClose={() => setShowSplit(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowSplit(false)}>
-          <Pressable style={styles.splitSheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.splitTitle}>Split</Text>
-
-            <View style={styles.splitTypeRow}>
-              {(['equal', 'exact', 'percent', 'shares'] as SplitType[]).map(st => (
-                <TouchableOpacity
-                  key={st}
-                  style={[styles.splitTypeBtn, splitType === st && styles.splitTypeActive]}
-                  onPress={() => setSplitType(st)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: splitType === st }}
-                >
-                  <Text style={[styles.splitTypeLabel, splitType === st && { color: colors.bg }]}>
-                    {st.charAt(0).toUpperCase() + st.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView style={{ maxHeight: 300 }}>
-              {members.map(m => {
-                const included = splitMembers.includes(m.id);
-                let inputEl = null;
-                if (included && splitType === 'exact') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={exactAmounts[m.id] ?? ''}
-                      onChangeText={v => setExactAmounts(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="decimal-pad"
-                      placeholder="₹0"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'percent') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={percentages[m.id] ?? ''}
-                      onChangeText={v => setPercentages(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="number-pad"
-                      placeholder="%"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'shares') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={ratios[m.id] ?? '1'}
-                      onChangeText={v => setRatios(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="number-pad"
-                      placeholder="1"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'equal') {
-                  const idx = splitMembers.indexOf(m.id);
-                  const eq = splitEqual(total, splitMembers.length);
-                  inputEl = <Text style={styles.eqAmount}>{formatRupees(eq[idx] ?? 0)}</Text>;
-                }
-                return (
-                  <View key={m.id} style={styles.splitRow}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} onPress={() => {
-                      setSplitMembers(prev =>
-                        prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                      );
-                    }} selected={included} />
-                    <Text style={styles.splitName}>{m.name}</Text>
-                    {inputEl}
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.remainderBar}>
-              <Text style={[styles.remainderText, { color: remainder === 0 ? colors.income : colors.expense }]}>
-                {remainder === 0
-                  ? 'Balanced'
-                  : remainder > 0
-                  ? `${formatRupees(remainder)} unassigned`
-                  : `${formatRupees(-remainder)} over-assigned`}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => setShowSplit(false)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <SplitSheet
+        visible={showSplit}
+        onClose={() => setShowSplit(false)}
+        members={members}
+        splitMembers={splitMembers}
+        setSplitMembers={setSplitMembers}
+        splitType={splitType}
+        setSplitType={setSplitType}
+        exactAmounts={exactAmounts}
+        setExactAmounts={setExactAmounts}
+        percentages={percentages}
+        setPercentages={setPercentages}
+        ratios={ratios}
+        setRatios={setRatios}
+        total={total}
+        remainder={remainder}
+      />
 
       <DatePickerSheet visible={showDate} value={txnDate} onClose={() => setShowDate(false)} onChange={setTxnDate} />
       <DatePickerSheet
