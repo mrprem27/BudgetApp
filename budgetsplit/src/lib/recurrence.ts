@@ -95,6 +95,26 @@ export function nthOccurrenceMs(
   return cursor.getTime();
 }
 
+/**
+ * Normalize a recurring charge to its monthly-equivalent (paise) for "₹X/mo"
+ * rollups. The single source of truth — three call sites previously disagreed
+ * (a weekly charge was ×4 in one place and ×52/12 in others). Weekly uses
+ * 52/12 (≈4.33 weeks per month); `custom` has no fixed cadence so it's left
+ * as-is. Amounts are integer paise, so the rounding stays exact.
+ */
+export function recurringMonthlyEquivalent(
+  amount: number,
+  freq: string | null | undefined,
+): number {
+  switch (freq) {
+    case 'daily':   return Math.round(amount * 30);
+    case 'weekly':  return Math.round((amount * 52) / 12);
+    case 'monthly': return amount;
+    case 'yearly':  return Math.round(amount / 12);
+    default:        return amount; // custom / unknown — no fixed monthly cadence
+  }
+}
+
 function advance(
   date: Date,
   freq: NonNullable<Txn['recur_freq']>,

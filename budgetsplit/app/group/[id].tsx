@@ -23,7 +23,7 @@ import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import { formatCompact, formatRupees } from '../../src/lib/money';
-import { nextOccurrenceOnOrAfter } from '../../src/lib/recurrence';
+import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
@@ -258,10 +258,7 @@ export default function GroupDetailScreen() {
   const recurringMonthlyTotal = useMemo(() => {
     return recurringRules.reduce((sum, r) => {
       const rAmt = r.payments.reduce((s, p) => s + p.amount, 0);
-      if (r.recur_freq === 'monthly') return sum + rAmt;
-      if (r.recur_freq === 'weekly') return sum + rAmt * 4;
-      if (r.recur_freq === 'daily') return sum + rAmt * 30;
-      return sum + rAmt;
+      return sum + recurringMonthlyEquivalent(rAmt, r.recur_freq);
     }, 0);
   }, [recurringRules]);
 

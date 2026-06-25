@@ -65,6 +65,23 @@ export async function insertCategory(
   return { id, group_id: groupId, name, icon, color, kind, section };
 }
 
+/**
+ * Delete a category and its matching budget line. Budget lines key off the
+ * category *name* (not its id), so deleting only the `category` row used to
+ * leave an orphan `category_budget` that no UI could reach. Past `txn.category`
+ * strings are intentionally kept — they're historical labels, not live links.
+ */
 export async function deleteCategory(db: SQLite.SQLiteDatabase, categoryId: string): Promise<void> {
-  await db.runAsync('DELETE FROM category WHERE id = ?', [categoryId]);
+  await db.withTransactionAsync(async () => {
+    const cat = await db.getFirstAsync<{ group_id: string; name: string }>(
+      'SELECT group_id, name FROM category WHERE id = ?', [categoryId],
+    );
+    await db.runAsync('DELETE FROM category WHERE id = ?', [categoryId]);
+    if (cat) {
+      await db.runAsync(
+        'DELETE FROM category_budget WHERE group_id = ? AND category = ?',
+        [cat.group_id, cat.name],
+      );
+    }
+  });
 }

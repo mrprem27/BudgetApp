@@ -281,6 +281,16 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // If the rebuild fails, leave the original table intact (yearly stays unavailable).
   }
 
+  // Hot-path indexes. Created here (not inline in SCHEMA) because the one-time
+  // txn rebuild above drops & recreates the txn table, which would wipe any
+  // index defined alongside it. IF NOT EXISTS keeps this idempotent on every open.
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
+    CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
+    CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
+  `);
+
   // One-time fix: 'wallet' is not a valid Feather icon
   await db.execAsync("UPDATE budget_group SET icon='credit-card' WHERE icon='wallet';");
   // The seeded Personal group (oldest, name 'Personal') is the single-user space.

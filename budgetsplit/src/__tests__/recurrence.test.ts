@@ -1,4 +1,4 @@
-import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo, recurringMonthlyEquivalent } from '../lib/recurrence';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -84,5 +84,30 @@ describe('occurrenceDatesUpTo (materialize job)', () => {
   it('returns just the start when until is before the next occurrence', () => {
     const dates = occurrenceDatesUpTo(ms(2024, 0, 1), 'monthly', 1, ms(2024, 0, 10), null);
     expect(dates).toEqual([ms(2024, 0, 1)]);
+  });
+});
+
+describe('recurringMonthlyEquivalent', () => {
+  it('daily → ×30', () => {
+    expect(recurringMonthlyEquivalent(10000, 'daily')).toBe(300000);
+  });
+
+  it('weekly → ×52/12 (≈4.33/mo), NOT ×4 — this is the bug that was fixed', () => {
+    expect(recurringMonthlyEquivalent(12000, 'weekly')).toBe(Math.round((12000 * 52) / 12));
+    expect(recurringMonthlyEquivalent(12000, 'weekly')).not.toBe(12000 * 4);
+  });
+
+  it('monthly → unchanged', () => {
+    expect(recurringMonthlyEquivalent(50000, 'monthly')).toBe(50000);
+  });
+
+  it('yearly → ÷12', () => {
+    expect(recurringMonthlyEquivalent(120000, 'yearly')).toBe(10000);
+  });
+
+  it('custom / unknown / null → unchanged (no fixed monthly cadence)', () => {
+    expect(recurringMonthlyEquivalent(7777, 'custom')).toBe(7777);
+    expect(recurringMonthlyEquivalent(7777, null)).toBe(7777);
+    expect(recurringMonthlyEquivalent(7777, undefined)).toBe(7777);
   });
 });

@@ -14,6 +14,7 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { AppRefreshControl, useRefresh } from '../src/components/ui/AppRefreshControl';
 import { getTransactionsInRange, getRecurringForGroup } from '../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../src/lib/analytics';
+import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getGroupNet } from '../src/db/queries/balances';
 import { getMe } from '../src/db/queries/persons';
@@ -116,8 +117,7 @@ export default function InsightsScreen() {
       const rules = byGroup.flat().filter(t => t.kind === 'expense' && t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
       const monthly = rules.reduce((s, t) => {
         const amt = t.shares.reduce((x, sh) => x + sh.amount, 0);
-        const f = t.recur_freq;
-        return s + (f === 'daily' ? amt * 30 : f === 'weekly' ? Math.round(amt * 52 / 12) : f === 'yearly' ? Math.round(amt / 12) : amt);
+        return s + recurringMonthlyEquivalent(amt, t.recur_freq);
       }, 0);
       setSubNames(rules.map(t => (t.note && t.note.trim()) || t.category));
       setSubsMonthly(monthly);

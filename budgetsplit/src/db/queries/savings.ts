@@ -269,8 +269,12 @@ export async function runLeftoverSweep(db: SQLite.SQLiteDatabase): Promise<numbe
       total += Math.max(0, (g.limit_monthly ?? 0) - spent);
     }
   }
-  if (total > 0) await addToPool(db, total, 'auto', 'Budget leftover');
+  // Advance the marker BEFORE depositing. The marker and the pool deposit live
+  // in two different stores (AsyncStorage + SQLite), so they can't be committed
+  // atomically; ordering it this way means a crash between them can only ever
+  // *miss* a sweep — never re-sweep the same months and credit phantom money.
   await AsyncStorage.setItem(SWEEP_KEY, newMarker);
+  if (total > 0) await addToPool(db, total, 'auto', 'Budget leftover');
   return total;
 }
 

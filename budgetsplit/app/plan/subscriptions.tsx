@@ -15,21 +15,13 @@ import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup } from '../../src/db/queries/transactions';
-import { nextOccurrenceOnOrAfter } from '../../src/lib/recurrence';
+import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatCompact } from '../../src/lib/money';
 
 type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
 
 // Normalise a recurring charge to a per-month figure for the running total.
-function toMonthly(amount: number, freq: string): number {
-  switch (freq) {
-    case 'daily': return amount * 30;
-    case 'weekly': return Math.round((amount * 52) / 12);
-    case 'monthly': return amount;
-    case 'yearly': return Math.round(amount / 12);
-    default: return amount;
-  }
-}
+const toMonthly = recurringMonthlyEquivalent;
 function cadenceLabel(freq: string): string {
   return freq === 'daily' ? 'daily' : freq === 'weekly' ? 'weekly' : freq === 'yearly' ? 'yearly' : freq === 'custom' ? 'custom' : 'monthly';
 }

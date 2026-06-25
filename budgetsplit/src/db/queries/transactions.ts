@@ -61,7 +61,7 @@ export async function getTransactionsForGroup(
     `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NULL ORDER BY date DESC, created_at DESC`,
     [groupId],
   );
-  return Promise.all(rows.map(t => loadSplits(db, t)));
+  return loadSplitsMany(db, rows);
 }
 
 export async function getTransactionsInRange(
@@ -81,7 +81,7 @@ export async function getTransactionsInRange(
     `SELECT t.* FROM txn t ${where} ORDER BY t.date DESC`,
     args,
   );
-  return Promise.all(txns.map(t => loadSplits(db, t)));
+  return loadSplitsMany(db, txns);
 }
 
 async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<TxnWithSplits> {
@@ -96,6 +96,46 @@ async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<TxnWithS
     payments: payments.map(p => ({ personId: p.person_id, amount: p.amount })),
     shares:   shares.map(s => ({ personId: s.person_id, amount: s.amount })),
   };
+}
+
+/**
+ * Attach payments + shares to a list of transactions in **two** queries total
+ * (one per side), instead of two per row. Replaces the old `Promise.all(rows.map
+ * (loadSplits))` N+1 pattern on every list/range loader. Ids are chunked to stay
+ * under SQLite's bound-parameter limit (~999) for very large groups.
+ */
+const SPLIT_IN_CHUNK = 400;
+
+async function loadSplitsMany(db: SQLite.SQLiteDatabase, txns: Txn[]): Promise<TxnWithSplits[]> {
+  if (txns.length === 0) return [];
+  const ids = txns.map(t => t.id);
+  const payByTxn = new Map<string, Array<{ personId: string; amount: number }>>();
+  const shareByTxn = new Map<string, Array<{ personId: string; amount: number }>>();
+
+  for (let i = 0; i < ids.length; i += SPLIT_IN_CHUNK) {
+    const chunk = ids.slice(i, i + SPLIT_IN_CHUNK);
+    const placeholders = chunk.map(() => '?').join(',');
+    const [payments, shares] = await Promise.all([
+      db.getAllAsync<TxnPayment>(`SELECT * FROM txn_payment WHERE txn_id IN (${placeholders})`, chunk),
+      db.getAllAsync<TxnShare>(`SELECT * FROM txn_share WHERE txn_id IN (${placeholders})`, chunk),
+    ]);
+    for (const p of payments) {
+      let arr = payByTxn.get(p.txn_id);
+      if (!arr) { arr = []; payByTxn.set(p.txn_id, arr); }
+      arr.push({ personId: p.person_id, amount: p.amount });
+    }
+    for (const s of shares) {
+      let arr = shareByTxn.get(s.txn_id);
+      if (!arr) { arr = []; shareByTxn.set(s.txn_id, arr); }
+      arr.push({ personId: s.person_id, amount: s.amount });
+    }
+  }
+
+  return txns.map(t => ({
+    ...t,
+    payments: payByTxn.get(t.id) ?? [],
+    shares:   shareByTxn.get(t.id) ?? [],
+  }));
 }
 
 export type InsertTxnInput = {
@@ -129,8 +169,24 @@ export async function insertTxn(
 ): Promise<string> {
   const id = uuid();
   const now = Date.now();
-
   await db.withTransactionAsync(async () => {
+    await insertTxnRows(db, input, id, now);
+  });
+  return id;
+}
+
+/**
+ * Write a txn row + its payments/shares + audit entries. Does NOT open its own
+ * transaction — call it inside an existing `withTransactionAsync` (expo-sqlite
+ * can't nest). `insertTxn` wraps it; `splitRecurringSeries` reuses it so the new
+ * rule + the old-rule cap commit atomically.
+ */
+async function insertTxnRows(
+  db: SQLite.SQLiteDatabase,
+  input: InsertTxnInput,
+  id: string,
+  now: number,
+): Promise<void> {
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
@@ -182,9 +238,6 @@ export async function insertTxn(
         });
       }
     }
-  });
-
-  return id;
 }
 
 export type ItemizedAdjustment = { label: string; type: 'tax' | 'tip' | 'discount'; mode: 'flat' | 'percent'; value: string };
@@ -352,7 +405,7 @@ export async function getRecurringForGroup(
      ORDER BY recur_state ASC, date DESC`,
     [groupId],
   );
-  return Promise.all(rows.map(t => loadSplits(db, t)));
+  return loadSplitsMany(db, rows);
 }
 
 export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
@@ -598,13 +651,15 @@ export async function splitRecurringSeries(
   if (splitDate === null) return null; // series already finished — nothing future to edit
 
   const now = Date.now();
+  const newId = uuid();
   // New rule starts at the split date and inherits the original end.
   const forward: InsertTxnInput = { ...newRule, date: splitDate, recurEnd: old.recur_end ?? undefined };
 
-  // insertTxn opens its own transaction, so it runs first (atomic on its own);
-  // then cap/supersede the old rule + audit in a second transaction.
-  const newId = await insertTxn(db, forward);
+  // Insert the new rule AND cap/supersede the old one in a single transaction —
+  // if the cap failed after a committed insert we'd have two overlapping active
+  // rules and double-counted occurrences.
   await db.withTransactionAsync(async () => {
+    await insertTxnRows(db, forward, newId, now);
     if (splitDate <= old.date) {
       // The old rule never produced a past occurrence — fully superseded.
       await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [now, seriesId]);
@@ -666,7 +721,7 @@ export async function getActiveRecurringRules(db: SQLite.SQLiteDatabase): Promis
   const rows = await db.getAllAsync<Txn>(
     `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
   );
-  return Promise.all(rows.map(t => loadSplits(db, t)));
+  return loadSplitsMany(db, rows);
 }
 
 export async function getLineItems(db: SQLite.SQLiteDatabase, txnId: string): Promise<LineItem[]> {
