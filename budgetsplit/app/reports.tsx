@@ -23,6 +23,7 @@ import { getAllGroups } from '../src/db/queries/groups';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../src/lib/analytics';
 import type { BudgetAnalytics } from '../src/lib/analytics';
+import { utilLabel, budgetHealth } from '../src/lib/budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
 import { formatRupees, formatCompact, formatCompactMajor } from '../src/lib/money';
 import { Badge } from '../src/components/ui/Badge';
@@ -738,12 +739,12 @@ export default function ReportsScreen() {
                     <View style={styles.utilRow}>
                       <Text style={styles.catTitle}>Budget used</Text>
                       <Text style={[styles.utilPct, (an.utilizationPct ?? 0) > 100 && { color: colors.expense }]}>
-                        {(an.utilizationPct ?? 0) > 100 ? `${((an.utilizationPct ?? 0) / 100).toFixed(1)}X` : `${an.utilizationPct ?? 0}%`}
+                        {utilLabel(an.utilizationPct ?? 0)}
                       </Text>
                     </View>
                     <BudgetBar
                       pct={an.utilizationPct}
-                      health={an.utilizationPct === null ? 'none' : an.utilizationPct >= 100 ? 'red' : an.utilizationPct >= 80 ? 'amber' : 'green'}
+                      health={budgetHealth(an.utilizationPct)}
                       height={6}
                     />
                     {an.recommendations.slice(0, 3).map(r => (

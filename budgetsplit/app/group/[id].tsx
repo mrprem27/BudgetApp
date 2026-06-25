@@ -17,7 +17,7 @@ import { useUndo } from '../../src/components/system/UndoToast';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
-import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
+import { getBudgetUsage, getCategoryBudgetStatus, utilLabel, budgetHealth } from '../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
@@ -46,12 +46,7 @@ function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
 }
 
-function utilHealth(pct: number | null): 'green' | 'amber' | 'red' | 'none' {
-  if (pct === null) return 'none';
-  return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
-}
-
-// Over 100 %: show as a multiplier (e.g. 2.5X) — more intuitive than 250 %.
+// Over 100 %: show as a multiplier (e.g. 2.5×) — more intuitive than 250 %.
 function splitLabel(mode: string): string {
   switch (mode) {
     case 'shares': return 'by shares';
@@ -68,12 +63,6 @@ function freqWord(freq: string | null): string {
     case 'custom': return 'custom';
     default: return 'monthly';
   }
-}
-
-function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
-  return `${pct}%`;
 }
 
 function recBg(sev: 'warn' | 'info' | 'good'): string {
@@ -538,15 +527,15 @@ export default function GroupDetailScreen() {
                   <View style={styles.ovTopRow}>
                     <View>
                       <Text style={styles.ovLabel}>Budget used</Text>
-                      <Text style={[styles.ovSpent, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>{formatCompact(analytics.totalSpent)}</Text>
+                      <Text style={[styles.ovSpent, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>{formatCompact(analytics.totalSpent)}</Text>
                       <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
                     </View>
-                    <Text style={[styles.ovPct, { color: healthColor(utilHealth(analytics.utilizationPct)) }]}>
+                    <Text style={[styles.ovPct, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>
                       {utilLabel(analytics.utilizationPct ?? 0)}
                     </Text>
                   </View>
                   <View style={{ marginTop: space.md }}>
-                    <BudgetBar pct={analytics.utilizationPct} health={utilHealth(analytics.utilizationPct)} height={10} />
+                    <BudgetBar pct={analytics.utilizationPct} health={budgetHealth(analytics.utilizationPct)} height={10} />
                   </View>
                   <View style={styles.ovStatsRow}>
                     <View style={styles.ovStat}>

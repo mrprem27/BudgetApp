@@ -1,17 +1,13 @@
 import { colors } from '../../tokens';
 import type { HealthBand } from '../../../lib/financialHealth';
 
+// Budget utilisation label lives in the budget domain now (one source).
+export { utilLabel } from '../../../lib/budget';
+
 /** Time-of-day greeting for the Home header. */
 export function greeting(): string {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
-
-/** Budget utilisation label: "75%", "1.2×" when over, "—" when unknown. */
-export function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}×`;
-  return `${pct}%`;
 }
 
 /** Accent colour for a health band. */

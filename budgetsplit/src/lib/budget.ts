@@ -17,6 +17,28 @@ export type BudgetUsage = {
   health: 'green' | 'amber' | 'red' | 'none';
 };
 
+export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
+
+/**
+ * Canonical budget-utilisation band from a percentage (null pct → 'none').
+ * The single source for the 80% / 100% thresholds — was duplicated inline in
+ * getBudgetUsage, group detail, reports, and analytics.
+ */
+export function budgetHealth(pct: number | null): BudgetHealth {
+  if (pct === null) return 'none';
+  return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
+}
+
+/**
+ * Canonical utilisation label: "75%", "1.2×" when over budget, "—" when
+ * unknown. One source (was copied with a glyph drift — ASCII "X" vs "×").
+ */
+export function utilLabel(pct: number | null): string {
+  if (pct === null) return '—';
+  if (pct > 100) return `${(pct / 100).toFixed(1)}×`;
+  return `${pct}%`;
+}
+
 export function getPeriodRange(period: Period, date: Date): { from: number; to: number } {
   switch (period) {
     case 'daily':
@@ -80,12 +102,7 @@ export async function getBudgetUsage(
   if (!effectiveLimit) return { spent, limit: null, pct: null, health: 'none' };
 
   const pct = Math.round((spent / effectiveLimit) * 100);
-  const health = pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
-  return { spent, limit: effectiveLimit, pct, health };
-}
-
-function healthFor(pct: number): 'green' | 'amber' | 'red' {
-  return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
+  return { spent, limit: effectiveLimit, pct, health: budgetHealth(pct) };
 }
 
 /** Total expense per category for a group within a period (full bill amount). */
@@ -158,7 +175,7 @@ export async function getCategoryBudgetStatus(
       spent,
       remaining: b.amount - spent,
       pct,
-      health: pct === null ? 'none' : healthFor(pct),
+      health: budgetHealth(pct),
     };
   });
 

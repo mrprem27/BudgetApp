@@ -6,7 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending } from './budget';
+import { getCategorySpending, utilLabel } from './budget';
 import { formatCompact, formatComparison } from './money';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
@@ -231,9 +231,6 @@ export async function getBudgetAnalytics(
   const daysInMonth = getDaysInMonth(now);
   const projectedMonthEnd = Math.round((totalMonthSpent / Math.max(1, dayOfMonth)) * daysInMonth);
   const monthlyBudgetTotal = budgets.filter(b => b.cadence === 'monthly').reduce((s, b) => s + b.amount, 0);
-
-  const utilLabel = (pct: number | null) =>
-    pct !== null && pct > 100 ? `${(pct / 100).toFixed(1)}×` : `${pct ?? '?'}%`;
 
   // --- Rule-based recommendations ---
   const recommendations: Recommendation[] = [];
