@@ -102,7 +102,7 @@ export default function HistoryScreen() {
       <View style={[styles.header, { paddingTop: insets.top + space.xs }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="chevron-left" size={18} color={colors.accent} />
-          <Text style={styles.backText}>Settings</Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
       </View>
 

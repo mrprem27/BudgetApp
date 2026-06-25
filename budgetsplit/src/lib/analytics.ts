@@ -6,7 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending, utilLabel } from './budget';
+import { getCategorySpending, utilLabel, budgetHealth } from './budget';
 import { formatCompact, formatComparison } from './money';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
@@ -182,7 +182,9 @@ export async function getBudgetAnalytics(
     const spent = curByCad[b.cadence]?.[b.category] ?? 0;
     const prevSpent = prevByCad[b.cadence]?.[b.category] ?? 0;
     const pct = b.amount > 0 ? Math.round((spent / b.amount) * 100) : null;
-    const status: BudgetStatus = pct === null ? 'none' : pct >= 100 ? 'over' : pct >= 80 ? 'near' : 'under';
+    // Shares the 80/100 thresholds with lib/budget.budgetHealth (one source).
+    const h = budgetHealth(pct);
+    const status: BudgetStatus = h === 'red' ? 'over' : h === 'amber' ? 'near' : h === 'green' ? 'under' : 'none';
     // Days until limit, only meaningful for monthly cadence mid-month.
     let daysToLimit: number | null = null;
     if (b.cadence === 'monthly' && b.amount > 0 && spent > 0 && spent < b.amount) {

@@ -128,7 +128,7 @@ export async function deleteGoal(db: SQLite.SQLiteDatabase, id: string): Promise
 
 // --- Ledger / pool -------------------------------------------------------
 
-async function insertTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {
+async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {
   await db.runAsync(
     `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -139,13 +139,13 @@ async function insertTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | '
 /** Add money into the Savings Pool (unallocated). */
 export async function addToPool(db: SQLite.SQLiteDatabase, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
   if (amount <= 0) return;
-  await insertTxn(db, { goal_id: null, amount, kind: 'deposit', source, date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: null, amount, kind: 'deposit', source, date: Date.now(), note: note ?? null });
 }
 
 /** Move money from the pool's unallocated balance into a goal. */
 export async function allocateToGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
   if (amount <= 0) return;
-  await insertTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null });
 }
 
 /**
@@ -157,22 +157,22 @@ export async function depositAndAllocate(db: SQLite.SQLiteDatabase, goalId: stri
   if (amount <= 0) return;
   await db.withTransactionAsync(async () => {
     if (shortfall > 0) {
-      await insertTxn(db, { goal_id: null, amount: shortfall, kind: 'deposit', source: 'manual', date: Date.now(), note: null });
+      await insertSavingsTxn(db, { goal_id: null, amount: shortfall, kind: 'deposit', source: 'manual', date: Date.now(), note: null });
     }
-    await insertTxn(db, { goal_id: goalId, amount, kind: 'allocate', source: 'manual', date: Date.now(), note: null });
+    await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source: 'manual', date: Date.now(), note: null });
   });
 }
 
 /** Pull money back out of a goal, returning it to the pool's unallocated balance. */
 export async function withdrawFromGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, note?: string): Promise<void> {
   if (amount <= 0) return;
-  await insertTxn(db, { goal_id: goalId, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
 }
 
 /** Take money out of the Savings Pool entirely (back to spending money). */
 export async function withdrawFromPool(db: SQLite.SQLiteDatabase, amount: number, note?: string): Promise<void> {
   if (amount <= 0) return;
-  await insertTxn(db, { goal_id: null, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: null, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
 }
 
 /** Saved (earmarked) amount per goal: allocations minus withdrawals. */
@@ -301,7 +301,7 @@ export async function reconcileAllocations(db: SQLite.SQLiteDatabase): Promise<n
   let reclaimed = 0;
   await db.withTransactionAsync(async () => {
     for (const r of reductions) {
-      await insertTxn(db, { goal_id: r.goalId, amount: r.reduceBy, kind: 'withdraw', source: 'auto', date: Date.now(), note: 'Auto-reduced' });
+      await insertSavingsTxn(db, { goal_id: r.goalId, amount: r.reduceBy, kind: 'withdraw', source: 'auto', date: Date.now(), note: 'Auto-reduced' });
       reclaimed += r.reduceBy;
     }
   });
