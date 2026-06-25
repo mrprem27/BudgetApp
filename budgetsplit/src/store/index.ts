@@ -1,44 +1,20 @@
 import { create } from 'zustand';
-import type { Person } from '../db/queries/persons';
 import type { BudgetGroup } from '../db/queries/groups';
-import type { TxnWithSplits } from '../db/queries/transactions';
 
+/**
+ * Minimal shared store. The app is SQLite-direct — every screen loads through
+ * the query layer into local state — so this holds only the one thing that's
+ * genuinely shared across screens: the groups list (Home loads it; Groups reads
+ * it for an instant first paint before its own reload). The former
+ * persons/txns/currentGroupId/isLocked/biometricEnabled surface had zero readers
+ * and was removed (see docs/BRUTAL_ANALYSIS.md §1.1 / REFACTORING_PLAN Phase 2).
+ */
 type AppState = {
-  persons: Person[];
   groups: BudgetGroup[];
-  currentGroupId: string | null;
-  txns: TxnWithSplits[];
-  isLocked: boolean;
-  biometricEnabled: boolean;
-
-  setPersons: (persons: Person[]) => void;
   setGroups: (groups: BudgetGroup[]) => void;
-  setCurrentGroupId: (id: string | null) => void;
-  setTxns: (txns: TxnWithSplits[]) => void;
-  addTxn: (txn: TxnWithSplits) => void;
-  removeTxn: (id: string) => void;
-  setLocked: (locked: boolean) => void;
-  setBiometricEnabled: (enabled: boolean) => void;
-
-  getMe: () => Person | undefined;
 };
 
-export const useStore = create<AppState>((set, get) => ({
-  persons: [],
+export const useStore = create<AppState>((set) => ({
   groups: [],
-  currentGroupId: null,
-  txns: [],
-  isLocked: false,
-  biometricEnabled: false,
-
-  setPersons: (persons) => set({ persons }),
-  setGroups:  (groups)  => set({ groups }),
-  setCurrentGroupId: (id) => set({ currentGroupId: id }),
-  setTxns:    (txns)    => set({ txns }),
-  addTxn:     (txn)     => set(s => ({ txns: [txn, ...s.txns] })),
-  removeTxn:  (id)      => set(s => ({ txns: s.txns.filter(t => t.id !== id) })),
-  setLocked:  (locked)  => set({ isLocked: locked }),
-  setBiometricEnabled: (enabled) => set({ biometricEnabled: enabled }),
-
-  getMe: () => get().persons.find(p => p.is_me === 1),
+  setGroups: (groups) => set({ groups }),
 }));

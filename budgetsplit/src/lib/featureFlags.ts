@@ -30,7 +30,7 @@ export type FeatureKey =
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
-const DEFAULTS: FeatureFlags = {
+export const DEFAULTS: FeatureFlags = {
   dashboardCash: true,
   dashboardBudget: true,
   dashboardDonut: true,

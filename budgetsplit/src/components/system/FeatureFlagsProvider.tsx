@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { loadFlags, setFlag as persistFlag, type FeatureFlags, type FeatureKey } from '../../lib/featureFlags';
+import { loadFlags, setFlag as persistFlag, DEFAULTS, type FeatureFlags, type FeatureKey } from '../../lib/featureFlags';
 
 type ContextValue = {
   flags: FeatureFlags;
@@ -7,13 +7,8 @@ type ContextValue = {
   ready: boolean;
 };
 
-const defaultFlags: FeatureFlags = {
-  dashboardCash: true, dashboardBudget: true, dashboardDonut: true, dashboardBalances: true, dashboardSavings: true, dashboardInsights: true,
-  reportsDonut: true, reportsTrend: true, forecast: true,
-  budgetInsights: true, savingsInsights: true,
-  itemizedOcr: true, recurring: true, smartCategory: false, affordCheck: false, streak: false, healthScore: true, subscriptions: true,
-  savingsGoals: true, reminders: true,
-};
+// Single source of truth for defaults — lib/featureFlags.ts (was duplicated here).
+const defaultFlags = DEFAULTS;
 
 const Ctx = createContext<ContextValue>({ flags: defaultFlags, setFlag: () => {}, ready: false });
 

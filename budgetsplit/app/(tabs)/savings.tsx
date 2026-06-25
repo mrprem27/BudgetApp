@@ -17,6 +17,7 @@ import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DraggableList } from '../../src/components/ui/DraggableList';
@@ -112,10 +113,13 @@ export default function SavingsScreen() {
   const [frequency, setFrequency] = useState<SavingsFrequency>('none');
   const [newDate, setNewDate] = useState<number | null>(null);
 
+  const [loadError, setLoadError] = useState(false);
+
   useFocusEffect(useCallback(() => { load(); }, []));
   const { refreshing, onRefresh } = useRefresh(() => load());
 
   async function load() {
+    try {
     await runSavingsMaintenance(db); // sweep + schedule + reconcile
     const [g, s, p, ins, c] = await Promise.all([getGoals(db), getGoalSavedMap(db), getPoolSummary(db), buildSavingsInsights(db), getCashPosition(db)]);
     setGoals(g);
@@ -159,6 +163,10 @@ export default function SavingsScreen() {
       // Upcoming recurring bills across all groups (design Screen 3).
       const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
       setUpcoming(buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5));
+    }
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     }
   }
 
@@ -213,6 +221,9 @@ export default function SavingsScreen() {
         title="Plan"
         large
       />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Module shortcuts — only those enabled show. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleRow} keyboardShouldPersistTaps="handled">
@@ -445,6 +456,7 @@ export default function SavingsScreen() {
 
         <View style={{ height: space.lg }} />
       </ScrollView>
+      )}
 
       {/* Add to pool sheet */}
       <SheetModal visible={showAddPool} onClose={() => setShowAddPool(false)} title="Add to savings">

@@ -75,7 +75,7 @@ export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setPersons, setGroups } = useStore();
+  const { setGroups } = useStore();
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
@@ -119,7 +119,6 @@ export default function DashboardScreen() {
 
   async function loadInner() {
     const persons = await getAllPersons(db);
-    setPersons(persons);
     const grps = await getAllGroups(db);
     setGroups(grps);
     setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id ?? null);

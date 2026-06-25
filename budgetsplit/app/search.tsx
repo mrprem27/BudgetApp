@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -52,23 +52,23 @@ export default function SearchScreen() {
 
   const SECTION_CAP = 6;
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const now = Date.now();
-        const [txns, me, grps] = await Promise.all([
-          getTransactionsInRange(db, null, now - THREE_YEARS_MS, now),
-          getMe(db),
-          getAllGroups(db),
-        ]);
-        setAll(txns);
-        setMyId(me?.id ?? '');
-        setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? '');
-        setGroupNames(Object.fromEntries(grps.map(g => [g.id, g.name])));
-        setLoadError(false);
-      } catch { setLoadError(true); }
-    })();
-  }, []);
+  const load = useCallback(async () => {
+    try {
+      const now = Date.now();
+      const [txns, me, grps] = await Promise.all([
+        getTransactionsInRange(db, null, now - THREE_YEARS_MS, now),
+        getMe(db),
+        getAllGroups(db),
+      ]);
+      setAll(txns);
+      setMyId(me?.id ?? '');
+      setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? '');
+      setGroupNames(Object.fromEntries(grps.map(g => [g.id, g.name])));
+      setLoadError(false);
+    } catch { setLoadError(true); }
+  }, [db]);
+
+  useEffect(() => { load(); }, [load]);
 
   const SOURCE_CHIPS: { key: SourceFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -122,7 +122,7 @@ export default function SearchScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Search" onBack={() => router.back()} />
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); }} />
+        <ErrorState onRetry={load} />
       ) : (
         <>
           <View style={styles.searchWrap}>
