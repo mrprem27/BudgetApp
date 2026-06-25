@@ -79,6 +79,22 @@ export function occurrenceDatesUpTo(
   return out;
 }
 
+/**
+ * The date (ms) of the Nth occurrence of a series (1-based), counting the start
+ * date as occurrence #1. Used to show "next charge" (n=2) and to convert an
+ * "ends after N times" choice into a concrete `recur_end` date. Pure.
+ */
+export function nthOccurrenceMs(
+  startMs: number,
+  freq: NonNullable<Txn['recur_freq']>,
+  interval: number,
+  n: number,
+): number {
+  let cursor = new Date(startMs);
+  for (let i = 1; i < Math.max(1, n); i++) cursor = advance(cursor, freq, interval);
+  return cursor.getTime();
+}
+
 function advance(
   date: Date,
   freq: NonNullable<Txn['recur_freq']>,
@@ -88,6 +104,7 @@ function advance(
     case 'daily':   return addDays(date, interval);
     case 'weekly':  return addWeeks(date, interval);
     case 'monthly': return addMonths(date, interval);
+    case 'yearly':  return addYears(date, interval);
     case 'custom':  return addDays(date, interval);
     default:        return addMonths(date, 1);
   }

@@ -42,28 +42,34 @@ function compactNum(n: number, decimals: number): string {
   return s;
 }
 
-/** How period-over-period changes are phrased in insights. User preference. */
-export enum ComparisonFormat {
-  /** "up 40% from last month" */
-  Percent = 'percent',
-  /** "1.4× last month" */
-  Multiple = 'multiple',
+/**
+ * App-wide rule for a period-over-period change shown in a tight label: a plain
+ * percentage up to ±100%, but past +100% it switches to a multiple of the
+ * baseline because "230% more" reads worse than "3.3×". Returns only the
+ * magnitude token (no "vs …" suffix) so callers append their own period label.
+ *   45  → "45%"   (1.45× baseline)
+ *   230 → "3.3×"  (3.3× baseline)
+ *   -30 → "30%"
+ * A spend can't drop below 0, so deltaPct never goes past −100 — only increases
+ * cross the 100 threshold. This is the single source of truth for the %/×
+ * choice (there is no user toggle).
+ */
+export function formatChangeMagnitude(deltaPct: number): string {
+  if (!isFinite(deltaPct)) return '0%';
+  if (Math.abs(deltaPct) > 100) return `${compactNum(1 + deltaPct / 100, 1)}×`;
+  return `${Math.round(Math.abs(deltaPct))}%`;
 }
 
 /**
- * Render a signed period-over-period change as a sentence fragment that slots
- * into "<Category> is <fragment>". `deltaPct` is the % change vs the baseline
- * (+40 = 40% higher, -30 = 30% lower).
- *   Percent  → "up 40% from last month" / "down 30% from last month"
- *   Multiple → "1.4× last month" / "0.7× last month"
- * Multiples read more intuitively to some people than percentages; the choice
- * is a single global setting. Baseline is assumed > 0 (callers gate on that).
+ * Sentence-form of {@link formatChangeMagnitude} for insight copy that slots
+ * into "<Category> is <fragment>". Same >100%→× rule, with direction words:
+ *   40   → "up 40% from last month"
+ *   -30  → "down 30% from last month"
+ *   230  → "3.3× last month"
+ * Baseline is assumed > 0 (callers gate on that).
  */
-export function formatComparison(deltaPct: number, format: ComparisonFormat): string {
-  if (format === ComparisonFormat.Multiple) {
-    const ratio = Math.max(0, 1 + deltaPct / 100);
-    return `${compactNum(ratio, 2)}× last month`;
-  }
+export function formatComparison(deltaPct: number): string {
+  if (Math.abs(deltaPct) > 100) return `${compactNum(1 + deltaPct / 100, 1)}× last month`;
   const up = deltaPct >= 0;
   return `${up ? 'up' : 'down'} ${Math.abs(Math.round(deltaPct))}% from last month`;
 }
@@ -108,6 +114,23 @@ export function formatCompact(smallestUnit: number, currency: CurrencyCode = DEF
   if (!isFinite(smallestUnit)) return def.symbol + '0';
   const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
   return formatCompactMajor(smallestUnit / divisor, currency);
+}
+
+/** Keep only digits + a single decimal point (max 2 places) from typed amount input. */
+export function sanitizeAmountInput(text: string): string {
+  let cleaned = text.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
+  const [intPart, decPart] = cleaned.split('.');
+  return decPart !== undefined ? `${intPart}.${decPart.slice(0, 2)}` : cleaned;
+}
+
+/** Display a raw amount string as "₹10,000" (en-IN grouping), preserving an in-progress decimal. */
+export function formatAmountInput(raw: string): string {
+  if (!raw) return '';
+  const [intPart, decPart] = raw.split('.');
+  const grouped = intPart ? Number(intPart).toLocaleString('en-IN') : '0';
+  return raw.includes('.') ? `₹${grouped}.${decPart ?? ''}` : `₹${grouped}`;
 }
 
 export function parseToPaise(input: string): number {

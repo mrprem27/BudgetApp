@@ -12,7 +12,7 @@ import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
-import { getTransactionsForGroup, softDeleteTxn, restoreTxn, insertTxn } from '../../src/db/queries/transactions';
+import { getTransactionsForGroup, softDeleteTxn, restoreTxn, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { useUndo } from '../../src/components/system/UndoToast';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
@@ -22,24 +22,25 @@ import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
-import { formatCompact } from '../../src/lib/money';
+import { formatCompact, formatRupees } from '../../src/lib/money';
+import { nextOccurrenceOnOrAfter } from '../../src/lib/recurrence';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { BalanceRow } from '../../src/components/finance/BalanceRow';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { FAB } from '../../src/components/ui/FAB';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { SettleSheet } from '../../src/components/finance/SettleSheet';
+import { FAB } from '../../src/components/ui/FAB';
+import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-type TabKey = 'transactions' | 'balances' | 'budget' | 'members' | 'insights';
+type TabKey = 'transactions' | 'balances' | 'budget' | 'members' | 'insights' | 'recurring';
 
 function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
@@ -51,6 +52,24 @@ function utilHealth(pct: number | null): 'green' | 'amber' | 'red' | 'none' {
 }
 
 // Over 100 %: show as a multiplier (e.g. 2.5X) — more intuitive than 250 %.
+function splitLabel(mode: string): string {
+  switch (mode) {
+    case 'shares': return 'by shares';
+    case 'exact': return 'by exact amounts';
+    case 'percent': return 'by percentage';
+    default: return 'equally';
+  }
+}
+function freqWord(freq: string | null): string {
+  switch (freq) {
+    case 'daily': return 'daily';
+    case 'weekly': return 'weekly';
+    case 'yearly': return 'yearly';
+    case 'custom': return 'custom';
+    default: return 'monthly';
+  }
+}
+
 function utilLabel(pct: number | null): string {
   if (pct === null) return '—';
   if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
@@ -96,9 +115,9 @@ export default function GroupDetailScreen() {
   const [budgetUsage, setBudgetUsage] = useState<any>(null);
   const [catStatus, setCatStatus] = useState<CategoryBudgetStatus[]>([]);
   const [analytics, setAnalytics] = useState<BudgetAnalytics | null>(null);
+  const [recurringRules, setRecurringRules] = useState<TxnWithSplits[]>([]);
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
-  const [settleTarget, setSettleTarget] = useState<{ from: Person; to: Person; amount: number } | null>(null);
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
   const [budgetFilter, setBudgetFilter] = useState('all');
@@ -130,6 +149,10 @@ export default function GroupDetailScreen() {
       setBudgetUsage(usage);
       setCatStatus(cs);
       setAnalytics(an);
+      if (grp.is_personal !== 1) {
+        const rules = await getRecurringForGroup(db, id);
+        setRecurringRules(rules.filter(r => r.recur_state === 'active'));
+      }
     }
   }
 
@@ -182,17 +205,6 @@ export default function GroupDetailScreen() {
     router.push(`/txn/${txn.id}`);
   }
 
-  async function handleMarkPaid(from: Person, to: Person, amount: number) {
-    if (!me) return;
-    await insertTxn(db, {
-      groupId: id, kind: 'settlement', entryMode: 'quick', date: Date.now(), category: 'Settlement',
-      payments: [{ personId: from.id, amount }],
-      shares:   [{ personId: to.id, amount }],
-    });
-    haptic.success();
-    await load();
-  }
-
   const settlements = simplifyOn ? simplify(net) : rawDebts(txns);
   const personMap = new Map(members.map(m => [m.id, m]));
 
@@ -228,6 +240,41 @@ export default function GroupDetailScreen() {
     };
   }, [txns, members, net]);
 
+  // Per-category spending for Insights TOP CATEGORIES (all-time, top 3)
+  const topCategories = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const t of txns) {
+      if (t.is_deleted || t.kind !== 'expense') continue;
+      totals[t.category] = (totals[t.category] ?? 0) + t.payments.reduce((s, p) => s + p.amount, 0);
+    }
+    const max = Math.max(1, ...Object.values(totals));
+    return Object.entries(totals)
+      .map(([cat, amt]) => ({ cat, amt, frac: amt / max }))
+      .sort((a, b) => b.amt - a.amt)
+      .slice(0, 3);
+  }, [txns]);
+
+  // Recurring monthly total for summary pill
+  const recurringMonthlyTotal = useMemo(() => {
+    return recurringRules.reduce((sum, r) => {
+      const rAmt = r.payments.reduce((s, p) => s + p.amount, 0);
+      if (r.recur_freq === 'monthly') return sum + rAmt;
+      if (r.recur_freq === 'weekly') return sum + rAmt * 4;
+      if (r.recur_freq === 'daily') return sum + rAmt * 30;
+      return sum + rAmt;
+    }, 0);
+  }, [recurringRules]);
+
+  // Earliest upcoming charge across the active recurring rules (for the summary).
+  const recurNextLabel = useMemo(() => {
+    const now = Date.now();
+    const next = recurringRules
+      .map(r => nextOccurrenceOnOrAfter(r, now))
+      .filter((d): d is number => d != null)
+      .sort((a, b) => a - b)[0];
+    return next ? format(next, 'MMM d') : null;
+  }, [recurringRules]);
+
   const TABS: { key: TabKey; label: string }[] = isPersonal
     ? [
         { key: 'transactions', label: 'Expenses' },
@@ -237,7 +284,7 @@ export default function GroupDetailScreen() {
         { key: 'transactions', label: 'Expenses' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
-        { key: 'insights', label: 'Insights' },
+        { key: 'recurring', label: 'Recurring' },
       ];
 
   if (!group) return null;
@@ -258,9 +305,16 @@ export default function GroupDetailScreen() {
           <Text style={styles.breadcrumbSep}>›</Text>
           <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{group.name}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {!isPersonal && (
+            <TouchableOpacity onPress={() => { setActiveTab('insights'); haptic.selection(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Insights">
+              <Feather name="bar-chart-2" size={20} color={activeTab === 'insights' ? colors.accent : colors.textPrimary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
+            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Group hero */}
@@ -270,15 +324,20 @@ export default function GroupDetailScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
-          <Text style={styles.heroSub} numberOfLines={1}>
-            {(() => {
-              const monthStart = startOfMonth(new Date()).getTime();
-              const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
-              const parts: string[] = [`${formatCompact(monthSpend)} this month`];
-              if (!isPersonal) parts.push(`${members.length} member${members.length > 1 ? 's' : ''}`);
-              return parts.join(' · ');
-            })()}
-          </Text>
+          {isPersonal ? (
+            <Text style={styles.heroSub} numberOfLines={1}>
+              {(() => {
+                const monthStart = startOfMonth(new Date()).getTime();
+                const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
+                return `${formatCompact(monthSpend)} this month`;
+              })()}
+            </Text>
+          ) : (
+            <View style={styles.heroMembers}>
+              <AvatarStack people={members} size={20} max={4} ringColor={colors.bg} />
+              <Text style={styles.heroSub}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -314,11 +373,9 @@ export default function GroupDetailScreen() {
             <TouchableOpacity
               style={styles.balCardBtn}
               onPress={() => {
-                if (primarySettle && me && primaryPerson) {
-                  const fromP = isOwe ? me : primaryPerson;
-                  const toP = isOwe ? primaryPerson : me;
-                  setSettleTarget({ from: fromP, to: toP, amount: primarySettle.amount });
-                }
+                // Consistent with the dashboard/friends/groups — open the global Settle flow.
+                if (primaryPerson) router.push(`/settle?focus=${primaryPerson.id}`);
+                else router.push('/settle');
               }}
               accessibilityRole="button"
               accessibilityLabel="Settle up"
@@ -329,7 +386,8 @@ export default function GroupDetailScreen() {
         );
       })()}
 
-      {budgetUsage && budgetUsage.pct !== null && (
+      {/* Mini budget bar — not in design's Expenses view (budget lives in the Budget tab). */}
+      {false && budgetUsage && budgetUsage.pct !== null && (
         <View style={styles.budgetHeaderBar}>
           <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
           <Text style={styles.budgetHeaderText}>
@@ -455,7 +513,7 @@ export default function GroupDetailScreen() {
                 if (!fromPerson || !toPerson) return null;
                 return (
                   <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => setSettleTarget({ from: fromPerson, to: toPerson, amount: s.amount })} />
+                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => router.push(`/settle?from=${s.from}&to=${s.to}&amount=${s.amount}&groupId=${id}` as any)} />
                   </View>
                 );
               })}
@@ -667,17 +725,24 @@ export default function GroupDetailScreen() {
             {members.map((m, mi) => {
               const v = net[m.id] ?? 0;
               const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
+              const sub = isLargest && !m.is_me
+                ? 'Largest contributor'
+                : m.joined_at ? `Joined ${format(m.joined_at, 'MMM yyyy')}` : '';
+              const balLabel = v > 0 ? 'is owed' : v < 0 ? (m.is_me ? 'you owe' : 'owes') : 'settled';
               return (
                 <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.memberName}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
-                    <Text style={[styles.memberNet, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
-                      {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'Settled up'}
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={44} imageUri={m.image_uri} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.memberName} numberOfLines={1}>
+                      {m.name}{m.is_me ? <Text style={styles.youTag}> (you)</Text> : null}
                     </Text>
-                    {isLargest && !m.is_me && (
-                      <Text style={styles.largestTag}>Largest contributor</Text>
-                    )}
+                    {!!sub && <Text style={styles.memberSub} numberOfLines={1}>{sub}</Text>}
+                  </View>
+                  <View style={styles.memberRight}>
+                    <Text style={[styles.memberBal, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
+                      {v > 0 ? `+${formatCompact(v)}` : v < 0 ? `−${formatCompact(-v)}` : '₹0'}
+                    </Text>
+                    <Text style={styles.memberBalLabel}>{balLabel}</Text>
                   </View>
                 </View>
               );
@@ -721,64 +786,143 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'insights' && !isPersonal && (
         <ScrollView contentContainerStyle={styles.listContent}>
-          {analytics && analytics.recommendations.length > 0 && (
-            <View style={styles.recList}>
-              {analytics.recommendations.map(r => (
-                <View key={r.id} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
-                  <Feather name={r.icon} size={15} color={recColor(r.severity)} />
-                  <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-          {contributions.total > 0 && (
-            <View style={styles.contribCard}>
-              <Text style={styles.contribTitle}>Who paid what</Text>
-              {contributions.rows.map((r, i) => (
-                <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
-                  <View style={styles.contribHead}>
+          {contributions.total > 0 ? (
+            <>
+              {/* SPENDING THIS MONTH — member bars */}
+              <Text style={styles.insightSectionLabel}>SPENDING THIS MONTH</Text>
+              <View style={styles.insightCard}>
+                {contributions.rows.map((r, i) => (
+                  <View key={r.member.id} style={[styles.insightMemberRow, i < contributions.rows.length - 1 && { marginBottom: 10 }]}>
                     <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
-                    <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
-                    <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
-                    <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
-                      {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
-                    </Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={styles.insightBarTrack}>
+                        <View style={[styles.insightBarFill, { width: `${Math.round(r.frac * 100)}%` as any, backgroundColor: r.member.avatar_color }]} />
+                      </View>
+                      <Text style={styles.insightMemberAmt}>
+                        {formatCompact(r.paid)}{r.member.is_me ? ' · you' : ''}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.contribTrack}>
-                    <View style={[styles.contribFill, { width: `${Math.round(r.frac * 100)}%`, backgroundColor: r.member.avatar_color }]} />
+                ))}
+              </View>
+
+              {/* TOP CATEGORIES */}
+              {topCategories.length > 0 && (
+                <>
+                  <Text style={styles.insightSectionLabel}>TOP CATEGORIES</Text>
+                  <View style={[styles.insightCard, { paddingHorizontal: 0 }]}>
+                    {topCategories.map((c, i) => {
+                      const vis = categoryVisual(c.cat);
+                      const barColors = ['#FF6F61', '#20C4B8', '#F5B301'];
+                      return (
+                        <View key={c.cat} style={[styles.catTopRow, i < topCategories.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+                          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: (vis?.color ?? colors.accent) + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Feather name={vis?.icon ?? 'tag'} size={16} color={vis?.color ?? colors.accent} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.catTopName}>{c.cat}</Text>
+                            <View style={styles.insightBarTrack}>
+                              <View style={[styles.insightBarFill, { width: `${Math.round(c.frac * 100)}%` as any, height: 3, backgroundColor: barColors[i] ?? colors.accent }]} />
+                            </View>
+                          </View>
+                          <Text style={styles.catTopAmt}>{formatCompact(c.amt)}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {/* Trend callout — best analytics recommendation */}
+              {analytics && analytics.recommendations.length > 0 && (
+                <View style={styles.trendCallout}>
+                  <View style={styles.trendDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.trendTitle}>{analytics.recommendations[0].text}</Text>
+                    <Text style={styles.trendSub}>Based on your group spending patterns this month.</Text>
                   </View>
                 </View>
-              ))}
-              <Text style={styles.contribFoot}>Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group</Text>
-            </View>
-          )}
-          {(!analytics || analytics.recommendations.length === 0) && contributions.total === 0 && (
+              )}
+            </>
+          ) : (
             <EmptyState icon="bar-chart-2" title="No insights yet" body="Add expenses to see analytics and spending patterns." tint={colors.textSecondary} />
           )}
         </ScrollView>
       )}
 
-      <FAB
-        aboveTabBar={false}
-        actions={[
-          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push(`/add/quick?groupId=${id}&kind=expense`) },
-          // Income is real money you received → personal ledger only. Shared groups
-          // move money via Transfer (settling "I owe you"), not income.
-          ...(isPersonal
-            ? [{ label: 'Income', icon: 'plus-circle' as const, tint: colors.income, description: 'Money you received', onPress: () => router.push(`/add/income?groupId=${id}`) }]
-            : [{ label: 'Transfer', icon: 'repeat' as const, tint: colors.settle, description: 'Settle who owes whom', onPress: () => router.push(`/add/transfer?groupId=${id}`) }]),
-          { label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push(`/add/itemized?groupId=${id}`) },
-        ]}
-      />
+      {activeTab === 'recurring' && !isPersonal && (
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {recurringRules.length === 0 ? (
+            <EmptyState
+              icon="repeat"
+              title="No recurring yet"
+              body="Rent, Wi-Fi, subscriptions — anything you set to repeat shows up here with its monthly cost and your share."
+              actionLabel="Add recurring expense"
+              onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
+            />
+          ) : (
+            <>
+              <View style={styles.recurSummaryCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={styles.recurSummaryTitle}>Group recurring</Text>
+                  <Text style={styles.recurSummaryAmt}>{formatRupees(recurringMonthlyTotal)}/mo</Text>
+                </View>
+                <Text style={styles.recurSummarySub}>
+                  {recurringRules.length} active{recurNextLabel ? ` · next charge ${recurNextLabel}` : ''} · split {splitLabel(group.default_split)}
+                </Text>
+              </View>
 
-      <SettleSheet
-        visible={!!settleTarget}
-        from={settleTarget?.from ?? null}
-        to={settleTarget?.to ?? null}
-        outstanding={settleTarget?.amount ?? 0}
-        onClose={() => setSettleTarget(null)}
-        onConfirm={(amt) => { if (settleTarget) handleMarkPaid(settleTarget.from, settleTarget.to, amt); setSettleTarget(null); }}
-      />
+              <Text style={styles.insightSectionLabel}>ACTIVE · {recurringRules.length}</Text>
+              <View style={[styles.insightCard, { paddingHorizontal: 0 }]}>
+                {recurringRules.map((r, i) => {
+                  const vis = categoryVisual(r.category);
+                  const total = r.shares.reduce((s, x) => s + x.amount, 0) || r.payments.reduce((s, p) => s + p.amount, 0);
+                  const myShare = me ? (r.shares.find(s => s.personId === me.id)?.amount ?? 0) : 0;
+                  const next = nextOccurrenceOnOrAfter(r, Date.now());
+                  const label = (r.note && r.note.trim()) || r.category;
+                  return (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.recurItem, i < recurringRules.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                      onPress={() => router.push(`/group/${id}/recurring?focus=${r.id}`)}
+                      accessibilityRole="button"
+                      accessibilityLabel={label}
+                    >
+                      <View style={[styles.recurItemIcon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                        <Feather name={vis?.icon ?? 'repeat'} size={18} color={vis?.color ?? colors.accent} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.recurItemName} numberOfLines={1}>{label}</Text>
+                        <Text style={styles.recurItemSub} numberOfLines={1}>
+                          {formatRupees(total)} · {freqWord(r.recur_freq)}{next ? ` · next ${format(next, 'MMM d')}` : ''}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.recurItemShare}>{formatRupees(myShare)}</Text>
+                        <Text style={styles.recurItemShareLabel}>your share</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity style={styles.addRecurBtn} onPress={() => router.push(`/add/quick?groupId=${id}&kind=expense`)} accessibilityRole="button">
+                <Feather name="plus" size={15} color={colors.accent} />
+                <View>
+                  <Text style={styles.addRecurBtnText}>Add recurring expense</Text>
+                  <Text style={styles.addRecurBtnSub}>Bills, subscriptions, any fixed charge</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      )}
+
+
+      {/* Centered single-tap FAB — same look/behaviour as the bottom-nav FAB,
+          but pre-fills THIS group. Switch to Transfer/Income via the pills on the
+          Add screen; Itemized via its link there. */}
+      <FAB onPress={() => router.push(`/add/quick?groupId=${id}&kind=expense`)} />
 
       {/* Group options menu */}
       <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title={group.name} scroll={false}>
@@ -825,11 +969,13 @@ export default function GroupDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   headerAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgCard + 'AA', alignItems: 'center', justifyContent: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
   heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   heroName: { ...type.title, fontSize: 26, color: colors.textPrimary },
   heroSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
+  heroMembers: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 4 },
   budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: 4, marginBottom: space.sm },
   budgetHeaderText: { ...type.caption, color: colors.textMuted },
   tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
@@ -908,9 +1054,46 @@ const styles = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
   memberName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   memberNet: { ...type.caption, marginTop: 2 },
+  youTag: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  memberSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  memberRight: { alignItems: 'flex-end' },
+  memberBal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, letterSpacing: -0.5 },
+  memberBalLabel: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 1 },
   linkBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   linkBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   linkBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
+
+  // Insights tab
+  insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8 },
+  insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
+  insightMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  insightBarTrack: { height: 8, backgroundColor: colors.bgMuted, borderRadius: 4, marginBottom: 3 },
+  insightBarFill: { height: 8, borderRadius: 4 },
+  insightMemberAmt: { fontSize: 10, color: colors.textMuted },
+  catTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: space.md, paddingVertical: 12 },
+  catTopEmoji: { fontSize: 20, width: 28, textAlign: 'center', flexShrink: 0 },
+  catTopName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 3 },
+  catTopAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, flexShrink: 0 },
+  trendCallout: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#081F16', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#0C3D22', marginBottom: space.md },
+  trendDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.income, flexShrink: 0, marginTop: 3 },
+  trendTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.income, marginBottom: 3 },
+  trendSub: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
+  // Recurring tab
+  recurSummaryCard: { backgroundColor: '#1A1A3A', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
+  recurSummaryTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  recurSummaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.settle, letterSpacing: -0.5 },
+  recurSummarySub: { fontSize: 12, color: colors.textMuted },
+  recurItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: space.md, paddingVertical: 14 },
+  recurItemIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  recurItemName: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  recurItemSub: { fontSize: 11, color: colors.textMuted },
+  recurItemShare: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary, letterSpacing: -0.5 },
+  recurItemShareLabel: { fontSize: 10, color: colors.textMuted, textAlign: 'right' },
+  variableBadge: { backgroundColor: '#221A00', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  variableBadgeText: { fontSize: 9, color: '#F5B301', fontFamily: 'Inter_600SemiBold' },
+  addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0E2C29', borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: 12, padding: 12, marginBottom: space.md },
+  addRecurBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.accent },
+  addRecurBtnSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
 
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },

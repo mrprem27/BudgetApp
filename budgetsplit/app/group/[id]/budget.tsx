@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, Keyboard, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -60,7 +60,9 @@ function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
 
 export default function BudgetEditorScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, category: focusCategoryRaw } = useLocalSearchParams<{ id: string; category?: string }>();
+  // Deep-linked from a category's "Set budget" CTA → jump straight to its field.
+  const focusCategory = focusCategoryRaw ? decodeURIComponent(focusCategoryRaw) : undefined;
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -72,6 +74,34 @@ export default function BudgetEditorScreen() {
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [loadError, setLoadError] = useState(false);
+  const [kbVisible, setKbVisible] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const focusRowRef = useRef<View>(null);
+  const scrolledToFocus = useRef(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  // Deep-linked from a category: once its row is laid out, center it in the
+  // visible area above the keyboard (the field would otherwise sit under it).
+  useEffect(() => {
+    if (scrolledToFocus.current || !focusCategory || allCategories.length === 0) return;
+    scrolledToFocus.current = true;
+    const t = setTimeout(() => {
+      const node = scrollRef.current ? findNodeHandle(scrollRef.current) : null;
+      if (focusRowRef.current && node != null) {
+        focusRowRef.current.measureLayout(
+          node,
+          (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true }),
+          () => {},
+        );
+      }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [focusCategory, allCategories.length]);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
@@ -98,8 +128,14 @@ export default function BudgetEditorScreen() {
       // Collapse sections that have no budget set yet; keep the ones in use open.
       const budgetedSections = new Set(Object.keys(amt).map(categorySection));
       const allSections = new Set(cats.map(c => categorySection(c.name)));
-      const toCollapse = new Set([...allSections].filter(s => !budgetedSections.has(s)));
-      setCollapsed(toCollapse);
+      if (focusCategory) {
+        // Deep-linked to one category: collapse every other section so its field
+        // is right at the top, ready to type into.
+        const target = categorySection(focusCategory);
+        setCollapsed(new Set([...allSections].filter(s => s !== target)));
+      } else {
+        setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
+      }
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -167,7 +203,7 @@ export default function BudgetEditorScreen() {
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
@@ -209,7 +245,7 @@ export default function BudgetEditorScreen() {
                   const amt = amounts[c.name] ?? '';
                   const hasAmt = parseToPaise(amt) > 0;
                   return (
-                    <View key={c.name}>
+                    <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
                       <View style={styles.divider} />
                       <View style={styles.rowItem}>
                         <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
@@ -240,6 +276,7 @@ export default function BudgetEditorScreen() {
                             placeholder="0"
                             placeholderTextColor={colors.textMuted}
                             accessibilityLabel={`${c.name} budget`}
+                            autoFocus={c.name === focusCategory}
                           />
                         </View>
                       </View>
@@ -252,10 +289,10 @@ export default function BudgetEditorScreen() {
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
 
-          <View style={{ height: 100 }} />
+          <View style={{ height: kbVisible ? space.lg : 100 }} />
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+        <View style={[styles.footer, { paddingBottom: (kbVisible ? space.sm : insets.bottom) + space.md }]}>
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>

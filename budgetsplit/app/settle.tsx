@@ -11,10 +11,11 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
+import { ModalHeader } from '../src/components/ui/ModalHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
-import { getGlobalNet } from '../src/db/queries/balances';
+import { getGroupNet } from '../src/db/queries/balances';
 import { getAllPersons } from '../src/db/queries/persons';
-import { getCommonGroupId } from '../src/db/queries/groups';
+import { getAllGroups } from '../src/db/queries/groups';
 import { insertTxn } from '../src/db/queries/transactions';
 import { simplify } from '../src/lib/settle';
 import { formatRupees, formatCompact, parseToPaise } from '../src/lib/money';
@@ -22,6 +23,8 @@ import { haptic } from '../src/lib/haptics';
 import type { Person } from '../src/db/queries/persons';
 
 type PayMethod = 'upi' | 'cash' | 'bank';
+/** One settle target — always scoped to a specific group. */
+type SettleItem = { from: string; to: string; amount: number; groupId: string };
 
 const PAY_METHODS: { key: PayMethod; label: string; emoji: string }[] = [
   { key: 'upi',  label: 'UPI',  emoji: '📱' },
@@ -33,10 +36,16 @@ export default function GlobalSettleScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  // `focus` opens the global wizard pre-selected on a person. `from/to/amount/groupId`
+  // open it in DIRECT mode: settle exactly that pair, that amount, in that group
+  // (used by the in-group balance rows — preserves the group-scoped figure).
+  const { focus, from: fromParam, to: toParam, amount: amtParam, groupId: gidParam } =
+    useLocalSearchParams<{ focus?: string; from?: string; to?: string; amount?: string; groupId?: string }>();
+  const directMode = !!fromParam && !!toParam;
 
-  const [net, setNet] = useState<Record<string, number>>({});
+  const [groupSettlements, setGroupSettlements] = useState<SettleItem[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState(false);
 
   // Active settlement being processed
@@ -52,9 +61,18 @@ export default function GlobalSettleScreen() {
 
   async function load() {
     try {
-      const [n, all] = await Promise.all([getGlobalNet(db), getAllPersons(db)]);
-      setNet(n);
+      const [all, grps] = await Promise.all([getAllPersons(db), getAllGroups(db)]);
       setPersons(all);
+      const shared = grps.filter(g => g.is_personal !== 1);
+      setGroupNames(Object.fromEntries(shared.map(g => [g.id, g.name])));
+      // Build per-group settle targets — a debt is only meaningful inside a group,
+      // so we never net across groups into one payment.
+      const items: SettleItem[] = [];
+      for (const g of shared) {
+        const net = await getGroupNet(db, g.id);
+        for (const s of simplify(net)) items.push({ from: s.from, to: s.to, amount: s.amount, groupId: g.id });
+      }
+      setGroupSettlements(items);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -62,14 +80,16 @@ export default function GlobalSettleScreen() {
   }
 
   const personMap = new Map(persons.map(p => [p.id, p]));
-  const settlements = simplify(net);
+  const settlements: SettleItem[] = directMode
+    ? [{ from: fromParam!, to: toParam!, amount: Math.max(0, Math.round(Number(amtParam) || 0)), groupId: gidParam ?? '' }]
+    : groupSettlements;
 
-  // Auto-focus person from ?focus= param
+  // Auto-focus person from ?focus= param (first group debt involving them).
   useEffect(() => {
-    if (autoFocused.current || !focus || persons.length === 0) return;
+    if (autoFocused.current || !focus || settlements.length === 0) return;
     const idx = settlements.findIndex(x => x.from === focus || x.to === focus);
     if (idx >= 0) { autoFocused.current = true; setCurrentIdx(idx); }
-  }, [focus, persons, net]);
+  }, [focus, settlements]);
 
   // Reset amount when switching settlement
   useEffect(() => { setCustomAmt(''); setNote(''); setPayMethod('upi'); }, [currentIdx]);
@@ -78,10 +98,15 @@ export default function GlobalSettleScreen() {
   const fromPerson = current ? personMap.get(current.from) : null;
   const toPerson   = current ? personMap.get(current.to)   : null;
   const me = persons.find(p => p.is_me === 1);
+  // The group is part of the settlement now — no async lookup needed.
+  const contextGroup = current ? (groupNames[current.groupId] ?? null) : null;
 
   // Determine display perspective: who are WE settling with?
+  const involvesMe = current ? (current.from === me?.id || current.to === me?.id) : false;
   const isIOwing = current ? current.from === me?.id : false;
-  const counterpart = isIOwing ? toPerson : fromPerson;
+  // When the pair doesn't involve me (settling two other members in a group), show
+  // the payer (from) neutrally rather than a wrong "you owe / owes you".
+  const counterpart = involvesMe ? (isIOwing ? toPerson : fromPerson) : fromPerson;
   const rawAmt = current?.amount ?? 0;
   const amtToPay = customAmt ? parseToPaise(customAmt) : rawAmt;
 
@@ -89,7 +114,7 @@ export default function GlobalSettleScreen() {
     if (!current || !fromPerson || !toPerson) return;
     setSaving(true);
     try {
-      const gid = await getCommonGroupId(db, fromPerson.id, toPerson.id);
+      const gid = current.groupId || null;
       if (!gid) {
         Alert.alert(
           'Cannot settle here',
@@ -98,19 +123,17 @@ export default function GlobalSettleScreen() {
         setSaving(false);
         return;
       }
-      const noteStr = note.trim() || `Settled via ${payMethod.toUpperCase()}`;
       await insertTxn(db, {
         groupId: gid, kind: 'settlement', entryMode: 'quick', date: Date.now(),
         category: 'Settlement',
-        note: noteStr,
+        note: note.trim() || undefined,
+        payMethod, // persisted field — no longer baked into the note
         payments: [{ personId: fromPerson.id, amount: amtToPay }],
         shares:   [{ personId: toPerson.id,   amount: amtToPay }],
       });
       haptic.success();
-      await load();
-      // Advance to next or close
-      const next = currentIdx < settlements.length - 1 ? currentIdx : Math.max(0, currentIdx - 1);
-      setCurrentIdx(next);
+      // Close once a settlement is recorded, even a partial one.
+      router.back();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -131,14 +154,15 @@ export default function GlobalSettleScreen() {
   if (settlements.length === 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.closeRow}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Settle up</Text>
           <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
             <Feather name="x" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
         <View style={styles.allDoneWrap}>
           <View style={styles.allDoneRing}>
-            <Feather name="check" size={32} color={colors.income} />
+            <Feather name="check" size={40} color={colors.income} />
           </View>
           <Text style={styles.allDoneTitle}>All settled up!</Text>
           <Text style={styles.allDoneSub}>You don't owe anyone and no one owes you right now.</Text>
@@ -163,18 +187,24 @@ export default function GlobalSettleScreen() {
     );
   }
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settle up</Text>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
-          <Feather name="x" size={20} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+  const canSettle = !!current && amtToPay > 0 && !saving;
 
-      {/* Multi-settlement counter */}
-      {settlements.length > 1 && (
+  return (
+    <View style={styles.container}>
+      {/* Header matches Add Expense: ✕ left · title center · ✓ save right */}
+      <ModalHeader
+        title="Settle up"
+        onClose={() => router.back()}
+        right={
+          <TouchableOpacity onPress={handleSettle} disabled={!canSettle} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save settlement">
+            <Feather name="check" size={24} color={canSettle ? colors.accent : colors.textMuted} />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Multi-settlement counter — not in design Screen 4 (handle later). It still
+          auto-advances to the next settlement after each "Mark as settled". */}
+      {/* {settlements.length > 1 && (
         <View style={styles.counterRow}>
           <Text style={styles.counterText}>
             {currentIdx + 1} of {settlements.length} — across all groups + personal
@@ -187,7 +217,7 @@ export default function GlobalSettleScreen() {
             ))}
           </View>
         </View>
-      )}
+      )} */}
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
@@ -199,9 +229,11 @@ export default function GlobalSettleScreen() {
             </View>
             <Text style={styles.personName}>{counterpart.name}</Text>
             <Text style={styles.personCtx}>
-              {isIOwing ? 'you owe from shared groups' : 'owes you from shared groups'}
+              {involvesMe
+                ? `${isIOwing ? 'you owe' : 'owes you'} ${contextGroup ? `· ${contextGroup}` : 'across shared groups'}`
+                : `owes ${toPerson?.name?.split(' ')[0] ?? 'someone'} ${contextGroup ? `· ${contextGroup}` : ''}`}
             </Text>
-            <Text style={[styles.personAmt, { color: isIOwing ? colors.expense : colors.income }]}>
+            <Text style={[styles.personAmt, { color: !involvesMe ? colors.textPrimary : isIOwing ? colors.expense : colors.income }]}>
               {formatRupees(rawAmt)}
             </Text>
           </View>
@@ -216,7 +248,7 @@ export default function GlobalSettleScreen() {
               value={customAmt}
               onChangeText={setCustomAmt}
               placeholder={formatRupees(rawAmt)}
-              placeholderTextColor={colors.textPrimary}
+              placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
               accessibilityLabel="Amount"
             />
@@ -261,17 +293,7 @@ export default function GlobalSettleScreen() {
           />
         </View>
 
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.settleCta, saving && { opacity: 0.6 }]}
-          onPress={handleSettle}
-          disabled={saving}
-          accessibilityRole="button"
-          accessibilityLabel="Mark as settled"
-        >
-          <Text style={styles.settleCtaText}>{saving ? 'Settling…' : 'Mark as settled'}</Text>
-        </TouchableOpacity>
-
+        {/* No bottom CTA — the ✓ in the header saves (matches Add Expense). */}
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>
@@ -354,9 +376,9 @@ const styles = StyleSheet.create({
   // All settled empty state
   allDoneWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xl },
   allDoneRing: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 100, height: 100, borderRadius: 50,
     borderWidth: 2.5, borderColor: colors.income,
-    alignItems: 'center', justifyContent: 'center', marginBottom: space.md,
+    alignItems: 'center', justifyContent: 'center', marginBottom: space.lg,
   },
   allDoneTitle: { fontSize: 22, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: space.sm },
   allDoneSub: { ...type.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: space.lg },

@@ -16,7 +16,7 @@ export type Txn = {
   attachment_uri: string | null;
   tags: string | null;
   adjustments: string | null;
-  recur_freq: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  recur_freq: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | null;
   recur_interval: number | null;
   recur_end: number | null;
   recur_override_date: number | null;
@@ -26,6 +26,7 @@ export type Txn = {
   lat: number | null;
   lng: number | null;
   place_label: string | null;
+  pay_method: 'upi' | 'cash' | 'bank' | null;
   currency: string | null;
   is_deleted: number;
   created_at: number;
@@ -106,12 +107,13 @@ export type InsertTxnInput = {
   note?: string;
   attachmentUri?: string;
   tags?: string[];
-  recurFreq?: 'daily' | 'weekly' | 'monthly' | 'custom';
+  recurFreq?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
   recurInterval?: number;
   recurEnd?: number;
   lat?: number;
   lng?: number;
   placeLabel?: string;
+  payMethod?: 'upi' | 'cash' | 'bank';
   currency?: string;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
@@ -132,14 +134,15 @@ export async function insertTxn(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,currency,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
         input.recurFreq ?? null, input.recurInterval ?? null, input.recurEnd ?? null,
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
+        input.payMethod ?? null,
         input.currency ?? null,
         now, now,
       ],
@@ -208,14 +211,14 @@ export async function insertItemizedTxn(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-          recur_freq,recur_interval,recur_end,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
-        null, null, null, now, now,
+        null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null, now, now,
       ],
     );
     for (const item of input.items) {
@@ -649,6 +652,15 @@ export async function clearAllAttachmentRefs(db: SQLite.SQLiteDatabase): Promise
   await db.runAsync('UPDATE txn SET attachment_uri=NULL WHERE attachment_uri IS NOT NULL');
 }
 
+/** Set (or clear, with null) the receipt attachment on a single transaction. */
+export async function setTxnAttachment(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  uri: string | null,
+): Promise<void> {
+  await db.runAsync('UPDATE txn SET attachment_uri=?, updated_at=? WHERE id=?', [uri, Date.now(), txnId]);
+}
+
 /** Active recurring rules across all groups, with their splits — for reminders. */
 export async function getActiveRecurringRules(db: SQLite.SQLiteDatabase): Promise<TxnWithSplits[]> {
   const rows = await db.getAllAsync<Txn>(
@@ -709,6 +721,7 @@ export type UpdateTxnInput = {
   date: number;
   category: string;
   note?: string;
+  payMethod?: 'upi' | 'cash' | 'bank';
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
@@ -721,8 +734,8 @@ export async function updateTxn(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE txn SET kind=?, date=?, category=?, note=?, updated_at=? WHERE id=?`,
-      [input.kind, input.date, input.category, input.note ?? null, now, input.id],
+      `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?, updated_at=? WHERE id=?`,
+      [input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, now, input.id],
     );
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);

@@ -35,6 +35,8 @@ export function buildUpcoming(
   meId: string,
   nowMs: number,
   limit = 3,
+  /** Only include occurrences due within this many days (e.g. 4 = "coming up soon"). */
+  withinDays?: number,
 ): UpcomingItem[] {
   const items: UpcomingItem[] = [];
   for (const txn of recurring) {
@@ -56,5 +58,6 @@ export function buildUpcoming(
     });
   }
   items.sort((a, b) => a.dateMs - b.dateMs);
-  return items.slice(0, limit);
+  const windowed = withinDays === undefined ? items : items.filter(i => i.daysUntil <= withinDays);
+  return windowed.slice(0, limit);
 }

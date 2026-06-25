@@ -271,3 +271,85 @@ export function computeHealthScore(input: HealthInputs): HealthResult {
 
   return { score, band, factors, dimensions };
 }
+
+// ─── Improvement projection ───────────────────────────────────────────────────
+// A *real* "what would help most" — never a fabricated number. We take the
+// weakest actionable factor, apply a concrete, achievable change, and re-run
+// computeHealthScore() so the projected score is the true recomputed result.
+
+export type HealthImprovement = {
+  factorLabel: string;
+  title: string;
+  detail: string;
+  fromScore: number;
+  toScore: number;
+};
+
+function buildLever(label: string, input: HealthInputs, fromScore: number): HealthImprovement | null {
+  const project = (patch: Partial<HealthInputs>): number => computeHealthScore({ ...input, ...patch }).score;
+
+  switch (label) {
+    case 'Cash flow':
+    case 'Spend pace': {
+      // Nothing to pace against → can't model honestly.
+      if (input.incomePaise <= 0 && input.budgetAllocated <= 0) return null;
+      const cut = Math.round(input.spendPaise * 0.12); // a concrete ~12% trim
+      if (cut <= 0) return null;
+      const to = project({
+        spendPaise: Math.max(0, input.spendPaise - cut),
+        budgetSpent: Math.max(0, input.budgetSpent - cut),
+      });
+      if (to <= fromScore) return null;
+      return {
+        factorLabel: label,
+        title: 'Biggest lever: trim spending',
+        detail: `Spending ${formatCompact(cut)} less this month would lift your score from ${fromScore} to ${to}.`,
+        fromScore, toScore: to,
+      };
+    }
+    case 'Category budgets': {
+      if (input.totalBudgeted === 0) return null;
+      if (input.categoriesOver === 0) {
+        if (input.categoriesNear === 0) return null;
+        const to = project({ categoriesNear: 0 });
+        if (to <= fromScore) return null;
+        return { factorLabel: label, title: 'Keep categories under budget', detail: `Keeping your near-limit categories under budget would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
+      }
+      const name = input.worstCategoryName;
+      const onlyOne = input.categoriesOver === 1;
+      const to = project({
+        categoriesOver: input.categoriesOver - 1,
+        worstCategoryPct: onlyOne ? null : input.worstCategoryPct,
+        worstCategoryName: onlyOne ? null : input.worstCategoryName,
+      });
+      if (to <= fromScore) return null;
+      return { factorLabel: label, title: name ? `Rein in ${name}` : 'Rein in over-budget spending', detail: `Bringing ${name ?? 'your worst category'} back under budget would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
+    }
+    case 'Debt position': {
+      if (input.netOwedPaise <= 0) return null;
+      const to = project({ netOwedPaise: 0 });
+      if (to <= fromScore) return null;
+      return { factorLabel: label, title: 'Settle what you owe', detail: `Settling the ${formatCompact(input.netOwedPaise)} you owe would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
+    }
+    default:
+      return null; // Spending trend isn't directly actionable within the period.
+  }
+}
+
+/**
+ * The single highest-impact, achievable improvement — or null when the score is
+ * already strong / nothing actionable moves it. The projected score is computed
+ * by re-running the real scoring formula, so it can never be a fake figure.
+ */
+export function suggestImprovement(input: HealthInputs, result: HealthResult): HealthImprovement | null {
+  const ranked = result.factors
+    .map(f => ({ f, gap: f.max - f.points }))
+    .filter(x => x.gap >= 3)
+    .sort((a, b) => b.gap - a.gap);
+
+  for (const { f } of ranked) {
+    const built = buildLever(f.label, input, result.score);
+    if (built && built.toScore > built.fromScore) return built;
+  }
+  return null;
+}

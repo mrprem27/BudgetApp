@@ -33,6 +33,7 @@ export default function MembersScreen() {
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
   const [loadError, setLoadError] = useState(false);
@@ -60,10 +61,17 @@ export default function MembersScreen() {
 
   const memberIds = new Set(members.map(m => m.id));
 
-  async function handleAdd(personId: string) {
+  function togglePending(id: string) {
+    setPendingIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function commitAdd() {
+    if (pendingIds.length === 0) return;
     try {
-      await addMemberToGroup(db, groupId, personId);
+      for (const pid of pendingIds) await addMemberToGroup(db, groupId, pid);
+      haptic.success();
       setShowAdd(false);
+      setPendingIds([]);
       await load();
     } catch {
       haptic.error();
@@ -184,7 +192,7 @@ export default function MembersScreen() {
         )}
 
         <View style={styles.addButtons}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityRole="button">
+          <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
             <View style={styles.addBtnIcon}>
               <Feather name="user-plus" size={16} color={colors.accent} />
             </View>
@@ -195,21 +203,25 @@ export default function MembersScreen() {
       </ScrollView>
       )}
 
-      {/* Add person sheet — search existing or create new */}
-      <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add to group">
+      {/* Add person sheet — search + multi-select existing, or create new */}
+      <SheetModal visible={showAdd} onClose={() => { setShowAdd(false); setPendingIds([]); }} title="Add to group">
         <PersonPicker
           persons={allPersons}
-          selected={members.map(m => m.id)}
+          selected={pendingIds}
           exclude={members.map(m => m.id)}
-          onToggle={handleAdd}
+          onToggle={togglePending}
           onCreate={async (name) => {
             const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
-            await addMemberToGroup(db, groupId, person.id);
-            setShowAdd(false);
-            await load();
+            setAllPersons(prev => [...prev, person]);
             return person;
           }}
           placeholder="Search or create a person…"
+        />
+        <PrimaryButton
+          label={pendingIds.length > 0 ? `Add ${pendingIds.length} ${pendingIds.length === 1 ? 'person' : 'people'}` : 'Select people to add'}
+          onPress={commitAdd}
+          disabled={pendingIds.length === 0}
+          style={styles.addCommit}
         />
       </SheetModal>
 
@@ -255,6 +267,7 @@ const styles = StyleSheet.create({
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
 
   renameGap: { marginBottom: space.md },
+  addCommit: { marginTop: space.sm },
   addButtons: { gap: space.sm },
   addBtn: {
     flexDirection: 'row',

@@ -1,11 +1,25 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
 
 export type CategoryRow = { name: string; paise: number };
+
+/** A category bar fill that grows in on mount and tweens when its value changes. */
+function AnimatedBar({ pct, color }: { pct: number; color: string }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: pct, duration: 450, useNativeDriver: false }).start();
+  }, [pct, anim]);
+  const width = anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
+  return (
+    <View style={styles.track}>
+      <Animated.View style={[styles.fill, { width, backgroundColor: color }]} />
+    </View>
+  );
+}
 
 type Props = {
   /** Spend-by-category, largest first. */
@@ -14,21 +28,56 @@ type Props = {
   total: number;
   /** How many rows to show before "+ N more". */
   topN?: number;
+  /** Show skeleton rows (e.g. while a period switch loads) — keeps height stable. */
+  loading?: boolean;
+  /** When expanded, the list shows all rows; the footer becomes "Show less". */
+  expanded?: boolean;
   onPressCategory: (name: string) => void;
+  /** Toggles expand/collapse (reveal the rest of the categories inline). */
   onMore: () => void;
 };
 
-/** "Where it went" — top-N category bars + a "+ N more" affordance. */
-export function CategoryRankList({ rows, total, topN = 3, onPressCategory, onMore }: Props) {
+/**
+ * "Where it went" — the top-N spend categories. Always renders exactly `topN`
+ * row-slots plus a reserved "more" line so the card is the SAME height in every
+ * state (loading, full, partial, empty) — switching Today/Month/Year never makes
+ * the dashboard jump. Empty slots are faint placeholders; during `loading` they're
+ * skeletons.
+ */
+export function CategoryRankList({ rows, total, topN = 3, loading = false, expanded = false, onPressCategory, onMore }: Props) {
   const top = rows.slice(0, topN);
   const moreCount = Math.max(0, rows.length - topN);
   const max = top.reduce((m, r) => Math.max(m, r.paise), 0) || 1;
+  const empty = !loading && rows.length === 0;
 
   return (
     <View>
       <Text style={styles.sectionLabel}>WHERE IT WENT</Text>
       <View style={styles.card}>
-        {top.map(row => {
+        {Array.from({ length: topN }).map((_, i) => {
+          if (loading) {
+            return (
+              <View key={i} style={styles.row}>
+                <View style={[styles.icon, styles.skelBlock]} />
+                <View style={[styles.skelName, styles.skelBlock]} />
+                <View style={styles.track} />
+                <View style={[styles.skelAmt, styles.skelBlock]} />
+              </View>
+            );
+          }
+          const row = top[i];
+          if (!row) {
+            // Empty slot keeps the row's height so the card doesn't shrink between
+            // periods — but instead of a fake faint row it shows a single quiet
+            // line (or the 'no spending' note in the first slot).
+            return (
+              <View key={i} style={styles.placeholderRow}>
+                {i === 0 && empty
+                  ? <Text style={styles.emptyMsg}>No spending this period</Text>
+                  : <View style={styles.emptyLine} />}
+              </View>
+            );
+          }
           const vis = categoryVisual(row.name);
           const barPct = Math.round((row.paise / max) * 100);
           const pctOfTotal = total > 0 ? row.paise / total : 0;
@@ -47,17 +96,22 @@ export function CategoryRankList({ rows, total, topN = 3, onPressCategory, onMor
                 <Feather name={vis.icon} size={14} color={vis.color} />
               </View>
               <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
-              <View style={styles.track}>
-                <View style={[styles.fill, { width: `${barPct}%`, backgroundColor: barColor }]} />
-              </View>
+              <AnimatedBar pct={barPct} color={barColor} />
               <Text style={styles.amount}>{formatCompact(row.paise)}</Text>
             </TouchableOpacity>
           );
         })}
-        {moreCount > 0 && (
-          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={`${moreCount} more categories`}>
-            <Text style={styles.more}>+ {moreCount} more {moreCount === 1 ? 'category' : 'categories'} →</Text>
+        {/* "more" line is always reserved (link or spacer) so height never changes. */}
+        {!loading && moreCount > 0 ? (
+          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={`Show ${moreCount} more categories`}>
+            <Text style={styles.more}>+ {moreCount} more {moreCount === 1 ? 'category' : 'categories'}</Text>
           </TouchableOpacity>
+        ) : !loading && expanded ? (
+          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel="Show fewer categories">
+            <Text style={styles.more}>Show less</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.moreSpacer} />
         )}
       </View>
     </View>
@@ -69,9 +123,18 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  name: { ...type.label, color: colors.textSecondary, width: 70 },
-  track: { flex: 1, height: 3, backgroundColor: colors.bgElevated, borderRadius: 2 },
+  // flex (not a fixed width) so longer names get more room and truncate with … instead of a hard cut.
+  name: { ...type.label, color: colors.textSecondary, flex: 1 },
+  track: { flex: 2, height: 3, backgroundColor: colors.bgElevated, borderRadius: 2 },
   fill: { height: 3, borderRadius: 2 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary, width: 52, textAlign: 'right' },
   more: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  moreSpacer: { height: 16 },
+  // Empty category slot — same height as a real row, but just a quiet line.
+  placeholderRow: { height: 28, flexDirection: 'row', alignItems: 'center' },
+  emptyLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.bgElevated },
+  emptyMsg: { ...type.label, color: colors.textMuted },
+  skelBlock: { backgroundColor: colors.bgElevated, borderRadius: 6 },
+  skelName: { flex: 1, height: 10, marginRight: space.sm },
+  skelAmt: { width: 52, height: 10 },
 });

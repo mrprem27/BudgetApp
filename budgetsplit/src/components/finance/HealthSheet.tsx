@@ -1,16 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
-import type { HealthResult } from '../../lib/financialHealth';
+import { suggestImprovement, type HealthResult, type HealthInputs } from '../../lib/financialHealth';
 import { healthBandColor, healthBandLabel, sevColor } from './home/helpers';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   result: HealthResult | null;
+  inputs?: HealthInputs | null;
 };
 
 const R = 50;
@@ -20,7 +20,8 @@ const CIRC = 2 * Math.PI * R;
  * Money-health detail sheet: score ring + per-dimension bars + factor list.
  * Built entirely from the HealthResult already computed on Home.
  */
-export function HealthSheet({ visible, onClose, result }: Props) {
+export function HealthSheet({ visible, onClose, result, inputs }: Props) {
+  const improvement = result && inputs ? suggestImprovement(inputs, result) : null;
   return (
     <SheetModal visible={visible} onClose={onClose} title="Money Health">
       {result && (
@@ -80,6 +81,22 @@ export function HealthSheet({ visible, onClose, result }: Props) {
               );
             })}
           </View>
+
+          {/* Biggest improvement — projection recomputed from the real formula */}
+          {improvement && (
+            <View style={styles.improveCard}>
+              <View style={styles.improveDot} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.improveTitle}>{improvement.title}</Text>
+                <Text style={styles.improveDetail}>{improvement.detail}</Text>
+                <View style={styles.improveScoreRow}>
+                  <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
+                  <Text style={styles.improveArrow}>→</Text>
+                  <Text style={styles.improveTo}>{improvement.toScore}</Text>
+                </View>
+              </View>
+            </View>
+          )}
         </>
       )}
     </SheetModal>
@@ -106,4 +123,13 @@ const styles = StyleSheet.create({
   factorLabel: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   factorDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
   factorPts: { fontFamily: 'SpaceMono_400Regular', fontSize: 11 },
+
+  improveCard: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, backgroundColor: '#081F16', borderRadius: radius.lg, borderWidth: 1, borderColor: '#0C3D22', padding: space.md },
+  improveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.income, marginTop: 5 },
+  improveTitle: { ...type.label, color: colors.income, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
+  improveDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
+  improveScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm },
+  improveFrom: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textMuted },
+  improveArrow: { color: colors.income, fontSize: 13 },
+  improveTo: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.income },
 });

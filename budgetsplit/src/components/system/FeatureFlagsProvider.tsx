@@ -11,7 +11,8 @@ const defaultFlags: FeatureFlags = {
   dashboardCash: true, dashboardBudget: true, dashboardDonut: true, dashboardBalances: true, dashboardSavings: true, dashboardInsights: true,
   reportsDonut: true, reportsTrend: true, forecast: true,
   budgetInsights: true, savingsInsights: true,
-  itemizedOcr: true, recurring: true, smartCategory: false, affordCheck: false, streak: false, healthScore: true, subscriptions: false,
+  itemizedOcr: true, recurring: true, smartCategory: false, affordCheck: false, streak: false, healthScore: true, subscriptions: true,
+  savingsGoals: true, reminders: true,
 };
 
 const Ctx = createContext<ContextValue>({ flags: defaultFlags, setFlag: () => {}, ready: false });

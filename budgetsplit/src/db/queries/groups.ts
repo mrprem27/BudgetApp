@@ -17,8 +17,11 @@ export type BudgetGroup = {
   is_archived: number;
   is_personal: number;
   simplify_debt: number;
+  default_split: SplitMode;
   created_at: number;
 };
+
+export type SplitMode = 'equal' | 'exact' | 'percent' | 'shares';
 
 export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
   return db.getAllAsync<BudgetGroup>(
@@ -53,20 +56,21 @@ export async function insertGroup(
   icon: string,
   color: string,
   memberIds: string[],
+  defaultSplit: SplitMode = 'equal',
 ): Promise<BudgetGroup> {
   const id = uuid();
   const now = Date.now();
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, created_at)
-       VALUES (?, ?, ?, ?, 0, 0, 0, ?)`,
-      [id, name, icon, color, now],
+      `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, default_split, created_at)
+       VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
+      [id, name, icon, color, defaultSplit, now],
     );
     for (const pid of memberIds) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO group_member (group_id, person_id) VALUES (?, ?)',
-        [id, pid],
+        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)',
+        [id, pid, now],
       );
     }
     for (const cat of DEFAULT_CATEGORIES) {
@@ -83,7 +87,7 @@ export async function insertGroup(
     }
   });
 
-  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, created_at: now };
+  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now };
 }
 
 export async function setSimplifyDebt(
@@ -117,17 +121,55 @@ export async function updateGroup(
   name: string,
   icon: string,
   color: string,
+  defaultSplit?: SplitMode,
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      'UPDATE budget_group SET name=?, icon=?, color=? WHERE id=?',
-      [name, icon, color, groupId],
-    );
+    if (defaultSplit) {
+      await db.runAsync(
+        'UPDATE budget_group SET name=?, icon=?, color=?, default_split=? WHERE id=?',
+        [name, icon, color, defaultSplit, groupId],
+      );
+    } else {
+      await db.runAsync(
+        'UPDATE budget_group SET name=?, icon=?, color=? WHERE id=?',
+        [name, icon, color, groupId],
+      );
+    }
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
       action: 'updated', summary: `Updated group · ${name}`,
     });
   });
+}
+
+/**
+ * Hard-delete a group and everything tied to it (transactions, splits, line
+ * items, members, budgets). Never deletes the Personal group. Irreversible —
+ * the caller must confirm first.
+ */
+export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<boolean> {
+  const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
+  if (!g || g.is_personal === 1) return false;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `DELETE FROM txn_payment WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+    await db.runAsync(
+      `DELETE FROM txn_share WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+    await db.runAsync(
+      `DELETE FROM line_item WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+    await db.runAsync(
+      `DELETE FROM recur_skip WHERE series_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+    await db.runAsync('DELETE FROM txn WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM group_member WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM category WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM category_budget WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM budget_group WHERE id=?', [groupId]);
+    await logAudit(db, {
+      entityType: 'group', entityId: groupId, groupId: null,
+      action: 'deleted', summary: `Deleted group · ${g.name}`,
+    });
+  });
+  return true;
 }
 
 /** Soft-delete (archive). Personal group can never be archived. */

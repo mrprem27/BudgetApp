@@ -98,8 +98,16 @@ export const CATEGORY_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Other', names: ['Travel', 'Family & Support', 'Other'] },
 ];
 
+/** Income categories grouped into sections (mirrors expense sectioning). */
+export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
+  { title: 'Earnings', names: ['Salary', 'Freelance', 'Business', 'Bonus'] },
+  { title: 'Investments', names: ['Interest', 'Dividends', 'Rent Received'] },
+  { title: 'Perks & Returns', names: ['Cashback', 'Refunds', 'Gifts Received'] },
+  { title: 'Other Income', names: ['Other Income'] },
+];
+
 const SECTION_OF: Record<string, string> = Object.fromEntries(
-  CATEGORY_SECTIONS.flatMap(s => s.names.map(n => [n, s.title])),
+  [...CATEGORY_SECTIONS, ...INCOME_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
 );
 
 /** The section a category belongs to (defaults to "Other" for custom ones). */

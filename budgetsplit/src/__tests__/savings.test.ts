@@ -2,16 +2,18 @@ import { goalProgress, estimatedCompletion, monthlyContribution } from '../lib/s
 
 describe('goalProgress', () => {
   it('computes pct and remaining', () => {
-    expect(goalProgress(2500, 10000)).toEqual({ saved: 2500, target: 10000, remaining: 7500, pct: 25, done: false });
+    expect(goalProgress(2500, 10000)).toEqual({ saved: 2500, target: 10000, remaining: 7500, pct: 25, rawPct: 25, over: 0, done: false });
   });
-  it('clamps at 100% and marks done when over-funded', () => {
+  it('clamps the ring at 100% but exposes overfunding (manual overfund allowed)', () => {
     const p = goalProgress(12000, 10000);
-    expect(p.pct).toBe(100);
+    expect(p.pct).toBe(100);      // ring fill clamps
+    expect(p.rawPct).toBe(120);   // true percentage
+    expect(p.over).toBe(2000);    // surplus exposed
     expect(p.remaining).toBe(0);
     expect(p.done).toBe(true);
   });
   it('handles zero target and negatives', () => {
-    expect(goalProgress(0, 0)).toEqual({ saved: 0, target: 0, remaining: 0, pct: 0, done: false });
+    expect(goalProgress(0, 0)).toEqual({ saved: 0, target: 0, remaining: 0, pct: 0, rawPct: 0, over: 0, done: false });
     expect(goalProgress(-500, 1000).saved).toBe(0);
   });
 });

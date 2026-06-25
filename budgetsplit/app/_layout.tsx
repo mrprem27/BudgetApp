@@ -1,4 +1,5 @@
 import 'react-native-get-random-values';
+import 'react-native-reanimated';
 import React, { useEffect, useState } from 'react';
 import { View, AppState } from 'react-native';
 import { Stack } from 'expo-router';
@@ -101,10 +102,10 @@ export default function RootLayout() {
                 }}
               >
                 <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="add/quick" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/income" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/itemized" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/transfer" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                {/* Full-screen (not the iOS inset 'modal' sheet) so they read like the Settle screen. */}
+                <Stack.Screen name="add/quick" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="add/income" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="add/itemized" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               </Stack>
             </OnboardingGate>
           </LockGate>

@@ -15,27 +15,27 @@ import {
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
-import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getTransactionsInRange } from '../../src/db/queries/transactions';
-import { getBudgetAnalytics } from '../../src/lib/analytics';
-import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../../src/lib/forecast';
-import { formatRupees, formatCompact, formatCompactMajor } from '../../src/lib/money';
-import { Badge } from '../../src/components/ui/Badge';
-import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { AmountText } from '../../src/components/ui/AmountText';
-import { BudgetBar } from '../../src/components/finance/BudgetBar';
-import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { EmptyState } from '../../src/components/ui/EmptyState';
-import { ErrorState } from '../../src/components/ui/ErrorState';
-import { categoryVisual } from '../../src/constants/categories';
-import { CHART_COLORS } from '../../src/constants/palette';
-import type { BudgetGroup } from '../../src/db/queries/groups';
-import type { TxnWithSplits } from '../../src/db/queries/transactions';
+import { CategoryDonut, type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { colors } from '../src/constants/colors';
+import { type } from '../src/constants/typography';
+import { space, radius, layout } from '../src/constants/layout';
+import { getAllGroups } from '../src/db/queries/groups';
+import { getTransactionsInRange } from '../src/db/queries/transactions';
+import { getBudgetAnalytics } from '../src/lib/analytics';
+import type { BudgetAnalytics } from '../src/lib/analytics';
+import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
+import { formatRupees, formatCompact, formatCompactMajor } from '../src/lib/money';
+import { Badge } from '../src/components/ui/Badge';
+import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
+import { AmountText } from '../src/components/ui/AmountText';
+import { BudgetBar } from '../src/components/finance/BudgetBar';
+import { SkeletonCard } from '../src/components/ui/Skeleton';
+import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
+import { categoryVisual } from '../src/constants/categories';
+import { CHART_COLORS } from '../src/constants/palette';
+import type { BudgetGroup } from '../src/db/queries/groups';
+import type { TxnWithSplits } from '../src/db/queries/transactions';
 
 /** Y-axis label: always whole numbers, no decimal K/L/Cr values. */
 function fmtY(v: string): string {
@@ -92,13 +92,16 @@ export default function ReportsScreen() {
   const [yearExpense, setYearExpense] = useState(0);
   const [yearTopCat, setYearTopCat] = useState('—');
   const [biggestTxn, setBiggestTxn] = useState(0);
+  const [monthSpent, setMonthSpent] = useState(0);
+  const [monthEarned, setMonthEarned] = useState(0);
+  const [prevSpent, setPrevSpent] = useState(0);
+  const [prevEarned, setPrevEarned] = useState(0);
   const [pieData, setPieData] = useState<DonutSeg[]>([]);
   const [pieTotal, setPieTotal] = useState(0);
   type TrendBar = { value: number; label: string; frontColor: string; labelTextStyle?: object };
   const [trendData, setTrendData] = useState<TrendBar[]>([]);
   const [monthlyData, setMonthlyData] = useState<Array<{ label: string; total: number; byCat: Record<string, number> }>>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
-  const [cutPct, setCutPct] = useState(20);
   type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
   const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
   const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
@@ -173,6 +176,25 @@ export default function ReportsScreen() {
           fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
         }
       }
+      // Month totals (Spent/Earned) + prior month, for the summary cards.
+      let mSpent = 0, mEarned = 0;
+      for (const t of allMonthTxns) {
+        if (t.kind === 'expense') mSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+        else if (t.kind === 'income') mEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
+      }
+      setMonthSpent(mSpent);
+      setMonthEarned(mEarned);
+      const pStart = startOfMonth(subMonths(month, 1)).getTime();
+      const pEnd = endOfMonth(subMonths(month, 1)).getTime();
+      const pTxns = await getTransactionsInRange(db, null, pStart, pEnd);
+      let pSpent = 0, pEarned = 0;
+      for (const t of pTxns) {
+        if (t.kind === 'expense') pSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+        else if (t.kind === 'income') pEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
+      }
+      setPrevSpent(pSpent);
+      setPrevEarned(pEarned);
+
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
       setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
         name,
@@ -413,7 +435,7 @@ export default function ReportsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={{ marginRight: space.xs, marginLeft: -6 }}>
           <Feather name="chevron-left" size={24} color={colors.textPrimary} />
@@ -485,6 +507,67 @@ export default function ReportsScreen() {
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
         <>
+          {/* Summary totals — Spent / Earned with vs-last-month deltas (design Screen 7) */}
+          {(() => {
+            const prevLabel = format(subMonths(month, 1), 'MMM');
+            const delta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
+              if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
+              const pct = Math.round(((cur - prev) / prev) * 100);
+              if (Math.abs(pct) < 2) return { text: `same as ${prevLabel}`, color: colors.textMuted, dir: 'flat' };
+              return { text: `${pct > 0 ? '+' : ''}${pct}% vs ${prevLabel}`, color: pct > 0 ? colors.expense : colors.income, dir: pct > 0 ? 'up' : 'down' };
+            };
+            const earnedDelta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
+              if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
+              const pct = Math.round(((cur - prev) / prev) * 100);
+              if (Math.abs(pct) < 2) return { text: `same as ${prevLabel}`, color: colors.income, dir: 'flat' };
+              return { text: `${pct > 0 ? '+' : ''}${pct}% vs ${prevLabel}`, color: pct > 0 ? colors.income : colors.expense, dir: pct > 0 ? 'up' : 'down' };
+            };
+            const ds = delta(monthSpent, prevSpent);
+            const de = earnedDelta(monthEarned, prevEarned);
+            return (
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>SPENT</Text>
+                  <Text style={styles.summaryValue}>{formatCompact(monthSpent)}</Text>
+                  <View style={styles.summaryDeltaRow}>
+                    {ds.dir !== 'flat' && <Feather name={ds.dir === 'up' ? 'arrow-up' : 'arrow-down'} size={10} color={ds.color} />}
+                    <Text style={[styles.summaryDelta, { color: ds.color }]}>{ds.text}</Text>
+                  </View>
+                </View>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>EARNED</Text>
+                  <Text style={[styles.summaryValue, { color: colors.income }]}>{formatCompact(monthEarned)}</Text>
+                  <View style={styles.summaryDeltaRow}>
+                    {de.dir !== 'flat' && <Feather name={de.dir === 'up' ? 'arrow-up' : 'arrow-down'} size={10} color={de.color} />}
+                    <Text style={[styles.summaryDelta, { color: de.color }]}>{de.text}</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* By category — stacked proportional bar + legend with % (design Screen 7) */}
+          {pieData.length > 0 && pieTotal > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitleSm}>BY CATEGORY</Text>
+              <View style={styles.stackBar}>
+                {pieData.map((seg, i) => (
+                  <View key={seg.name} style={{ flex: seg.paise, backgroundColor: seg.color, height: '100%' }} />
+                ))}
+              </View>
+              <View style={{ gap: 9 }}>
+                {pieData.slice(0, 5).map(seg => (
+                  <View key={seg.name} style={styles.legendRow}>
+                    <View style={[styles.legendDot, { backgroundColor: seg.color }]} />
+                    <Text style={styles.legendName} numberOfLines={1}>{seg.name}</Text>
+                    <Text style={styles.legendAmt}>{formatCompact(seg.paise)}</Text>
+                    <Text style={styles.legendPct}>{Math.round((seg.paise / pieTotal) * 100)}%</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* Spending by category — selected month, ALL groups (the dashboard
               donut is current-period & personal; this is the cross-group analysis). */}
           {flags.reportsDonut && pieData.length > 0 && (
@@ -603,31 +686,6 @@ export default function ReportsScreen() {
               </View>
             </View>
           )}
-
-          {/* What-if simulator — cut your top category and see the savings */}
-          {pieData.length > 0 && pieData[0].paise > 0 && (() => {
-            const top = pieData[0];
-            const monthlySaving = Math.round((top.paise * cutPct) / 100);
-            return (
-              <View style={styles.card}>
-                <Text style={styles.chartTitle}>What if…</Text>
-                <Text style={styles.whatifLead}>
-                  Cut <Text style={{ color: top.color, fontFamily: 'Inter_600SemiBold' }}>{top.name}</Text> by
-                </Text>
-                <View style={styles.whatifChips}>
-                  {[10, 20, 30].map(p => (
-                    <TouchableOpacity key={p} style={[styles.whatifChip, cutPct === p && styles.whatifChipActive]} onPress={() => setCutPct(p)} accessibilityRole="button">
-                      <Text style={[styles.whatifChipText, cutPct === p && { color: colors.bg }]}>{p}%</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={styles.whatifResult}>
-                  <Text style={styles.whatifSave}>You’d save <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>{formatCompact(monthlySaving)}</Text>/mo</Text>
-                  <Text style={styles.whatifYear}>≈ {formatCompact(monthlySaving * 12)} a year</Text>
-                </View>
-              </View>
-            );
-          })()}
 
           {summaries.length === 0 && (
             <EmptyState
@@ -760,6 +818,19 @@ const styles = StyleSheet.create({
   navBtn: { padding: space.xs },
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
+  sectionTitleSm: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  summaryRow: { flexDirection: 'row', gap: space.sm },
+  summaryCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md },
+  summaryLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: 6 },
+  summaryValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, color: colors.textPrimary, letterSpacing: -1, marginBottom: 3 },
+  summaryDeltaRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  summaryDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  stackBar: { height: 10, borderRadius: 5, overflow: 'hidden', flexDirection: 'row', marginBottom: space.md, backgroundColor: colors.bgElevated },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  legendDot: { width: 10, height: 10, borderRadius: 2, flexShrink: 0 },
+  legendName: { flex: 1, ...type.label, color: colors.textPrimary },
+  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
+  legendPct: { ...type.caption, color: colors.textMuted, width: 30, textAlign: 'right' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },

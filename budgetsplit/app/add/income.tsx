@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Keyboard,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
 import { colors } from '../../src/constants/colors';
@@ -21,6 +20,8 @@ import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { Input } from '../../src/components/ui/Input';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
+import { ModalHeader } from '../../src/components/ui/ModalHeader';
+import { MoreOptions } from '../../src/components/ui/MoreOptions';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
@@ -52,7 +53,6 @@ export default function AddIncomeScreen() {
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
@@ -74,6 +74,7 @@ export default function AddIncomeScreen() {
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
@@ -183,12 +184,19 @@ export default function AddIncomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
-          <Feather name="x" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? 'Edit Income' : 'Add entry'}</Text>
-        {/* Expense / Income toggle */}
+      {/* Header: ✕ left · title centered · ✓ save right (consistent with Add Expense) */}
+      <ModalHeader
+        title={isRecurEdit ? 'Edit recurring' : isEditing ? 'Edit income' : 'Add income'}
+        onClose={() => router.back()}
+        right={
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Feather name="check" size={24} color={(!canSave || saving) ? colors.textMuted : colors.income} />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Expense / Income toggle — centered, just below the title */}
+      <View style={styles.kindToggleRow}>
         <View style={styles.modeToggle}>
           <TouchableOpacity onPress={() => router.replace('/add/quick?kind=expense')} style={styles.modeBtn} accessibilityRole="button">
             <Text style={styles.modeBtnText}>Expense</Text>
@@ -198,13 +206,11 @@ export default function AddIncomeScreen() {
           </View>
         </View>
       </View>
-
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-
           {/* Large amount display */}
           <TouchableOpacity style={styles.amountWrap} onPress={() => amtRef.current?.focus()} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Edit amount">
             <TextInput
@@ -223,30 +229,18 @@ export default function AddIncomeScreen() {
 
           {/* Source + date row */}
           <View style={styles.sourceRow}>
-            <TouchableOpacity style={styles.sourcePill} onPress={() => {}} accessibilityRole="button" accessibilityLabel="Select source">
+            <TouchableOpacity style={styles.sourcePill} onPress={() => { Keyboard.dismiss(); setShowCatPicker(true); }} accessibilityRole="button" accessibilityLabel="Select source">
               <Text style={styles.sourcePillEmoji}>{SOURCE_CHIPS.find(s => s.label === sourceChip)?.emoji ?? '💼'}</Text>
-              <Text style={styles.sourcePillText}>{sourceChip}</Text>
+              <Text style={styles.sourcePillText} numberOfLines={1}>{category?.name ?? sourceChip}</Text>
               <Feather name="chevron-down" size={12} color={colors.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.datePill} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Select date">
+            <TouchableOpacity style={styles.datePill} onPress={() => { Keyboard.dismiss(); setShowDate(true); }} accessibilityRole="button" accessibilityLabel="Select date">
               <Text style={styles.datePillText}>
                 {isSameDay(new Date(date), new Date()) ? 'Today' : format(new Date(date), 'dd MMM')}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Note */}
-          <View style={styles.noteWrap}>
-            <TextInput
-              style={styles.noteInput}
-              value={note}
-              onChangeText={setNote}
-              placeholder="Note (optional)"
-              placeholderTextColor={colors.textMuted}
-              accessibilityLabel="Note"
-              maxLength={80}
-            />
-          </View>
 
           {/* Budget impact nudge */}
           {budgetAllocated > 0 && total > 0 && (
@@ -296,7 +290,7 @@ export default function AddIncomeScreen() {
             return (
               <TouchableOpacity
                 style={styles.groupSelector}
-                onPress={() => setShowGroupPicker(true)}
+                onPress={() => { Keyboard.dismiss(); setShowGroupPicker(true); }}
                 accessibilityRole="button"
                 accessibilityLabel="Select group"
               >
@@ -359,7 +353,7 @@ export default function AddIncomeScreen() {
                   )}
                   <Text style={styles.fieldLabel}>Ends</Text>
                   <View style={styles.endRow}>
-                    <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
+                    <TouchableOpacity style={styles.endDateBtn} onPress={() => { Keyboard.dismiss(); setShowEndDate(true); }} accessibilityRole="button" accessibilityLabel="End date">
                       <Feather name="calendar" size={15} color={colors.income} />
                       <Text style={styles.dateText}>{recurEndMs && Number.isFinite(recurEndMs) ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
                     </TouchableOpacity>
@@ -374,22 +368,41 @@ export default function AddIncomeScreen() {
             </>
           )}
 
-          {/* Green CTA */}
-          <TouchableOpacity
-            style={[styles.incomeCta, (!canSave || saving) && { opacity: 0.5 }]}
-            onPress={handleSave}
-            disabled={!canSave || saving}
-            accessibilityRole="button"
-            accessibilityLabel={total > 0 ? `Log ${formatRupees(total)} income` : 'Log income'}
-          >
-            <Text style={styles.incomeCtaText}>
-              {saving ? 'Saving…' : total > 0 ? `Log ${formatRupees(total)} income` : isEditing ? 'Save' : 'Log income'}
-            </Text>
-          </TouchableOpacity>
+          {/* More options — Note (income is always personal; no splits/recurring here). */}
+          <MoreOptions hint="Note" forceOpen={isEditing}>
+            <View style={styles.noteWrap}>
+              <TextInput
+                style={styles.noteInput}
+                value={note}
+                onChangeText={setNote}
+                placeholder="Note (optional)"
+                placeholderTextColor={colors.textMuted}
+                accessibilityLabel="Note"
+                maxLength={120}
+              />
+            </View>
+          </MoreOptions>
 
+          {/* No bottom CTA — the ✓ in the header saves. */}
           <View style={{ height: 32 }} />
         </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      )}
+
+      {showCatPicker && (
+        <CategoryPicker
+          categories={categories}
+          value={category}
+          onChange={setCategory}
+          forceOpen
+          hideTrigger
+          onClose={() => setShowCatPicker(false)}
+          onCreate={async (name) => {
+            const c = await insertCategory(db, selectedGroupId, name, null, null, 'income');
+            setCategories(prev => [...prev, c]);
+            return c;
+          }}
+        />
       )}
 
       <DatePickerSheet visible={showDate} value={date} onClose={() => setShowDate(false)} onChange={setDate} />
@@ -417,9 +430,8 @@ export default function AddIncomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 52 },
-  title: { ...type.heading, color: colors.textPrimary },
-  headerClose: { minWidth: 44, alignItems: 'flex-start', justifyContent: 'center', height: 44 },
+  // paddingTop clears the native sheet's grabber.
+  kindToggleRow: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
 
   // Mode toggle pill
   modeToggle: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border, gap: 2 },
@@ -432,7 +444,7 @@ const styles = StyleSheet.create({
 
   // Amount — large centered display
   amountWrap: { alignItems: 'center', borderBottomWidth: 1, borderColor: colors.border + '66', paddingBottom: space.md },
-  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 44, color: colors.income, textAlign: 'center', letterSpacing: -2, lineHeight: 52 },
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 44, color: colors.income, textAlign: 'center', letterSpacing: -2, lineHeight: 52, alignSelf: 'stretch', width: '100%' },
   amountHint: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
 
   // Source + date row

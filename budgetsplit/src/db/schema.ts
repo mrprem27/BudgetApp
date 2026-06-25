@@ -30,12 +30,14 @@ CREATE TABLE IF NOT EXISTS budget_group (
   is_archived    INTEGER NOT NULL DEFAULT 0,
   is_personal    INTEGER NOT NULL DEFAULT 0,
   simplify_debt  INTEGER NOT NULL DEFAULT 1,
+  default_split  TEXT NOT NULL DEFAULT 'equal' CHECK(default_split IN ('equal','exact','percent','shares')),
   created_at     INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS group_member (
   group_id   TEXT NOT NULL REFERENCES budget_group(id),
   person_id  TEXT NOT NULL REFERENCES person(id),
+  joined_at  INTEGER,                       -- when this person joined the group (epoch ms)
   PRIMARY KEY (group_id, person_id)
 );
 
@@ -50,7 +52,7 @@ CREATE TABLE IF NOT EXISTS txn (
   attachment_uri TEXT,
   tags           TEXT,
   adjustments    TEXT,
-  recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','custom')),
+  recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','yearly','custom')),
   recur_interval INTEGER,
   recur_end      INTEGER,
   recur_override_date INTEGER,
@@ -60,6 +62,7 @@ CREATE TABLE IF NOT EXISTS txn (
   lat            REAL,
   lng            REAL,
   place_label    TEXT,
+  pay_method     TEXT,
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -147,6 +150,8 @@ CREATE TABLE IF NOT EXISTS savings_goal (
   locked       INTEGER NOT NULL DEFAULT 0,  -- protect from auto-reallocation
   is_archived  INTEGER NOT NULL DEFAULT 0,
   last_auto_at INTEGER,                      -- schedule anchor for auto-funding
+  target_date  INTEGER,                      -- optional deadline (epoch ms) → "needed/mo" + countdown
+  sort_order   INTEGER NOT NULL DEFAULT 0,   -- manual drag rank → funding order (lower = funded first)
   created_at   INTEGER NOT NULL
 );
 
@@ -199,6 +204,16 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN adjustments TEXT",
   // Recurring occurrences materialize into real rows linked back to their rule.
   "ALTER TABLE txn ADD COLUMN parent_recur_id TEXT",
+  // Settlements record how they were paid (upi/cash/bank) as a real field, not a note.
+  "ALTER TABLE txn ADD COLUMN pay_method TEXT",
+  // Savings goals can carry an optional deadline → needed-per-month + countdown.
+  "ALTER TABLE savings_goal ADD COLUMN target_date INTEGER",
+  // Manual drag rank → funding order (lower = funded first). Replaces priority buckets.
+  "ALTER TABLE savings_goal ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+  // When a person joined a group → "Joined {month year}" on the Members sub-tab.
+  "ALTER TABLE group_member ADD COLUMN joined_at INTEGER",
+  // A group's default split mode, picked at creation → seeds the Add-expense split.
+  "ALTER TABLE budget_group ADD COLUMN default_split TEXT NOT NULL DEFAULT 'equal'",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -211,6 +226,59 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     } catch {
       // Column already exists — safe to ignore.
     }
+  }
+
+  // One-time rebuild: the original txn table had CHECK(recur_freq IN
+  // ('daily','weekly','monthly','custom')) which rejects 'yearly'. SQLite can't
+  // ALTER a CHECK, so recreate the table without the stale constraint, copying
+  // every row by column name. Detected by the absence of 'yearly' in its DDL.
+  try {
+    const txnDef = await db.getFirstAsync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='txn'",
+    );
+    if (txnDef && !txnDef.sql.includes("'yearly'")) {
+      const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
+        + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
+        + 'tz,lat,lng,place_label,pay_method,currency,is_deleted,created_at,updated_at';
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE txn_new (
+          id             TEXT PRIMARY KEY,
+          group_id       TEXT NOT NULL REFERENCES budget_group(id),
+          kind           TEXT NOT NULL CHECK(kind IN ('income','expense','settlement')),
+          entry_mode     TEXT NOT NULL CHECK(entry_mode IN ('quick','itemized')),
+          date           INTEGER NOT NULL,
+          category       TEXT NOT NULL,
+          note           TEXT,
+          attachment_uri TEXT,
+          tags           TEXT,
+          adjustments    TEXT,
+          recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','yearly','custom')),
+          recur_interval INTEGER,
+          recur_end      INTEGER,
+          recur_override_date INTEGER,
+          parent_recur_id TEXT,
+          recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
+          tz             TEXT,
+          lat            REAL,
+          lng            REAL,
+          place_label    TEXT,
+          pay_method     TEXT,
+          currency       TEXT,
+          is_deleted     INTEGER NOT NULL DEFAULT 0,
+          created_at     INTEGER NOT NULL,
+          updated_at     INTEGER NOT NULL
+        );
+        INSERT INTO txn_new (${cols}) SELECT ${cols} FROM txn;
+        DROP TABLE txn;
+        ALTER TABLE txn_new RENAME TO txn;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  } catch {
+    // If the rebuild fails, leave the original table intact (yearly stays unavailable).
   }
 
   // One-time fix: 'wallet' is not a valid Feather icon

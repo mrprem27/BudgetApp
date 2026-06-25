@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -12,20 +13,19 @@ import {
 } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, layout } from '../../src/constants/layout';
+import { space, layout, radius } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGlobalNet } from '../../src/db/queries/balances';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
-import { FAB } from '../../src/components/ui/FAB';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
-import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { computeHealthScore, type HealthResult } from '../../src/lib/financialHealth';
+import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
@@ -33,8 +33,10 @@ import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { HealthBand } from '../../src/components/finance/home/HealthBand';
+import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
-import { greeting } from '../../src/components/finance/home/helpers';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -47,12 +49,16 @@ function getRange(tab: TabKey): { from: number; to: number } {
   }
 }
 
+// "Till now" comparison: the prior period only up to the SAME elapsed point we're
+// at in the current one (e.g. month-to-date vs same-day-last-month-to-date), so the
+// delta isn't unfairly low early in a period. Capped at the prior period's real end.
 function getPrevRange(tab: TabKey): { from: number; to: number } {
   const now = new Date();
+  const elapsed = now.getTime() - getRange(tab).from;
   switch (tab) {
-    case 'today': { const d = subDays(now, 1);   return { from: startOfDay(d).getTime(), to: endOfDay(d).getTime() }; }
-    case 'month': { const d = subMonths(now, 1); return { from: startOfMonth(d).getTime(), to: endOfMonth(d).getTime() }; }
-    case 'year':  { const d = subYears(now, 1);  return { from: startOfYear(d).getTime(), to: endOfYear(d).getTime() }; }
+    case 'today': { const d = subDays(now, 1);   const from = startOfDay(d).getTime();   return { from, to: Math.min(from + elapsed, endOfDay(d).getTime()) }; }
+    case 'month': { const d = subMonths(now, 1); const from = startOfMonth(d).getTime(); return { from, to: Math.min(from + elapsed, endOfMonth(d).getTime()) }; }
+    case 'year':  { const d = subYears(now, 1);  const from = startOfYear(d).getTime();  return { from, to: Math.min(from + elapsed, endOfYear(d).getTime()) }; }
   }
 }
 
@@ -80,16 +86,32 @@ export default function DashboardScreen() {
   const [budget, setBudget] = useState<{ allocated: number; spent: number }>({ allocated: 0, spent: 0 });
   const [catRows, setCatRows] = useState<CategoryRow[]>([]);
   const [catTotal, setCatTotal] = useState(0);
+  // Once the user has any spend, keep the category card mounted across period
+  // switches so it never collapses (a period with no spend shows an empty slot).
+  const [everHadCats, setEverHadCats] = useState(false);
+  const [catExpanded, setCatExpanded] = useState(false);
   const [health, setHealth] = useState<HealthResult | null>(null);
+  const [healthInputs, setHealthInputs] = useState<HealthInputs | null>(null);
   const [showHealth, setShowHealth] = useState(false);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
+  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [hideAmounts, setHideAmounts] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [streakLoggedDays, setStreakLoggedDays] = useState<Set<string>>(new Set());
+  const [catchUpBanner, setCatchUpBanner] = useState<{ days: number; ruleCount: number } | null>(null);
   const { refreshing, onRefresh } = useRefresh(() => load());
 
   async function load() {
+    // No loading UI on period switch — data is local, so only the VALUES change;
+    // positions/sections stay put (nothing vanishes and re-appears).
     try {
       await loadInner();
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -100,6 +122,7 @@ export default function DashboardScreen() {
     setPersons(persons);
     const grps = await getAllGroups(db);
     setGroups(grps);
+    setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id ?? null);
 
     const me = persons.find(p => p.is_me === 1);
     if (!me) return;
@@ -124,6 +147,26 @@ export default function DashboardScreen() {
     }
     setSpending(sp);
     setIncome(inc);
+
+    // Compute daily streak from month transactions
+    const loggedDays = new Set<string>();
+    for (const t of txns) {
+      if (t.is_deleted) continue;
+      const d = new Date(t.date);
+      if (!isFinite(d.getTime())) continue;
+      loggedDays.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    setStreakLoggedDays(loggedDays);
+    // Count consecutive days backwards from today
+    const today3 = new Date();
+    let s = 0;
+    for (let i = 0; i < 31; i++) {
+      const check = new Date(today3.getFullYear(), today3.getMonth(), today3.getDate() - i);
+      const key = `${check.getFullYear()}-${String(check.getMonth() + 1).padStart(2, '0')}-${String(check.getDate()).padStart(2, '0')}`;
+      if (loggedDays.has(key)) s++;
+      else break;
+    }
+    setStreak(s);
 
     // Prior-period spend (my share) for the hero delta.
     const prev = getPrevRange(tab);
@@ -159,7 +202,7 @@ export default function DashboardScreen() {
     const worstCat = allBudgetedCats[0] ?? null;
 
     const now2 = new Date();
-    setHealth(computeHealthScore({
+    const healthInputsNow: HealthInputs = {
       spendPaise: sp,
       incomePaise: inc,
       prevSpendPaise: prevSp,
@@ -173,24 +216,53 @@ export default function DashboardScreen() {
       netOwedPaise: owe - owed,
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
-    }));
+    };
+    setHealth(computeHealthScore(healthInputsNow));
+    setHealthInputs(healthInputsNow);
 
     // Category breakdown for "Where it went" (largest first).
     const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
     setCatRows(sorted.map(([name, paise]) => ({ name, paise })));
     setCatTotal(sorted.reduce((s, [, v]) => s + v, 0));
+    if (sorted.length > 0) setEverHadCats(true);
 
     // Coming up: next recurring bills across all groups.
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 3));
+    // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
+    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 6, 4));
 
     setLoading(false);
   }
 
-  useFocusEffect(useCallback(() => { load(); }, [tab]));
+  useFocusEffect(useCallback(() => {
+    load();
+    AsyncStorage.getItem('hide_amounts').then(v => setHideAmounts(v === 'true'));
+    checkCatchUp();
+  }, [tab]));
 
-  // Pace bar is only meaningful on the Month tab (budgets are monthly).
-  const paceAllocated = tab === 'month' ? budget.allocated : 0;
+  async function checkCatchUp() {
+    const raw = await AsyncStorage.getItem('app_last_open');
+    const now = Date.now();
+    const lastOpen = raw ? parseInt(raw, 10) : now;
+    // Record current open time immediately so the next open can compare.
+    await AsyncStorage.setItem('app_last_open', String(now));
+    const gapDays = Math.floor((now - lastOpen) / (1000 * 60 * 60 * 24));
+    if (gapDays < 30) return;
+    // Count active recurring rules across all groups.
+    const grps = await getAllGroups(db);
+    const rulesPerGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+    const ruleCount = rulesPerGroup.flat().filter(r => r.recur_freq && r.recur_state !== 'paused').length;
+    if (ruleCount > 0) {
+      setCatchUpBanner({ days: gapDays, ruleCount });
+    }
+  }
+
+  // Budgets are stored monthly; scale to the active period so the pace line
+  // shows on every tab when a budget exists (Today = per-day, Year = ×12).
+  const paceAllocated = budget.allocated <= 0 ? 0
+    : tab === 'today' ? Math.round(budget.allocated / getDaysInMonth(new Date()))
+    : tab === 'year' ? budget.allocated * 12
+    : budget.allocated;
 
   return (
     <View style={styles.container}>
@@ -211,58 +283,140 @@ export default function DashboardScreen() {
               <Feather name="bell" size={18} color={colors.textSecondary} />
               <View style={styles.notifDot} />
             </TouchableOpacity>
+            <MemberAvatar
+              name={meInfo?.name ?? ''}
+              color={meInfo?.color ?? colors.accent}
+              imageUri={meInfo?.image}
+              size={36}
+              onPress={() => router.push('/settings')}
+            />
           </View>
         </View>
 
-        {loading ? (
-          <View style={{ gap: space.md }}>
-            <SkeletonCard height={148} />
-            <SkeletonCard height={64} />
-            <SkeletonCard height={160} />
-            <SkeletonCard height={96} />
-          </View>
-        ) : (
+        {/* No loading skeleton — local data loads instantly; render nothing until
+            ready so we never flash the empty-home at a user who has data. */}
+        {loadError ? (
+          <ErrorState
+            title="Couldn't load your data"
+            body="Something went wrong reading your data. It's safe on your device — try again."
+            onRetry={() => { setLoadError(false); setLoading(true); load(); }}
+          />
+        ) : loading ? null : (
           <FadeIn>
+            {/* Recurring catch-up — surfaces when rules ran while the app was closed 30+ days */}
+            {catchUpBanner && (
+              <View style={styles.catchUpBanner}>
+                <View style={styles.catchUpRow}>
+                  <Feather name="refresh-cw" size={16} color={colors.healthAmber} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.catchUpTitle}>Recurring catch-up complete</Text>
+                    <Text style={styles.catchUpText}>
+                      {catchUpBanner.ruleCount} recurring {catchUpBanner.ruleCount === 1 ? 'rule' : 'rules'} ran while the app was closed ({catchUpBanner.days} days). Review the new entries.
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.catchUpActions}>
+                  <TouchableOpacity onPress={() => router.push('/history' as any)} accessibilityRole="button" style={styles.catchUpBtn}>
+                    <Text style={styles.catchUpBtnText}>Review entries</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setCatchUpBanner(null)} accessibilityRole="button" style={styles.catchUpDismiss}>
+                    <Text style={styles.catchUpDismissText}>Dismiss</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {(spending === 0 && income === 0 && !everHadCats) ? (
+              <>
+                {/* Dedicated first-run empty home (design Screen 6) */}
+                <View style={styles.emptyHero}>
+                  <View style={styles.emptyHeroTile}><Text style={styles.emptyHeroZero}>₹0</Text></View>
+                  <Text style={styles.emptyHeroTitle}>Nothing logged yet</Text>
+                  <Text style={styles.emptyHeroBody}>Log your first expense to see where your money's going.</Text>
+                  <TouchableOpacity style={styles.emptyHeroCta} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button" accessibilityLabel="Log first expense">
+                    <Text style={styles.emptyHeroCtaText}>Log first expense</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.getStartedLabel}>GET STARTED</Text>
+                <View style={{ gap: space.sm }}>
+                  <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget` as any)} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.healthAmber + '22' }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Set a monthly budget</Text>
+                      <Text style={styles.startSub}>Know your limits before you hit them</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Create a group</Text>
+                      <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.income + '22' }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Add people you split with</Text>
+                      <Text style={styles.startSub}>Name-only — no account needed</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+            <>
             <HeroCard
               spent={spending}
               periodLabel={PERIOD_LABEL[tab]}
               budgetAllocated={paceAllocated}
-              budgetSpent={budget.spent}
               prevSpending={prevSpending}
               prevLabel={PREV_LABEL[tab]}
+              obfuscate={hideAmounts}
+              healthScore={health ? health.score : null}
+              healthColor={health ? healthBandColor(health.band) : colors.accent}
+              onPressHealth={() => setShowHealth(true)}
             />
 
             <View style={styles.tabRow}>
               <TabPills tabs={TABS} active={tab} onChange={(key) => setTab(key as TabKey)} />
             </View>
 
+            {everHadCats && (
+              <CategoryRankList
+                rows={catRows}
+                total={catTotal}
+                topN={catExpanded ? Math.max(3, catRows.length) : 3}
+                expanded={catExpanded}
+                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}` as any)}
+                onMore={() => setCatExpanded(e => !e)}
+              />
+            )}
+
+            {/* Settle-up sits below the bars. */}
             {(oweTotal > 0 || owedTotal > 0) && (
               <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/settle')} />
             )}
 
-            {catRows.length > 0 && (
-              <CategoryRankList
-                rows={catRows}
-                total={catTotal}
-                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}` as any)}
-                onMore={() => router.push('/reports' as any)}
-              />
-            )}
-
             {upcoming.length > 0 && <ComingUpList items={upcoming} />}
 
-            {flags.healthScore && health && (
+            {/* HealthBand moved into the hero card as a corner ring (tap → /health sheet) */}
+            {/* {flags.healthScore && health && (
               <HealthBand result={health} onPress={() => setShowHealth(true)} />
-            )}
+            )} */}
 
-            {spending === 0 && income === 0 && (
-              <EmptyState
-                icon="edit-3"
-                title="Start tracking"
-                body="Tap + to log your first expense. BudgetSplit will show you exactly where your money goes."
-                actionLabel="Add your first expense"
-                onAction={() => router.push('/add/quick?kind=expense')}
+            {/* StreakCard — not in design */}
+            {/* {flags.streak && (
+              <StreakCard
+                streak={streak}
+                daysInMonth={getDaysInMonth(new Date())}
+                loggedDays={streakLoggedDays}
               />
+            )} */}
+
+            </>
             )}
           </FadeIn>
         )}
@@ -270,9 +424,9 @@ export default function DashboardScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      <FAB onPress={() => router.push('/add/quick?kind=expense')} />
+      {/* FAB now lives in the custom tab bar (centered, docked). */}
 
-      <HealthSheet visible={showHealth} onClose={() => setShowHealth(false)} result={health} />
+      <HealthSheet visible={showHealth} onClose={() => setShowHealth(false)} result={health} inputs={healthInputs} />
     </View>
   );
 }
@@ -281,10 +435,35 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
+  emptyHints: { gap: space.xs, marginTop: space.sm },
+  emptyHintRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  emptyHintText: { ...type.label, color: colors.textSecondary },
+  // Dedicated first-run empty home (design Screen 6)
+  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: 32, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
+  emptyHeroZero: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, color: colors.accent, letterSpacing: -1 },
+  emptyHeroTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 6 },
+  emptyHeroBody: { ...type.label, color: colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 240, marginBottom: space.lg },
+  emptyHeroCta: { alignSelf: 'stretch', backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
+  emptyHeroCtaText: { ...type.button, color: colors.bg },
+  getStartedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: 14, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  startTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  startSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   greeting: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   notifDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.expense, borderWidth: 1.5, borderColor: colors.bgMuted },
   tabRow: { marginBottom: space.md },
+  catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
+  catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  catchUpTitle: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  catchUpText: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
+  catchUpActions: { flexDirection: 'row', gap: space.sm },
+  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '33', borderRadius: 20, borderWidth: 1, borderColor: colors.healthAmber + '66' },
+  catchUpBtnText: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
+  catchUpDismiss: { paddingHorizontal: space.md, paddingVertical: space.xs },
+  catchUpDismissText: { ...type.label, color: colors.textMuted },
 });

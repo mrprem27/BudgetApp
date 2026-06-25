@@ -2,15 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   ScrollView, Alert, Modal, Pressable, Switch, Image,
-  KeyboardAvoidingView, Platform, ActionSheetIOS,
+  Platform, ActionSheetIOS, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
+import { nthOccurrenceMs } from '../../src/lib/recurrence';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrentPlace } from '../../src/lib/location';
+import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
 import { matchCategory } from '../../src/lib/smartCategory';
@@ -19,21 +19,26 @@ import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
+import { getAllGroups, getGroupById } from '../../src/db/queries/groups';
+import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/persons';
+import { TransferBody } from '../../src/components/finance/TransferBody';
+import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
+import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares, formatAmountInput, sanitizeAmountInput } from '../../src/lib/money';
 import { getAffordSnapshot, type AffordSnapshot } from '../../src/db/queries/savings';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { AvatarStack } from '../../src/components/finance/AvatarStack';
+import { ModalHeader } from '../../src/components/ui/ModalHeader';
+import { MoreOptions } from '../../src/components/ui/MoreOptions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { Input } from '../../src/components/ui/Input';
 import { haptic } from '../../src/lib/haptics';
-import { pickAttachment } from '../../src/lib/attachment';
+import { pickAttachment, AttachmentStorageError } from '../../src/lib/attachment';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
@@ -47,14 +52,26 @@ export default function QuickAddScreen() {
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
-  const [kind, setKind] = useState<'income' | 'expense'>(paramKind === 'income' ? 'income' : 'expense');
+  const [kind, setKind] = useState<'income' | 'expense' | 'transfer'>(
+    paramKind === 'income' ? 'income' : paramKind === 'transfer' ? 'transfer' : 'expense',
+  );
   const [amountText, setAmountText] = useState('');
+  // Transfer (settlement) state — only used when kind === 'transfer'.
+  const [allPersons, setAllPersons] = useState<Person[]>([]);
+  const [transferFromId, setTransferFromId] = useState('');
+  const [transferToId, setTransferToId] = useState('');
+  const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null); // which slot the picker fills
+  // Launched from a group's FAB → pre-select that group's transfer scope.
+  const [transferScope, setTransferScope] = useState<'all' | string>(paramGroupId ?? 'all');
+  const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
+  const [payMethod, setPayMethod] = useState<'upi' | 'cash' | 'bank'>('upi');
+  const [transferNote, setTransferNote] = useState('');
   const [note, setNote] = useState('');
+  const [title, setTitle] = useState(''); // smart-category title (drives category); separate from Note
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [catManual, setCatManual] = useState(false); // user overrode the smart guess
@@ -65,7 +82,7 @@ export default function QuickAddScreen() {
   // we can't confidently place falls back to "Other" (the catch-all) rather than
   // silently leaving whatever was preselected.
   function onTitleChange(text: string) {
-    setNote(text);
+    setTitle(text);
     if (flags.smartCategory && !catManual && text.trim()) {
       const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories) ?? 'Other';
       const c = categories.find(cat => cat.name === name);
@@ -86,10 +103,15 @@ export default function QuickAddScreen() {
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
+  const [place, setPlace] = useState<CapturedPlace | null>(null);
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [capturingLoc, setCapturingLoc] = useState(false);
   const [recurEnabled, setRecurEnabled] = useState(false);
-  const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
+  const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
+  const [recurEndMode, setRecurEndMode] = useState<'never' | 'date' | 'count'>('never');
+  const [recurCount, setRecurCount] = useState('12');
   const [showEndDate, setShowEndDate] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
@@ -113,11 +135,19 @@ export default function QuickAddScreen() {
         if (txn) {
           setSelectedGroupId(txn.group_id);
           await loadGroup(txn.group_id, meRow, txn.category);
-          setKind(txn.kind === 'income' ? 'income' : 'expense');
+          setKind(txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
+
+          if (txn.kind === 'settlement') {
+            setTransferFromId(txn.payments[0]?.personId ?? '');
+            setTransferToId(txn.shares[0]?.personId ?? '');
+            setTransferScope(txn.group_id);
+            setPayMethod((txn.pay_method ?? 'upi'));
+            setTransferNote(txn.note ?? '');
+          }
           // Reconstruct the split/payers as explicit amounts so a *shared*
           // expense stays editable exactly as it was. In a personal (solo)
           // ledger there's only one member who always owns 100% and is the sole
@@ -138,7 +168,7 @@ export default function QuickAddScreen() {
             setRecurEnabled(true);
             setRecurFreq(txn.recur_freq);
             setRecurInterval(String(txn.recur_interval ?? 1));
-            if (txn.recur_end) setRecurEndMs(txn.recur_end);
+            if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode('date'); }
           }
         }
         return;
@@ -162,9 +192,37 @@ export default function QuickAddScreen() {
     const me_ = meRow ?? me;
     setSplitMembers(mems.map(m => m.id));
     if (me_) setPayerAmounts({ [me_.id]: '' });
+    // Seed the split mode from the group's default (new expenses in shared groups
+    // only — editing reconstructs its own split, solo groups stay equal).
+    if (!isEditing && mems.length > 1) {
+      const g = await getGroupById(db, gid);
+      if (g) setSplitType(g.default_split);
+    }
   }
 
+  // Transfer: load everyone, default the payer to me, and (re)compute the balance
+  // per shared group + combined whenever either side changes.
+  useEffect(() => { getAllPersons(db).then(setAllPersons).catch(() => {}); }, [db]);
+  useEffect(() => { if (!transferFromId && me) setTransferFromId(me.id); }, [me, transferFromId]);
+  useEffect(() => {
+    if (kind !== 'transfer' || !transferFromId || !transferToId || transferFromId === transferToId) { setTransferScopes(null); return; }
+    let alive = true;
+    computeTransferScopes(db, transferFromId, transferToId)
+      .then(s => { if (alive) setTransferScopes(s); })
+      .catch(() => { if (alive) setTransferScopes(null); });
+    return () => { alive = false; };
+  }, [db, kind, transferFromId, transferToId]);
+
   const total = parseToPaise(amountText);
+  const transferScopeBal = transferScope === 'all'
+    ? (transferScopes?.all.amount ?? 0)
+    : (transferScopes?.groups.find(g => g.groupId === transferScope)?.amount ?? 0);
+
+  // With smart-category on, Title (drives category) and Note are separate fields,
+  // composed into the single saved note. Otherwise the one field is the note.
+  const composedNote = (flags.smartCategory
+    ? [title.trim(), note.trim()].filter(Boolean).join(' — ')
+    : note.trim()) || undefined;
 
   function computeShares(): Array<{ personId: string; amount: number }> {
     const selected = members.filter(m => splitMembers.includes(m.id));
@@ -220,13 +278,82 @@ export default function QuickAddScreen() {
   const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
   const nudgeColor = nudgePct == null ? null : nudgePct > 0.2 ? colors.income : nudgePct > 0 ? colors.healthAmber : colors.expense;
 
-  const canSave = total > 0
-    && selectedCategory !== null
-    && selectedGroupId !== ''
-    && (kind === 'income' || (remainder === 0 && paymentRemainder === 0))
-    && (kind === 'income' ? paymentsTotal === total : true);
+  const canSave = kind === 'transfer'
+    ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId)
+    : (total > 0
+        && selectedCategory !== null
+        && selectedGroupId !== ''
+        && (kind === 'income' || (remainder === 0 && paymentRemainder === 0))
+        && (kind === 'income' ? paymentsTotal === total : true));
+
+  // Location tagging — capture once on open when the user has it enabled, and
+  // surface it in the form so they can see / clear it before saving.
+  async function captureLocation() {
+    setCapturingLoc(true);
+    try { setPlace(await getCurrentPlace()); } finally { setCapturingLoc(false); }
+  }
+  useEffect(() => {
+    if (isEditing) return;
+    (async () => {
+      const on = (await AsyncStorage.getItem('save_location')) === 'true';
+      setLocEnabled(on);
+      if (on) await captureLocation();
+    })();
+  }, [isEditing]);
+
+  async function handleSaveTransfer() {
+    if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
+    setSaving(true);
+    try {
+      // Editing an existing settlement → update that single row in its group.
+      if (isEditing) {
+        await updateTxn(db, {
+          id: editId!, groupId: transferScope === 'all' ? selectedGroupId : transferScope,
+          kind: 'settlement', date: txnDate, category: 'Settlement',
+          note: transferNote.trim() || undefined, payMethod,
+          payments: [{ personId: transferFromId, amount: total }],
+          shares: [{ personId: transferToId, amount: total }],
+        });
+        haptic.success();
+        router.back();
+        return;
+      }
+
+      // New transfer. Specific group → one row; "All groups" → split largest-first,
+      // all rows in the chosen from→to direction.
+      const plans = transferScope === 'all'
+        ? planAllGroupsSettlement(transferScopes ?? { groups: [], all: { amount: 0, from: transferFromId, to: transferToId } }, total, transferFromId, transferToId)
+        : [{ groupId: transferScope, from: transferFromId, to: transferToId, amount: total }];
+
+      // Fallback: "All groups" with no known balances — post the full amount to the
+      // first group both belong to (or fail if they share none).
+      let finalPlans = plans;
+      if (finalPlans.length === 0) {
+        const firstGroup = transferScopes?.groups[0];
+        if (!firstGroup) { Alert.alert('No shared group', 'These two people don’t share a group to transfer in.'); setSaving(false); return; }
+        finalPlans = [{ groupId: firstGroup.groupId, from: transferFromId, to: transferToId, amount: total }];
+      }
+
+      for (const p of finalPlans) {
+        await insertTxn(db, {
+          groupId: p.groupId, kind: 'settlement', entryMode: 'quick', date: txnDate,
+          category: 'Settlement', note: transferNote.trim() || undefined, payMethod,
+          payments: [{ personId: p.from, amount: p.amount }],
+          shares: [{ personId: p.to, amount: p.amount }],
+        });
+      }
+      haptic.success();
+      router.back();
+    } catch {
+      haptic.error();
+      Alert.alert('Error', 'Could not save the transfer.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSave() {
+    if (kind === 'transfer') return handleSaveTransfer();
     if (!canSave || saving) return;
     setSaving(true);
     try {
@@ -244,7 +371,7 @@ export default function QuickAddScreen() {
           kind,
           date: txnDate,
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           payments: finalPayments,
           shares: finalShares,
         });
@@ -262,7 +389,7 @@ export default function QuickAddScreen() {
           entryMode: 'quick',
           date: txnDate, // overridden to the split date inside the query
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           recurFreq: recurFreq,
           recurInterval: recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
@@ -274,23 +401,29 @@ export default function QuickAddScreen() {
         return;
       }
 
-      // End date is optional; only valid if it's after the start date.
-      const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
+      // Resolve the end date from the chosen "Ends" mode. "After N times" is
+      // converted to the date of the Nth occurrence so the engine needs no count column.
+      const recurIntervalN = recurFreq === 'custom' ? (parseInt(recurInterval, 10) || 1) : 1;
+      let recurEnd: number | undefined;
+      if (recurEnabled) {
+        if (recurEndMode === 'date') {
+          recurEnd = recurEndMs && recurEndMs > txnDate ? recurEndMs : undefined;
+        } else if (recurEndMode === 'count') {
+          const n = Math.max(1, parseInt(recurCount, 10) || 1);
+          recurEnd = nthOccurrenceMs(txnDate, recurFreq, recurIntervalN, n);
+        }
+      }
 
       const commit = async () => {
-        // Optional, user-controlled location capture (Settings → Privacy).
-        let place: { lat: number; lng: number; label: string | null } | null = null;
-        try {
-          if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
-        } catch { /* best-effort */ }
-
+        // Location was captured into `place` on open (when enabled) and may have
+        // been cleared by the user — use whatever is in state at save time.
         await insertTxn(db, {
           groupId: selectedGroupId,
           kind,
           entryMode: 'quick',
           date: txnDate,
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurFreq : undefined,
           recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
@@ -333,13 +466,20 @@ export default function QuickAddScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
-          <Feather name="x" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : 'Add entry'}</Text>
-        {/* Expense / Income toggle in header */}
-        {!isEditing && !isRecurEdit ? (
+      {/* Header: ✕ left · title centered · ✓ save right */}
+      <ModalHeader
+        title={isRecurEdit ? 'Edit recurring' : isEditing ? (kind === 'income' ? 'Edit income' : kind === 'transfer' ? 'Edit settlement' : 'Edit expense') : (kind === 'income' ? 'Add income' : kind === 'transfer' ? 'Settle up' : 'Add expense')}
+        onClose={() => router.back()}
+        right={
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Feather name="check" size={24} color={(!canSave || saving) ? colors.textMuted : colors.accent} />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Expense / Income toggle — centered, just below the title */}
+      {!isEditing && !isRecurEdit && (
+        <View style={styles.kindToggleRow}>
           <View style={styles.kindRow}>
             <TouchableOpacity
               style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExpenseActive]}
@@ -350,20 +490,29 @@ export default function QuickAddScreen() {
               <Text style={[styles.kindLabel, kind === 'expense' && styles.kindLabelActive]}>Expense</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
+              onPress={() => { setKind('transfer'); haptic.selection(); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'transfer' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'transfer' && styles.kindLabelTransferActive]}>Transfer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
-              onPress={() => { setKind('income'); haptic.selection(); }}
+              onPress={() => {
+                setKind('income'); haptic.selection();
+                // Income is always personal — never a shared group.
+                const p = groups.find(g => g.is_personal === 1);
+                if (p && p.id !== selectedGroupId) { setSelectedGroupId(p.id); loadGroup(p.id, me); }
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === 'income' }}
             >
               <Text style={[styles.kindLabel, kind === 'income' && styles.kindLabelIncomeActive]}>Income</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save" style={{ minWidth: 44 }}>
-            <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -371,23 +520,42 @@ export default function QuickAddScreen() {
         {/* Large centered amount */}
         <View style={styles.amountBlock}>
           <TextInput
-            style={[styles.amountInput, { color: kind === 'income' ? colors.income : colors.textPrimary }]}
-            value={amountText}
-            onChangeText={setAmountText}
+            style={[styles.amountInput, { color: kind === 'income' ? colors.income : kind === 'transfer' ? colors.settle : colors.textPrimary }]}
+            value={formatAmountInput(amountText)}
+            onChangeText={(t) => setAmountText(sanitizeAmountInput(t))}
             keyboardType="decimal-pad"
-            placeholder={`₹0`}
+            placeholder={kind === 'transfer' && transferScopeBal > 0 ? formatRupees(transferScopeBal) : '₹0'}
             placeholderTextColor={kind === 'income' ? colors.income + '55' : colors.textMuted}
             accessibilityLabel="Amount"
             autoFocus={!isEditing}
           />
-          <View style={[styles.amountCursor, { backgroundColor: kind === 'income' ? colors.income : colors.accent }]} />
+          <View style={[styles.amountCursor, { backgroundColor: kind === 'income' ? colors.income : kind === 'transfer' ? colors.settle : colors.accent }]} />
         </View>
 
+        {kind === 'transfer' && (
+          <TransferBody
+            me={me}
+            persons={allPersons}
+            fromId={transferFromId}
+            toId={transferToId}
+            onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
+            onSwap={() => { setTransferFromId(transferToId); setTransferToId(transferFromId); }}
+            scopes={transferScopes}
+            scope={transferScope}
+            onScope={setTransferScope}
+            payMethod={payMethod}
+            onPayMethod={setPayMethod}
+            note={transferNote}
+            onNote={setTransferNote}
+          />
+        )}
+
+        {kind !== 'transfer' && (<>
         {/* Category + Date pills row */}
         <View style={styles.pillsRow}>
           <TouchableOpacity
             style={styles.catPill}
-            onPress={() => { haptic.light(); setShowCatPicker(true); }}
+            onPress={() => { Keyboard.dismiss(); haptic.light(); setShowCatPicker(true); }}
             accessibilityRole="button"
             accessibilityLabel={selectedCategory ? `Category: ${selectedCategory.name}` : 'Choose category'}
           >
@@ -403,7 +571,7 @@ export default function QuickAddScreen() {
             )}
             <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.datePill} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
+          <TouchableOpacity style={styles.datePill} onPress={() => { Keyboard.dismiss(); setShowDate(true); }} accessibilityRole="button" accessibilityLabel="Date">
             <Text style={styles.datePillText}>
               {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'dd MMM')}
             </Text>
@@ -422,7 +590,7 @@ export default function QuickAddScreen() {
             setSelectedCategory(c);
             setCatManual(true);
             setShowCatPicker(false);
-            if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
+            if (title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
           }}
           onCreate={async (name) => {
             const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
@@ -431,12 +599,14 @@ export default function QuickAddScreen() {
           }}
         />
 
-        {groups.length > 1 && (() => {
+        {/* Group selector — expense only (income is always Personal). Picking a real
+            group loads its members, which enables the split row below. */}
+        {kind === 'expense' && groups.length > 1 && (() => {
           const selectedGroup = groups.find(g => g.id === selectedGroupId);
           return (
             <TouchableOpacity
               style={styles.groupSelector}
-              onPress={() => setShowGroupPicker(true)}
+              onPress={() => { Keyboard.dismiss(); setShowGroupPicker(true); }}
               accessibilityRole="button"
               accessibilityLabel="Select group"
             >
@@ -452,15 +622,15 @@ export default function QuickAddScreen() {
           );
         })()}
 
-        {/* Note field */}
+        {/* Top field: Title (drives category) when smart-category is on, else the Note. */}
         <View style={styles.noteCard}>
           <TextInput
             style={styles.noteCardInput}
-            value={note}
+            value={flags.smartCategory ? title : note}
             onChangeText={flags.smartCategory ? onTitleChange : setNote}
             placeholder={flags.smartCategory ? 'e.g. Uber, Groceries, Netflix' : 'Note (optional)'}
             placeholderTextColor={colors.textMuted}
-            accessibilityLabel="Note"
+            accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
             autoCapitalize="sentences"
             maxLength={80}
           />
@@ -478,134 +648,261 @@ export default function QuickAddScreen() {
           </View>
         )}
 
-        {attachmentUri ? (
-          <View style={styles.attachRow}>
-            <Image source={{ uri: attachmentUri }} style={styles.attachThumb} />
-            <Text style={styles.attachName} numberOfLines={1}>Receipt attached</Text>
-            <TouchableOpacity onPress={() => setAttachmentUri(null)} hitSlop={10} accessibilityLabel="Remove attachment">
-              <Feather name="x" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={() => {
-              if (Platform.OS === 'ios') {
-                ActionSheetIOS.showActionSheetWithOptions(
-                  { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-                  async (i) => {
-                    if (i === 1) { const u = await pickAttachment('camera'); if (u) setAttachmentUri(u); }
-                    if (i === 2) { const u = await pickAttachment('gallery'); if (u) setAttachmentUri(u); }
-                  },
-                );
-              } else {
-                pickAttachment('camera').then(u => { if (u) setAttachmentUri(u); });
-              }
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Attach receipt"
-          >
-            <Feather name="paperclip" size={16} color={colors.accent} />
-            <Text style={styles.attachBtnText}>Attach receipt</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Recurring toggle shows "starts on" label — keep hidden date field for recurring use */}
-        {recurEnabled && (
-          <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Starts on">
-            <Feather name="calendar" size={16} color={colors.accent} />
-            <Text style={styles.dateText}>
-              Starts {isSameDay(new Date(txnDate), new Date()) ? 'today' : format(new Date(txnDate), 'EEE, dd MMM yyyy')}
-            </Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-
-        {!isEditing && flags.recurring && (
-        <View style={styles.scheduleRow}>
-          <Text style={[styles.fieldLabel, recurEnabled && { color: colors.accent }]}>
-            {recurEnabled ? `Repeats ${recurFreq}` : 'Repeat this'}
-          </Text>
-          <Switch
-            value={recurEnabled}
-            onValueChange={setRecurEnabled}
-            trackColor={{ true: colors.accent, false: colors.bgMuted }}
-            thumbColor={colors.textPrimary}
-            accessibilityLabel="Repeat on a schedule"
-          />
-        </View>
-        )}
-
-        {!isEditing && recurEnabled && (
-          <View style={styles.recurOptions}>
-            <View style={styles.splitTypeRow}>
-              {(['daily', 'weekly', 'monthly', 'custom'] as const).map(f => (
-                <TouchableOpacity
-                  key={f}
-                  style={[styles.splitTypeBtn, recurFreq === f && styles.splitTypeActive]}
-                  onPress={() => setRecurFreq(f)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: recurFreq === f }}
-                >
-                  <Text style={[styles.splitTypeLabel, recurFreq === f && { color: colors.bg }]}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {recurFreq === 'custom' && (
-              <View style={styles.recurIntervalRow}>
-                <Text style={styles.fieldLabel}>Every</Text>
+        {/* More options — Attach receipt + Recurring. (Income is the header
+            toggle; Itemized is a separate FAB action.) */}
+        <MoreOptions hint="Split · Attach" forceOpen={isEditing}>
+            {/* Note lives here when the top field is the Title (smart-category on). */}
+            {flags.smartCategory && (
+              <View style={styles.noteCard}>
                 <TextInput
-                  style={styles.recurIntervalInput}
-                  value={recurInterval}
-                  onChangeText={setRecurInterval}
-                  keyboardType="number-pad"
-                  placeholder="1"
+                  style={styles.noteCardInput}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="Note (optional)"
                   placeholderTextColor={colors.textMuted}
-                  accessibilityLabel="Interval days"
+                  accessibilityLabel="Note"
+                  autoCapitalize="sentences"
+                  maxLength={120}
                 />
-                <Text style={styles.fieldLabel}>days</Text>
               </View>
             )}
 
-            <Text style={styles.fieldLabel}>Ends</Text>
-            <View style={styles.endRow}>
-              <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
-                <Feather name="calendar" size={15} color={colors.accent} />
-                <Text style={styles.dateText}>{recurEndMs ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
+            {/* Split by items — opens the separate itemized screen, carrying the group. */}
+            {!isEditing && (
+              <TouchableOpacity
+                style={styles.byItemsRow}
+                onPress={() => router.push(`/add/itemized${selectedGroupId ? `?groupId=${selectedGroupId}` : ''}` as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Split by items"
+              >
+                <Feather name="list" size={16} color={colors.accent} />
+                <Text style={styles.byItemsText}>Split by items</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
               </TouchableOpacity>
-              {recurEndMs != null && (
-                <TouchableOpacity style={styles.endNeverBtn} onPress={() => setRecurEndMs(null)} accessibilityRole="button" accessibilityLabel="No end date">
-                  <Text style={styles.endNeverText}>Never</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
+            )}
 
-        {kind === 'expense' && members.length > 1 && total > 0 && (
-          <View style={styles.sentenceRow}>
-            <Text style={styles.sentenceText}>Paid by</Text>
-            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowPayers(true)} accessibilityRole="button" accessibilityLabel="Who paid">
-              <Text style={styles.sentencePillText}>
-                {payments.length === 1
-                  ? payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone'
-                  : `${payments.length} people`}
-              </Text>
-              <Feather name="chevron-down" size={14} color={colors.accent} />
-            </TouchableOpacity>
-            <Text style={styles.sentenceDot}>·</Text>
-            <Text style={styles.sentenceText}>split</Text>
-            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowSplit(true)} accessibilityRole="button" accessibilityLabel="Configure split">
-              <Text style={styles.sentencePillText}>
-                {splitType === 'equal' ? 'equally' : splitType}
-              </Text>
-              <Feather name="chevron-down" size={14} color={colors.accent} />
-            </TouchableOpacity>
-          </View>
-        )}
+            {attachmentUri ? (
+              <View style={styles.attachRow}>
+                <Image source={{ uri: attachmentUri }} style={styles.attachThumb} />
+                <Text style={styles.attachName} numberOfLines={1}>Receipt attached</Text>
+                <TouchableOpacity onPress={() => setAttachmentUri(null)} hitSlop={10} accessibilityLabel="Remove attachment">
+                  <Feather name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.attachBtn}
+                onPress={() => {
+                  const attach = async (src: 'camera' | 'gallery') => {
+                    try {
+                      const u = await pickAttachment(src);
+                      if (u) setAttachmentUri(u);
+                    } catch (e) {
+                      // Out of storage — the design lets the user keep going without a photo.
+                      if (e instanceof AttachmentStorageError) {
+                        Alert.alert(
+                          'Photo couldn’t be saved',
+                          'Your device is low on storage. Free up space and try again — your expense will still save without the photo.',
+                          [
+                            { text: 'Storage settings', onPress: () => router.push('/storage' as any) },
+                            { text: 'OK', style: 'cancel' },
+                          ],
+                        );
+                      }
+                    }
+                  };
+                  if (Platform.OS === 'ios') {
+                    ActionSheetIOS.showActionSheetWithOptions(
+                      { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+                      (i) => { if (i === 1) attach('camera'); if (i === 2) attach('gallery'); },
+                    );
+                  } else {
+                    attach('camera');
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Attach receipt"
+              >
+                <Feather name="paperclip" size={16} color={colors.accent} />
+                <Text style={styles.attachBtnText}>Attach receipt</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Location — shown when the user has location tagging on (Settings). */}
+            {locEnabled && !isEditing && (
+              <View style={styles.attachRow}>
+                <Feather name="map-pin" size={16} color={place ? colors.accent : colors.textMuted} />
+                <Text style={styles.attachName} numberOfLines={1}>
+                  {capturingLoc ? 'Locating…' : place?.label || (place ? 'Location tagged' : 'No location yet')}
+                </Text>
+                {place ? (
+                  <TouchableOpacity onPress={() => setPlace(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
+                    <Feather name="x" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={captureLocation} hitSlop={10} disabled={capturingLoc} accessibilityRole="button" accessibilityLabel="Capture location">
+                    <Feather name="refresh-cw" size={15} color={colors.accent} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Recurring — design: Screens 4, "Recurring expanded inline". */}
+            {!isEditing && flags.recurring && (
+              recurEnabled ? (
+                <View style={styles.recurCard}>
+                  <View style={styles.recurHeader}>
+                    <View style={styles.recurDot} />
+                    <Text style={styles.recurTitle}>Recurring</Text>
+                    <TouchableOpacity onPress={() => setRecurEnabled(false)} hitSlop={10} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel="Turn off recurring">
+                      <Feather name="chevron-up" size={18} color={colors.settle} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Frequency */}
+                  <View style={styles.recurSection}>
+                    <Text style={styles.recurSectionLabel}>FREQUENCY</Text>
+                    <View style={styles.recurPills}>
+                      {(['monthly', 'weekly', 'yearly', 'custom'] as const).map(f => (
+                        <TouchableOpacity
+                          key={f}
+                          style={[styles.recurPill, recurFreq === f && styles.recurPillActive]}
+                          onPress={() => setRecurFreq(f)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: recurFreq === f }}
+                        >
+                          <Text style={[styles.recurPillText, recurFreq === f && styles.recurPillTextActive]}>
+                            {f.charAt(0).toUpperCase() + f.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {recurFreq === 'custom' && (
+                      <View style={[styles.recurIntervalRow, { marginTop: space.sm }]}>
+                        <Text style={styles.recurRowLabel}>Every</Text>
+                        <TextInput
+                          style={styles.recurIntervalInput}
+                          value={recurInterval}
+                          onChangeText={setRecurInterval}
+                          keyboardType="number-pad"
+                          placeholder="1"
+                          placeholderTextColor={colors.textMuted}
+                          accessibilityLabel="Interval days"
+                        />
+                        <Text style={styles.recurRowLabel}>days</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Next charge — the occurrence after the start date */}
+                  <View style={styles.recurRow}>
+                    <Text style={styles.recurRowLabel}>Next charge</Text>
+                    <View style={styles.recurDateChip}>
+                      <Text style={styles.recurDateChipText}>
+                        {format(new Date(nthOccurrenceMs(txnDate, recurFreq, recurFreq === 'custom' ? (parseInt(recurInterval, 10) || 1) : 1, 2)), 'dd MMM yyyy')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Ends — Never / On date / After N */}
+                  <View style={styles.recurRow}>
+                    <Text style={styles.recurRowLabel}>Ends</Text>
+                    <View style={styles.recurEndPills}>
+                      <TouchableOpacity
+                        style={[styles.recurChip, recurEndMode === 'never' && styles.recurPillActive]}
+                        onPress={() => { setRecurEndMode('never'); setRecurEndMs(null); }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: recurEndMode === 'never' }}
+                      >
+                        <Text style={[styles.recurChipText, recurEndMode === 'never' && styles.recurPillTextActive]}>Never</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.recurChip, recurEndMode === 'date' && styles.recurPillActive]}
+                        onPress={() => { setRecurEndMode('date'); Keyboard.dismiss(); setShowEndDate(true); }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: recurEndMode === 'date' }}
+                      >
+                        <Text style={[styles.recurChipText, recurEndMode === 'date' && styles.recurPillTextActive]}>On date</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.recurChip, recurEndMode === 'count' && styles.recurPillActive]}
+                        onPress={() => setRecurEndMode('count')}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: recurEndMode === 'count' }}
+                      >
+                        <Text style={[styles.recurChipText, recurEndMode === 'count' && styles.recurPillTextActive]}>After N</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {recurEndMode === 'date' && recurEndMs != null && (
+                    <TouchableOpacity style={styles.recurEndDate} onPress={() => { Keyboard.dismiss(); setShowEndDate(true); }} accessibilityRole="button" accessibilityLabel="Change end date">
+                      <Feather name="calendar" size={13} color={colors.settle} />
+                      <Text style={styles.recurEndDateText}>Ends {format(new Date(recurEndMs!), 'dd MMM yyyy')}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {recurEndMode === 'count' && (
+                    <View style={styles.recurCountRow}>
+                      <Text style={styles.recurRowLabel}>After</Text>
+                      <TextInput
+                        style={styles.recurIntervalInput}
+                        value={recurCount}
+                        onChangeText={setRecurCount}
+                        keyboardType="number-pad"
+                        placeholder="12"
+                        placeholderTextColor={colors.textMuted}
+                        accessibilityLabel="Number of occurrences"
+                      />
+                      <Text style={styles.recurRowLabel}>times</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.scheduleRow}>
+                  <Text style={styles.fieldLabel}>Repeat this</Text>
+                  <Switch
+                    value={recurEnabled}
+                    onValueChange={setRecurEnabled}
+                    trackColor={{ true: colors.settle, false: colors.bgMuted }}
+                    thumbColor={colors.textPrimary}
+                    accessibilityLabel="Repeat on a schedule"
+                  />
+                </View>
+              )
+            )}
+        </MoreOptions>
+
+        {kind === 'expense' && members.length > 1 && total > 0 && (() => {
+          const inSplit = members.filter(m => splitMembers.includes(m.id));
+          const perEach = inSplit.length > 0 ? Math.round(total / inSplit.length) : 0;
+          const summary = splitType === 'equal'
+            ? `Equal · ${formatCompact(perEach)} each`
+            : splitType.charAt(0).toUpperCase() + splitType.slice(1);
+          const payerName = payments.length === 1
+            ? (payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone')
+            : `${payments.length} people`;
+          const payers = payments
+            .map(p => members.find(m => m.id === p.personId))
+            .filter((m): m is Person => !!m);
+          return (
+            <View>
+              {/* Split with [avatars] · Equal · ₹217 each (design Screen 2) */}
+              <TouchableOpacity style={styles.splitWithRow} onPress={() => { Keyboard.dismiss(); setShowSplit(true); }} accessibilityRole="button" accessibilityLabel="Configure split">
+                <Text style={styles.splitWithLabel}>Split with</Text>
+                <View style={styles.splitWithRight}>
+                  <AvatarStack people={inSplit} size={24} max={4} />
+                  <Text style={styles.splitWithValue}>{summary}</Text>
+                </View>
+              </TouchableOpacity>
+              {/* Who paid — prominent; shows payer avatars when more than one person paid. */}
+              <TouchableOpacity style={styles.paidByLine} onPress={() => { Keyboard.dismiss(); setShowPayers(true); }} accessibilityRole="button" accessibilityLabel="Who paid">
+                <Text style={styles.paidByLabel}>Paid by</Text>
+                {payments.length > 1 && <AvatarStack people={payers} size={20} max={3} />}
+                <Text style={styles.paidByValue}>{payerName}</Text>
+                <Feather name="chevron-right" size={15} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         {kind === 'expense' && total > 0 && (paymentRemainder !== 0 || remainder !== 0) && (
           <Text style={styles.remainderWarning}>
@@ -614,24 +911,9 @@ export default function QuickAddScreen() {
               : remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over-assigned`}
           </Text>
         )}
+        </>)}
 
-        {/* Teal/green CTA — "Log expense" / "Log income" */}
-        <TouchableOpacity
-          style={[
-            styles.logCta,
-            { backgroundColor: kind === 'income' ? colors.income : colors.accent },
-            (!canSave || saving) && { opacity: 0.5 },
-          ]}
-          onPress={handleSave}
-          disabled={!canSave || saving}
-          accessibilityRole="button"
-          accessibilityLabel={total > 0 ? `Log ${formatRupees(total)} ${kind}` : `Log ${kind}`}
-        >
-          <Text style={styles.logCtaText}>
-            {saving ? 'Saving…' : isEditing ? 'Save changes' : total > 0 ? `Log ${formatRupees(total)} ${kind}` : `Log ${kind}`}
-          </Text>
-        </TouchableOpacity>
-
+        {/* No bottom CTA — the ✓ in the header saves. */}
         <View style={{ height: 32 }} />
       </ScrollView>
       </KeyboardAvoidingView>
@@ -759,6 +1041,35 @@ export default function QuickAddScreen() {
         ))}
       </SheetModal>
 
+      {/* Transfer: pick the payer / recipient for the active slot */}
+      <SheetModal visible={transferSlot !== null} onClose={() => setTransferSlot(null)} title={transferSlot === 'from' ? 'Who paid?' : 'Who received?'} scroll={false}>
+        {allPersons.map(p => {
+          const active = transferSlot === 'from' ? p.id === transferFromId : p.id === transferToId;
+          return (
+            <TouchableOpacity
+              key={p.id}
+              style={[styles.groupPickerRow, active && styles.groupPickerRowActive]}
+              onPress={() => {
+                // Keep the two slots distinct: picking a person already in the other slot swaps them.
+                if (transferSlot === 'from') {
+                  if (p.id === transferToId) setTransferToId(transferFromId);
+                  setTransferFromId(p.id);
+                } else if (transferSlot === 'to') {
+                  if (p.id === transferFromId) setTransferFromId(transferToId);
+                  setTransferToId(p.id);
+                }
+                setTransferSlot(null);
+              }}
+              accessibilityRole="button"
+            >
+              <MemberAvatar name={p.name} color={p.avatar_color} size={36} imageUri={p.image_uri} />
+              <Text style={styles.groupPickerName}>{p.id === me?.id ? `${p.name} (you)` : p.name}</Text>
+              {active && <Feather name="check" size={18} color={colors.accent} />}
+            </TouchableOpacity>
+          );
+        })}
+      </SheetModal>
+
       {/* Currency picker hidden for v1 (INR-only). */}
 
       {/* Paid by sheet — set one or more payers */}
@@ -802,24 +1113,25 @@ export default function QuickAddScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 52 },
-  title: { ...type.heading, color: colors.textPrimary },
-  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
-  headerClose: { minWidth: 44, alignItems: 'flex-start', justifyContent: 'center', height: 44 },
+  // paddingTop clears the native sheet's grabber so the title isn't tucked under it.
+  kindToggleRow: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
   // Header kind toggle
   kindRow: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border },
   kindBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
   kindBtnExpenseActive: { backgroundColor: colors.accent },
   kindBtnIncomeActive: { backgroundColor: colors.income },
-  kindLabel: { fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_400Regular' },
+  kindBtnTransferActive: { backgroundColor: colors.settle },
+  kindLabel: { fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_600SemiBold' },
   kindLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   kindLabelIncomeActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  kindLabelTransferActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
 
   scroll: { padding: layout.screenPaddingH, gap: space.md },
   // Large centered amount
   amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: colors.border + '55' },
-  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 48, textAlign: 'center', letterSpacing: -2, lineHeight: 56 },
-  amountCursor: { width: 60, height: 2, borderRadius: 1, marginTop: 6 },
+  // No lineHeight (it clipped the top of the glyphs on iOS); vertical padding gives headroom.
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, textAlign: 'center', letterSpacing: -1.5, paddingVertical: 4, alignSelf: 'stretch', width: '100%' },
+  amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: 4 },
 
   // Category + date pills row
   pillsRow: { flexDirection: 'row', gap: space.sm },
@@ -838,6 +1150,35 @@ const styles = StyleSheet.create({
   nudge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
   nudgeDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
   nudgeText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
+
+  // More-options expander
+  byItemsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  byItemsText: { ...type.body, color: colors.textPrimary },
+
+  // Recurring purple card (design: Screens 4)
+  // Neutral card with the app's teal accent (matches the rest of the app — no off-theme purple).
+  recurCard: { backgroundColor: colors.settle + '14', borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.settle, overflow: 'hidden' },
+  recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
+  recurDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.settle },
+  recurTitle: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
+  recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderTopWidth: 1, borderTopColor: colors.settle + '33' },
+  recurRowLabel: { ...type.body, color: colors.textSecondary },
+  recurSection: { paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  recurSectionLabel: { ...type.caption, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  recurPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.settle + '44' },
+  recurPillActive: { backgroundColor: colors.settle, borderColor: colors.settle },
+  recurDateChip: { backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.sm + 2, paddingVertical: 6 },
+  recurDateChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  recurCountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },
+  // SemiBold on both states so the active pill doesn't change width (no resize on select).
+  recurPillText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
+  recurPillTextActive: { color: '#fff' },
+  recurChip: { paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.settle + '44' },
+  recurChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  recurEndPills: { flexDirection: 'row', gap: 6 },
+  recurEndDate: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },
+  recurEndDateText: { ...type.label, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
 
   // Log CTA
   logCta: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: space.sm },
@@ -863,11 +1204,14 @@ const styles = StyleSheet.create({
   attachName: { ...type.body, color: colors.textPrimary, flex: 1 },
   dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
   dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  sentenceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs, padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  sentenceText: { ...type.body, color: colors.textSecondary },
-  sentencePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, minHeight: 32 },
-  sentencePillText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  sentenceDot: { ...type.body, color: colors.textMuted },
+  // "Split with [avatars] · Equal · ₹217 each" row (design Screen 2)
+  splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  splitWithLabel: { ...type.body, color: colors.textSecondary },
+  splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  splitWithValue: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingTop: space.sm + 2 },
+  paidByLabel: { ...type.body, color: colors.textSecondary },
+  paidByValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
   saveBtn: { marginTop: space.md },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },

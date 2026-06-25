@@ -8,11 +8,14 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { getAllGroups } from '../../src/db/queries/groups';
+import { getCategoriesForGroup } from '../../src/db/queries/categories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
 import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
@@ -21,8 +24,6 @@ import {
   MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
 } from '../../src/lib/reminders';
 import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
-import { ComparisonFormat, formatComparison } from '../../src/lib/money';
-import { getComparisonFormat, setComparisonFormat } from '../../src/lib/displayPrefs';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -35,12 +36,6 @@ import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
 
-const COMPARE_FMT_LABELS: Record<ComparisonFormat, string> = {
-  [ComparisonFormat.Percent]: 'Percentage',
-  [ComparisonFormat.Multiple]: 'Multiple (×)',
-};
-const COMPARE_FMT_KEYS: ComparisonFormat[] = [ComparisonFormat.Percent, ComparisonFormat.Multiple];
-
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -51,16 +46,16 @@ export default function SettingsScreen() {
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
   const [contactCount, setContactCount] = useState(0);
+  const [categoryCount, setCategoryCount] = useState(0);
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
+  const [hideAmounts, setHideAmounts] = useState(false);
   const [saveLocation, setSaveLocation] = useState(false);
   const [autoSweep, setAutoSweep] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-  const [compareFmt, setCompareFmt] = useState<ComparisonFormat>(ComparisonFormat.Percent);
-  const [showCompareFmt, setShowCompareFmt] = useState(false);
 
   const [reminders, setReminders] = useState<ReminderPrefs | null>(null);
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
@@ -71,14 +66,18 @@ export default function SettingsScreen() {
       setMe(await getMe(db));
       const allPersons = await getAllPersons(db);
       setContactCount(allPersons.filter(p => !p.is_me).length);
+      // Mirror the Categories screen: expense categories for the (first) group.
+      const grps = await getAllGroups(db);
+      const gid = grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id;
+      if (gid) setCategoryCount((await getCategoriesForGroup(db, gid, 'expense')).length);
       setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
       setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
+      setHideAmounts((await AsyncStorage.getItem('hide_amounts')) === 'true');
       setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
       setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
       setReminders(await getReminderPrefs());
       const dc = await AsyncStorage.getItem('default_cadence');
       if (dc) setDefaultCadence(dc as BudgetCadence);
-      setCompareFmt(await getComparisonFormat());
     })();
   }, []);
 
@@ -110,17 +109,24 @@ export default function SettingsScreen() {
     await AsyncStorage.setItem(key, val ? 'true' : 'false');
   }
 
+  // Turning location on must ask for OS permission first; if denied, leave it off.
+  async function toggleLocation(val: boolean) {
+    haptic.selection();
+    if (val) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location off', 'Allow location access for BudgetSplit in your phone’s Settings to tag where you spend.');
+        return;
+      }
+    }
+    setSaveLocation(val);
+    await AsyncStorage.setItem('save_location', val ? 'true' : 'false');
+  }
+
   async function pickCadence(c: BudgetCadence) {
     setDefaultCadence(c);
     setShowCadence(false);
     await AsyncStorage.setItem('default_cadence', c);
-  }
-
-  async function pickCompareFmt(f: ComparisonFormat) {
-    haptic.selection();
-    setCompareFmt(f);
-    setShowCompareFmt(false);
-    await setComparisonFormat(f);
   }
 
   async function onTestReminder() {
@@ -179,7 +185,7 @@ export default function SettingsScreen() {
       </TouchableOpacity>
 
       {/* MANAGE */}
-      <Text style={styles.sectionTitle}>Manage</Text>
+      <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Manage</Text>
       <View style={styles.card}>
         <SettingsRow
           icon="users"
@@ -191,13 +197,15 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="tag"
           label="Categories"
+          value={categoryCount > 0 ? `${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}` : undefined}
           onPress={() => { haptic.light(); router.push('/categories'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow
           icon="target"
           label="Budgets & Goals"
-          onPress={() => { haptic.light(); router.push('/savings'); }}
+          value="Per group"
+          onPress={() => { haptic.light(); router.push('/groups'); }}
         />
       </View>
 
@@ -208,13 +216,11 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="percent" label="Insight comparisons" value={COMPARE_FMT_LABELS[compareFmt]} onPress={() => setShowCompareFmt(true)} />
-        <View style={settingsRowDivider} />
         <ToggleRow icon="activity" label="Health score" value={!!flags.healthScore} onValueChange={(v) => setFlag('healthScore', v)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="credit-card" label="Subscription detection" value={!!flags.subscriptions} onValueChange={(v) => setFlag('subscriptions', v)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
+        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={toggleLocation} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Sections" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
@@ -225,9 +231,12 @@ export default function SettingsScreen() {
         <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
+        <View style={settingsRowDivider} />
+        <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle('hide_amounts', v, setHideAmounts)} />
       </View>
 
       {/* REMINDERS */}
+      {flags.reminders && (<>
       <Text style={styles.sectionTitle}>Reminders</Text>
       <View style={styles.card}>
         <ToggleRow icon="bell" label="Renewal reminders" value={!!reminders?.renewals} onValueChange={(v) => updateReminders({ renewals: v }, v)} />
@@ -261,8 +270,11 @@ export default function SettingsScreen() {
         )}
         <View style={settingsRowDivider} />
         <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="bell" label="Manage notifications" onPress={() => { haptic.light(); router.push('/settings/notifications' as any); }} />
       </View>
       <Text style={styles.featureCaption}>All on-device — nothing leaves your phone.</Text>
+      </>)}
 
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
@@ -294,6 +306,7 @@ export default function SettingsScreen() {
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
           <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+          <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>
         </TouchableOpacity>
       </View>
 
@@ -307,19 +320,6 @@ export default function SettingsScreen() {
           <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} onPress={() => pickCadence(c)} accessibilityRole="button">
             <Text style={[styles.cadOptionText, defaultCadence === c && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{CADENCE_LABELS[c]}</Text>
             {defaultCadence === c && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
-
-      <SheetModal visible={showCompareFmt} onClose={() => setShowCompareFmt(false)} title="Insight comparisons" scroll={false}>
-        <Text style={styles.sheetHint}>How insights phrase a change from last month.</Text>
-        {COMPARE_FMT_KEYS.map(f => (
-          <TouchableOpacity key={f} style={[styles.cadOption, compareFmt === f && styles.cadOptionActive]} onPress={() => pickCompareFmt(f)} accessibilityRole="button">
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cadOptionText, compareFmt === f && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{COMPARE_FMT_LABELS[f]}</Text>
-              <Text style={styles.cadOptionExample}>e.g. Dining is {formatComparison(40, f)}</Text>
-            </View>
-            {compareFmt === f && <Feather name="check" size={18} color={colors.accent} />}
           </TouchableOpacity>
         ))}
       </SheetModal>
@@ -363,7 +363,8 @@ const styles = StyleSheet.create({
   cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
 
   aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },
-  aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 2 },
+  aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingTop: 2 },
+  aboutHint: { ...type.caption, color: colors.textMuted, fontSize: 10, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 6 },
   nameInputGap: { marginBottom: space.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },

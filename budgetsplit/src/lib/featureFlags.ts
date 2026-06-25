@@ -24,7 +24,9 @@ export type FeatureKey =
   | 'affordCheck'
   | 'streak'
   | 'healthScore'
-  | 'subscriptions';
+  | 'subscriptions'
+  | 'savingsGoals'
+  | 'reminders';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
@@ -45,8 +47,10 @@ const DEFAULTS: FeatureFlags = {
   smartCategory: false, // opt-in
   affordCheck: false,   // opt-in
   streak: false,        // opt-in
-  healthScore: false,   // opt-in
-  subscriptions: false, // opt-in
+  healthScore: true,    // shown on home by default (matches Settings design)
+  subscriptions: true,  // auto-detect recurring charges by default (matches Settings design)
+  savingsGoals: true,   // Plan tab savings pool + goals
+  reminders: true,      // bill / settle-up nudges (Settings › Reminders)
 };
 
 const PREFIX = 'feature_';

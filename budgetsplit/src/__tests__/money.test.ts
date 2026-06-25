@@ -1,4 +1,4 @@
-import { parseToPaise, splitEqual, splitByPercent, splitByShares, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, ComparisonFormat } from '../lib/money';
+import { parseToPaise, splitEqual, splitByPercent, splitByShares, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, formatChangeMagnitude } from '../lib/money';
 
 describe('parseToPaise', () => {
   it('parses rupee strings to paise', () => {
@@ -95,16 +95,28 @@ describe('formatCompact (smallest unit / paise)', () => {
 });
 
 describe('formatComparison', () => {
-  it('renders percentages with direction', () => {
-    expect(formatComparison(40, ComparisonFormat.Percent)).toBe('up 40% from last month');
-    expect(formatComparison(-30, ComparisonFormat.Percent)).toBe('down 30% from last month');
+  it('uses a directional percentage up to ±100%', () => {
+    expect(formatComparison(40)).toBe('up 40% from last month');
+    expect(formatComparison(-30)).toBe('down 30% from last month');
+    expect(formatComparison(100)).toBe('up 100% from last month'); // exactly 100 stays %
   });
-  it('renders multiples relative to the baseline', () => {
-    expect(formatComparison(40, ComparisonFormat.Multiple)).toBe('1.4× last month');
-    expect(formatComparison(-30, ComparisonFormat.Multiple)).toBe('0.7× last month');
-    expect(formatComparison(100, ComparisonFormat.Multiple)).toBe('2× last month'); // no trailing zeros
+  it('switches to a multiple past +100%', () => {
+    expect(formatComparison(230)).toBe('3.3× last month');
+    expect(formatComparison(900)).toBe('10× last month'); // no trailing zeros
   });
-  it('never produces a negative multiple', () => {
-    expect(formatComparison(-150, ComparisonFormat.Multiple)).toBe('0× last month');
+});
+
+describe('formatChangeMagnitude', () => {
+  it('is a percentage up to ±100%', () => {
+    expect(formatChangeMagnitude(45)).toBe('45%');
+    expect(formatChangeMagnitude(-30)).toBe('30%');
+    expect(formatChangeMagnitude(100)).toBe('100%');
+  });
+  it('switches to a multiple past +100%', () => {
+    expect(formatChangeMagnitude(230)).toBe('3.3×');
+    expect(formatChangeMagnitude(900)).toBe('10×');
+  });
+  it('is safe on non-finite input', () => {
+    expect(formatChangeMagnitude(Infinity)).toBe('0%');
   });
 });

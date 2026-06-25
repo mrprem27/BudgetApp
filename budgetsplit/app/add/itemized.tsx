@@ -6,6 +6,8 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
@@ -15,8 +17,10 @@ import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, type ItemizedAdjustment } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, splitEqual } from '../../src/lib/money';
+import { asFeather } from '../../src/constants/palette';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
@@ -119,6 +123,22 @@ export default function ItemizedScreen() {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [place, setPlace] = useState<CapturedPlace | null>(null);
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [capturingLoc, setCapturingLoc] = useState(false);
+
+  async function captureLocation() {
+    setCapturingLoc(true);
+    try { setPlace(await getCurrentPlace()); } finally { setCapturingLoc(false); }
+  }
+  useEffect(() => {
+    if (isEditing) return;
+    (async () => {
+      const on = (await AsyncStorage.getItem('save_location')) === 'true';
+      setLocEnabled(on);
+      if (on) await captureLocation();
+    })();
+  }, [isEditing]);
 
   useEffect(() => {
     (async () => {
@@ -185,6 +205,9 @@ export default function ItemizedScreen() {
     .filter(p => p.amount > 0);
   const paymentsTotal = payments.reduce((s, p) => s + p.amount, 0);
   const paymentRemainder = total - paymentsTotal;
+
+  const peopleFor = (ids: string[]) =>
+    ids.map(pid => members.find(m => m.id === pid)).filter((m): m is Person => !!m);
 
   function addItem() {
     if (!newName.trim() || !newPrice.trim()) return;
@@ -260,6 +283,9 @@ export default function ItemizedScreen() {
           assignedTo: i.assignedTo,
         })),
         adjustments: adjustments as ItemizedAdjustment[],
+        lat: place?.lat,
+        lng: place?.lng,
+        placeLabel: place?.label ?? undefined,
       };
       if (isEditing) await updateItemizedTxn(db, editId!, payload);
       else await insertItemizedTxn(db, payload);
@@ -282,10 +308,10 @@ export default function ItemizedScreen() {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
-          <Feather name="x" size={22} color={colors.textPrimary} />
+          <Feather name="chevron-left" size={24} color={colors.accent} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>{stepTitle}</Text>
+          <Text style={styles.title} numberOfLines={1}>Split by items</Text>
         </View>
         {/* Receipt scan hidden until true AI line-item extraction exists (the
             old on-device OCR only read a single total). See PLAN.md. */}
@@ -304,14 +330,30 @@ export default function ItemizedScreen() {
         ))}
       </View>
 
-      <View style={styles.totalBar}>
-        <Text style={styles.totalLabel}>Bill total</Text>
-        <Text style={styles.totalAmount}>{formatRupees(total)}</Text>
+      {/* TOTAL preview card */}
+      <View style={styles.totalCard}>
+        <View style={styles.totalCardLeft}>
+          <Text style={styles.totalCardLabel}>TOTAL</Text>
+          <Text style={styles.totalCardAmount} numberOfLines={1}>{formatRupees(total)}</Text>
+        </View>
+        <View style={styles.totalCardRight}>
+          <Text style={styles.totalCardMeta} numberOfLines={1}>{stepTitle}</Text>
+          {selectedCategory && (
+            <View style={styles.categoryChip}>
+              <Feather name={asFeather(selectedCategory.icon, 'tag')} size={12} color={colors.accent} />
+              <Text style={styles.categoryChipText} numberOfLines={1}>{selectedCategory.name}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* STEP 1: ITEMS */}
       {step === 'items' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.addCardHeader}>
+            <Feather name="plus" size={15} color={colors.accent} />
+            <Text style={styles.addCardHeaderText}>Add item</Text>
+          </View>
           <View style={styles.addCard}>
             <TextInput
               style={styles.addNameInput}
@@ -358,22 +400,31 @@ export default function ItemizedScreen() {
           </View>
 
           {items.length > 0 && (
-            <View style={styles.card}>
-              {items.map((item, idx) => (
-                <View key={item.id} style={[styles.itemRow, idx < items.length - 1 && styles.rowBorder]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.itemSub} numberOfLines={1}>
-                      {item.qty} × {formatRupees(parseToPaise(item.unitPrice))}
-                    </Text>
+            <>
+              <Text style={styles.sectionLabel}>LINE ITEMS</Text>
+              <View style={styles.card}>
+                {items.map((item, idx) => (
+                  <View key={item.id} style={[styles.itemRow, idx < items.length - 1 && styles.rowBorder]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                      {item.assignedTo.length > 0 ? (
+                        <View style={styles.itemAvatars}>
+                          <AvatarStack people={peopleFor(item.assignedTo)} size={20} max={4} />
+                        </View>
+                      ) : (
+                        <Text style={styles.itemSub} numberOfLines={1}>
+                          {item.qty} × {formatRupees(parseToPaise(item.unitPrice))}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>
+                    <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
+                      <Feather name="trash-2" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>
-                  <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
-                    <Feather name="trash-2" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            </>
           )}
 
           {items.length > 0 && (
@@ -409,14 +460,17 @@ export default function ItemizedScreen() {
           )}
 
           {items.length > 0 && (
-            <View style={styles.adjButtons}>
-              {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
-                <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => openAdj(t)} accessibilityRole="button">
-                  <Feather name={ic} size={13} color={colors.accent} />
-                  <Text style={styles.adjBtnText}>{label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <>
+              <Text style={styles.sectionLabel}>ADJUSTMENTS</Text>
+              <View style={styles.adjButtons}>
+                {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
+                  <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => openAdj(t)} accessibilityRole="button">
+                    <Feather name={ic} size={13} color={colors.accent} />
+                    <Text style={styles.adjBtnText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
           )}
 
           {items.length === 0 && (
@@ -449,13 +503,7 @@ export default function ItemizedScreen() {
                 </View>
                 {item.assignedTo.length === 0
                   ? <Text style={styles.unassignedTag}>Unassigned</Text>
-                  : <View style={styles.assignedAvatars}>
-                      {item.assignedTo.slice(0, 3).map(pid => {
-                        const m = members.find(m => m.id === pid);
-                        return m ? <MemberAvatar key={pid} name={m.name} color={m.avatar_color} size={24} imageUri={m.image_uri} /> : null;
-                      })}
-                      {item.assignedTo.length > 3 && <Text style={styles.moreCount}>+{item.assignedTo.length - 3}</Text>}
-                    </View>
+                  : <AvatarStack people={peopleFor(item.assignedTo)} size={24} max={3} />
                 }
                 <Feather name={expandedItem === item.id ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
               </TouchableOpacity>
@@ -484,7 +532,20 @@ export default function ItemizedScreen() {
                 ))}
               </View>
               {unassignedTotal !== 0 && (
-                <Text style={styles.unassignedWarn}>{formatRupees(Math.abs(unassignedTotal))} unassigned</Text>
+                <View style={styles.unassignedBanner}>
+                  <View style={styles.unassignedBannerRow}>
+                    <Feather name="alert-circle" size={16} color={colors.expense} />
+                    <Text style={styles.unassignedBannerText}>
+                      {formatRupees(Math.abs(unassignedTotal))} {unassignedTotal > 0 ? 'not assigned to anyone' : 'over-assigned'}
+                    </Text>
+                  </View>
+                  {unassignedTotal > 0 && (
+                    <TouchableOpacity style={styles.assignCta} onPress={splitRestEqually} accessibilityRole="button">
+                      <Feather name="users" size={13} color={colors.healthAmber} />
+                      <Text style={styles.assignCtaText}>Split {formatRupees(unassignedTotal)} equally →</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
               <View style={styles.navRow}>
                 <TouchableOpacity onPress={() => setStep('items')} style={styles.backBtn} accessibilityRole="button">
@@ -557,15 +618,38 @@ export default function ItemizedScreen() {
             onChangeText={setNote}
           />
 
-          <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Each person owes</Text>
-          <View style={styles.card}>
-            {members.filter(m => (perPerson[m.id] ?? 0) > 0).map((m, i, arr) => (
-              <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
-                <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
-                <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
-              </View>
-            ))}
+          {locEnabled && !isEditing && (
+            <View style={styles.locRow}>
+              <Feather name="map-pin" size={15} color={place ? colors.accent : colors.textMuted} />
+              <Text style={styles.locText} numberOfLines={1}>
+                {capturingLoc ? 'Locating…' : place?.label || (place ? 'Location tagged' : 'No location yet')}
+              </Text>
+              {place ? (
+                <TouchableOpacity onPress={() => setPlace(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
+                  <Feather name="x" size={15} color={colors.textMuted} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={captureLocation} hitSlop={10} disabled={capturingLoc} accessibilityRole="button" accessibilityLabel="Capture location">
+                  <Feather name="refresh-cw" size={14} color={colors.accent} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          <Text style={[styles.shareLabel, { marginTop: space.md }]}>YOUR SHARE</Text>
+          <View style={styles.shareCard}>
+            {members.filter(m => (perPerson[m.id] ?? 0) > 0).map((m, i, arr) => {
+              const isMe = m.is_me === 1;
+              return (
+                <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.shareRowBorder]}>
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
+                  <Text style={[styles.perPersonName, isMe && styles.shareNameMe]} numberOfLines={1}>
+                    {m.name}{isMe ? ' (you)' : ''}
+                  </Text>
+                  <Text style={[styles.perPersonAmount, isMe && styles.shareAmountMe]}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
+                </View>
+              );
+            })}
           </View>
 
           <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Paid by</Text>
@@ -582,9 +666,18 @@ export default function ItemizedScreen() {
             })}
           </View>
 
-          <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
-            <Text style={styles.backBtnText}>Back</Text>
-          </TouchableOpacity>
+          <View style={styles.navRow}>
+            <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
+              <Text style={styles.backBtnText}>Back</Text>
+            </TouchableOpacity>
+            <PrimaryButton
+              label="Log itemized expense"
+              onPress={handleSave}
+              loading={saving}
+              disabled={!canSave || saving}
+              style={{ flex: 1 }}
+            />
+          </View>
         </ScrollView>
       )}
 
@@ -630,12 +723,21 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6, paddingHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   dot: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.bgMuted },
   dotActive: { backgroundColor: colors.accent },
-  totalBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: layout.screenPaddingH, paddingVertical: space.sm, backgroundColor: colors.bgCard, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
-  totalLabel: { ...type.label, color: colors.textSecondary },
-  totalAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, color: colors.accent },
+  totalCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, padding: space.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 14 },
+  totalCardLeft: { flexShrink: 1 },
+  totalCardLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5 },
+  totalCardAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, color: colors.textPrimary, marginTop: 2 },
+  totalCardRight: { alignItems: 'flex-end', gap: 6, marginLeft: space.sm },
+  totalCardMeta: { ...type.label, color: colors.textMuted },
+  categoryChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgMuted, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill },
+  categoryChipText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, paddingBottom: 48, gap: space.md },
 
-  addCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  sectionLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, marginBottom: -space.sm },
+  addCardHeader: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: -space.sm },
+  addCardHeaderText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  addCard: { backgroundColor: colors.accentMuted, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', padding: space.md, gap: space.sm },
+  itemAvatars: { marginTop: 6 },
   addNameInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border },
   addRow2: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
   qtyWrap: { width: 64, gap: 4 },
@@ -672,8 +774,6 @@ const styles = StyleSheet.create({
   assignItem: { backgroundColor: colors.bgCard, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: colors.expense + '22', paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
-  assignedAvatars: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  moreCount: { ...type.caption, color: colors.textSecondary, marginLeft: 4 },
   avatarRow: { paddingHorizontal: space.md, paddingBottom: space.md },
   avatarCol: { alignItems: 'center', gap: 4, marginRight: space.md, width: 52 },
   avatarName: { ...type.caption, color: colors.textSecondary, maxWidth: 52 },
@@ -682,7 +782,17 @@ const styles = StyleSheet.create({
   perPersonRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   perPersonName: { ...type.body, color: colors.textPrimary, flex: 1 },
   perPersonAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
+  shareLabel: { ...type.caption, color: colors.settle, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
+  shareCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.md, marginTop: space.sm },
+  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
+  shareNameMe: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  shareAmountMe: { color: colors.accent },
   unassignedWarn: { ...type.label, color: colors.expense, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
+  unassignedBanner: { backgroundColor: colors.expense + '18', borderRadius: radius.md, borderWidth: 1, borderColor: colors.expense + '55', padding: space.sm, gap: space.xs },
+  unassignedBannerRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  unassignedBannerText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  assignCta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.healthAmber + '22', borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  assignCtaText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   navRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   backBtn: { height: 52, paddingHorizontal: space.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
@@ -690,6 +800,8 @@ const styles = StyleSheet.create({
 
   fieldLabel: { ...type.label, color: colors.textSecondary },
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  locRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  locText: { ...type.body, color: colors.textSecondary, flex: 1 },
   payerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   payerName: { ...type.body, color: colors.textPrimary, flex: 1 },
   payerInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 96 },

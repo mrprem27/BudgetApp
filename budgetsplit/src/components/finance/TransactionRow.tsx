@@ -17,9 +17,31 @@ type Props = {
   showDate?: boolean;
   members?: Person[];
   isPersonal?: boolean;
+  /** Muted group label shown under the title — useful in cross-group lists (e.g. Category detail). */
+  groupName?: string;
+  /** When set, highlights this substring (case-insensitive) inside the title — for search results. */
+  highlight?: string;
 };
 
-export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false, members, isPersonal }: Props) {
+/** Split a title around a search term so the matched part can render in accent. */
+function highlightParts(title: string, term: string): { text: string; hit: boolean }[] {
+  const q = term.trim();
+  if (!q) return [{ text: title, hit: false }];
+  const lower = title.toLowerCase();
+  const ql = q.toLowerCase();
+  const out: { text: string; hit: boolean }[] = [];
+  let i = 0;
+  while (i < title.length) {
+    const idx = lower.indexOf(ql, i);
+    if (idx < 0) { out.push({ text: title.slice(i), hit: false }); break; }
+    if (idx > i) out.push({ text: title.slice(i, idx), hit: false });
+    out.push({ text: title.slice(idx, idx + q.length), hit: true });
+    i = idx + q.length;
+  }
+  return out;
+}
+
+export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight }: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
   const nameOf = (pid?: string) => members?.find(m => m.id === pid)?.name ?? 'Someone';
 
@@ -78,9 +100,23 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
         <Feather name={visual.icon} size={18} color={visual.color} />
       </View>
       <View style={styles.middle}>
-        <Text style={styles.category} numberOfLines={1}>{title}</Text>
+        <Text style={styles.category} numberOfLines={1}>
+          {highlight
+            ? highlightParts(title, highlight).map((p, i) => (
+                <Text key={i} style={p.hit ? styles.hl : undefined}>{p.text}</Text>
+              ))
+            : title}
+        </Text>
         {txn.note ? <Text style={styles.note} numberOfLines={1}>{txn.note}</Text> : null}
-        {attribution && <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>{attribution.text}</Text>}
+        <View style={styles.metaLine}>
+          {groupName ? (
+            <View style={styles.groupChip}>
+              <Feather name="users" size={10} color={colors.textMuted} />
+              <Text style={styles.groupText} numberOfLines={1}>{groupName}</Text>
+            </View>
+          ) : null}
+          {attribution && <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>{attribution.text}</Text>}
+        </View>
       </View>
       <View style={styles.right}>
         {/* Sign-colored: + received (green) / − paid out (red). The purple icon
@@ -122,15 +158,35 @@ const styles = StyleSheet.create({
     ...type.body,
     color: colors.textPrimary,
   },
+  hl: {
+    color: colors.accent,
+    fontFamily: 'Inter_600SemiBold',
+  },
   note: {
     ...type.caption,
     color: colors.textSecondary,
     marginTop: 2,
   },
+  metaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: 2,
+  },
+  groupChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 1,
+  },
+  groupText: {
+    ...type.caption,
+    color: colors.textMuted,
+    flexShrink: 1,
+  },
   attribution: {
     ...type.caption,
     fontFamily: 'Inter_600SemiBold',
-    marginTop: 2,
   },
   date: {
     ...type.caption,

@@ -37,8 +37,14 @@ export type GoalLike = {
   allocation: number;
   frequency: SavingsFrequency;
   priority: Priority;
+  /** Manual drag rank — when present it drives funding order; falls back to priority. */
+  sort_order?: number;
   anchor: number; // last_auto_at ?? created_at
 };
+
+/** Funding order key: manual drag rank when set, else the High→Med→Low bucket. */
+const rankKey = (g: { sort_order?: number; priority: Priority }) =>
+  g.sort_order ?? PRIORITY_RANK[g.priority];
 
 export type AutoAllocation = { goalId: string; amount: number; newAnchor: number };
 
@@ -66,7 +72,7 @@ export function planAutoAllocations(
     })
     .filter(x => x.periods >= 1);
 
-  eligible.sort((a, b) => PRIORITY_RANK[a.g.priority] - PRIORITY_RANK[b.g.priority] || a.g.anchor - b.g.anchor);
+  eligible.sort((a, b) => rankKey(a.g) - rankKey(b.g) || a.g.anchor - b.g.anchor);
 
   let poolLeft = Math.max(0, poolUnallocated);
   const out: AutoAllocation[] = [];
@@ -107,7 +113,7 @@ export function monthsToSweep(marker: string | null, now: Date): { months: { sta
 
 // --- Auto-reduce (protect high-priority goals) ---------------------------
 
-export type ReduceGoal = { id: string; priority: Priority; locked: number };
+export type ReduceGoal = { id: string; priority: Priority; locked: number; sort_order?: number };
 export type Reduction = { goalId: string; reduceBy: number };
 
 /**
@@ -119,7 +125,7 @@ export function planReduction(goals: ReduceGoal[], saved: Record<string, number>
   if (excess <= 0) return [];
   const order = goals
     .filter(g => g.locked !== 1 && (saved[g.id] ?? 0) > 0)
-    .sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]); // low priority first
+    .sort((a, b) => rankKey(b) - rankKey(a)); // lowest rank (bottom of list) reduced first
 
   let left = excess;
   const out: Reduction[] = [];

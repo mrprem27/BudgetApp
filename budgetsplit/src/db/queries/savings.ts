@@ -30,6 +30,8 @@ export type SavingsGoal = {
   locked: number;          // 0 | 1
   is_archived: number;     // 0 | 1
   last_auto_at: number | null; // auto-funding schedule anchor
+  target_date: number | null;  // optional deadline (epoch ms)
+  sort_order: number;          // manual drag rank (lower = funded first)
   created_at: number;
 };
 
@@ -50,10 +52,11 @@ export type PoolSummary = { total: number; allocated: number; unallocated: numbe
 
 export async function getGoals(db: SQLite.SQLiteDatabase, includeArchived = false): Promise<SavingsGoal[]> {
   const where = includeArchived ? '' : 'WHERE is_archived = 0';
-  // High → Medium → Low, then newest first.
+  // Manual drag rank first (lower = higher priority); newest first as a stable tiebreak
+  // before any reordering (all sort_order default to 0 until the user drags).
   return db.getAllAsync<SavingsGoal>(
     `SELECT * FROM savings_goal ${where}
-     ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, created_at DESC`,
+     ORDER BY sort_order ASC, created_at DESC`,
   );
 }
 
@@ -71,29 +74,43 @@ export type NewGoal = {
   allocation?: number;
   frequency?: SavingsFrequency;
   locked?: boolean;
+  target_date?: number | null;
 };
 
 export async function insertGoal(db: SQLite.SQLiteDatabase, g: NewGoal): Promise<SavingsGoal> {
   const id = uuid();
   const now = Date.now();
+  // New goals append to the bottom of the manual rank (funded last by default).
+  const maxRow = await db.getFirstAsync<{ m: number }>('SELECT COALESCE(MAX(sort_order), -1) AS m FROM savings_goal');
+  const sortOrder = (maxRow?.m ?? -1) + 1;
   const row: SavingsGoal = {
     id, name: g.name, target: g.target, priority: g.priority,
     category: g.category ?? null, icon: g.icon ?? null, color: g.color ?? null,
     allocation: g.allocation ?? 0, frequency: g.frequency ?? 'none',
-    locked: g.locked ? 1 : 0, is_archived: 0, last_auto_at: null, created_at: now,
+    locked: g.locked ? 1 : 0, is_archived: 0, last_auto_at: null,
+    target_date: g.target_date ?? null, sort_order: sortOrder, created_at: now,
   };
   await db.runAsync(
-    `INSERT INTO savings_goal (id, name, target, priority, category, icon, color, allocation, frequency, locked, is_archived, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    [row.id, row.name, row.target, row.priority, row.category, row.icon, row.color, row.allocation, row.frequency, row.locked, row.created_at],
+    `INSERT INTO savings_goal (id, name, target, priority, category, icon, color, allocation, frequency, locked, is_archived, target_date, sort_order, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    [row.id, row.name, row.target, row.priority, row.category, row.icon, row.color, row.allocation, row.frequency, row.locked, row.target_date, row.sort_order, row.created_at],
   );
   return row;
 }
 
+/** Persist a manual drag order: each id's array position becomes its sort_order. */
+export async function reorderGoals(db: SQLite.SQLiteDatabase, orderedIds: string[]): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.runAsync('UPDATE savings_goal SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
+    }
+  });
+}
+
 export async function updateGoal(db: SQLite.SQLiteDatabase, id: string, g: NewGoal): Promise<void> {
   await db.runAsync(
-    `UPDATE savings_goal SET name=?, target=?, priority=?, category=?, icon=?, color=?, allocation=?, frequency=?, locked=? WHERE id=?`,
-    [g.name, g.target, g.priority, g.category ?? null, g.icon ?? null, g.color ?? null, g.allocation ?? 0, g.frequency ?? 'none', g.locked ? 1 : 0, id],
+    `UPDATE savings_goal SET name=?, target=?, priority=?, category=?, icon=?, color=?, allocation=?, frequency=?, locked=?, target_date=? WHERE id=?`,
+    [g.name, g.target, g.priority, g.category ?? null, g.icon ?? null, g.color ?? null, g.allocation ?? 0, g.frequency ?? 'none', g.locked ? 1 : 0, g.target_date ?? null, id],
   );
 }
 
@@ -208,7 +225,7 @@ export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean
   const [saved, pool] = await Promise.all([getGoalSavedMap(db), getPoolSummary(db)]);
   const now = Date.now();
   const plan = planAutoAllocations(
-    eligible.map(g => ({ id: g.id, target: g.target, allocation: g.allocation, frequency: g.frequency, priority: g.priority, anchor: g.last_auto_at ?? g.created_at })),
+    eligible.map(g => ({ id: g.id, target: g.target, allocation: g.allocation, frequency: g.frequency, priority: g.priority, sort_order: g.sort_order, anchor: g.last_auto_at ?? g.created_at })),
     saved, pool.unallocated, now,
   );
   if (plan.length === 0) return false;
@@ -267,7 +284,7 @@ export async function reconcileAllocations(db: SQLite.SQLiteDatabase): Promise<n
   if (pool.unallocated >= 0) return 0;
   const excess = -pool.unallocated;
   const [goals, saved] = await Promise.all([getGoals(db, true), getGoalSavedMap(db)]);
-  const reductions = planReduction(goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked })), saved, excess);
+  const reductions = planReduction(goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order })), saved, excess);
   if (reductions.length === 0) return 0;
 
   let reclaimed = 0;

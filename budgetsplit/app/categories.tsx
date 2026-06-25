@@ -18,7 +18,7 @@ import {
 } from '../src/db/queries/categories';
 import { haptic } from '../src/lib/haptics';
 import {
-  CATEGORY_SECTIONS, categorySection, DEFAULT_CATEGORIES, INCOME_CATEGORIES,
+  CATEGORY_SECTIONS, INCOME_SECTIONS, categorySection, DEFAULT_CATEGORIES, INCOME_CATEGORIES,
 } from '../src/constants/categories';
 import {
   CATEGORY_ICON_CHOICES as ICON_CHOICES,
@@ -84,7 +84,16 @@ export default function CategoriesScreen() {
   }
 
   function getCategoriesInSection(sectionTitle: string): Category[] {
-    return categories.filter(c => (c.section ?? categorySection(c.name)) === sectionTitle);
+    const titles = sections.map(s => s.title);
+    const isLast = sectionTitle === titles[titles.length - 1];
+    return categories.filter(c => {
+      const sec = c.section ?? categorySection(c.name);
+      if (sec === sectionTitle) return true;
+      // Catch-all: a category whose stored/derived section isn't one of the
+      // current kind's sections (e.g. a legacy custom income cat) lands in the
+      // last section so it can never silently disappear.
+      return isLast && !titles.includes(sec);
+    });
   }
 
   async function addCategory() {
@@ -129,18 +138,18 @@ export default function CategoriesScreen() {
 
   function startAdding(section: string) {
     haptic.light();
-    const sectionDef = CATEGORY_SECTIONS.find(s => s.title === section);
+    const allSecs = kindTab === 'expense' ? CATEGORY_SECTIONS : INCOME_SECTIONS;
+    const defs = kindTab === 'expense' ? DEFAULT_CATEGORIES : INCOME_CATEGORIES;
+    const sectionDef = allSecs.find(s => s.title === section);
     const firstCatInSection = sectionDef
-      ? DEFAULT_CATEGORIES.find(c => sectionDef.names.includes(c.name))
+      ? defs.find(c => sectionDef.names.includes(c.name))
       : null;
     setIcon(firstCatInSection?.icon ?? 'tag');
     setColor(firstCatInSection?.color ?? COLOR_CHOICES[0]);
     setAddingToSection(section);
   }
 
-  const sections = kindTab === 'expense'
-    ? CATEGORY_SECTIONS
-    : [{ title: 'Income', names: INCOME_CATEGORIES.map(c => c.name) }];
+  const sections = kindTab === 'expense' ? CATEGORY_SECTIONS : INCOME_SECTIONS;
 
   return (
     <View style={styles.container}>

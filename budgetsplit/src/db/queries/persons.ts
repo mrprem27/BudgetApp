@@ -12,6 +12,8 @@ export type Person = {
   mobile: string | null;
   remote_uid: string | null;
   image_uri: string | null;
+  /** Only populated by getGroupMembers (from group_member.joined_at). */
+  joined_at?: number | null;
 };
 
 export async function setPersonImage(db: SQLite.SQLiteDatabase, id: string, uri: string | null): Promise<void> {
@@ -32,7 +34,7 @@ export async function getPersonById(db: SQLite.SQLiteDatabase, id: string): Prom
 
 export async function getGroupMembers(db: SQLite.SQLiteDatabase, groupId: string): Promise<Person[]> {
   return db.getAllAsync<Person>(
-    `SELECT p.* FROM person p
+    `SELECT p.*, gm.joined_at FROM person p
      JOIN group_member gm ON gm.person_id = p.id
      WHERE gm.group_id = ?
      ORDER BY p.is_me DESC, p.name ASC`,
@@ -90,8 +92,8 @@ export async function addMemberToGroup(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT OR IGNORE INTO group_member (group_id, person_id) VALUES (?, ?)',
-      [groupId, personId],
+      'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)',
+      [groupId, personId, Date.now()],
     );
     const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
     await logAudit(db, {

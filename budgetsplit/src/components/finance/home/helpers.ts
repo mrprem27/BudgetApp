@@ -7,10 +7,10 @@ export function greeting(): string {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
-/** Budget utilisation label: "75%", "1.2X" when over, "—" when unknown. */
+/** Budget utilisation label: "75%", "1.2×" when over, "—" when unknown. */
 export function utilLabel(pct: number | null): string {
   if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
+  if (pct > 100) return `${(pct / 100).toFixed(1)}×`;
   return `${pct}%`;
 }
 
