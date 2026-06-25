@@ -249,6 +249,13 @@ const SWEEP_KEY = 'savings_last_sweep';
 /** Opt-in flag for the budget-leftover auto-sweep (off by default). */
 export const AUTO_SWEEP_KEY = 'auto_sweep_enabled';
 
+/** Whether the opt-in budget-leftover auto-sweep is enabled. */
+export const isAutoSweepEnabled = async (): Promise<boolean> =>
+  (await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true';
+/** Enable/disable the auto-sweep. */
+export const setAutoSweepEnabled = (v: boolean): Promise<void> =>
+  AsyncStorage.setItem(AUTO_SWEEP_KEY, v ? 'true' : 'false');
+
 /**
  * Sweep completed-month budget leftover into the Savings Pool (replaces
  * carry-over). Only groups with a monthly limit and carry_over OFF are swept —
@@ -309,7 +316,7 @@ export async function reconcileAllocations(db: SQLite.SQLiteDatabase): Promise<n
  */
 export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<void> {
   await runAutoFunding(db).catch(() => {});
-  if ((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true') {
+  if (await isAutoSweepEnabled()) {
     await runLeftoverSweep(db).catch(() => {});
   }
   await reconcileAllocations(db).catch(() => {});

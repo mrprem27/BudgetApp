@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../lib/settings';
 import { Onboarding } from './Onboarding';
 import { BrandedLoader } from './BrandedLoader';
-
-const KEY = 'onboarding_done';
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<'loading' | 'onboarding' | 'done'>('loading');
@@ -11,8 +9,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const val = await AsyncStorage.getItem(KEY);
-        setStatus(val === 'true' ? 'done' : 'onboarding');
+        setStatus((await settings.onboardingDone()) ? 'done' : 'onboarding');
       } catch {
         setStatus('onboarding');
       }
@@ -21,7 +18,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   async function complete() {
     try {
-      await AsyncStorage.setItem(KEY, 'true');
+      await settings.setOnboardingDone(true);
     } finally {
       setStatus('done');
     }

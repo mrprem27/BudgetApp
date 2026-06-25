@@ -7,7 +7,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../src/lib/settings';
 import * as Location from 'expo-location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -17,7 +17,7 @@ import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../sr
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getCategoriesForGroup } from '../../src/db/queries/categories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
-import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
+import { isAutoSweepEnabled } from '../../src/db/queries/savings';
 import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
 import {
   getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
@@ -70,13 +70,13 @@ export default function SettingsScreen() {
       const grps = await getAllGroups(db);
       const gid = grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id;
       if (gid) setCategoryCount((await getCategoriesForGroup(db, gid, 'expense')).length);
-      setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
-      setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
-      setHideAmounts((await AsyncStorage.getItem('hide_amounts')) === 'true');
-      setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
-      setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
+      setBiometric(await settings.biometricEnabled());
+      setPrivacyScreen(await settings.privacyScreen());
+      setHideAmounts(await settings.hideAmounts());
+      setSaveLocation(await settings.saveLocation());
+      setAutoSweep(await isAutoSweepEnabled());
       setReminders(await getReminderPrefs());
-      const dc = await AsyncStorage.getItem('default_cadence');
+      const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
   }, []);
@@ -103,10 +103,10 @@ export default function SettingsScreen() {
     setTimeEditing(null);
   }
 
-  async function toggle(key: string, val: boolean, setter: (v: boolean) => void) {
+  async function toggle(persist: (v: boolean) => Promise<void>, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
     setter(val);
-    await AsyncStorage.setItem(key, val ? 'true' : 'false');
+    await persist(val);
   }
 
   // Turning location on must ask for OS permission first; if denied, leave it off.
@@ -120,13 +120,13 @@ export default function SettingsScreen() {
       }
     }
     setSaveLocation(val);
-    await AsyncStorage.setItem('save_location', val ? 'true' : 'false');
+    await settings.setSaveLocation(val);
   }
 
   async function pickCadence(c: BudgetCadence) {
     setDefaultCadence(c);
     setShowCadence(false);
-    await AsyncStorage.setItem('default_cadence', c);
+    await settings.setDefaultCadence(c);
   }
 
   async function onTestReminder() {
@@ -228,11 +228,11 @@ export default function SettingsScreen() {
       {/* SECURITY */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
-        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
+        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle(settings.setBiometricEnabled, v, setBiometric)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
+        <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle('hide_amounts', v, setHideAmounts)} />
+        <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
       </View>
 
       {/* REMINDERS */}
@@ -283,7 +283,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await AsyncStorage.removeItem('onboarding_done'); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="History & Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
       </View>

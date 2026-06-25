@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, AppState, AppStateStatus, TouchableOpacity, Image, Linking,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../lib/settings';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
@@ -26,8 +26,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const val = await AsyncStorage.getItem('biometric_enabled');
-        const on = val === 'true';
+        const on = await settings.biometricEnabled();
         setEnabled(on);
         if (on) {
           setLocked(true);
@@ -47,14 +46,12 @@ export function LockGate({ children }: { children: React.ReactNode }) {
       appState.current = next;
 
       if (next === 'background' || next === 'inactive') {
-        const val = await AsyncStorage.getItem('biometric_enabled');
-        if (val === 'true') setLocked(true);
+        if (await settings.biometricEnabled()) setLocked(true);
         return;
       }
 
       if (next === 'active' && (prev === 'background' || prev === 'inactive')) {
-        const val = await AsyncStorage.getItem('biometric_enabled');
-        const on = val === 'true';
+        const on = await settings.biometricEnabled();
         setEnabled(on);
         if (on && locked) authenticate();
       }
@@ -118,7 +115,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.disableLockBtn}
-                  onPress={async () => { await AsyncStorage.setItem('biometric_enabled', 'false'); setEnabled(false); setLocked(false); setNotEnrolled(false); }}
+                  onPress={async () => { await settings.setBiometricEnabled(false); setEnabled(false); setLocked(false); setNotEnrolled(false); }}
                   accessibilityRole="button"
                 >
                   <Text style={styles.disableLockText}>Disable lock in BudgetSplit</Text>

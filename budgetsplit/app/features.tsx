@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../src/lib/settings';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
@@ -18,7 +18,6 @@ const CORES: { icon: keyof typeof Feather.glyphMap; tint: string; label: string;
   { icon: 'bar-chart-2', tint: colors.healthAmber, label: 'Insights', caption: 'Trends, alerts, and patterns across both' },
 ];
 
-const SAVE_LOCATION_KEY = 'save_location';
 
 export default function FeaturesScreen() {
   const router = useRouter();
@@ -27,14 +26,14 @@ export default function FeaturesScreen() {
 
   useEffect(() => {
     (async () => {
-      setSaveLocation((await AsyncStorage.getItem(SAVE_LOCATION_KEY)) === 'true');
+      setSaveLocation(await settings.saveLocation());
     })();
   }, []);
 
   async function toggleSaveLocation(v: boolean) {
     haptic.selection();
     setSaveLocation(v);
-    await AsyncStorage.setItem(SAVE_LOCATION_KEY, v ? 'true' : 'false');
+    await settings.setSaveLocation(v);
   }
 
   // Each optional module maps to the flag (or store) that actually gates it.

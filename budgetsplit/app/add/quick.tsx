@@ -9,7 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
 import { nthOccurrenceMs } from '../../src/lib/recurrence';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../src/lib/settings';
 import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
@@ -126,7 +126,7 @@ export default function QuickAddScreen() {
       setMe(meRow);
       loadLearned().then(setLearned).catch(() => {});
       getAffordSnapshot(db).then(setSnapshot).catch(() => {});
-      const savedCur = await AsyncStorage.getItem('default_currency');
+      const savedCur = await settings.defaultCurrency();
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
       const loadId = editId ?? recurEditId;
@@ -295,7 +295,7 @@ export default function QuickAddScreen() {
   useEffect(() => {
     if (isEditing) return;
     (async () => {
-      const on = (await AsyncStorage.getItem('save_location')) === 'true';
+      const on = await settings.saveLocation();
       setLocEnabled(on);
       if (on) await captureLocation();
     })();

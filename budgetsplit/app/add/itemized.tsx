@@ -6,7 +6,7 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../src/lib/settings';
 import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -134,7 +134,7 @@ export default function ItemizedScreen() {
   useEffect(() => {
     if (isEditing) return;
     (async () => {
-      const on = (await AsyncStorage.getItem('save_location')) === 'true';
+      const on = await settings.saveLocation();
       setLocEnabled(on);
       if (on) await captureLocation();
     })();

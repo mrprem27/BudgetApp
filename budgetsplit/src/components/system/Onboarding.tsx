@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../lib/settings';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius, layout, shadow } from '../../constants/layout';
@@ -322,7 +322,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   function enterFeatures() {
     // Capture the persona as a soft preference. Not wired to feature flags yet —
     // stored so a later pass can tailor default toggles to it.
-    AsyncStorage.setItem('onboarding_intent', intent).catch(() => { /* best-effort */ });
+    settings.setOnboardingIntent(intent).catch(() => { /* best-effort */ });
     pageRef.current = 0;
     setPage(0);
     setStage('features');
@@ -390,8 +390,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           payments: [{ personId: me.id, amount: paise }],
           shares: [{ personId: me.id, amount: paise }],
         });
-        try { await AsyncStorage.setItem('monthly_income', String(incomeNum)); } catch { /* best-effort */ }
-        try { await AsyncStorage.setItem('payday', String(payday)); } catch { /* best-effort */ }
+        try { await settings.setMonthlyIncome(incomeNum); } catch { /* best-effort */ }
+        try { await settings.setPayday(payday); } catch { /* best-effort */ }
       }
 
       // Whole monthly budget (the user's own number — no % of income).
@@ -407,7 +407,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         try { await insertPerson(db, t, GROUP_COLORS[ci % GROUP_COLORS.length]); ci++; } catch { /* skip one bad contact */ }
       }
 
-      if (addFirstRef.current) { try { await AsyncStorage.setItem('pending_first_add', 'true'); } catch { /* best-effort */ } }
+      if (addFirstRef.current) { try { await settings.setPendingFirstAdd(true); } catch { /* best-effort */ } }
       haptic.success();
     } catch {
       haptic.error();
@@ -787,7 +787,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 const ok = status === 'granted';
                 setLocPerm(ok);
-                if (ok) { try { await AsyncStorage.setItem('save_location', 'true'); } catch { /* best-effort */ } }
+                if (ok) { try { await settings.setSaveLocation(true); } catch { /* best-effort */ } }
               }}
               disabled={locPerm}
               accessibilityRole="button"

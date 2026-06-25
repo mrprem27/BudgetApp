@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../src/lib/settings';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -235,16 +235,15 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => {
     load();
-    AsyncStorage.getItem('hide_amounts').then(v => setHideAmounts(v === 'true'));
+    settings.hideAmounts().then(setHideAmounts);
     checkCatchUp();
   }, [tab]));
 
   async function checkCatchUp() {
-    const raw = await AsyncStorage.getItem('app_last_open');
     const now = Date.now();
-    const lastOpen = raw ? parseInt(raw, 10) : now;
+    const lastOpen = (await settings.appLastOpen()) ?? now;
     // Record current open time immediately so the next open can compare.
-    await AsyncStorage.setItem('app_last_open', String(now));
+    await settings.setAppLastOpen(now);
     const gapDays = Math.floor((now - lastOpen) / (1000 * 60 * 60 * 24));
     if (gapDays < 30) return;
     // Count active recurring rules across all groups.

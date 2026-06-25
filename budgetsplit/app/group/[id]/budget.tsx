@@ -6,7 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../../src/lib/settings';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
@@ -111,7 +111,7 @@ export default function BudgetEditorScreen() {
       const [cats, budgets, dc] = await Promise.all([
         getCategoriesByFrequency(db, id),
         getCategoryBudgets(db, id),
-        AsyncStorage.getItem('default_cadence'),
+        settings.defaultCadence(),
       ]);
       if (dc) setDefaultCadence(dc as BudgetCadence);
       setAllCategories(cats);
