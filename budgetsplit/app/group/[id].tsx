@@ -28,6 +28,7 @@ import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/consta
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { BalanceRow } from '../../src/components/finance/BalanceRow';
+import { InsightsTab } from '../../src/components/finance/group/InsightsTab';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -771,69 +772,7 @@ export default function GroupDetailScreen() {
       )}
 
       {activeTab === 'insights' && !isPersonal && (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          {contributions.total > 0 ? (
-            <>
-              {/* SPENDING THIS MONTH — member bars */}
-              <Text style={styles.insightSectionLabel}>SPENDING THIS MONTH</Text>
-              <View style={styles.insightCard}>
-                {contributions.rows.map((r, i) => (
-                  <View key={r.member.id} style={[styles.insightMemberRow, i < contributions.rows.length - 1 && { marginBottom: 10 }]}>
-                    <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={styles.insightBarTrack}>
-                        <View style={[styles.insightBarFill, { width: `${Math.round(r.frac * 100)}%` as any, backgroundColor: r.member.avatar_color }]} />
-                      </View>
-                      <Text style={styles.insightMemberAmt}>
-                        {formatCompact(r.paid)}{r.member.is_me ? ' · you' : ''}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* TOP CATEGORIES */}
-              {topCategories.length > 0 && (
-                <>
-                  <Text style={styles.insightSectionLabel}>TOP CATEGORIES</Text>
-                  <View style={[styles.insightCard, { paddingHorizontal: 0 }]}>
-                    {topCategories.map((c, i) => {
-                      const vis = categoryVisual(c.cat);
-                      const barColors = ['#FF6F61', '#20C4B8', '#F5B301'];
-                      return (
-                        <View key={c.cat} style={[styles.catTopRow, i < topCategories.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: (vis?.color ?? colors.accent) + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <Feather name={vis?.icon ?? 'tag'} size={16} color={vis?.color ?? colors.accent} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.catTopName}>{c.cat}</Text>
-                            <View style={styles.insightBarTrack}>
-                              <View style={[styles.insightBarFill, { width: `${Math.round(c.frac * 100)}%` as any, height: 3, backgroundColor: barColors[i] ?? colors.accent }]} />
-                            </View>
-                          </View>
-                          <Text style={styles.catTopAmt}>{formatCompact(c.amt)}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {/* Trend callout — best analytics recommendation */}
-              {analytics && analytics.recommendations.length > 0 && (
-                <View style={styles.trendCallout}>
-                  <View style={styles.trendDot} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.trendTitle}>{analytics.recommendations[0].text}</Text>
-                    <Text style={styles.trendSub}>Based on your group spending patterns this month.</Text>
-                  </View>
-                </View>
-              )}
-            </>
-          ) : (
-            <EmptyState icon="bar-chart-2" title="No insights yet" body="Add expenses to see analytics and spending patterns." tint={colors.textSecondary} />
-          )}
-        </ScrollView>
+        <InsightsTab contributions={contributions} topCategories={topCategories} analytics={analytics} />
       )}
 
       {activeTab === 'recurring' && !isPersonal && (

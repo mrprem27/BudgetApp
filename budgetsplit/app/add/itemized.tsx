@@ -16,7 +16,11 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, type ItemizedAdjustment } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees, splitEqual } from '../../src/lib/money';
+import { parseToPaise, formatRupees } from '../../src/lib/money';
+import {
+  computeAdjustedTotal, computeItemSubtotal, computePerPersonShares,
+  type LineItemDraft, type Adjustment,
+} from '../../src/lib/itemized';
 import { asFeather } from '../../src/constants/palette';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -30,73 +34,7 @@ import type { BudgetGroup } from '../../src/db/queries/groups';
 
 type Step = 'items' | 'assign' | 'payers' | 'review';
 
-type LineItemDraft = {
-  id: string;
-  name: string;
-  qty: string;
-  unitPrice: string;
-  assignedTo: string[];
-};
-
-type Adjustment = {
-  label: string;
-  type: 'tax' | 'tip' | 'discount';
-  mode: 'flat' | 'percent';
-  value: string;
-};
-
 const STEPS: Step[] = ['items', 'assign', 'payers', 'review'];
-
-function computeAdjustedTotal(subtotal: number, adjustments: Adjustment[]): number {
-  let total = subtotal;
-  for (const adj of adjustments) {
-    const val = parseToPaise(adj.value);
-    const amount = adj.mode === 'percent' ? Math.round((subtotal * val) / 10000) : val;
-    if (adj.type === 'discount') total -= amount;
-    else total += amount;
-  }
-  return Math.max(0, total);
-}
-
-function computeItemSubtotal(item: LineItemDraft): number {
-  const qty = Math.max(1, parseInt(item.qty, 10) || 1);
-  const price = parseToPaise(item.unitPrice);
-  return qty * price;
-}
-
-function computePerPersonShares(
-  items: LineItemDraft[],
-  adjustments: Adjustment[],
-  members: Person[],
-): Record<string, number> {
-  const subtotal = items.reduce((s, i) => s + computeItemSubtotal(i), 0);
-  const total = computeAdjustedTotal(subtotal, adjustments);
-  const ratio = subtotal > 0 ? total / subtotal : 1;
-
-  const raw: Record<string, number> = {};
-  for (const m of members) raw[m.id] = 0;
-
-  for (const item of items) {
-    if (item.assignedTo.length === 0) continue;
-    const itemTotal = Math.round(computeItemSubtotal(item) * ratio);
-    const splits = splitEqual(itemTotal, item.assignedTo.length);
-    item.assignedTo.forEach((pid, i) => {
-      raw[pid] = (raw[pid] ?? 0) + splits[i];
-    });
-  }
-
-  const assigned = Object.values(raw).reduce((a, b) => a + b, 0);
-  const unassignedItems = items.filter(i => i.assignedTo.length === 0);
-  if (unassignedItems.length === 0) {
-    let diff = total - assigned;
-    for (const m of members) {
-      if (diff === 0) break;
-      if (raw[m.id] > 0) { raw[m.id] += diff > 0 ? 1 : -1; diff += diff > 0 ? -1 : 1; }
-    }
-  }
-
-  return raw;
-}
 
 export default function ItemizedScreen() {
   const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();

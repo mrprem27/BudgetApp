@@ -27,6 +27,9 @@ import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefres
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
+import { GoalCard } from '../../src/components/finance/plan/GoalCard';
+import { PoolCard } from '../../src/components/finance/plan/PoolCard';
+import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, monthlyContribution, neededPerMonth, monthsUntil } from '../../src/lib/savings';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
@@ -272,27 +275,12 @@ export default function SavingsScreen() {
 
         {/* Savings pool (design Screen 3) — teal gradient card */}
         {flags.savingsGoals && (
-        <LinearGradient colors={[colors.accentMuted, colors.bgCard]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.poolCard}>
-          <Text style={styles.poolLabel}>Savings Pool</Text>
-          <View style={styles.poolMainRow}>
-            <View style={{ flex: 1 }}>
-              <AmountText paise={pool.total} size="xl" forceColor={colors.textPrimary} compact />
-              <Text style={styles.poolSub}>
-                {formatCompact(pool.unallocated)} unallocated · {goals.length} {goals.length === 1 ? 'goal' : 'goals'}
-              </Text>
-            </View>
-            <View style={styles.poolActions}>
-              <TouchableOpacity style={styles.poolActionBtn} onPress={() => { setPoolAmt(''); setShowAddPool(true); }} accessibilityRole="button" accessibilityLabel="Add to savings">
-                <Feather name="plus" size={18} color={colors.accent} />
-              </TouchableOpacity>
-              {pool.unallocated > 0 && (
-                <TouchableOpacity style={styles.poolActionBtn} onPress={() => { setPoolAmt(''); setShowWithdrawPool(true); }} accessibilityRole="button" accessibilityLabel="Withdraw from savings">
-                  <Feather name="arrow-up" size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </LinearGradient>
+          <PoolCard
+            pool={pool}
+            goalsCount={goals.length}
+            onAdd={() => { setPoolAmt(''); setShowAddPool(true); }}
+            onWithdraw={() => { setPoolAmt(''); setShowWithdrawPool(true); }}
+          />
         )}
 
         {/* Insights */}
@@ -330,49 +318,9 @@ export default function SavingsScreen() {
               data={goals}
               keyExtractor={(g) => g.id}
               onReorder={handleReorder}
-              renderItem={(g, isActive) => {
-                const p = goalProgress(saved[g.id] ?? 0, g.target);
-                const hasDate = g.target_date != null;
-                const monthly = monthlyContribution(g.allocation, g.frequency);
-                const needed = hasDate ? neededPerMonth(p.remaining, g.target_date!) : 0;
-                const monthsLeft = hasDate ? monthsUntil(g.target_date!) : 0;
-                return (
-                  <PressableScale style={[styles.goalCard, isActive && styles.goalCardActive]} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityLabel={g.name}>
-                    <View style={styles.goalRow}>
-                      <View style={[styles.goalIcon, { backgroundColor: (g.color ?? colors.accent) + '22' }]}>
-                        <Feather name={asFeather(g.icon, 'target')} size={20} color={g.color ?? colors.accent} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.goalNameRow}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.goalName} numberOfLines={1}>{g.name}</Text>
-                            <Text style={styles.goalSub} numberOfLines={1}>
-                              {hasDate ? `${format(g.target_date!, 'MMM yyyy')} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'}`}` : 'No deadline'}
-                            </Text>
-                          </View>
-                          <Text style={styles.goalAmt}>{formatCompact(p.saved)} / {formatCompact(p.target)}</Text>
-                        </View>
-                        <View style={styles.goalBarWrap}>
-                          <BudgetBar pct={p.pct} health={p.over > 0 ? 'amber' : hasDate && needed > monthly ? 'amber' : 'green'} height={4} />
-                        </View>
-                        <View style={styles.goalMetaRow}>
-                          {p.over > 0 ? (
-                            <Text style={[styles.goalMeta, { color: colors.healthAmber }]} numberOfLines={1}>{p.rawPct}% · +{formatCompact(p.over)} over</Text>
-                          ) : (
-                            <Text style={styles.goalMeta} numberOfLines={1}>{p.pct}% · {formatCompact(p.remaining)} to go</Text>
-                          )}
-                          {hasDate ? (
-                            <Text style={[styles.goalMetaRight, { color: needed > monthly ? colors.healthAmber : colors.income }]} numberOfLines={1}>{formatCompact(needed)}/mo needed</Text>
-                          ) : monthly > 0 ? (
-                            <Text style={[styles.goalMetaRight, { color: colors.accent }]} numberOfLines={1}>+{formatCompact(monthly)}/mo</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                      <Feather name="menu" size={16} color={colors.textMuted} style={styles.dragHandle} />
-                    </View>
-                  </PressableScale>
-                );
-              }}
+              renderItem={(g, isActive) => (
+                <GoalCard goal={g} saved={saved[g.id] ?? 0} isActive={isActive} onPress={() => router.push(`/savings/${g.id}` as any)} />
+              )}
             />
           </>
         ) : (
@@ -436,22 +384,7 @@ export default function SavingsScreen() {
 
         {/* Month-end spend forecast */}
         {forecastMonthEnd !== null && (
-          <View style={styles.forecastCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.forecastLabel}>Month-end forecast</Text>
-              <Text style={styles.forecastSub}>At current pace</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.forecastAmt}>{formatCompact(forecastMonthEnd)}</Text>
-              {forecastBudget > 0 && (
-                <Text style={[styles.forecastDelta, { color: forecastMonthEnd > forecastBudget ? colors.expense : colors.income }]}>
-                  {forecastMonthEnd > forecastBudget
-                    ? `${formatCompact(forecastMonthEnd - forecastBudget)} over budget`
-                    : `${formatCompact(forecastBudget - forecastMonthEnd)} under budget`}
-                </Text>
-              )}
-            </View>
-          </View>
+          <ForecastCard forecastMonthEnd={forecastMonthEnd} forecastBudget={forecastBudget} />
         )}
 
         <View style={{ height: space.lg }} />
