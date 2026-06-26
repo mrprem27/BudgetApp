@@ -361,8 +361,8 @@ export default function GroupDetailScreen() {
               style={styles.balCardBtn}
               onPress={() => {
                 // Consistent with the dashboard/friends/groups — open the global Settle flow.
-                if (primaryPerson) router.push(`/settle?focus=${primaryPerson.id}`);
-                else router.push('/settle');
+                if (primaryPerson) router.push(`/add/quick?kind=transfer&to=${primaryPerson.id}`);
+                else router.push('/add/quick?kind=transfer');
               }}
               accessibilityRole="button"
               accessibilityLabel="Settle up"
@@ -500,7 +500,7 @@ export default function GroupDetailScreen() {
                 if (!fromPerson || !toPerson) return null;
                 return (
                   <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => router.push(`/settle?from=${s.from}&to=${s.to}&amount=${s.amount}&groupId=${id}` as any)} />
+                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => router.push(`/add/quick?kind=transfer&from=${s.from}&to=${s.to}&amount=${s.amount}&groupId=${id}` as any)} />
                   </View>
                 );
               })}
@@ -750,7 +750,7 @@ export default function GroupDetailScreen() {
             return (
               <TouchableOpacity
                 style={styles.settleGroupCta}
-                onPress={() => router.push('/settle')}
+                onPress={() => router.push('/add/quick?kind=transfer')}
                 accessibilityRole="button"
                 accessibilityLabel="Settle group balances"
               >

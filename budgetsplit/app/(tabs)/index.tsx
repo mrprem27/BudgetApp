@@ -395,7 +395,7 @@ export default function DashboardScreen() {
 
             {/* Settle-up sits below the bars. */}
             {(oweTotal > 0 || owedTotal > 0) && (
-              <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/settle')} />
+              <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
             )}
 
             {upcoming.length > 0 && <ComingUpList items={upcoming} />}

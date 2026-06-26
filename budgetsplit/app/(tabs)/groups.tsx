@@ -260,7 +260,7 @@ export default function GroupsScreen() {
               </View>
               <TouchableOpacity
                 style={styles.settleChip}
-                onPress={() => router.push(`/settle?focus=${f.personId}`)}
+                onPress={() => router.push(`/add/quick?kind=transfer&to=${f.personId}`)}
                 accessibilityRole="button"
                 accessibilityLabel={`Settle with ${f.name}`}
               >

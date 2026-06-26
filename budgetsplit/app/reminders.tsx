@@ -109,7 +109,7 @@ export default function RemindersScreen() {
                   <Text style={styles.rowSub}>
                     {s.iOwe ? 'You owe' : 'Owes you'} {formatCompact(s.amount)}
                   </Text>
-                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/settle?focus=${s.counterpart.id}` as any)} accessibilityRole="button">
+                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}` as any)} accessibilityRole="button">
                     <Text style={[styles.actionBtnText, { color: '#fff' }]}>Settle now</Text>
                   </TouchableOpacity>
                 </View>

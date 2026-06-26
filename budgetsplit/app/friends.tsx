@@ -176,7 +176,7 @@ export default function FriendsScreen() {
                         </View>
                       </TouchableOpacity>
                       {net !== 0 && (
-                        <TouchableOpacity style={styles.settlePill} onPress={() => router.push(`/settle?focus=${p.id}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${p.name}`}>
+                        <TouchableOpacity style={styles.settlePill} onPress={() => router.push(`/add/quick?kind=transfer&to=${p.id}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${p.name}`}>
                           <Text style={styles.settlePillText}>Settle</Text>
                         </TouchableOpacity>
                       )}

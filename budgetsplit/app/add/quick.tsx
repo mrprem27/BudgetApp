@@ -48,7 +48,8 @@ import type { Category } from '../../src/db/queries/categories';
 type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
 
 export default function QuickAddScreen() {
-  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId } = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string }>();
+  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount } =
+    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string }>();
   const isEditing = !!editId;
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
@@ -60,11 +61,13 @@ export default function QuickAddScreen() {
   const [kind, setKind] = useState<'income' | 'expense' | 'transfer'>(
     paramKind === 'income' ? 'income' : paramKind === 'transfer' ? 'transfer' : 'expense',
   );
-  const [amountText, setAmountText] = useState('');
+  // Optional deep-link prefill (e.g. "Settle with Rahul" → kind=transfer&to=…).
+  // Purely additive: with no params these all fall back to the normal defaults.
+  const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? (parseInt(paramAmount, 10) / 100).toString() : '');
   // Transfer (settlement) state — only used when kind === 'transfer'.
   const [allPersons, setAllPersons] = useState<Person[]>([]);
-  const [transferFromId, setTransferFromId] = useState('');
-  const [transferToId, setTransferToId] = useState('');
+  const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
+  const [transferToId, setTransferToId] = useState(paramTo ?? '');
   const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null); // which slot the picker fills
   // Launched from a group's FAB → pre-select that group's transfer scope.
   const [transferScope, setTransferScope] = useState<'all' | string>(paramGroupId ?? 'all');
