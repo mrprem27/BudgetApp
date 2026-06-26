@@ -95,7 +95,6 @@ export default function SavingsScreen() {
   const [saved, setSaved] = useState<Record<string, number>>({});
   const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
   const [cash, setCash] = useState<CashPosition | null>(null);
-  const [personalId, setPersonalId] = useState('');
   const [insights, setInsights] = useState<Insight[]>([]);
   const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
   const [forecastBudget, setForecastBudget] = useState(0);
@@ -132,7 +131,6 @@ export default function SavingsScreen() {
     setInsights(ins);
     setCash(c);
     const grps = await getAllGroups(db);
-    setPersonalId(grps.find(g => g.is_personal === 1)?.id ?? '');
 
     // Current month's category spend — feeds the month-end forecast + what-if simulator.
     const monthStart = new Date();
@@ -437,14 +435,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
-  personalCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  personalIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  personalTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  personalSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
-  affordBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  affordIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  affordBtnText: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
   cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
   cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   cashBreakSep: { color: colors.textMuted },
@@ -471,7 +462,6 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
   sectionHint: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   dragHandle: { marginLeft: space.xs },
-  moneySection: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
   subsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm, gap: space.sm },
   subsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   subsTotal: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
@@ -534,15 +524,6 @@ const styles = StyleSheet.create({
   moduleRow: { gap: space.sm, paddingBottom: space.xs },
   moduleChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8 },
   moduleChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  whatIfCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
-  whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
-  whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
-  whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
-  whatIfChipActive: { backgroundColor: colors.accent },
-  whatIfChipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  whatIfResult: { gap: 2 },
-  whatIfSave: { ...type.body, color: colors.textPrimary },
-  whatIfYear: { ...type.caption, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },

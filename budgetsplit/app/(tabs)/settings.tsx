@@ -8,7 +8,6 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
-import * as Location from 'expo-location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
@@ -17,7 +16,6 @@ import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../sr
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getCategoriesForGroup } from '../../src/db/queries/categories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
-import { isAutoSweepEnabled } from '../../src/db/queries/savings';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -45,8 +43,6 @@ export default function SettingsScreen() {
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
   const [hideAmounts, setHideAmounts] = useState(false);
-  const [saveLocation, setSaveLocation] = useState(false);
-  const [autoSweep, setAutoSweep] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
@@ -65,8 +61,6 @@ export default function SettingsScreen() {
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
-      setSaveLocation(await settings.saveLocation());
-      setAutoSweep(await isAutoSweepEnabled());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
@@ -76,20 +70,6 @@ export default function SettingsScreen() {
     haptic.selection();
     setter(val);
     await persist(val);
-  }
-
-  // Turning location on must ask for OS permission first; if denied, leave it off.
-  async function toggleLocation(val: boolean) {
-    haptic.selection();
-    if (val) {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Location off', 'Allow location access for BudgetSplit in your phone’s Settings to tag where you spend.');
-        return;
-      }
-    }
-    setSaveLocation(val);
-    await settings.setSaveLocation(val);
   }
 
   async function pickCadence(c: BudgetCadence) {

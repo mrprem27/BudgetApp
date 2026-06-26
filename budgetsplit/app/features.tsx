@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../src/lib/settings';
 import { colors } from '../src/constants/colors';
@@ -32,6 +33,14 @@ export default function FeaturesScreen() {
 
   async function toggleSaveLocation(v: boolean) {
     haptic.selection();
+    // Turning it ON asks for OS location permission first; if denied, leave it off.
+    if (v) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location off', 'Allow location access for BudgetSplit in your phone’s Settings to tag where you spend.');
+        return;
+      }
+    }
     setSaveLocation(v);
     await settings.setSaveLocation(v);
   }
