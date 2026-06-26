@@ -34,7 +34,8 @@ import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, monthlyContribution, neededPerMonth, monthsUntil } from '../../src/lib/savings';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { getMe } from '../../src/db/queries/persons';
-import { getDate, getDaysInMonth, format, addMonths } from 'date-fns';
+import { getDate, getDaysInMonth, format, addMonths, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { forecastMonthEnd as computeForecastMonthEnd } from '../../src/lib/forecast';
 
 // Goal deadline as quick durations (avoids a fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -147,12 +148,19 @@ export default function SavingsScreen() {
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
     setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
 
-    // Month-end spend forecast based on daily pace.
+    // Month-end spend forecast — same credibility-weighted model as Reports
+    // (lib/forecast), blended with last month's actual. Hidden until day 3.
     const today2 = new Date();
     const dayOfMonth = getDate(today2);
     const daysInMonth = getDaysInMonth(today2);
     const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
-    setForecastMonthEnd(dayOfMonth > 0 ? Math.round((totalMonthSpend / dayOfMonth) * daysInMonth) : null);
+    const prevTxns = await getTransactionsInRange(db, null, startOfMonth(subMonths(today2, 1)).getTime(), endOfMonth(subMonths(today2, 1)).getTime());
+    let priorMonthTotal = 0;
+    for (const t of prevTxns) {
+      if (t.kind === 'expense') priorMonthTotal += t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+    }
+    const f = computeForecastMonthEnd(totalMonthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
+    setForecastMonthEnd(f.ready ? f.projected : null);
 
     // Budget total across all groups for the forecast over/under line.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
@@ -235,6 +243,7 @@ export default function SavingsScreen() {
             { key: 'reports', icon: 'file-text' as const, label: 'Reports', show: flags.reportsDonut, to: '/reports' },
             { key: 'subs', icon: 'refresh-cw' as const, label: 'Subscriptions', show: flags.subscriptions, to: '/plan/subscriptions' },
             { key: 'reminders', icon: 'bell' as const, label: 'Reminders', show: flags.reminders, to: '/reminders' },
+            { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
           ].filter(m => m.show).map(m => (
             <TouchableOpacity key={m.key} style={styles.moduleChip} onPress={() => router.push(m.to as any)} accessibilityRole="button" accessibilityLabel={m.label}>
               <Feather name={m.icon} size={15} color={colors.accent} />

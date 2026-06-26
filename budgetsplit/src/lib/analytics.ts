@@ -7,6 +7,7 @@ import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
 import { getCategorySpending, utilLabel, budgetHealth } from './budget';
+import { forecastMonthEnd } from './forecast';
 import { formatCompact, formatComparison } from './money';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
@@ -230,8 +231,11 @@ export async function getBudgetAnalytics(
   }
 
   const totalMonthSpent = Object.values(monthSpend).reduce((s, v) => s + v, 0);
+  const priorMonthTotal = Object.values(prevMonthSpend).reduce((s, v) => s + v, 0);
   const daysInMonth = getDaysInMonth(now);
-  const projectedMonthEnd = Math.round((totalMonthSpent / Math.max(1, dayOfMonth)) * daysInMonth);
+  // One forecast model everywhere: credibility-weighted blend (lib/forecast),
+  // not a raw linear run-rate. Floors at spend-so-far; 0 before day 3.
+  const projectedMonthEnd = forecastMonthEnd(totalMonthSpent, dayOfMonth, daysInMonth, priorMonthTotal).projected;
   const monthlyBudgetTotal = budgets.filter(b => b.cadence === 'monthly').reduce((s, b) => s + b.amount, 0);
 
   // --- Rule-based recommendations ---

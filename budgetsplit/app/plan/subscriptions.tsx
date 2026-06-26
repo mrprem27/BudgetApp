@@ -14,8 +14,9 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getRecurringForGroup } from '../../src/db/queries/transactions';
+import { getRecurringForGroup, getTransactionsInRange } from '../../src/db/queries/transactions';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
+import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
 import { formatCompact } from '../../src/lib/money';
 
 type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
@@ -31,6 +32,7 @@ export default function SubscriptionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [subs, setSubs] = useState<Sub[]>([]);
+  const [detected, setDetected] = useState<DetectedSub[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
@@ -49,6 +51,17 @@ export default function SubscriptionsScreen() {
     }));
     list.sort((a, b) => (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
     setSubs(list);
+
+    // "Maybe a subscription" — detect regular repeats in manually-logged
+    // expenses (last ~150d), excluding materialized recurring occurrences, then
+    // drop any that already match an active rule (same category + amount).
+    const recent = await getTransactionsInRange(db, null, now - 150 * 86400000, now);
+    const detectTxns = recent
+      .filter(t => t.kind === 'expense' && !t.parent_recur_id)
+      .map(t => ({ category: t.category, amount: t.shares.reduce((s, sh) => s + sh.amount, 0), date: t.date }));
+    const ruleKeys = new Set(list.map(s => `${s.category}|${s.amount}`));
+    setDetected(detectSubscriptions(detectTxns).filter(d => !ruleKeys.has(`${d.category}|${d.amount}`)));
+
     setLoaded(true);
   }
 
@@ -67,7 +80,7 @@ export default function SubscriptionsScreen() {
       >
         <Text style={styles.intro}>Your repeating bills & subscriptions — from your recurring expenses.</Text>
 
-        {loaded && subs.length === 0 ? (
+        {loaded && subs.length === 0 && detected.length === 0 ? (
           <EmptyState
             icon="refresh-cw"
             title="No subscriptions yet"
@@ -75,8 +88,9 @@ export default function SubscriptionsScreen() {
             actionLabel="Add a recurring expense"
             onAction={() => router.push('/add/quick?kind=expense' as any)}
           />
-        ) : subs.length > 0 ? (
+        ) : (
           <>
+            {subs.length > 0 && (<>
             {/* Monthly total */}
             <View style={styles.summaryCard}>
               <View style={{ flex: 1 }}>
@@ -118,8 +132,40 @@ export default function SubscriptionsScreen() {
             </View>
 
             <Text style={styles.footHint}>≈ {formatCompact(monthlyTotal * 12)} a year · tap a row to manage its schedule.</Text>
+            </>)}
+
+            {detected.length > 0 && (<>
+              <Text style={styles.sectionLabel}>MAYBE A SUBSCRIPTION · {detected.length}</Text>
+              <View style={styles.listCard}>
+                {detected.map((d, i) => {
+                  const vis = categoryVisual(d.category);
+                  return (
+                    <TouchableOpacity
+                      key={`${d.category}-${d.amount}`}
+                      style={[styles.row, i < detected.length - 1 && styles.rowBorder]}
+                      onPress={() => router.push('/add/quick?kind=expense' as any)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${d.category}, looks ${d.cadence}, track as recurring`}
+                    >
+                      <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                        <Feather name={vis?.icon ?? 'help-circle'} size={18} color={vis?.color ?? colors.accent} />
+                      </View>
+                      <View style={styles.info}>
+                        <Text style={styles.name} numberOfLines={1}>{d.category}</Text>
+                        <Text style={styles.detail}>Seen {d.count}× · looks {d.cadence}</Text>
+                      </View>
+                      <View style={styles.right}>
+                        <AmountText paise={d.amount} size="sm" forceColor={colors.textPrimary} />
+                        <Text style={styles.trackHint}>Track →</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.footHint}>Spotted from your logged expenses — tap to add it as a recurring rule.</Text>
+            </>)}
           </>
-        ) : null}
+        )}
       </ScrollView>
     </View>
   );
@@ -144,5 +190,6 @@ const styles = StyleSheet.create({
   detail: { ...type.caption, color: colors.textMuted },
   right: { alignItems: 'flex-end' },
   nextDate: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 2 },
+  trackHint: { ...type.caption, color: colors.accent, fontSize: 10, marginTop: 2, fontFamily: 'Inter_600SemiBold' },
   footHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });
