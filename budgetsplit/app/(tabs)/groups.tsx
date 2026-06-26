@@ -56,7 +56,6 @@ export default function GroupsScreen() {
   const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [listMode, setListMode] = useState<'groups' | 'budget'>('groups');
   const [loadError, setLoadError] = useState(false);
   const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
@@ -300,52 +299,7 @@ export default function GroupsScreen() {
         <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
       ) : (
         <>
-      {listMode === 'budget' ? (
-        <FlatList
-          data={activeGroups
-            .filter(g => health[g.id]?.pct !== null && health[g.id]?.pct !== undefined)
-            .sort((a, b) => (health[b.id]?.pct ?? 0) - (health[a.id]?.pct ?? 0))}
-          keyExtractor={g => g.id}
-          contentContainerStyle={styles.list}
-          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={<Text style={styles.budgetOverviewHeader}>Budget overview</Text>}
-          ItemSeparatorComponent={() => <View style={{ height: space.xs }} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="bar-chart-2"
-              title="No budgets set"
-              body="Set budgets for your groups to track spending here."
-              tint={colors.textSecondary}
-            />
-          }
-          renderItem={({ item }) => {
-            const h = health[item.id];
-            if (!h || h.pct === null) return null;
-            const hColor = h.health === 'red' ? colors.expense : h.health === 'amber' ? colors.healthAmber : colors.income;
-            return (
-              <FadeIn>
-                <PressableScale
-                  style={styles.budgetOverviewRow}
-                  onPress={() => router.push(`/group/${item.id}/budget` as any)}
-                  accessibilityLabel={item.name}
-                >
-                  <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
-                    <Feather name={asFeather(item.icon, 'credit-card')} size={18} color={item.color} />
-                  </View>
-                  <View style={styles.budgetOverviewInfo}>
-                    <View style={styles.budgetOverviewNameRow}>
-                      <Text style={styles.budgetOverviewName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={[styles.budgetOverviewPct, { color: hColor }]}>{utilLabel(h.pct)}</Text>
-                    </View>
-                    <BudgetBar pct={h.pct} health={h.health} height={6} />
-                  </View>
-                </PressableScale>
-              </FadeIn>
-            );
-          }}
-        />
-      ) : (
-        <FlatList
+      <FlatList
           data={viewMode === 'active' ? activeGroups : archived}
           keyExtractor={g => g.id}
           renderItem={renderGroup}
@@ -373,7 +327,6 @@ export default function GroupsScreen() {
             )
           }
         />
-      )}
         </>
       )}
 
@@ -405,11 +358,6 @@ const styles = StyleSheet.create({
   title: { ...type.title, color: colors.textPrimary },
   friendsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  filterRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  filterChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs + 2, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  filterChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  filterChipText: { ...type.label, color: colors.textMuted },
-  filterChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
   balancesWrap: { marginBottom: space.sm },
   balHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
@@ -438,12 +386,6 @@ const styles = StyleSheet.create({
   headerButtons: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted },
   headerIconBtnActive: { backgroundColor: colors.accentMuted },
-  budgetOverviewHeader: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm },
-  budgetOverviewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  budgetOverviewInfo: { flex: 1, gap: space.xs },
-  budgetOverviewNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  budgetOverviewName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  budgetOverviewPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13 },
   overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },

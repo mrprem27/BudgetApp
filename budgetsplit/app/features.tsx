@@ -36,19 +36,38 @@ export default function FeaturesScreen() {
     await settings.setSaveLocation(v);
   }
 
-  // Each optional module maps to the flag (or store) that actually gates it.
-  // "Reports & Charts" gates the donut + trend together; "Scan Receipts" is the
-  // itemized OCR flag; "Location Tagging" lives in AsyncStorage, not the flag set.
-  const MODULES: { icon: keyof typeof Feather.glyphMap; label: string; caption: string; value: boolean; onChange: (v: boolean) => void }[] = [
-    { icon: 'target', label: 'Savings Goals', caption: 'Track goals, auto-sweep surplus each month', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
-    { icon: 'trending-up', label: 'Spending Forecast', caption: 'See where your spending lands at month-end', value: flags.forecast, onChange: v => setFlag('forecast', v) },
-    { icon: 'activity', label: 'Financial Health Score', caption: 'A wellness score for your money habits', value: flags.healthScore, onChange: v => setFlag('healthScore', v) },
-    { icon: 'help-circle', label: 'Afford Check', caption: 'Quick "can I afford this?" before a big buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
-    { icon: 'refresh-cw', label: 'Subscription Tracker', caption: 'Spot and review recurring charges', value: flags.subscriptions, onChange: v => setFlag('subscriptions', v) },
-    { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => setFlag('reminders', v) },
-    { icon: 'pie-chart', label: 'Reports & Charts', caption: 'Deep-dive charts and PDF export', value: flags.reportsDonut, onChange: v => { setFlag('reportsDonut', v); setFlag('reportsTrend', v); } },
-    { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
-    { icon: 'camera', label: 'Scan Receipts', caption: 'Snap a receipt to prefill the total automatically', value: flags.itemizedOcr, onChange: v => setFlag('itemizedOcr', v) },
+  // Optional modules, grouped into clear sections. Each maps to the flag (or
+  // store) that actually gates it. "Reports & Charts" gates donut + trend
+  // together; "Location Tagging" lives in AsyncStorage, not the flag set.
+  type Module = { icon: keyof typeof Feather.glyphMap; label: string; caption: string; value: boolean; onChange: (v: boolean) => void };
+  const MODULE_SECTIONS: { title: string; items: Module[] }[] = [
+    {
+      title: 'Insights & reports',
+      items: [
+        { icon: 'activity', label: 'Financial Health Score', caption: 'A wellness score for your money habits', value: flags.healthScore, onChange: v => setFlag('healthScore', v) },
+        { icon: 'trending-up', label: 'Spending Forecast', caption: 'See where your spending lands at month-end', value: flags.forecast, onChange: v => setFlag('forecast', v) },
+        { icon: 'zap', label: 'Savings Insights', caption: 'Opportunity-cost & habit nudges on the Plan tab', value: flags.savingsInsights, onChange: v => setFlag('savingsInsights', v) },
+        { icon: 'pie-chart', label: 'Reports & Charts', caption: 'Deep-dive charts and PDF export', value: flags.reportsDonut, onChange: v => { setFlag('reportsDonut', v); setFlag('reportsTrend', v); } },
+      ],
+    },
+    {
+      title: 'Money tools',
+      items: [
+        { icon: 'target', label: 'Savings Goals', caption: 'Track goals, auto-sweep surplus each month', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
+        { icon: 'refresh-cw', label: 'Subscription Tracker', caption: 'Spot and review recurring charges', value: flags.subscriptions, onChange: v => setFlag('subscriptions', v) },
+        { icon: 'help-circle', label: 'Afford Check', caption: 'Quick "can I afford this?" before a big buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
+        { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => setFlag('reminders', v) },
+        { icon: 'award', label: 'Tracking Streak', caption: 'A daily-logging streak on Home (shows at 3+ days)', value: flags.streak, onChange: v => setFlag('streak', v) },
+      ],
+    },
+    {
+      title: 'Smart capture',
+      items: [
+        { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
+        { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
+        { icon: 'camera', label: 'Scan Receipts', caption: 'Snap a receipt to prefill the total automatically', value: flags.itemizedOcr, onChange: v => setFlag('itemizedOcr', v) },
+      ],
+    },
   ];
 
   return (
@@ -79,23 +98,27 @@ export default function FeaturesScreen() {
           ))}
         </View>
 
-        {/* OPTIONAL MODULES — toggles */}
-        <Text style={styles.sectionTitle}>Optional modules</Text>
-        <View style={styles.card}>
-          {MODULES.map((m, i) => (
-            <View key={m.label}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={[styles.row, !m.value && styles.rowOff]}>
-                <View style={styles.iconDot}><Feather name={m.icon} size={16} color={colors.accent} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>{m.label}</Text>
-                  <Text style={styles.caption}>{m.caption}</Text>
+        {/* OPTIONAL MODULES — grouped into sections */}
+        {MODULE_SECTIONS.map(section => (
+          <View key={section.title}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <View style={styles.card}>
+              {section.items.map((m, i) => (
+                <View key={m.label}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <View style={[styles.row, !m.value && styles.rowOff]}>
+                    <View style={styles.iconDot}><Feather name={m.icon} size={16} color={colors.accent} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>{m.label}</Text>
+                      <Text style={styles.caption}>{m.caption}</Text>
+                    </View>
+                    <Switch value={m.value} onValueChange={m.onChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={m.label} />
+                  </View>
                 </View>
-                <Switch value={m.value} onValueChange={m.onChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={m.label} />
-              </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
 
         <Text style={styles.footer}>Enabled sections appear in their natural home.{'\n'}Nothing is deleted when a section is off.</Text>
       </ScrollView>

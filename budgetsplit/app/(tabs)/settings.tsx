@@ -216,13 +216,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="activity" label="Health score" value={!!flags.healthScore} onValueChange={(v) => setFlag('healthScore', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="credit-card" label="Subscription detection" value={!!flags.subscriptions} onValueChange={(v) => setFlag('subscriptions', v)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={toggleLocation} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Sections" onPress={() => { haptic.light(); router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
 
       {/* SECURITY */}
