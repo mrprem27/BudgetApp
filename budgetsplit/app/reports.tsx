@@ -326,9 +326,14 @@ export default function ReportsScreen() {
       const file = new File(Paths.cache, fileName);
       file.create({ overwrite: true });
       file.write(csv);
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Saved', `Sharing isn’t available here. The CSV was saved to:\n${file.uri}`);
+        return;
+      }
       await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Export CSV' });
-    } catch {
-      Alert.alert('Export failed', 'Could not export CSV.');
+    } catch (e) {
+      // Surface the real reason — silent "Export failed" hid genuine bugs before.
+      Alert.alert('Export failed', `Could not export CSV.\n\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setExporting(false);
     }
@@ -339,9 +344,13 @@ export default function ReportsScreen() {
     try {
       const html = await buildReportHtml(db, summaries, month);
       const { uri } = await Print.printToFileAsync({ html });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Saved', `Sharing isn’t available here. The PDF was saved to:\n${uri}`);
+        return;
+      }
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export PDF' });
-    } catch {
-      Alert.alert('Export failed', 'Could not export PDF.');
+    } catch (e) {
+      Alert.alert('Export failed', `Could not export PDF.\n\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPdfExporting(false);
     }

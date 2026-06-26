@@ -273,7 +273,7 @@ export default function SettingsScreen() {
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="download" label="Export PDF" onPress={() => { haptic.light(); Alert.alert('Coming soon', 'PDF export will be available in a future update.'); }} />
+        <SettingsRow icon="download" label="Export & reports" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
         <View style={settingsRowDivider} />
