@@ -338,7 +338,7 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            {(spending === 0 && income === 0 && !everHadCats) ? (
+            {(spending === 0 && income === 0 && budget.allocated <= 0 && !everHadCats) ? (
               <>
                 {/* Dedicated first-run empty home (design Screen 6) */}
                 <View style={styles.emptyHero}>
