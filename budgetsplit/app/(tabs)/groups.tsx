@@ -12,6 +12,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
+import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
 import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -62,6 +63,7 @@ export default function GroupsScreen() {
   useFocusEffect(useCallback(() => {
     loadGroups();
   }, []));
+  useRefreshOnDataChange(loadGroups);
 
   async function loadGroups() {
     try {

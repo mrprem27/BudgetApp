@@ -25,6 +25,7 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
 import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
@@ -238,6 +239,8 @@ export default function DashboardScreen() {
     settings.hideAmounts().then(setHideAmounts);
     checkCatchUp();
   }, [tab]));
+  // Reflect writes from other screens (e.g. saving a budget) without needing a re-focus.
+  useRefreshOnDataChange(load);
 
   // Onboarding's "add my first expense" hand-off: open Add once, then clear the
   // one-shot flag so it never re-fires.

@@ -11,6 +11,7 @@ import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
@@ -65,6 +66,7 @@ export default function BudgetEditorScreen() {
   const focusCategory = focusCategoryRaw ? decodeURIComponent(focusCategoryRaw) : undefined;
   const db = useSQLiteContext();
   const router = useRouter();
+  const { refresh } = useDataRefresh();
   const insets = useSafeAreaInsets();
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -186,6 +188,7 @@ export default function BudgetEditorScreen() {
         .map(c => ({ category: c.name, cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? '') }))
         .filter(e => e.amount > 0);
       await setCategoryBudgets(db, id, entries);
+      refresh(); // tell Home / group detail their budget data changed
       haptic.success();
       router.back();
     } catch {

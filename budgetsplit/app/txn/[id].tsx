@@ -13,6 +13,7 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { getTxnById, softDeleteTxn, restoreTxn, getLineItems, setTxnAttachment } from '../../src/db/queries/transactions';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../../src/lib/attachment';
 import { useUndo } from '../../src/components/system/UndoToast';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getAuditLog } from '../../src/db/queries/audit';
@@ -38,6 +39,7 @@ export default function TxnDetailScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
+  const { refresh } = useDataRefresh();
   const [txn, setTxn] = useState<TxnWithSplits | null>(null);
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
@@ -162,10 +164,11 @@ export default function TxnDetailScreen() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await softDeleteTxn(db, id);
+          refresh();
           haptic.warning();
           showUndo({
             message: 'Transaction deleted',
-            onUndo: async () => { try { await restoreTxn(db, id); haptic.success(); } catch { /* ignore */ } },
+            onUndo: async () => { try { await restoreTxn(db, id); refresh(); haptic.success(); } catch { /* ignore */ } },
           });
           router.back();
         } catch {

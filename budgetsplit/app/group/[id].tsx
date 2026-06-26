@@ -14,6 +14,7 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
 import { getTransactionsForGroup, softDeleteTxn, restoreTxn, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { useUndo } from '../../src/components/system/UndoToast';
+import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
@@ -113,6 +114,7 @@ export default function GroupDetailScreen() {
   const [budgetFilter, setBudgetFilter] = useState('all');
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
+  useRefreshOnDataChange(load);
 
   async function load() {
     const [grp, txnList, memberList, meRow] = await Promise.all([
