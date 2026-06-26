@@ -15,6 +15,52 @@
 
 ---
 
+## ✅ Completion status — reconciled 2026-06-26
+
+This plan has now been **executed** (branch `refactor/phase-1-perf-safety`, ~18 commits,
+`tsc` clean, **149/149 tests** — 7 dead-code tests removed). What shipped:
+
+- **Phase 1 (perf + safety):** hot-path `txn`/`line_item` indexes; batched split loader
+  (killed the N+1); atomic `splitRecurringSeries`; `deleteCategory` budget-orphan fix;
+  idempotent leftover sweep; recurring→monthly bug fixed via one `recurringMonthlyEquivalent`.
+- **Phase 2 (state + settings):** dead Zustand surface trimmed to `groups`/`setGroups`;
+  new `lib/settings.ts` (one typed prefs store; ~30 AsyncStorage sites migrated); flag
+  defaults deduped; `search` retry + Plan error-state fixed.
+- **Phase 3 (helpers):** `budgetHealth` + `utilLabel` — one source in `lib/budget`
+  (incl. the `groups.tsx` leftover, fixed in the final reconcile pass).
+- **Phase 4 (monoliths):** `reports` CSV/PDF → `lib/reportExport`; onboarding commit →
+  `lib/onboarding`; itemized math → `lib/itemized`; Plan `GoalCard`/`PoolCard`/`ForecastCard`;
+  group `InsightsTab`; quick `SplitSheet`. The quick.tsx add flow is otherwise **frozen**
+  (owner: "it's perfect") — only an additive deep-link prefill was added.
+- **Phase 5 (naming + engine):** ONE forecast model (`lib/forecast` everywhere); analytics
+  budget status via `budgetHealth`; `history` back-label; `insertSavingsTxn` rename;
+  `recordSettlement` (one settlement write path).
+- **Phase 6 (cleanup):** deleted `Card.tsx`, `settle.tsx`, `group/[id]/insights.tsx`,
+  `computeNet`, `getDashboardInsights`/`rankInsights` (+tests); removed dead branches
+  (group `false && budgetUsage`, groups filter chips + `listMode==='budget'`); resolved
+  `SHOW_EXTRAS`.
+
+**Beyond the plan (owner-directed):**
+- **Settle = one flow:** the Quick-Add Transfer pill is now primary; all 8 entry points
+  re-pointed; standalone `/settle` screen removed.
+- **Surfaced hidden features:** Plan **Cash available** card + **Savings insights**; group
+  **Balances** tab (Simplify-debts toggle + settle plan); **category rename** (propagates
+  to all txns/budgets).
+- **Wired orphans:** Streak re-enabled, subscription detection live, Afford reachable,
+  onboarding "first add" hand-off. **OCR** parked (`@deprecated`, kept).
+- **Feature management** screen sectioned (Insights & reports / Money tools / Smart
+  capture); duplicate toggles removed from Settings.
+
+**Deliberately NOT done:** drop dead schema columns + `settings` table (risky rebuild
+migration, ~0 benefit); full category-ID normalization (the safe `renameCategory` delivers
+the real value); a real OCR build.
+
+> The other four docs (ARCHITECTURE, FEATURES_AND_FLOWS, BRUTAL_ANALYSIS, FUTURE_IMPROVEMENTS)
+> were written as the **pre-refactor baseline**. Read them with this status in mind — many
+> "current state" / "problem" statements in them are now **resolved** (see each doc's top banner).
+
+---
+
 ## Decisions locked (owner, this cycle)
 
 - **Keep all 4 orphan features for future wiring — do NOT delete:** Afford check

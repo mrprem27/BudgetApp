@@ -7,6 +7,12 @@
 >
 > For *fixing what's already half-built*, see [REFACTORING_PLAN.md](./REFACTORING_PLAN.md)
 > and [BRUTAL_ANALYSIS.md](./BRUTAL_ANALYSIS.md). This doc is about *new* value.
+>
+> ✅ **Status (reconciled 2026-06-26):** the "finish what's already in the codebase" items in
+> §1 are now **done** — Afford check is reachable, subscription detection is wired, the
+> tracking streak is re-enabled, and OCR is **parked** (`@deprecated`, kept, not deleted).
+> The forecast unification and one budget classifier (§3) are also done. The remaining items
+> below are genuinely future work.
 
 ---
 

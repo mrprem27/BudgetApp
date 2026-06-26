@@ -6,6 +6,17 @@
 > [BRUTAL_ANALYSIS.md](./BRUTAL_ANALYSIS.md), [REFACTORING_PLAN.md](./REFACTORING_PLAN.md).
 > Build/design rules live in [../AGENTS.md](../AGENTS.md).
 
+> ⚠️ **Status (reconciled 2026-06-26):** this was written as the *pre-refactor baseline*.
+> The codebase has since completed all of [REFACTORING_PLAN.md](./REFACTORING_PLAN.md)
+> (see its "Completion status"). Changed since: the Zustand store is trimmed to
+> `groups`/`setGroups`; new lib modules `settings.ts`, `onboarding.ts`, `itemized.ts`,
+> `reportExport.ts` + `recordSettlement`; **one** forecast model (`lib/forecast`) and one
+> `budgetHealth`/`utilLabel`; the standalone `/settle` screen, `Card.tsx`,
+> `computeNet`, `getDashboardInsights`/`rankInsights` are **deleted**; settlements record via
+> `recordSettlement`. The dead `settings` table + columns in §5 are still present (left on
+> purpose). Treat data-model/§ details as accurate; treat store/§6, settle, and the
+> "competing forecasts" notes as superseded.
+
 ---
 
 ## 1. What the app is

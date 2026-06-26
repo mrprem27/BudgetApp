@@ -20,6 +20,7 @@ import { getGlobalNet, getGroupNet, getFriendBalances, type FriendBalance } from
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { simplify } from '../../src/lib/settle';
 import { formatCompact } from '../../src/lib/money';
+import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
@@ -35,11 +36,6 @@ import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palett
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
-  return `${pct}%`;
-}
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();

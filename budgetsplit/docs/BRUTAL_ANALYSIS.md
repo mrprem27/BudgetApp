@@ -5,6 +5,18 @@
 > half-finished, duplicated, or confusing. Every claim cites a real `file:line`. The fix
 > plan lives in [REFACTORING_PLAN.md](./REFACTORING_PLAN.md).
 
+> ✅ **Status (reconciled 2026-06-26): most of this is now FIXED.** This teardown was the
+> baseline; the work in [REFACTORING_PLAN.md](./REFACTORING_PLAN.md) "Completion status" has
+> since resolved the bulk of it — **resolved:** the N+1 split loader (§9), the recurring-monthly
+> bug + duplicated `utilLabel`/`budgetHealth` (§4), the dead Zustand store surface (§1.1),
+> settings scattered across stores (§1.2 — now `lib/settings.ts`), duplicated flag defaults
+> (§1.3), the orphan modules `computeNet`/`getDashboardInsights` and dead `Card.tsx`/screens
+> (§3), the two settle flows (§4.4 — unified on the pill + `recordSettlement`), the two
+> forecasts (§4.3), and several monolith extractions (§2.1). **Still open / by design:**
+> `PRAGMA foreign_keys` off + dead schema columns/`settings` table (§1.4 — left intentionally),
+> `quick.tsx` still large (frozen per owner), category-as-string (safe `renameCategory` shipped
+> instead of a full migration). Read findings below as the *original* diagnosis.
+
 ---
 
 ## 0. One-paragraph verdict

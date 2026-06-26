@@ -6,6 +6,17 @@
 >
 > **Notation:** `→` = navigates to. Money is paise internally, shown via
 > `formatRupees`/`formatCompact`. "Flag" = a `useFeatureFlags()` gate.
+>
+> ⚠️ **Status (reconciled 2026-06-26):** pre-refactor baseline. Behaviour changed since
+> (see [REFACTORING_PLAN.md](./REFACTORING_PLAN.md) "Completion status"):
+> **Settle** is now the Quick-Add **Transfer pill** everywhere — the standalone `/settle`
+> screen is gone and the 8 entry points open `/add/quick?kind=transfer&to=…`.
+> **Plan tab** now shows the **Cash available** card + **Savings insights** (un-hidden); the
+> what-if simulator lives only on `/insights`. **Group detail** has a **Balances** tab
+> (Simplify-debts toggle + settle plan) when there are debts. **Categories** support
+> **rename** (propagates to all txns/budgets). **Streak / Subscription detection / Afford**
+> are now wired; onboarding's "first add" hand-off auto-opens Add. **Settings → Feature
+> management** is sectioned and the duplicate toggles were removed from Settings. OCR is parked.
 
 ---
 
