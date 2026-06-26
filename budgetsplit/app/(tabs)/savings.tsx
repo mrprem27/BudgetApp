@@ -67,7 +67,6 @@ const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB
 
 // Plan screen (design Screen 3) = Pool + Goals + Upcoming + Forecast only.
 // Everything else the app had is hidden behind this toggle for now — handle later.
-const SHOW_EXTRAS = false;
 
 const FREQS: { key: SavingsFrequency; label: string }[] = [
   { key: 'none', label: 'None' },
@@ -97,8 +96,6 @@ export default function SavingsScreen() {
   const [cash, setCash] = useState<CashPosition | null>(null);
   const [personalId, setPersonalId] = useState('');
   const [insights, setInsights] = useState<Insight[]>([]);
-  const [whatIfCat, setWhatIfCat] = useState<{ name: string; monthly: number } | null>(null);
-  const [whatIfPct, setWhatIfPct] = useState(20);
   const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
   const [forecastBudget, setForecastBudget] = useState(0);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
@@ -145,9 +142,6 @@ export default function SavingsScreen() {
         catMap[t.category] = (catMap[t.category] ?? 0) + amt;
       }
     }
-    const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
-    setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
-
     // Month-end spend forecast — same credibility-weighted model as Reports
     // (lib/forecast), blended with last month's actual. Hidden until day 3.
     const today2 = new Date();
@@ -252,8 +246,8 @@ export default function SavingsScreen() {
           ))}
         </ScrollView>
 
-        {/* Cash available — your real money */}
-        {SHOW_EXTRAS && cash && (
+        {/* Cash available — your real money (income in − paid out − saved) */}
+        {cash && (
           <View style={styles.cashCard}>
             <Text style={styles.cashLabel}>Cash available</Text>
             <AmountText paise={cash.available} size="xl" forceColor={cash.available >= 0 ? colors.textPrimary : colors.expense} compact />
@@ -267,21 +261,6 @@ export default function SavingsScreen() {
           </View>
         )}
 
-        {/* Personal budget & spending (the personal ledger lives here now) */}
-        {SHOW_EXTRAS && !!personalId && (
-          <>
-            <Text style={styles.moneySection}>Spending & budget</Text>
-            <TouchableOpacity style={styles.personalCard} onPress={() => router.push(`/group/${personalId}` as any)} accessibilityRole="button" accessibilityLabel="Personal budget and spending">
-              <View style={styles.personalIcon}><Feather name="book" size={18} color={colors.accent} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.personalTitle}>Personal budget & spending</Text>
-                <Text style={styles.personalSub}>Your ledger, categories & limits</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          </>
-        )}
-
         {/* Savings pool (design Screen 3) — teal gradient card */}
         {flags.savingsGoals && (
           <PoolCard
@@ -292,8 +271,8 @@ export default function SavingsScreen() {
           />
         )}
 
-        {/* Insights */}
-        {SHOW_EXTRAS && flags.savingsInsights && insights.length > 0 && (
+        {/* Savings insights — opportunity-cost / habit nudges */}
+        {flags.savingsInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
             <Text style={styles.insightsTitle}>Insights</Text>
             {insights.map((ins, i) => {
@@ -341,49 +320,6 @@ export default function SavingsScreen() {
             onAction={() => { resetNew(); setShowNew(true); }}
           />
         ))}
-
-        {/* What if — cut top category and see savings */}
-        {SHOW_EXTRAS && whatIfCat && (
-          <View style={styles.whatIfCard}>
-            <Text style={styles.moneySection}>What if…</Text>
-            <Text style={styles.whatIfLead}>
-              Cut <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold' }}>{whatIfCat.name}</Text> by
-            </Text>
-            <View style={styles.whatIfChips}>
-              {[10, 20, 30].map(p => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.whatIfChip, whatIfPct === p && styles.whatIfChipActive]}
-                  onPress={() => setWhatIfPct(p)}
-                  accessibilityRole="button"
-                >
-                  <Text style={[styles.whatIfChipText, whatIfPct === p && { color: colors.bg }]}>{p}%</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.whatIfResult}>
-              <Text style={styles.whatIfSave}>
-                You'd save{' '}
-                <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>
-                  {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100))}
-                </Text>
-                /mo
-              </Text>
-              <Text style={styles.whatIfYear}>
-                ≈ {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100) * 12)} a year
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* ── PLANNING & INSIGHTS ── */}
-        {SHOW_EXTRAS && flags.affordCheck && (
-          <TouchableOpacity style={styles.affordBtn} onPress={() => router.push('/afford')} accessibilityRole="button" accessibilityLabel="Can I afford something?">
-            <View style={styles.affordIcon}><Feather name="help-circle" size={16} color={colors.accent} /></View>
-            <Text style={styles.affordBtnText}>Can I afford something?</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
 
 
         {/* Upcoming this month — recurring bills (design Screen 3) */}

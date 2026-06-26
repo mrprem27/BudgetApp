@@ -271,6 +271,9 @@ export default function GroupDetailScreen() {
         { key: 'transactions', label: 'Expenses' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
+        // Balances view (everyone's net + Simplify-debts toggle + settle plan) —
+        // shown only when there's something outstanding to settle.
+        ...(settlements.length > 0 ? [{ key: 'balances' as const, label: 'Balances' }] : []),
         { key: 'recurring', label: 'Recurring' },
       ];
 
@@ -372,16 +375,6 @@ export default function GroupDetailScreen() {
           </View>
         );
       })()}
-
-      {/* Mini budget bar — not in design's Expenses view (budget lives in the Budget tab). */}
-      {false && budgetUsage && budgetUsage.pct !== null && (
-        <View style={styles.budgetHeaderBar}>
-          <BudgetBar pct={budgetUsage.pct} health={budgetUsage.health} height={4} />
-          <Text style={styles.budgetHeaderText}>
-            <Text style={{ color: healthColor(budgetUsage.health) }}>{formatCompact(budgetUsage.spent)}</Text> / {formatCompact(budgetUsage.limit ?? 0)} ({utilLabel(budgetUsage.pct)})
-          </Text>
-        </View>
-      )}
 
       {/* Pill/boxed segmented tabs — matches design */}
       <View style={styles.tabStrip}>

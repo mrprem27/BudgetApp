@@ -239,6 +239,17 @@ export default function DashboardScreen() {
     checkCatchUp();
   }, [tab]));
 
+  // Onboarding's "add my first expense" hand-off: open Add once, then clear the
+  // one-shot flag so it never re-fires.
+  useEffect(() => {
+    (async () => {
+      if (await settings.pendingFirstAdd()) {
+        await settings.clearPendingFirstAdd();
+        router.push('/add/quick?kind=expense');
+      }
+    })();
+  }, []);
+
   async function checkCatchUp() {
     const now = Date.now();
     const lastOpen = (await settings.appLastOpen()) ?? now;
@@ -399,11 +410,6 @@ export default function DashboardScreen() {
             )}
 
             {upcoming.length > 0 && <ComingUpList items={upcoming} />}
-
-            {/* HealthBand moved into the hero card as a corner ring (tap → /health sheet) */}
-            {/* {flags.healthScore && health && (
-              <HealthBand result={health} onPress={() => setShowHealth(true)} />
-            )} */}
 
             {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
             {flags.streak && (

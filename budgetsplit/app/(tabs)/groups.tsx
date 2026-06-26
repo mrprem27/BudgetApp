@@ -300,29 +300,6 @@ export default function GroupsScreen() {
         <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
       ) : (
         <>
-      {/* Filter chips (Active/Archived) — app extra, not in design. Handle later. */}
-      {false && listMode === 'groups' && archived.length > 0 && (
-        <View style={styles.filterRow}>
-          <TouchableOpacity
-            style={[styles.filterChip, viewMode === 'active' && styles.filterChipActive]}
-            onPress={() => setViewMode('active')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'active' }}
-          >
-            <Text style={[styles.filterChipText, viewMode === 'active' && styles.filterChipTextActive]}>Active ({activeGroups.length})</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, viewMode === 'archived' && styles.filterChipActive]}
-            onPress={() => setViewMode('archived')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'archived' }}
-          >
-            <Feather name="archive" size={13} color={viewMode === 'archived' ? colors.accent : colors.textMuted} />
-            <Text style={[styles.filterChipText, viewMode === 'archived' && styles.filterChipTextActive]}>Archived ({archived.length})</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {listMode === 'budget' ? (
         <FlatList
           data={activeGroups
