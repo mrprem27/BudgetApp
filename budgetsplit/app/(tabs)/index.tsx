@@ -405,14 +405,14 @@ export default function DashboardScreen() {
               <HealthBand result={health} onPress={() => setShowHealth(true)} />
             )} */}
 
-            {/* StreakCard — not in design */}
-            {/* {flags.streak && (
+            {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
+            {flags.streak && (
               <StreakCard
                 streak={streak}
                 daysInMonth={getDaysInMonth(new Date())}
                 loggedDays={streakLoggedDays}
               />
-            )} */}
+            )}
 
             </>
             )}
