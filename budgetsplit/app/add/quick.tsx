@@ -24,7 +24,7 @@ import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/pers
 import { TransferBody } from '../../src/components/finance/TransferBody';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate, recordSettlement } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares, formatAmountInput, sanitizeAmountInput } from '../../src/lib/money';
 import { getAffordSnapshot, type AffordSnapshot } from '../../src/db/queries/savings';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
@@ -336,11 +336,9 @@ export default function QuickAddScreen() {
       }
 
       for (const p of finalPlans) {
-        await insertTxn(db, {
-          groupId: p.groupId, kind: 'settlement', entryMode: 'quick', date: txnDate,
-          category: 'Settlement', note: transferNote.trim() || undefined, payMethod,
-          payments: [{ personId: p.from, amount: p.amount }],
-          shares: [{ personId: p.to, amount: p.amount }],
+        await recordSettlement(db, {
+          groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
+          date: txnDate, note: transferNote.trim() || undefined, payMethod,
         });
       }
       haptic.success();

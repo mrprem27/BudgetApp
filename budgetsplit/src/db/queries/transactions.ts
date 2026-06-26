@@ -240,6 +240,29 @@ async function insertTxnRows(
     }
 }
 
+/** One person paying another, recorded as a settlement. The single canonical
+ *  way to record money moving between people — used by the global Settle screen
+ *  and the Quick-Add Transfer pill, so the settlement txn shape lives in one
+ *  place (was hand-built identically in both). */
+export type SettlementInput = {
+  groupId: string;
+  fromId: string;
+  toId: string;
+  amount: number;
+  date?: number;
+  note?: string;
+  payMethod?: 'upi' | 'cash' | 'bank';
+};
+
+export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementInput): Promise<string> {
+  return insertTxn(db, {
+    groupId: s.groupId, kind: 'settlement', entryMode: 'quick', date: s.date ?? Date.now(),
+    category: 'Settlement', note: s.note, payMethod: s.payMethod,
+    payments: [{ personId: s.fromId, amount: s.amount }],
+    shares: [{ personId: s.toId, amount: s.amount }],
+  });
+}
+
 export type ItemizedAdjustment = { label: string; type: 'tax' | 'tip' | 'discount'; mode: 'flat' | 'percent'; value: string };
 
 export type InsertItemizedTxnInput = InsertTxnInput & {

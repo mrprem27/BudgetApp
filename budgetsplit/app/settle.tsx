@@ -16,7 +16,7 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { getGroupNet } from '../src/db/queries/balances';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
-import { insertTxn } from '../src/db/queries/transactions';
+import { recordSettlement } from '../src/db/queries/transactions';
 import { simplify } from '../src/lib/settle';
 import { formatRupees, formatCompact, parseToPaise } from '../src/lib/money';
 import { haptic } from '../src/lib/haptics';
@@ -123,13 +123,10 @@ export default function GlobalSettleScreen() {
         setSaving(false);
         return;
       }
-      await insertTxn(db, {
-        groupId: gid, kind: 'settlement', entryMode: 'quick', date: Date.now(),
-        category: 'Settlement',
+      await recordSettlement(db, {
+        groupId: gid, fromId: fromPerson.id, toId: toPerson.id, amount: amtToPay,
         note: note.trim() || undefined,
         payMethod, // persisted field — no longer baked into the note
-        payments: [{ personId: fromPerson.id, amount: amtToPay }],
-        shares:   [{ personId: toPerson.id,   amount: amtToPay }],
       });
       haptic.success();
       // Close once a settlement is recorded, even a partial one.
