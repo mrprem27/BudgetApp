@@ -17,13 +17,12 @@ type Props = {
   showDate?: boolean;
   members?: Person[];
   isPersonal?: boolean;
-  /** Muted group label shown under the title — useful in cross-group lists (e.g. Category detail). */
+  /** Muted group label shown under the primary line — for cross-group lists. */
   groupName?: string;
-  /** When set, highlights this substring (case-insensitive) inside the title — for search results. */
+  /** Highlight this substring (case-insensitive) inside the primary text. */
   highlight?: string;
 };
 
-/** Split a title around a search term so the matched part can render in accent. */
 function highlightParts(title: string, term: string): { text: string; hit: boolean }[] {
   const q = term.trim();
   if (!q) return [{ text: title, hit: false }];
@@ -41,13 +40,14 @@ function highlightParts(title: string, term: string): { text: string; hit: boole
   return out;
 }
 
-export const TransactionRow = React.memo(function TransactionRow({ txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight }: Props) {
+export const TransactionRow = React.memo(function TransactionRow({
+  txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
+}: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
   const nameOf = (pid?: string) => members?.find(m => m.id === pid)?.name ?? 'Someone';
 
-  // Title + signed amount. Settlements read directionally (who paid whom); the
-  // payer has no share, so the old `-myShare` showed ₹0 for them.
-  let title = txn.category;
+  // Determine display amount and settlement title.
+  let settlementTitle: string | null = null;
   let displayAmount: number;
   if (txn.kind === 'income') {
     displayAmount = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
@@ -57,10 +57,12 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     const amount = txn.payments[0]?.amount ?? 0;
     const iPaid = fromId === myId;
     const iGot = toId === myId;
-    displayAmount = iPaid ? -amount : amount; // out when I paid, in when I received
+    displayAmount = iPaid ? -amount : amount;
     if (members && !isPersonal) {
-      title = iPaid ? `You paid ${nameOf(toId)}`
-        : iGot ? `${nameOf(fromId)} paid you`
+      settlementTitle = iPaid
+        ? `You paid ${nameOf(toId)}`
+        : iGot
+        ? `${nameOf(fromId)} paid you`
         : `${nameOf(fromId)} paid ${nameOf(toId)}`;
     }
   } else {
@@ -73,19 +75,28 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
     ? { icon: 'check-circle' as const, color: colors.settle }
     : categoryVisual(txn.category);
 
-  // Attribution line — "you lent / you borrowed" on shared-group expenses.
+  // Attribution — shown on the RIGHT side below the amount.
   let attribution: { text: string; color: string } | null = null;
   if (members && !isPersonal && txn.kind === 'expense') {
     const myPaid = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
     const lent = myPaid - myShare;
     if (lent > 0) {
-      attribution = { text: `you lent ${formatCompact(lent)}`, color: colors.income };
+      attribution = { text: `lent ${formatCompact(lent)}`, color: colors.income };
     } else if (lent < 0) {
-      attribution = { text: `you borrowed ${formatCompact(-lent)}`, color: colors.expense };
+      attribution = { text: `borrowed ${formatCompact(-lent)}`, color: colors.expense };
     }
   }
 
   const hasAttachment = !!txn.attachment_uri;
+
+  // Display hierarchy:
+  // If there's a note (user typed a title/note), that's the primary line.
+  // Category goes below as secondary — helps scan by recognizable names.
+  // Settlements always show the directional sentence as primary.
+  // If no note, category is primary (nothing below).
+  const note = txn.note?.trim();
+  const primaryText = settlementTitle ?? (note || txn.category);
+  const secondaryText = !settlementTitle && note ? txn.category : null;
 
   return (
     <TouchableOpacity
@@ -94,40 +105,53 @@ export const TransactionRow = React.memo(function TransactionRow({ txn, myId, on
       onLongPress={onDelete}
       activeOpacity={0.6}
       accessibilityRole="button"
-      accessibilityLabel={`${txn.category}: ${formatRupees(Math.abs(displayAmount))}`}
+      accessibilityLabel={`${primaryText}: ${formatRupees(Math.abs(displayAmount))}`}
     >
       <View style={[styles.iconCircle, { backgroundColor: visual.color + '22' }]}>
         <Feather name={visual.icon} size={18} color={visual.color} />
       </View>
+
       <View style={styles.middle}>
-        <Text style={styles.category} numberOfLines={1}>
-          {highlight
-            ? highlightParts(title, highlight).map((p, i) => (
-                <Text key={i} style={p.hit ? styles.hl : undefined}>{p.text}</Text>
-              ))
-            : title}
-        </Text>
-        {txn.note ? <Text style={styles.note} numberOfLines={1}>{txn.note}</Text> : null}
-        <View style={styles.metaLine}>
-          {groupName ? (
-            <View style={styles.groupChip}>
-              <Feather name="users" size={10} color={colors.textMuted} />
-              <Text style={styles.groupText} numberOfLines={1}>{groupName}</Text>
-            </View>
-          ) : null}
-          {attribution && <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>{attribution.text}</Text>}
-        </View>
-      </View>
-      <View style={styles.right}>
-        {/* Sign-colored: + received (green) / − paid out (red). The purple icon
-            already marks it as a settlement, so the amount can show direction. */}
-        <AmountText paise={displayAmount} size="sm" />
-        <View style={styles.rightMeta}>
-          {hasAttachment && <Feather name="paperclip" size={12} color={colors.textMuted} />}
-          {showDate && Number.isFinite(txn.date) && (
-            <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
+        {/* Primary line: note/title + attachment icon */}
+        <View style={styles.primaryLine}>
+          <Text style={styles.primary} numberOfLines={1}>
+            {highlight
+              ? highlightParts(primaryText, highlight).map((p, i) => (
+                  <Text key={i} style={p.hit ? styles.hl : undefined}>{p.text}</Text>
+                ))
+              : primaryText}
+          </Text>
+          {hasAttachment && (
+            <Feather name="paperclip" size={11} color={colors.textMuted} style={styles.clipIcon} />
           )}
         </View>
+
+        {/* Secondary line: category (only when note is primary) */}
+        {secondaryText ? (
+          <Text style={styles.secondary} numberOfLines={1}>{secondaryText}</Text>
+        ) : null}
+
+        {/* Group chip — cross-group list context */}
+        {groupName ? (
+          <View style={styles.groupChip}>
+            <Feather name="users" size={10} color={colors.textMuted} />
+            <Text style={styles.groupText} numberOfLines={1}>{groupName}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.right}>
+        <AmountText paise={displayAmount} size="sm" />
+        {/* Lending/borrowing info below amount */}
+        {attribution ? (
+          <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>
+            {attribution.text}
+          </Text>
+        ) : null}
+        {/* Date (cross-group list) */}
+        {showDate && Number.isFinite(txn.date) ? (
+          <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -147,55 +171,56 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   middle: {
     flex: 1,
+    minWidth: 0,
   },
-  right: {
-    alignItems: 'flex-end',
+  primaryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  category: {
+  primary: {
     ...type.body,
     color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  clipIcon: {
+    flexShrink: 0,
+  },
+  secondary: {
+    ...type.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   hl: {
     color: colors.accent,
     fontFamily: 'Inter_600SemiBold',
   },
-  note: {
-    ...type.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  metaLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    marginTop: 2,
-  },
   groupChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    flexShrink: 1,
+    marginTop: 2,
   },
   groupText: {
     ...type.caption,
     color: colors.textMuted,
     flexShrink: 1,
   },
+  right: {
+    alignItems: 'flex-end',
+    gap: 2,
+    flexShrink: 0,
+  },
   attribution: {
-    ...type.caption,
+    fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
   },
   date: {
     ...type.caption,
     color: colors.textMuted,
-  },
-  rightMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
   },
 });

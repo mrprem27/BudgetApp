@@ -10,6 +10,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
@@ -98,13 +99,7 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + space.xs }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="chevron-left" size={18} color={colors.accent} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader title="Audit Log" onBack={() => router.back()} />
 
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
@@ -112,7 +107,6 @@ export default function HistoryScreen() {
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
         >
-          <Text style={styles.title}>Audit Log</Text>
           <Text style={styles.subtitle}>Every change made to your data, in order.</Text>
 
           {sections.length === 0 ? (

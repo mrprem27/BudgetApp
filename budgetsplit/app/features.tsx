@@ -81,7 +81,7 @@ export default function FeaturesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Sections" onBack={() => router.back()} />
+      <ScreenHeader title="Feature Management" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>Turn on what you need. Off by default keeps the app clean.</Text>
 

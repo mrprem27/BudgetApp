@@ -5,7 +5,7 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
@@ -13,6 +13,7 @@ import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
@@ -28,7 +29,6 @@ export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [members, setMembers] = useState<Person[]>([]);
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
@@ -127,12 +127,7 @@ export default function MembersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={14} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Members</Text>
-      </View>
+      <ScreenHeader title="Members" onBack={() => router.back()} />
 
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />

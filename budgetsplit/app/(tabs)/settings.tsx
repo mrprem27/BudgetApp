@@ -46,6 +46,7 @@ export default function SettingsScreen() {
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
+  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
 
   const [devTaps, setDevTaps] = useState(0);
 
@@ -54,9 +55,10 @@ export default function SettingsScreen() {
       setMe(await getMe(db));
       const allPersons = await getAllPersons(db);
       setContactCount(allPersons.filter(p => !p.is_me).length);
-      // Mirror the Categories screen: expense categories for the (first) group.
       const grps = await getAllGroups(db);
-      const gid = grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id;
+      const personalGroup = grps.find(g => g.is_personal === 1);
+      const gid = personalGroup?.id ?? grps[0]?.id;
+      setPersonalGroupId(personalGroup?.id ?? null);
       if (gid) setCategoryCount((await getCategoriesForGroup(db, gid, 'expense')).length);
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
@@ -140,9 +142,13 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow
           icon="target"
-          label="Budgets & Goals"
-          value="Per group"
-          onPress={() => { haptic.light(); router.push('/groups'); }}
+          label="Budget"
+          value="Personal budget"
+          onPress={() => {
+            haptic.light();
+            if (personalGroupId) router.push(`/group/${personalGroupId}/budget` as any);
+            else router.push('/groups');
+          }}
         />
       </View>
 

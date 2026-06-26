@@ -35,9 +35,9 @@ export function BalanceRow({ from, to, amount, onPaid }: Props) {
             style={styles.paidBtn}
             onPress={onPaid}
             accessibilityRole="button"
-            accessibilityLabel="Record payment"
+            accessibilityLabel="Settle amount"
           >
-            <Text style={styles.paidText}>Settle</Text>
+            <Text style={styles.paidText}>Settle amount</Text>
           </TouchableOpacity>
         )}
       </View>

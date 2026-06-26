@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
 import { nthOccurrenceMs } from '../../src/lib/recurrence';
@@ -34,6 +35,7 @@ import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SplitSheet } from '../../src/components/finance/add/SplitSheet';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
+import { GroupSelector } from '../../src/components/finance/GroupSelector';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
 import { MoreOptions } from '../../src/components/ui/MoreOptions';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -48,6 +50,7 @@ import type { Category } from '../../src/db/queries/categories';
 type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
 
 export default function QuickAddScreen() {
+  const insets = useSafeAreaInsets();
   const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount } =
     useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string }>();
   const isEditing = !!editId;
@@ -117,7 +120,6 @@ export default function QuickAddScreen() {
   const [recurEndMode, setRecurEndMode] = useState<'never' | 'date' | 'count'>('never');
   const [recurCount, setRecurCount] = useState('12');
   const [showEndDate, setShowEndDate] = useState(false);
-  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
@@ -516,8 +518,8 @@ export default function QuickAddScreen() {
         </View>
       )}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
 
         {/* Large centered amount */}
         <View style={styles.amountBlock}>
@@ -601,28 +603,20 @@ export default function QuickAddScreen() {
           }}
         />
 
-        {/* Group selector — expense only (income is always Personal). Picking a real
-            group loads its members, which enables the split row below. */}
-        {kind === 'expense' && groups.length > 1 && (() => {
-          const selectedGroup = groups.find(g => g.id === selectedGroupId);
-          return (
-            <TouchableOpacity
-              style={styles.groupSelector}
-              onPress={() => { Keyboard.dismiss(); setShowGroupPicker(true); }}
-              accessibilityRole="button"
-              accessibilityLabel="Select group"
-            >
-              <View style={[styles.groupSelectorIcon, { backgroundColor: (selectedGroup?.color ?? colors.accent) + '22' }]}>
-                <Feather name={asFeather(selectedGroup?.icon, 'layers')} size={16} color={selectedGroup?.color ?? colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.groupSelectorLabel}>Group</Text>
-                <Text style={styles.groupSelectorName}>{selectedGroup?.name ?? 'Select'}</Text>
-              </View>
-              <Feather name="chevron-down" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          );
-        })()}
+        {/* Group selector — expense only (income is always Personal). Inline chips
+            for faster group switching without opening a modal. */}
+        {kind === 'expense' && groups.length > 1 && (
+          <GroupSelector
+            groups={groups}
+            selectedId={selectedGroupId}
+            onSelect={async (gid) => {
+              Keyboard.dismiss();
+              setSelectedGroupId(gid);
+              await loadGroup(gid, me);
+            }}
+            label="In"
+          />
+        )}
 
         {/* Top field: Title (drives category) when smart-category is on, else the Note. */}
         <View style={styles.noteCard}>
@@ -630,7 +624,9 @@ export default function QuickAddScreen() {
             style={styles.noteCardInput}
             value={flags.smartCategory ? title : note}
             onChangeText={flags.smartCategory ? onTitleChange : setNote}
-            placeholder={flags.smartCategory ? 'e.g. Uber, Groceries, Netflix' : 'Note (optional)'}
+            placeholder={flags.smartCategory
+              ? (kind === 'income' ? 'e.g. Salary, Freelance, Dividend' : 'e.g. Uber, Groceries, Netflix')
+              : (kind === 'income' ? 'Source (optional)' : 'Note (optional)')}
             placeholderTextColor={colors.textMuted}
             accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
             autoCapitalize="sentences"
@@ -669,8 +665,8 @@ export default function QuickAddScreen() {
               </View>
             )}
 
-            {/* Split by items — opens the separate itemized screen, carrying the group. */}
-            {!isEditing && (
+            {/* Split by items — expense-only; income has no items to split. */}
+            {!isEditing && kind !== 'income' && (
               <TouchableOpacity
                 style={styles.byItemsRow}
                 onPress={() => router.push(`/add/itemized${selectedGroupId ? `?groupId=${selectedGroupId}` : ''}` as any)}
@@ -916,7 +912,6 @@ export default function QuickAddScreen() {
         </>)}
 
         {/* No bottom CTA — the ✓ in the header saves. */}
-        <View style={{ height: 32 }} />
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -946,22 +941,7 @@ export default function QuickAddScreen() {
         onChange={setRecurEndMs}
       />
 
-      <SheetModal visible={showGroupPicker} onClose={() => setShowGroupPicker(false)} title="Select group" scroll={false}>
-        {groups.map(g => (
-          <TouchableOpacity
-            key={g.id}
-            style={[styles.groupPickerRow, selectedGroupId === g.id && styles.groupPickerRowActive]}
-            onPress={async () => { setSelectedGroupId(g.id); await loadGroup(g.id, me); setShowGroupPicker(false); }}
-            accessibilityRole="button"
-          >
-            <View style={[styles.groupPickerIcon, { backgroundColor: g.color + '22' }]}>
-              <Feather name={asFeather(g.icon, 'layers')} size={16} color={g.color} />
-            </View>
-            <Text style={styles.groupPickerName}>{g.name}</Text>
-            {selectedGroupId === g.id && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
+      {/* Group picker modal removed — replaced by inline GroupSelector chips above. */}
 
       {/* Transfer: pick the payer / recipient for the active slot */}
       <SheetModal visible={transferSlot !== null} onClose={() => setTransferSlot(null)} title={transferSlot === 'from' ? 'Who paid?' : 'Who received?'} scroll={false}>
@@ -1111,13 +1091,8 @@ const styles = StyleSheet.create({
   smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   smartCatHint: { ...type.caption, color: colors.textMuted },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  groupSelectorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  groupSelectorLabel: { ...type.caption, color: colors.textMuted },
-  groupSelectorName: { ...type.body, color: colors.textPrimary },
   groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
   groupPickerRowActive: { backgroundColor: colors.accentMuted },
-  groupPickerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
   attachBtnText: { ...type.body, color: colors.accent },

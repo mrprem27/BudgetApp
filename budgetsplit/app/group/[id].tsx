@@ -42,7 +42,7 @@ import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-type TabKey = 'transactions' | 'balances' | 'budget' | 'members' | 'insights' | 'recurring';
+type TabKey = 'transactions' | 'budget' | 'members' | 'insights' | 'recurring';
 
 function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
@@ -271,12 +271,9 @@ export default function GroupDetailScreen() {
       ]
     : [
         { key: 'transactions', label: 'Expenses' },
+        { key: 'recurring', label: 'Recurring' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
-        // Balances view (everyone's net + Simplify-debts toggle + settle plan) —
-        // shown only when there's something outstanding to settle.
-        ...(settlements.length > 0 ? [{ key: 'balances' as const, label: 'Balances' }] : []),
-        { key: 'recurring', label: 'Recurring' },
       ];
 
   if (!group) return null;
@@ -401,8 +398,9 @@ export default function GroupDetailScreen() {
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
             txns.length > 0 ? (
-              <View style={{ marginBottom: space.sm }}>
+              <View style={{ marginBottom: space.xs }}>
                 <FilterBar
+                  collapsible
                   search={search}
                   onSearch={setSearch}
                   searchPlaceholder="Search note or category"
@@ -449,62 +447,7 @@ export default function GroupDetailScreen() {
         />
       )}
 
-      {activeTab === 'balances' && (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          {/* Per-member net totals */}
-          <Text style={styles.balSectionLabel}>Everyone's balance</Text>
-          <View style={styles.card}>
-            {members.map((m, i) => {
-              const v = net[m.id] ?? 0;
-              return (
-                <View key={m.id} style={[styles.memberNetRow, i < members.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
-                  <Text style={styles.memberNetName} numberOfLines={1}>{m.name}{m.is_me ? ' (me)' : ''}</Text>
-                  <Text style={[styles.memberNetAmt, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
-                    {v > 0 ? `is owed ${formatCompact(v)}` : v < 0 ? `owes ${formatCompact(-v)}` : 'settled up'}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Simplify toggle */}
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.toggleTitle}>Simplify debts</Text>
-              <Text style={styles.toggleSub}>{simplifyOn ? 'Fewest possible payments' : 'Show every direct debt'}</Text>
-            </View>
-            <Switch
-              value={simplifyOn}
-              onValueChange={handleToggleSimplify}
-              trackColor={{ true: colors.accent, false: colors.bgMuted }}
-              thumbColor={colors.textPrimary}
-              accessibilityLabel="Simplify debts"
-            />
-          </View>
-
-          {/* Settlements */}
-          <Text style={styles.balSectionLabel}>
-            {settlements.length > 0 ? `${settlements.length} payment${settlements.length > 1 ? 's' : ''} to settle` : 'Settlements'}
-          </Text>
-          {settlements.length > 0 ? (
-            <View style={styles.card}>
-              {settlements.map((s, i) => {
-                const fromPerson = personMap.get(s.from);
-                const toPerson = personMap.get(s.to);
-                if (!fromPerson || !toPerson) return null;
-                return (
-                  <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => router.push(`/add/quick?kind=transfer&from=${s.from}&to=${s.to}&amount=${s.amount}&groupId=${id}` as any)} />
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <EmptyState icon="check-circle" title="All settled up" body={`No outstanding balances in ${group.name}.`} tint={colors.income} />
-          )}
-        </ScrollView>
-      )}
+      {/* Balances tab removed — settlement rows now live inside Members tab */}
 
       {activeTab === 'budget' && (
         <ScrollView contentContainerStyle={styles.listContent}>
@@ -613,7 +556,7 @@ export default function GroupDetailScreen() {
                 </View>
               )}
 
-              <View style={{ marginBottom: space.sm }}>
+              <View>
                 <FilterBar
                   selected={{ status: budgetFilter }}
                   onSelect={(_, v) => setBudgetFilter(v)}
@@ -737,32 +680,46 @@ export default function GroupDetailScreen() {
             <Text style={styles.inviteBtnText}>Invite someone</Text>
           </TouchableOpacity>
 
-          {/* Settle group CTA */}
-          {(() => {
-            const owersCount = members.filter(m => (net[m.id] ?? 0) < 0).length;
-            const owedCount  = members.filter(m => (net[m.id] ?? 0) > 0).length;
-            if (owersCount === 0 && owedCount === 0) return null;
-            return (
-              <TouchableOpacity
-                style={styles.settleGroupCta}
-                onPress={() => router.push('/add/quick?kind=transfer')}
-                accessibilityRole="button"
-                accessibilityLabel="Settle group balances"
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.settleGroupTitle}>Settle group balances</Text>
-                  <Text style={styles.settleGroupSub}>
-                    {owersCount > 0 ? `${owersCount} member${owersCount > 1 ? 's' : ''} owe` : ''}
-                    {owersCount > 0 && owedCount > 0 ? ' · ' : ''}
-                    {owedCount > 0 ? `${owedCount} is owed` : ''}
-                  </Text>
-                </View>
-                <View style={styles.settleGroupBtn}>
-                  <Text style={styles.settleGroupBtnText}>Settle up</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })()}
+          {/* Simplify debts toggle */}
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>Simplify debts</Text>
+              <Text style={styles.toggleSub}>{simplifyOn ? 'Fewest possible payments' : 'Show every direct debt'}</Text>
+            </View>
+            <Switch
+              value={simplifyOn}
+              onValueChange={handleToggleSimplify}
+              trackColor={{ true: colors.accent, false: colors.bgMuted }}
+              thumbColor={colors.textPrimary}
+              accessibilityLabel="Simplify debts"
+            />
+          </View>
+
+          {/* Settlement rows — who owes whom */}
+          {settlements.length > 0 ? (<>
+            <Text style={styles.balSectionLabel}>
+              {settlements.length} payment{settlements.length > 1 ? 's' : ''} to settle
+            </Text>
+            <View style={styles.card}>
+              {settlements.map((s, i) => {
+                const fromPerson = personMap.get(s.from);
+                const toPerson = personMap.get(s.to);
+                if (!fromPerson || !toPerson) return null;
+                return (
+                  <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
+                    <BalanceRow
+                      from={fromPerson}
+                      to={toPerson}
+                      amount={s.amount}
+                      onPaid={() => router.push(`/add/quick?kind=transfer&from=${s.from}&to=${s.to}&amount=${s.amount}&groupId=${id}` as any)}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </>) : (
+            <EmptyState icon="check-circle" title="All settled up" body={`No outstanding balances in ${group.name}.`} tint={colors.income} />
+          )}
         </ScrollView>
       )}
 
@@ -839,10 +796,8 @@ export default function GroupDetailScreen() {
       )}
 
 
-      {/* Centered single-tap FAB — same look/behaviour as the bottom-nav FAB,
-          but pre-fills THIS group. Switch to Transfer/Income via the pills on the
-          Add screen; Itemized via its link there. */}
-      <FAB onPress={() => router.push(`/add/quick?groupId=${id}&kind=expense`)} />
+      {/* Single-tap FAB — pre-fills this group. No tab bar on pushed screen. */}
+      <FAB onPress={() => router.push(`/add/quick?groupId=${id}&kind=expense`)} aboveTabBar={false} />
 
       {/* Group options menu */}
       <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title={group.name} scroll={false}>
@@ -903,7 +858,7 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.accent },
   tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
   tabLabelActive: { color: colors.bg },
-  listContent: { padding: layout.screenPaddingH, paddingBottom: 120 },
+  listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
   sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   sep: { height: 1, backgroundColor: colors.border },
 
