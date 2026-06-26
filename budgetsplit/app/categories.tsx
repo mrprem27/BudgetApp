@@ -14,7 +14,7 @@ import { ErrorState } from '../src/components/ui/ErrorState';
 import { Input } from '../src/components/ui/Input';
 import { getAllGroups } from '../src/db/queries/groups';
 import {
-  getCategoriesForGroup, insertCategory, deleteCategory,
+  getCategoriesForGroup, insertCategory, deleteCategory, renameCategory,
 } from '../src/db/queries/categories';
 import { haptic } from '../src/lib/haptics';
 import {
@@ -47,6 +47,8 @@ export default function CategoriesScreen() {
   const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState(COLOR_CHOICES[0]);
   const [loadError, setLoadError] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
 
   useFocusEffect(useCallback(() => { init(); }, []));
 
@@ -107,6 +109,33 @@ export default function CategoriesScreen() {
       setIcon('tag');
       setColor(COLOR_CHOICES[0]);
       setAddingToSection(null);
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
+  }
+
+  function startRename(cat: Category) {
+    haptic.light();
+    setRenamingId(cat.id);
+    setRenameText(cat.name);
+    setAddingToSection(null);
+  }
+
+  async function saveRename(cat: Category) {
+    const n = renameText.trim();
+    if (!n || n === cat.name) { setRenamingId(null); return; }
+    // Categories are keyed by name — block a collision so we never create two
+    // with the same name (and never trip the budget UNIQUE constraint).
+    if (categories.some(c => c.id !== cat.id && c.name.toLowerCase() === n.toLowerCase())) {
+      Alert.alert('Name already used', 'Another category in this group already uses that name.');
+      return;
+    }
+    try {
+      await renameCategory(db, cat.id, n);
+      haptic.success();
+      setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, name: n } : c)).sort((a, b) => a.name.localeCompare(b.name)));
+      setRenamingId(null);
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -211,15 +240,35 @@ export default function CategoriesScreen() {
                       <View style={[styles.iconDot, { backgroundColor: (c.color ?? colors.accent) + '22' }]}>
                         <Feather name={asFeather(c.icon, 'tag')} size={16} color={c.color ?? colors.accent} />
                       </View>
-                      <Text style={styles.rowName}>{c.name}</Text>
-                      <TouchableOpacity
-                        onPress={() => confirmDelete(c)}
-                        hitSlop={10}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${c.name}`}
-                      >
-                        <Feather name="trash-2" size={17} color={colors.textMuted} />
-                      </TouchableOpacity>
+                      {renamingId === c.id ? (
+                        <>
+                          <Input
+                            value={renameText}
+                            onChangeText={setRenameText}
+                            autoFocus
+                            autoCapitalize="words"
+                            maxLength={30}
+                            onSubmitEditing={() => saveRename(c)}
+                            style={styles.renameInput}
+                          />
+                          <TouchableOpacity onPress={() => saveRename(c)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save name">
+                            <Feather name="check" size={18} color={colors.accent} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setRenamingId(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cancel rename">
+                            <Feather name="x" size={18} color={colors.textMuted} />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.rowName}>{c.name}</Text>
+                          <TouchableOpacity onPress={() => startRename(c)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Rename ${c.name}`}>
+                            <Feather name="edit-2" size={15} color={colors.textMuted} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => confirmDelete(c)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Delete ${c.name}`}>
+                            <Feather name="trash-2" size={17} color={colors.textMuted} />
+                          </TouchableOpacity>
+                        </>
+                      )}
                     </View>
                   ))}
 
@@ -324,6 +373,7 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   rowName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  renameInput: { flex: 1 },
   empty: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, marginTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   addRowText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

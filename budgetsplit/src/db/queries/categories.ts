@@ -71,6 +71,28 @@ export async function insertCategory(
  * leave an orphan `category_budget` that no UI could reach. Past `txn.category`
  * strings are intentionally kept — they're historical labels, not live links.
  */
+/**
+ * Rename a category and propagate the new name to every transaction and budget
+ * line that used the old one. Categories key off the name string (not an id),
+ * so without this a rename would orphan all past data — this keeps them in sync
+ * in one transaction. Same group only. Caller must ensure `newName` isn't
+ * already used by another category in the group (the category_budget UNIQUE
+ * constraint would otherwise reject a colliding budget line).
+ */
+export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: string, newName: string): Promise<void> {
+  const n = newName.trim();
+  if (!n) return;
+  await db.withTransactionAsync(async () => {
+    const cat = await db.getFirstAsync<{ group_id: string; name: string }>(
+      'SELECT group_id, name FROM category WHERE id = ?', [categoryId],
+    );
+    if (!cat || cat.name === n) return;
+    await db.runAsync('UPDATE category SET name = ? WHERE id = ?', [n, categoryId]);
+    await db.runAsync('UPDATE txn SET category = ? WHERE group_id = ? AND category = ?', [n, cat.group_id, cat.name]);
+    await db.runAsync('UPDATE category_budget SET category = ? WHERE group_id = ? AND category = ?', [n, cat.group_id, cat.name]);
+  });
+}
+
 export async function deleteCategory(db: SQLite.SQLiteDatabase, categoryId: string): Promise<void> {
   await db.withTransactionAsync(async () => {
     const cat = await db.getFirstAsync<{ group_id: string; name: string }>(
