@@ -1,3 +1,11 @@
+/**
+ * @deprecated PARKED — not wired into any flow. On-device OCR (expo-ocr) can
+ * only reliably read a single total, not itemize a bill, so it was never
+ * surfaced in the add flow. Kept (not deleted) as a starting point for a future
+ * real receipt-scan feature; revisit with camera + a proper line-item model.
+ * Until then this module and the `expo-ocr` dependency are intentionally dormant.
+ * See docs/FUTURE_IMPROVEMENTS.md.
+ */
 import * as ImagePicker from 'expo-image-picker';
 import { recognizeText } from 'expo-ocr';
 

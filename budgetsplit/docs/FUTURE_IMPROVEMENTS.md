@@ -20,9 +20,11 @@
 - **Activate subscription detection** (M) — `lib/subscriptions.ts` (`detectSubscriptions`)
   is fully built + tested but never called. Use it to *suggest* "Looks like a subscription —
   track it?" from logged history, deduped against existing recurring rules.
-- **OCR receipt scan or remove it** (M/L) — `lib/ocr.ts` + `expo-ocr` ship but are
-  orphaned, and `itemizedOcr` defaults on with no code path. Either wire single-total OCR
-  into the receipt-attach flow (pre-fill amount) or delete the module + dependency.
+- **OCR receipt scan** (M/L) — **DECIDED: parked / deprecated, kept in place.**
+  `lib/ocr.ts` is marked `@deprecated` and stays dormant (on-device OCR only reads a
+  single total, not line items, so it was never surfaced). Revisit as a real
+  camera + line-item-model feature; until then `lib/ocr.ts` + `expo-ocr` are
+  intentionally unused (not deleted).
 - **Tracking streak** (S) — `StreakCard` + streak query exist; currently commented out on
   Home. Re-enable behind the `streak` flag (only show at ≥3 days; never guilt-trip).
 
