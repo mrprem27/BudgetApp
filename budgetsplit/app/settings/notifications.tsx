@@ -9,27 +9,15 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
-import { getReminderPrefs, setReminderPrefs, rescheduleReminders } from '../../src/lib/reminders';
+import {
+  getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
+  MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
+} from '../../src/lib/reminders';
 import { sendTestReminder } from '../../src/lib/notifications';
+import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
 import { haptic } from '../../src/lib/haptics';
-import type { ReminderPrefs } from '../../src/lib/reminderPlan';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
-
-const NOTIFICATION_TYPES = [
-  {
-    key: 'renewals' as keyof ReminderPrefs,
-    emoji: '📅',
-    label: 'Bill reminders',
-    desc: 'Alert before recurring bills and subscriptions renew',
-  },
-  {
-    key: 'daily' as keyof ReminderPrefs,
-    emoji: '📓',
-    label: 'Daily log reminder',
-    desc: 'Nudge to log your expenses at the end of the day',
-  },
-];
 
 export default function NotificationsScreen() {
   const db = useSQLiteContext();
@@ -37,6 +25,7 @@ export default function NotificationsScreen() {
   const [prefs, setPrefs] = useState<ReminderPrefs | null>(null);
   const [permStatus, setPermStatus] = useState<PermStatus>('undetermined');
   const [testSent, setTestSent] = useState(false);
+  const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
 
   async function load() {
     const [p, perm] = await Promise.all([
@@ -49,24 +38,29 @@ export default function NotificationsScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  async function toggle(key: keyof ReminderPrefs) {
+  // Turning a reminder ON asks for permission first; off needs none.
+  async function toggle(key: 'renewals' | 'daily') {
     if (!prefs) return;
     haptic.selection();
-    if (permStatus !== 'granted') {
+    if (!prefs[key] && permStatus !== 'granted') {
       const result = await Notifications.requestPermissionsAsync();
-      if (!result.granted) {
-        setPermStatus('denied');
-        return;
-      }
+      if (!result.granted) { setPermStatus('denied'); return; }
       setPermStatus('granted');
     }
-    const next = await setReminderPrefs({ [key]: !prefs[key] });
+    await patchPrefs({ [key]: !prefs[key] });
+  }
+
+  // Lead-days / time changes — the reminder is already on, no permission prompt.
+  async function patchPrefs(patch: Partial<ReminderPrefs>) {
+    const next = await setReminderPrefs(patch);
     setPrefs(next);
     await rescheduleReminders(db);
   }
 
-  async function openSettings() {
-    await Linking.openSettings();
+  function onSaveTime(time: ReminderTime) {
+    if (timeEditing === 'renewal') patchPrefs({ renewalTime: time });
+    else if (timeEditing === 'daily') patchPrefs({ dailyTime: time });
+    setTimeEditing(null);
   }
 
   async function runTest() {
@@ -77,15 +71,20 @@ export default function NotificationsScreen() {
       setTestSent(true);
       setTimeout(() => setTestSent(false), 6000);
     } catch {
-      // expo-go silently fails — that's fine
+      // Expo Go silently fails — local notifications need a dev build.
     }
   }
 
+  const Toggle = ({ on, onPress }: { on: boolean; onPress: () => void }) => (
+    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }}>
+      <View style={[styles.thumb, on && styles.thumbOn]} />
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Notifications" onBack={() => router.back()} />
+      <ScreenHeader title="Notifications & Reminders" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Permission denied banner */}
         {permStatus === 'denied' && (
           <View style={styles.deniedBanner}>
             <View style={styles.deniedLeft}>
@@ -95,35 +94,65 @@ export default function NotificationsScreen() {
                 <Text style={styles.deniedSub}>BudgetSplit can't send you reminders until you allow it.</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.deniedCta} onPress={openSettings} accessibilityRole="button">
+            <TouchableOpacity style={styles.deniedCta} onPress={() => Linking.openSettings()} accessibilityRole="button">
               <Text style={styles.deniedCtaText}>Open Settings to allow</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Notification types */}
-        <Text style={styles.sectionLabel}>WHAT YOU'LL RECEIVE</Text>
+        {/* Reminders — every reminder setting lives here */}
+        <Text style={styles.sectionLabel}>REMINDERS</Text>
         <View style={styles.card}>
-          {NOTIFICATION_TYPES.map((t, i) => {
-            const isOn = !!prefs?.[t.key as 'renewals' | 'daily'];
-            return (
-              <View key={t.key} style={[styles.typeRow, i > 0 && styles.typeRowBorder]}>
-                <Text style={styles.typeEmoji}>{t.emoji}</Text>
-                <View style={styles.typeInfo}>
-                  <Text style={styles.typeLabel}>{t.label}</Text>
-                  <Text style={styles.typeDesc}>{t.desc}</Text>
+          {/* Bill / renewal reminders */}
+          <View style={styles.typeRow}>
+            <Text style={styles.typeEmoji}>📅</Text>
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Bill reminders</Text>
+              <Text style={styles.typeDesc}>Alert before recurring bills and subscriptions renew</Text>
+            </View>
+            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} />
+          </View>
+          {prefs?.renewals && (
+            <>
+              <View style={styles.configRow}>
+                <Feather name="calendar" size={15} color={colors.accent} />
+                <Text style={styles.configLabel}>Start {prefs.renewalLeadDays} day{prefs.renewalLeadDays === 1 ? '' : 's'} before</Text>
+                <View style={styles.stepper}>
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays - 1 })} disabled={prefs.renewalLeadDays <= 1} accessibilityLabel="Fewer days">
+                    <Feather name="minus" size={16} color={prefs.renewalLeadDays <= 1 ? colors.textMuted : colors.accent} />
+                  </TouchableOpacity>
+                  <Text style={styles.stepperVal}>{prefs.renewalLeadDays}</Text>
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays + 1 })} disabled={prefs.renewalLeadDays >= MAX_LEAD_DAYS} accessibilityLabel="More days">
+                    <Feather name="plus" size={16} color={prefs.renewalLeadDays >= MAX_LEAD_DAYS ? colors.textMuted : colors.accent} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={[styles.toggle, isOn && styles.toggleOn]}
-                  onPress={() => toggle(t.key as 'renewals' | 'daily')}
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: isOn }}
-                >
-                  <View style={[styles.thumb, isOn && styles.thumbOn]} />
-                </TouchableOpacity>
               </View>
-            );
-          })}
+              <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('renewal')} accessibilityRole="button">
+                <Feather name="clock" size={15} color={colors.accent} />
+                <Text style={styles.configLabel}>Reminder time</Text>
+                <Text style={styles.configValue}>{formatReminderTime(prefs.renewalTime)}</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Daily log reminder */}
+          <View style={[styles.typeRow, styles.typeRowBorder]}>
+            <Text style={styles.typeEmoji}>📓</Text>
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Daily log reminder</Text>
+              <Text style={styles.typeDesc}>Nudge to log your expenses at the end of the day</Text>
+            </View>
+            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} />
+          </View>
+          {prefs?.daily && (
+            <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('daily')} accessibilityRole="button">
+              <Feather name="clock" size={15} color={colors.accent} />
+              <Text style={styles.configLabel}>Daily reminder time</Text>
+              <Text style={styles.configValue}>{formatReminderTime(prefs.dailyTime)}</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Test notification */}
@@ -147,9 +176,18 @@ export default function NotificationsScreen() {
           </View>
         </View>
 
-        {/* Footer */}
         <Text style={styles.footer}>All notifications are local — no server, no push, always offline.</Text>
       </ScrollView>
+
+      {prefs && (
+        <TimePickerSheet
+          visible={timeEditing !== null}
+          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Renewal reminder time'}
+          value={timeEditing === 'daily' ? prefs.dailyTime : prefs.renewalTime}
+          onClose={() => setTimeEditing(null)}
+          onSave={onSaveTime}
+        />
+      )}
     </View>
   );
 }
@@ -157,71 +195,33 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: 48 },
-  deniedBanner: {
-    backgroundColor: '#1F0E0E',
-    borderWidth: 1.5,
-    borderColor: colors.expense,
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
-    marginBottom: space.xs,
-  },
+  deniedBanner: { backgroundColor: '#1F0E0E', borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
   deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   deniedSub: { ...type.caption, color: colors.textSecondary },
-  deniedCta: {
-    backgroundColor: colors.expense + '22',
-    borderWidth: 1,
-    borderColor: colors.expense,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    alignSelf: 'flex-start',
-  },
+  deniedCta: { backgroundColor: colors.expense + '22', borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
   deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
-  sectionLabel: {
-    ...type.caption,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontWeight: '700',
-    marginTop: space.md,
-    marginBottom: space.xs,
-  },
-  card: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadow.sm,
-  },
+  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   typeRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   typeEmoji: { fontSize: 22, width: 32, textAlign: 'center', flexShrink: 0 },
   typeInfo: { flex: 1 },
   typeLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   typeDesc: { ...type.caption, color: colors.textSecondary },
-  toggle: {
-    width: 44, height: 26, borderRadius: 13,
-    backgroundColor: colors.bgMuted,
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    flexShrink: 0,
-  },
+  // Sub-config rows under an enabled reminder.
+  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg + '55' },
+  configLabel: { ...type.body, color: colors.textSecondary, flex: 1 },
+  configValue: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  stepperBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  stepperVal: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', minWidth: 18, textAlign: 'center' },
+  toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.bgMuted, justifyContent: 'center', paddingHorizontal: 3, flexShrink: 0 },
   toggleOn: { backgroundColor: colors.accent },
   thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.textMuted },
   thumbOn: { backgroundColor: colors.bg, alignSelf: 'flex-end' },
   testRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
-  testBtn: {
-    backgroundColor: colors.accent + '22',
-    borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    flexShrink: 0,
-  },
+  testBtn: { backgroundColor: colors.accent + '22', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
   testBtnDisabled: { backgroundColor: colors.bgMuted, borderColor: colors.border },
   testBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.lg },

@@ -18,12 +18,6 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getCategoriesForGroup } from '../../src/db/queries/categories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { isAutoSweepEnabled } from '../../src/db/queries/savings';
-import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
-import {
-  getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
-  MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
-} from '../../src/lib/reminders';
-import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -57,8 +51,6 @@ export default function SettingsScreen() {
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
 
-  const [reminders, setReminders] = useState<ReminderPrefs | null>(null);
-  const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
   const [devTaps, setDevTaps] = useState(0);
 
   useEffect(() => {
@@ -75,33 +67,10 @@ export default function SettingsScreen() {
       setHideAmounts(await settings.hideAmounts());
       setSaveLocation(await settings.saveLocation());
       setAutoSweep(await isAutoSweepEnabled());
-      setReminders(await getReminderPrefs());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
   }, []);
-
-  // Any reminder change persists the prefs and rebuilds the schedule. Turning a
-  // reminder ON requests permission first. In Expo Go this is a harmless no-op.
-  async function updateReminders(patch: Partial<ReminderPrefs>, turningOn = false) {
-    haptic.selection();
-    if (turningOn) {
-      const ok = await requestNotificationPermission();
-      if (!ok) {
-        Alert.alert('Notifications off', 'Enable notifications for BudgetSplit in your phone’s Settings to get reminders.');
-        return;
-      }
-    }
-    const next = await setReminderPrefs(patch);
-    setReminders(next);
-    await rescheduleReminders(db);
-  }
-
-  function onSaveTime(time: ReminderTime) {
-    if (timeEditing === 'renewal') updateReminders({ renewalTime: time });
-    else if (timeEditing === 'daily') updateReminders({ dailyTime: time });
-    setTimeEditing(null);
-  }
 
   async function toggle(persist: (v: boolean) => Promise<void>, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
@@ -127,18 +96,6 @@ export default function SettingsScreen() {
     setDefaultCadence(c);
     setShowCadence(false);
     await settings.setDefaultCadence(c);
-  }
-
-  async function onTestReminder() {
-    haptic.light();
-    const res = await sendTestReminder();
-    if (res === 'scheduled') {
-      Alert.alert('Test sent', 'A reminder will appear in about 5 seconds. Lock your phone or switch apps to see the banner.');
-    } else if (res === 'denied') {
-      Alert.alert('Notifications off', 'Allow notifications for BudgetSplit in your phone’s Settings, then try again.');
-    } else {
-      Alert.alert('Not available here', 'Test reminders need a dev build (they don’t fire in Expo Go).');
-    }
   }
 
   async function saveName() {
@@ -229,45 +186,12 @@ export default function SettingsScreen() {
         <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
       </View>
 
-      {/* REMINDERS */}
+      {/* NOTIFICATIONS & REMINDERS — all reminder config lives on its own screen now */}
       {flags.reminders && (<>
-      <Text style={styles.sectionTitle}>Reminders</Text>
+      <Text style={styles.sectionTitle}>Notifications</Text>
       <View style={styles.card}>
-        <ToggleRow icon="bell" label="Renewal reminders" value={!!reminders?.renewals} onValueChange={(v) => updateReminders({ renewals: v }, v)} />
-        {reminders?.renewals && (
-          <>
-            <View style={settingsRowDivider} />
-            <View style={styles.stepperRow}>
-              <View style={styles.toggleIcon}><Feather name="calendar" size={16} color={colors.accent} /></View>
-              <Text style={styles.stepperLabel}>Start {reminders.renewalLeadDays} day{reminders.renewalLeadDays === 1 ? '' : 's'} before</Text>
-              <View style={styles.stepper}>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => updateReminders({ renewalLeadDays: reminders.renewalLeadDays - 1 })} disabled={reminders.renewalLeadDays <= 1} accessibilityLabel="Fewer days">
-                  <Feather name="minus" size={16} color={reminders.renewalLeadDays <= 1 ? colors.textMuted : colors.accent} />
-                </TouchableOpacity>
-                <Text style={styles.stepperVal}>{reminders.renewalLeadDays}</Text>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => updateReminders({ renewalLeadDays: reminders.renewalLeadDays + 1 })} disabled={reminders.renewalLeadDays >= MAX_LEAD_DAYS} accessibilityLabel="More days">
-                  <Feather name="plus" size={16} color={reminders.renewalLeadDays >= MAX_LEAD_DAYS ? colors.textMuted : colors.accent} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={settingsRowDivider} />
-            <SettingsRow icon="clock" label="Reminder time" value={formatReminderTime(reminders.renewalTime)} onPress={() => setTimeEditing('renewal')} />
-          </>
-        )}
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="calendar" label="Daily log reminder" value={!!reminders?.daily} onValueChange={(v) => updateReminders({ daily: v }, v)} />
-        {reminders?.daily && (
-          <>
-            <View style={settingsRowDivider} />
-            <SettingsRow icon="clock" label="Daily reminder time" value={formatReminderTime(reminders.dailyTime)} onPress={() => setTimeEditing('daily')} />
-          </>
-        )}
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="bell" label="Manage notifications" onPress={() => { haptic.light(); router.push('/settings/notifications' as any); }} />
+        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { haptic.light(); router.push('/settings/notifications' as any); }} />
       </View>
-      <Text style={styles.featureCaption}>All on-device — nothing leaves your phone.</Text>
       </>)}
 
       {/* DATA & HELP */}
@@ -318,16 +242,6 @@ export default function SettingsScreen() {
         ))}
       </SheetModal>
 
-      {reminders && (
-        <TimePickerSheet
-          visible={timeEditing !== null}
-          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Renewal reminder time'}
-          value={timeEditing === 'daily' ? reminders.dailyTime : reminders.renewalTime}
-          onClose={() => setTimeEditing(null)}
-          onSave={onSaveTime}
-        />
-      )}
-
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
     </KeyboardAvoidingView>
@@ -369,10 +283,5 @@ const styles = StyleSheet.create({
   cadOptionText: { ...type.body, color: colors.textPrimary },
   cadOptionExample: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   sheetHint: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
-  stepperLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  stepperBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  stepperVal: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', minWidth: 18, textAlign: 'center' },
 });
 
