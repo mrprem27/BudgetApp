@@ -91,6 +91,8 @@ export async function getBudgetAnalytics(
   db: SQLite.SQLiteDatabase,
   group: BudgetGroup,
   now = new Date(),
+  /** When set, spend counts only this person's share (individual budget). */
+  meId?: string,
 ): Promise<BudgetAnalytics> {
   const budgets = await getCategoryBudgets(db, group.id);
 
@@ -110,9 +112,9 @@ export async function getBudgetAnalytics(
   const prevByCad: Record<string, Record<string, number>> = {};
   await Promise.all(cadences.map(async cad => {
     const cw = currentWindow(cad, now);
-    curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to);
+    curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to, meId);
     const pw = previousWindow(cad, now);
-    prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to) : {};
+    prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to, meId) : {};
   }));
 
   const dayOfMonth = getDate(now);

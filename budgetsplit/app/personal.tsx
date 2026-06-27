@@ -16,6 +16,8 @@ import { getMyActivity, getRecurringForGroup, type MyActivityItem, type TxnWithS
 import { getAllGroups, type BudgetGroup } from '../src/db/queries/groups';
 import { getAllPersons, getMe } from '../src/db/queries/persons';
 import { getFriendBalances } from '../src/db/queries/balances';
+import { getMyGlobalBudgetStatus, type CategoryBudgetStatus } from '../src/lib/budget';
+import { BudgetBar } from '../src/components/finance/BudgetBar';
 import { categoryVisual } from '../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { groupByDate } from '../src/lib/txnGrouping';
@@ -43,6 +45,7 @@ export default function PersonalScreen() {
   const [activity, setActivity] = useState<MyActivityItem[]>([]);
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [recurGroups, setRecurGroups] = useState<RecurGroup[]>([]);
+  const [budget, setBudget] = useState<CategoryBudgetStatus[]>([]);
   const [summary, setSummary] = useState({ owe: 0, lent: 0 });
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -55,16 +58,18 @@ export default function PersonalScreen() {
     try {
       const meRow = await getMe(db);
       if (!meRow) { setLoadError(true); return; }
-      const [acts, allPersons, grps, fb] = await Promise.all([
+      const [acts, allPersons, grps, fb, bud] = await Promise.all([
         getMyActivity(db, meRow.id),
         getAllPersons(db),
         getAllGroups(db),
         getFriendBalances(db, meRow.id),
+        getMyGlobalBudgetStatus(db, meRow.id),
       ]);
       setMe(meRow);
       setPersons(allPersons);
       setActivity(acts);
       setGroups(grps);
+      setBudget(bud);
 
       // Owe / Lent summary from pairwise friend balances.
       let owe = 0, lent = 0;
@@ -103,6 +108,11 @@ export default function PersonalScreen() {
   function toggleCollapse(id: string) {
     haptic.selection();
     setCollapsed(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  function openBudgetEditor() {
+    const pg = groups.find(g => g.is_personal === 1);
+    if (pg) router.push(`/group/${pg.id}/budget` as any);
   }
 
   return (
@@ -198,22 +208,52 @@ export default function PersonalScreen() {
             />
           )}
 
-          {/* BUDGET — Phase 3 makes this a global budget; for now route to the personal budget. */}
+          {/* BUDGET — global: my total share-spend (personal + groups) vs my limits */}
           {tab === 'budget' && (
-            <ScrollView contentContainerStyle={styles.listContent}>
-              <View style={styles.budgetCard}>
-                <Feather name="target" size={22} color={colors.accent} />
-                <Text style={styles.budgetTitle}>Your budget</Text>
-                <Text style={styles.budgetBody}>Set category limits for your spending. A unified budget across personal + your share of group spend is coming next.</Text>
-                <TouchableOpacity
-                  style={styles.budgetBtn}
-                  onPress={() => { const pg = groups.find(g => g.is_personal === 1); if (pg) router.push(`/group/${pg.id}/budget`); }}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.budgetBtnText}>Edit budget</Text>
-                  <Feather name="chevron-right" size={16} color={colors.bg} />
-                </TouchableOpacity>
-              </View>
+            <ScrollView contentContainerStyle={styles.listContent} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+              {budget.length === 0 ? (
+                <View style={styles.budgetCard}>
+                  <Feather name="target" size={22} color={colors.accent} />
+                  <Text style={styles.budgetTitle}>No budget yet</Text>
+                  <Text style={styles.budgetBody}>Set category limits measured against your total spending — personal plus your share of group expenses.</Text>
+                  <TouchableOpacity style={styles.budgetBtn} onPress={openBudgetEditor} accessibilityRole="button">
+                    <Text style={styles.budgetBtnText}>Set a budget</Text>
+                    <Feather name="chevron-right" size={16} color={colors.bg} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.budgetHeadRow}>
+                    <Text style={styles.budgetHeading}>Your spending vs budget</Text>
+                    <TouchableOpacity style={styles.editPill} onPress={openBudgetEditor} accessibilityRole="button" accessibilityLabel="Edit budget">
+                      <Feather name="edit-2" size={13} color={colors.accent} />
+                      <Text style={styles.editPillText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.budgetNote}>Counts your share across personal + all groups.</Text>
+                  <View style={styles.budgetList}>
+                    {budget.map((b, i) => {
+                      const vis = categoryVisual(b.category);
+                      const tint = b.health === 'red' ? colors.expense : b.health === 'amber' ? colors.healthAmber : colors.income;
+                      return (
+                        <View key={`${b.category}-${b.cadence}`} style={[styles.budgetRow, i < budget.length - 1 && styles.budgetRowBorder]}>
+                          <View style={styles.budgetRowTop}>
+                            <View style={[styles.budgetIcon, { backgroundColor: vis.color + '22' }]}>
+                              <Feather name={vis.icon} size={14} color={vis.color} />
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={styles.budgetCat} numberOfLines={1}>{b.category}</Text>
+                              <Text style={styles.budgetCadence}>{b.cadence === 'once' ? 'one-time' : b.cadence}</Text>
+                            </View>
+                            <Text style={styles.budgetAmt}><Text style={{ color: tint }}>{formatCompact(b.spent)}</Text> / {formatCompact(b.allocated)}</Text>
+                          </View>
+                          <BudgetBar pct={b.pct} health={b.health} height={6} />
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
             </ScrollView>
           )}
 
@@ -294,6 +334,19 @@ const styles = StyleSheet.create({
   budgetBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   budgetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.lg, paddingVertical: 12, marginTop: space.xs },
   budgetBtnText: { ...type.button, color: colors.bg },
+  budgetHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetHeading: { ...type.subheading, color: colors.textPrimary },
+  editPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  budgetNote: { ...type.caption, color: colors.textMuted, marginTop: 2, marginBottom: space.xs },
+  budgetList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  budgetRow: { paddingHorizontal: space.md, paddingVertical: space.md, gap: 8 },
+  budgetRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  budgetRowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  budgetIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  budgetCat: { ...type.body, color: colors.textPrimary },
+  budgetCadence: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
+  budgetAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
 
   recurGroup: { marginBottom: space.sm },
   recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },

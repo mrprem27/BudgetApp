@@ -76,7 +76,13 @@ duties from Groups/Budgets/Goals.
   `getMyActivity` (transactions.ts). The **Budget tab is a placeholder** linking to the personal
   budget editor — replaced by the global budget in Phase 3. The personal group still exists in the
   DB as storage (UI-level dissolve).
-- **Phase 3 / 4** ⏳ pending.
+- **Phase 3** ✅ budgets are now **my-share** aware. `getCategorySpending`/`getCategoryBudgetStatus`/
+  `getBudgetAnalytics` take an optional `meId` (counts only my share; `null` group spans all groups).
+  New `getMyGlobalBudgetStatus(meId)` = the personal-group budgets measured against my share across
+  **all** groups → rendered in the Personal **Budget** tab. The group Budget tab now shows my
+  individual share vs the group's limit. (Dashboard/Reports/Insights still pass no `meId` = full
+  totals — aligning those is a follow-up.)
+- **Phase 4** ⏳ pending.
 
 ## Open details (resolve during each phase)
 - Exact filter labels & ordering on the Personal Expenses tab.

@@ -125,10 +125,11 @@ export default function GroupDetailScreen() {
     setNet(netMap);
 
     if (grp) {
+      // Budgets are individual: count only MY share of each (shared) expense.
       const [usage, cs, an] = await Promise.all([
         getBudgetUsage(db, grp, 'monthly'),
-        getCategoryBudgetStatus(db, grp),
-        getBudgetAnalytics(db, grp),
+        getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
+        getBudgetAnalytics(db, grp, new Date(), meRow?.id),
       ]);
       setBudgetUsage(usage);
       setCatStatus(cs);
