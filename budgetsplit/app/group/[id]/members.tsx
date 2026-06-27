@@ -14,6 +14,7 @@ import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { useUndo } from '../../../src/components/system/UndoToast';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
@@ -29,6 +30,7 @@ export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
   const [members, setMembers] = useState<Person[]>([]);
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [net, setNet] = useState<Record<string, number>>({});
@@ -116,6 +118,10 @@ export default function MembersScreen() {
           try {
             await removeMemberFromGroup(db, groupId, person.id);
             await load();
+            showUndo({
+              message: `Removed ${person.name}`,
+              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id); await load(); } catch { /* ignore */ } },
+            });
           } catch {
             haptic.error();
             Alert.alert('Something went wrong', 'Please try again.');

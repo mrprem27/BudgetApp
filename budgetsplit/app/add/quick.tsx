@@ -22,6 +22,7 @@ import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
 import { getAllGroups, getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/persons';
+import { getFriendBalances } from '../../src/db/queries/balances';
 import { TransferBody } from '../../src/components/finance/TransferBody';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
@@ -69,6 +70,8 @@ export default function QuickAddScreen() {
   const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? (parseInt(paramAmount, 10) / 100).toString() : '');
   // Transfer (settlement) state — only used when kind === 'transfer'.
   const [allPersons, setAllPersons] = useState<Person[]>([]);
+  // Net balance with each person (>0 = they owe me, <0 = I owe them) — shown in the transfer picker.
+  const [personNet, setPersonNet] = useState<Record<string, number>>({});
   const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
   const [transferToId, setTransferToId] = useState(paramTo ?? '');
   const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null); // which slot the picker fills
@@ -209,6 +212,12 @@ export default function QuickAddScreen() {
   // Transfer: load everyone, default the payer to me, and (re)compute the balance
   // per shared group + combined whenever either side changes.
   useEffect(() => { getAllPersons(db).then(setAllPersons).catch(() => {}); }, [db]);
+  useEffect(() => {
+    if (!me) return;
+    getFriendBalances(db, me.id)
+      .then(fb => setPersonNet(Object.fromEntries(fb.map(f => [f.personId, f.net]))))
+      .catch(() => {});
+  }, [db, me]);
   useEffect(() => { if (!transferFromId && me) setTransferFromId(me.id); }, [me, transferFromId]);
   useEffect(() => {
     if (kind !== 'transfer' || !transferFromId || !transferToId || transferFromId === transferToId) { setTransferScopes(null); return; }
@@ -966,6 +975,11 @@ export default function QuickAddScreen() {
             >
               <MemberAvatar name={p.name} color={p.avatar_color} size={36} imageUri={p.image_uri} />
               <Text style={styles.groupPickerName}>{p.id === me?.id ? `${p.name} (you)` : p.name}</Text>
+              {p.id !== me?.id && (personNet[p.id] ?? 0) !== 0 && (
+                <Text style={[styles.transferBal, { color: (personNet[p.id] ?? 0) > 0 ? colors.income : colors.expense }]}>
+                  {(personNet[p.id] ?? 0) > 0 ? `owes you ${formatRupees(personNet[p.id])}` : `you owe ${formatRupees(-(personNet[p.id] ?? 0))}`}
+                </Text>
+              )}
               {active && <Feather name="check" size={18} color={colors.accent} />}
             </TouchableOpacity>
           );
@@ -1046,7 +1060,7 @@ const styles = StyleSheet.create({
 
   // Note card
   noteCard: { backgroundColor: colors.bgCard, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  noteCardInput: { ...type.body, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
+  noteCardInput: { fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
 
   // Budget nudge dot style
   nudge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
@@ -1094,6 +1108,7 @@ const styles = StyleSheet.create({
   groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
   groupPickerRowActive: { backgroundColor: colors.accentMuted },
   groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  transferBal: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginRight: space.xs },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
   attachBtnText: { ...type.body, color: colors.accent },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },

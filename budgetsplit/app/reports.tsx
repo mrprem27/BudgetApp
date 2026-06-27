@@ -27,6 +27,7 @@ import { utilLabel, budgetHealth } from '../src/lib/budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
 import { formatCompact, formatCompactMajor } from '../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../src/lib/reportExport';
+import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { Badge } from '../src/components/ui/Badge';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { AmountText } from '../src/components/ui/AmountText';
@@ -356,48 +357,47 @@ export default function ReportsScreen() {
     }
   }
 
+  const exportButtons = (
+    <View style={styles.exportRow}>
+      <TouchableOpacity
+        style={styles.exportBtn}
+        onPress={exportCSV}
+        disabled={exporting}
+        accessibilityRole="button"
+        accessibilityLabel="Export CSV"
+      >
+        {exporting ? (
+          <ActivityIndicator size="small" color={colors.bg} />
+        ) : (
+          <View style={styles.exportBtnInner}>
+            <Feather name="download" size={13} color={colors.bg} />
+            <Text style={styles.exportBtnText}>CSV</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.exportBtn, styles.exportBtnAlt]}
+        onPress={exportPDF}
+        disabled={pdfExporting}
+        accessibilityRole="button"
+        accessibilityLabel="Export PDF"
+      >
+        {pdfExporting ? (
+          <ActivityIndicator size="small" color={colors.textPrimary} />
+        ) : (
+          <View style={styles.exportBtnInner}>
+            <Feather name="file-text" size={13} color={colors.textPrimary} />
+            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>PDF</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={{ marginRight: space.xs, marginLeft: -6 }}>
-          <Feather name="chevron-left" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { flex: 1 }]}>Reports</Text>
-        <View style={styles.exportRow}>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={exportCSV}
-            disabled={exporting}
-            accessibilityRole="button"
-            accessibilityLabel="Export CSV"
-          >
-            {exporting ? (
-              <ActivityIndicator size="small" color={colors.bg} />
-            ) : (
-              <View style={styles.exportBtnInner}>
-                <Feather name="download" size={13} color={colors.bg} />
-                <Text style={styles.exportBtnText}>CSV</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.exportBtn, styles.exportBtnAlt]}
-            onPress={exportPDF}
-            disabled={pdfExporting}
-            accessibilityRole="button"
-            accessibilityLabel="Export PDF"
-          >
-            {pdfExporting ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <View style={styles.exportBtnInner}>
-                <Feather name="file-text" size={13} color={colors.textPrimary} />
-                <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>PDF</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader title="Reports" onBack={() => router.back()} right={exportButtons} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}>
 
       <View style={styles.monthNav}>
         <TouchableOpacity
@@ -722,15 +722,14 @@ export default function ReportsScreen() {
           </View>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl, gap: space.md },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space.sm },
-  title: { ...type.heading, color: colors.textPrimary },
   exportRow: { flexDirection: 'row', gap: space.xs },
   exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: 36 },
   exportBtnAlt: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },

@@ -114,7 +114,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    ...type.body,
+    // Inter at body size, but NO lineHeight — line-height on a single-line
+    // TextInput vertically misaligns/clips the text and placeholder.
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
     color: colors.textPrimary,
     paddingVertical: 0,
   },

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { AmountText } from '../ui/AmountText';
+import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space } from '../tokens';
 import { formatRupees, formatCompact } from '../../lib/money';
 import { categoryVisual } from '../../constants/categories';
@@ -44,11 +45,15 @@ export const TransactionRow = React.memo(function TransactionRow({
   txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
 }: Props) {
   const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
-  const nameOf = (pid?: string) => members?.find(m => m.id === pid)?.name ?? 'Someone';
+  const personOf = (pid?: string) => members?.find(m => m.id === pid);
+  const nameOf = (pid?: string) => personOf(pid)?.name ?? 'Someone';
 
   // Determine display amount and settlement title.
   let settlementTitle: string | null = null;
   let displayAmount: number;
+  // For settlements: the two people the money moved between (payer → payee),
+  // rendered as overlapping avatars in place of the category icon.
+  let settlementPair: { from?: Person; to?: Person } | null = null;
   if (txn.kind === 'income') {
     displayAmount = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
   } else if (txn.kind === 'settlement') {
@@ -64,6 +69,9 @@ export const TransactionRow = React.memo(function TransactionRow({
         : iGot
         ? `${nameOf(fromId)} paid you`
         : `${nameOf(fromId)} paid ${nameOf(toId)}`;
+      const from = personOf(fromId);
+      const to = personOf(toId);
+      if (from && to) settlementPair = { from, to };
     }
   } else {
     displayAmount = -myShare;
@@ -107,9 +115,18 @@ export const TransactionRow = React.memo(function TransactionRow({
       accessibilityRole="button"
       accessibilityLabel={`${primaryText}: ${formatRupees(Math.abs(displayAmount))}`}
     >
-      <View style={[styles.iconCircle, { backgroundColor: visual.color + '22' }]}>
-        <Feather name={visual.icon} size={18} color={visual.color} />
-      </View>
+      {settlementPair ? (
+        <View style={styles.avatarPair}>
+          <MemberAvatar name={settlementPair.from!.name} color={settlementPair.from!.avatar_color} size={30} imageUri={settlementPair.from!.image_uri} />
+          <View style={styles.avatarPairOverlap}>
+            <MemberAvatar name={settlementPair.to!.name} color={settlementPair.to!.avatar_color} size={30} imageUri={settlementPair.to!.image_uri} />
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.iconCircle, { backgroundColor: visual.color + '22' }]}>
+          <Feather name={visual.icon} size={18} color={visual.color} />
+        </View>
+      )}
 
       <View style={styles.middle}>
         {/* Primary line: note/title + attachment icon */}
@@ -172,6 +189,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  // Overlapping payer→payee avatars for settlement rows; same 40px footprint
+  // as iconCircle so the text column stays aligned with other rows.
+  avatarPair: {
+    width: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  avatarPairOverlap: {
+    marginLeft: -12,
+    borderWidth: 2,
+    borderColor: colors.bgCard,
+    borderRadius: 16,
   },
   middle: {
     flex: 1,

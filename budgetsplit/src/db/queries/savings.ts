@@ -126,6 +126,23 @@ export async function deleteGoal(db: SQLite.SQLiteDatabase, id: string): Promise
   });
 }
 
+/** Re-create a goal and its ledger exactly as captured — the undo of `deleteGoal`. */
+export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, ledger: SavingsTxn[]): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO savings_goal (id, name, target, priority, category, icon, color, allocation, frequency, locked, is_archived, last_auto_at, target_date, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [goal.id, goal.name, goal.target, goal.priority, goal.category, goal.icon, goal.color, goal.allocation, goal.frequency, goal.locked, goal.is_archived, goal.last_auto_at, goal.target_date, goal.sort_order, goal.created_at],
+    );
+    for (const t of ledger) {
+      await db.runAsync(
+        `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [t.id, t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.created_at],
+      );
+    }
+  });
+}
+
 // --- Ledger / pool -------------------------------------------------------
 
 async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {

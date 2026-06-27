@@ -272,9 +272,9 @@ export default function InsightsScreen() {
           <View style={styles.subsCard}>
             <View style={styles.subsHeader}>
               <View style={styles.subsDot} />
-              <Text style={styles.subsLabel}>Subscriptions · {formatCompact(subsMonthly)}/mo</Text>
+              <Text style={styles.subsLabel}>Recurring · {formatCompact(subsMonthly)}/mo</Text>
             </View>
-            <Text style={styles.subsTitle}>{subNames.length} active {subNames.length === 1 ? 'subscription' : 'subscriptions'}</Text>
+            <Text style={styles.subsTitle}>{subNames.length} active recurring {subNames.length === 1 ? 'item' : 'items'}</Text>
             <Text style={styles.subsSub}>{subNames.slice(0, 3).join(', ')}{subNames.length > 3 ? ` and ${subNames.length - 3} more` : ''}.</Text>
             <View style={styles.subsActions}>
               <TouchableOpacity style={styles.subsReviewBtn} onPress={() => router.push('/plan/subscriptions' as any)} accessibilityRole="button">

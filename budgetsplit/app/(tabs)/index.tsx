@@ -27,11 +27,13 @@ import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
 import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
+import { forecastMonthEnd, type Forecast } from '../../src/lib/forecast';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
+import { ForecastCard, type ForecastShift } from '../../src/components/finance/home/ForecastCard';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { HealthBand } from '../../src/components/finance/home/HealthBand';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
@@ -95,6 +97,8 @@ export default function DashboardScreen() {
   const [healthInputs, setHealthInputs] = useState<HealthInputs | null>(null);
   const [showHealth, setShowHealth] = useState(false);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [topShift, setTopShift] = useState<ForecastShift | null>(null);
   const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
   const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -230,6 +234,33 @@ export default function DashboardScreen() {
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
     // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
     setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 6, 4));
+
+    // Month-end forecast + biggest category shift vs last month (Month view only).
+    if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
+      const now = new Date();
+      const lmStart = startOfMonth(subMonths(now, 1)).getTime();
+      const lmEnd = endOfMonth(subMonths(now, 1)).getTime();
+      const lmTxns = await getTransactionsInRange(db, null, lmStart, lmEnd);
+      let lmSpend = 0;
+      const lmCat: Record<string, number> = {};
+      for (const t of lmTxns) {
+        if (t.is_deleted || t.kind !== 'expense') continue;
+        const share = t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+        if (share <= 0) continue;
+        lmSpend += share;
+        lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
+      }
+      setForecast(forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend));
+      // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
+      const shift = Object.entries(catMap)
+        .filter(([cat]) => lmCat[cat])
+        .map(([cat, thisAmt]) => ({ cat, thisAmt, pct: lmCat[cat] > 0 ? Math.round(((thisAmt - lmCat[cat]) / lmCat[cat]) * 100) : 0 }))
+        .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0] ?? null;
+      setTopShift(shift);
+    } else {
+      setForecast(null);
+      setTopShift(null);
+    }
 
     setLoading(false);
   }
@@ -410,6 +441,20 @@ export default function DashboardScreen() {
             {/* Settle-up sits below the bars. */}
             {(oweTotal > 0 || owedTotal > 0) && (
               <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
+            )}
+
+            {/* Month-end forecast (+ insight teaser) — below the owe/owed strip, Month view only */}
+            {tab === 'month' && flags.forecast && forecast?.ready && (
+              <ForecastCard
+                projected={forecast.projected}
+                budget={budget.allocated}
+                spentSoFar={spending}
+                dayOfMonth={getDate(new Date())}
+                daysInMonth={getDaysInMonth(new Date())}
+                topShift={flags.dashboardInsights ? topShift : null}
+                obfuscate={hideAmounts}
+                onPressInsights={() => router.push('/insights')}
+              />
             )}
 
             {upcoming.length > 0 && <ComingUpList items={upcoming} />}

@@ -23,9 +23,11 @@ import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, ne
 import { haptic } from '../../src/lib/haptics';
 import {
   getGoalById, getGoalSavedMap, getPoolSummary, getGoalHistory,
-  depositAndAllocate, withdrawFromGoal, setGoalLocked, deleteGoal, updateGoal,
+  depositAndAllocate, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
   type SavingsGoal, type SavingsTxn, type SavingsFrequency,
 } from '../../src/db/queries/savings';
+import { useUndo } from '../../src/components/system/UndoToast';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -53,6 +55,8 @@ export default function GoalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
+  const { showUndo } = useUndo();
+  const { refresh } = useDataRefresh();
 
   const [goal, setGoal] = useState<SavingsGoal | null>(null);
   const [saved, setSaved] = useState(0);
@@ -215,7 +219,21 @@ export default function GoalDetailScreen() {
   function confirmDelete() {
     Alert.alert('Delete goal?', `“${goal!.name}” will be removed and its ${formatRupees(saved)} returns to your savings pool.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteGoal(db, id); haptic.warning(); router.back(); } },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          // Capture the goal + its ledger so the delete can be undone.
+          const snapshot = goal!;
+          const ledger = await getGoalHistory(db, id);
+          await deleteGoal(db, id);
+          haptic.warning();
+          router.back();
+          showUndo({
+            message: `Deleted “${snapshot.name}”`,
+            onUndo: async () => { try { await restoreGoal(db, snapshot, ledger); refresh(); } catch { /* ignore */ } },
+          });
+        },
+      },
     ]);
   }
 

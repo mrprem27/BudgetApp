@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 
@@ -15,8 +15,9 @@ type Props = {
   onSearch?: (s: string) => void;
   searchPlaceholder?: string;
   /**
-   * When true, the search bar collapses to a search icon until tapped.
-   * Expands inline on tap; collapses again when cleared and blurred.
+   * When true: chips + a compact search icon are shown inline on one row.
+   * Tapping the search icon replaces the chip row with a full-width input.
+   * Clearing/blurring collapses back.
    */
   collapsible?: boolean;
   /** Chip groups (kind, range, action, entity, …). */
@@ -27,47 +28,66 @@ type Props = {
 };
 
 /**
- * Reusable filter bar: a search box plus one or more horizontally-scrolling
- * chip groups. Used by group transactions, history, and reports.
+ * Reusable filter bar: chip filters + optional collapsible search.
+ *
+ * Non-collapsible: search box on top, chip rows below (stacked).
+ * Collapsible: all chips + a search icon in one compact row. Tapping the
+ * search icon expands to a full-width text input; closing reverts.
+ * Chips always live in exactly ONE position — no dual-rendering.
  */
 export function FilterBar({
   search, onSearch, searchPlaceholder = 'Search…', collapsible = false,
   groups = [], selected, onSelect,
 }: Props) {
-  const [expanded, setExpanded] = React.useState(!collapsible || !!search);
+  const [searchOpen, setSearchOpen] = useState(!!search);
   const inputRef = useRef<TextInput>(null);
-  const widthAnim = useRef(new Animated.Value(collapsible && !search ? 0 : 1)).current;
 
-  function expand() {
-    setExpanded(true);
-    Animated.timing(widthAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start(
-      () => inputRef.current?.focus(),
-    );
+  function openSearch() {
+    setSearchOpen(true);
+    // Small delay so the input mounts before we try to focus it.
+    setTimeout(() => inputRef.current?.focus(), 30);
   }
 
-  function collapse() {
-    if (!search) {
-      Animated.timing(widthAnim, { toValue: 0, duration: 160, useNativeDriver: false }).start(
-        () => setExpanded(false),
+  function closeSearch() {
+    onSearch?.('');
+    setSearchOpen(false);
+  }
+
+  const chips = groups.flatMap(g => {
+    const active = selected[g.key] ?? g.options[0]?.value;
+    return g.options.map(o => {
+      const isActive = active === o.value;
+      return (
+        <TouchableOpacity
+          key={`${g.key}:${o.value}`}
+          style={[styles.chip, isActive && styles.chipActive]}
+          onPress={() => onSelect(g.key, o.value)}
+          hitSlop={{ top: 6, bottom: 6 }}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isActive }}
+        >
+          <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{o.label}</Text>
+        </TouchableOpacity>
       );
-    }
-  }
+    });
+  });
 
-  return (
-    <View style={styles.wrap}>
-      {onSearch && (
-        <View style={styles.searchRow}>
-          {collapsible && !expanded ? (
+  if (collapsible) {
+    // One row: either chips + search icon, OR full-width search input.
+    return (
+      <View style={styles.collapsibleRow}>
+        {searchOpen ? (
+          // Full-width search — chips are fully hidden to free up space.
+          <>
             <TouchableOpacity
-              onPress={expand}
+              onPress={closeSearch}
               hitSlop={8}
-              style={styles.searchIconBtn}
+              style={styles.collapseBtn}
               accessibilityRole="button"
-              accessibilityLabel="Open search"
+              accessibilityLabel="Close search"
             >
-              <Feather name="search" size={18} color={colors.textSecondary} />
+              <Feather name="chevron-left" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-          ) : (
             <View style={styles.searchBox}>
               <Feather name="search" size={15} color={colors.textMuted} />
               <TextInput
@@ -79,58 +99,75 @@ export function FilterBar({
                 onChangeText={onSearch}
                 autoCorrect={false}
                 returnKeyType="search"
-                onBlur={collapsible ? collapse : undefined}
+                onBlur={() => { if (!search) closeSearch(); }}
               />
               {!!search && (
-                <TouchableOpacity onPress={() => { onSearch(''); if (collapsible) collapse(); }} hitSlop={8} accessibilityLabel="Clear search">
+                <TouchableOpacity onPress={() => onSearch?.('')} hitSlop={8} accessibilityLabel="Clear search">
                   <Feather name="x" size={15} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
-          )}
-
-          {/* Filter chips scroll inline with the search icon when collapsible */}
-          {collapsible && !expanded && groups.map(g => {
-            const active = selected[g.key] ?? g.options[0]?.value;
-            return (
-              <ScrollView
-                key={g.key}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipRowInline}
-                keyboardShouldPersistTaps="handled"
-                style={{ flex: 1 }}
+          </>
+        ) : (
+          // Chip row + search icon at the end.
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRowContent}
+              keyboardShouldPersistTaps="handled"
+              style={styles.chipScroll}
+            >
+              {chips}
+            </ScrollView>
+            {onSearch && (
+              <TouchableOpacity
+                onPress={openSearch}
+                hitSlop={8}
+                style={styles.searchIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Search"
               >
-                {g.options.map(o => {
-                  const isActive = active === o.value;
-                  return (
-                    <TouchableOpacity
-                      key={o.value}
-                      style={[styles.chip, isActive && styles.chipActive]}
-                      onPress={() => onSelect(g.key, o.value)}
-                      hitSlop={{ top: 6, bottom: 6 }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive }}
-                    >
-                      <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{o.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            );
-          })}
+                <Feather name="search" size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+    );
+  }
+
+  // Non-collapsible: search box above, chip rows below.
+  return (
+    <View style={styles.wrap}>
+      {onSearch && (
+        <View style={styles.searchBox}>
+          <Feather name="search" size={15} color={colors.textMuted} />
+          <TextInput
+            ref={inputRef}
+            style={styles.searchInput}
+            placeholder={searchPlaceholder}
+            placeholderTextColor={colors.textMuted}
+            value={search}
+            onChangeText={onSearch}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {!!search && (
+            <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+              <Feather name="x" size={15} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
       )}
-
-      {/* Chip groups below search (when search is expanded or no search) */}
-      {(!collapsible || expanded) && groups.map(g => {
+      {groups.map(g => {
         const active = selected[g.key] ?? g.options[0]?.value;
         return (
           <ScrollView
             key={g.key}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
+            contentContainerStyle={styles.chipRowContent}
             keyboardShouldPersistTaps="handled"
           >
             {g.options.map(o => {
@@ -157,11 +194,17 @@ export function FilterBar({
 
 const styles = StyleSheet.create({
   wrap: { gap: space.xs },
-  searchRow: {
+
+  // Collapsible: single row containing chips OR search.
+  collapsibleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs,
+    minHeight: 40,
   },
+  chipScroll: { flex: 1 },
+  chipRowContent: { gap: space.xs, alignItems: 'center', flexDirection: 'row' },
+
   searchIconBtn: {
     width: 36,
     height: 36,
@@ -173,6 +216,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  collapseBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  // Shared search box (used by both collapsible-open and non-collapsible).
   searchBox: {
     flex: 1,
     flexDirection: 'row',
@@ -185,9 +237,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     height: 40,
   },
-  searchInput: { flex: 1, ...type.body, color: colors.textPrimary, padding: 0 },
-  chipRow: { gap: space.xs, paddingRight: space.sm },
-  chipRowInline: { gap: space.xs, paddingRight: space.sm, flexDirection: 'row', alignItems: 'center' },
+  // No lineHeight — it misaligns the placeholder/text in a single-line input.
+  searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
+
   chip: {
     paddingHorizontal: space.sm + 2,
     height: 30,

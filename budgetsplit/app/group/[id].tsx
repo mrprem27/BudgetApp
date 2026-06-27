@@ -802,16 +802,11 @@ export default function GroupDetailScreen() {
       {/* Group options menu */}
       <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title={group.name} scroll={false}>
         <View style={styles.menuCard}>
-          <SettingsRow icon="repeat" label="Recurring transactions" onPress={() => { setShowMenu(false); router.push(`/group/${id}/recurring`); }} />
-          <View style={settingsRowDivider} />
+          {/* Recurring & Members live in their own tabs now — kept out of this menu. */}
           <SettingsRow icon="clock" label="History" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
           {!isPersonal && <View style={settingsRowDivider} />}
           {!isPersonal && (
             <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
-          )}
-          {!isPersonal && <View style={settingsRowDivider} />}
-          {!isPersonal && (
-            <SettingsRow icon="users" label="Manage members" onPress={() => { setShowMenu(false); router.push(`/group/${id}/members`); }} />
           )}
         </View>
         {!isPersonal && (

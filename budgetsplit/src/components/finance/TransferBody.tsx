@@ -81,9 +81,9 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
         <>
           <Text style={styles.label}>GROUP</Text>
           <View style={styles.scopeRow}>
-            <ScopeChip label="All groups" active={scope === 'all'} onPress={() => onScope('all')} />
+            <ScopeChip label="All groups" amount={scopes?.all?.amount ?? 0} active={scope === 'all'} onPress={() => onScope('all')} />
             {scopes!.groups.map(g => (
-              <ScopeChip key={g.groupId} label={g.name} active={scope === g.groupId} onPress={() => onScope(g.groupId)} />
+              <ScopeChip key={g.groupId} label={g.name} amount={g.amount} active={scope === g.groupId} onPress={() => onScope(g.groupId)} />
             ))}
           </View>
         </>
@@ -119,10 +119,12 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
   );
 }
 
-function ScopeChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function ScopeChip({ label, amount, active, onPress }: { label: string; amount?: number; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[styles.scopeChip, active && styles.scopeChipActive]} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }}>
-      <Text style={[styles.scopeChipText, active && styles.scopeChipTextActive]}>{label}</Text>
+      <Text style={[styles.scopeChipText, active && styles.scopeChipTextActive]}>
+        {label}{amount && amount > 0 ? ` · ${formatRupees(amount)}` : ''}
+      </Text>
     </TouchableOpacity>
   );
 }

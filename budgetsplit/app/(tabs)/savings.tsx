@@ -206,7 +206,12 @@ export default function SavingsScreen() {
   // Persist a drag reorder → new funding priority. Reorder local state to match
   // so the screen doesn't need a full reload.
   async function handleReorder(ids: string[]) {
-    setGoals(prev => ids.map(id => prev.find(g => g.id === id)).filter((g): g is SavingsGoal => !!g));
+    // Only the active goals are draggable; preserve any goals not in `ids` (completed).
+    setGoals(prev => {
+      const reordered = ids.map(id => prev.find(g => g.id === id)).filter((g): g is SavingsGoal => !!g);
+      const rest = prev.filter(g => !ids.includes(g.id));
+      return [...reordered, ...rest];
+    });
     await reorderGoals(db, ids);
   }
 
@@ -239,8 +244,8 @@ export default function SavingsScreen() {
           {[
             { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
             { key: 'reports', icon: 'file-text' as const, label: 'Reports', show: flags.reportsDonut, to: '/reports' },
-            { key: 'subs', icon: 'refresh-cw' as const, label: 'Subscriptions', show: flags.subscriptions, to: '/plan/subscriptions' },
-            { key: 'reminders', icon: 'bell' as const, label: 'Reminders', show: flags.reminders, to: '/reminders' },
+            { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.subscriptions, to: '/plan/subscriptions' },
+            // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
             { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
           ].filter(m => m.show).map(m => (
             <TouchableOpacity key={m.key} style={styles.moduleChip} onPress={() => router.push(m.to as any)} accessibilityRole="button" accessibilityLabel={m.label}>
@@ -293,29 +298,45 @@ export default function SavingsScreen() {
           </View>
         )}
 
-        {/* Goals */}
-        {flags.savingsGoals && (goals.length > 0 ? (
+        {/* Goals — active are drag-rankable for funding priority; completed sink to the bottom */}
+        {flags.savingsGoals && (goals.length > 0 ? (() => {
+          const activeGoals = goals.filter(g => (saved[g.id] ?? 0) < g.target);
+          const completedGoals = goals.filter(g => (saved[g.id] ?? 0) >= g.target);
+          return (
           <>
             <View style={styles.sectionHead}>
               <View>
                 <Text style={styles.sectionTitle}>Goals</Text>
-                {goals.length > 1 && <Text style={styles.sectionHint}>Hold &amp; drag to set funding priority</Text>}
+                {activeGoals.length > 1 && <Text style={styles.sectionHint}>Hold &amp; drag to set funding priority</Text>}
               </View>
               <TouchableOpacity style={styles.newPill} onPress={() => { resetNew(); setShowNew(true); }} accessibilityRole="button">
                 <Feather name="plus" size={13} color={colors.accent} />
                 <Text style={styles.newPillText}>New</Text>
               </TouchableOpacity>
             </View>
-            <DraggableList
-              data={goals}
-              keyExtractor={(g) => g.id}
-              onReorder={handleReorder}
-              renderItem={(g, isActive) => (
-                <GoalCard goal={g} saved={saved[g.id] ?? 0} isActive={isActive} onPress={() => router.push(`/savings/${g.id}` as any)} />
-              )}
-            />
+            {activeGoals.length > 0 && (
+              <DraggableList
+                data={activeGoals}
+                keyExtractor={(g) => g.id}
+                onReorder={handleReorder}
+                renderItem={(g, isActive) => (
+                  <GoalCard goal={g} saved={saved[g.id] ?? 0} isActive={isActive} onPress={() => router.push(`/savings/${g.id}` as any)} />
+                )}
+              />
+            )}
+            {completedGoals.length > 0 && (
+              <View style={styles.completedSection}>
+                <Text style={styles.completedLabel}>COMPLETED · {completedGoals.length}</Text>
+                <View style={{ gap: space.sm }}>
+                  {completedGoals.map(g => (
+                    <GoalCard key={g.id} goal={g} saved={saved[g.id] ?? 0} isActive={false} completed onPress={() => router.push(`/savings/${g.id}` as any)} />
+                  ))}
+                </View>
+              </View>
+            )}
           </>
-        ) : (
+          );
+        })() : (
           <EmptyState
             icon="target"
             title="No savings goals yet"
@@ -461,6 +482,8 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
   sectionHint: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  completedSection: { marginTop: space.md, gap: space.sm },
+  completedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   dragHandle: { marginLeft: space.xs },
   subsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm, gap: space.sm },
   subsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

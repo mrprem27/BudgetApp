@@ -73,17 +73,17 @@ export default function SubscriptionsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Subscriptions" onBack={() => router.back()} />
+      <ScreenHeader title="Recurring" onBack={() => router.back()} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.intro}>Your repeating bills & subscriptions — from your recurring expenses.</Text>
+        <Text style={styles.intro}>Your repeating bills & charges — from your recurring expenses.</Text>
 
         {loaded && subs.length === 0 && detected.length === 0 ? (
           <EmptyState
             icon="refresh-cw"
-            title="No subscriptions yet"
+            title="No recurring items yet"
             body="Mark an expense as Recurring (monthly Netflix, rent, gym…) when you add it, and it'll show here with its monthly cost and next charge."
             actionLabel="Add a recurring expense"
             onAction={() => router.push('/add/quick?kind=expense' as any)}
@@ -135,7 +135,7 @@ export default function SubscriptionsScreen() {
             </>)}
 
             {detected.length > 0 && (<>
-              <Text style={styles.sectionLabel}>MAYBE A SUBSCRIPTION · {detected.length}</Text>
+              <Text style={styles.sectionLabel}>MAYBE RECURRING · {detected.length}</Text>
               <View style={styles.listCard}>
                 {detected.map((d, i) => {
                   const vis = categoryVisual(d.category);
