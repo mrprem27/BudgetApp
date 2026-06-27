@@ -216,6 +216,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
   await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: 'upi', note: 'Part of rent' });
   await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: 'cash' });
+  // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
+  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
 
   // --- Goa Trip: exact + shares splits + an itemized bill -----------------
   // Hotel — EXACT split (everyone a different amount).
@@ -267,15 +269,20 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { category: 'Groceries', cadence: 'monthly', amount: R(6000) },
     { category: 'Electricity', cadence: 'monthly', amount: R(2000) },
   ]);
+  // A second group with its own (individual) budget → per-group Budget tab has variety.
+  await setCategoryBudgets(db, family.id, [
+    { category: 'Groceries', cadence: 'monthly', amount: R(3000) },
+    { category: 'Health & Pharmacy', cadence: 'monthly', amount: R(1500) },
+  ]);
 
   // --- Savings: pool + goals (funded / reached / empty / deadline / w-draw)
   await addToPool(db, R(150000), 'manual', 'Initial savings');
   await addToPool(db, R(8000), 'auto', 'Month-end sweep');
   const emergency = await insertGoal(db, { name: 'Emergency Fund', target: R(100000), priority: 'high', icon: 'shield', color: '#0EA5E9', allocation: R(5000), frequency: 'monthly', locked: true });
   await allocateToGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked
-  const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'medium', icon: 'map', color: '#F472B6', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
+  const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'medium', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
   await allocateToGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
-  const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'medium', icon: 'monitor', color: '#818CF8' });
+  const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'medium', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
   await allocateToGoal(db, laptop.id, R(15000), 'manual');                              // partial
   const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'low', icon: 'globe', color: '#34D399', allocation: R(3000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
   await allocateToGoal(db, vacation.id, R(4000), 'manual');
