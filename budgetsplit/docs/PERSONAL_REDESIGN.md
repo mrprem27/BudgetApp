@@ -82,7 +82,12 @@ duties from Groups/Budgets/Goals.
   **all** groups → rendered in the Personal **Budget** tab. The group Budget tab now shows my
   individual share vs the group's limit. (Dashboard/Reports/Insights still pass no `meId` = full
   totals — aligning those is a follow-up.)
-- **Phase 4** ⏳ pending.
+- **Phase 4** ✅ the Dashboard category tap (`/category/[name]`) is now a **comprehensive
+  category-insights page**: my-share spend + budget (prorated), **Where it goes** (personal vs each
+  group), **Top places** (location-tagged), **Recurring** rules in the category, and **Goals**
+  tagged to it — plus the transaction list. The existing Insights screen (Plan icon) remains the
+  analytics hub. Follow-up: optionally fold the group `InsightsTab` + savings insights into that hub
+  and strip analytics from management screens.
 
 ## Open details (resolve during each phase)
 - Exact filter labels & ordering on the Personal Expenses tab.

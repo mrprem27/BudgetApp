@@ -15,11 +15,13 @@ import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
-import { getTransactionsInRange, type TxnWithSplits } from '../../src/db/queries/transactions';
+import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { getCategoryBudgets, type CategoryBudget } from '../../src/db/queries/categoryBudgets';
 import { getMe } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
+import { getGoals, type SavingsGoal } from '../../src/db/queries/savings';
 import { categoryVisual } from '../../src/constants/categories';
+import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../src/lib/money';
 
 type Period = 'day' | 'month' | 'year';
@@ -36,8 +38,10 @@ function paramToPeriod(p?: string): Period {
   return 'month';
 }
 
-const sumShares = (arr: TxnWithSplits[]) =>
-  arr.reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
+// My share of each expense (personal entries: full; group entries: my split).
+const myShareOf = (t: TxnWithSplits, myId: string) => t.shares.find(sh => sh.personId === myId)?.amount ?? 0;
+const sumMyShare = (arr: TxnWithSplits[], myId: string) =>
+  arr.reduce((s, t) => s + myShareOf(t, myId), 0);
 
 export default function CategoryDetailScreen() {
   const { name, period: periodParam } = useLocalSearchParams<{ name?: string; period?: string }>();
@@ -56,6 +60,8 @@ export default function CategoryDetailScreen() {
   const [yearExpenses, setYearExpenses] = useState<TxnWithSplits[]>([]);
   const [catBudgets, setCatBudgets] = useState<CategoryBudget[]>([]);
   const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
+  const [recurRules, setRecurRules] = useState<TxnWithSplits[]>([]);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
 
   const visual = categoryVisual(categoryName);
 
@@ -79,14 +85,18 @@ export default function CategoryDetailScreen() {
       const personal = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
       setPersonalGroupId(personal);
       setGroupNames(Object.fromEntries(groups.map(g => [g.id, g.name])));
-      const [yearTxns, ...budgetArrays] = await Promise.all([
+      const [yearTxns, rules, allGoals, ...budgetArrays] = await Promise.all([
         getTransactionsInRange(db, null, ranges.year[0], ranges.year[1]),
+        getActiveRecurringRules(db),
+        getGoals(db),
         ...groups.map(g => getCategoryBudgets(db, g.id)),
       ]);
       const budgets = budgetArrays.flat();
 
       setYearExpenses(yearTxns.filter(t => t.kind === 'expense' && !t.is_deleted));
       setCatBudgets(budgets.filter(b => b.category === categoryName));
+      setRecurRules(rules.filter(r => r.category === categoryName));
+      setGoals(allGoals.filter(g => g.category === categoryName));
       setLoading(false);
     })();
   }, [db, categoryName, ranges]);
@@ -107,17 +117,42 @@ export default function CategoryDetailScreen() {
   }, [catBudgets]);
 
   // Derived view for the selected period — budget is always prorated to it.
+  // All money figures are MY share (consistent with the rest of Personal).
   const view = useMemo(() => {
     const now = new Date();
     const [ps, pe] = ranges[period];
     const inPeriod = yearExpenses.filter(t => t.date >= ps && t.date <= pe);
     const cat = inPeriod.filter(t => t.category === categoryName).sort((a, b) => b.date - a.date);
-    const spent = sumShares(cat);
-    const totalAll = sumShares(inPeriod);
+    const spent = sumMyShare(cat, myId);
+    const totalAll = sumMyShare(inPeriod, myId);
     const daysInPeriod = period === 'day' ? 1 : period === 'month' ? getDaysInMonth(now) : getDaysInYear(now);
     const budget = Math.round(dailyRate * daysInPeriod);
-    return { txns: cat, spent, totalAll, count: cat.length, budget };
-  }, [ranges, period, yearExpenses, categoryName, dailyRate]);
+
+    // Where my spend in this category goes — personal vs each group.
+    const byGroup = new Map<string, number>();
+    for (const t of cat) {
+      const amt = myShareOf(t, myId);
+      if (amt > 0) byGroup.set(t.group_id, (byGroup.get(t.group_id) ?? 0) + amt);
+    }
+    const perGroup = Array.from(byGroup.entries())
+      .map(([gid, amt]) => ({ gid, name: gid === personalGroupId ? 'Personal' : (groupNames[gid] ?? 'Group'), amt }))
+      .sort((a, b) => b.amt - a.amt);
+
+    // Top places for this category (location-tagged entries).
+    const byPlace = new Map<string, { amt: number; count: number }>();
+    for (const t of cat) {
+      const label = t.place_label?.trim();
+      if (!label) continue;
+      const cur = byPlace.get(label) ?? { amt: 0, count: 0 };
+      byPlace.set(label, { amt: cur.amt + myShareOf(t, myId), count: cur.count + 1 });
+    }
+    const places = Array.from(byPlace.entries())
+      .map(([label, v]) => ({ label, ...v }))
+      .sort((a, b) => b.amt - a.amt)
+      .slice(0, 5);
+
+    return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places };
+  }, [ranges, period, yearExpenses, categoryName, dailyRate, myId, personalGroupId, groupNames]);
 
   const showBudgetCard = view.budget > 0;
   // No recurring budget set at all → prompt to set one (applies to every period).
@@ -219,6 +254,72 @@ export default function CategoryDetailScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Where it goes — my spend split across personal + groups */}
+            {view.perGroup.length > 1 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>WHERE IT GOES</Text>
+                {view.perGroup.map(g => {
+                  const pct = view.spent > 0 ? Math.round((g.amt / view.spent) * 100) : 0;
+                  return (
+                    <View key={g.gid} style={styles.insRow}>
+                      <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{g.name}</Text>
+                      <Text style={styles.insMeta}>{pct}%</Text>
+                      <Text style={styles.insAmt}>{formatCompact(g.amt)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Top places */}
+            {view.places.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>TOP PLACES</Text>
+                {view.places.map(p => (
+                  <View key={p.label} style={styles.insRow}>
+                    <Feather name="map-pin" size={13} color={colors.textMuted} />
+                    <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{p.label}</Text>
+                    <Text style={styles.insMeta}>{p.count}×</Text>
+                    <Text style={styles.insAmt}>{formatCompact(p.amt)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Recurring in this category */}
+            {recurRules.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>RECURRING</Text>
+                {recurRules.map(r => {
+                  const mine = myShareOf(r, myId) || r.shares.reduce((s, x) => s + x.amount, 0);
+                  const name = (r.note && r.note.trim()) || r.category;
+                  return (
+                    <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/group/${r.group_id}/recurring?focus=${r.id}` as any)} accessibilityRole="button">
+                      <Feather name="repeat" size={13} color={colors.settle} />
+                      <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{name}</Text>
+                      <Text style={styles.insMeta}>{r.recur_freq}</Text>
+                      <Text style={styles.insAmt}>{formatCompact(mine)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Savings goals tagged to this category */}
+            {goals.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>GOALS</Text>
+                {goals.map(g => (
+                  <TouchableOpacity key={g.id} style={styles.insRow} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityRole="button">
+                    <Feather name="target" size={13} color={g.color ?? colors.accent} />
+                    <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{g.name}</Text>
+                    <Text style={styles.insAmt}>{formatCompact(g.target)}</Text>
+                    <Feather name="chevron-right" size={14} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* Transactions */}
             {view.txns.length > 0 ? (
               <View>
@@ -284,4 +385,10 @@ const styles = StyleSheet.create({
 
   txnLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   txnDivider: { height: 1, backgroundColor: colors.border, marginLeft: 56 },
+
+  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
+  insRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 7 },
+  insName: { ...type.body, color: colors.textPrimary },
+  insMeta: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
+  insAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary, minWidth: 52, textAlign: 'right' },
 });

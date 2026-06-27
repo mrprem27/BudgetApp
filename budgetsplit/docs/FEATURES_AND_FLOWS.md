@@ -271,10 +271,12 @@ section (preview/add/replace/remove; not for settlements); split summary; itemiz
 (read-only); audit-log timeline; **Delete** (soft-delete + undo → back).
 - **Edit** (only if not a materialized recurring occurrence) → routes to the right add screen (itemized / transfer / income / quick).
 
-### Category detail — `app/category/[name].tsx`
-Reached from Home category rows (`?period=`) and Reports donut. Period segment
-(Today/Month/Year, client-side); budget card (prorated to period) or amount card;
-"set budget" → `/group/{personal}/budget?category=`; transaction list → `/txn/{id}`.
+### Category insights — `app/category/[name].tsx`
+Reached from Home category rows (`?period=`) and Reports donut — a **comprehensive
+category-insights page** (all figures = my share). Period segment (Today/Month/Year); budget
+card (prorated) or amount card + "set budget"; **Where it goes** (personal vs each group);
+**Top places** (location-tagged); **Recurring** rules in the category → `/group/{id}/recurring`;
+**Goals** tagged to it → `/savings/{id}`; transaction list → `/txn/{id}`.
 
 ---
 
