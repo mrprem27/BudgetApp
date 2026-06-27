@@ -22,6 +22,13 @@
 > Reminders chip. **Settings** Manage→**Budget** opens the personal budget directly; module
 > toggles live only in **Feature management**; reminder config lives on its own
 > Notifications screen. **GroupSelector** is frequent-pills + a **More** picker sheet.
+>
+> **Personal/Budget/Insights redesign (Phases 1–4, see [PERSONAL_REDESIGN.md](./PERSONAL_REDESIGN.md)):**
+> "Subscriptions" renamed to **Recurring** (labels only). **Goals**: completed sort to bottom with a
+> distinct card. **Transfers**: picker shows your balance with each person. **Undo** on every delete
+> (txn/member/goal). New unified **Personal** view at `/personal` (pinned in Groups). Budgets are
+> **my-share**: a global personal budget + optional per-group budgets. The Dashboard category tap
+> opens a **comprehensive category-insights page** (spend split · places · recurring · goals).
 
 ---
 
@@ -85,8 +92,9 @@ Custom bottom tab bar: **Home · Groups · [FAB] · Plan · Settings**.
 Tab bar:  Home · Groups · (＋FAB) · Plan · Settings
 
 Home ──► Search, History, Settings, Insights, Category, Group budget, Add(expense/transfer)
-Groups ──► Group detail, Add(transfer)
-Plan ──► Goal detail, Insights, Reports, Subscriptions, Afford, Add
+Groups ──► Personal (pinned), Group detail, Add(transfer)
+Personal ──► Txn (source), Budget editor, group Recurring
+Plan ──► Goal detail, Insights, Reports, Recurring, Afford, Add
 Settings ──► People, Categories, Budget, Features, Notifications, Reports, Help, History, Storage
 Group detail ──► Txn, Budget, Members, Recurring, Edit, History, Add(expense/transfer)
 Add(quick) ──► Itemized, Storage(attach)
@@ -226,7 +234,7 @@ math including exact remainder distribution.
 **Question:** "What am I saving toward, and what will my month look like?"
 - **States:** `ErrorState` + retry; pull-to-refresh.
 1. **ScreenHeader** "Plan" (large) + month pill.
-2. 🔘 **Module chips:** `Insights` (always, `/insights`) · `Reports` (`reportsDonut`, `/reports`) · `Subscriptions` (`subscriptions`, `/plan/subscriptions`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders chip removed — it's notification config, in Settings.)*
+2. 🔘 **Module chips:** `Insights` (always, `/insights`) · `Reports` (`reportsDonut`, `/reports`) · `Recurring` (flag `subscriptions`, `/plan/subscriptions`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders chip removed — it's notification config, in Settings.)*
 3. **Cash available** card — income in − paid out − saved.
 4. **PoolCard** (`savingsGoals`): total saved, unallocated, goal count; **+** add to pool / withdraw *(sheets)*.
 5. **Savings insights** card (`savingsInsights`): opportunity-cost / habit nudges.
@@ -315,7 +323,7 @@ Static config list (loaded once; no loading/error state).
 | Dashboard insight teaser | `dashboardInsights` | Home ForecastCard shift teaser | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` | ✅ wired |
 | Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build for OS notifications) |
-| Subscriptions | `subscriptions` | Plan chip → `plan/subscriptions.tsx`, insights nudge | ✅ wired — **from recurring rules**, not auto-detection |
+| Recurring (label; flag still `subscriptions`) | `subscriptions` | Plan **Recurring** chip → `plan/subscriptions.tsx`, insights nudge | ✅ wired — tracked recurring rules **+** a "Maybe recurring" detector over logs |
 | Smart category | `smartCategory` (off) | Quick-add note | ✅ wired |
 | Reports & charts | `reportsDonut`/`reportsTrend` | `reports.tsx` (Plan chip) | ✅ wired |
 | Afford check | `affordCheck` (off) | Plan chip → `afford.tsx` | ✅ wired |
@@ -331,15 +339,16 @@ year-in-review; export CSV / PDF (inline HTML template).
 ### Insights — `app/insights.tsx`
 `ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
 overspend) → "See what to cut" (`/group/{personal}`); **shifts vs last month**; 🔘 **what-if**
-`10% · 20% · 30%`; **across-all-groups net**; **subscriptions** nudge (→ `/plan/subscriptions`).
+`10% · 20% · 30%`; **across-all-groups net**; **recurring** nudge (→ `/plan/subscriptions`).
 
 ### Reminders — `app/reminders.tsx`
 `ScreenHeader` → upcoming bills (`buildUpcoming`) → "Log payment" (`/add/quick?kind=expense`);
 settle-ups → "Settle now" (`/add/quick?kind=transfer&to=`); settings → `/settings/notifications`.
 
-### Subscriptions — `app/plan/subscriptions.tsx`
-Active recurring **expense rules** (not detected) + monthly-total summary; rows →
-`/group/{id}/recurring`; empty CTA → `/add/quick?kind=expense`.
+### Recurring — `app/plan/subscriptions.tsx`
+Title "Recurring". Tracked recurring **expense rules** + monthly-total summary; rows →
+`/group/{id}/recurring`; a **"Maybe recurring"** detector section surfaces repeating un-ruled
+charges; empty CTA → `/add/quick?kind=expense`. *(Route/flag keep the legacy `subscriptions` name.)*
 
 ### Afford check — `app/afford.tsx`
 Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/add/quick` or `/savings`).
@@ -359,7 +368,7 @@ Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/
 | Boot splash | `BrandedLoader` | Logo + spinner during DB init. |
 | Boot failure | `_layout` `ErrorState` | Isolated; Retry re-runs DB init. |
 | Recurring catch-up | `materializeDueOccurrences` | On boot + foreground; surfaces the Home catch-up banner. |
-| Pull-to-refresh | `useRefresh` / `AppRefreshControl` | Home, Groups, Plan, Insights, Subscriptions, Reminders, group detail. |
+| Pull-to-refresh | `useRefresh` / `AppRefreshControl` | Home, Groups, Plan, Insights, Recurring, Reminders, group detail, Personal. |
 | Brand animation | `LogoAssembly` | ⛔ **Never modify** (also the onboarding hero ring/fan). |
 
 ---
@@ -373,7 +382,9 @@ Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/
 | Add (expense) | GroupSelector | frequent-group pills + **More** picker *(sheet)* |
 | Add (shared) | Split mode | Equal · Exact · % · Shares |
 | Add (transfer) | Pay method | UPI · Cash · Bank |
-| Plan | Modules | Insights · Reports · Subscriptions · Can I afford? |
+| Plan | Modules | Insights · Reports · Recurring · Can I afford? |
+| Personal | Tabs | Activity · Budget · Recurring |
+| Personal › Activity | Scope filter | Personal · Groups · All · {each group} |
 | Group | Tabs | Expenses · Recurring · Budget · Members |
 | Group › Expenses | Kind filter | All · Expense · Income · Settlement |
 | Group › Budget | Status filter | All · Over · Near limit · On track |
@@ -391,17 +402,19 @@ A one-line index of every user-facing capability and where it lives.
 - **Log income** — Add Income / kind toggle → `insertTxn` (personal).
 - **Split a bill (equal/exact/%/shares)** — Quick Add split rows + `SplitSheet`.
 - **Itemized split** — 4-step Itemized wizard.
-- **Settle a debt** — Quick-Add Transfer pill (min-transaction `simplify` / largest-first).
+- **Settle a debt** — Quick-Add Transfer pill (min-transaction `simplify` / largest-first); the picker shows your balance with each person + per-group scope amounts.
+- **Personal** — unified "everything involving me" view (`/personal`): Owe/Lent/Net + Activity (filters, my-share, source-linked) + global Budget + Recurring-by-group.
 - **Groups** — create/edit/archive/delete; members; per-group default split; simplify-debts toggle.
 - **People / friends** — cross-group balances; add/rename; avatars.
-- **Budgets** — per-category limits with cadence (once/daily/monthly/yearly); utilization bars.
+- **Budgets** — individual & **my-share**: a global personal budget (across all groups) + optional per-group budget; per-category cadence (once/daily/monthly/yearly).
 - **Recurring transactions** — rules with skip/pause/resume/end; materialized on open.
-- **Savings goals + pool** — manual + auto-funding (drag-rank), lock, overfund handling.
+- **Savings goals + pool** — manual + auto-funding (drag-rank), lock, overfund; **completed goals** sort to the bottom with a distinct card.
 - **Financial health score** — 5-factor engine + improvement projection.
 - **Spending forecast** — Bühlmann-blended month-end projection (Home + Plan + Reports).
 - **Reports** — donut, trend, forecast, year-in-review, CSV/PDF export.
-- **Insights** — velocity, shifts, what-if, cross-group net, subscriptions.
-- **Subscriptions** — recurring-expense tracker + monthly total.
+- **Insights** — velocity, shifts, what-if, cross-group net, recurring; **per-category insights page** (spend split, places, recurring, goals) from the Dashboard.
+- **Recurring tracker** — recurring-expense tracker + monthly total + "maybe recurring" detector.
+- **Undo** — every delete (txn, member, goal) shows a 5s Undo toast.
 - **Reminders** — local renewal + daily-log notifications (dev build).
 - **Afford check** — yes/tight/no purchase decision.
 - **Smart categories** — keyword guess + learned corrections.
@@ -426,7 +439,7 @@ Reached via **Settings → tap "BudgetSplit v2.0" ×7 → `/storage`**.
   - **Splits:** equal · exact · shares/weights · itemized (tax + tip + **discount**). **Settlements:** partial (live balances) + fully-settled, all pay methods. **simplify-debt OFF** on Goa.
   - **TransactionRow states:** note-primary, **category-primary (no note)**, attachment clip, lent/borrowed attribution, income, settlement (two avatars).
   - **Recurring:** active / paused / ended across daily→weekly→monthly→yearly→**custom**; plus **near-due rules** (1–3 days out) so **Home "Coming up"** + **Plan "Upcoming"** populate.
-  - **Subscriptions:** tracked rules (varied cadence + next-charge dates) **and** a repeating un-ruled charge that triggers the **"Maybe a subscription"** detector.
+  - **Recurring:** tracked rules (varied cadence + next-charge dates) **and** a repeating un-ruled charge that triggers the **"Maybe recurring"** detector.
   - **Budgets:** over / near / under, every cadence (once/daily/monthly/yearly).
   - **Savings — 7 goals:** locked@40% · reached 100% (deadline) · over-funded 120% · partial · 0% empty · withdrawal history · **overdue** (deadline past) · manual + auto funding.
   - **Edge cases:** ₹65k large, ₹5 tiny, soft-deleted txn, location-tagged + attachment rows.
@@ -542,7 +555,7 @@ demo data**, run these:
 | 4 | **Recurring skip / pause / stop** | Active rules incl. **near-due** ones (1–3 days) | Group/Personal → Recurring → a rule → **Skip next / Pause / Stop**. |
 | 5 | **Member remove — blocked vs allowed** | Roommates members have balances; **Office Lunch** is fully settled | Group → Members → swipe-remove: blocked in Roommates ("settle first"), allowed in Office Lunch. |
 | 6 | **Empty states** (within a populated app) | **"Weekend Plans"** group (members, 0 txns) | Open it → empty Expenses & Budget tabs. (Whole-app empty → **Erase all data**.) |
-| 7 | **"Maybe a subscription"** detection | 3× un-ruled "Prime Video" ₹199/mo charges | Plan → Subscriptions → scroll to **"MAYBE A SUBSCRIPTION"**. |
+| 7 | **"Maybe recurring"** detection | 3× un-ruled "Prime Video" ₹199/mo charges | Plan → Recurring → scroll to **"MAYBE RECURRING"**. |
 | 8 | **Coming up / Upcoming** | 3 near-due recurring rules (1–3 days out) | Home **"Coming up"** + Plan **"Upcoming this month"** already show them. |
 | 9 | **Smart-category learning** | flag ON; many noted txns to learn from | Add expense → type a title (e.g. "Uber") → category auto-suggests; correct it once → it learns. |
 | 10 | **Itemized split** (4-step wizard) | groups with members | Add → expense → **Split by items** → add items, assign, payers, review → Save. |
