@@ -66,6 +66,18 @@ individual budget. Group "Budget" tab = my individual budget for that group; Per
 category-insights page (personal + group spend, places, recurring, goals & budget). Strip insight
 duties from Groups/Budgets/Goals.
 
+## Progress
+
+- **Phase 0** ✅ seeder hardened with write-verification.
+- **Phase 1** ✅ Recurring rename · Goals completed UI · Transfer balances · Undo (members + goals).
+- **Phase 2** 🚧 `app/personal.tsx` built: pinned Groups card → `/personal`; group-style screen with
+  Owe/Lent/Net header + tabs **Activity** (filters Personal/Groups/All/specific-group, my-share
+  amounts, tap → source `/txn/[id]`) and **Recurring** (collapsible, grouped by group). Data via
+  `getMyActivity` (transactions.ts). The **Budget tab is a placeholder** linking to the personal
+  budget editor — replaced by the global budget in Phase 3. The personal group still exists in the
+  DB as storage (UI-level dissolve).
+- **Phase 3 / 4** ⏳ pending.
+
 ## Open details (resolve during each phase)
 - Exact filter labels & ordering on the Personal Expenses tab.
 - How per-group individual budgets surface in the group screen (tab vs section).

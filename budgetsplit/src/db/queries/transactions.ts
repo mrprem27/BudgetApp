@@ -84,6 +84,34 @@ export async function getTransactionsInRange(
   return loadSplitsMany(db, txns);
 }
 
+export type MyActivityItem = TxnWithSplits & { groupName: string; isPersonal: boolean };
+
+/**
+ * Every transaction **involving me**, across all groups — the data behind the
+ * unified Personal view. Includes personal-group entries plus any shared-group
+ * txn where I have a share or payment (my expenses/income, my share of a group
+ * expense, settlements to/from me). One row per source txn (never duplicated);
+ * each carries its group name so the UI can label it and link back to the source.
+ */
+export async function getMyActivity(db: SQLite.SQLiteDatabase, meId: string): Promise<MyActivityItem[]> {
+  const rows = await db.getAllAsync<Txn & { group_name: string; grp_personal: number }>(
+    `SELECT t.*, bg.name AS group_name, bg.is_personal AS grp_personal
+       FROM txn t
+       JOIN budget_group bg ON bg.id = t.group_id
+      WHERE t.is_deleted = 0 AND t.recur_freq IS NULL
+        AND (
+          bg.is_personal = 1
+          OR EXISTS (SELECT 1 FROM txn_share sh   WHERE sh.txn_id = t.id AND sh.person_id = ?)
+          OR EXISTS (SELECT 1 FROM txn_payment pp WHERE pp.txn_id = t.id AND pp.person_id = ?)
+        )
+      ORDER BY t.date DESC`,
+    [meId, meId],
+  );
+  const meta = new Map(rows.map(r => [r.id, { groupName: r.group_name, isPersonal: r.grp_personal === 1 }]));
+  const withSplits = await loadSplitsMany(db, rows);
+  return withSplits.map(t => ({ ...t, groupName: meta.get(t.id)!.groupName, isPersonal: meta.get(t.id)!.isPersonal }));
+}
+
 async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<TxnWithSplits> {
   const payments = await db.getAllAsync<TxnPayment>(
     'SELECT * FROM txn_payment WHERE txn_id = ?', [txn.id],

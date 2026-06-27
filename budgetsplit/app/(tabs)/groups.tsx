@@ -186,7 +186,7 @@ export default function GroupsScreen() {
         >
           <PressableScale
             style={[styles.groupCard, isArchivedView && styles.groupCardArchived]}
-            onPress={() => isArchivedView ? handleRestore(item) : router.push(`/group/${item.id}`)}
+            onPress={() => isArchivedView ? handleRestore(item) : router.push((item.is_personal === 1 ? '/personal' : `/group/${item.id}`) as any)}
             accessibilityLabel={item.name}
           >
             <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
@@ -199,7 +199,7 @@ export default function GroupsScreen() {
                 {isArchivedView
                   ? 'Archived — tap to restore'
                   : item.is_personal === 1
-                  ? `Just you · ${formatCompact(h?.spent ?? 0)} this month`
+                  ? `Everything involving you · ${formatCompact(h?.spent ?? 0)}/mo`
                   : `${h?.members ?? 0} ${(h?.members ?? 0) === 1 ? 'member' : 'members'} · ${formatCompact(h?.spent ?? 0)} this month`
                 }
               </Text>

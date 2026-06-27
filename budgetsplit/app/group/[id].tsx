@@ -6,7 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { format, isSameDay, startOfMonth } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
@@ -18,6 +18,7 @@ import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshP
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
+import { groupByDate } from '../../src/lib/txnGrouping';
 import { getBudgetUsage, getCategoryBudgetStatus, utilLabel, budgetHealth } from '../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
@@ -79,16 +80,7 @@ function isRecurInstance(id: string): boolean {
 }
 
 
-function groupTxnsByDate(txns: TxnWithSplits[]): Array<{ title: string; data: TxnWithSplits[] }> {
-  const map = new Map<string, TxnWithSplits[]>();
-  for (const txn of txns) {
-    const date = new Date(txn.date);
-    const key = isSameDay(date, new Date()) ? 'Today' : format(date, 'dd MMM yyyy');
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(txn);
-  }
-  return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
-}
+const groupTxnsByDate = groupByDate<TxnWithSplits>;
 
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

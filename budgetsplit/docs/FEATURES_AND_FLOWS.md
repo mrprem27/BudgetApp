@@ -139,6 +139,13 @@ teaser. Reads AsyncStorage `hide_amounts` (obfuscates the hero) and `app_last_op
 3. **Group card** (`renderGroup`) — swipeable (swipe-left → Archive/Restore, suppressed for Personal); icon, name, "member count · spend", **AvatarStack**, **BudgetBar** + utilization label + over-budget badge, **BalanceChip**/chevron. **Tap → `/group/{id}`**.
 4. **New Group sheet** (`SheetModal` + `GroupForm`): emoji/icon, name, type, members, default split. **Create** → `insertGroup` → reload → `/group/{newId}`.
 
+> **Personal card** (pinned first, "Everything involving you") → **`/personal`** (not `/group/{id}`):
+> the unified view (`app/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs **Activity · Budget ·
+> Recurring**. Activity = every txn involving me (`getMyActivity`) with 🔘 filters
+> `Personal · Groups · All · {each group}`, my-share amounts, tap → source `/txn/{id}`. Recurring =
+> collapsible, grouped by group. Budget tab currently links to the personal budget editor (global
+> budget arrives in Phase 3). See [PERSONAL_REDESIGN.md](./PERSONAL_REDESIGN.md).
+
 **Data loaded:** all groups (→ store), archived groups, me, per-group analytics+members+net,
 global net, all persons, friend balances via `simplify`.
 
