@@ -15,9 +15,6 @@ const PAY_METHODS: { key: PayMethod; label: string; emoji: string }[] = [
   { key: 'bank', label: 'Bank', emoji: '🏦' },
 ];
 
-/** Quick-pick reasons for a transfer; free-text Notes covers anything else. */
-export const TRANSFER_REASONS = ['Repayment', 'Rent', 'Shared bill', 'Groceries', 'Travel'] as const;
-
 type Props = {
   me: Person | null;
   persons: Person[];
@@ -30,14 +27,14 @@ type Props = {
   onScope: (s: 'all' | string) => void;
   payMethod: PayMethod;
   onPayMethod: (m: PayMethod) => void;
-  reason: string;
-  onReason: (r: string) => void;
   note: string;
   onNote: (t: string) => void;
 };
 
-/** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient. */
-export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, reason, onReason, note, onNote }: Props) {
+/** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient.
+ *  The transfer reason is a real 'transfer' category picked via the shared
+ *  category pill in Quick Add (same UI as Expense/Income). */
+export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, note, onNote }: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
@@ -108,25 +105,6 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
         </>
       )}
 
-      {/* Reason — quick pick (free-text Notes below covers anything else) */}
-      <Text style={styles.label}>REASON</Text>
-      <View style={styles.reasonRow}>
-        {TRANSFER_REASONS.map(r => {
-          const active = reason === r;
-          return (
-            <TouchableOpacity
-              key={r}
-              style={[styles.reasonChip, active && styles.reasonChipActive]}
-              onPress={() => { haptic.selection(); onReason(active ? '' : r); }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text style={[styles.reasonChipText, active && styles.reasonChipTextActive]}>{r}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
       {/* How was it paid? */}
       <Text style={styles.label}>HOW WAS IT PAID?</Text>
       <View style={styles.methodRow}>
@@ -187,11 +165,6 @@ const styles = StyleSheet.create({
   scopeChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   scopeChipText: { ...type.label, color: colors.textSecondary },
   scopeChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  reasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  reasonChip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
-  reasonChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
-  reasonChipText: { ...type.label, color: colors.textSecondary },
-  reasonChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   methodRow: { flexDirection: 'row', gap: space.sm },
   methodTile: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   methodTileActive: { borderColor: colors.settle, backgroundColor: colors.settle + '22' },

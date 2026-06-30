@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
-export type CategoryKind = 'expense' | 'income';
+export type CategoryKind = 'expense' | 'income' | 'transfer';
 
 export type Category = {
   id: string;

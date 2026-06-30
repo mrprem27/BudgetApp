@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../../constants/categories';
+import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../../constants/categories';
 import { logAudit } from './audit';
 
 export type BudgetGroup = {
@@ -83,6 +83,12 @@ export async function insertGroup(
     for (const cat of INCOME_CATEGORIES) {
       await db.runAsync(
         "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
+        [uuid(), id, cat.name, cat.icon, cat.color],
+      );
+    }
+    for (const cat of TRANSFER_CATEGORIES) {
+      await db.runAsync(
+        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')",
         [uuid(), id, cat.name, cat.icon, cat.color],
       );
     }

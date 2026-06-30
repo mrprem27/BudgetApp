@@ -13,7 +13,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../constants/categories';
+import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../constants/categories';
 import { insertGroup } from './queries/groups';
 import { insertPerson } from './queries/persons';
 import { getMe } from './queries/persons';
@@ -74,6 +74,9 @@ async function createMeAndPersonal(
   }
   for (const c of INCOME_CATEGORIES) {
     await db.runAsync("INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')", [uuid(), personalId, c.name, c.icon, c.color]);
+  }
+  for (const c of TRANSFER_CATEGORIES) {
+    await db.runAsync("INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')", [uuid(), personalId, c.name, c.icon, c.color]);
   }
   return personalId;
 }
@@ -216,8 +219,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
-  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: 'upi', note: 'Part of rent' });
-  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: 'cash' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: 'upi', category: 'Rent', note: 'Part of rent' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: 'cash', category: 'Repayment' });
   // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
 
@@ -244,8 +247,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Office Lunch: fully settled (tests the "all settled up" state) ------
   await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: thisMonth(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
-  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'upi' });
-  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'cash' });
+  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'upi', category: 'Shared Bill' });
+  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'cash', category: 'Shared Bill' });
 
   // --- Family: I owe THEM (they paid) → a "you owe" balance direction --------
   await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: priya.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: priya.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
@@ -253,7 +256,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Manali Trip: single expense + a full settle-back ----------------------
   await insertTxn(db, { groupId: manali.id, kind: 'expense', entryMode: 'quick', date: monthsBack(2, 20), category: 'Travel', note: 'Cabs & stay', payments: [{ personId: meId, amount: R(15000) }], shares: [{ personId: meId, amount: R(5000) }, { personId: rohan.id, amount: R(5000) }, { personId: vikram.id, amount: R(5000) }] });
-  await recordSettlement(db, { groupId: manali.id, fromId: rohan.id, toId: meId, amount: R(5000), date: monthsBack(1, 5), payMethod: 'bank' });
+  await recordSettlement(db, { groupId: manali.id, fromId: rohan.id, toId: meId, amount: R(5000), date: monthsBack(1, 5), payMethod: 'bank', category: 'Repayment' });
 
   // --- Category budgets (over / near / under, every cadence) --------------
   await setCategoryBudgets(db, personalId, [

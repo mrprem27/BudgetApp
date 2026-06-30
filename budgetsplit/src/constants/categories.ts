@@ -104,8 +104,28 @@ export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Other', names: ['Refunds', 'Cashback', 'Gifts Received', 'Other Income'] },
 ];
 
+/**
+ * Transfer (settlement) categories — the "reason" a person moved money to another
+ * is now a real category (kind = 'transfer'), managed in the Categories screen and
+ * picked with the same UI as expense/income. Seeded per group.
+ */
+export const TRANSFER_CATEGORIES: CategoryDef[] = [
+  { name: 'Repayment',   icon: 'corner-up-left',  color: '#8B7CF8' },
+  { name: 'Rent',        icon: 'home',            color: '#A78BFA' },
+  { name: 'Shared Bill', icon: 'file-text',       color: '#7C6AF7' },
+  { name: 'Lent',        icon: 'arrow-up-right',  color: '#22D3EE' },
+  { name: 'Borrowed',    icon: 'arrow-down-left', color: '#F0A500' },
+  { name: 'Other',       icon: 'more-horizontal', color: '#8B8A99' },
+];
+
+/** Transfer categories grouped into sections (single section for now). */
+export const TRANSFER_SECTIONS: { title: string; names: string[] }[] = [
+  { title: 'Transfers', names: ['Repayment', 'Rent', 'Shared Bill', 'Lent', 'Borrowed'] },
+  { title: 'Other', names: ['Other'] },
+];
+
 const SECTION_OF: Record<string, string> = Object.fromEntries(
-  [...CATEGORY_SECTIONS, ...INCOME_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
+  [...CATEGORY_SECTIONS, ...INCOME_SECTIONS, ...TRANSFER_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
 );
 
 /** The section a category belongs to (defaults to "Other" for custom ones). */
@@ -116,9 +136,11 @@ export function categorySection(name: string): string {
 /** Ordered list of section titles for grouping UIs. */
 export const SECTION_ORDER = CATEGORY_SECTIONS.map(s => s.title);
 
-/** name → {icon,color} lookup for rendering any stored category by name. */
+/** name → {icon,color} lookup for rendering any stored category by name.
+ *  Transfer cats listed last; on a name collision (e.g. 'Rent', 'Other') the
+ *  expense/income visual wins, which is fine — they're near-identical. */
 export const CATEGORY_LOOKUP: Record<string, { icon: FeatherName; color: string }> = Object.fromEntries(
-  [...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
+  [...TRANSFER_CATEGORIES, ...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
 );
 
 /** Special non-catalog categories that still need an icon/colour. */

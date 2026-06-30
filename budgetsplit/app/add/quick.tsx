@@ -23,7 +23,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/con
 import { getAllGroups, getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/persons';
 import { getFriendBalances } from '../../src/db/queries/balances';
-import { TransferBody, TRANSFER_REASONS } from '../../src/components/finance/TransferBody';
+import { TransferBody } from '../../src/components/finance/TransferBody';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
 import { getCategoriesByFrequency, insertCategory, type CategoryKind } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate, recordSettlement } from '../../src/db/queries/transactions';
@@ -83,7 +83,6 @@ export default function QuickAddScreen() {
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>('upi');
   const [transferNote, setTransferNote] = useState('');
-  const [transferReason, setTransferReason] = useState('');
   const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState(''); // smart-category title (drives category); separate from Note
   const [categories, setCategories] = useState<Category[]>([]);
@@ -147,7 +146,7 @@ export default function QuickAddScreen() {
         const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
-          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? 'income' : 'expense');
+          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
           setKind(txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
@@ -159,11 +158,8 @@ export default function QuickAddScreen() {
             setTransferToId(txn.shares[0]?.personId ?? '');
             setTransferScope(txn.group_id);
             setPayMethod((txn.pay_method ?? 'upi'));
-            // Saved note may be "Reason · extra note" — split the quick-pick reason back out.
-            const savedNote = txn.note ?? '';
-            const r = TRANSFER_REASONS.find(x => savedNote === x || savedNote.startsWith(`${x} · `));
-            setTransferReason(r ?? '');
-            setTransferNote(r ? savedNote.slice(savedNote === r ? r.length : r.length + 3) : savedNote);
+            // Reason is now the category (loaded above); the note is the plain note.
+            setTransferNote(txn.note ?? '');
           }
           // Reconstruct the split/payers as explicit amounts so a *shared*
           // expense stays editable exactly as it was. In a personal (solo)
@@ -191,9 +187,12 @@ export default function QuickAddScreen() {
         return;
       }
 
-      const gid = paramGroupId ?? grps[0]?.id ?? '';
+      // Initial category set must match the starting kind (deep-link ?kind=income
+      // / ?kind=transfer never fires a toggle, so load the right catalog here).
+      let gid = paramGroupId ?? grps[0]?.id ?? '';
+      if (kind === 'income') gid = grps.find(g => g.is_personal === 1)?.id ?? gid;
       setSelectedGroupId(gid);
-      if (gid) await loadGroup(gid, meRow);
+      if (gid) await loadGroup(gid, meRow, undefined, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
     })();
   }, []);
 
@@ -302,7 +301,7 @@ export default function QuickAddScreen() {
   const nudgeColor = nudgePct == null ? null : nudgePct > 0.2 ? colors.income : nudgePct > 0 ? colors.healthAmber : colors.expense;
 
   const canSave = kind === 'transfer'
-    ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId)
+    ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId && selectedCategory !== null)
     : (total > 0
         && selectedCategory !== null
         && selectedGroupId !== ''
@@ -326,15 +325,16 @@ export default function QuickAddScreen() {
 
   async function handleSaveTransfer() {
     if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
-    // Quick-pick reason + optional free note → one stored note string.
-    const transferFullNote = [transferReason, transferNote.trim()].filter(Boolean).join(' · ') || undefined;
+    // Reason is now the chosen transfer category; the note is plain free text.
+    const transferCategory = selectedCategory?.name ?? 'Settlement';
+    const transferFullNote = transferNote.trim() || undefined;
     setSaving(true);
     try {
       // Editing an existing settlement → update that single row in its group.
       if (isEditing) {
         await updateTxn(db, {
           id: editId!, groupId: transferScope === 'all' ? selectedGroupId : transferScope,
-          kind: 'settlement', date: txnDate, category: 'Settlement',
+          kind: 'settlement', date: txnDate, category: transferCategory,
           note: transferFullNote, payMethod,
           payments: [{ personId: transferFromId, amount: total }],
           shares: [{ personId: transferToId, amount: total }],
@@ -362,7 +362,7 @@ export default function QuickAddScreen() {
       for (const p of finalPlans) {
         await recordSettlement(db, {
           groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
-          date: txnDate, note: transferFullNote, payMethod,
+          date: txnDate, note: transferFullNote, payMethod, category: transferCategory,
         });
       }
       haptic.success();
@@ -518,7 +518,13 @@ export default function QuickAddScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
-              onPress={() => { setKind('transfer'); haptic.selection(); }}
+              onPress={() => {
+                setKind('transfer'); haptic.selection();
+                // Transfer reason = a 'transfer' category. They're seeded identically
+                // in every group, so load (and create) from the current group.
+                const gid = selectedGroupId || groups.find(g => g.is_personal === 1)?.id || groups[0]?.id || '';
+                if (gid) loadGroup(gid, me, undefined, 'transfer');
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === 'transfer' }}
             >
@@ -562,34 +568,14 @@ export default function QuickAddScreen() {
           <View style={[styles.amountCursor, { backgroundColor: kind === 'income' ? colors.income : kind === 'transfer' ? colors.settle : colors.accent }]} />
         </View>
 
-        {kind === 'transfer' && (
-          <TransferBody
-            me={me}
-            persons={allPersons}
-            fromId={transferFromId}
-            toId={transferToId}
-            onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
-            onSwap={() => { setTransferFromId(transferToId); setTransferToId(transferFromId); }}
-            scopes={transferScopes}
-            scope={transferScope}
-            onScope={setTransferScope}
-            payMethod={payMethod}
-            onPayMethod={setPayMethod}
-            reason={transferReason}
-            onReason={setTransferReason}
-            note={transferNote}
-            onNote={setTransferNote}
-          />
-        )}
-
-        {kind !== 'transfer' && (<>
-        {/* Category + Date pills row */}
+        {/* Category + Date pills row — shared selection UI across Expense / Income /
+            Transfer. For transfer the category IS the reason. */}
         <View style={styles.pillsRow}>
           <TouchableOpacity
             style={styles.catPill}
             onPress={() => { Keyboard.dismiss(); haptic.light(); setShowCatPicker(true); }}
             accessibilityRole="button"
-            accessibilityLabel={selectedCategory ? `Category: ${selectedCategory.name}` : 'Choose category'}
+            accessibilityLabel={selectedCategory ? `${kind === 'transfer' ? 'Reason' : 'Category'}: ${selectedCategory.name}` : (kind === 'transfer' ? 'Choose reason' : 'Choose category')}
           >
             {selectedCategory ? (
               <>
@@ -599,7 +585,7 @@ export default function QuickAddScreen() {
                 <Text style={styles.catPillText}>{selectedCategory.name}</Text>
               </>
             ) : (
-              <Text style={styles.catPillPlaceholder}>Category</Text>
+              <Text style={styles.catPillPlaceholder}>{kind === 'transfer' ? 'Reason' : 'Category'}</Text>
             )}
             <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
@@ -622,14 +608,34 @@ export default function QuickAddScreen() {
             setSelectedCategory(c);
             setCatManual(true);
             setShowCatPicker(false);
-            if (title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
+            if (kind !== 'transfer' && title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
           }}
           onCreate={async (name) => {
-            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent, kind === 'income' ? 'income' : 'expense');
+            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
             setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
             return created;
           }}
         />
+
+        {kind === 'transfer' && (
+          <TransferBody
+            me={me}
+            persons={allPersons}
+            fromId={transferFromId}
+            toId={transferToId}
+            onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
+            onSwap={() => { setTransferFromId(transferToId); setTransferToId(transferFromId); }}
+            scopes={transferScopes}
+            scope={transferScope}
+            onScope={setTransferScope}
+            payMethod={payMethod}
+            onPayMethod={setPayMethod}
+            note={transferNote}
+            onNote={setTransferNote}
+          />
+        )}
+
+        {kind !== 'transfer' && (<>
 
         {/* Group selector — expense only (income is always Personal). Inline chips
             for faster group switching without opening a modal. */}

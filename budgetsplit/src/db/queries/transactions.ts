@@ -281,12 +281,14 @@ export type SettlementInput = {
   date?: number;
   note?: string;
   payMethod?: PayMethod;
+  /** Transfer reason — now a real 'transfer' category. Defaults to 'Settlement'. */
+  category?: string;
 };
 
 export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementInput): Promise<string> {
   return insertTxn(db, {
     groupId: s.groupId, kind: 'settlement', entryMode: 'quick', date: s.date ?? Date.now(),
-    category: 'Settlement', note: s.note, payMethod: s.payMethod,
+    category: s.category ?? 'Settlement', note: s.note, payMethod: s.payMethod,
     payments: [{ personId: s.fromId, amount: s.amount }],
     shares: [{ personId: s.toId, amount: s.amount }],
   });

@@ -58,8 +58,8 @@ export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
 
 // --- Categories / budgets ------------------------------------------------
 
-/** `category.kind CHECK(kind IN ('expense','income'))`. */
-export const CATEGORY_KIND = ['expense', 'income'] as const;
+/** `category.kind CHECK(kind IN ('expense','income','transfer'))`. */
+export const CATEGORY_KIND = ['expense', 'income', 'transfer'] as const;
 export type CategoryKind = typeof CATEGORY_KIND[number];
 
 /** Category-budget cadence. */

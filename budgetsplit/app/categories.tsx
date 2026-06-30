@@ -19,7 +19,8 @@ import {
 } from '../src/db/queries/categories';
 import { haptic } from '../src/lib/haptics';
 import {
-  CATEGORY_SECTIONS, INCOME_SECTIONS, categorySection, DEFAULT_CATEGORIES, INCOME_CATEGORIES,
+  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection,
+  DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../src/constants/categories';
 import {
   CATEGORY_ICON_CHOICES as ICON_CHOICES,
@@ -167,8 +168,8 @@ export default function CategoriesScreen() {
 
   function startAdding(section: string) {
     haptic.light();
-    const allSecs = kindTab === 'expense' ? CATEGORY_SECTIONS : INCOME_SECTIONS;
-    const defs = kindTab === 'expense' ? DEFAULT_CATEGORIES : INCOME_CATEGORIES;
+    const allSecs = kindTab === 'expense' ? CATEGORY_SECTIONS : kindTab === 'income' ? INCOME_SECTIONS : TRANSFER_SECTIONS;
+    const defs = kindTab === 'expense' ? DEFAULT_CATEGORIES : kindTab === 'income' ? INCOME_CATEGORIES : TRANSFER_CATEGORIES;
     const sectionDef = allSecs.find(s => s.title === section);
     const firstCatInSection = sectionDef
       ? defs.find(c => sectionDef.names.includes(c.name))
@@ -178,7 +179,7 @@ export default function CategoriesScreen() {
     setAddingToSection(section);
   }
 
-  const sections = kindTab === 'expense' ? CATEGORY_SECTIONS : INCOME_SECTIONS;
+  const sections = kindTab === 'expense' ? CATEGORY_SECTIONS : kindTab === 'income' ? INCOME_SECTIONS : TRANSFER_SECTIONS;
 
   return (
     <View style={styles.container}>
@@ -200,7 +201,7 @@ export default function CategoriesScreen() {
               accessibilityState={{ selected: kindTab === k }}
             >
               <Text style={[styles.kindPillText, kindTab === k && styles.kindPillTextActive]}>
-                {k === 'expense' ? 'Expense' : 'Income'}
+                {k === 'expense' ? 'Expense' : k === 'income' ? 'Income' : 'Transfer'}
               </Text>
             </TouchableOpacity>
           ))}

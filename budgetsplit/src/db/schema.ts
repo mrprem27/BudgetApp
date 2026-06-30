@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { INCOME_CATEGORIES, CATEGORY_SECTIONS } from '../constants/categories';
+import { INCOME_CATEGORIES, CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_CATEGORIES, TRANSFER_SECTIONS } from '../constants/categories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS category (
   name      TEXT NOT NULL,
   icon      TEXT,
   color     TEXT,
-  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income'))
+  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer'))
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -297,6 +297,39 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // If the rebuild fails, leave the original table intact (yearly stays unavailable).
   }
 
+  // One-time rebuild: the original category table had
+  // CHECK(kind IN ('expense','income')) which rejects 'transfer'. SQLite can't
+  // ALTER a CHECK, so recreate it without the stale constraint. Detected by the
+  // absence of 'transfer' in its DDL.
+  try {
+    const catDef = await db.getFirstAsync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='category'",
+    );
+    if (catDef && !catDef.sql.includes("'transfer'")) {
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE category_new (
+          id        TEXT PRIMARY KEY,
+          group_id  TEXT NOT NULL REFERENCES budget_group(id),
+          name      TEXT NOT NULL,
+          icon      TEXT,
+          color     TEXT,
+          kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+          section   TEXT
+        );
+        INSERT INTO category_new (id,group_id,name,icon,color,kind,section)
+          SELECT id,group_id,name,icon,color,kind,section FROM category;
+        DROP TABLE category;
+        ALTER TABLE category_new RENAME TO category;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  } catch {
+    // If the rebuild fails, leave the original table intact (transfer cats stay unavailable).
+  }
+
   // Hot-path indexes. Created here (not inline in SCHEMA) because the one-time
   // txn rebuild above drops & recreates the txn table, which would wipe any
   // index defined alongside it. IF NOT EXISTS keeps this idempotent on every open.
@@ -337,7 +370,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   for (const g of groups) {
     for (const cat of INCOME_CATEGORIES) {
       const exists = await db.getFirstAsync<{ one: number }>(
-        'SELECT 1 as one FROM category WHERE group_id=? AND name=?', [g.id, cat.name],
+        "SELECT 1 as one FROM category WHERE group_id=? AND name=? AND kind='income'", [g.id, cat.name],
       );
       if (!exists) {
         await db.runAsync(
@@ -346,21 +379,38 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
         );
       }
     }
-  }
-
-  // Backfill section column for all categories that don't have one yet.
-  for (const sec of CATEGORY_SECTIONS) {
-    if (sec.names.length > 0) {
-      const placeholders = sec.names.map(() => '?').join(',');
-      await db.runAsync(
-        `UPDATE category SET section=? WHERE section IS NULL AND name IN (${placeholders})`,
-        [sec.title, ...sec.names],
+    // Transfer (settlement) categories. Checked with kind='transfer' because
+    // some names ('Rent', 'Other') collide with expense category names.
+    for (const cat of TRANSFER_CATEGORIES) {
+      const exists = await db.getFirstAsync<{ one: number }>(
+        "SELECT 1 as one FROM category WHERE group_id=? AND name=? AND kind='transfer'", [g.id, cat.name],
       );
+      if (!exists) {
+        await db.runAsync(
+          "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')",
+          [uuid(), g.id, cat.name, cat.icon, cat.color],
+        );
+      }
     }
   }
-  await db.runAsync(
-    "UPDATE category SET section='Income' WHERE section IS NULL AND kind='income'",
-  );
+
+  // Backfill the section column per kind so a name shared across kinds (e.g.
+  // 'Rent', 'Other') lands in the right section for its own kind.
+  const backfillSections = async (kind: string, secs: { title: string; names: string[] }[]) => {
+    for (const sec of secs) {
+      if (sec.names.length === 0) continue;
+      const placeholders = sec.names.map(() => '?').join(',');
+      await db.runAsync(
+        `UPDATE category SET section=? WHERE section IS NULL AND kind=? AND name IN (${placeholders})`,
+        [sec.title, kind, ...sec.names],
+      );
+    }
+  };
+  await backfillSections('expense', CATEGORY_SECTIONS);
+  await backfillSections('income', INCOME_SECTIONS);
+  await backfillSections('transfer', TRANSFER_SECTIONS);
+  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='income'");
+  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='transfer'");
 
   return db;
 }
