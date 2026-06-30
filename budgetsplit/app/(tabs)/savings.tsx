@@ -245,26 +245,25 @@ export default function SavingsScreen() {
       <ScreenHeader
         title="Plan"
         large
+        right={
+          <View style={styles.headerRight}>
+            {[
+              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
+              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/subscriptions' },
+              // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
+              { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
+            ].filter(m => m.show).map(m => (
+              <TouchableOpacity key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to as any)} accessibilityRole="button" accessibilityLabel={m.label}>
+                <Feather name={m.icon} size={18} color={colors.accent} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        }
       />
       {loadError ? (
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {/* Module shortcuts — only those enabled show. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleRow} keyboardShouldPersistTaps="handled">
-          {[
-            { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
-            { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/subscriptions' },
-            // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
-            { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
-          ].filter(m => m.show).map(m => (
-            <TouchableOpacity key={m.key} style={styles.moduleChip} onPress={() => router.push(m.to as any)} accessibilityRole="button" accessibilityLabel={m.label}>
-              <Feather name={m.icon} size={15} color={colors.accent} />
-              <Text style={styles.moduleChipText}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
         {/* Total Money — cash + investments + available credit, with breakdown */}
         {money && <TotalMoneyCard money={money} onEdit={() => setShowMoneyEditor(true)} />}
 
@@ -555,11 +554,8 @@ const styles = StyleSheet.create({
   goalMeta: { ...type.caption, color: colors.textMuted, flexShrink: 1 },
   goalMetaRight: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
 
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  insightsBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  moduleRow: { gap: space.sm, paddingBottom: space.xs },
-  moduleChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8 },
-  moduleChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  headerIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },

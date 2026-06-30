@@ -269,6 +269,7 @@ export default function GroupDetailScreen() {
         { key: 'recurring', label: 'Recurring' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
+        { key: 'insights', label: 'Insights' },
       ];
 
   if (!group) return null;
@@ -290,11 +291,6 @@ export default function GroupDetailScreen() {
           <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{group.name}</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          {!isPersonal && (
-            <TouchableOpacity onPress={() => { setActiveTab('insights'); haptic.selection(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Insights">
-              <Feather name="bar-chart-2" size={20} color={activeTab === 'insights' ? colors.accent : colors.textPrimary} />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
             <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
