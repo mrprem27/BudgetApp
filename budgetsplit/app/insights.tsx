@@ -21,22 +21,12 @@ import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getMyExposure } from '../src/db/queries/balances';
 import { getMe } from '../src/db/queries/persons';
-import { formatCompact } from '../src/lib/money';
+import { formatCompact, formatAxisShort } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 
 type Shift = { cat: string; thisAmt: number; pct: number };
 type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
-
-/** Compact ₹ axis label for the trend chart. */
-function fmtY(v: string): string {
-  const n = Math.round(Number(v));
-  if (!isFinite(n) || n === 0) return '₹0';
-  const abs = Math.abs(n);
-  if (abs >= 100000) return `₹${(abs / 100000).toFixed(1)}L`;
-  if (abs >= 1000) return `₹${Math.round(abs / 1000)}k`;
-  return `₹${abs}`;
-}
 
 export default function InsightsScreen() {
   const db = useSQLiteContext();
@@ -242,7 +232,7 @@ export default function InsightsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={fmtY}
+                formatYLabel={formatAxisShort}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
                 hideRules
                 isAnimated

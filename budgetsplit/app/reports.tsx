@@ -25,7 +25,7 @@ import { getBudgetAnalytics } from '../src/lib/analytics';
 import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
-import { formatCompact, formatCompactMajor } from '../src/lib/money';
+import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../src/lib/reportExport';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { Badge } from '../src/components/ui/Badge';
@@ -39,18 +39,6 @@ import { categoryVisual } from '../src/constants/categories';
 import { CHART_COLORS } from '../src/constants/palette';
 import type { BudgetGroup } from '../src/db/queries/groups';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
-
-/** Y-axis label: always whole numbers, no decimal K/L/Cr values. */
-function fmtY(v: string): string {
-  const n = Math.round(Number(v));
-  if (!isFinite(n)) return '₹0';
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs < 1000) return sign + '₹' + abs;
-  if (abs < 100000) return sign + '₹' + Math.round(abs / 1000) + 'K';
-  if (abs < 10000000) return sign + '₹' + Math.round(abs / 100000) + 'L';
-  return sign + '₹' + Math.round(abs / 10000000) + 'Cr';
-}
 
 type GroupSummary = {
   group: BudgetGroup;
@@ -493,7 +481,7 @@ export default function ReportsScreen() {
                 xAxisThickness={0}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={fmtY}
+                formatYLabel={formatAxisShort}
                 xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
                 hideRules
                 isAnimated
@@ -513,7 +501,7 @@ export default function ReportsScreen() {
                     return (
                       <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
                         <Text style={{ color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', fontSize: 11 }}>
-                          {fmtY(String(val))}
+                          {formatAxisShort(val)}
                         </Text>
                       </View>
                     );

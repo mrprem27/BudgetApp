@@ -139,6 +139,19 @@ export function parseToPaise(input: string): number {
   return Math.round(n * 100);
 }
 
+/** Compact ₹ axis/short label, e.g. ₹0, ₹450, ₹12K, ₹2L, ₹1Cr. Accepts the
+ *  string gifted-charts passes to formatYLabel, or a number. */
+export function formatAxisShort(v: string | number): string {
+  const n = Math.round(Number(v));
+  if (!isFinite(n)) return '₹0';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs < 1000) return sign + '₹' + abs;
+  if (abs < 100000) return sign + '₹' + Math.round(abs / 1000) + 'K';
+  if (abs < 10000000) return sign + '₹' + Math.round(abs / 100000) + 'L';
+  return sign + '₹' + Math.round(abs / 10000000) + 'Cr';
+}
+
 export function splitEqual(total: number, n: number): number[] {
   if (n === 0) return [];
   const base = Math.floor(total / n);

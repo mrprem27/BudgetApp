@@ -111,14 +111,15 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
             </TouchableOpacity>
           );
         })}
-        {/* "more" line is always reserved (link or spacer) so height never changes. */}
-        {!loading && moreCount > 0 ? (
-          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={expanded ? 'Show fewer categories' : `Show ${moreCount} more categories`}>
-            <Text style={styles.more}>{expanded ? 'Show less' : `+ ${moreCount} more ${moreCount === 1 ? 'category' : 'categories'}`}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.moreSpacer} />
-        )}
+        {/* Footer is a FIXED-HEIGHT slot (link or empty) so the card height never
+            changes between periods (Today/Month/Year) or more/less states. */}
+        <View style={styles.moreSlot}>
+          {!loading && moreCount > 0 && (
+            <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={expanded ? 'Show fewer categories' : `Show ${moreCount} more categories`}>
+              <Text style={styles.more}>{expanded ? 'Show less' : `+ ${moreCount} more ${moreCount === 1 ? 'category' : 'categories'}`}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
   fill: { height: 3, borderRadius: 2 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary, width: 52, textAlign: 'right' },
   more: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  moreSpacer: { height: 16 },
+  moreSlot: { height: 18, justifyContent: 'center' },
   // Empty category slot — same height as a real row, but just a quiet line.
   placeholderRow: { height: 28, flexDirection: 'row', alignItems: 'center' },
   emptyLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.bgElevated },

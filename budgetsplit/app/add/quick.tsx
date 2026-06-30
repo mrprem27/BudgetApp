@@ -37,6 +37,7 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SplitSheet } from '../../src/components/finance/add/SplitSheet';
 import { RecurringControls } from '../../src/components/finance/add/RecurringControls';
 import { PayersSheet } from '../../src/components/finance/add/PayersSheet';
+import { TransferSlotSheet } from '../../src/components/finance/add/TransferSlotSheet';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { GroupSelector } from '../../src/components/finance/GroupSelector';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
@@ -855,41 +856,26 @@ export default function QuickAddScreen() {
       {/* Group picker modal removed — replaced by inline GroupSelector chips above. */}
 
       {/* Transfer: pick the payer / recipient for the active slot */}
-      <SheetModal visible={transferSlot !== null} onClose={() => setTransferSlot(null)} title={transferSlot === 'from' ? 'Who paid?' : 'Who received?'} scroll={false}>
-        {allPersons.map(p => {
-          const active = transferSlot === 'from' ? p.id === transferFromId : p.id === transferToId;
-          return (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.groupPickerRow, active && styles.groupPickerRowActive]}
-              onPress={() => {
-                // Keep the two slots distinct: picking a person already in the other slot swaps them.
-                if (transferSlot === 'from') {
-                  if (p.id === transferToId) setTransferToId(transferFromId);
-                  setTransferFromId(p.id);
-                } else if (transferSlot === 'to') {
-                  if (p.id === transferFromId) setTransferFromId(transferToId);
-                  setTransferToId(p.id);
-                }
-                setTransferSlot(null);
-              }}
-              accessibilityRole="button"
-            >
-              <MemberAvatar name={p.name} color={p.avatar_color} size={36} imageUri={p.image_uri} />
-              <Text style={styles.groupPickerName}>{p.id === me?.id ? `${p.name} (you)` : p.name}</Text>
-              {p.id !== me?.id && (personNet[p.id] ?? 0) !== 0 && (() => {
-                const ov = oweView(personNet[p.id] ?? 0);
-                return (
-                  <Text style={[styles.transferBal, { color: ov.color }]}>
-                    {ov.label} {formatRupees(ov.amount)}
-                  </Text>
-                );
-              })()}
-              {active && <Feather name="check" size={18} color={colors.accent} />}
-            </TouchableOpacity>
-          );
-        })}
-      </SheetModal>
+      <TransferSlotSheet
+        slot={transferSlot}
+        persons={allPersons}
+        me={me}
+        fromId={transferFromId}
+        toId={transferToId}
+        personNet={personNet}
+        onClose={() => setTransferSlot(null)}
+        onPick={(pid) => {
+          // Keep the two slots distinct: picking a person already in the other slot swaps them.
+          if (transferSlot === 'from') {
+            if (pid === transferToId) setTransferToId(transferFromId);
+            setTransferFromId(pid);
+          } else if (transferSlot === 'to') {
+            if (pid === transferFromId) setTransferFromId(transferToId);
+            setTransferToId(pid);
+          }
+          setTransferSlot(null);
+        }}
+      />
 
       {/* Currency picker hidden for v1 (INR-only). */}
 
@@ -964,10 +950,6 @@ const styles = StyleSheet.create({
   smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   smartCatHint: { ...type.caption, color: colors.textMuted },
-  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
-  groupPickerRowActive: { backgroundColor: colors.accentMuted },
-  groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  transferBal: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginRight: space.xs },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
   attachBtnText: { ...type.body, color: colors.accent },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
