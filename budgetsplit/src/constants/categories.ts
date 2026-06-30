@@ -101,8 +101,7 @@ export const CATEGORY_SECTIONS: { title: string; names: string[] }[] = [
 export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Earnings', names: ['Salary', 'Freelance', 'Business', 'Bonus'] },
   { title: 'Investments', names: ['Interest', 'Dividends', 'Rent Received'] },
-  { title: 'Perks & Returns', names: ['Cashback', 'Refunds', 'Gifts Received'] },
-  { title: 'Other Income', names: ['Other Income'] },
+  { title: 'Other', names: ['Refunds', 'Cashback', 'Gifts Received', 'Other Income'] },
 ];
 
 const SECTION_OF: Record<string, string> = Object.fromEntries(

@@ -25,7 +25,7 @@ import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/pers
 import { getFriendBalances } from '../../src/db/queries/balances';
 import { TransferBody, TRANSFER_REASONS } from '../../src/components/finance/TransferBody';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
-import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
+import { getCategoriesByFrequency, insertCategory, type CategoryKind } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate, recordSettlement } from '../../src/db/queries/transactions';
 import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares, formatAmountInput, sanitizeAmountInput } from '../../src/lib/money';
 import { getAffordSnapshot, type AffordSnapshot } from '../../src/db/queries/savings';
@@ -147,7 +147,7 @@ export default function QuickAddScreen() {
         const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
-          await loadGroup(txn.group_id, meRow, txn.category);
+          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? 'income' : 'expense');
           setKind(txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
@@ -197,9 +197,9 @@ export default function QuickAddScreen() {
     })();
   }, []);
 
-  async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string) {
+  async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string, catKind: CategoryKind = 'expense') {
     const [cats, mems] = await Promise.all([
-      getCategoriesByFrequency(db, gid),
+      getCategoriesByFrequency(db, gid, catKind),
       getGroupMembers(db, gid),
     ]);
     setCategories(cats);
@@ -506,7 +506,11 @@ export default function QuickAddScreen() {
           <View style={styles.kindRow}>
             <TouchableOpacity
               style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExpenseActive]}
-              onPress={() => { setKind('expense'); haptic.selection(); }}
+              onPress={() => {
+                setKind('expense'); haptic.selection();
+                // Reload the expense category set (income/expense have separate catalogs).
+                if (selectedGroupId) loadGroup(selectedGroupId, me, undefined, 'expense');
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === 'expense' }}
             >
@@ -524,9 +528,12 @@ export default function QuickAddScreen() {
               style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
               onPress={() => {
                 setKind('income'); haptic.selection();
-                // Income is always personal — never a shared group.
+                // Income is always personal — never a shared group — and uses the
+                // income category catalog (not expense).
                 const p = groups.find(g => g.is_personal === 1);
-                if (p && p.id !== selectedGroupId) { setSelectedGroupId(p.id); loadGroup(p.id, me); }
+                const gid = p?.id ?? selectedGroupId;
+                if (p && p.id !== selectedGroupId) setSelectedGroupId(p.id);
+                if (gid) loadGroup(gid, me, undefined, 'income');
               }}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === 'income' }}
@@ -618,7 +625,7 @@ export default function QuickAddScreen() {
             if (title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
           }}
           onCreate={async (name) => {
-            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent, kind === 'income' ? 'income' : 'expense');
             setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
             return created;
           }}

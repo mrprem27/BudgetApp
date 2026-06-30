@@ -14,8 +14,9 @@ import {
   startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { LineChart } from 'react-native-gifted-charts';
-import { type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { LineChart, BarChart } from 'react-native-gifted-charts';
+import { CategoryDonut, type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { CategoryRankList } from '../src/components/finance/home/CategoryRankList';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout } from '../src/constants/layout';
@@ -46,6 +47,8 @@ type GroupSummary = {
   expense: number;
   topCats: Array<{ name: string; amount: number }>;
 };
+
+type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
 
 function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
   let income = 0;
@@ -89,6 +92,9 @@ export default function ReportsScreen() {
   const [prevEarned, setPrevEarned] = useState(0);
   const [pieData, setPieData] = useState<DonutSeg[]>([]);
   const [pieTotal, setPieTotal] = useState(0);
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [catExpanded, setCatExpanded] = useState(false);
+  const [monthly, setMonthly] = useState<MonthPoint[]>([]);
   type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
   const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
   const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
@@ -189,7 +195,24 @@ export default function ReportsScreen() {
         color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
       })));
       setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
-      // (6-month trend moved to Insights — see the "Spending breakdown & trends" link.)
+
+      // 6-month spending trend ending at the selected month — overall + per-category,
+      // so picking a category in the donut/labels redraws this chart for that category.
+      const months: MonthPoint[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const m = subMonths(month, i);
+        const mTxns = await getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime());
+        let mTotal = 0;
+        const byCat: Record<string, number> = {};
+        for (const t of mTxns) {
+          if (t.kind !== 'expense') continue;
+          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+          mTotal += amt;
+          byCat[t.category] = (byCat[t.category] ?? 0) + amt;
+        }
+        months.push({ label: format(m, 'MMM'), total: mTotal, byCat });
+      }
+      setMonthly(months);
 
       // Build daily cumulative spending forecast (current month only)
       const now = new Date();
@@ -351,6 +374,16 @@ export default function ReportsScreen() {
     </View>
   );
 
+  // 6-month bars, keyed to the selected category (or total when none selected).
+  // Derived in render from `selectedCat` so picking a category instantly redraws.
+  const trendColor = selectedCat ? (categoryVisual(selectedCat).color || colors.accent) : colors.accent;
+  const trendBars = monthly.map(m => ({
+    value: Math.round((selectedCat ? (m.byCat[selectedCat] ?? 0) : m.total) / 100),
+    label: m.label,
+    frontColor: trendColor,
+  }));
+  const trendMax = Math.max(1, ...trendBars.map(b => b.value));
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Reports" onBack={() => router.back()} right={exportButtons} />
@@ -425,37 +458,65 @@ export default function ReportsScreen() {
             );
           })()}
 
-          {/* By category — stacked proportional bar + legend with % (design Screen 7) */}
+          {/* Spending breakdown — top category labels (colored icons), a popping
+              donut, and a 6-month trend. All three stay in sync via `selectedCat`. */}
           {pieData.length > 0 && pieTotal > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitleSm}>BY CATEGORY</Text>
-              <View style={styles.stackBar}>
-                {pieData.map((seg, i) => (
-                  <View key={seg.name} style={{ flex: seg.paise, backgroundColor: seg.color, height: '100%' }} />
-                ))}
-              </View>
-              <View style={{ gap: 9 }}>
-                {pieData.slice(0, 5).map(seg => (
-                  <View key={seg.name} style={styles.legendRow}>
-                    <View style={[styles.legendDot, { backgroundColor: seg.color }]} />
-                    <Text style={styles.legendName} numberOfLines={1}>{seg.name}</Text>
-                    <Text style={styles.legendAmt}>{formatCompact(seg.paise)}</Text>
-                    <Text style={styles.legendPct}>{Math.round((seg.paise / pieTotal) * 100)}%</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
+            <>
+              <CategoryRankList
+                rows={pieData.map(s => ({ name: s.name, paise: s.paise }))}
+                total={pieTotal}
+                topN={4}
+                expanded={catExpanded}
+                onMore={() => setCatExpanded(e => !e)}
+                selectedName={selectedCat}
+                onPressCategory={(name) => setSelectedCat(c => (c === name ? null : name))}
+              />
 
-          {/* Spending breakdown + 6-month trend now live in Insights (single analytics home). */}
-          <TouchableOpacity style={[styles.card, styles.insightsLink]} onPress={() => router.push('/insights')} accessibilityRole="button" accessibilityLabel="Open Insights for charts">
-            <View style={styles.insightsLinkIcon}><Feather name="bar-chart-2" size={18} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.insightsLinkTitle}>Spending breakdown & trends</Text>
-              <Text style={styles.insightsLinkSub}>Category donut + 6-month trend → Insights</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
+              <View style={styles.card}>
+                <CategoryDonut
+                  data={pieData}
+                  total={pieTotal}
+                  onOpen={() => {}}
+                  selectedName={selectedCat}
+                  onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
+                />
+
+                {trendBars.length > 0 && (
+                  <View style={styles.trendBlock}>
+                    <View style={styles.trendHeader}>
+                      <Text style={styles.chartTitle}>
+                        {selectedCat ? `${selectedCat} · last 6 months` : 'Total spend · last 6 months'}
+                      </Text>
+                      {selectedCat && (
+                        <TouchableOpacity onPress={() => setSelectedCat(null)} accessibilityRole="button" accessibilityLabel="Clear category">
+                          <Text style={styles.trendClear}>Clear</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <BarChart
+                      data={trendBars}
+                      height={140}
+                      barWidth={22}
+                      spacing={18}
+                      initialSpacing={12}
+                      endSpacing={8}
+                      roundedTop
+                      noOfSections={3}
+                      maxValue={Math.ceil(trendMax * 1.15)}
+                      xAxisThickness={0}
+                      yAxisThickness={0}
+                      yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                      formatYLabel={formatAxisShort}
+                      xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
+                      hideRules
+                      isAnimated
+                      disableScroll
+                    />
+                  </View>
+                )}
+              </View>
+            </>
+          )}
 
           {/* Spending Forecast (current month only) */}
           {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
@@ -651,37 +712,17 @@ const styles = StyleSheet.create({
   navBtn: { padding: space.xs },
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
-  sectionTitleSm: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   summaryRow: { flexDirection: 'row', gap: space.sm },
   summaryCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md },
   summaryLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: 6 },
   summaryValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, color: colors.textPrimary, letterSpacing: -1, marginBottom: 3 },
   summaryDeltaRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   summaryDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  stackBar: { height: 10, borderRadius: 5, overflow: 'hidden', flexDirection: 'row', marginBottom: space.md, backgroundColor: colors.bgElevated },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  legendDot: { width: 10, height: 10, borderRadius: 2, flexShrink: 0 },
-  legendName: { flex: 1, ...type.label, color: colors.textPrimary },
-  legendAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
-  legendPct: { ...type.caption, color: colors.textMuted, width: 30, textAlign: 'right' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
-  chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },
-  donutHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm },
-  insightsLink: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  insightsLinkIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  insightsLinkTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  insightsLinkSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  trendBlock: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
   trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
   trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  whatifLead: { ...type.body, color: colors.textSecondary },
-  whatifChips: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  whatifChip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
-  whatifChipActive: { backgroundColor: colors.accent },
-  whatifChipText: { ...type.label, color: colors.textSecondary },
-  whatifResult: { marginTop: space.md },
-  whatifSave: { ...type.subheading, color: colors.textPrimary },
-  whatifYear: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },
