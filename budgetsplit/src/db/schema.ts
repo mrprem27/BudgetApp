@@ -170,6 +170,22 @@ CREATE TABLE IF NOT EXISTS savings_txn (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_savings_txn_goal ON savings_txn(goal_id);
+
+-- Imported rows awaiting Review (Import → Review inbox). Heuristically parsed from
+-- a pasted statement; the user classifies each, then it becomes a real txn (and is
+-- deleted here) or is discarded. Never feeds balances/budgets until confirmed.
+CREATE TABLE IF NOT EXISTS pending_txn (
+  id          TEXT PRIMARY KEY,
+  date        INTEGER NOT NULL,
+  amount      INTEGER NOT NULL,            -- paise (positive)
+  description TEXT NOT NULL,
+  kind        TEXT NOT NULL CHECK(kind IN ('income','expense','settlement')),
+  category    TEXT,                        -- suggested category (may be null)
+  direction   TEXT NOT NULL DEFAULT 'unknown' CHECK(direction IN ('debit','credit','unknown')),
+  raw         TEXT,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 `;
 
 /**
@@ -293,6 +309,18 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
 
   // One-time fix: 'wallet' is not a valid Feather icon
   await db.execAsync("UPDATE budget_group SET icon='credit-card' WHERE icon='wallet';");
+  // Savings Pool removed: goals are now funded directly from cash. Drop the old
+  // pool-level ledger rows (goal_id IS NULL = deposits/withdrawals to the pool).
+  // Per-goal balances (goal_id NOT NULL) are untouched; any unallocated pool
+  // money simply stops being "set aside" and folds back into Cash available.
+  await db.execAsync("DELETE FROM savings_txn WHERE goal_id IS NULL;");
+  // 'Subscriptions' is no longer a category — a subscription is a recurring billing
+  // pattern, and its spend belongs to a normal category (e.g. Entertainment).
+  // Reclassify existing transactions, drop now-orphaned Subscriptions budgets, then
+  // remove the category from every group's picker.
+  await db.execAsync("UPDATE txn SET category='Entertainment' WHERE category='Subscriptions';");
+  await db.execAsync("DELETE FROM category_budget WHERE category='Subscriptions';");
+  await db.execAsync("DELETE FROM category WHERE name='Subscriptions';");
   // The seeded Personal group (oldest, name 'Personal') is the single-user space.
   await db.execAsync(
     "UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1);",

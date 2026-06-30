@@ -183,13 +183,15 @@ export default function SettingsScreen() {
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="download" label="Export & reports" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
+        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { haptic.light(); router.push('/import' as any); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="clock" label="History & Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
+        <SettingsRow icon="clock" label="Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
       </View>
 
       {/* About — tap version 7× to open developer storage screen */}

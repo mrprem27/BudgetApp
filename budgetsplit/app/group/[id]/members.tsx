@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Animated,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../../../src/hooks/useScreenData';
 
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../src/constants/colors';
@@ -23,6 +24,7 @@ import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
+import { oweView } from '../../../src/lib/owe';
 import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 
@@ -31,35 +33,25 @@ export default function MembersScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
-  const [members, setMembers] = useState<Person[]>([]);
-  const [allPersons, setAllPersons] = useState<Person[]>([]);
-  const [net, setNet] = useState<Record<string, number>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
-  const [loadError, setLoadError] = useState(false);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  useFocusEffect(useCallback(() => { load(); }, [groupId]));
+  const { data, error: loadError, reload } = useScreenData(async (db) => {
+    const [members, allPersons, net] = await Promise.all([
+      getGroupMembers(db, groupId),
+      getAllPersons(db),
+      getGroupNet(db, groupId),
+    ]);
+    return { members, allPersons, net };
+  }, [groupId]);
+  const members = data?.members ?? [];
+  const allPersons = data?.allPersons ?? [];
+  const net = data?.net ?? {};
 
   if (!groupId) { router.back(); return null; }
-
-  async function load() {
-    try {
-      const [m, all, n] = await Promise.all([
-        getGroupMembers(db, groupId),
-        getAllPersons(db),
-        getGroupNet(db, groupId),
-      ]);
-      setMembers(m);
-      setAllPersons(all);
-      setNet(n);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
 
   const memberIds = new Set(members.map(m => m.id));
 
@@ -74,7 +66,7 @@ export default function MembersScreen() {
       haptic.success();
       setShowAdd(false);
       setPendingIds([]);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -93,7 +85,7 @@ export default function MembersScreen() {
       await updatePersonName(db, renamePerson.id, trimmed);
       haptic.success();
       setRenamePerson(null);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -117,10 +109,10 @@ export default function MembersScreen() {
         onPress: async () => {
           try {
             await removeMemberFromGroup(db, groupId, person.id);
-            await load();
+            await reload();
             showUndo({
               message: `Removed ${person.name}`,
-              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id); await load(); } catch { /* ignore */ } },
+              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id); await reload(); } catch { /* ignore */ } },
             });
           } catch {
             haptic.error();
@@ -136,7 +128,7 @@ export default function MembersScreen() {
       <ScreenHeader title="Members" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
       <ScrollView contentContainerStyle={styles.list}>
         {members.length > 0 && (
@@ -167,7 +159,7 @@ export default function MembersScreen() {
                       color={item.avatar_color}
                       size={36}
                       imageUri={item.image_uri}
-                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await load(); } }}
+                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); } }}
                     />
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -176,11 +168,14 @@ export default function MembersScreen() {
                       accessibilityLabel={`Rename ${item.name}`}
                     >
                       <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-                      {net[item.id] !== undefined && net[item.id] !== 0 && (
-                        <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
-                          {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
-                        </Text>
-                      )}
+                      {net[item.id] !== undefined && net[item.id] !== 0 && (() => {
+                        const ov = oweView(net[item.id]);
+                        return (
+                          <Text style={[styles.netText, { color: ov.color }]}>
+                            {ov.thirdPerson} {formatRupees(ov.amount)}
+                          </Text>
+                        );
+                      })()}
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
                       <Feather name="edit-2" size={15} color={colors.textMuted} />
@@ -213,7 +208,7 @@ export default function MembersScreen() {
           onToggle={togglePending}
           onCreate={async (name) => {
             const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
-            setAllPersons(prev => [...prev, person]);
+            reload();
             return person;
           }}
           placeholder="Search or create a person…"

@@ -25,6 +25,7 @@ import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import { formatCompact, formatRupees } from '../../src/lib/money';
+import { oweView } from '../../src/lib/owe';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/constants/categories';
 import { haptic } from '../../src/lib/haptics';
@@ -101,6 +102,7 @@ export default function GroupDetailScreen() {
   const [recurringRules, setRecurringRules] = useState<TxnWithSplits[]>([]);
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
+  const [membersExpanded, setMembersExpanded] = useState(false);
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
   const [budgetFilter, setBudgetFilter] = useState('all');
@@ -328,14 +330,15 @@ export default function GroupDetailScreen() {
         const myNet = net[me?.id ?? ''] ?? 0;
         if (myNet === 0) return null;
         const mySettles = simplify(net);
-        const isOwe = myNet < 0;
+        const ov = oweView(myNet);
+        const isOwe = ov.direction === 'owe';
         const primarySettle = isOwe
           ? mySettles.find(s => s.from === me?.id)
           : mySettles.find(s => s.to === me?.id);
         const primaryPerson = primarySettle
           ? personMap.get(isOwe ? primarySettle.to : primarySettle.from)
           : null;
-        const balColor = isOwe ? colors.expense : colors.income;
+        const balColor = ov.color;
         return (
           <View style={[styles.balCard, {
             backgroundColor: isOwe ? '#2A1714' : '#14271F',
@@ -348,9 +351,6 @@ export default function GroupDetailScreen() {
               <Text style={[styles.balCardAmt, { color: balColor }]}>
                 {formatCompact(Math.abs(myNet))}
               </Text>
-              {primaryPerson && (
-                <Text style={styles.balCardSub}>{isOwe ? 'to' : 'by'} {primaryPerson.name}</Text>
-              )}
             </View>
             <TouchableOpacity
               style={styles.balCardBtn}
@@ -638,10 +638,22 @@ export default function GroupDetailScreen() {
             );
           })()}
 
-          {/* Member list */}
+          {/* Member list — collapsed by default; tap the header to expand */}
+          <TouchableOpacity
+            style={styles.membersHeader}
+            onPress={() => setMembersExpanded(e => !e)}
+            accessibilityRole="button"
+            accessibilityLabel={`${members.length} members, ${membersExpanded ? 'collapse' : 'expand'}`}
+          >
+            <AvatarStack people={members} size={24} max={5} ringColor={colors.bg} />
+            <Text style={styles.membersHeaderText}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
+            <Feather name={membersExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+          {membersExpanded && (
           <View style={styles.card}>
             {members.map((m, mi) => {
               const v = net[m.id] ?? 0;
+              const ov = oweView(v); // canonical color + sign
               const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
               const sub = isLargest && !m.is_me
                 ? 'Largest contributor'
@@ -657,8 +669,8 @@ export default function GroupDetailScreen() {
                     {!!sub && <Text style={styles.memberSub} numberOfLines={1}>{sub}</Text>}
                   </View>
                   <View style={styles.memberRight}>
-                    <Text style={[styles.memberBal, { color: v > 0 ? colors.income : v < 0 ? colors.expense : colors.textMuted }]}>
-                      {v > 0 ? `+${formatCompact(v)}` : v < 0 ? `−${formatCompact(-v)}` : '₹0'}
+                    <Text style={[styles.memberBal, { color: ov.color }]}>
+                      {v === 0 ? '₹0' : `${ov.sign}${formatCompact(ov.amount)}`}
                     </Text>
                     <Text style={styles.memberBalLabel}>{balLabel}</Text>
                   </View>
@@ -666,6 +678,7 @@ export default function GroupDetailScreen() {
               );
             })}
           </View>
+          )}
 
           {/* Invite */}
           <TouchableOpacity style={styles.inviteBtn} onPress={() => router.push(`/group/${id}/members`)} accessibilityRole="button">
@@ -796,7 +809,7 @@ export default function GroupDetailScreen() {
       <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title={group.name} scroll={false}>
         <View style={styles.menuCard}>
           {/* Recurring & Members live in their own tabs now — kept out of this menu. */}
-          <SettingsRow icon="clock" label="History" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
+          <SettingsRow icon="clock" label="Audit log" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
           {!isPersonal && <View style={settingsRowDivider} />}
           {!isPersonal && (
             <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
@@ -841,7 +854,7 @@ const styles = StyleSheet.create({
   heroMembers: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 4 },
   budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: 4, marginBottom: space.sm },
   budgetHeaderText: { ...type.caption, color: colors.textMuted },
-  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
+  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
   tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 8 },
   tabActive: { backgroundColor: colors.accent },
   tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
@@ -914,6 +927,8 @@ const styles = StyleSheet.create({
   catCadenceTag: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
   catUnbudgeted: { ...type.caption, color: colors.textMuted },
 
+  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.sm + 2, paddingHorizontal: space.md, marginBottom: space.sm },
+  membersHeaderText: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
   memberName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   memberNet: { ...type.caption, marginTop: 2 },
@@ -966,10 +981,9 @@ const styles = StyleSheet.create({
   breadcrumbBack: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   breadcrumbSep: { ...type.body, color: colors.border, marginHorizontal: 1 },
   breadcrumbCurrent: { ...type.label, color: colors.textSecondary, flex: 1 },
-  balCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, borderRadius: radius.lg, padding: space.md, marginBottom: space.sm, borderWidth: 1 },
-  balCardLabel: { ...type.caption, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 },
-  balCardAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, letterSpacing: -1, lineHeight: 32 },
-  balCardSub: { ...type.caption, color: colors.textMuted, marginTop: 3 },
+  balCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm + 2, marginBottom: space.sm, borderWidth: 1 },
+  balCardLabel: { ...type.caption, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 },
+  balCardAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, letterSpacing: -0.5, lineHeight: 26 },
   balCardBtn: { paddingHorizontal: space.md + 2, paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent },
   balCardBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },

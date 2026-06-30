@@ -7,6 +7,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
+import { CATEGORY_KIND, type CategoryKind } from '../src/constants/enums';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
@@ -32,7 +33,6 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-type KindTab = 'expense' | 'income';
 
 export default function CategoriesScreen() {
   const db = useSQLiteContext();
@@ -40,7 +40,7 @@ export default function CategoriesScreen() {
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [groupId, setGroupId] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
-  const [kindTab, setKindTab] = useState<KindTab>('expense');
+  const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [addingToSection, setAddingToSection] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -68,7 +68,7 @@ export default function CategoriesScreen() {
     }
   }
 
-  async function switchKind(k: KindTab) {
+  async function switchKind(k: CategoryKind) {
     haptic.selection();
     setKindTab(k);
     setExpandedSection(null);
@@ -191,7 +191,7 @@ export default function CategoriesScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
-          {(['expense', 'income'] as KindTab[]).map(k => (
+          {CATEGORY_KIND.map(k => (
             <TouchableOpacity
               key={k}
               style={[styles.kindPill, kindTab === k && styles.kindPillActive]}

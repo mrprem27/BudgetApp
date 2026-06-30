@@ -17,7 +17,8 @@ import { space, layout, radius } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getGlobalNet } from '../../src/db/queries/balances';
+import { getMyExposure } from '../../src/db/queries/balances';
+import { getPendingCount } from '../../src/db/queries/pending';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -34,7 +35,6 @@ import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
 import { ForecastCard, type ForecastShift } from '../../src/components/finance/home/ForecastCard';
-import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { HealthBand } from '../../src/components/finance/home/HealthBand';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
@@ -68,9 +68,10 @@ function getPrevRange(tab: TabKey): { from: number; to: number } {
 const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
 const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', month: 'SPENT THIS MONTH', year: 'SPENT THIS YEAR' };
 
+// Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'month', label: 'Month' },
   { key: 'today', label: 'Today' },
+  { key: 'month', label: 'Month' },
   { key: 'year',  label: 'Year' },
 ];
 
@@ -86,6 +87,7 @@ export default function DashboardScreen() {
   const [income, setIncome] = useState(0);
   const [oweTotal, setOweTotal] = useState(0);
   const [owedTotal, setOwedTotal] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
   const [budget, setBudget] = useState<{ allocated: number; spent: number }>({ allocated: 0, spent: 0 });
   const [catRows, setCatRows] = useState<CategoryRow[]>([]);
   const [catTotal, setCatTotal] = useState(0);
@@ -182,13 +184,12 @@ export default function DashboardScreen() {
     }
     setPrevSpending(prevSp);
 
-    // Who owes whom (global net), split into owe / owed totals for the strip.
-    const net = await getGlobalNet(db);
-    const myNet = net[me.id] ?? 0;
-    const owe = myNet < 0 ? -myNet : 0;
-    const owed = myNet > 0 ? myNet : 0;
-    setOweTotal(owe);
-    setOwedTotal(owed);
+    // Who owes whom — single source of truth (per-person, after all settlements),
+    // so owe AND owed can both show (matches Insights / Personal / Groups).
+    const exp = await getMyExposure(db, me.id);
+    setOweTotal(exp.owe);
+    setOwedTotal(exp.owed);
+    setReviewCount(await getPendingCount(db));
 
     // Budget rollup (monthly) for the hero pace bar + the health engine.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
@@ -217,7 +218,7 @@ export default function DashboardScreen() {
       totalBudgeted,
       worstCategoryPct: worstCat?.pct ?? null,
       worstCategoryName: worstCat?.category ?? null,
-      netOwedPaise: owe - owed,
+      netOwedPaise: exp.owe - exp.owed,
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
     };
@@ -233,7 +234,9 @@ export default function DashboardScreen() {
     // Coming up: next recurring bills across all groups.
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
     // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
-    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 6, 4));
+    // Drives the bell badge only (the list moved to the Reminders screen). Count
+    // all bills due within the next 14 days — same window the Reminders screen uses.
+    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14));
 
     // Month-end forecast + biggest category shift vs last month (Month view only).
     if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
@@ -319,12 +322,24 @@ export default function DashboardScreen() {
             <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
           </View>
           <View style={styles.headerRight}>
+            {reviewCount > 0 && (
+              <TouchableOpacity onPress={() => router.push('/review' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
+                <Feather name="inbox" size={18} color={colors.textSecondary} />
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{reviewCount > 9 ? '9+' : reviewCount}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
               <Feather name="search" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/history')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Notifications">
+            <TouchableOpacity onPress={() => router.push('/reminders' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Reminders${upcoming.length > 0 ? `, ${upcoming.length} upcoming` : ''}`}>
               <Feather name="bell" size={18} color={colors.textSecondary} />
-              <View style={styles.notifDot} />
+              {upcoming.length > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{upcoming.length > 9 ? '9+' : upcoming.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <MemberAvatar
               name={meInfo?.name ?? ''}
@@ -431,7 +446,7 @@ export default function DashboardScreen() {
               <CategoryRankList
                 rows={catRows}
                 total={catTotal}
-                topN={catExpanded ? Math.max(3, catRows.length) : 3}
+                topN={3}
                 expanded={catExpanded}
                 onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}` as any)}
                 onMore={() => setCatExpanded(e => !e)}
@@ -456,8 +471,6 @@ export default function DashboardScreen() {
                 onPressInsights={() => router.push('/insights')}
               />
             )}
-
-            {upcoming.length > 0 && <ComingUpList items={upcoming} />}
 
             {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
             {flags.streak && (
@@ -507,7 +520,8 @@ const styles = StyleSheet.create({
   appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  notifDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.expense, borderWidth: 1.5, borderColor: colors.bgMuted },
+  notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.bg },
+  notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: '#fff' },
   tabRow: { marginBottom: space.md },
   catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
   catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },

@@ -23,7 +23,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/con
 import { getAllGroups, getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/persons';
 import { getFriendBalances } from '../../src/db/queries/balances';
-import { TransferBody } from '../../src/components/finance/TransferBody';
+import { TransferBody, TRANSFER_REASONS } from '../../src/components/finance/TransferBody';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
 import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate, recordSettlement } from '../../src/db/queries/transactions';
@@ -47,13 +47,13 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
-
-type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
+import { type SplitMode, type RecurFreq, type PayMethod } from '../../src/constants/enums';
+import { oweView } from '../../src/lib/owe';
 
 export default function QuickAddScreen() {
   const insets = useSafeAreaInsets();
-  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount } =
-    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string }>();
+  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount, note: paramNote, date: paramDate } =
+    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string }>();
   const isEditing = !!editId;
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
@@ -78,9 +78,10 @@ export default function QuickAddScreen() {
   // Launched from a group's FAB → pre-select that group's transfer scope.
   const [transferScope, setTransferScope] = useState<'all' | string>(paramGroupId ?? 'all');
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
-  const [payMethod, setPayMethod] = useState<'upi' | 'cash' | 'bank'>('upi');
+  const [payMethod, setPayMethod] = useState<PayMethod>('upi');
   const [transferNote, setTransferNote] = useState('');
-  const [note, setNote] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState(''); // smart-category title (drives category); separate from Note
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -103,9 +104,9 @@ export default function QuickAddScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   const [showPayers, setShowPayers] = useState(false);
-  const [txnDate, setTxnDate] = useState(Date.now());
+  const [txnDate, setTxnDate] = useState(paramDate && /^\d+$/.test(paramDate) ? parseInt(paramDate, 10) : Date.now());
   const [showDate, setShowDate] = useState(false);
-  const [splitType, setSplitType] = useState<SplitType>('equal');
+  const [splitType, setSplitType] = useState<SplitMode>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [percentages, setPercentages] = useState<Record<string, string>>({});
@@ -117,7 +118,7 @@ export default function QuickAddScreen() {
   const [locEnabled, setLocEnabled] = useState(false);
   const [capturingLoc, setCapturingLoc] = useState(false);
   const [recurEnabled, setRecurEnabled] = useState(false);
-  const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>('monthly');
+  const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [recurEndMode, setRecurEndMode] = useState<'never' | 'date' | 'count'>('never');
@@ -155,7 +156,11 @@ export default function QuickAddScreen() {
             setTransferToId(txn.shares[0]?.personId ?? '');
             setTransferScope(txn.group_id);
             setPayMethod((txn.pay_method ?? 'upi'));
-            setTransferNote(txn.note ?? '');
+            // Saved note may be "Reason · extra note" — split the quick-pick reason back out.
+            const savedNote = txn.note ?? '';
+            const r = TRANSFER_REASONS.find(x => savedNote === x || savedNote.startsWith(`${x} · `));
+            setTransferReason(r ?? '');
+            setTransferNote(r ? savedNote.slice(savedNote === r ? r.length : r.length + 3) : savedNote);
           }
           // Reconstruct the split/payers as explicit amounts so a *shared*
           // expense stays editable exactly as it was. In a personal (solo)
@@ -318,6 +323,8 @@ export default function QuickAddScreen() {
 
   async function handleSaveTransfer() {
     if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
+    // Quick-pick reason + optional free note → one stored note string.
+    const transferFullNote = [transferReason, transferNote.trim()].filter(Boolean).join(' · ') || undefined;
     setSaving(true);
     try {
       // Editing an existing settlement → update that single row in its group.
@@ -325,7 +332,7 @@ export default function QuickAddScreen() {
         await updateTxn(db, {
           id: editId!, groupId: transferScope === 'all' ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: 'Settlement',
-          note: transferNote.trim() || undefined, payMethod,
+          note: transferFullNote, payMethod,
           payments: [{ personId: transferFromId, amount: total }],
           shares: [{ personId: transferToId, amount: total }],
         });
@@ -352,7 +359,7 @@ export default function QuickAddScreen() {
       for (const p of finalPlans) {
         await recordSettlement(db, {
           groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
-          date: txnDate, note: transferNote.trim() || undefined, payMethod,
+          date: txnDate, note: transferFullNote, payMethod,
         });
       }
       haptic.success();
@@ -558,6 +565,8 @@ export default function QuickAddScreen() {
             onScope={setTransferScope}
             payMethod={payMethod}
             onPayMethod={setPayMethod}
+            reason={transferReason}
+            onReason={setTransferReason}
             note={transferNote}
             onNote={setTransferNote}
           />
@@ -975,11 +984,14 @@ export default function QuickAddScreen() {
             >
               <MemberAvatar name={p.name} color={p.avatar_color} size={36} imageUri={p.image_uri} />
               <Text style={styles.groupPickerName}>{p.id === me?.id ? `${p.name} (you)` : p.name}</Text>
-              {p.id !== me?.id && (personNet[p.id] ?? 0) !== 0 && (
-                <Text style={[styles.transferBal, { color: (personNet[p.id] ?? 0) > 0 ? colors.income : colors.expense }]}>
-                  {(personNet[p.id] ?? 0) > 0 ? `owes you ${formatRupees(personNet[p.id])}` : `you owe ${formatRupees(-(personNet[p.id] ?? 0))}`}
-                </Text>
-              )}
+              {p.id !== me?.id && (personNet[p.id] ?? 0) !== 0 && (() => {
+                const ov = oweView(personNet[p.id] ?? 0);
+                return (
+                  <Text style={[styles.transferBal, { color: ov.color }]}>
+                    {ov.label} {formatRupees(ov.amount)}
+                  </Text>
+                );
+              })()}
               {active && <Feather name="check" size={18} color={colors.accent} />}
             </TouchableOpacity>
           );

@@ -14,8 +14,8 @@ import {
   startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { BarChart, LineChart } from 'react-native-gifted-charts';
-import { CategoryDonut, type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { LineChart } from 'react-native-gifted-charts';
+import { type DonutSeg } from '../src/components/finance/CategoryDonut';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout } from '../src/constants/layout';
@@ -101,10 +101,6 @@ export default function ReportsScreen() {
   const [prevEarned, setPrevEarned] = useState(0);
   const [pieData, setPieData] = useState<DonutSeg[]>([]);
   const [pieTotal, setPieTotal] = useState(0);
-  type TrendBar = { value: number; label: string; frontColor: string; labelTextStyle?: object };
-  const [trendData, setTrendData] = useState<TrendBar[]>([]);
-  const [monthlyData, setMonthlyData] = useState<Array<{ label: string; total: number; byCat: Record<string, number> }>>([]);
-  const [selectedCat, setSelectedCat] = useState<string | null>(null);
   type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
   const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
   const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
@@ -205,34 +201,7 @@ export default function ReportsScreen() {
         color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
       })));
       setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
-
-      // Build 6-month spending trend — overall totals + a per-category breakdown
-      // so tapping a donut wedge can re-draw the same chart for that category.
-      const months: Array<{ label: string; total: number; byCat: Record<string, number> }> = [];
-      for (let i = 5; i >= 0; i--) {
-        const m = subMonths(month, i);
-        const mFrom = startOfMonth(m).getTime();
-        const mTo = endOfMonth(m).getTime();
-        const mTxns = await getTransactionsInRange(db, null, mFrom, mTo);
-        let mSpend = 0;
-        const byCat: Record<string, number> = {};
-        for (const t of mTxns) {
-          if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
-            const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-            mSpend += amt;
-            byCat[t.category] = (byCat[t.category] ?? 0) + amt;
-          }
-        }
-        months.push({ label: format(m, 'MMM'), total: mSpend, byCat });
-      }
-      setMonthlyData(months);
-      setSelectedCat(null);
-      setTrendData(months.map((mm, i) => ({
-        value: Math.round(mm.total / 100),
-        label: mm.label,
-        frontColor: i === months.length - 1 ? colors.accent : colors.accentDeep,
-        labelTextStyle: i === months.length - 1 ? { color: colors.accent, fontFamily: 'Inter_600SemiBold' } : { color: colors.textMuted },
-      })));
+      // (6-month trend moved to Insights — see the "Spending breakdown & trends" link.)
 
       // Build daily cumulative spending forecast (current month only)
       const now = new Date();
@@ -490,60 +459,15 @@ export default function ReportsScreen() {
             </View>
           )}
 
-          {/* Spending by category — selected month, ALL groups (the dashboard
-              donut is current-period & personal; this is the cross-group analysis). */}
-          {flags.reportsDonut && pieData.length > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.chartTitle}>Spending by category</Text>
-              <Text style={styles.chartSub}>{format(month, 'MMMM yyyy')} · all groups</Text>
-              <CategoryDonut
-                data={pieData}
-                total={pieTotal}
-                onSelect={(seg) => setSelectedCat(seg?.name ?? null)}
-                onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
-              />
-              {selectedCat && <Text style={styles.donutHint}>Tap the wedge again to clear · trend below shows {selectedCat}</Text>}
+          {/* Spending breakdown + 6-month trend now live in Insights (single analytics home). */}
+          <TouchableOpacity style={[styles.card, styles.insightsLink]} onPress={() => router.push('/insights')} accessibilityRole="button" accessibilityLabel="Open Insights for charts">
+            <View style={styles.insightsLinkIcon}><Feather name="bar-chart-2" size={18} color={colors.accent} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.insightsLinkTitle}>Spending breakdown & trends</Text>
+              <Text style={styles.insightsLinkSub}>Category donut + 6-month trend → Insights</Text>
             </View>
-          )}
-
-          {/* 6-month Spending Trend — overall, or the tapped category */}
-          {flags.reportsTrend && trendData.length > 0 && trendData.some(b => b.value > 0) && (() => {
-            const bars: TrendBar[] = selectedCat
-              ? monthlyData.map((mm, i) => ({
-                  value: Math.round((mm.byCat[selectedCat] ?? 0) / 100),
-                  label: mm.label,
-                  frontColor: i === monthlyData.length - 1 ? colors.accent : colors.accentDeep,
-                  labelTextStyle: i === monthlyData.length - 1 ? { color: colors.accent, fontFamily: 'Inter_600SemiBold' } : { color: colors.textMuted },
-                }))
-              : trendData;
-            return (
-            <View style={styles.card}>
-              <View style={styles.trendHeader}>
-                <Text style={styles.chartTitle}>{selectedCat ? `${selectedCat} · 6 months` : '6-month spending trend'}</Text>
-                {selectedCat && (
-                  <TouchableOpacity onPress={() => setSelectedCat(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Show all categories">
-                    <Text style={styles.trendClear}>Show all</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <BarChart
-                data={bars}
-                barWidth={28}
-                barBorderRadius={4}
-                noOfSections={4}
-                spacing={20}
-                xAxisThickness={0}
-                yAxisThickness={0}
-                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={fmtY}
-                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                hideRules
-                isAnimated
-                disableScroll
-              />
-            </View>
-            );
-          })()}
+            <Feather name="chevron-right" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
 
           {/* Spending Forecast (current month only) */}
           {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
@@ -756,6 +680,10 @@ const styles = StyleSheet.create({
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   chartSub: { ...type.caption, color: colors.textMuted, marginTop: -space.sm + 2, marginBottom: space.md },
   donutHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm },
+  insightsLink: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  insightsLinkIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  insightsLinkTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  insightsLinkSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
   trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   whatifLead: { ...type.body, color: colors.textSecondary },

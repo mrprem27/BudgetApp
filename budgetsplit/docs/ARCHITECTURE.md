@@ -44,7 +44,8 @@ afford check, savings goals) ships as optional feature-flagged modules.
 | Runtime | React Native + **Expo SDK 56** (check `https://docs.expo.dev/versions/v56.0.0/` before any Expo API work) |
 | Navigation | **Expo Router** (file-based, `app/`) |
 | Database | **expo-sqlite** (`budgetsplit.db`, WAL mode) |
-| Global state | **Zustand** (`src/store/index.ts`) — *largely vestigial; see §6* |
+| Data loading | **`useScreenData`** (`src/hooks/`) over SQLite + `DataRefreshProvider` — the standard per-screen pattern (see AGENTS.md → State & Data Access) |
+| Global state | **Zustand** (`src/store/index.ts`) — small app-wide client state only (`me`, `groups`), hydrated at root by `StoreHydrator`; not a data mirror |
 | Local prefs | **AsyncStorage** (the real settings store; see §7) |
 | Charts | **react-native-svg** (donut, health ring) + **gifted-charts** (reports trend) |
 | Gestures/animation | **react-native-gesture-handler**, **react-native-reanimated**, RN `Animated` |
@@ -237,24 +238,24 @@ an AsyncStorage marker with DB writes — both documented in BRUTAL_ANALYSIS).
 | `persons.ts` | People CRUD, `getMe`, group membership, avatars |
 | `categories.ts` | Per-group categories CRUD (with usage counts) |
 | `categoryBudgets.ts` | Per-category budget limits (delete-all-then-reinsert) |
-| `balances.ts` | **Canonical net-balance SQL** (`getGroupNet`, `getGlobalNet`), spending/income, `getFriendBalances` |
+| `balances.ts` | **Canonical net-balance SQL** (`getGroupNet`, `getGlobalNet`), spending/income, `getFriendBalances`, **`getMyExposure`** (single source for global owe/owed; pure `summarizeExposure`) |
 | `audit.ts` | `logAudit` (call inside caller's txn), `getAuditLog` |
 | `savings.ts` (471 L) | Goals + pool ledger + auto-funding; **also de-facto reporting module** (`getCashPosition`, `getAffordSnapshot`, `buildSavingsInsights`) |
 
-### State layer (`src/store/index.ts`)
-One Zustand store: `persons`, `groups`, `currentGroupId`, `txns`, `isLocked`,
-`biometricEnabled` + actions. **It is overwhelmingly vestigial:**
-- Only **2 screens** import it (`index.tsx`, `groups.tsx`) and they mostly **write** to it.
-- The app is **SQLite-direct**: every screen loads via `useSQLiteContext()` + query
-  functions into local `useState`. `getMe(db)` is called directly at ~20 sites; the
-  store's `getMe()`/`persons` are never read for rendering.
-- `txns`/`addTxn`/`removeTxn`/`currentGroupId`/`isLocked`/`biometricEnabled` have **zero
-  read consumers** — dead store surface.
+### State & data-loading layer
+The app is **SQLite-direct / local-first**: SQLite is the single source of truth. Two pieces
+standardize how screens read it (see AGENTS.md → "State & Data Access"):
 
-**Implication:** there is no single in-memory source of truth; the store can silently
-diverge from the DB. The pragmatic model today is "SQLite is the source; reload after
-every mutation." See REFACTORING_PLAN for the decision (make the store authoritative, or
-delete the dead surface).
+- **`src/hooks/useScreenData.ts`** — the standard per-screen loader. Owns
+  `loading`/`error`/`refreshing`, focus refetch, cross-screen refetch (via
+  `DataRefreshProvider`), and pull-to-refresh. Screens pass a `(db) => Promise<T>` loader and
+  destructure `data`. Replaces the old hand-rolled `useState`+`load()`+try/catch pattern.
+  After a write, callers `refresh()` (from `useDataRefresh`) to re-run all mounted loaders.
+- **`src/store/index.ts`** (Zustand) — small global *client* state only: `me` and `groups`,
+  the values read on nearly every screen. Hydrated once at the root by
+  `components/system/StoreHydrator.tsx` and re-hydrated on the data-change signal. It is **not**
+  a data mirror — everything else loads through `useScreenData`. (Historically this store held
+  dead `txns`/`currentGroupId`/`isLocked`/`biometricEnabled` fields; those were removed.)
 
 ---
 

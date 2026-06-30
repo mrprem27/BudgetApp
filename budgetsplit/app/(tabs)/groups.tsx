@@ -17,10 +17,10 @@ import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGr
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
-import { getGlobalNet, getGroupNet, getFriendBalances, type FriendBalance } from '../../src/db/queries/balances';
+import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
-import { simplify } from '../../src/lib/settle';
 import { formatCompact } from '../../src/lib/money';
+import { oweView } from '../../src/lib/owe';
 import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -54,7 +54,6 @@ export default function GroupsScreen() {
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [loadError, setLoadError] = useState(false);
-  const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
   const [memberMap, setMemberMap] = useState<Record<string, Person[]>>({});
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
@@ -88,26 +87,11 @@ export default function GroupsScreen() {
       setHealth(h);
       setMemberMap(mm);
 
-      // Balances hero — who-owes-whom across all shared groups, from my view.
-      const [net, persons] = await Promise.all([getGlobalNet(db), getAllPersons(db)]);
+      // People balances — who-owes-whom across all groups, from my view.
+      // Single source of truth: getMyExposure (per-person, after all settlements).
+      const persons = await getAllPersons(db);
       setAllPersons(persons.filter(p => !p.is_me));
-      if (me) {
-        const pmap = new Map(persons.map(p => [p.id, p]));
-        const mine = simplify(net).filter(s => s.from === me.id || s.to === me.id);
-        let youOwe = 0, youAreOwed = 0;
-        const rows = mine.map(s => {
-          const iPay = s.from === me.id;
-          if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
-          const otherId = iPay ? s.to : s.from;
-          const other = pmap.get(otherId);
-          return { key: `${s.from}-${s.to}`, otherId, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
-        });
-        setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
-        setFriends(await getFriendBalances(db, me.id));
-      } else {
-        setBal(null);
-        setFriends([]);
-      }
+      setFriends(me ? (await getMyExposure(db, me.id)).perPerson : []);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -251,9 +235,14 @@ export default function GroupsScreen() {
               <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
-                <Text style={[styles.balSub, { color: f.net > 0 ? colors.income : colors.expense }]}>
-                  {f.net > 0 ? 'owes you' : 'you owe'} {formatCompact(Math.abs(f.net))}
-                </Text>
+                {(() => {
+                  const ov = oweView(f.net);
+                  return (
+                    <Text style={[styles.balSub, { color: ov.color }]}>
+                      {ov.label} {formatCompact(ov.amount)}
+                    </Text>
+                  );
+                })()}
               </View>
               <TouchableOpacity
                 style={styles.settleChip}

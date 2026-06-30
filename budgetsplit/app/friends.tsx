@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -15,52 +15,45 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { getAllPersons, updatePersonName, setPersonImage, insertPerson } from '../src/db/queries/persons';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
-import { getMe } from '../src/db/queries/persons';
 import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
 import { formatCompact } from '../src/lib/money';
+import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
 import type { Person } from '../src/db/queries/persons';
+import { useScreenData } from '../src/hooks/useScreenData';
+import { useStore } from '../src/store';
+import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 
 export default function FriendsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const [me, setMe] = useState<Person | null>(null);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [balances, setBalances] = useState<Record<string, FriendBalance>>({});
-  const [loadError, setLoadError] = useState(false);
+  const me = useStore((s) => s.me);
+  const { refresh } = useDataRefresh();
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [query, setQuery] = useState('');
 
+  const { data, error: loadError, reload } = useScreenData(async (db) => {
+    const [all, bals] = await Promise.all([
+      getAllPersons(db),
+      me ? getFriendBalances(db, me.id) : Promise.resolve([] as FriendBalance[]),
+    ]);
+    const balances: Record<string, FriendBalance> = {};
+    for (const b of bals) balances[b.personId] = b;
+    return { people: all.filter(p => !p.is_me), balances };
+  }, [me?.id]);
+  const people = data?.people ?? [];
+  const balances = data?.balances ?? {};
+
   const q = query.trim().toLowerCase();
   const filtered = q ? people.filter(p => p.name.toLowerCase().includes(q)) : people;
 
-  useFocusEffect(useCallback(() => { load(); }, []));
-
-  async function load() {
-    try {
-      const meRow = await getMe(db);
-      const [all, bals] = await Promise.all([
-        getAllPersons(db),
-        meRow ? getFriendBalances(db, meRow.id) : Promise.resolve([]),
-      ]);
-      setMe(meRow);
-      setPeople(all.filter(p => !p.is_me));
-      const map: Record<string, FriendBalance> = {};
-      for (const b of bals) map[b.personId] = b;
-      setBalances(map);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
-
   async function changePhoto(p: Person) {
     const uri = await pickAndSaveAvatar(p.id);
-    if (uri) { await setPersonImage(db, p.id, uri); haptic.success(); await load(); }
+    if (uri) { await setPersonImage(db, p.id, uri); haptic.success(); refresh(); }
   }
 
   async function handleAddFriend() {
@@ -71,7 +64,7 @@ export default function FriendsScreen() {
       await insertPerson(db, trimmed, color);
       haptic.success();
       setAddName(''); setShowAdd(false);
-      await load();
+      refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -90,7 +83,7 @@ export default function FriendsScreen() {
       await updatePersonName(db, renamePerson.id, trimmed);
       haptic.success();
       setRenamePerson(null);
-      await load();
+      refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -110,7 +103,7 @@ export default function FriendsScreen() {
         }
       />
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           <Text style={styles.intro}>People you split with. No account needed — names only.</Text>
@@ -167,11 +160,17 @@ export default function FriendsScreen() {
                       <TouchableOpacity style={{ flex: 1 }} onPress={() => openRename(p)} accessibilityRole="button" accessibilityLabel={`Rename ${p.name}`}>
                         <Text style={styles.name}>{p.name}</Text>
                         <View style={styles.chipRow}>
-                          <View style={[styles.balChip, { backgroundColor: net > 0 ? colors.income + '1A' : net < 0 ? colors.expense + '1A' : colors.bgMuted }]}>
-                            <Text style={[styles.balChipText, { color: net > 0 ? colors.income : net < 0 ? colors.expense : colors.textSecondary }]}>
-                              {net > 0 ? `owes you ${formatCompact(net)}` : net < 0 ? `you owe ${formatCompact(-net)}` : 'settled'}
-                            </Text>
-                          </View>
+                          {(() => {
+                            const ov = oweView(net);
+                            const settled = ov.direction === 'settled';
+                            return (
+                              <View style={[styles.balChip, { backgroundColor: settled ? colors.bgMuted : ov.color + '1A' }]}>
+                                <Text style={[styles.balChipText, { color: settled ? colors.textSecondary : ov.color }]}>
+                                  {settled ? ov.label : `${ov.label} ${formatCompact(ov.amount)}`}
+                                </Text>
+                              </View>
+                            );
+                          })()}
                           {groupCount > 0 && <Text style={styles.groupsCount}>{groupCount} {groupCount === 1 ? 'group' : 'groups'}</Text>}
                         </View>
                       </TouchableOpacity>

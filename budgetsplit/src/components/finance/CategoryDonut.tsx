@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { G, Path } from 'react-native-svg';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type } from '../tokens';
 import { formatCompact } from '../../lib/money';
 import { computeDonutWedges, type DonutSeg, type DonutWedge } from '../../lib/donut';
 
@@ -41,13 +41,16 @@ type Props = {
   data: DonutSeg[];
   total: number;
   onOpen: (seg: DonutSeg) => void;
-  /** Fires when the highlighted wedge changes (tap to select, tap again / data change to clear). */
+  /** Controlled selection by category name (kept in sync with the top labels + trend). */
+  selectedName?: string | null;
+  /** Fires when a wedge is tapped — reports the new selection (null = cleared). */
   onSelect?: (seg: DonutSeg | null) => void;
 };
 
-export function CategoryDonut({ data, total, onOpen, onSelect }: Props) {
-  const [sel, setSel] = useState<number | null>(null);
+export function CategoryDonut({ data, total, onOpen, selectedName, onSelect }: Props) {
   const segs = useMemo(() => computeDonutWedges(data, total, { gap: GAP }), [data, total]);
+  // Selection is controlled by the parent via `selectedName`.
+  const sel = selectedName ? segs.findIndex(s => s.name === selectedName) : -1;
 
   const opacityRefs = useRef<Animated.Value[]>([]);
 
@@ -56,16 +59,11 @@ export function CategoryDonut({ data, total, onOpen, onSelect }: Props) {
     opacityRefs.current = segs.map(() => new Animated.Value(1));
   }
 
-  // Reset selection whenever the underlying data changes (tab switch, reload)
-  useEffect(() => {
-    setSel(null);
-  }, [segs]);
-
   // Drive opacity animation whenever selection changes
   useEffect(() => {
     const anims = opacityRefs.current.map((anim, i) =>
       Animated.timing(anim, {
-        toValue: sel === null ? 1 : sel === i ? 1 : DIM,
+        toValue: sel < 0 ? 1 : sel === i ? 1 : DIM,
         duration: 220,
         easing: Easing.out(Easing.ease),
         useNativeDriver: false,
@@ -74,12 +72,10 @@ export function CategoryDonut({ data, total, onOpen, onSelect }: Props) {
     Animated.parallel(anims).start();
   }, [sel]);
 
-  const selected = sel !== null && sel < segs.length ? segs[sel] : null;
+  const selected = sel >= 0 && sel < segs.length ? segs[sel] : null;
 
   function handleWedgePress(i: number) {
-    const next = sel === i ? null : i;
-    setSel(next);
-    onSelect?.(next === null ? null : (data[next] ?? null));
+    onSelect?.(sel === i ? null : (data[i] ?? null));
   }
 
   if (!segs.length) {
@@ -137,25 +133,6 @@ export function CategoryDonut({ data, total, onOpen, onSelect }: Props) {
           )}
         </View>
       </View>
-
-      {/* Quick-pick chips */}
-      <View style={styles.chips}>
-        {segs.map((seg, i) => {
-          const on = sel === i;
-          return (
-            <TouchableOpacity
-              key={seg.name}
-              style={[styles.chip, on && styles.chipOn]}
-              onPress={() => setSel(on ? null : i)}
-            >
-              <View style={[styles.chipDot, { backgroundColor: seg.color }]} />
-              <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
-                {seg.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
     </View>
   );
 }
@@ -175,12 +152,6 @@ const styles = StyleSheet.create({
   viewLink: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: 4 },
   spentLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
   tapHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: space.md },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill },
-  chipOn: { backgroundColor: colors.bgMuted },
-  chipDot: { width: 8, height: 8, borderRadius: 4 },
-  chipText: { ...type.caption, color: colors.textSecondary },
-  chipTextOn: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   empty: { height: 80, alignItems: 'center', justifyContent: 'center' },
   emptyText: { ...type.body, color: colors.textMuted },
 });

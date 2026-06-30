@@ -219,3 +219,45 @@ Never raw hex. Always use tokens.
 - **Import from tokens**: from inside a component subfolder use `import { colors, type, space, radius, shadow, gradients } from '../tokens'`; screens import components via `../../src/components/<folder>/<Name>`.
 - **No `any` types** unless wrapping an untyped third-party API.
 - **Null checks**: check results before using — DB queries can return null for missing rows.
+
+---
+
+## State & Data Access
+
+The app is **local-first**: SQLite is the single source of truth. There is no Redux/React Query
+and no in-memory data mirror. Layering:
+
+| Layer | Lives in | Rule |
+|---|---|---|
+| Data (SQLite reads/writes) | `src/db/queries/` | All SQL here. Screens never inline SQL. |
+| Pure logic / engines | `src/lib/` | No React, no `db`, no RN. Unit-testable (e.g. `settle`, `owe`, `savingsEngine`, `money`). |
+| Reusable hooks | `src/hooks/` | React hooks shared across screens (e.g. `useScreenData`). |
+| Global client state | `src/store/` (zustand) | Tiny + app-wide only (`me`, `groups`). **Not** a data mirror. |
+| Screens | `app/` | Compose the above; see "screen thinness" below. |
+
+- **Loading data in a screen → use `useScreenData`** (`src/hooks/useScreenData.ts`). It owns the
+  `loading`/`error`/`refreshing` states, focus refetch, cross-screen refetch, and pull-to-refresh.
+  Do **not** hand-roll `useState`+`load()`+try/catch+`useFocusEffect`+`useRefresh`.
+  ```tsx
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
+    async (db) => ({ items: await getItems(db, groupId) }),
+    [groupId],
+  );
+  ```
+  Reference implementations: [app/friends.tsx](app/friends.tsx) (simple), [app/personal.tsx](app/personal.tsx) (multi-value).
+- **After a write, call `refresh()`** from `useDataRefresh()` (`components/system/DataRefreshProvider`).
+  That re-runs every mounted screen's `useScreenData` *and* re-hydrates the store — never manually
+  poke other screens. (A screen-local re-fetch is `reload()` from the hook.)
+- **Current user / groups → read from the store** (`useStore(s => s.me)` / `s.groups`), don't
+  re-query `getMe`/`getAllGroups` in every loader. The store is hydrated at the root by
+  `StoreHydrator` and refreshed on the data-change signal.
+
+## Project Structure — screen thinness
+
+- Screens **compose**; they don't hold business logic. Heavy derivation/computation belongs in
+  `src/lib/` (pure) or a feature hook in `src/hooks/`.
+- When a screen file grows past **~300 lines**, extract: pull sub-views into
+  `components/finance/<area>/` and logic into `src/lib`/`src/hooks`. Don't let screens become
+  1000-line monoliths.
+- Migrate legacy screens to `useScreenData` **opportunistically** — whenever you're already
+  editing one for a feature, convert it; no big-bang migration.

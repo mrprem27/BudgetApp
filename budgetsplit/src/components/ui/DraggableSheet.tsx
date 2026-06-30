@@ -35,11 +35,16 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   const [kbVisible, setKbVisible] = useState(false);
   const scrollY = useRef(0);
+  // Guards so onClose fires exactly once and never after unmount: drag-dismiss,
+  // backdrop-tap and a parent flipping `visible` can otherwise overlap.
+  const closingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKbVisible(true));
     const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKbVisible(false));
-    return () => { show.remove(); hide.remove(); };
+    return () => { mountedRef.current = false; show.remove(); hide.remove(); };
   }, []);
 
   // Spring in on mount.
@@ -49,7 +54,11 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   }, [translateY]);
 
   const animateClose = () => {
-    Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); });
+    if (closingRef.current) return;
+    closingRef.current = true;
+    Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(({ finished }) => {
+      if (finished && mountedRef.current) onClose();
+    });
   };
   const springBack = () => Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 0, speed: 16 }).start();
 

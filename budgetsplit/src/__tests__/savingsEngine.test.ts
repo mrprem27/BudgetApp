@@ -1,4 +1,4 @@
-import { periodsElapsed, advanceAnchor, planAutoAllocations, monthsToSweep, planReduction, type GoalLike, type ReduceGoal } from '../lib/savingsEngine';
+import { periodsElapsed, advanceAnchor, planAutoAllocations, planOverspendRaid, type GoalLike, type RaidGoal } from '../lib/savingsEngine';
 
 const jan1 = new Date('2026-01-01T00:00:00Z').getTime();
 const apr1 = new Date('2026-04-01T00:00:00Z').getTime();
@@ -23,7 +23,7 @@ const goal = (id: string, priority: GoalLike['priority'], allocation: number, ta
   ({ id, priority, allocation, target, anchor, frequency: 'monthly' });
 
 describe('planAutoAllocations', () => {
-  it('funds each goal its allocation × elapsed periods when the pool is ample', () => {
+  it('funds each goal its allocation × elapsed periods when cash is ample', () => {
     const plan = planAutoAllocations([goal('a', 'high', 1000, 100000)], {}, 100000, apr1);
     expect(plan).toEqual([{ goalId: 'a', amount: 3000, newAnchor: apr1 }]);
   });
@@ -33,9 +33,9 @@ describe('planAutoAllocations', () => {
     expect(plan[0].amount).toBe(2500); // 3×1000 capped at target 2500
   });
 
-  it('prioritises High over Low when the pool is short', () => {
+  it('prioritises High over Low when cash is short', () => {
     const goals = [goal('low', 'low', 1000, 100000), goal('hi', 'high', 1000, 100000)];
-    const plan = planAutoAllocations(goals, {}, 2000, apr1); // each due 3000, pool only 2000
+    const plan = planAutoAllocations(goals, {}, 2000, apr1); // each due 3000, cash only 2000
     const hi = plan.find(p => p.goalId === 'hi')!;
     const low = plan.find(p => p.goalId === 'low');
     expect(hi.amount).toBe(2000);     // high goal funded first
@@ -43,7 +43,7 @@ describe('planAutoAllocations', () => {
   });
 
   it('advances the anchor only for funded periods when short', () => {
-    // due 3000 (3 months), pool funds 2000 = 2 whole periods → anchor moves 2 months
+    // due 3000 (3 months), cash funds 2000 = 2 whole periods → anchor moves 2 months
     const plan = planAutoAllocations([goal('a', 'high', 1000, 100000)], {}, 2000, apr1);
     expect(plan[0].amount).toBe(2000);
     expect(plan[0].newAnchor).toBe(advanceAnchor('monthly', jan1, 2));
@@ -60,35 +60,21 @@ describe('planAutoAllocations', () => {
   });
 });
 
-describe('monthsToSweep', () => {
-  it('starts fresh on first run (no back-sweep)', () => {
-    const r = monthsToSweep(null, new Date('2026-06-18'));
-    expect(r.months).toEqual([]);
-    expect(r.newMarker).toBe('2026-05'); // last completed month
-  });
-  it('sweeps each completed month after the marker, never the current one', () => {
-    const r = monthsToSweep('2026-02', new Date('2026-06-18'));
-    // completed months after Feb, up to May
-    expect(r.months.length).toBe(3); // Mar, Apr, May
-    expect(r.newMarker).toBe('2026-05');
-  });
-  it('returns no months when already caught up', () => {
-    const r = monthsToSweep('2026-05', new Date('2026-06-18'));
-    expect(r.months).toEqual([]);
-    expect(r.newMarker).toBe('2026-05');
-  });
-});
-
-describe('planReduction', () => {
-  const g = (id: string, priority: ReduceGoal['priority'], locked = 0): ReduceGoal => ({ id, priority, locked });
-  it('reduces lowest-priority unlocked goals first, protecting high & locked', () => {
+describe('planOverspendRaid', () => {
+  const g = (id: string, priority: RaidGoal['priority'], locked = 0): RaidGoal => ({ id, priority, locked });
+  it('raids lowest-priority unlocked goals first, protecting high & locked', () => {
     const goals = [g('hi', 'high'), g('lo', 'low'), g('mid', 'medium'), g('lk', 'low', 1)];
     const saved = { hi: 5000, lo: 3000, mid: 4000, lk: 9999 };
-    const out = planReduction(goals, saved, 5000);
+    const out = planOverspendRaid(goals, saved, 5000);
     // low first (3000), then medium (2000) — high & locked untouched
-    expect(out).toEqual([{ goalId: 'lo', reduceBy: 3000 }, { goalId: 'mid', reduceBy: 2000 }]);
+    expect(out).toEqual([{ goalId: 'lo', amount: 3000 }, { goalId: 'mid', amount: 2000 }]);
   });
-  it('returns nothing when there is no excess', () => {
-    expect(planReduction([g('a', 'low')], { a: 1000 }, 0)).toEqual([]);
+  it('covers only what the goals hold when the deficit exceeds savings', () => {
+    const goals = [g('a', 'low'), g('b', 'medium')];
+    const out = planOverspendRaid(goals, { a: 1000, b: 1000 }, 5000);
+    expect(out).toEqual([{ goalId: 'a', amount: 1000 }, { goalId: 'b', amount: 1000 }]); // partial
+  });
+  it('returns nothing when there is no deficit', () => {
+    expect(planOverspendRaid([g('a', 'low')], { a: 1000 }, 0)).toEqual([]);
   });
 });

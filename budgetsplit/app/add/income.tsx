@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
 import { colors } from '../../src/constants/colors';
+import { type RecurFreq } from '../../src/constants/enums';
 import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
@@ -31,15 +32,11 @@ import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
 
-const SOURCE_CHIPS = [
-  { label: 'Salary',     emoji: '💼' },
-  { label: 'Freelance',  emoji: '🧑‍💻' },
-  { label: 'Investment', emoji: '📈' },
-  { label: 'Other',      emoji: '💰' },
-];
+// Income "source" = the income category. Quick chips are the real categories
+// (no hardcoded list that can mismatch); "More" opens the full picker.
+const QUICK_SOURCES = 5;
 
-type Freq = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
-const FREQS: { key: Freq; label: string }[] = [
+const FREQS: { key: RecurFreq; label: string }[] = [
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
@@ -61,7 +58,6 @@ export default function AddIncomeScreen() {
   const [amountText, setAmountText] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState<Category | null>(null);
-  const [sourceChip, setSourceChip] = useState<string>('Salary');
   const [budgetAllocated, setBudgetAllocated] = useState(0);
   const [budgetSpent, setBudgetSpent] = useState(0);
   const amtRef = useRef<TextInput>(null);
@@ -69,7 +65,7 @@ export default function AddIncomeScreen() {
   const [date, setDate] = useState(Date.now());
   const [showDate, setShowDate] = useState(false);
   const [recurOn, setRecurOn] = useState(false);
-  const [freq, setFreq] = useState<Freq>('monthly');
+  const [freq, setFreq] = useState<RecurFreq>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [showEndDate, setShowEndDate] = useState(false);
@@ -105,7 +101,7 @@ export default function AddIncomeScreen() {
               if ((txn.recur_interval ?? 0) >= 365) setFreq('yearly');
               else { setFreq('custom'); setRecurInterval(String(txn.recur_interval ?? 1)); }
             } else {
-              setFreq(txn.recur_freq as Freq);
+              setFreq(txn.recur_freq as RecurFreq);
             }
             if (txn.recur_end) setRecurEndMs(txn.recur_end);
           }
@@ -230,8 +226,8 @@ export default function AddIncomeScreen() {
           {/* Source + date row */}
           <View style={styles.sourceRow}>
             <TouchableOpacity style={styles.sourcePill} onPress={() => { Keyboard.dismiss(); setShowCatPicker(true); }} accessibilityRole="button" accessibilityLabel="Select source">
-              <Text style={styles.sourcePillEmoji}>{SOURCE_CHIPS.find(s => s.label === sourceChip)?.emoji ?? '💼'}</Text>
-              <Text style={styles.sourcePillText} numberOfLines={1}>{category?.name ?? sourceChip}</Text>
+              <Feather name={asFeather(category?.icon, 'briefcase')} size={14} color={colors.income} />
+              <Text style={styles.sourcePillText} numberOfLines={1}>{category?.name ?? 'Select source'}</Text>
               <Feather name="chevron-down" size={12} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.datePill} onPress={() => { Keyboard.dismiss(); setShowDate(true); }} accessibilityRole="button" accessibilityLabel="Select date">
@@ -259,28 +255,31 @@ export default function AddIncomeScreen() {
             </View>
           )}
 
-          {/* SOURCE chips */}
+          {/* SOURCE chips — real income categories; one tap selects. "More" = full picker. */}
           <View style={styles.sourceChipsWrap}>
             <Text style={styles.sourceChipsLabel}>SOURCE</Text>
             <View style={styles.sourceChipsRow}>
-              {SOURCE_CHIPS.map(s => (
-                <TouchableOpacity
-                  key={s.label}
-                  style={[styles.sourceChip, sourceChip === s.label && styles.sourceChipActive]}
-                  onPress={() => {
-                    setSourceChip(s.label);
-                    haptic.selection();
-                    // Sync to matching category if it exists
-                    const match = categories.find(c => c.name.toLowerCase() === s.label.toLowerCase());
-                    if (match) setCategory(match);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: sourceChip === s.label }}
-                >
-                  <Text style={styles.sourceChipEmoji}>{s.emoji}</Text>
-                  <Text style={[styles.sourceChipText, sourceChip === s.label && styles.sourceChipTextActive]}>{s.label}</Text>
+              {categories.slice(0, QUICK_SOURCES).map(c => {
+                const active = category?.id === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.sourceChip, active && styles.sourceChipActive]}
+                    onPress={() => { haptic.selection(); setCategory(c); }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Feather name={asFeather(c.icon, 'briefcase')} size={12} color={active ? colors.bg : colors.textSecondary} />
+                    <Text style={[styles.sourceChipText, active && styles.sourceChipTextActive]}>{c.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {categories.length > QUICK_SOURCES && (
+                <TouchableOpacity style={styles.sourceChip} onPress={() => { Keyboard.dismiss(); setShowCatPicker(true); }} accessibilityRole="button" accessibilityLabel="More sources">
+                  <Feather name="more-horizontal" size={14} color={colors.textSecondary} />
+                  <Text style={styles.sourceChipText}>More</Text>
                 </TouchableOpacity>
-              ))}
+              )}
             </View>
           </View>
 
@@ -450,7 +449,6 @@ const styles = StyleSheet.create({
   // Source + date row
   sourceRow: { flexDirection: 'row', gap: space.sm },
   sourcePill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
-  sourcePillEmoji: { fontSize: 14 },
   sourcePillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
   datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
@@ -471,7 +469,6 @@ const styles = StyleSheet.create({
   sourceChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   sourceChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: colors.bgCard, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
   sourceChipActive: { backgroundColor: colors.income, borderColor: colors.income },
-  sourceChipEmoji: { fontSize: 13 },
   sourceChipText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
   sourceChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
 

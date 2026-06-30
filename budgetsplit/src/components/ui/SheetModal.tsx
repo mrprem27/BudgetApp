@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DraggableSheet } from './DraggableSheet';
 
 type Props = {
@@ -23,9 +24,14 @@ export function SheetModal({ visible, onClose, title, children, scroll = true, h
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       {visible && (
-        <DraggableSheet onClose={onClose} title={title} scroll={scroll} headerRight={headerRight}>
-          {children}
-        </DraggableSheet>
+        // RN <Modal> renders in a detached native view tree, so gesture-handler
+        // needs its own root inside it — without this the drag-to-dismiss gesture
+        // crashes. (The app-level root in _layout doesn't reach into the Modal.)
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <DraggableSheet onClose={onClose} title={title} scroll={scroll} headerRight={headerRight}>
+            {children}
+          </DraggableSheet>
+        </GestureHandlerRootView>
       )}
     </Modal>
   );

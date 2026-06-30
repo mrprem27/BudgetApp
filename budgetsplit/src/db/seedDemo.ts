@@ -20,7 +20,9 @@ import { getMe } from './queries/persons';
 import { insertTxn, insertItemizedTxn, recordSettlement, softDeleteTxn } from './queries/transactions';
 import { pauseRecurring, endRecurring } from './queries/transactions';
 import { setCategoryBudgets } from './queries/categoryBudgets';
-import { insertGoal, addToPool, allocateToGoal, withdrawFromGoal } from './queries/savings';
+import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
+import { setMoneyProfile } from './queries/moneyProfile';
+import type { RecurFreq, PayMethod } from '../constants/enums';
 
 /** Rupees → integer paise. */
 const R = (rupees: number) => Math.round(rupees * 100);
@@ -28,7 +30,7 @@ const R = (rupees: number) => Math.round(rupees * 100);
 const ALL_TABLES = [
   'txn_payment', 'txn_share', 'line_item', 'recur_skip', 'txn',
   'category_budget', 'category', 'group_member', 'budget_group',
-  'savings_txn', 'savings_goal', 'audit_log', 'person',
+  'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
 ];
 
 /** Delete every row from every data table (settings/feature-flags untouched). */
@@ -133,7 +135,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await income('Interest', 1200, thisMonth(5), 'Savings interest');
 
   // --- Personal expenses (logged occurrences) ----------------------------
-  type Opt = { note?: string; pay?: 'upi' | 'cash' | 'bank'; lat?: number; lng?: number; place?: string; attach?: string };
+  type Opt = { note?: string; pay?: PayMethod; lat?: number; lng?: number; place?: string; attach?: string };
   const exp = (category: string, rupees: number, date: number, o: Opt = {}) =>
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date, category, note: o.note, payMethod: o.pay, lat: o.lat, lng: o.lng, placeLabel: o.place, attachmentUri: o.attach, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
 
@@ -175,10 +177,10 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await softDeleteTxn(db, doomed);
 
   // --- Personal recurring rules (templates) → Recurring tab + Subscriptions
-  const rule = (category: string, rupees: number, freq: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom', note: string, interval = 1) =>
+  const rule = (category: string, rupees: number, freq: RecurFreq, note: string, interval = 1) =>
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category, note, recurFreq: freq, recurInterval: interval, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
-  await rule('Subscriptions', 649, 'monthly', 'Netflix');
-  await rule('Subscriptions', 119, 'monthly', 'Spotify');
+  await rule('Entertainment', 649, 'monthly', 'Netflix');
+  await rule('Entertainment', 119, 'monthly', 'Spotify');
   await rule('Bills', 22000, 'monthly', 'Rent auto-pay');
   await rule('Insurance', 12000, 'yearly', 'Term insurance');
   await rule('Household Help', 800, 'weekly', 'House cleaning');                          // weekly frequency
@@ -195,12 +197,12 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date: Date.now() + inDays * DAY, category, note, recurFreq: freq, recurInterval: 1, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
   await dueRule('Bills', 400, 'weekly', 'Newspaper', 1);            // due tomorrow
   await dueRule('WiFi & Broadband', 999, 'monthly', 'Internet bill', 2);
-  await dueRule('Subscriptions', 130, 'monthly', 'Cloud storage', 3);
+  await dueRule('Entertainment', 130, 'monthly', 'Cloud storage', 3);
 
   // Repeating un-ruled charge (same category+amount, ~monthly) → "Maybe a subscription" detection.
-  await exp('Subscriptions', 199, thisMonth(10), { note: 'Prime Video' });
-  await exp('Subscriptions', 199, monthsBack(1, 10), { note: 'Prime Video' });
-  await exp('Subscriptions', 199, monthsBack(2, 10), { note: 'Prime Video' });
+  await exp('Entertainment', 199, thisMonth(10), { note: 'Prime Video' });
+  await exp('Entertainment', 199, monthsBack(1, 10), { note: 'Prime Video' });
+  await exp('Entertainment', 199, monthsBack(2, 10), { note: 'Prime Video' });
 
   // No-note expenses → TransactionRow shows the CATEGORY as the primary line (note-less path).
   await exp('Metro & Bus', 60, thisMonth(2));
@@ -275,26 +277,32 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { category: 'Health & Pharmacy', cadence: 'monthly', amount: R(1500) },
   ]);
 
-  // --- Savings: pool + goals (funded / reached / empty / deadline / w-draw)
-  await addToPool(db, R(150000), 'manual', 'Initial savings');
-  await addToPool(db, R(8000), 'auto', 'Month-end sweep');
+  // --- Money profile (Total Money breakdown): cash + investments + credit
+  await setMoneyProfile(db, {
+    openingCash: R(300000),
+    investments: R(150000),
+    creditLimit: R(60000),
+    creditUsed: R(10000),
+  });
+
+  // --- Savings: goals funded directly from cash (funded / reached / empty / deadline / w-draw)
   const emergency = await insertGoal(db, { name: 'Emergency Fund', target: R(100000), priority: 'high', icon: 'shield', color: '#0EA5E9', allocation: R(5000), frequency: 'monthly', locked: true });
-  await allocateToGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked
+  await fundGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked
   const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'medium', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
-  await allocateToGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
+  await fundGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
   const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'medium', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
-  await allocateToGoal(db, laptop.id, R(15000), 'manual');                              // partial
+  await fundGoal(db, laptop.id, R(15000), 'manual');                              // partial
   const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'low', icon: 'globe', color: '#34D399', allocation: R(3000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
-  await allocateToGoal(db, vacation.id, R(4000), 'manual');
-  await allocateToGoal(db, vacation.id, R(1000), 'auto');                                // auto-funded slice
+  await fundGoal(db, vacation.id, R(4000), 'manual');
+  await fundGoal(db, vacation.id, R(1000), 'auto');                                // auto-funded slice
   await withdrawFromGoal(db, vacation.id, R(2000), 'Changed plans');                    // withdrawal history → net ₹3,000
   const gift = await insertGoal(db, { name: 'Anniversary Gift', target: R(5000), priority: 'medium', icon: 'gift', color: '#F9A8D4' });
-  await allocateToGoal(db, gift.id, R(6000), 'manual');                                  // OVER-funded (120%) edge case
+  await fundGoal(db, gift.id, R(6000), 'manual');                                  // OVER-funded (120%) edge case
   const overdue = await insertGoal(db, { name: 'Tax Payment', target: R(40000), priority: 'high', icon: 'percent', color: '#FCD34D', target_date: Date.now() - 10 * 86400000 });
-  await allocateToGoal(db, overdue.id, R(20000), 'manual');                              // 50% funded, deadline PAST → overdue edge case
+  await fundGoal(db, overdue.id, R(20000), 'manual');                              // 50% funded, deadline PAST → overdue edge case
   // PRIMED FLOW: 97.5% funded → add just ₹500 to hit 100% and fire GoalCelebration.
   const almost = await insertGoal(db, { name: 'Weekend Getaway', target: R(20000), priority: 'medium', icon: 'map', color: '#2DD4BF' });
-  await allocateToGoal(db, almost.id, R(19500), 'manual');
+  await fundGoal(db, almost.id, R(19500), 'manual');
   await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.

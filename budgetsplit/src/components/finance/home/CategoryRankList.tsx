@@ -35,6 +35,8 @@ type Props = {
   onPressCategory: (name: string) => void;
   /** Toggles expand/collapse (reveal the rest of the categories inline). */
   onMore: () => void;
+  /** Highlight the row for this category (two-way sync with a donut/chart). */
+  selectedName?: string | null;
 };
 
 /**
@@ -44,17 +46,24 @@ type Props = {
  * the dashboard jump. Empty slots are faint placeholders; during `loading` they're
  * skeletons.
  */
-export function CategoryRankList({ rows, total, topN = 3, loading = false, expanded = false, onPressCategory, onMore }: Props) {
+export function CategoryRankList({ rows, total, topN = 3, loading = false, expanded = false, onPressCategory, onMore, selectedName }: Props) {
   const top = rows.slice(0, topN);
   const moreCount = Math.max(0, rows.length - topN);
-  const max = top.reduce((m, r) => Math.max(m, r.paise), 0) || 1;
+  // Bars scale to the largest *visible* row.
+  const max = (expanded ? rows : top).reduce((m, r) => Math.max(m, r.paise), 0) || 1;
   const empty = !loading && rows.length === 0;
+  // Collapsed keeps a fixed topN height (no jump on the dashboard); expanded shows all.
+  const displayRows: (CategoryRow | null)[] = loading
+    ? Array.from({ length: topN }, () => null)
+    : expanded
+    ? rows
+    : Array.from({ length: topN }, (_, i) => top[i] ?? null);
 
   return (
     <View>
       <Text style={styles.sectionLabel}>WHERE IT WENT</Text>
       <View style={styles.card}>
-        {Array.from({ length: topN }).map((_, i) => {
+        {displayRows.map((row, i) => {
           if (loading) {
             return (
               <View key={i} style={styles.row}>
@@ -65,7 +74,6 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
               </View>
             );
           }
-          const row = top[i];
           if (!row) {
             // Empty slot keeps the row's height so the card doesn't shrink between
             // periods — but instead of a fake faint row it shows a single quiet
@@ -81,21 +89,23 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
           const vis = categoryVisual(row.name);
           const barPct = Math.round((row.paise / max) * 100);
           const pctOfTotal = total > 0 ? row.paise / total : 0;
-          // Red bar when this single category dominates spend.
-          const barColor = pctOfTotal >= 0.5 ? colors.expense : colors.accent;
+          const isSel = !!selectedName && row.name === selectedName;
+          // Selected → category color; single dominant category → red; else accent.
+          const barColor = isSel ? vis.color : pctOfTotal >= 0.5 ? colors.expense : colors.accent;
           return (
             <TouchableOpacity
               key={row.name}
-              style={styles.row}
+              style={[styles.row, isSel && styles.rowSelected]}
               activeOpacity={0.7}
               onPress={() => onPressCategory(row.name)}
               accessibilityRole="button"
+              accessibilityState={{ selected: isSel }}
               accessibilityLabel={`${row.name}, ${formatCompact(row.paise)}`}
             >
               <View style={[styles.icon, { backgroundColor: vis.color + '22' }]}>
                 <Feather name={vis.icon} size={14} color={vis.color} />
               </View>
-              <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
+              <Text style={[styles.name, isSel && styles.nameSelected]} numberOfLines={1}>{row.name}</Text>
               <AnimatedBar pct={barPct} color={barColor} />
               <Text style={styles.amount}>{formatCompact(row.paise)}</Text>
             </TouchableOpacity>
@@ -103,12 +113,8 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
         })}
         {/* "more" line is always reserved (link or spacer) so height never changes. */}
         {!loading && moreCount > 0 ? (
-          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={`Show ${moreCount} more categories`}>
-            <Text style={styles.more}>+ {moreCount} more {moreCount === 1 ? 'category' : 'categories'}</Text>
-          </TouchableOpacity>
-        ) : !loading && expanded ? (
-          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel="Show fewer categories">
-            <Text style={styles.more}>Show less</Text>
+          <TouchableOpacity onPress={onMore} accessibilityRole="button" accessibilityLabel={expanded ? 'Show fewer categories' : `Show ${moreCount} more categories`}>
+            <Text style={styles.more}>{expanded ? 'Show less' : `+ ${moreCount} more ${moreCount === 1 ? 'category' : 'categories'}`}</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.moreSpacer} />
@@ -121,7 +127,9 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
 const styles = StyleSheet.create({
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: 4, paddingVertical: 2 },
+  rowSelected: { backgroundColor: colors.bgMuted },
+  nameSelected: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   // flex (not a fixed width) so longer names get more room and truncate with … instead of a hard cut.
   name: { ...type.label, color: colors.textSecondary, flex: 1 },

@@ -15,6 +15,7 @@ import * as Location from 'expo-location';
 import { requestNotificationPermission } from '../../lib/notifications';
 import { setReminderPrefs } from '../../lib/reminders';
 import { finalizeOnboarding } from '../../lib/onboarding';
+import { setMoneyProfile } from '../../db/queries/moneyProfile';
 import { GROUP_COLORS } from '../../constants/palette';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { FadeIn } from '../ui/FadeIn';
@@ -230,11 +231,11 @@ function SlideArt({ kind, tint, active }: { kind: AnimKind; tint: string; active
   return <PrivacyArt tint={tint} active={active} />;
 }
 
-type Stage = 'hero' | 'intent' | 'features' | 'name' | 'income' | 'budget' | 'people' | 'permissions';
+type Stage = 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget' | 'people' | 'permissions';
 type IntentKey = 'personal' | 'split' | 'both';
 
 // The four setup steps after the name screen drive the progress dots.
-const SETUP_STEPS: Stage[] = ['income', 'budget', 'people', 'permissions'];
+const SETUP_STEPS: Stage[] = ['income', 'money', 'budget', 'people', 'permissions'];
 
 const INTENT_OPTIONS: { key: IntentKey; emoji: string; label: string; desc: string }[] = [
   { key: 'personal', emoji: '💰', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
@@ -281,6 +282,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [incomeText, setIncomeText] = useState('');     // free take-home entry (rupees)
   const [payday, setPayday] = useState(1);              // day of month salary lands
   const [budgetText, setBudgetText] = useState('');     // free monthly-budget entry (rupees)
+  const [cashText, setCashText] = useState('');         // total cash available (rupees)
+  const [investText, setInvestText] = useState('');     // total investments (rupees)
+  const [creditLimitText, setCreditLimitText] = useState(''); // credit card limit (rupees)
+  const [creditUsedText, setCreditUsedText] = useState('');   // credit already used (rupees)
   const [people, setPeople] = useState<string[]>([]);   // contacts added during onboarding
   const [personDraft, setPersonDraft] = useState('');
   const [notifPerm, setNotifPerm] = useState(false);
@@ -351,11 +356,20 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   }, [page, progress]);
 
   // Single commit point for the whole questionnaire — see lib/onboarding.ts.
+  // rupees text → integer paise
+  const toPaise = (t: string) => Math.max(0, Math.round((Number(t.replace(/[^0-9.]/g, '')) || 0) * 100));
+
   async function finalize() {
     setSaving(true);
     const ok = await finalizeOnboarding(db, {
       name, incomeNum, payday, budgetNum, people, addFirst: addFirstRef.current,
     });
+    await setMoneyProfile(db, {
+      openingCash: toPaise(cashText),
+      investments: toPaise(investText),
+      creditLimit: toPaise(creditLimitText),
+      creditUsed: toPaise(creditUsedText),
+    }).catch(() => { /* best-effort */ });
     if (ok) haptic.success(); else haptic.error();
     setSaving(false);
     onDone();
@@ -586,7 +600,51 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Text style={styles.daySub}>Salary lands on the {ordinal(payday)} of each month.</Text>
           </ScrollView>
           <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(incomeNum) : ''); setStage('budget'); }} />
+            <PrimaryButton label="Continue" onPress={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(incomeNum) : ''); setStage('money'); }} />
+            <TouchableOpacity onPress={() => setStage('money')} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </FadeIn>
+      )}
+
+      {/* MONEY STEP — what you have right now: cash, investments, credit */}
+      {stage === 'money' && (
+        <FadeIn key="money" style={[styles.page, { paddingBottom: bottomPad }]}>
+          <TouchableOpacity onPress={() => setStage('income')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
+            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <SetupDots step="money" />
+            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>What do you have right now?</Text>
+            <Text style={styles.slideBody}>Sets up your “Total Money”. Rough numbers are fine — you can edit anytime on the Plan screen.</Text>
+
+            <Text style={styles.fieldHeading}>CASH AVAILABLE</Text>
+            <View style={styles.amtField}>
+              <Text style={styles.amtRupee}>₹</Text>
+              <TextInput style={styles.amtInput} value={cashText} onChangeText={(t) => setCashText(t.replace(/[^0-9]/g, ''))} placeholder="50,000" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Cash available" />
+            </View>
+
+            <Text style={styles.fieldHeading}>INVESTMENTS</Text>
+            <View style={styles.amtField}>
+              <Text style={styles.amtRupee}>₹</Text>
+              <TextInput style={styles.amtInput} value={investText} onChangeText={(t) => setInvestText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Investments" />
+            </View>
+
+            <Text style={styles.fieldHeading}>CREDIT CARD LIMIT</Text>
+            <View style={styles.amtField}>
+              <Text style={styles.amtRupee}>₹</Text>
+              <TextInput style={styles.amtInput} value={creditLimitText} onChangeText={(t) => setCreditLimitText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Credit card limit" />
+            </View>
+
+            <Text style={styles.fieldHeading}>CREDIT ALREADY USED</Text>
+            <View style={styles.amtField}>
+              <Text style={styles.amtRupee}>₹</Text>
+              <TextInput style={styles.amtInput} value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Credit already used" />
+            </View>
+          </ScrollView>
+          <View style={styles.footer}>
+            <PrimaryButton label="Continue" onPress={() => setStage('budget')} />
             <TouchableOpacity onPress={() => setStage('budget')} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
               <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
@@ -597,7 +655,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       {/* BUDGET STEP — whole amount, the user's own number (no % of income) */}
       {stage === 'budget' && (
         <FadeIn key="budget" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('income')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
+          <TouchableOpacity onPress={() => setStage('money')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>

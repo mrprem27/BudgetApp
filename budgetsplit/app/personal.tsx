@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -11,19 +11,21 @@ import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
-import { AppRefreshControl, useRefresh } from '../src/components/ui/AppRefreshControl';
-import { getMyActivity, getRecurringForGroup, type MyActivityItem, type TxnWithSplits } from '../src/db/queries/transactions';
-import { getAllGroups, type BudgetGroup } from '../src/db/queries/groups';
-import { getAllPersons, getMe } from '../src/db/queries/persons';
-import { getFriendBalances } from '../src/db/queries/balances';
-import { getMyGlobalBudgetStatus, type CategoryBudgetStatus } from '../src/lib/budget';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { getMyActivity, getRecurringForGroup, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getAllGroups } from '../src/db/queries/groups';
+import { getAllPersons } from '../src/db/queries/persons';
+import { getMyExposure } from '../src/db/queries/balances';
+import { useScreenData } from '../src/hooks/useScreenData';
+import { useStore } from '../src/store';
+import { getMyGlobalBudgetStatus } from '../src/lib/budget';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
 import { categoryVisual } from '../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
+import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
-import type { Person } from '../src/db/queries/persons';
 
 type TabKey = 'activity' | 'budget' | 'recurring';
 const TABS: { key: TabKey; label: string }[] = [
@@ -37,62 +39,46 @@ type RecurGroup = { groupId: string; name: string; isPersonal: boolean; rules: T
 export default function PersonalScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const { refreshing, onRefresh } = useRefresh(() => load());
+  const me = useStore((s) => s.me);
+  const myId = me?.id ?? '';
 
   const [tab, setTab] = useState<TabKey>('activity');
-  const [me, setMe] = useState<Person | null>(null);
-  const [persons, setPersons] = useState<Person[]>([]);
-  const [activity, setActivity] = useState<MyActivityItem[]>([]);
-  const [groups, setGroups] = useState<BudgetGroup[]>([]);
-  const [recurGroups, setRecurGroups] = useState<RecurGroup[]>([]);
-  const [budget, setBudget] = useState<CategoryBudgetStatus[]>([]);
-  const [summary, setSummary] = useState({ owe: 0, lent: 0 });
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+    if (!me) throw new Error('No current user');
+    const [acts, allPersons, grps, exp, bud] = await Promise.all([
+      getMyActivity(db, me.id),
+      getAllPersons(db),
+      getAllGroups(db),
+      getMyExposure(db, me.id),
+      getMyGlobalBudgetStatus(db, me.id),
+    ]);
+    // Recurring rules grouped by their group (personal first).
+    const rulesByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+    const recurGroups: RecurGroup[] = grps
+      .map((g, i) => ({ groupId: g.id, name: g.is_personal === 1 ? 'Personal' : g.name, isPersonal: g.is_personal === 1, rules: rulesByGroup[i] }))
+      .filter(r => r.rules.length > 0)
+      .sort((a, b) => (a.isPersonal ? -1 : b.isPersonal ? 1 : 0));
+    return {
+      persons: allPersons,
+      activity: acts,
+      groups: grps,
+      budget: bud,
+      recurGroups,
+      // Owe / Lent summary — single source of truth (netted per person).
+      summary: { owe: exp.owe, lent: exp.owed },
+    };
+  }, [me?.id]);
 
-  async function load() {
-    try {
-      const meRow = await getMe(db);
-      if (!meRow) { setLoadError(true); return; }
-      const [acts, allPersons, grps, fb, bud] = await Promise.all([
-        getMyActivity(db, meRow.id),
-        getAllPersons(db),
-        getAllGroups(db),
-        getFriendBalances(db, meRow.id),
-        getMyGlobalBudgetStatus(db, meRow.id),
-      ]);
-      setMe(meRow);
-      setPersons(allPersons);
-      setActivity(acts);
-      setGroups(grps);
-      setBudget(bud);
+  const persons = data?.persons ?? [];
+  const activity = data?.activity ?? [];
+  const groups = data?.groups ?? [];
+  const budget = data?.budget ?? [];
+  const recurGroups = data?.recurGroups ?? [];
+  const summary = data?.summary ?? { owe: 0, lent: 0 };
 
-      // Owe / Lent summary from pairwise friend balances.
-      let owe = 0, lent = 0;
-      for (const f of fb) { if (f.net > 0) lent += f.net; else owe += -f.net; }
-      setSummary({ owe, lent });
-
-      // Recurring rules grouped by their group (personal first).
-      const rulesByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-      const recur: RecurGroup[] = grps
-        .map((g, i) => ({ groupId: g.id, name: g.is_personal === 1 ? 'Personal' : g.name, isPersonal: g.is_personal === 1, rules: rulesByGroup[i] }))
-        .filter(r => r.rules.length > 0)
-        .sort((a, b) => (a.isPersonal ? -1 : b.isPersonal ? 1 : 0));
-      setRecurGroups(recur);
-
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const myId = me?.id ?? '';
   const sharedGroups = groups.filter(g => g.is_personal !== 1);
 
   const filtered = activity.filter(a =>
@@ -120,26 +106,31 @@ export default function PersonalScreen() {
       <ScreenHeader title="Personal" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); setLoading(true); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
         <>
           {/* Owe / Lent / Net summary */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>You owe</Text>
-              <Text style={[styles.summaryAmt, { color: summary.owe > 0 ? colors.expense : colors.textMuted }]}>{formatCompact(summary.owe)}</Text>
+              <Text style={[styles.summaryAmt, { color: oweView(-summary.owe).color }]}>{formatCompact(summary.owe)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>You're owed</Text>
-              <Text style={[styles.summaryAmt, { color: summary.lent > 0 ? colors.income : colors.textMuted }]}>{formatCompact(summary.lent)}</Text>
+              <Text style={[styles.summaryAmt, { color: oweView(summary.lent).color }]}>{formatCompact(summary.lent)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Net</Text>
-              <Text style={[styles.summaryAmt, { color: net > 0 ? colors.income : net < 0 ? colors.expense : colors.textMuted }]}>
-                {net > 0 ? '+' : net < 0 ? '−' : ''}{formatCompact(Math.abs(net))}
-              </Text>
+              {(() => {
+                const ov = oweView(net);
+                return (
+                  <Text style={[styles.summaryAmt, { color: ov.color }]}>
+                    {ov.sign}{formatCompact(Math.abs(net))}
+                  </Text>
+                );
+              })()}
             </View>
           </View>
 

@@ -7,14 +7,12 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
-import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -28,10 +26,10 @@ import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queri
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { GoalCard } from '../../src/components/finance/plan/GoalCard';
-import { PoolCard } from '../../src/components/finance/plan/PoolCard';
+import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard';
+import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
-import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
-import { goalProgress, monthlyContribution, neededPerMonth, monthsUntil } from '../../src/lib/savings';
+import { formatCompact, parseToPaise } from '../../src/lib/money';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { getMe } from '../../src/db/queries/persons';
 import { getDate, getDaysInMonth, format, addMonths, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -54,12 +52,14 @@ function deadlineOn(dateMs: number | null, months: number | null): boolean {
 }
 import { haptic } from '../../src/lib/haptics';
 import {
-  getGoals, getGoalSavedMap, getPoolSummary, getCashPosition, addToPool, withdrawFromPool, insertGoal, reorderGoals, runSavingsMaintenance, buildSavingsInsights,
-  type SavingsGoal, type PoolSummary, type Priority, type SavingsFrequency,
+  getGoals, getGoalSavedMap, getTotalMoney, fundGoal, insertGoal, reorderGoals,
+  runSavingsMaintenance, undoOverspendRaid, buildSavingsInsights,
+  type SavingsGoal, type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../../src/db/queries/savings';
+import { getMoneyProfile, setMoneyProfile } from '../../src/db/queries/moneyProfile';
 import { getAllGroups } from '../../src/db/queries/groups';
 import type { Insight } from '../../src/lib/savingsInsights';
-import type { CashPosition } from '../../src/lib/cash';
+import type { TotalMoney, MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useRefreshOnDataChange, useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
@@ -93,16 +93,17 @@ export default function SavingsScreen() {
   const { flags } = useFeatureFlags();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [saved, setSaved] = useState<Record<string, number>>({});
-  const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
-  const [cash, setCash] = useState<CashPosition | null>(null);
+  const [money, setMoney] = useState<TotalMoney | null>(null);
+  const [profile, setProfile] = useState<MoneyProfile>({ openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 });
   const [insights, setInsights] = useState<Insight[]>([]);
   const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
   const [forecastBudget, setForecastBudget] = useState(0);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [overspend, setOverspend] = useState<OverspendRaid | null>(null);
 
-  const [showAddPool, setShowAddPool] = useState(false);
-  const [showWithdrawPool, setShowWithdrawPool] = useState(false);
-  const [poolAmt, setPoolAmt] = useState('');
+  const [showMoneyEditor, setShowMoneyEditor] = useState(false);
+  const [fundGoalId, setFundGoalId] = useState<string | null>(null);
+  const [fundAmt, setFundAmt] = useState('');
 
   const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState('');
@@ -123,13 +124,15 @@ export default function SavingsScreen() {
 
   async function load() {
     try {
-    await runSavingsMaintenance(db); // sweep + schedule + reconcile
-    const [g, s, p, ins, c] = await Promise.all([getGoals(db), getGoalSavedMap(db), getPoolSummary(db), buildSavingsInsights(db), getCashPosition(db)]);
+    // Scheduled goal funding + overspend auto-raid. Surface a notice if a raid happened.
+    const raid = await runSavingsMaintenance(db);
+    if (raid.total > 0) setOverspend(raid);
+    const [g, s, tm, mp, ins] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db), buildSavingsInsights(db)]);
     setGoals(g);
     setSaved(s);
-    setPool(p);
+    setMoney(tm);
+    setProfile(mp);
     setInsights(ins);
-    setCash(c);
     const grps = await getAllGroups(db);
 
     // Current month's category spend — feeds the month-end forecast + what-if simulator.
@@ -176,24 +179,32 @@ export default function SavingsScreen() {
     }
   }
 
-  async function handleAddPool() {
-    const amt = parseToPaise(poolAmt);
-    if (amt <= 0) return;
-    await addToPool(db, amt);
+  async function handleSaveMoney(p: MoneyProfile) {
+    await setMoneyProfile(db, p);
     haptic.success();
-    setPoolAmt('');
-    setShowAddPool(false);
+    setShowMoneyEditor(false);
     await load();
     refresh();
   }
 
-  async function handleWithdrawPool() {
-    const amt = Math.min(parseToPaise(poolAmt), pool.unallocated);
-    if (amt <= 0) return;
-    await withdrawFromPool(db, amt);
+  const fundGoalObj = goals.find(g => g.id === fundGoalId) ?? null;
+
+  async function handleFundGoal() {
+    const amt = parseToPaise(fundAmt);
+    if (!fundGoalId || amt <= 0) return;
+    await fundGoal(db, fundGoalId, amt);
     haptic.success();
-    setPoolAmt('');
-    setShowWithdrawPool(false);
+    setFundAmt('');
+    setFundGoalId(null);
+    await load();
+    refresh();
+  }
+
+  async function handleUndoOverspend() {
+    if (!overspend) return;
+    await undoOverspendRaid(db, overspend.withdrawals);
+    haptic.success();
+    setOverspend(null);
     await load();
     refresh();
   }
@@ -243,8 +254,7 @@ export default function SavingsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleRow} keyboardShouldPersistTaps="handled">
           {[
             { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
-            { key: 'reports', icon: 'file-text' as const, label: 'Reports', show: flags.reportsDonut, to: '/reports' },
-            { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.subscriptions, to: '/plan/subscriptions' },
+            { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/subscriptions' },
             // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
             { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
           ].filter(m => m.show).map(m => (
@@ -255,29 +265,30 @@ export default function SavingsScreen() {
           ))}
         </ScrollView>
 
-        {/* Cash available — your real money (income in − paid out − saved) */}
-        {cash && (
-          <View style={styles.cashCard}>
-            <Text style={styles.cashLabel}>Cash available</Text>
-            <AmountText paise={cash.available} size="xl" forceColor={cash.available >= 0 ? colors.textPrimary : colors.expense} compact />
-            <Text style={styles.cashBreak}>
-              <Text style={{ color: colors.income }}>{formatCompact(cash.income)} in</Text>
-              <Text style={styles.cashBreakSep}> · </Text>
-              <Text style={{ color: colors.expense }}>{formatCompact(cash.paidExpenses + cash.settledOut)} out</Text>
-              <Text style={styles.cashBreakSep}> · </Text>
-              <Text style={{ color: colors.accent }}>{formatCompact(cash.savings)} saved</Text>
-            </Text>
-          </View>
-        )}
+        {/* Total Money — cash + investments + available credit, with breakdown */}
+        {money && <TotalMoneyCard money={money} onEdit={() => setShowMoneyEditor(true)} />}
 
-        {/* Savings pool (design Screen 3) — teal gradient card */}
-        {flags.savingsGoals && (
-          <PoolCard
-            pool={pool}
-            goalsCount={goals.length}
-            onAdd={() => { setPoolAmt(''); setShowAddPool(true); }}
-            onWithdraw={() => { setPoolAmt(''); setShowWithdrawPool(true); }}
-          />
+        {/* Overspend notice — money auto-pulled from lowest-priority goals to cover a deficit */}
+        {overspend && overspend.total > 0 && (
+          <View style={styles.overspendCard}>
+            <View style={styles.overspendIcon}>
+              <Feather name="alert-triangle" size={16} color={colors.expense} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.overspendTitle}>Covered {formatCompact(overspend.total)} overspend</Text>
+              <Text style={styles.overspendBody} numberOfLines={2}>
+                Pulled from {overspend.withdrawals.map(w => w.name).join(', ')} (lowest priority).
+              </Text>
+            </View>
+            <View style={styles.overspendActions}>
+              <TouchableOpacity onPress={handleUndoOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo">
+                <Text style={styles.overspendUndo}>Undo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setOverspend(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+                <Feather name="x" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {/* Savings insights — opportunity-cost / habit nudges */}
@@ -320,7 +331,13 @@ export default function SavingsScreen() {
                 keyExtractor={(g) => g.id}
                 onReorder={handleReorder}
                 renderItem={(g, isActive) => (
-                  <GoalCard goal={g} saved={saved[g.id] ?? 0} isActive={isActive} onPress={() => router.push(`/savings/${g.id}` as any)} />
+                  <GoalCard
+                    goal={g}
+                    saved={saved[g.id] ?? 0}
+                    isActive={isActive}
+                    onPress={() => router.push(`/savings/${g.id}` as any)}
+                    onAdd={() => { setFundAmt(''); setFundGoalId(g.id); }}
+                  />
                 )}
               />
             )}
@@ -361,36 +378,30 @@ export default function SavingsScreen() {
       </ScrollView>
       )}
 
-      {/* Add to pool sheet */}
-      <SheetModal visible={showAddPool} onClose={() => setShowAddPool(false)} title="Add to savings">
-        <TextInput
-          style={styles.amountInput}
-          value={poolAmt}
-          onChangeText={setPoolAmt}
-          keyboardType="decimal-pad"
-          placeholder="₹0"
-          placeholderTextColor={colors.textMuted}
-          autoFocus
-          accessibilityLabel="Amount"
-        />
-        <Text style={styles.hint}>Money goes to your unallocated pool — assign it to goals anytime.</Text>
-        <PrimaryButton label="Add" onPress={handleAddPool} disabled={parseToPaise(poolAmt) <= 0} />
-      </SheetModal>
+      {/* Edit Total Money inputs (cash / investments / credit) */}
+      <MoneyEditorSheet
+        visible={showMoneyEditor}
+        onClose={() => setShowMoneyEditor(false)}
+        initial={profile}
+        onSave={handleSaveMoney}
+      />
 
-      {/* Withdraw from pool sheet */}
-      <SheetModal visible={showWithdrawPool} onClose={() => setShowWithdrawPool(false)} title="Withdraw from savings">
+      {/* Fund a goal directly from cash */}
+      <SheetModal visible={fundGoalId !== null} onClose={() => setFundGoalId(null)} title={fundGoalObj ? `Add to ${fundGoalObj.name}` : 'Add to goal'}>
         <TextInput
           style={styles.amountInput}
-          value={poolAmt}
-          onChangeText={setPoolAmt}
+          value={fundAmt}
+          onChangeText={setFundAmt}
           keyboardType="decimal-pad"
           placeholder="₹0"
           placeholderTextColor={colors.textMuted}
           autoFocus
           accessibilityLabel="Amount"
         />
-        <Text style={styles.hint}>{formatCompact(pool.unallocated)} available · returns to your spending money.</Text>
-        <PrimaryButton label="Withdraw" onPress={handleWithdrawPool} disabled={parseToPaise(poolAmt) <= 0} />
+        <Text style={styles.hint}>
+          {money ? `${formatCompact(money.cashAvailable)} cash available · ` : ''}comes out of your Cash available.
+        </Text>
+        <PrimaryButton label="Add to goal" onPress={handleFundGoal} disabled={parseToPaise(fundAmt) <= 0} />
       </SheetModal>
 
       {/* New goal sheet */}
@@ -456,10 +467,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
-  cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
-  cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  cashBreakSep: { color: colors.textMuted },
+  overspendCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.expense + '14', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.expense + '40', padding: space.md },
+  overspendIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.expense + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  overspendTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  overspendBody: { ...type.caption, color: colors.textSecondary, marginTop: 1 },
+  overspendActions: { flexDirection: 'row', alignItems: 'center', gap: space.md, flexShrink: 0 },
+  overspendUndo: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   // Teal gradient pool card with accent label (design Screen 3). Gradient supplies the fill.
   poolCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.accent + '33', padding: space.lg, ...shadow.md },
   poolLabel: { ...type.caption, color: colors.accent, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },

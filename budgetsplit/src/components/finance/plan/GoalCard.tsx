@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors, type, space, radius, shadow } from '../../tokens';
@@ -22,12 +22,15 @@ export function GoalCard({
   onPress,
   /** Reached its target — renders the distinct completed style (no drag, green accents). */
   completed = false,
+  /** Quick-fund this goal directly from cash. When set (and not completed), shows a + button. */
+  onAdd,
 }: {
   goal: SavingsGoal;
   saved: number;
   isActive: boolean;
   onPress: () => void;
   completed?: boolean;
+  onAdd?: () => void;
 }) {
   const p = goalProgress(saved, g.target);
   const hasDate = g.target_date != null;
@@ -75,9 +78,18 @@ export function GoalCard({
             </View>
           )}
         </View>
-        {completed
-          ? <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
-          : <Feather name="menu" size={16} color={colors.textMuted} style={styles.dragHandle} />}
+        {completed ? (
+          <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
+        ) : (
+          <View style={styles.trailing}>
+            {onAdd && (
+              <TouchableOpacity style={styles.addBtn} onPress={onAdd} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Add money to ${g.name}`}>
+                <Feather name="plus" size={16} color={colors.accent} />
+              </TouchableOpacity>
+            )}
+            <Feather name="menu" size={16} color={colors.textMuted} style={styles.dragHandle} />
+          </View>
+        )}
       </View>
     </PressableScale>
   );
@@ -101,4 +113,6 @@ const styles = StyleSheet.create({
   goalMeta: { ...type.caption, color: colors.textMuted, flexShrink: 1 },
   goalMetaRight: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   dragHandle: { marginLeft: 4 },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  addBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 });

@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, space } from '../tokens';
+import { space } from '../tokens';
 import { formatCompact } from '../../lib/money';
+import { oweView } from '../../lib/owe';
 
 type Props = {
   /** Net balance in paise: > 0 = owed to you (green), < 0 = you owe (coral). */
@@ -11,12 +12,11 @@ type Props = {
 /** Compact owe/owed money chip, e.g. "+₹800" (green) or "−₹2.1k" (coral). */
 export function BalanceChip({ net }: Props) {
   if (net === 0) return null;
-  const positive = net > 0;
-  const color = positive ? colors.income : colors.expense;
+  const { color, sign, amount } = oweView(net);
   return (
     <View style={[styles.chip, { backgroundColor: color + '1A' }]}>
       <Text style={[styles.text, { color }]}>
-        {positive ? '+' : '−'}{formatCompact(Math.abs(net))}
+        {sign}{formatCompact(amount)}
       </Text>
     </View>
   );

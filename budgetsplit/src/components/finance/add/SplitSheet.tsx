@@ -4,8 +4,7 @@ import { colors, type, space, radius } from '../../tokens';
 import { splitEqual, formatRupees } from '../../../lib/money';
 import { MemberAvatar } from '../MemberAvatar';
 import type { Person } from '../../../db/queries/persons';
-
-export type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
+import { SPLIT_MODE, type SplitMode } from '../../../constants/enums';
 
 /**
  * The "Split" bottom-sheet editor for Quick Add. Fully controlled — every piece
@@ -26,8 +25,8 @@ export function SplitSheet({
   members: Person[];
   splitMembers: string[];
   setSplitMembers: React.Dispatch<React.SetStateAction<string[]>>;
-  splitType: SplitType;
-  setSplitType: (t: SplitType) => void;
+  splitType: SplitMode;
+  setSplitType: (t: SplitMode) => void;
   exactAmounts: Record<string, string>;
   setExactAmounts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   percentages: Record<string, string>;
@@ -44,7 +43,7 @@ export function SplitSheet({
           <Text style={styles.splitTitle}>Split</Text>
 
           <View style={styles.splitTypeRow}>
-            {(['equal', 'exact', 'percent', 'shares'] as SplitType[]).map(st => (
+            {SPLIT_MODE.map(st => (
               <TouchableOpacity
                 key={st}
                 style={[styles.splitTypeBtn, splitType === st && styles.splitTypeActive]}

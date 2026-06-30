@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay, isYesterday, startOfDay, startOfMonth, subDays } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,24 +63,14 @@ type Section = { title: string; data: AuditLog[] };
 
 export default function HistoryScreen() {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [entries, setEntries] = useState<AuditLog[]>([]);
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
-  const [loadError, setLoadError] = useState(false);
-
-  useFocusEffect(useCallback(() => { load(); }, [groupId]));
-
-  async function load() {
-    try {
-      const rows = await getAuditLog(db, { groupId: groupId || undefined });
-      setEntries(rows);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
+  const { data, error: loadError, reload } = useScreenData(
+    (db) => getAuditLog(db, { groupId: groupId || undefined }),
+    [groupId],
+  );
+  const entries = data ?? [];
 
   const sections: Section[] = useMemo(() => {
     const visible = entries.slice(0, pageLimit);
@@ -99,10 +89,10 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Audit Log" onBack={() => router.back()} />
+      <ScreenHeader title="Audit log" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
@@ -110,7 +100,7 @@ export default function HistoryScreen() {
           <Text style={styles.subtitle}>Every change made to your data, in order.</Text>
 
           {sections.length === 0 ? (
-            <EmptyState icon="clock" title="No history yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+            <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
           ) : (
             sections.map(section => (
               <View key={section.title}>

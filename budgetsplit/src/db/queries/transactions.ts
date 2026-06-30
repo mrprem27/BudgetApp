@@ -4,29 +4,30 @@ import { v4 as uuid } from 'uuid';
 import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
+import type { EntryMode, RecurFreq, RecurState, PayMethod } from '../../constants/enums';
 
 export type Txn = {
   id: string;
   group_id: string;
   kind: 'income' | 'expense' | 'settlement';
-  entry_mode: 'quick' | 'itemized';
+  entry_mode: EntryMode;
   date: number;
   category: string;
   note: string | null;
   attachment_uri: string | null;
   tags: string | null;
   adjustments: string | null;
-  recur_freq: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | null;
+  recur_freq: RecurFreq | null;
   recur_interval: number | null;
   recur_end: number | null;
   recur_override_date: number | null;
   parent_recur_id: string | null;
-  recur_state: 'active' | 'paused' | 'ended';
+  recur_state: RecurState;
   tz: string | null;
   lat: number | null;
   lng: number | null;
   place_label: string | null;
-  pay_method: 'upi' | 'cash' | 'bank' | null;
+  pay_method: PayMethod | null;
   currency: string | null;
   is_deleted: number;
   created_at: number;
@@ -169,19 +170,19 @@ async function loadSplitsMany(db: SQLite.SQLiteDatabase, txns: Txn[]): Promise<T
 export type InsertTxnInput = {
   groupId: string;
   kind: 'income' | 'expense' | 'settlement';
-  entryMode: 'quick' | 'itemized';
+  entryMode: EntryMode;
   date: number;
   category: string;
   note?: string;
   attachmentUri?: string;
   tags?: string[];
-  recurFreq?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+  recurFreq?: RecurFreq;
   recurInterval?: number;
   recurEnd?: number;
   lat?: number;
   lng?: number;
   placeLabel?: string;
-  payMethod?: 'upi' | 'cash' | 'bank';
+  payMethod?: PayMethod;
   currency?: string;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
@@ -279,7 +280,7 @@ export type SettlementInput = {
   amount: number;
   date?: number;
   note?: string;
-  payMethod?: 'upi' | 'cash' | 'bank';
+  payMethod?: PayMethod;
 };
 
 export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementInput): Promise<string> {
@@ -827,7 +828,7 @@ export type UpdateTxnInput = {
   date: number;
   category: string;
   note?: string;
-  payMethod?: 'upi' | 'cash' | 'bank';
+  payMethod?: PayMethod;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };

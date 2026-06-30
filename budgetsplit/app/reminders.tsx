@@ -1,7 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -12,7 +11,8 @@ import { categoryVisual } from '../src/constants/categories';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
-import { AppRefreshControl, useRefresh } from '../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getRecurringForGroup } from '../src/db/queries/transactions';
 import { getGlobalNet } from '../src/db/queries/balances';
@@ -20,6 +20,7 @@ import { getMe, getAllPersons, type Person } from '../src/db/queries/persons';
 import { simplify } from '../src/lib/settle';
 import { buildUpcoming, type UpcomingItem } from '../src/lib/upcoming';
 import { formatRupees, formatCompact } from '../src/lib/money';
+import { oweView } from '../src/lib/owe';
 
 type SettleReminder = { from: string; to: string; amount: number; counterpart: Person; iOwe: boolean };
 
@@ -31,39 +32,33 @@ function dueLabel(days: number): string {
 }
 
 export default function RemindersScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [bills, setBills] = useState<UpcomingItem[]>([]);
-  const [settles, setSettles] = useState<SettleReminder[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useFocusEffect(useCallback(() => { load(); }, []));
-  const { refreshing, onRefresh } = useRefresh(() => load());
-
-  async function load() {
-    const grps = await getAllGroups(db);
+  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
     const me = await getMe(db);
-    if (!me) { setLoaded(true); return; }
+    if (!me) return { bills: [] as UpcomingItem[], settles: [] as SettleReminder[] };
+    const grps = await getAllGroups(db);
 
     // Bills coming up in the next ~2 weeks (from recurring expense rules).
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    setBills(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 8, 14));
+    const bills = buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 8, 14);
 
     // Pending settle-ups that involve me.
     const persons = await getAllPersons(db);
     const pmap = new Map(persons.map(p => [p.id, p]));
     const mine = simplify(await getGlobalNet(db)).filter(s => s.from === me.id || s.to === me.id);
-    setSettles(mine.map(s => {
+    const settles = mine.map(s => {
       const iOwe = s.from === me.id;
       const other = pmap.get(iOwe ? s.to : s.from);
       return { from: s.from, to: s.to, amount: s.amount, counterpart: other as Person, iOwe };
-    }).filter(s => s.counterpart));
+    }).filter(s => s.counterpart) as SettleReminder[];
 
-    setLoaded(true);
-  }
+    return { bills, settles };
+  }, []);
 
-  const nothing = loaded && bills.length === 0 && settles.length === 0;
+  const bills = data?.bills ?? [];
+  const settles = data?.settles ?? [];
+  const nothing = !loading && bills.length === 0 && settles.length === 0;
 
   return (
     <View style={styles.container}>
@@ -74,48 +69,61 @@ export default function RemindersScreen() {
       >
         <Text style={styles.intro}>Nudges before bills and settle-ups.</Text>
 
-        {(bills.length > 0 || settles.length > 0) && (
-          <Text style={styles.secLabel}>UPCOMING · {bills.length + settles.length}</Text>
+        {/* UPCOMING — recurring bills due soon (top section) */}
+        {bills.length > 0 && (
+          <>
+            <Text style={styles.secLabel}>UPCOMING · {bills.length}</Text>
+            <View style={styles.card}>
+              {bills.map((b, i) => {
+                const vis = categoryVisual(b.category);
+                return (
+                  <View key={`bill-${b.id}`} style={[styles.row, i < bills.length - 1 ? styles.rowBorder : null]}>
+                    <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                      <Feather name={vis?.icon ?? 'calendar'} size={18} color={vis?.color ?? colors.accent} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={styles.rowTop}>
+                        <Text style={styles.rowTitle} numberOfLines={1}>{b.name}</Text>
+                        <View style={styles.dueChip}><Text style={styles.dueChipText}>{dueLabel(b.daysUntil)}</Text></View>
+                      </View>
+                      <Text style={styles.rowSub}>{formatRupees(b.amount)} · {format(b.dateMs, 'd MMM')}</Text>
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense' as any)} accessibilityRole="button">
+                        <Text style={styles.actionBtnText}>Log payment</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </>
         )}
 
-        {(bills.length > 0 || settles.length > 0) && (
-          <View style={styles.card}>
-            {bills.map((b, i) => {
-              const vis = categoryVisual(b.category);
-              return (
-                <View key={`bill-${b.id}`} style={[styles.row, i < bills.length - 1 || settles.length > 0 ? styles.rowBorder : null]}>
-                  <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
-                    <Feather name={vis?.icon ?? 'calendar'} size={18} color={vis?.color ?? colors.accent} />
-                  </View>
+        {/* SETTLE UP — pending balances with people */}
+        {settles.length > 0 && (
+          <>
+            <Text style={[styles.secLabel, styles.secLabelSettle]}>SETTLE UP · {settles.length}</Text>
+            <View style={styles.card}>
+              {settles.map((s, i) => (
+                <View key={`settle-${s.from}-${s.to}`} style={[styles.row, i < settles.length - 1 ? styles.rowBorder : null]}>
+                  <MemberAvatar name={s.counterpart.name} color={s.counterpart.avatar_color} size={40} imageUri={s.counterpart.image_uri} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <View style={styles.rowTop}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>{b.name}</Text>
-                      <View style={styles.dueChip}><Text style={styles.dueChipText}>{dueLabel(b.daysUntil)}</Text></View>
-                    </View>
-                    <Text style={styles.rowSub}>{formatRupees(b.amount)} · {format(b.dateMs, 'd MMM')}</Text>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense' as any)} accessibilityRole="button">
-                      <Text style={styles.actionBtnText}>Log payment</Text>
+                    <Text style={styles.rowTitle} numberOfLines={1}>Settle {s.counterpart.name.split(' ')[0]}</Text>
+                    {(() => {
+                      const ov = oweView(s.iOwe ? -s.amount : s.amount);
+                      return (
+                        <Text style={[styles.rowSub, { color: ov.color }]}>
+                          {ov.label} {formatCompact(s.amount)}
+                        </Text>
+                      );
+                    })()}
+                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}` as any)} accessibilityRole="button">
+                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>Settle now</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-              );
-            })}
-
-            {settles.map((s, i) => (
-              <View key={`settle-${s.from}-${s.to}`} style={[styles.row, i < settles.length - 1 ? styles.rowBorder : null]}>
-                <MemberAvatar name={s.counterpart.name} color={s.counterpart.avatar_color} size={40} imageUri={s.counterpart.image_uri} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>Settle {s.counterpart.name.split(' ')[0]}</Text>
-                  <Text style={styles.rowSub}>
-                    {s.iOwe ? 'You owe' : 'Owes you'} {formatCompact(s.amount)}
-                  </Text>
-                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}` as any)} accessibilityRole="button">
-                    <Text style={[styles.actionBtnText, { color: '#fff' }]}>Settle now</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          </>
         )}
 
         {nothing && (
@@ -146,6 +154,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
   intro: { ...type.label, color: colors.textMuted, marginBottom: space.xs },
   secLabel: { fontSize: 10, color: colors.healthAmber, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8, marginTop: 4 },
+  secLabelSettle: { color: colors.settle, marginTop: space.md },
   card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, padding: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

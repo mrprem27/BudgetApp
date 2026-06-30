@@ -21,7 +21,8 @@ export type BudgetGroup = {
   created_at: number;
 };
 
-export type SplitMode = 'equal' | 'exact' | 'percent' | 'shares';
+import type { SplitMode } from '../../constants/enums';
+export type { SplitMode } from '../../constants/enums';
 
 export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
   return db.getAllAsync<BudgetGroup>(

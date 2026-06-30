@@ -50,6 +50,7 @@ export default function ItemizedScreen() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [note, setNote] = useState('');
   const [items, setItems] = useState<LineItemDraft[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newQty, setNewQty] = useState('1');
   const [newPrice, setNewPrice] = useState('');
@@ -162,7 +163,12 @@ export default function ItemizedScreen() {
   }
 
 
-  function removeItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
+  function removeItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); setEditingId(c => c === id ? null : c); }
+
+  /** Inline edit of an existing item's name / qty / unit price. */
+  function updateItem(id: string, patch: Partial<Pick<LineItemDraft, 'name' | 'qty' | 'unitPrice'>>) {
+    setItems(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
+  }
 
   function toggleAssign(itemId: string, personId: string) {
     setItems(prev => prev.map(i => {
@@ -341,26 +347,69 @@ export default function ItemizedScreen() {
             <>
               <Text style={styles.sectionLabel}>LINE ITEMS</Text>
               <View style={styles.card}>
-                {items.map((item, idx) => (
+                {items.map((item, idx) => {
+                  const editing = editingId === item.id;
+                  return (
                   <View key={item.id} style={[styles.itemRow, idx < items.length - 1 && styles.rowBorder]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                      {item.assignedTo.length > 0 ? (
-                        <View style={styles.itemAvatars}>
-                          <AvatarStack people={peopleFor(item.assignedTo)} size={20} max={4} />
+                    {editing ? (
+                      <View style={{ flex: 1, gap: space.xs }}>
+                        <TextInput
+                          style={styles.itemEditName}
+                          value={item.name}
+                          onChangeText={(t) => updateItem(item.id, { name: t })}
+                          placeholder="Item name"
+                          placeholderTextColor={colors.textMuted}
+                          accessibilityLabel="Item name"
+                        />
+                        <View style={styles.itemEditRow}>
+                          <TextInput
+                            style={styles.itemEditQty}
+                            value={item.qty}
+                            onChangeText={(t) => updateItem(item.id, { qty: t.replace(/[^0-9]/g, '') })}
+                            keyboardType="number-pad"
+                            placeholder="1"
+                            placeholderTextColor={colors.textMuted}
+                            accessibilityLabel="Quantity"
+                          />
+                          <Text style={styles.itemEditTimes}>×</Text>
+                          <View style={styles.itemEditPriceWrap}>
+                            <Text style={styles.itemEditRupee}>₹</Text>
+                            <TextInput
+                              style={styles.itemEditPrice}
+                              value={item.unitPrice}
+                              onChangeText={(t) => updateItem(item.id, { unitPrice: t.replace(/[^0-9.]/g, '') })}
+                              keyboardType="decimal-pad"
+                              placeholder="0"
+                              placeholderTextColor={colors.textMuted}
+                              accessibilityLabel="Unit price"
+                            />
+                          </View>
+                          <TouchableOpacity style={styles.itemDoneBtn} onPress={() => setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
+                            <Feather name="check" size={16} color={colors.accent} />
+                          </TouchableOpacity>
                         </View>
-                      ) : (
-                        <Text style={styles.itemSub} numberOfLines={1}>
-                          {item.qty} × {formatRupees(parseToPaise(item.unitPrice))}
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={{ flex: 1 }} onPress={() => setEditingId(item.id)} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
+                        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                        {item.assignedTo.length > 0 ? (
+                          <View style={styles.itemAvatars}>
+                            <AvatarStack people={peopleFor(item.assignedTo)} size={20} max={4} />
+                          </View>
+                        ) : (
+                          <Text style={styles.itemSub} numberOfLines={1}>
+                            {item.qty} × {formatRupees(parseToPaise(item.unitPrice))} · tap to edit
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    {!editing && <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>}
                     <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
                       <Feather name="trash-2" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </>
           )}
@@ -692,6 +741,14 @@ const styles = StyleSheet.create({
   itemName: { ...type.body, color: colors.textPrimary },
   itemSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   itemTotal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
+  itemEditName: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, paddingVertical: 6 },
+  itemEditRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  itemEditQty: { width: 44, textAlign: 'center', ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingVertical: 6 },
+  itemEditTimes: { ...type.caption, color: colors.textMuted },
+  itemEditPriceWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm },
+  itemEditRupee: { ...type.body, color: colors.textMuted },
+  itemEditPrice: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: 6 },
+  itemDoneBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm },
   summaryLabel: { ...type.body, color: colors.textSecondary, flexShrink: 1 },

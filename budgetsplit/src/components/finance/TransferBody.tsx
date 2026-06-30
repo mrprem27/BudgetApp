@@ -7,13 +7,16 @@ import { formatRupees } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
+import type { PayMethod } from '../../constants/enums';
 
-type PayMethod = 'upi' | 'cash' | 'bank';
 const PAY_METHODS: { key: PayMethod; label: string; emoji: string }[] = [
   { key: 'upi',  label: 'UPI',  emoji: '📱' },
   { key: 'cash', label: 'Cash', emoji: '💵' },
   { key: 'bank', label: 'Bank', emoji: '🏦' },
 ];
+
+/** Quick-pick reasons for a transfer; free-text Notes covers anything else. */
+export const TRANSFER_REASONS = ['Repayment', 'Rent', 'Shared bill', 'Groceries', 'Travel'] as const;
 
 type Props = {
   me: Person | null;
@@ -27,32 +30,48 @@ type Props = {
   onScope: (s: 'all' | string) => void;
   payMethod: PayMethod;
   onPayMethod: (m: PayMethod) => void;
+  reason: string;
+  onReason: (r: string) => void;
   note: string;
   onNote: (t: string) => void;
 };
 
 /** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient. */
-export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, note, onNote }: Props) {
+export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, reason, onReason, note, onNote }: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
 
   const entry = scope === 'all' ? scopes?.all : scopes?.groups.find(g => g.groupId === scope);
   const bal = entry?.amount ?? 0;
-  let hint = 'Pick who paid and who received';
+
+  // Me-aware balance label (net-negative = "You owe"), consistent with the rest of
+  // the app. The amount renders right-aligned beside it.
+  let balLabel: string | null = null;
+  let balColor: string = colors.settle;
+  let plainHint = 'Pick who paid and who received';
   if (fromId && toId) {
     if (bal > 0 && entry) {
-      const ower = persons.find(p => p.id === entry.from) ?? null;
-      const owee = persons.find(p => p.id === entry.to) ?? null;
-      hint = `${nameOf(ower, 'Someone')} owes ${nameOf(owee, 'someone')} ${formatRupees(bal)}`;
+      const owerName = nameOf(persons.find(p => p.id === entry.from) ?? null, 'Someone');
+      const oweeName = nameOf(persons.find(p => p.id === entry.to) ?? null, 'someone');
+      if (entry.from === me?.id) { balLabel = `You owe ${oweeName}`; balColor = colors.expense; }
+      else if (entry.to === me?.id) { balLabel = `${owerName} owes you`; balColor = colors.income; }
+      else { balLabel = `${owerName} owes ${oweeName}`; balColor = colors.settle; }
     } else {
-      hint = 'No balance between them — enter any amount';
+      plainHint = 'No balance between them — enter any amount';
     }
   }
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.hint, bal > 0 && { color: colors.settle }]}>{hint}</Text>
+      {balLabel ? (
+        <View style={styles.balRow}>
+          <Text style={[styles.balRowLabel, { color: balColor }]} numberOfLines={1}>{balLabel}</Text>
+          <Text style={[styles.balRowAmt, { color: balColor }]}>{formatRupees(bal)}</Text>
+        </View>
+      ) : (
+        <Text style={styles.hint}>{plainHint}</Text>
+      )}
 
       {/* FROM → TO direction */}
       <View style={[styles.dirCard, !!fromId && !!toId && fromId === toId && styles.dirCardError]}>
@@ -89,6 +108,25 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
         </>
       )}
 
+      {/* Reason — quick pick (free-text Notes below covers anything else) */}
+      <Text style={styles.label}>REASON</Text>
+      <View style={styles.reasonRow}>
+        {TRANSFER_REASONS.map(r => {
+          const active = reason === r;
+          return (
+            <TouchableOpacity
+              key={r}
+              style={[styles.reasonChip, active && styles.reasonChipActive]}
+              onPress={() => { haptic.selection(); onReason(active ? '' : r); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.reasonChipText, active && styles.reasonChipTextActive]}>{r}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* How was it paid? */}
       <Text style={styles.label}>HOW WAS IT PAID?</Text>
       <View style={styles.methodRow}>
@@ -106,13 +144,14 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
         ))}
       </View>
 
+      <Text style={styles.label}>NOTES</Text>
       <TextInput
         style={styles.noteInput}
         value={note}
         onChangeText={onNote}
-        placeholder="Note (optional)"
+        placeholder="Add a note (optional)"
         placeholderTextColor={colors.textMuted}
-        accessibilityLabel="Note"
+        accessibilityLabel="Transfer notes"
         maxLength={80}
       />
     </View>
@@ -132,6 +171,9 @@ function ScopeChip({ label, amount, active, onPress }: { label: string; amount?:
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   hint: { ...type.label, color: colors.textMuted, textAlign: 'center', marginBottom: space.xs },
+  balRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, backgroundColor: colors.bgMuted, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.xs },
+  balRowLabel: { ...type.label, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
+  balRowAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, flexShrink: 0 },
   label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginTop: space.sm },
   dirCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md },
   dirCardError: { borderColor: colors.expense, borderWidth: 1.5 },
@@ -145,11 +187,16 @@ const styles = StyleSheet.create({
   scopeChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   scopeChipText: { ...type.label, color: colors.textSecondary },
   scopeChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  reasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  reasonChip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
+  reasonChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
+  reasonChipText: { ...type.label, color: colors.textSecondary },
+  reasonChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   methodRow: { flexDirection: 'row', gap: space.sm },
   methodTile: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   methodTileActive: { borderColor: colors.settle, backgroundColor: colors.settle + '22' },
   methodEmoji: { fontSize: 20 },
   methodLabel: { ...type.label, color: colors.textSecondary },
   methodLabelActive: { color: colors.settle, fontFamily: 'Inter_600SemiBold' },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.sm },
+  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.xs },
 });

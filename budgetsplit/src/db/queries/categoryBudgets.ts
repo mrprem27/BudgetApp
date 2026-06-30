@@ -2,7 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
-export type BudgetCadence = 'once' | 'daily' | 'monthly' | 'yearly';
+import type { BudgetCadence } from '../../constants/enums';
+export type { BudgetCadence } from '../../constants/enums';
 
 export type CategoryBudget = {
   id: string;

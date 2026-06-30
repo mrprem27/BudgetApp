@@ -40,7 +40,6 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 
   // Lifestyle
   { name: 'Shopping',         icon: 'shopping-bag',   color: '#A78BFA' },
-  { name: 'Subscriptions',    icon: 'repeat',         color: '#2DD4BF' },
   { name: 'Entertainment',    icon: 'film',           color: '#F87171' },
   { name: 'Gym & Fitness',    icon: 'activity',       color: '#34D399' },
   { name: 'Salon & Grooming', icon: 'scissors',       color: '#E879F9' },
@@ -92,7 +91,7 @@ export const CATEGORY_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Food', names: ['Groceries', 'Food Delivery', 'Eating Out', 'Chai & Snacks'] },
   { title: 'Transport', names: ['Cab & Auto', 'Metro & Bus', 'Fuel', 'Parking & Toll'] },
   { title: 'Bills & Utilities', names: ['Electricity', 'Mobile Recharge', 'WiFi & Broadband', 'Bills'] },
-  { title: 'Lifestyle', names: ['Shopping', 'Subscriptions', 'Entertainment', 'Gym & Fitness', 'Salon & Grooming', 'Electronics', 'Gifts'] },
+  { title: 'Lifestyle', names: ['Shopping', 'Entertainment', 'Gym & Fitness', 'Salon & Grooming', 'Electronics', 'Gifts'] },
   { title: 'Health', names: ['Health & Pharmacy', 'Insurance'] },
   { title: 'Money & Growth', names: ['Investments / SIP', 'Savings', 'EMI & Loans', 'Education', 'Taxes'] },
   { title: 'Other', names: ['Travel', 'Family & Support', 'Other'] },

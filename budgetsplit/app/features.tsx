@@ -62,8 +62,8 @@ export default function FeaturesScreen() {
     {
       title: 'Money tools',
       items: [
-        { icon: 'target', label: 'Savings Goals', caption: 'Track goals, auto-sweep surplus each month', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
-        { icon: 'refresh-cw', label: 'Recurring Tracker', caption: 'Track repeating bills & charges', value: flags.subscriptions, onChange: v => setFlag('subscriptions', v) },
+        { icon: 'target', label: 'Savings Goals', caption: 'Track goals and fund them directly from cash', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
+        { icon: 'refresh-cw', label: 'Recurring', caption: 'Track repeating bills & charges', value: flags.recurring, onChange: v => setFlag('recurring', v) },
         { icon: 'help-circle', label: 'Afford Check', caption: 'Quick "can I afford this?" before a big buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
         { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => setFlag('reminders', v) },
         { icon: 'award', label: 'Tracking Streak', caption: 'A daily-logging streak on Home (shows at 3+ days)', value: flags.streak, onChange: v => setFlag('streak', v) },

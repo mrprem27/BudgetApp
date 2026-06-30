@@ -1,7 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -12,11 +11,11 @@ import { categoryVisual } from '../../src/constants/categories';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { AmountText } from '../../src/components/ui/AmountText';
-import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { useScreenData } from '../../src/hooks/useScreenData';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getRecurringForGroup, getTransactionsInRange } from '../../src/db/queries/transactions';
+import { getRecurringForGroup } from '../../src/db/queries/transactions';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
-import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
 import { formatCompact } from '../../src/lib/money';
 
 type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
@@ -28,14 +27,10 @@ function cadenceLabel(freq: string): string {
 }
 
 export default function SubscriptionsScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [subs, setSubs] = useState<Sub[]>([]);
-  const [detected, setDetected] = useState<DetectedSub[]>([]);
-  const [loaded, setLoaded] = useState(false);
 
-  async function load() {
+  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
     const now = Date.now();
     const grps = await getAllGroups(db);
     const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
@@ -50,24 +45,11 @@ export default function SubscriptionsScreen() {
       nextMs: nextOccurrenceOnOrAfter(t, now),
     }));
     list.sort((a, b) => (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
-    setSubs(list);
+    return list;
+  }, []);
 
-    // "Maybe a subscription" — detect regular repeats in manually-logged
-    // expenses (last ~150d), excluding materialized recurring occurrences, then
-    // drop any that already match an active rule (same category + amount).
-    const recent = await getTransactionsInRange(db, null, now - 150 * 86400000, now);
-    const detectTxns = recent
-      .filter(t => t.kind === 'expense' && !t.parent_recur_id)
-      .map(t => ({ category: t.category, amount: t.shares.reduce((s, sh) => s + sh.amount, 0), date: t.date }));
-    const ruleKeys = new Set(list.map(s => `${s.category}|${s.amount}`));
-    setDetected(detectSubscriptions(detectTxns).filter(d => !ruleKeys.has(`${d.category}|${d.amount}`)));
-
-    setLoaded(true);
-  }
-
-  useFocusEffect(useCallback(() => { load(); }, []));
-  const { refreshing, onRefresh } = useRefresh(() => load());
-
+  const subs = data ?? [];
+  const loaded = !loading;
   const monthlyTotal = subs.reduce((s, x) => s + toMonthly(x.amount, x.freq), 0);
   const nextUp = subs.find(s => s.nextMs != null);
 
@@ -80,7 +62,7 @@ export default function SubscriptionsScreen() {
       >
         <Text style={styles.intro}>Your repeating bills & charges — from your recurring expenses.</Text>
 
-        {loaded && subs.length === 0 && detected.length === 0 ? (
+        {loaded && subs.length === 0 ? (
           <EmptyState
             icon="refresh-cw"
             title="No recurring items yet"
@@ -132,37 +114,6 @@ export default function SubscriptionsScreen() {
             </View>
 
             <Text style={styles.footHint}>≈ {formatCompact(monthlyTotal * 12)} a year · tap a row to manage its schedule.</Text>
-            </>)}
-
-            {detected.length > 0 && (<>
-              <Text style={styles.sectionLabel}>MAYBE RECURRING · {detected.length}</Text>
-              <View style={styles.listCard}>
-                {detected.map((d, i) => {
-                  const vis = categoryVisual(d.category);
-                  return (
-                    <TouchableOpacity
-                      key={`${d.category}-${d.amount}`}
-                      style={[styles.row, i < detected.length - 1 && styles.rowBorder]}
-                      onPress={() => router.push('/add/quick?kind=expense' as any)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${d.category}, looks ${d.cadence}, track as recurring`}
-                    >
-                      <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
-                        <Feather name={vis?.icon ?? 'help-circle'} size={18} color={vis?.color ?? colors.accent} />
-                      </View>
-                      <View style={styles.info}>
-                        <Text style={styles.name} numberOfLines={1}>{d.category}</Text>
-                        <Text style={styles.detail}>Seen {d.count}× · looks {d.cadence}</Text>
-                      </View>
-                      <View style={styles.right}>
-                        <AmountText paise={d.amount} size="sm" forceColor={colors.textPrimary} />
-                        <Text style={styles.trackHint}>Track →</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text style={styles.footHint}>Spotted from your logged expenses — tap to add it as a recurring rule.</Text>
             </>)}
           </>
         )}

@@ -4,11 +4,14 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { getDate, getDaysInMonth, format } from 'date-fns';
+import { getDate, getDaysInMonth, format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { BarChart } from 'react-native-gifted-charts';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
+import { CategoryDonut, type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { CategoryRankList } from '../src/components/finance/home/CategoryRankList';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { AppRefreshControl, useRefresh } from '../src/components/ui/AppRefreshControl';
@@ -16,12 +19,24 @@ import { getTransactionsInRange, getRecurringForGroup } from '../src/db/queries/
 import { getBudgetAnalytics } from '../src/lib/analytics';
 import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { getAllGroups } from '../src/db/queries/groups';
-import { getGroupNet } from '../src/db/queries/balances';
+import { getMyExposure } from '../src/db/queries/balances';
 import { getMe } from '../src/db/queries/persons';
 import { formatCompact } from '../src/lib/money';
+import { oweView } from '../src/lib/owe';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 
 type Shift = { cat: string; thisAmt: number; pct: number };
+type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
+
+/** Compact ₹ axis label for the trend chart. */
+function fmtY(v: string): string {
+  const n = Math.round(Number(v));
+  if (!isFinite(n) || n === 0) return '₹0';
+  const abs = Math.abs(n);
+  if (abs >= 100000) return `₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `₹${Math.round(abs / 1000)}k`;
+  return `₹${abs}`;
+}
 
 export default function InsightsScreen() {
   const db = useSQLiteContext();
@@ -39,6 +54,10 @@ export default function InsightsScreen() {
   const [iOwe, setIOwe] = useState(0);
   const [owedPeople, setOwedPeople] = useState(0);
   const [owePeople, setOwePeople] = useState(0);
+  const [pieData, setPieData] = useState<DonutSeg[]>([]);
+  const [pieSel, setPieSel] = useState<string | null>(null);
+  const [catExpanded, setCatExpanded] = useState(false);
+  const [monthly, setMonthly] = useState<MonthPoint[]>([]);
   const [subNames, setSubNames] = useState<string[]>([]);
   const [subsMonthly, setSubsMonthly] = useState(0);
   const [whatIf, setWhatIf] = useState<{ name: string; monthly: number } | null>(null);
@@ -73,6 +92,30 @@ export default function InsightsScreen() {
     const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
     setMonthSpend(totalMonthSpend);
 
+    // Spending breakdown donut — Insights is the single home for analytics.
+    const sortedCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+    setPieData(sortedCats.slice(0, 8).map(([name, paise]) => ({
+      name, paise, color: categoryVisual(name).color || colors.accent,
+    })));
+
+    // 6-month spending trend (overall + per-category, so the donut selection redraws it).
+    const months: MonthPoint[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const m = subMonths(now, i);
+      const mTxns = await getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime());
+      let total = 0;
+      const byCat: Record<string, number> = {};
+      for (const t of mTxns) {
+        if (t.kind !== 'expense') continue;
+        const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+        total += amt;
+        byCat[t.category] = (byCat[t.category] ?? 0) + amt;
+      }
+      months.push({ label: format(m, 'MMM'), total, byCat });
+    }
+    setMonthly(months);
+
     // Top spending category powers the "What if I cut…" simulator.
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
     setWhatIf(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
@@ -98,21 +141,19 @@ export default function InsightsScreen() {
       .slice(0, 3);
     setShifts(computed);
 
-    // Net exposure across all non-personal groups.
+    // Net exposure across all groups — single source of truth, netted per person
+    // after all settlements (matches Personal / Groups / Friends).
     const me = await getMe(db);
-    let oTm = 0, iO = 0, oP = 0, owP = 0;
     if (me) {
-      for (const g of grps) {
-        if (g.is_personal === 1) continue;
-        const myNet = (await getGroupNet(db, g.id))[me.id] ?? 0;
-        if (myNet > 0) { oTm += myNet; oP += 1; }
-        else if (myNet < 0) { iO += -myNet; owP += 1; }
-      }
+      const exp = await getMyExposure(db, me.id);
+      setOwedToMe(exp.owed); setIOwe(exp.owe);
+      setOwedPeople(exp.owedPeople); setOwePeople(exp.owePeople);
+    } else {
+      setOwedToMe(0); setIOwe(0); setOwedPeople(0); setOwePeople(0);
     }
-    setOwedToMe(oTm); setIOwe(iO); setOwedPeople(oP); setOwePeople(owP);
 
     // Subscriptions = recurring EXPENSE rules (reliable; not guessed from logs).
-    if (flags.subscriptions) {
+    if (flags.recurring) {
       const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
       const rules = byGroup.flat().filter(t => t.kind === 'expense' && t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
       const monthly = rules.reduce((s, t) => {
@@ -150,6 +191,66 @@ export default function InsightsScreen() {
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={styles.eyebrow}>{format(today, 'MMMM yyyy')} · {dayOfMonth} days in</Text>
+
+        {/* Where your money went — top labels + donut, two-way synced */}
+        {pieData.length > 0 && (
+          <>
+            <CategoryRankList
+              rows={pieData.map(p => ({ name: p.name, paise: p.paise }))}
+              total={monthSpend}
+              selectedName={pieSel}
+              expanded={catExpanded}
+              onMore={() => setCatExpanded(e => !e)}
+              onPressCategory={(name) => setPieSel(c => (c === name ? null : name))}
+            />
+            <View style={[styles.secCard, { padding: space.md, marginBottom: space.md }]}>
+              <CategoryDonut
+                data={pieData}
+                total={monthSpend}
+                selectedName={pieSel}
+                onSelect={(seg) => setPieSel(seg?.name ?? null)}
+                onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+              />
+            </View>
+          </>
+        )}
+
+        {/* 6-month spending trend — overall, or the selected category (donut/label driven) */}
+        {monthly.some(m => m.total > 0) && (() => {
+          const bars = monthly.map((m, i) => ({
+            value: Math.round((pieSel ? (m.byCat[pieSel] ?? 0) : m.total) / 100),
+            label: m.label,
+            frontColor: i === monthly.length - 1 ? colors.accent : colors.accentDeep,
+            labelTextStyle: i === monthly.length - 1 ? { color: colors.accent, fontFamily: 'Inter_600SemiBold' } : { color: colors.textMuted },
+          }));
+          return (
+            <View style={[styles.secCard, { padding: space.md, marginBottom: space.md }]}>
+              <View style={styles.trendHeader}>
+                <Text style={styles.secLabel}>{pieSel ? `${pieSel.toUpperCase()} · 6 MONTHS` : '6-MONTH TREND'}</Text>
+                {pieSel && (
+                  <TouchableOpacity onPress={() => setPieSel(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Show all categories">
+                    <Text style={styles.trendClear}>Show all</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <BarChart
+                data={bars}
+                barWidth={26}
+                barBorderRadius={4}
+                noOfSections={4}
+                spacing={18}
+                xAxisThickness={0}
+                yAxisThickness={0}
+                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                formatYLabel={fmtY}
+                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                hideRules
+                isAnimated
+                disableScroll
+              />
+            </View>
+          );
+        })()}
 
         {/* HERO — spending velocity (only when projected to overspend) */}
         {overspend && (
@@ -243,9 +344,14 @@ export default function InsightsScreen() {
             <View style={[styles.secCard, { padding: space.md }]}>
               <View style={styles.netRow}>
                 <Text style={styles.shiftCat}>Net position</Text>
-                <Text style={[styles.netAmt, { color: net >= 0 ? colors.income : colors.expense }]}>
-                  {net >= 0 ? '+' : '−'}{formatCompact(Math.abs(net))}
-                </Text>
+                {(() => {
+                  const ov = oweView(net);
+                  return (
+                    <Text style={[styles.netAmt, { color: ov.color }]}>
+                      {ov.sign || '+'}{formatCompact(ov.direction === 'settled' ? 0 : ov.amount)}
+                    </Text>
+                  );
+                })()}
               </View>
               <Text style={[styles.shiftAmt, { marginBottom: 10 }]}>
                 You're owed {formatCompact(owedToMe)} · You owe {formatCompact(iOwe)}
@@ -268,7 +374,7 @@ export default function InsightsScreen() {
         )}
 
         {/* SUBSCRIPTIONS NUDGE */}
-        {flags.subscriptions && subNames.length > 0 && (
+        {flags.recurring && subNames.length > 0 && (
           <View style={styles.subsCard}>
             <View style={styles.subsHeader}>
               <View style={styles.subsDot} />
@@ -319,6 +425,8 @@ const styles = StyleSheet.create({
   velocityCtaText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
 
   secLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8, marginTop: 4 },
+  trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
   whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },

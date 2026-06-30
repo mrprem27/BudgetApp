@@ -1,11 +1,10 @@
 import * as SQLite from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { planAutoAllocations, monthsToSweep, planReduction } from '../../lib/savingsEngine';
-import { getSpentInRange } from '../../lib/budget';
+import { planAutoAllocations, planOverspendRaid } from '../../lib/savingsEngine';
 import { generateInsights, type Insight, type CategorySpend } from '../../lib/savingsInsights';
-import { computeCash, type CashPosition } from '../../lib/cash';
+import { computeCash, computeTotalMoney, type CashPosition, type TotalMoney } from '../../lib/cash';
+import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups } from './groups';
 import { getMe } from './persons';
 import { getTransactionsInRange } from './transactions';
@@ -13,9 +12,10 @@ import { getCategoriesByFrequency, type Category } from './categories';
 import { getCategoryBudgets, type BudgetCadence } from './categoryBudgets';
 import { startOfMonth, endOfMonth, getDaysInMonth } from 'date-fns';
 
-export type Priority = 'high' | 'medium' | 'low';
-export type SavingsFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'none';
-export type SavingsTxnKind = 'deposit' | 'allocate' | 'withdraw';
+// Domain value sets are defined once in constants/enums.ts; re-exported here for
+// existing importers.
+import type { Priority, SavingsFrequency, SavingsTxnKind } from '../../constants/enums';
+export type { Priority, SavingsFrequency, SavingsTxnKind } from '../../constants/enums';
 
 export type SavingsGoal = {
   id: string;
@@ -45,8 +45,6 @@ export type SavingsTxn = {
   note: string | null;
   created_at: number;
 };
-
-export type PoolSummary = { total: number; allocated: number; unallocated: number };
 
 // --- Goals ---------------------------------------------------------------
 
@@ -118,7 +116,7 @@ export async function setGoalLocked(db: SQLite.SQLiteDatabase, id: string, locke
   await db.runAsync('UPDATE savings_goal SET locked=? WHERE id=?', [locked ? 1 : 0, id]);
 }
 
-/** Deletes a goal. Its earmarked savings return to the pool (allocations are dropped). */
+/** Deletes a goal. Its earmarked savings return to Cash available (ledger rows are dropped). */
 export async function deleteGoal(db: SQLite.SQLiteDatabase, id: string): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM savings_txn WHERE goal_id = ?', [id]);
@@ -143,7 +141,7 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
   });
 }
 
-// --- Ledger / pool -------------------------------------------------------
+// --- Ledger (goal funding) -----------------------------------------------
 
 async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {
   await db.runAsync(
@@ -153,43 +151,16 @@ async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, '
   );
 }
 
-/** Add money into the Savings Pool (unallocated). */
-export async function addToPool(db: SQLite.SQLiteDatabase, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
-  if (amount <= 0) return;
-  await insertSavingsTxn(db, { goal_id: null, amount, kind: 'deposit', source, date: Date.now(), note: note ?? null });
-}
-
-/** Move money from the pool's unallocated balance into a goal. */
-export async function allocateToGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
+/** Fund a goal directly from Cash available — earmarks money to the goal. */
+export async function fundGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
   if (amount <= 0) return;
   await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null });
 }
 
-/**
- * Atomically top up the pool by `shortfall` (when the goal needs more than the
- * unallocated balance) and allocate `amount` to the goal — in one transaction so
- * a failure can never deposit without allocating.
- */
-export async function depositAndAllocate(db: SQLite.SQLiteDatabase, goalId: string, amount: number, shortfall = 0): Promise<void> {
-  if (amount <= 0) return;
-  await db.withTransactionAsync(async () => {
-    if (shortfall > 0) {
-      await insertSavingsTxn(db, { goal_id: null, amount: shortfall, kind: 'deposit', source: 'manual', date: Date.now(), note: null });
-    }
-    await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source: 'manual', date: Date.now(), note: null });
-  });
-}
-
-/** Pull money back out of a goal, returning it to the pool's unallocated balance. */
+/** Pull money back out of a goal, returning it to Cash available. */
 export async function withdrawFromGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, note?: string): Promise<void> {
   if (amount <= 0) return;
   await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
-}
-
-/** Take money out of the Savings Pool entirely (back to spending money). */
-export async function withdrawFromPool(db: SQLite.SQLiteDatabase, amount: number, note?: string): Promise<void> {
-  if (amount <= 0) return;
-  await insertSavingsTxn(db, { goal_id: null, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
 }
 
 /** Saved (earmarked) amount per goal: allocations minus withdrawals. */
@@ -206,17 +177,10 @@ export async function getGoalSavedMap(db: SQLite.SQLiteDatabase): Promise<Record
   return map;
 }
 
-export async function getPoolSummary(db: SQLite.SQLiteDatabase): Promise<PoolSummary> {
-  const row = await db.getFirstAsync<{ deposits: number; pool_out: number; allocated: number }>(
-    `SELECT
-        COALESCE(SUM(CASE WHEN kind='deposit' THEN amount ELSE 0 END), 0) AS deposits,
-        COALESCE(SUM(CASE WHEN kind='withdraw' AND goal_id IS NULL THEN amount ELSE 0 END), 0) AS pool_out,
-        COALESCE(SUM(CASE WHEN kind='allocate' THEN amount WHEN kind='withdraw' AND goal_id IS NOT NULL THEN -amount ELSE 0 END), 0) AS allocated
-       FROM savings_txn`,
-  );
-  const total = (row?.deposits ?? 0) - (row?.pool_out ?? 0);
-  const allocated = row?.allocated ?? 0;
-  return { total, allocated, unallocated: total - allocated };
+/** Total money currently earmarked across all goals (paise). */
+export async function getTotalSaved(db: SQLite.SQLiteDatabase): Promise<number> {
+  const map = await getGoalSavedMap(db);
+  return Object.values(map).reduce((a, b) => a + Math.max(0, b), 0);
 }
 
 export async function getGoalHistory(db: SQLite.SQLiteDatabase, goalId: string): Promise<SavingsTxn[]> {
@@ -230,20 +194,20 @@ export async function getGoalHistory(db: SQLite.SQLiteDatabase, goalId: string):
 
 /**
  * Catch-up auto-funding. Runs cheaply on app open / Savings focus: funds each
- * goal's fixed allocation for every elapsed period (priority order when the
- * pool is short), then advances each goal's schedule anchor. Idempotent —
- * nothing happens until a full period elapses.
+ * goal's fixed allocation for every elapsed period from Cash available (priority
+ * order when cash is short), then advances each goal's schedule anchor.
+ * Idempotent — nothing happens until a full period elapses.
  */
 export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean> {
   const goals = await getGoals(db);
   const eligible = goals.filter(g => g.allocation > 0 && g.frequency !== 'none');
   if (eligible.length === 0) return false;
 
-  const [saved, pool] = await Promise.all([getGoalSavedMap(db), getPoolSummary(db)]);
+  const [saved, cash] = await Promise.all([getGoalSavedMap(db), getCashPosition(db)]);
   const now = Date.now();
   const plan = planAutoAllocations(
     eligible.map(g => ({ id: g.id, target: g.target, allocation: g.allocation, frequency: g.frequency, priority: g.priority, sort_order: g.sort_order, anchor: g.last_auto_at ?? g.created_at })),
-    saved, pool.unallocated, now,
+    saved, cash.available, now,
   );
   if (plan.length === 0) return false;
 
@@ -262,81 +226,63 @@ export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean
   return true;
 }
 
-const SWEEP_KEY = 'savings_last_sweep';
-/** Opt-in flag for the budget-leftover auto-sweep (off by default). */
-export const AUTO_SWEEP_KEY = 'auto_sweep_enabled';
-
-/** Whether the opt-in budget-leftover auto-sweep is enabled. */
-export const isAutoSweepEnabled = async (): Promise<boolean> =>
-  (await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true';
-/** Enable/disable the auto-sweep. */
-export const setAutoSweepEnabled = (v: boolean): Promise<void> =>
-  AsyncStorage.setItem(AUTO_SWEEP_KEY, v ? 'true' : 'false');
+export type OverspendRaid = { withdrawals: { goalId: string; name: string; amount: number }[]; total: number };
 
 /**
- * Sweep completed-month budget leftover into the Savings Pool (replaces
- * carry-over). Only groups with a monthly limit and carry_over OFF are swept —
- * groups that opted into carry-over keep rolling over. First run starts fresh
- * (no retroactive sweep). Idempotent via the stored month marker.
+ * If Cash available has gone negative (overspending), cover the deficit by
+ * pulling from the lowest-priority unlocked goals first (drag rank). Records the
+ * raid as auto goal withdrawals and returns what moved so the Plan screen can
+ * show a notice + offer Undo. Investments are never touched.
  */
-export async function runLeftoverSweep(db: SQLite.SQLiteDatabase): Promise<number> {
-  const marker = await AsyncStorage.getItem(SWEEP_KEY);
-  const { months, newMarker } = monthsToSweep(marker, new Date());
-  if (!marker) { await AsyncStorage.setItem(SWEEP_KEY, newMarker); return 0; } // initialise, no back-sweep
-  if (months.length === 0) { await AsyncStorage.setItem(SWEEP_KEY, newMarker); return 0; }
+export async function runOverspendRaid(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
+  const cash = await getCashPosition(db);
+  if (cash.available >= 0) return { withdrawals: [], total: 0 };
+  const deficit = -cash.available;
+  const [goals, saved] = await Promise.all([getGoals(db), getGoalSavedMap(db)]);
+  const raids = planOverspendRaid(
+    goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order })),
+    saved, deficit,
+  );
+  if (raids.length === 0) return { withdrawals: [], total: 0 };
 
-  const groups = (await getAllGroups(db)).filter(g => (g.limit_monthly ?? 0) > 0 && g.carry_over !== 1);
+  const nameById = new Map(goals.map(g => [g.id, g.name]));
+  const now = Date.now();
   let total = 0;
-  for (const m of months) {
-    for (const g of groups) {
-      const spent = await getSpentInRange(db, g.id, m.start, m.end);
-      total += Math.max(0, (g.limit_monthly ?? 0) - spent);
-    }
-  }
-  // Advance the marker BEFORE depositing. The marker and the pool deposit live
-  // in two different stores (AsyncStorage + SQLite), so they can't be committed
-  // atomically; ordering it this way means a crash between them can only ever
-  // *miss* a sweep — never re-sweep the same months and credit phantom money.
-  await AsyncStorage.setItem(SWEEP_KEY, newMarker);
-  if (total > 0) await addToPool(db, total, 'auto', 'Budget leftover');
-  return total;
-}
-
-/**
- * Keep allocated ≤ pool total. If the pool can't back all earmarked savings,
- * pull funds from the lowest-priority unlocked goals first (protecting
- * high-priority and locked goals). Returns the amount reclaimed.
- */
-export async function reconcileAllocations(db: SQLite.SQLiteDatabase): Promise<number> {
-  const pool = await getPoolSummary(db);
-  if (pool.unallocated >= 0) return 0;
-  const excess = -pool.unallocated;
-  const [goals, saved] = await Promise.all([getGoals(db, true), getGoalSavedMap(db)]);
-  const reductions = planReduction(goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order })), saved, excess);
-  if (reductions.length === 0) return 0;
-
-  let reclaimed = 0;
   await db.withTransactionAsync(async () => {
-    for (const r of reductions) {
-      await insertSavingsTxn(db, { goal_id: r.goalId, amount: r.reduceBy, kind: 'withdraw', source: 'auto', date: Date.now(), note: 'Auto-reduced' });
-      reclaimed += r.reduceBy;
+    for (const r of raids) {
+      await db.runAsync(
+        `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
+         VALUES (?, ?, ?, 'withdraw', 'auto', ?, 'Covered overspend', ?)`,
+        [uuid(), r.goalId, r.amount, now, now],
+      );
+      total += r.amount;
     }
   });
-  return reclaimed;
+  return {
+    withdrawals: raids.map(r => ({ goalId: r.goalId, name: nameById.get(r.goalId) ?? 'Goal', amount: r.amount })),
+    total,
+  };
+}
+
+/** Undo an overspend raid by re-funding the goals it pulled from. */
+export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: { goalId: string; amount: number }[]): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    for (const w of withdrawals) {
+      if (w.amount <= 0) continue;
+      await insertSavingsTxn(db, { goal_id: w.goalId, amount: w.amount, kind: 'allocate', source: 'auto', date: now, note: 'Undo overspend cover' });
+    }
+  });
 }
 
 /**
- * Run savings automation: scheduled per-goal funding → (opt-in) leftover sweep →
- * reconcile. The budget-leftover sweep moves unspent budget into the pool, which
- * lowers "Cash available", so it is OFF by default and runs only when the user
- * has enabled it in Settings (`AUTO_SWEEP_KEY`).
+ * Run savings automation: scheduled per-goal funding (from Cash available) →
+ * overspend raid (pull lowest-priority goals when cash goes negative). Returns
+ * the raid result so the caller can surface a notice.
  */
-export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   await runAutoFunding(db).catch(() => {});
-  if (await isAutoSweepEnabled()) {
-    await runLeftoverSweep(db).catch(() => {});
-  }
-  await reconcileAllocations(db).catch(() => {});
+  return runOverspendRaid(db).catch(() => ({ withdrawals: [], total: 0 }));
 }
 
 // --- Insights (Phase 3) --------------------------------------------------
@@ -356,16 +302,23 @@ export async function getCategorySpend30d(db: SQLite.SQLiteDatabase): Promise<Ca
   return Object.entries(map).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
 }
 
-/** Your real money — derived cash position across all groups, minus savings. */
+/** Your real money — derived cash position across all groups, minus money in goals. */
 export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPosition> {
   const me = await getMe(db);
-  const empty: CashPosition = { available: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0 };
+  const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0 };
   if (!me) return empty;
-  const [txns, pool] = await Promise.all([
+  const [txns, savedTotal, profile] = await Promise.all([
     getTransactionsInRange(db, null, 0, Date.now()),
-    getPoolSummary(db),
+    getTotalSaved(db),
+    getMoneyProfile(db),
   ]);
-  return computeCash(txns, me.id, pool.total);
+  return computeCash(txns, me.id, savedTotal, profile.openingCash);
+}
+
+/** The single "Total Money" figure + breakdown for the Plan screen. */
+export async function getTotalMoney(db: SQLite.SQLiteDatabase): Promise<TotalMoney> {
+  const [cash, profile] = await Promise.all([getCashPosition(db), getMoneyProfile(db)]);
+  return computeTotalMoney(cash, profile);
 }
 
 // --- "Can I afford this?" snapshot ---------------------------------------

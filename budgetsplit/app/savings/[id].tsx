@@ -22,8 +22,8 @@ import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
 import { haptic } from '../../src/lib/haptics';
 import {
-  getGoalById, getGoalSavedMap, getPoolSummary, getGoalHistory,
-  depositAndAllocate, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
+  getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory,
+  fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
   type SavingsGoal, type SavingsTxn, type SavingsFrequency,
 } from '../../src/db/queries/savings';
 import { useUndo } from '../../src/components/system/UndoToast';
@@ -60,7 +60,7 @@ export default function GoalDetailScreen() {
 
   const [goal, setGoal] = useState<SavingsGoal | null>(null);
   const [saved, setSaved] = useState(0);
-  const [unallocated, setUnallocated] = useState(0);
+  const [cashAvailable, setCashAvailable] = useState(0);
   const [history, setHistory] = useState<SavingsTxn[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -82,12 +82,12 @@ export default function GoalDetailScreen() {
 
   async function load() {
     try {
-      const [g, savedMap, pool, hist] = await Promise.all([
-        getGoalById(db, id), getGoalSavedMap(db), getPoolSummary(db), getGoalHistory(db, id),
+      const [g, savedMap, money, hist] = await Promise.all([
+        getGoalById(db, id), getGoalSavedMap(db), getTotalMoney(db), getGoalHistory(db, id),
       ]);
       setGoal(g);
       setSaved(savedMap[id] ?? 0);
-      setUnallocated(pool.unallocated);
+      setCashAvailable(money.cashAvailable);
       setHistory(hist);
       setLoadError(false);
     } catch {
@@ -142,11 +142,9 @@ export default function GoalDetailScreen() {
     const a = parseToPaise(amt);
     if (a <= 0) return;
     try {
-      // Pull from the unallocated pool; top it up first if there isn't enough.
-      // Both writes happen in one transaction so we never deposit without allocating.
-      const shortfall = Math.max(0, a - unallocated);
+      // Fund the goal directly from Cash available.
       const justCompleted = goal !== null && saved < goal.target && saved + a >= goal.target;
-      await depositAndAllocate(db, id, a, shortfall);
+      await fundGoal(db, id, a);
       haptic.success();
       setAmt(''); setShowAdd(false);
       await load();
@@ -217,7 +215,7 @@ export default function GoalDetailScreen() {
   }
 
   function confirmDelete() {
-    Alert.alert('Delete goal?', `“${goal!.name}” will be removed and its ${formatRupees(saved)} returns to your savings pool.`, [
+    Alert.alert('Delete goal?', `“${goal!.name}” will be removed and its ${formatRupees(saved)} returns to your Cash available.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
@@ -384,13 +382,13 @@ export default function GoalDetailScreen() {
 
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add funds">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatCompact(unallocated)} available in your pool · extra is added automatically.</Text>
+        <Text style={styles.hint}>{formatCompact(cashAvailable)} cash available · comes out of your Cash available.</Text>
         <PrimaryButton label="Add to goal" onPress={handleAdd} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
 
-      <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw to pool">
+      <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw to cash">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatCompact(saved)} saved · returns to your unallocated pool.</Text>
+        <Text style={styles.hint}>{formatCompact(saved)} saved · returns to your Cash available.</Text>
         <PrimaryButton label="Withdraw" onPress={handleWithdraw} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
 
