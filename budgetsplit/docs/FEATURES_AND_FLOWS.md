@@ -209,12 +209,11 @@ saves wrapped in try/catch with haptic + Alert on failure.
 7. **Save** (`✓`, gated by `canSave`): transfer → `handleSaveTransfer` (`planAllGroupsSettlement` largest-first, or single group); edit → `updateTxn`; recurring-edit → `splitRecurringSeries` ("this & future"); new expense → duplicate-check (`findRecentDuplicate`, ±24 h) → `insertTxn`.
 8. **Receipt attach:** iOS action sheet (camera/library); storage-full → Alert with a `/storage` deep-link; expense still saves.
 
-### Income — `app/add/income.tsx`
-Green-themed. Mode toggle flips to Quick (`router.replace`). Amount; source chips
-(Salary/Freelance/Investment/Other, synced to category); budget-impact nudge (surplus/short);
-group selector (personal only); recurring toggle + frequency + custom interval + end date.
-**Save** → `insertTxn`/`updateTxn`/`splitRecurringSeries` with `payments:[{me,total}]`.
-("Yearly" maps to a custom 365-day interval.) **No "split by items".**
+### Income — handled by Quick (`app/add/quick.tsx`, `kind='income'`)
+There is no separate income screen anymore — the old `app/add/income.tsx` was folded into Quick
+(one code path, unified category pill + picker). Selecting **Income** forces the Personal group,
+loads the **income** category catalog, and saves with `payments:[{me,total}]`, `shares:[]`. Add /
+edit / recurring-edit all run through Quick.
 
 ### Itemized — `app/add/itemized.tsx`
 4-step wizard with progress dots:
@@ -234,7 +233,7 @@ math including exact remainder distribution.
 **Question:** "What am I saving toward, and what will my month look like?"
 - **States:** `ErrorState` + retry; pull-to-refresh.
 1. **ScreenHeader** "Plan" (large) + month pill.
-2. 🔘 **Module chips:** `Insights` (always, `/insights`) · `Reports` (`reportsDonut`, `/reports`) · `Recurring` (flag `subscriptions`, `/plan/subscriptions`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders chip removed — it's notification config, in Settings.)*
+2. **Header icons** (top-right, not pills): `Insights` (always, `/insights`) · `Recurring` (flag `recurring`, `/plan/recurring`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders lives in Settings; Reports is reached from Insights/Settings, not here.)*
 3. **Cash available** card — income in − paid out − saved.
 4. **PoolCard** (`savingsGoals`): total saved, unallocated, goal count; **+** add to pool / withdraw *(sheets)*.
 5. **Savings insights** card (`savingsInsights`): opportunity-cost / habit nudges.
@@ -304,7 +303,7 @@ Static config list (loaded once; no loading/error state).
 | Screen | Route | What it does |
 |---|---|---|
 | **People** | `friends.tsx` | You card + contacts with balance chips, group counts, tap → `/add/quick?kind=transfer&to=`; add/rename person *(sheet)*. |
-| **Categories** | `categories.tsx` | 🔘 `Expense · Income` kind tabs; collapsible sections; add (name/icon/color) / rename / delete. |
+| **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/color) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Others"). |
 | **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module 🔘 switches by section (Insights & reports · Money tools · Smart capture). Location toggle asks OS permission + writes `save_location`. |
 | **Help** | `help.tsx` | Static FAQ accordion. |
 | **Audit log** | `history.tsx` | Date-grouped change log with colored dots, EDIT/DEL badges, "Load older". Filters by `?groupId=`. |
@@ -323,7 +322,7 @@ Static config list (loaded once; no loading/error state).
 | Dashboard insight teaser | `dashboardInsights` | Home ForecastCard shift teaser | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` | ✅ wired |
 | Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build for OS notifications) |
-| Recurring (label; flag still `subscriptions`) | `subscriptions` | Plan **Recurring** chip → `plan/subscriptions.tsx`, insights nudge | ✅ wired — tracked recurring rules **+** a "Maybe recurring" detector over logs |
+| Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked recurring rules (the log-scanning "detector" was removed in P5) |
 | Smart category | `smartCategory` (off) | Quick-add note | ✅ wired |
 | Reports & charts | `reportsDonut`/`reportsTrend` | `reports.tsx` (Plan chip) | ✅ wired |
 | Afford check | `affordCheck` (off) | Plan chip → `afford.tsx` | ✅ wired |
@@ -331,24 +330,26 @@ Static config list (loaded once; no loading/error state).
 | OCR receipt scan | `itemizedOcr` (on) | — | ❌ parked — `ocr.ts` never called (camera capture only) |
 | Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired |
 
-### Reports — `app/reports.tsx`
-`ScreenHeader` "Reports" + CSV/PDF export (right slot). Month nav; SPENT/EARNED cards; category
-donut (tap segment → `/category/{name}`); 6-month trend (Bar/Line charts); forecast line;
-year-in-review; export CSV / PDF (inline HTML template).
+### Reports — `app/reports.tsx` (the analytics home)
+`ScreenHeader` "Reports" + CSV/PDF export (right slot). Month nav; SPENT/EARNED cards; then the
+synced breakdown: **top category labels** (`CategoryRankList`, colored icons) + a **popping donut**
+(`CategoryDonut`, no bottom legend) + a **6-month trend** (`BarChart`) — all two-way synced via
+`selectedCat` (picking a category in any one redraws the trend for it). Un-adopted category names
+fold into one **"Others"** slice (`foldUncategorized`). Forecast line; year-in-review; export CSV / PDF.
 
-### Insights — `app/insights.tsx`
+### Insights — `app/insights.tsx` (narrative only)
 `ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
 overspend) → "See what to cut" (`/group/{personal}`); **shifts vs last month**; 🔘 **what-if**
-`10% · 20% · 30%`; **across-all-groups net**; **recurring** nudge (→ `/plan/subscriptions`).
+`10% · 20% · 30%`. Analytics (donut/trend/owe-owed/recurring) live in Reports now, not here.
 
 ### Reminders — `app/reminders.tsx`
 `ScreenHeader` → upcoming bills (`buildUpcoming`) → "Log payment" (`/add/quick?kind=expense`);
 settle-ups → "Settle now" (`/add/quick?kind=transfer&to=`); settings → `/settings/notifications`.
 
-### Recurring — `app/plan/subscriptions.tsx`
+### Recurring — `app/plan/recurring.tsx`
 Title "Recurring". Tracked recurring **expense rules** + monthly-total summary; rows →
-`/group/{id}/recurring`; a **"Maybe recurring"** detector section surfaces repeating un-ruled
-charges; empty CTA → `/add/quick?kind=expense`. *(Route/flag keep the legacy `subscriptions` name.)*
+`/group/{id}/recurring`; empty CTA → `/add/quick?kind=expense`. *(The old log-scanning detector was
+removed in P5 — recurring rules are the single source of truth.)*
 
 ### Afford check — `app/afford.tsx`
 Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/add/quick` or `/savings`).
