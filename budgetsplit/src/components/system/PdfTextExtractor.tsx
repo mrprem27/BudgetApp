@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { ensurePdfJsSource } from '../../lib/pdfjsCache';
 
 /**
  * Off-screen WebView that extracts text from a PDF using Mozilla's pdf.js.
@@ -9,22 +10,25 @@ import { WebView } from 'react-native-webview';
  * getTextContent(), and post the reconstructed text back. The GPay parser is
  * tolerant of the (scrambled) line order pdf.js produces.
  *
- * pdf.js loads from a CDN on first use (needs network once); if it fails, the
- * caller falls back to paste. Bundling pdf.js locally is a later hardening step.
+ * pdf.js is cached to local storage on first use ([[pdfjsCache]]) and INLINED
+ * into the page here, so extraction works fully offline after the first download
+ * (no runtime CDN dependency). If it can't be cached/loaded, the caller falls
+ * back to paste.
  */
 
-const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168';
+// Minified JS can't contain a literal </script> — neutralise it before inlining.
+const safe = (js: string) => js.replace(/<\/script/gi, '<\\/script');
 
-function buildHtml(base64: string): string {
+function buildHtml(base64: string, main: string, worker: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
-<script type="module">
-  import * as pdfjsLib from '${PDFJS}/pdf.min.mjs';
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '${PDFJS}/pdf.worker.min.mjs';
-  const post = (type, payload) => window.ReactNativeWebView.postMessage(JSON.stringify({ type, payload }));
+<script>${safe(main)}</script>
+<script>
   (async () => {
+    const post = (type, payload) => window.ReactNativeWebView.postMessage(JSON.stringify({ type, payload }));
     try {
-      const b64 = "${base64}";
-      const raw = atob(b64);
+      const workerBlob = new Blob([${JSON.stringify(worker)}], { type: 'text/javascript' });
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+      const raw = atob("${base64}");
       const bytes = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
       const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
@@ -49,12 +53,24 @@ type Props = {
 };
 
 export function PdfTextExtractor({ base64, onText, onError }: Props) {
+  const [html, setHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    ensurePdfJsSource()
+      .then(({ main, worker }) => { if (alive) setHtml(buildHtml(base64, main, worker)); })
+      .catch(() => { if (alive) onError('Could not load the PDF reader.'); });
+    return () => { alive = false; };
+  }, [base64]);
+
+  if (!html) return null; // still caching/preparing pdf.js
+
   return (
     <View style={styles.offscreen} pointerEvents="none">
       <WebView
         originWhitelist={['*']}
         javaScriptEnabled
-        source={{ html: buildHtml(base64) }}
+        source={{ html }}
         onMessage={(e: { nativeEvent: { data: string } }) => {
           try {
             const m = JSON.parse(e.nativeEvent.data);
@@ -65,7 +81,6 @@ export function PdfTextExtractor({ base64, onText, onError }: Props) {
           }
         }}
         onError={() => onError('Could not load the PDF reader.')}
-        onHttpError={() => onError('Could not load the PDF reader.')}
       />
     </View>
   );
