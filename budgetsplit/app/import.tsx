@@ -12,6 +12,7 @@ import { space, radius, layout } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { parseStatement, type ParseResult } from '../src/lib/importParse';
+import { isGpayStatement, parseGpayStatement } from '../src/lib/gpayParse';
 import { matchCategory } from '../src/lib/smartCategory';
 import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../src/constants/categories';
 import { insertPending } from '../src/db/queries/pending';
@@ -29,9 +30,15 @@ export default function ImportScreen() {
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Google Pay statements have a distinct block layout — use the dedicated
+  // parser for those, and the tolerant CSV/UPI parser for everything else.
+  function parseAny(content: string): ParseResult {
+    return isGpayStatement(content) ? parseGpayStatement(content) : parseStatement(content);
+  }
+
   function handleParse() {
     haptic.selection();
-    setResult(parseStatement(text));
+    setResult(parseAny(text));
   }
 
   async function handlePickFile() {
@@ -43,7 +50,7 @@ export default function ImportScreen() {
       if (res.canceled || !res.assets?.[0]) return;
       const content = await FileSystem.readAsStringAsync(res.assets[0].uri);
       setText(content);
-      setResult(parseStatement(content));
+      setResult(parseAny(content));
       haptic.success();
     } catch {
       haptic.error();
@@ -78,8 +85,9 @@ export default function ImportScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
-            Import from a bank / UPI statement — pick a CSV/text file or paste the rows. We'll do
-            our best to read them; you confirm and fix each one in Review before anything is saved.
+            Import a Google Pay statement (or a bank / UPI export) — pick a file or paste the rows.
+            Google Pay statements are auto-detected. We'll do our best to read them; you confirm and
+            fix each one in Review before anything is saved.
           </Text>
 
           <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} accessibilityRole="button" accessibilityLabel="Choose a CSV or text file">
