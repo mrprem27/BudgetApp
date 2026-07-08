@@ -106,7 +106,7 @@ export async function getFriendBalances(
      FROM group_member gm1
      JOIN group_member gm2 ON gm1.group_id = gm2.group_id AND gm2.person_id != ?
      JOIN person p ON p.id = gm2.person_id
-     JOIN budget_group bg ON bg.id = gm1.group_id AND bg.is_personal = 0 AND bg.is_archived = 0
+     JOIN budget_group bg ON bg.id = gm1.group_id AND bg.is_personal = 0
      WHERE gm1.person_id = ?
      GROUP BY p.id`,
     [meId, meId],
@@ -130,7 +130,10 @@ export async function getFriendBalances(
       net: friendNet,
       groupCount: r.group_count,
     };
-  }).filter(f => f.net !== 0 || f.groupCount > 0);
+  });
+  // (No post-filter: everyone you share a non-personal group with is shown, incl.
+  // settled-up friends at net 0 and archived-group balances — the old
+  // `f.net !== 0 || f.groupCount > 0` guard was a no-op since group_count >= 1 always.)
 }
 
 /**
