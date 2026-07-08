@@ -152,7 +152,7 @@ export default function TxnDetailScreen() {
     ? `/add/itemized?editId=${id}`
     : isSettlement
     ? `/add/quick?kind=transfer&editId=${id}`
-    : `/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`;
+    : `/add/quick?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')

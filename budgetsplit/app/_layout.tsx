@@ -108,7 +108,6 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
                 {/* Full-screen (not the iOS inset 'modal' sheet) so they read like the Settle screen. */}
                 <Stack.Screen name="add/quick" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/income" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
                 <Stack.Screen name="add/itemized" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               </Stack>
             </OnboardingGate>
