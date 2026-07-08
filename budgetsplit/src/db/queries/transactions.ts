@@ -587,21 +587,31 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
   if (templates.length === 0) return 0;
 
   const ids = templates.map(t => t.id);
-  const [skipMap, claimedMap] = await Promise.all([getSkipsMap(db, ids), getClaimedOccurrences(db, ids)]);
+  // Batch-load splits + skips + claims once (was an N+1 loadSplits per template).
+  const [withSplits, skipMap, claimedMap] = await Promise.all([
+    loadSplitsMany(db, templates),
+    getSkipsMap(db, ids),
+    getClaimedOccurrences(db, ids),
+  ]);
+  const splitsById = new Map(withSplits.map(t => [t.id, t]));
   let created = 0;
 
-  for (const t of templates) {
-    const rw = await loadSplits(db, t);
-    const dates = occurrenceDatesUpTo(t.date, t.recur_freq!, t.recur_interval ?? 1, now, t.recur_end);
-    const skips = skipMap.get(t.id);
-    const claimed = claimedMap.get(t.id);
-    for (const occ of dates) {
-      // Older occurrences stay virtual (still shown/counted) to avoid a huge
-      // first-run back-fill; only recent due ones become real editable rows.
-      if (occ < horizonStart) continue;
-      if (skips?.has(occ) || claimed?.has(occ)) continue;
-      const newId = uuid();
-      await db.withTransactionAsync(async () => {
+  // One transaction for the whole run (was one per occurrence → ~90 fsync'd
+  // transactions on a daily rule's first back-fill). Materialization is
+  // idempotent — a failure rolls back and retries on the next open.
+  await db.withTransactionAsync(async () => {
+    for (const t of templates) {
+      const rw = splitsById.get(t.id);
+      if (!rw) continue;
+      const dates = occurrenceDatesUpTo(t.date, t.recur_freq!, t.recur_interval ?? 1, now, t.recur_end);
+      const skips = skipMap.get(t.id);
+      const claimed = claimedMap.get(t.id);
+      for (const occ of dates) {
+        // Older occurrences stay virtual (still shown/counted) to avoid a huge
+        // first-run back-fill; only recent due ones become real editable rows.
+        if (occ < horizonStart) continue;
+        if (skips?.has(occ) || claimed?.has(occ)) continue;
+        const newId = uuid();
         await db.runAsync(
           `INSERT INTO txn
              (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
@@ -618,10 +628,10 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
         for (const s of rw.shares) {
           await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
         }
-      });
-      created++;
+        created++;
+      }
     }
-  }
+  });
   return created;
 }
 

@@ -341,6 +341,10 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
     CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
     CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
+    -- Cross-group recurring scans (materializeDueOccurrences / getActiveRecurringRules)
+    -- filter recur_state with no group_id, so they can't use the group_id-leading
+    -- index above — this recur_state-leading partial index serves them.
+    CREATE INDEX IF NOT EXISTS idx_txn_recur_state ON txn(recur_state) WHERE recur_freq IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
   `);
 

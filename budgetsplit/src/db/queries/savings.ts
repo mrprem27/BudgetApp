@@ -402,7 +402,9 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
       const mine = myShare(t);
       if (mine > 0) norm[t.category] = (norm[t.category] ?? 0) + mine;
     } else if (t.kind === 'income') {
-      monthlyIncome += t.payments.reduce((s, p) => s + p.amount, 0);
+      // Only MY income — `recentTxns` spans all groups, so a co-member's income
+      // in a shared group must not inflate my monthly-income proxy.
+      monthlyIncome += t.payments.filter(p => p.personId === me.id).reduce((s, p) => s + p.amount, 0);
     }
   }
 
