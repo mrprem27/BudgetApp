@@ -22,7 +22,8 @@ import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
 import type { TxnKind } from '../src/constants/enums';
 
-type RowEdit = { kind: TxnKind; category: string; amount: string };
+// dest = 'personal' or a group id. Group rows are handed to the editor to split.
+type RowEdit = { kind: TxnKind; category: string; amount: string; dest: string };
 
 export default function ReviewScreen() {
   const db = useSQLiteContext();
@@ -42,6 +43,7 @@ export default function ReviewScreen() {
     ]);
     return {
       pending, meId: me?.id ?? '', personalId,
+      sharedGroups: groups.filter(g => g.is_personal !== 1).map(g => ({ id: g.id, name: g.name })),
       expenseCats: expenseCats.map(c => c.name),
       incomeCats: incomeCats.map(c => c.name),
     };
@@ -55,9 +57,19 @@ export default function ReviewScreen() {
       kind: e.kind ?? (row.kind === 'settlement' ? 'expense' : row.kind),
       category: e.category ?? row.category ?? '',
       amount: e.amount ?? String(row.amount / 100),
+      dest: e.dest ?? 'personal',
     };
   }
   const patch = (id: string, p: Partial<RowEdit>) => setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...p } }));
+  /** Assign every pending row to a destination ('personal' or a group id) at once. */
+  const setAllDest = (dest: string) => {
+    haptic.selection();
+    setEdits(prev => {
+      const next = { ...prev };
+      for (const row of pending) next[row.id] = { ...next[row.id], dest };
+      return next;
+    });
+  };
 
   async function confirmRow(row: PendingTxn) {
     const v = eff(row);
@@ -86,12 +98,16 @@ export default function ReviewScreen() {
     reload();
   }
 
-  /** Hand a row to the full editor (split / transfer / fine-tune), then drop the pending row. */
+  /** Hand a row to the full editor (split / transfer / fine-tune), then drop the pending
+   *  row. Group-destined rows open in that group so the split UI (Equal / Specific /
+   *  Percent / Shares) applies; personal rows open in Personal. */
   async function openInEditor(row: PendingTxn) {
     const v = eff(row);
+    const groupId = v.dest !== 'personal' ? v.dest : (data?.personalId ?? '');
+    const kind = v.kind === 'income' ? 'income' : 'expense';
     await deletePending(db, row.id);
     refresh();
-    router.push(`/add/quick?kind=${v.kind === 'income' ? 'income' : 'expense'}&amount=${row.amount}&note=${encodeURIComponent(row.description)}&date=${row.date}` as any);
+    router.push(`/add/quick?kind=${kind}&groupId=${groupId}&amount=${row.amount}&note=${encodeURIComponent(row.description)}&date=${row.date}` as any);
   }
 
   async function handleClearAll() {
@@ -125,9 +141,29 @@ export default function ReviewScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}>
           <Text style={styles.intro}>{pending.length} to review · confirm each, or fine-tune in the editor.</Text>
+
+          {/* Assign all → Personal or a group (fast bulk classification). */}
+          {(data?.sharedGroups.length ?? 0) > 0 && (
+            <View style={styles.assignAll}>
+              <Text style={styles.assignAllLabel}>Assign all to</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.destRow} keyboardShouldPersistTaps="handled">
+                <TouchableOpacity style={styles.destChip} onPress={() => setAllDest('personal')} accessibilityRole="button" accessibilityLabel="Assign all to Personal">
+                  <Text style={styles.destChipText}>Personal</Text>
+                </TouchableOpacity>
+                {data!.sharedGroups.map(g => (
+                  <TouchableOpacity key={g.id} style={styles.destChip} onPress={() => setAllDest(g.id)} accessibilityRole="button" accessibilityLabel={`Assign all to ${g.name}`}>
+                    <Text style={styles.destChipText}>{g.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {pending.map(row => {
             const v = eff(row);
             const cats = v.kind === 'income' ? (data?.incomeCats ?? []) : (data?.expenseCats ?? []);
+            const isGroup = v.dest !== 'personal';
+            const groupName = data?.sharedGroups.find(g => g.id === v.dest)?.name;
             return (
               <View key={row.id} style={styles.card}>
                 <View style={styles.rowTop}>
@@ -174,20 +210,48 @@ export default function ReviewScreen() {
                   })}
                 </ScrollView>
 
-                {/* Actions */}
+                {/* Destination — Personal or a group (only when shared groups exist). */}
+                {(data?.sharedGroups.length ?? 0) > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.destRow} keyboardShouldPersistTaps="handled">
+                    <TouchableOpacity style={[styles.destChip, !isGroup && styles.destChipOn]} onPress={() => patch(row.id, { dest: 'personal' })} accessibilityRole="button" accessibilityState={{ selected: !isGroup }}>
+                      <Feather name="user" size={12} color={!isGroup ? colors.bg : colors.textSecondary} />
+                      <Text style={[styles.destChipText, !isGroup && styles.destChipTextOn]}>Personal</Text>
+                    </TouchableOpacity>
+                    {data!.sharedGroups.map(g => {
+                      const on = v.dest === g.id;
+                      return (
+                        <TouchableOpacity key={g.id} style={[styles.destChip, on && styles.destChipOn]} onPress={() => patch(row.id, { dest: g.id })} accessibilityRole="button" accessibilityState={{ selected: on }}>
+                          <Feather name="users" size={12} color={on ? colors.bg : colors.textSecondary} />
+                          <Text style={[styles.destChipText, on && styles.destChipTextOn]}>{g.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                {/* Actions — Personal rows confirm inline; Group rows open the split editor. */}
                 <View style={styles.actions}>
-                  <TouchableOpacity style={styles.editorLink} onPress={() => openInEditor(row)} accessibilityRole="button" accessibilityLabel="Open in editor to split or transfer">
-                    <Feather name="sliders" size={14} color={colors.textSecondary} />
-                    <Text style={styles.editorLinkText}>Split / transfer</Text>
-                  </TouchableOpacity>
+                  {!isGroup && (
+                    <TouchableOpacity style={styles.editorLink} onPress={() => openInEditor(row)} accessibilityRole="button" accessibilityLabel="Open in editor to split or transfer">
+                      <Feather name="sliders" size={14} color={colors.textSecondary} />
+                      <Text style={styles.editorLinkText}>Split / transfer</Text>
+                    </TouchableOpacity>
+                  )}
                   <View style={{ flex: 1 }} />
                   <TouchableOpacity style={styles.discardBtn} onPress={() => discardRow(row)} accessibilityRole="button" accessibilityLabel="Discard">
                     <Feather name="x" size={18} color={colors.textMuted} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.confirmBtn} onPress={() => confirmRow(row)} accessibilityRole="button" accessibilityLabel="Confirm">
-                    <Feather name="check" size={16} color={colors.bg} />
-                    <Text style={styles.confirmText}>Confirm</Text>
-                  </TouchableOpacity>
+                  {isGroup ? (
+                    <TouchableOpacity style={styles.confirmBtn} onPress={() => openInEditor(row)} accessibilityRole="button" accessibilityLabel={`Split in ${groupName}`}>
+                      <Feather name="users" size={15} color={colors.bg} />
+                      <Text style={styles.confirmText} numberOfLines={1}>Split in {groupName}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.confirmBtn} onPress={() => confirmRow(row)} accessibilityRole="button" accessibilityLabel="Confirm">
+                      <Feather name="check" size={16} color={colors.bg} />
+                      <Text style={styles.confirmText}>Confirm</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );
@@ -222,6 +286,13 @@ const styles = StyleSheet.create({
   catChipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   catChipText: { ...type.label, color: colors.textSecondary },
   catChipTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  assignAll: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xs },
+  assignAllLabel: { ...type.caption, color: colors.textMuted, flexShrink: 0 },
+  destRow: { gap: 6, paddingVertical: 2 },
+  destChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
+  destChipOn: { backgroundColor: colors.settle, borderColor: colors.settle },
+  destChipText: { ...type.label, color: colors.textSecondary },
+  destChipTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   editorLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   editorLinkText: { ...type.label, color: colors.textSecondary },
