@@ -105,9 +105,10 @@ export default function ReviewScreen() {
     const v = eff(row);
     const groupId = v.dest !== 'personal' ? v.dest : (data?.personalId ?? '');
     const kind = v.kind === 'income' ? 'income' : 'expense';
+    const cat = v.category ? `&category=${encodeURIComponent(v.category)}` : '';
     await deletePending(db, row.id);
     refresh();
-    router.push(`/add/quick?kind=${kind}&groupId=${groupId}&amount=${row.amount}&note=${encodeURIComponent(row.description)}&date=${row.date}` as any);
+    router.push(`/add/quick?kind=${kind}&groupId=${groupId}&amount=${row.amount}&note=${encodeURIComponent(row.description)}&date=${row.date}${cat}` as any);
   }
 
   async function handleClearAll() {

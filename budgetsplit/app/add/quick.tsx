@@ -55,8 +55,8 @@ import { oweView } from '../../src/lib/owe';
 
 export default function QuickAddScreen() {
   const insets = useSafeAreaInsets();
-  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount, note: paramNote, date: paramDate } =
-    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string }>();
+  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount, note: paramNote, date: paramDate, category: paramCategory } =
+    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string }>();
   const isEditing = !!editId;
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
@@ -192,7 +192,9 @@ export default function QuickAddScreen() {
       let gid = paramGroupId ?? grps[0]?.id ?? '';
       if (kind === 'income') gid = grps.find(g => g.is_personal === 1)?.id ?? gid;
       setSelectedGroupId(gid);
-      if (gid) await loadGroup(gid, meRow, undefined, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
+      // Prefill category (e.g. handed off from import Review) so it carries through.
+      const preCat = typeof paramCategory === 'string' && paramCategory ? paramCategory : undefined;
+      if (gid) await loadGroup(gid, meRow, preCat, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
     })();
   }, []);
 
