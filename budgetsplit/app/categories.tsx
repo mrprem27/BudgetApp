@@ -13,9 +13,8 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { Input } from '../src/components/ui/Input';
-import { getAllGroups } from '../src/db/queries/groups';
 import {
-  getCategoriesForGroup, insertCategory, deleteCategory, renameCategory,
+  getCategories, insertCategory, deleteCategory, renameCategory,
 } from '../src/db/queries/categories';
 import { haptic } from '../src/lib/haptics';
 import {
@@ -27,7 +26,6 @@ import {
   CATEGORY_COLOR_CHOICES as COLOR_CHOICES,
   asFeather,
 } from '../src/constants/palette';
-import type { BudgetGroup } from '../src/db/queries/groups';
 import type { Category } from '../src/db/queries/categories';
 
 if (Platform.OS === 'android') {
@@ -38,8 +36,6 @@ if (Platform.OS === 'android') {
 export default function CategoriesScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const [groups, setGroups] = useState<BudgetGroup[]>([]);
-  const [groupId, setGroupId] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -51,18 +47,12 @@ export default function CategoriesScreen() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState('');
 
-  useFocusEffect(useCallback(() => { init(); }, []));
+  useFocusEffect(useCallback(() => { loadCats(kindTab); }, [kindTab]));
 
-  async function init() {
+  // Categories are a single global catalog now — no group scoping.
+  async function loadCats(k: CategoryKind) {
     try {
-      const grps = await getAllGroups(db);
-      setGroups(grps);
-      const gid = groupId || grps[0]?.id || '';
-      setGroupId(gid);
-      if (gid) {
-        const cats = await getCategoriesForGroup(db, gid, kindTab);
-        setCategories(cats);
-      }
+      setCategories(await getCategories(db, k));
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -74,10 +64,7 @@ export default function CategoriesScreen() {
     setKindTab(k);
     setExpandedSection(null);
     setAddingToSection(null);
-    if (groupId) {
-      const cats = await getCategoriesForGroup(db, groupId, k);
-      setCategories(cats);
-    }
+    await loadCats(k);
   }
 
   function toggleSection(title: string) {
@@ -101,9 +88,9 @@ export default function CategoriesScreen() {
 
   async function addCategory() {
     const trimmed = name.trim();
-    if (!trimmed || !groupId) return;
+    if (!trimmed) return;
     try {
-      const created = await insertCategory(db, groupId, trimmed, icon, color, kindTab, addingToSection);
+      const created = await insertCategory(db, trimmed, icon, color, kindTab, addingToSection);
       haptic.success();
       setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       setName('');
@@ -186,7 +173,7 @@ export default function CategoriesScreen() {
       <ScreenHeader title="Categories" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); init(); }} />
+        <ErrorState onRetry={() => { setLoadError(false); loadCats(kindTab); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

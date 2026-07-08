@@ -590,7 +590,7 @@ export default function ItemizedScreen() {
             value={selectedCategory}
             onChange={setSelectedCategory}
             onCreate={async (name) => {
-              const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
+              const created = await insertCategory(db, name, 'tag', colors.accent);
               setCategories(prev => [...prev, created]);
               return created;
             }}

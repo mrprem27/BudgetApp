@@ -397,7 +397,7 @@ export default function AddIncomeScreen() {
           hideTrigger
           onClose={() => setShowCatPicker(false)}
           onCreate={async (name) => {
-            const c = await insertCategory(db, selectedGroupId, name, null, null, 'income');
+            const c = await insertCategory(db, name, null, null, 'income');
             setCategories(prev => [...prev, c]);
             return c;
           }}

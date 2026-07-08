@@ -611,7 +611,7 @@ export default function QuickAddScreen() {
             if (kind !== 'transfer' && title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
           }}
           onCreate={async (name) => {
-            const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
+            const created = await insertCategory(db, name, 'tag', colors.accent, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
             setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
             return created;
           }}

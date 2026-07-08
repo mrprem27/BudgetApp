@@ -15,7 +15,7 @@ import { getPending, deletePending, clearPending, type PendingTxn } from '../src
 import { insertTxn } from '../src/db/queries/transactions';
 import { getMe } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
-import { getCategoriesForGroup } from '../src/db/queries/categories';
+import { getCategories } from '../src/db/queries/categories';
 import { parseToPaise } from '../src/lib/money';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
@@ -37,8 +37,8 @@ export default function ReviewScreen() {
     const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
     const [pending, expenseCats, incomeCats] = await Promise.all([
       getPending(db),
-      personalId ? getCategoriesForGroup(db, personalId, 'expense') : Promise.resolve([]),
-      personalId ? getCategoriesForGroup(db, personalId, 'income') : Promise.resolve([]),
+      getCategories(db, 'expense'),
+      getCategories(db, 'income'),
     ]);
     return {
       pending, meId: me?.id ?? '', personalId,

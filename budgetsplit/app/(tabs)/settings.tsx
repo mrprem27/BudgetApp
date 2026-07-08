@@ -14,7 +14,7 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getCategoriesForGroup } from '../../src/db/queries/categories';
+import { getCategories } from '../../src/db/queries/categories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -59,7 +59,7 @@ export default function SettingsScreen() {
       const personalGroup = grps.find(g => g.is_personal === 1);
       const gid = personalGroup?.id ?? grps[0]?.id;
       setPersonalGroupId(personalGroup?.id ?? null);
-      if (gid) setCategoryCount((await getCategoriesForGroup(db, gid, 'expense')).length);
+      setCategoryCount((await getCategories(db, 'expense')).length);
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());

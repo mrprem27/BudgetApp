@@ -13,7 +13,6 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../constants/categories';
 import { insertGroup } from './queries/groups';
 import { insertPerson } from './queries/persons';
 import { getMe } from './queries/persons';
@@ -69,15 +68,7 @@ async function createMeAndPersonal(
     [personalId, 'Personal', 'credit-card', meColor, now],
   );
   await db.runAsync('INSERT INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)', [personalId, meId, now]);
-  for (const c of DEFAULT_CATEGORIES) {
-    await db.runAsync("INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'expense')", [uuid(), personalId, c.name, c.icon, c.color]);
-  }
-  for (const c of INCOME_CATEGORIES) {
-    await db.runAsync("INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')", [uuid(), personalId, c.name, c.icon, c.color]);
-  }
-  for (const c of TRANSFER_CATEGORIES) {
-    await db.runAsync("INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')", [uuid(), personalId, c.name, c.icon, c.color]);
-  }
+  // Categories are a global catalog seeded in openDB — not per group.
   return personalId;
 }
 

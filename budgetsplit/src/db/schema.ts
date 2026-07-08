@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { INCOME_CATEGORIES, CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_CATEGORIES, TRANSFER_SECTIONS } from '../constants/categories';
+import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_CATEGORIES, TRANSFER_SECTIONS } from '../constants/categories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -98,13 +98,17 @@ CREATE TABLE IF NOT EXISTS line_item (
   assigned_to  TEXT NOT NULL
 );
 
+-- Categories are a single GLOBAL catalog per kind (group_id NULL = global).
+-- UNIQUE(name, kind) keeps one row per name within a kind.
 CREATE TABLE IF NOT EXISTS category (
   id        TEXT PRIMARY KEY,
-  group_id  TEXT NOT NULL REFERENCES budget_group(id),
+  group_id  TEXT REFERENCES budget_group(id),
   name      TEXT NOT NULL,
   icon      TEXT,
   color     TEXT,
-  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer'))
+  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+  section   TEXT,
+  UNIQUE(name, kind)
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -363,36 +367,56 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     "UPDATE person SET email='hello123@vortiqal.com' WHERE is_me=1 AND (email IS NULL OR email='');",
   );
 
-  // Phase G: reclassify legacy income-named categories, then backfill the
-  // income category set into any group that doesn't have it yet.
+  // Reclassify legacy income-named categories before the global dedupe, so a
+  // legacy 'Salary' (seeded as expense) merges into the income catalog.
   await db.execAsync("UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income');");
-  const groups = await db.getAllAsync<{ id: string }>('SELECT id FROM budget_group');
-  for (const g of groups) {
-    for (const cat of INCOME_CATEGORIES) {
-      const exists = await db.getFirstAsync<{ one: number }>(
-        "SELECT 1 as one FROM category WHERE group_id=? AND name=? AND kind='income'", [g.id, cat.name],
-      );
-      if (!exists) {
-        await db.runAsync(
-          "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
-          [uuid(), g.id, cat.name, cat.icon, cat.color],
+
+  // Phase GC: collapse the per-group category rows into a single GLOBAL catalog
+  // (group_id NULL = global), deduped by (name, kind). One-time, flagged — the
+  // rebuild also drops the old NOT NULL on group_id and adds UNIQUE(name,kind).
+  try {
+    const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key='category_global_v1'");
+    if (!done) {
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE category_g (
+          id        TEXT PRIMARY KEY,
+          group_id  TEXT REFERENCES budget_group(id),
+          name      TEXT NOT NULL,
+          icon      TEXT,
+          color     TEXT,
+          kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+          section   TEXT,
+          UNIQUE(name, kind)
         );
-      }
+        INSERT INTO category_g (id, group_id, name, icon, color, kind, section)
+          SELECT id, NULL, name, icon, color, kind, section FROM category GROUP BY name, kind;
+        DROP TABLE category;
+        ALTER TABLE category_g RENAME TO category;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+      await db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES ('category_global_v1', '1')");
     }
-    // Transfer (settlement) categories. Checked with kind='transfer' because
-    // some names ('Rent', 'Other') collide with expense category names.
-    for (const cat of TRANSFER_CATEGORIES) {
-      const exists = await db.getFirstAsync<{ one: number }>(
-        "SELECT 1 as one FROM category WHERE group_id=? AND name=? AND kind='transfer'", [g.id, cat.name],
-      );
-      if (!exists) {
-        await db.runAsync(
-          "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')",
-          [uuid(), g.id, cat.name, cat.icon, cat.color],
-        );
-      }
-    }
+  } catch {
+    // Leave categories as-is if the global migration fails.
   }
+
+  // Ensure the global catalog contains every default category (idempotent via
+  // UNIQUE(name, kind)). This is the ONLY category seeding now — groups no longer
+  // seed their own copies.
+  const seedGlobal = async (defs: { name: string; icon: string; color: string }[], kind: string) => {
+    for (const c of defs) {
+      await db.runAsync(
+        "INSERT OR IGNORE INTO category (id, group_id, name, icon, color, kind) VALUES (?, NULL, ?, ?, ?, ?)",
+        [uuid(), c.name, c.icon, c.color, kind],
+      );
+    }
+  };
+  await seedGlobal(DEFAULT_CATEGORIES, 'expense');
+  await seedGlobal(INCOME_CATEGORIES, 'income');
+  await seedGlobal(TRANSFER_CATEGORIES, 'transfer');
 
   // Backfill the section column per kind so a name shared across kinds (e.g.
   // 'Rent', 'Other') lands in the right section for its own kind.

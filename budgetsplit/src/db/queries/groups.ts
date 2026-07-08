@@ -1,7 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../../constants/categories';
 import { logAudit } from './audit';
 
 export type BudgetGroup = {
@@ -74,24 +73,8 @@ export async function insertGroup(
         [id, pid, now],
       );
     }
-    for (const cat of DEFAULT_CATEGORIES) {
-      await db.runAsync(
-        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'expense')",
-        [uuid(), id, cat.name, cat.icon, cat.color],
-      );
-    }
-    for (const cat of INCOME_CATEGORIES) {
-      await db.runAsync(
-        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
-        [uuid(), id, cat.name, cat.icon, cat.color],
-      );
-    }
-    for (const cat of TRANSFER_CATEGORIES) {
-      await db.runAsync(
-        "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'transfer')",
-        [uuid(), id, cat.name, cat.icon, cat.color],
-      );
-    }
+    // Categories are a single global catalog now (seeded once in openDB) — groups
+    // no longer seed their own copies.
   });
 
   return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now };
@@ -168,7 +151,8 @@ export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): P
       `DELETE FROM recur_skip WHERE series_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
     await db.runAsync('DELETE FROM txn WHERE group_id=?', [groupId]);
     await db.runAsync('DELETE FROM group_member WHERE group_id=?', [groupId]);
-    await db.runAsync('DELETE FROM category WHERE group_id=?', [groupId]);
+    // Categories are a global catalog now — not owned by the group. Only this
+    // group's budget lines go.
     await db.runAsync('DELETE FROM category_budget WHERE group_id=?', [groupId]);
     await db.runAsync('DELETE FROM budget_group WHERE id=?', [groupId]);
     await logAudit(db, {
