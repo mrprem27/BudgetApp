@@ -44,17 +44,31 @@ export default function ImportScreen() {
   async function handlePickFile() {
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/vnd.ms-excel'],
+        type: ['application/pdf', 'text/csv', 'text/comma-separated-values', 'text/plain', 'application/vnd.ms-excel'],
         copyToCacheDirectory: true,
       });
       if (res.canceled || !res.assets?.[0]) return;
-      const content = await FileSystem.readAsStringAsync(res.assets[0].uri);
+      const asset = res.assets[0];
+      const isPdf = asset.mimeType === 'application/pdf' || /\.pdf$/i.test(asset.name ?? '');
+      let content = '';
+      try { content = await FileSystem.readAsStringAsync(asset.uri); } catch { content = ''; }
+      const parsed = parseAny(content);
+      // Many PDFs store text compressed (FlateDecode) — not readable on-device
+      // without a native extractor. If nothing parsed, guide the user to paste.
+      if (parsed.rows.length === 0 && isPdf) {
+        haptic.warning();
+        Alert.alert(
+          'Couldn’t read this PDF automatically',
+          'Some statement PDFs keep their text compressed, which we can’t extract on-device yet. Open the statement, select all the text, and paste it below — it’ll parse the same way.',
+        );
+        return;
+      }
       setText(content);
-      setResult(parseAny(content));
+      setResult(parsed);
       haptic.success();
     } catch {
       haptic.error();
-      Alert.alert('Could not read that file', 'Pick a .csv or .txt export, or paste the text below instead.');
+      Alert.alert('Could not read that file', 'Pick a PDF / CSV / text export, or paste the text below instead.');
     }
   }
 
@@ -90,9 +104,9 @@ export default function ImportScreen() {
             fix each one in Review before anything is saved.
           </Text>
 
-          <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} accessibilityRole="button" accessibilityLabel="Choose a CSV or text file">
+          <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} accessibilityRole="button" accessibilityLabel="Choose a PDF, CSV or text file">
             <Feather name="file-text" size={18} color={colors.accent} />
-            <Text style={styles.fileBtnText}>Choose a file (.csv / .txt)</Text>
+            <Text style={styles.fileBtnText}>Choose a file (.pdf / .csv / .txt)</Text>
           </TouchableOpacity>
           <Text style={styles.orHint}>or paste below</Text>
 
