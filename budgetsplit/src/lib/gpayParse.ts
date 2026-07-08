@@ -32,6 +32,13 @@ const PARTY_RE = /^(Paid to|Received from)\s+(.+)$/i;
 const UPI_RE = /UPI Transaction ID:\s*(\d+)/i;
 const AMOUNT_RE = /^₹\s*[\d,]+(?:\.\d{1,2})?$/;
 
+/** The funding-account line, e.g. "ICICI Bank 6607" — NOT a counterparty. PDF
+ *  extraction sometimes strands a received row's "Paid to <bank>" line into the
+ *  next block, so this filter keeps it from being read as the payee. */
+function isFundingLine(name: string): boolean {
+  return /\bbank\b/i.test(name) && /\d/.test(name);
+}
+
 /** Is this text a Google Pay statement? Import rejects anything else. */
 export function isGpayStatement(text: string): boolean {
   const t = text ?? '';
@@ -76,16 +83,20 @@ export function parseGpayStatement(text: string): ParseResult {
   let skipped = 0;
 
   for (const block of blocks) {
-    const timeLine = block[1] && TIME_RE.test(block[1]) ? block[1] : undefined;
-    // First party line is the counterparty; a later "Paid to <bank>" (income
-    // funding line) is ignored because we take the first match only.
-    const partyLine = block.find(l => PARTY_RE.test(l));
+    // PDF extraction interleaves columns, so search the whole block (not fixed
+    // positions) and disambiguate the counterparty from the funding line.
+    const timeLine = block.find(l => TIME_RE.test(l));
     const amountLine = block.find(l => AMOUNT_RE.test(l));
-    if (!partyLine || !amountLine) { skipped += 1; continue; }
+    const parties = block.map(l => PARTY_RE.exec(l)).filter((m): m is RegExpExecArray => m !== null);
+    // "Received from X" is always the counterparty (income). Otherwise the first
+    // "Paid to X" that isn't the bank funding line is the counterparty (expense).
+    const received = parties.find(p => /received from/i.test(p[1]));
+    const paidTo = parties.find(p => /paid to/i.test(p[1]) && !isFundingLine(p[2].trim()));
+    const chosen = received ?? paidTo;
+    if (!chosen || !amountLine) { skipped += 1; continue; }
 
-    const party = PARTY_RE.exec(partyLine)!;
-    const isReceived = /received from/i.test(party[1]);
-    const description = party[2].trim();
+    const isReceived = chosen === received;
+    const description = chosen[2].trim();
     const amount = parseToPaise(amountLine);
     if (amount <= 0) { skipped += 1; continue; }
 

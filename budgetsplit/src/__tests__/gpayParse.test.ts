@@ -100,4 +100,40 @@ ${INCOME}`;
     expect(parseGpayStatement('').rows).toHaveLength(0);
     expect(parseGpayStatement('random text\nno dates here').rows).toHaveLength(0);
   });
+
+  // Real PDF extraction scrambles column order across pages — these guard it.
+  it('handles amount BEFORE the UPI line (interleaved layout)', () => {
+    const { rows } = parseGpayStatement(`${HEADER}
+01 Jun, 2026
+07:57 PM
+Paid to RAKESH KUMAR SOOD
+₹1,000
+UPI Transaction ID: 651844987653
+Paid by ICICI Bank 6607`);
+    expect(rows[0]).toMatchObject({ amount: 100000, description: 'RAKESH KUMAR SOOD', kind: 'expense' });
+  });
+
+  it('ignores a stranded "Paid to <bank>" funding line before the real payee', () => {
+    // From page 3: SUBHAM's funding line strands into Anis Kumar's block.
+    const { rows } = parseGpayStatement(`${HEADER}
+02 Jun, 2026
+07:10 PM
+Paid to ICICI Bank 6607
+Paid to Anis Kumar
+₹60
+UPI Transaction ID: 615357348320`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ description: 'Anis Kumar', kind: 'expense', amount: 6000 });
+  });
+
+  it('still reads income when a prior row\'s "Paid by <bank>" strands in', () => {
+    const { rows } = parseGpayStatement(`${HEADER}
+02 Jun, 2026
+03:03 PM
+Paid by ICICI Bank 6607
+Received from SUBHAM KUMAR NIRALA
+₹17,000
+UPI Transaction ID: 651947086891`);
+    expect(rows[0]).toMatchObject({ description: 'SUBHAM KUMAR NIRALA', kind: 'income', amount: 1700000 });
+  });
 });

@@ -26,14 +26,16 @@ export default function ImportScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
+  const [source, setSource] = useState<'gpay' | 'other'>('gpay');
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Google Pay statements have a distinct block layout — use the dedicated
-  // parser for those, and the tolerant CSV/UPI parser for everything else.
+  // The source picker chooses the parser: Google Pay's block layout vs. the
+  // tolerant CSV/UPI parser. (GPay is also auto-detected as a safety net.)
   function parseAny(content: string): ParseResult {
-    return isGpayStatement(content) ? parseGpayStatement(content) : parseStatement(content);
+    const gpay = source === 'gpay' || isGpayStatement(content);
+    return gpay ? parseGpayStatement(content) : parseStatement(content);
   }
 
   function handleParse() {
@@ -100,9 +102,30 @@ export default function ImportScreen() {
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
             Import a Google Pay statement (or a bank / UPI export) — pick a file or paste the rows.
-            Google Pay statements are auto-detected. We'll do our best to read them; you confirm and
-            fix each one in Review before anything is saved.
+            You confirm and fix each one in Review before anything is saved.
           </Text>
+
+          {/* Source picker — tells us which format to parse. */}
+          <Text style={styles.sourceLabel}>STATEMENT SOURCE</Text>
+          <View style={styles.sourceRow}>
+            {([['gpay', 'Google Pay'], ['other', 'Bank / UPI (CSV)']] as const).map(([key, label]) => (
+              <TouchableOpacity
+                key={key}
+                style={[styles.sourceChip, source === key && styles.sourceChipOn]}
+                onPress={() => { haptic.selection(); setSource(key); setResult(null); }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: source === key }}
+              >
+                <Text style={[styles.sourceChipText, source === key && styles.sourceChipTextOn]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {source === 'gpay' && (
+            <Text style={styles.sourceHint}>
+              Open your Google Pay statement PDF → Select All → Copy → paste below. (Direct PDF upload
+              works too when its text is readable.)
+            </Text>
+          )}
 
           <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} accessibilityRole="button" accessibilityLabel="Choose a PDF, CSV or text file">
             <Feather name="file-text" size={18} color={colors.accent} />
@@ -146,6 +169,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
   intro: { ...type.body, color: colors.textSecondary, marginBottom: space.md, lineHeight: 20 },
+  sourceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
+  sourceRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
+  sourceChip: { flex: 1, alignItems: 'center', paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  sourceChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
+  sourceChipText: { ...type.label, color: colors.textSecondary },
+  sourceChipTextOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  sourceHint: { ...type.caption, color: colors.textMuted, marginBottom: space.md, lineHeight: 16 },
   fileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accentMuted },
   fileBtnText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   orHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginVertical: space.sm },
