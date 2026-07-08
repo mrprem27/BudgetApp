@@ -21,7 +21,8 @@ import {
   computeAdjustedTotal, computeItemSubtotal, computePerPersonShares, splitItemBase,
   type LineItemDraft, type Adjustment,
 } from '../../src/lib/itemized';
-import { SPLIT_MODE, SPLIT_MODE_LABEL, type SplitMode } from '../../src/constants/enums';
+import { type SplitMode } from '../../src/constants/enums';
+import { SplitEditor } from '../../src/components/finance/add/SplitEditor';
 import { asFeather } from '../../src/constants/palette';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -507,69 +508,27 @@ export default function ItemizedScreen() {
                 <Feather name={expandedItem === item.id ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
               </TouchableOpacity>
               {expandedItem === item.id && (() => {
-                const mode: SplitMode = item.splitMode ?? 'equal';
                 const base = computeItemSubtotal(item);
                 const itemSplit = splitItemBase(item, base);
-                const assignees = members.filter(m => item.assignedTo.includes(m.id));
-                const exactRemainder = base - assignees.reduce((s, m) => s + (itemSplit[m.id] ?? 0), 0);
+                const exactRemainder = base - item.assignedTo.reduce((s, id) => s + (itemSplit[id] ?? 0), 0);
                 return (
-                  <View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarRow} keyboardShouldPersistTaps="handled">
-                      {members.map(m => (
-                        <View key={m.id} style={styles.avatarCol}>
-                          <MemberAvatar name={m.name} color={m.avatar_color} size={40} imageUri={m.image_uri} selected={item.assignedTo.includes(m.id)} onPress={() => toggleAssign(item.id, m.id)} />
-                          <Text style={styles.avatarName} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-
-                    {/* Per-item split mode (only once someone is assigned). */}
-                    {assignees.length > 0 && (
-                      <>
-                        <View style={styles.splitModeRow}>
-                          {SPLIT_MODE.map(sm => (
-                            <TouchableOpacity
-                              key={sm}
-                              style={[styles.splitModeChip, mode === sm && styles.splitModeChipOn]}
-                              onPress={() => { haptic.selection(); setItemSplitMode(item.id, sm); }}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: mode === sm }}
-                            >
-                              <Text style={[styles.splitModeText, mode === sm && styles.splitModeTextOn]}>{SPLIT_MODE_LABEL[sm]}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-
-                        {/* Equal → the selected avatars ARE the checkboxes; other modes take per-member inputs. */}
-                        {mode !== 'equal' && (
-                          <View style={styles.splitInputs}>
-                            {assignees.map(m => (
-                              <View key={m.id} style={styles.splitInputRow}>
-                                <Text style={styles.splitInputName} numberOfLines={1}>{m.name.split(' ')[0]}</Text>
-                                <View style={styles.splitInputWrap}>
-                                  {mode === 'exact' && <Text style={styles.splitInputAffix}>₹</Text>}
-                                  <TextInput
-                                    style={styles.splitInput}
-                                    value={item.splitValues?.[m.id] ?? ''}
-                                    onChangeText={t => setItemSplitValue(item.id, m.id, t)}
-                                    keyboardType="decimal-pad"
-                                    placeholder={mode === 'shares' ? '1' : '0'}
-                                    placeholderTextColor={colors.textMuted}
-                                    accessibilityLabel={`${m.name} ${mode}`}
-                                  />
-                                  {mode === 'percent' && <Text style={styles.splitInputAffix}>%</Text>}
-                                </View>
-                                <Text style={styles.splitInputResult}>{formatRupees(itemSplit[m.id] ?? 0)}</Text>
-                              </View>
-                            ))}
-                            {mode === 'exact' && exactRemainder !== 0 && (
-                              <Text style={styles.splitRemainder}>
-                                {formatRupees(Math.abs(exactRemainder))} {exactRemainder > 0 ? 'left to assign' : 'over'} · item is {formatRupees(base)}
-                              </Text>
-                            )}
-                          </View>
-                        )}
-                      </>
+                  <View style={styles.splitBody}>
+                    {/* Shared split allocator — same UI as Quick / import group-split. */}
+                    <SplitEditor
+                      members={members}
+                      included={item.assignedTo}
+                      onToggle={(id) => toggleAssign(item.id, id)}
+                      mode={item.splitMode ?? 'equal'}
+                      onMode={(m) => { haptic.selection(); setItemSplitMode(item.id, m); }}
+                      rawValue={(id) => item.splitValues?.[id] ?? ''}
+                      onValue={(id, v) => setItemSplitValue(item.id, id, v)}
+                      result={(id) => itemSplit[id] ?? 0}
+                      avatarSize={40}
+                    />
+                    {item.splitMode === 'exact' && item.assignedTo.length > 0 && exactRemainder !== 0 && (
+                      <Text style={styles.splitRemainder}>
+                        {formatRupees(Math.abs(exactRemainder))} {exactRemainder > 0 ? 'left to assign' : 'over'} · item is {formatRupees(base)}
+                      </Text>
                     )}
                   </View>
                 );
@@ -839,21 +798,7 @@ const styles = StyleSheet.create({
   assignItem: { backgroundColor: colors.bgCard, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: colors.expense + '22', paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
-  avatarRow: { paddingHorizontal: space.md, paddingBottom: space.md },
-  avatarCol: { alignItems: 'center', gap: 4, marginRight: space.md, width: 52 },
-  avatarName: { ...type.caption, color: colors.textSecondary, maxWidth: 52 },
-  splitModeRow: { flexDirection: 'row', gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm },
-  splitModeChip: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  splitModeChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  splitModeText: { ...type.caption, color: colors.textSecondary },
-  splitModeTextOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  splitInputs: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.xs },
-  splitInputRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  splitInputName: { ...type.label, color: colors.textPrimary, width: 72 },
-  splitInputWrap: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, flex: 1 },
-  splitInputAffix: { ...type.body, color: colors.textMuted },
-  splitInput: { flex: 1, ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', paddingVertical: 6, textAlign: 'right' },
-  splitInputResult: { ...type.label, color: colors.textSecondary, width: 72, textAlign: 'right', fontFamily: 'SpaceMono_400Regular' },
+  splitBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   splitRemainder: { ...type.caption, color: colors.healthAmber, marginTop: 2 },
   sep: { height: space.sm },
 

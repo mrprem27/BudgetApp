@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
-import { splitEqual, formatRupees } from '../../../lib/money';
-import { MemberAvatar } from '../MemberAvatar';
+import { splitEqual, splitByPercent, splitByShares, parseToPaise, formatRupees } from '../../../lib/money';
+import { SplitEditor } from './SplitEditor';
 import type { Person } from '../../../db/queries/persons';
-import { SPLIT_MODE, type SplitMode } from '../../../constants/enums';
+import { type SplitMode } from '../../../constants/enums';
 
 /**
- * The "Split" bottom-sheet editor for Quick Add. Fully controlled — every piece
- * of split state lives in the parent (app/add/quick.tsx); this is the
- * presentation + input wiring only. Extracted verbatim, no logic change.
+ * The "Split" bottom-sheet for Quick Add — sheet chrome + remainder + Done around
+ * the shared {@link SplitEditor}. Fully controlled; split state lives in the
+ * parent (app/add/quick.tsx). The split UI itself is the shared SplitEditor so
+ * Quick / itemized / import group-split all look and behave identically.
  */
 export function SplitSheet({
   visible, onClose,
@@ -36,82 +37,51 @@ export function SplitSheet({
   total: number;
   remainder: number;
 }) {
+  // Computed share (paise) per member for the active mode — feeds SplitEditor's display.
+  const result = (id: string): number => {
+    if (!splitMembers.includes(id)) return 0;
+    const idx = splitMembers.indexOf(id);
+    if (splitType === 'exact') return parseToPaise(exactAmounts[id] ?? '0');
+    if (splitType === 'percent') {
+      const pcts = splitMembers.map(mid => { const p = parseInt(percentages[mid] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+      return splitByPercent(total, pcts)[idx] ?? 0;
+    }
+    if (splitType === 'shares') {
+      const rs = splitMembers.map(mid => { const r = parseInt(ratios[mid] ?? '1', 10); return Number.isFinite(r) && r > 0 ? r : 1; });
+      return splitByShares(total, rs)[idx] ?? 0;
+    }
+    return splitEqual(total, splitMembers.length)[idx] ?? 0;
+  };
+  const rawValue = (id: string): string =>
+    splitType === 'exact' ? (exactAmounts[id] ?? '')
+    : splitType === 'percent' ? (percentages[id] ?? '')
+    : splitType === 'shares' ? (ratios[id] ?? '1')
+    : '';
+  const onValue = (id: string, v: string) => {
+    if (splitType === 'exact') setExactAmounts(prev => ({ ...prev, [id]: v }));
+    else if (splitType === 'percent') setPercentages(prev => ({ ...prev, [id]: v }));
+    else if (splitType === 'shares') setRatios(prev => ({ ...prev, [id]: v }));
+  };
+  const onToggle = (id: string) =>
+    setSplitMembers(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.splitSheet} onPress={e => e.stopPropagation()}>
           <Text style={styles.splitTitle}>Split</Text>
 
-          <View style={styles.splitTypeRow}>
-            {SPLIT_MODE.map(st => (
-              <TouchableOpacity
-                key={st}
-                style={[styles.splitTypeBtn, splitType === st && styles.splitTypeActive]}
-                onPress={() => setSplitType(st)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: splitType === st }}
-              >
-                <Text style={[styles.splitTypeLabel, splitType === st && { color: colors.bg }]}>
-                  {st.charAt(0).toUpperCase() + st.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <ScrollView style={{ maxHeight: 300 }}>
-            {members.map(m => {
-              const included = splitMembers.includes(m.id);
-              let inputEl = null;
-              if (included && splitType === 'exact') {
-                inputEl = (
-                  <TextInput
-                    style={styles.splitInput}
-                    value={exactAmounts[m.id] ?? ''}
-                    onChangeText={v => setExactAmounts(prev => ({ ...prev, [m.id]: v }))}
-                    keyboardType="decimal-pad"
-                    placeholder="₹0"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                );
-              } else if (included && splitType === 'percent') {
-                inputEl = (
-                  <TextInput
-                    style={styles.splitInput}
-                    value={percentages[m.id] ?? ''}
-                    onChangeText={v => setPercentages(prev => ({ ...prev, [m.id]: v }))}
-                    keyboardType="number-pad"
-                    placeholder="%"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                );
-              } else if (included && splitType === 'shares') {
-                inputEl = (
-                  <TextInput
-                    style={styles.splitInput}
-                    value={ratios[m.id] ?? '1'}
-                    onChangeText={v => setRatios(prev => ({ ...prev, [m.id]: v }))}
-                    keyboardType="number-pad"
-                    placeholder="1"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                );
-              } else if (included && splitType === 'equal') {
-                const idx = splitMembers.indexOf(m.id);
-                const eq = splitEqual(total, splitMembers.length);
-                inputEl = <Text style={styles.eqAmount}>{formatRupees(eq[idx] ?? 0)}</Text>;
-              }
-              return (
-                <View key={m.id} style={styles.splitRow}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} onPress={() => {
-                    setSplitMembers(prev =>
-                      prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                    );
-                  }} selected={included} />
-                  <Text style={styles.splitName}>{m.name}</Text>
-                  {inputEl}
-                </View>
-              );
-            })}
+          <ScrollView style={{ maxHeight: 340 }}>
+            <SplitEditor
+              members={members}
+              included={splitMembers}
+              onToggle={onToggle}
+              mode={splitType}
+              onMode={setSplitType}
+              rawValue={rawValue}
+              onValue={onValue}
+              result={result}
+            />
           </ScrollView>
 
           <View style={styles.remainderBar}>
@@ -137,14 +107,6 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   splitSheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
   splitTitle: { ...type.subheading, color: colors.textPrimary },
-  splitTypeRow: { flexDirection: 'row', gap: space.xs, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  splitTypeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm },
-  splitTypeActive: { backgroundColor: colors.accent },
-  splitTypeLabel: { ...type.caption, color: colors.textSecondary },
-  splitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  splitName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  splitInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, width: 80, textAlign: 'right', borderWidth: 1, borderColor: colors.border },
-  eqAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textSecondary },
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
   remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
   doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
