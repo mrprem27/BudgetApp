@@ -249,7 +249,7 @@ export default function SavingsScreen() {
           <View style={styles.headerRight}>
             {[
               { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
-              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/subscriptions' },
+              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/recurring' },
               // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
               { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
             ].filter(m => m.show).map(m => (
