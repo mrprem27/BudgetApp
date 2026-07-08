@@ -145,8 +145,10 @@ export const CATEGORY_LOOKUP: Record<string, { icon: FeatherName; color: string 
 
 /** Special non-catalog categories that still need an icon/colour. */
 const EXTRA_LOOKUP: Record<string, { icon: FeatherName; color: string }> = {
-  Settlement: { icon: 'check-circle', color: '#7C6AF7' },
-  Income:     { icon: 'trending-up',  color: '#3ECF8E' },
+  Settlement: { icon: 'check-circle',   color: '#7C6AF7' },
+  Income:     { icon: 'trending-up',    color: '#3ECF8E' },
+  // The combined bucket for un-adopted category names (see lib/categoryFold).
+  Others:     { icon: 'more-horizontal', color: '#8B8A99' },
 };
 
 /** Resolve icon + colour for any category name, with a sensible fallback. */

@@ -21,7 +21,9 @@ import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout } from '../src/constants/layout';
 import { getAllGroups } from '../src/db/queries/groups';
+import { getCategories } from '../src/db/queries/categories';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
+import { foldUncategorized } from '../src/lib/categoryFold';
 import { getBudgetAnalytics } from '../src/lib/analytics';
 import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
@@ -162,13 +164,16 @@ export default function ReportsScreen() {
       const fromMs2 = startOfMonth(month).getTime();
       const toMs2 = endOfMonth(month).getTime();
       const allMonthTxns = await getTransactionsInRange(db, null, fromMs2, toMs2);
-      const fullCatMap: Record<string, number> = {};
+      // Adopted expense category names — anything else folds into "Others".
+      const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
+      const fullCatMapRaw: Record<string, number> = {};
       for (const t of allMonthTxns) {
         if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
           const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-          fullCatMap[t.category] = (fullCatMap[t.category] ?? 0) + amt;
+          fullCatMapRaw[t.category] = (fullCatMapRaw[t.category] ?? 0) + amt;
         }
       }
+      const fullCatMap = foldUncategorized(fullCatMapRaw, knownExpense);
       // Month totals (Spent/Earned) + prior month, for the summary cards.
       let mSpent = 0, mEarned = 0;
       for (const t of allMonthTxns) {
@@ -203,14 +208,16 @@ export default function ReportsScreen() {
         const m = subMonths(month, i);
         const mTxns = await getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime());
         let mTotal = 0;
-        const byCat: Record<string, number> = {};
+        const byCatRaw: Record<string, number> = {};
         for (const t of mTxns) {
           if (t.kind !== 'expense') continue;
           const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           mTotal += amt;
-          byCat[t.category] = (byCat[t.category] ?? 0) + amt;
+          byCatRaw[t.category] = (byCatRaw[t.category] ?? 0) + amt;
         }
-        months.push({ label: format(m, 'MMM'), total: mTotal, byCat });
+        // Fold unknown names into "Others" so the trend matches the donut/labels
+        // (selecting the Others slice shows its 6-month total too).
+        months.push({ label: format(m, 'MMM'), total: mTotal, byCat: foldUncategorized(byCatRaw, knownExpense) });
       }
       setMonthly(months);
 

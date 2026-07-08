@@ -19,7 +19,9 @@ import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getMyExposure } from '../../src/db/queries/balances';
 import { getPendingCount } from '../../src/db/queries/pending';
+import { getCategories } from '../../src/db/queries/categories';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
+import { foldUncategorized } from '../../src/lib/categoryFold';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -225,8 +227,11 @@ export default function DashboardScreen() {
     setHealth(computeHealthScore(healthInputsNow));
     setHealthInputs(healthInputsNow);
 
-    // Category breakdown for "Where it went" (largest first).
-    const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+    // Category breakdown for "Where it went" (largest first). Names not in the
+    // global catalog fold into one "Others" row (catMap itself is left intact so
+    // budget attribution above stays per-name).
+    const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
+    const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
     setCatRows(sorted.map(([name, paise]) => ({ name, paise })));
     setCatTotal(sorted.reduce((s, [, v]) => s + v, 0));
     if (sorted.length > 0) setEverHadCats(true);
