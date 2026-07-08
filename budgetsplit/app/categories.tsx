@@ -14,11 +14,11 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { Input } from '../src/components/ui/Input';
 import {
-  getCategories, insertCategory, deleteCategory, renameCategory,
+  getCategories, getUncategorizedNames, insertCategory, deleteCategory, renameCategory,
 } from '../src/db/queries/categories';
 import { haptic } from '../src/lib/haptics';
 import {
-  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection,
+  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection, categoryVisual,
   DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../src/constants/categories';
 import {
@@ -37,6 +37,7 @@ export default function CategoriesScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [uncategorized, setUncategorized] = useState<Array<{ name: string; count: number }>>([]);
   const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [addingToSection, setAddingToSection] = useState<string | null>(null);
@@ -52,10 +53,27 @@ export default function CategoriesScreen() {
   // Categories are a single global catalog now — no group scoping.
   async function loadCats(k: CategoryKind) {
     try {
-      setCategories(await getCategories(db, k));
+      const [cats, unc] = await Promise.all([getCategories(db, k), getUncategorizedNames(db, k)]);
+      setCategories(cats);
+      setUncategorized(unc);
       setLoadError(false);
     } catch {
       setLoadError(true);
+    }
+  }
+
+  // Adopt an uncategorized name into the global catalog (its spend then splits
+  // out of "Others"). Defaults from the name's known visual; user can edit after.
+  async function adoptCategory(name: string) {
+    try {
+      const vis = categoryVisual(name);
+      const created = await insertCategory(db, name, vis.icon, vis.color, kindTab, 'Other');
+      haptic.success();
+      setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setUncategorized(prev => prev.filter(u => u.name !== name));
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
     }
   }
 
@@ -335,6 +353,43 @@ export default function CategoriesScreen() {
             </View>
           );
         })}
+
+        {/* Uncategorized — names used on transactions that aren't in your catalog
+            (from imports, renames, or a co-member). They count as "Others" until
+            you adopt them. */}
+        {uncategorized.length > 0 && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Uncategorized</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{uncategorized.length}</Text>
+              </View>
+            </View>
+            <View style={styles.sectionContent}>
+              <Text style={styles.uncatHint}>
+                Counted under “Others” until you add them to your catalog.
+              </Text>
+              {uncategorized.map((u, i) => {
+                const vis = categoryVisual(u.name);
+                return (
+                  <View key={u.name} style={[styles.row, i < uncategorized.length - 1 && styles.rowBorder]}>
+                    <View style={[styles.iconDot, { backgroundColor: (vis.color ?? colors.accent) + '22' }]}>
+                      <Feather name={asFeather(vis.icon, 'tag')} size={16} color={vis.color ?? colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName}>{u.name}</Text>
+                      <Text style={styles.uncatCount}>{u.count} transaction{u.count === 1 ? '' : 's'}</Text>
+                    </View>
+                    <TouchableOpacity style={styles.adoptBtn} onPress={() => adoptCategory(u.name)} accessibilityRole="button" accessibilityLabel={`Add ${u.name} to catalog`}>
+                      <Feather name="plus" size={13} color={colors.accent} />
+                      <Text style={styles.adoptBtnText}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
       )}
@@ -365,6 +420,10 @@ const styles = StyleSheet.create({
   empty: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, marginTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   addRowText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  uncatHint: { ...type.caption, color: colors.textMuted, marginBottom: space.xs, lineHeight: 16 },
+  uncatCount: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  adoptBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  adoptBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addForm: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   inputGap: { marginBottom: space.md },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
