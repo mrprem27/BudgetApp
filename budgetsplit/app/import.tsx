@@ -13,6 +13,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { parseStatement, type ParseResult } from '../src/lib/importParse';
 import { isGpayStatement, parseGpayStatement } from '../src/lib/gpayParse';
+import { PdfTextExtractor } from '../src/components/system/PdfTextExtractor';
 import { matchCategory } from '../src/lib/smartCategory';
 import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../src/constants/categories';
 import { insertPending } from '../src/db/queries/pending';
@@ -30,6 +31,9 @@ export default function ImportScreen() {
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
+  // base64 of a picked PDF while pdf.js extracts its text (off-screen WebView).
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
 
   // The source picker chooses the parser: Google Pay's block layout vs. the
   // tolerant CSV/UPI parser. (GPay is also auto-detected as a safety net.)
@@ -52,26 +56,48 @@ export default function ImportScreen() {
       if (res.canceled || !res.assets?.[0]) return;
       const asset = res.assets[0];
       const isPdf = asset.mimeType === 'application/pdf' || /\.pdf$/i.test(asset.name ?? '');
-      let content = '';
-      try { content = await FileSystem.readAsStringAsync(asset.uri); } catch { content = ''; }
-      const parsed = parseAny(content);
-      // Many PDFs store text compressed (FlateDecode) — not readable on-device
-      // without a native extractor. If nothing parsed, guide the user to paste.
-      if (parsed.rows.length === 0 && isPdf) {
-        haptic.warning();
-        Alert.alert(
-          'Couldn’t read this PDF automatically',
-          'Some statement PDFs keep their text compressed, which we can’t extract on-device yet. Open the statement, select all the text, and paste it below — it’ll parse the same way.',
-        );
+      if (isPdf) {
+        // Extract text via pdf.js in an off-screen WebView (handles compressed PDFs).
+        const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
+        setExtracting(true);
+        setPdfBase64(b64);
         return;
       }
+      const content = await FileSystem.readAsStringAsync(asset.uri);
       setText(content);
-      setResult(parsed);
+      setResult(parseAny(content));
       haptic.success();
     } catch {
       haptic.error();
       Alert.alert('Could not read that file', 'Pick a PDF / CSV / text export, or paste the text below instead.');
     }
+  }
+
+  function onPdfText(extracted: string) {
+    setPdfBase64(null);
+    setExtracting(false);
+    const parsed = parseAny(extracted);
+    if (parsed.rows.length === 0) {
+      haptic.warning();
+      Alert.alert(
+        'Couldn’t read that PDF',
+        'We couldn’t pull transactions from this PDF. Open the statement, select all the text, and paste it below — it’ll parse the same way.',
+      );
+      return;
+    }
+    setText(extracted);
+    setResult(parsed);
+    haptic.success();
+  }
+
+  function onPdfError() {
+    setPdfBase64(null);
+    setExtracting(false);
+    haptic.warning();
+    Alert.alert(
+      'Couldn’t read that PDF',
+      'The PDF reader couldn’t load (it needs a connection the first time). Open the statement, select all the text, and paste it below instead.',
+    );
   }
 
   async function handleAdd() {
@@ -127,11 +153,14 @@ export default function ImportScreen() {
             </Text>
           )}
 
-          <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} accessibilityRole="button" accessibilityLabel="Choose a PDF, CSV or text file">
-            <Feather name="file-text" size={18} color={colors.accent} />
-            <Text style={styles.fileBtnText}>Choose a file (.pdf / .csv / .txt)</Text>
+          <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} disabled={extracting} accessibilityRole="button" accessibilityLabel="Choose a PDF, CSV or text file">
+            <Feather name={extracting ? 'loader' : 'file-text'} size={18} color={colors.accent} />
+            <Text style={styles.fileBtnText}>{extracting ? 'Reading PDF…' : 'Choose a file (.pdf / .csv / .txt)'}</Text>
           </TouchableOpacity>
           <Text style={styles.orHint}>or paste below</Text>
+
+          {/* Off-screen pdf.js extractor — mounted only while reading a PDF. */}
+          {pdfBase64 && <PdfTextExtractor base64={pdfBase64} onText={onPdfText} onError={onPdfError} />}
 
           <TextInput
             style={styles.input}
