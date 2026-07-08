@@ -1,4 +1,5 @@
-import { parseToPaise, splitEqual } from './money';
+import { parseToPaise, splitEqual, splitByPercent, splitByShares } from './money';
+import type { SplitMode } from '../constants/enums';
 import type { Person } from '../db/queries/persons';
 
 /** A draft line item being entered on the Itemized screen (string fields = raw input). */
@@ -8,7 +9,46 @@ export type LineItemDraft = {
   qty: string;
   unitPrice: string;
   assignedTo: string[];
+  /** How this item is split among `assignedTo`. Defaults to 'equal'. */
+  splitMode?: SplitMode;
+  /** Per-member raw input for non-equal modes: exact ₹ (exact), % (percent), or share count (shares). */
+  splitValues?: Record<string, string>;
 };
+
+/**
+ * Split one item's base amount (paise, pre-adjustment) among its assigned members
+ * per the item's split mode. Reuses the app-wide split engine so itemized splits
+ * match Quick/Transfer. Equal ignores splitValues; exact reads ₹ inputs directly
+ * (any shortfall/overage is the user's remainder to reconcile).
+ */
+export function splitItemBase(item: LineItemDraft, base: number): Record<string, number> {
+  const ids = item.assignedTo;
+  const out: Record<string, number> = {};
+  if (ids.length === 0) return out;
+  const vals = item.splitValues ?? {};
+  switch (item.splitMode) {
+    case 'exact':
+      ids.forEach(pid => { out[pid] = parseToPaise(vals[pid] ?? '0'); });
+      break;
+    case 'percent': {
+      const pcts = ids.map(pid => { const p = parseInt(vals[pid] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+      const amts = splitByPercent(base, pcts);
+      ids.forEach((pid, i) => { out[pid] = amts[i]; });
+      break;
+    }
+    case 'shares': {
+      const rs = ids.map(pid => { const r = parseInt(vals[pid] ?? '1', 10); return Number.isFinite(r) && r > 0 ? r : 1; });
+      const amts = splitByShares(base, rs);
+      ids.forEach((pid, i) => { out[pid] = amts[i]; });
+      break;
+    }
+    default: { // 'equal' (or undefined)
+      const amts = splitEqual(base, ids.length);
+      ids.forEach((pid, i) => { out[pid] = amts[i]; });
+    }
+  }
+  return out;
+}
 
 /** A tax / tip / discount adjustment on an itemized bill. */
 export type Adjustment = {
@@ -56,11 +96,12 @@ export function computePerPersonShares(
 
   for (const item of items) {
     if (item.assignedTo.length === 0) continue;
-    const itemTotal = Math.round(computeItemSubtotal(item) * ratio);
-    const splits = splitEqual(itemTotal, item.assignedTo.length);
-    item.assignedTo.forEach((pid, i) => {
-      raw[pid] = (raw[pid] ?? 0) + splits[i];
-    });
+    // Split the item by its own mode, then scale each share by the adjustment ratio.
+    const base = computeItemSubtotal(item);
+    const split = splitItemBase(item, base);
+    for (const pid of item.assignedTo) {
+      raw[pid] = (raw[pid] ?? 0) + Math.round((split[pid] ?? 0) * ratio);
+    }
   }
 
   const assigned = Object.values(raw).reduce((a, b) => a + b, 0);
