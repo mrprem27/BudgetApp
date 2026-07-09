@@ -7,7 +7,10 @@ import * as FileSystem from 'expo-file-system';
  * dependency once cached (and no fragile vendored megabyte files in the repo).
  */
 
-const PDFJS_VERSION = '4.4.168';
+// v3.x ships a real UMD build (global `pdfjsLib`) that we can inline into a
+// classic <script>; v4 is ES-module only (.mjs), which is why the earlier build
+// failed to load. Keep this a UMD-shipping version.
+const PDFJS_VERSION = '3.11.174';
 const CDN = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
 // `?? ''` keeps this safe under the newer expo-file-system API surface.
 const DIR = ((FileSystem as any).documentDirectory ?? '') + 'pdfjs/';
