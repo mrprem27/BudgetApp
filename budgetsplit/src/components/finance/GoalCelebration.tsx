@@ -80,7 +80,7 @@ export function GoalCelebration({ visible, goalName, onDone }: { visible: boolea
 }
 
 const styles = StyleSheet.create({
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay },
   card: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.xl, paddingHorizontal: space.lg, marginHorizontal: space.xl, ...shadow.lg },
   iconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.income + '22', alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
   title: { ...type.title, color: colors.textPrimary },
