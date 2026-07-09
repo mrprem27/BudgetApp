@@ -44,6 +44,8 @@ export type LineItem = {
   qty: number;
   unit_price: number;
   assigned_to: string;
+  split_mode: string | null;
+  split_values: string | null; // JSON
 };
 
 export type TxnWithSplits = Txn & {
@@ -302,6 +304,9 @@ export type InsertItemizedTxnInput = InsertTxnInput & {
     qty: number;
     unitPrice: number;
     assignedTo: string[];
+    /** Per-item split mode + raw per-member inputs, persisted so splits round-trip on edit. */
+    splitMode?: string;
+    splitValues?: Record<string, string>;
   }>;
   /** Persisted so an itemized bill round-trips on edit (tax/tip/discount). */
   adjustments?: ItemizedAdjustment[];
@@ -330,8 +335,8 @@ export async function insertItemizedTxn(
     );
     for (const item of input.items) {
       await db.runAsync(
-        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
-        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo)],
+        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to, split_mode, split_values) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo), item.splitMode ?? null, item.splitValues ? JSON.stringify(item.splitValues) : null],
       );
     }
     for (const p of input.payments) {
@@ -381,8 +386,8 @@ export async function updateItemizedTxn(
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
     for (const item of input.items) {
       await db.runAsync(
-        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
-        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo)],
+        'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to, split_mode, split_values) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), id, item.name, item.qty, item.unitPrice, JSON.stringify(item.assignedTo), item.splitMode ?? null, item.splitValues ? JSON.stringify(item.splitValues) : null],
       );
     }
     for (const p of input.payments) {

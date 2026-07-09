@@ -106,6 +106,8 @@ export default function ItemizedScreen() {
             qty: String(li.qty),
             unitPrice: (li.unit_price / 100).toString(),
             assignedTo: (() => { try { return JSON.parse(li.assigned_to) as string[]; } catch { return []; } })(),
+            splitMode: (li.split_mode ?? undefined) as SplitMode | undefined,
+            splitValues: (() => { try { return li.split_values ? JSON.parse(li.split_values) as Record<string, string> : undefined; } catch { return undefined; } })(),
           })));
           if (t.adjustments) {
             try { setAdjustments(JSON.parse(t.adjustments) as Adjustment[]); } catch { /* ignore */ }
@@ -238,6 +240,8 @@ export default function ItemizedScreen() {
           qty: parseInt(i.qty, 10) || 1,
           unitPrice: parseToPaise(i.unitPrice),
           assignedTo: i.assignedTo,
+          splitMode: i.splitMode,
+          splitValues: i.splitValues,
         })),
         adjustments: adjustments as ItemizedAdjustment[],
         lat: place?.lat,

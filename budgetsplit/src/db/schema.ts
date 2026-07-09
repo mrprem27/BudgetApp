@@ -95,7 +95,9 @@ CREATE TABLE IF NOT EXISTS line_item (
   name         TEXT NOT NULL,
   qty          INTEGER NOT NULL DEFAULT 1,
   unit_price   INTEGER NOT NULL,
-  assigned_to  TEXT NOT NULL
+  assigned_to  TEXT NOT NULL,
+  split_mode   TEXT,          -- per-item split mode (equal/exact/percent/shares); NULL = equal
+  split_values TEXT           -- JSON: per-member raw input for non-equal modes
 );
 
 -- Categories are a single GLOBAL catalog per kind (group_id NULL = global).
@@ -234,6 +236,9 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE group_member ADD COLUMN joined_at INTEGER",
   // A group's default split mode, picked at creation → seeds the Add-expense split.
   "ALTER TABLE budget_group ADD COLUMN default_split TEXT NOT NULL DEFAULT 'equal'",
+  // Per-item split mode/values so an itemized bill round-trips its splits on edit.
+  "ALTER TABLE line_item ADD COLUMN split_mode TEXT",
+  "ALTER TABLE line_item ADD COLUMN split_values TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

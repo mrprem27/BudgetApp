@@ -957,11 +957,6 @@ const styles = StyleSheet.create({
   // Neutral card with the app's teal accent (matches the rest of the app — no off-theme purple).
   // SemiBold on both states so the active pill doesn't change width (no resize on select).
 
-  // Log CTA
-  logCta: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: space.sm },
-  logCtaText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.bg },
-  field: { gap: space.xs },
-  smartCatChip: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.xs },
   smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   smartCatHint: { ...type.caption, color: colors.textMuted },
@@ -970,8 +965,6 @@ const styles = StyleSheet.create({
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   attachThumb: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
   attachName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
-  dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
   // "Split with [avatars] · Equal · ₹217 each" row (design Screen 2)
   splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   splitWithLabel: { ...type.body, color: colors.textSecondary },
@@ -981,23 +974,8 @@ const styles = StyleSheet.create({
   paidByLabel: { ...type.body, color: colors.textSecondary },
   paidByValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
-  saveBtn: { marginTop: space.md },
-  scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  splitSheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
-  splitTitle: { ...type.subheading, color: colors.textPrimary },
-  splitTypeRow: { flexDirection: 'row', gap: space.xs, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  splitTypeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm },
-  splitTypeActive: { backgroundColor: colors.accent },
-  splitTypeLabel: { ...type.caption, color: colors.textSecondary },
-  splitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  splitName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  splitInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, width: 80, textAlign: 'right', borderWidth: 1, borderColor: colors.border },
-  eqAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textSecondary },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '44' },
   endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  doneBtnText: { ...type.button, color: colors.bg },
 });

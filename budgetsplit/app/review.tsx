@@ -70,11 +70,13 @@ export default function ReviewScreen() {
 
   function eff(row: PendingTxn): RowEdit {
     const e = edits[row.id] ?? {};
+    const kind = e.kind ?? (row.kind === 'settlement' ? 'expense' : row.kind);
     return {
-      kind: e.kind ?? (row.kind === 'settlement' ? 'expense' : row.kind),
+      kind,
       category: e.category ?? row.category ?? '',
       amount: e.amount ?? String(row.amount / 100),
-      dest: e.dest ?? 'personal',
+      // Income is always personal (matches Quick) — you don't split income into a group.
+      dest: kind === 'income' ? 'personal' : (e.dest ?? 'personal'),
     };
   }
   const patch = (id: string, p: Partial<RowEdit>) => setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...p } }));
@@ -99,13 +101,15 @@ export default function ReviewScreen() {
       for (const row of personalRows) {
         const v = eff(row);
         const amount = parseToPaise(v.amount);
-        if (amount <= 0) continue;
+        // A zeroed-out row is unusable — discard it rather than strand it pending.
+        if (amount <= 0) { await deletePending(db, row.id); continue; }
         await insertTxn(db, {
           groupId: data.personalId, kind: v.kind, entryMode: 'quick', date: row.date,
           category: v.category || (v.kind === 'income' ? 'Other Income' : 'Other'),
           note: row.description,
           payments: [{ personId: data.meId, amount }],
-          shares: [{ personId: data.meId, amount }],
+          // Income has no shares (canonical shape, matches Quick); expense = my full share.
+          shares: v.kind === 'income' ? [] : [{ personId: data.meId, amount }],
         });
         await deletePending(db, row.id);
       }
@@ -143,14 +147,16 @@ export default function ReviewScreen() {
   async function confirmGroupRow(row: PendingTxn) {
     if (saving || !data?.meId) return;
     const v = eff(row);
+    const total = parseToPaise(v.amount); // honor the edited amount, not the raw pending value
+    if (total <= 0) return;
     const st = splitState(row);
-    const shares = splitByMode(row.amount, st.included, st.mode, st.values);
+    const shares = splitByMode(total, st.included, st.mode, st.values);
     setSaving(true);
     try {
       await insertTxn(db, {
         groupId: v.dest, kind: 'expense', entryMode: 'quick', date: row.date,
         category: v.category || 'Other', note: row.description,
-        payments: [{ personId: data.meId, amount: row.amount }],
+        payments: [{ personId: data.meId, amount: total }],
         shares: st.included.map(id => ({ personId: id, amount: shares[id] ?? 0 })),
       });
       await deletePending(db, row.id);
@@ -217,7 +223,7 @@ export default function ReviewScreen() {
             <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
             <Feather name="chevron-down" size={12} color={colors.textMuted} />
           </TouchableOpacity>
-          {hasGroups && (
+          {hasGroups && v.kind === 'expense' && (
             <TouchableOpacity style={[styles.pill, v.dest !== 'personal' && styles.pillGroup]} onPress={() => setDestSheetFor(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
               <Feather name={v.dest === 'personal' ? 'user' : 'users'} size={12} color={v.dest === 'personal' ? colors.textSecondary : colors.settle} />
               <Text style={[styles.pillText, v.dest !== 'personal' && { color: colors.settle }]} numberOfLines={1}>{destName}</Text>
@@ -234,19 +240,20 @@ export default function ReviewScreen() {
     const groupName = data?.sharedGroups.find(g => g.id === v.dest)?.name ?? 'group';
     const gm = data?.groupMembers[v.dest] ?? [];
     const expanded = expandedSplit === row.id;
+    const total = parseToPaise(v.amount); // honor the edited amount from step 1
     const st = splitState(row);
-    const shares = splitByMode(row.amount, st.included, st.mode, st.values);
+    const shares = splitByMode(total, st.included, st.mode, st.values);
     const assigned = st.included.reduce((s, id) => s + (shares[id] ?? 0), 0);
-    const remainder = row.amount - assigned;
+    const remainder = total - assigned;
     const balanced = st.included.length > 0 && remainder === 0;
     return (
       <View style={styles.card}>
         <TouchableOpacity style={styles.rowTop} onPress={() => setExpandedSplit(expanded ? null : row.id)} accessibilityRole="button">
           <View style={{ flex: 1 }}>
             <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
-            <Text style={styles.splitMeta} numberOfLines={1}>{v.category || 'Uncategorized'} · {groupName} · {st.included.length}/{gm.length} people</Text>
+            <Text style={styles.splitMeta} numberOfLines={1}>{v.category || 'Other'} · {groupName} · {st.included.length}/{gm.length} people</Text>
           </View>
-          <Text style={styles.amtStatic}>{formatRupees(row.amount)}</Text>
+          <Text style={styles.amtStatic}>{formatRupees(total)}</Text>
           <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
         </TouchableOpacity>
 
