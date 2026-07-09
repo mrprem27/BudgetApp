@@ -180,3 +180,35 @@ export function splitByShares(total: number, ratios: number[]): number[] {
     return v;
   });
 }
+
+/**
+ * Split a total (paise) among member ids by mode → { id: paise }. The single
+ * split engine reused by Quick, Itemized and the import group-split. `values`
+ * holds the per-member raw input (₹ for exact, % for percent, count for shares);
+ * ignored for equal. Exact reads inputs verbatim (any shortfall is the user's
+ * remainder to reconcile).
+ */
+export function splitByMode(
+  total: number,
+  ids: string[],
+  mode: 'equal' | 'exact' | 'percent' | 'shares',
+  values: Record<string, string>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (ids.length === 0) return out;
+  if (mode === 'exact') {
+    ids.forEach(id => { out[id] = parseToPaise(values[id] ?? '0'); });
+  } else if (mode === 'percent') {
+    const pcts = ids.map(id => { const p = parseInt(values[id] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+    const amts = splitByPercent(total, pcts);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  } else if (mode === 'shares') {
+    const rs = ids.map(id => { const r = parseInt(values[id] ?? '1', 10); return Number.isFinite(r) && r > 0 ? r : 1; });
+    const amts = splitByShares(total, rs);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  } else {
+    const amts = splitEqual(total, ids.length);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  }
+  return out;
+}

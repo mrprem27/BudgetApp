@@ -1,4 +1,24 @@
-import { parseToPaise, splitEqual, splitByPercent, splitByShares, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, formatChangeMagnitude } from '../lib/money';
+import { parseToPaise, splitEqual, splitByPercent, splitByShares, splitByMode, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, formatChangeMagnitude } from '../lib/money';
+
+describe('splitByMode', () => {
+  it('equal splits evenly and exact-sums', () => {
+    const out = splitByMode(1000, ['a', 'b', 'c'], 'equal', {});
+    expect(out.a + out.b + out.c).toBe(1000);
+    expect(out).toEqual({ a: 334, b: 333, c: 333 });
+  });
+  it('exact reads ₹ inputs', () => {
+    expect(splitByMode(1000, ['a', 'b'], 'exact', { a: '6', b: '4' })).toEqual({ a: 600, b: 400 });
+  });
+  it('percent + shares sum to the total', () => {
+    const p = splitByMode(1000, ['a', 'b'], 'percent', { a: '70', b: '30' });
+    expect(p.a + p.b).toBe(1000);
+    const s = splitByMode(900, ['a', 'b', 'c'], 'shares', { a: '2', b: '1', c: '0' });
+    expect(s.a + s.b + s.c).toBe(900);
+  });
+  it('returns {} for no members', () => {
+    expect(splitByMode(1000, [], 'equal', {})).toEqual({});
+  });
+});
 
 describe('parseToPaise', () => {
   it('parses rupee strings to paise', () => {

@@ -15,19 +15,21 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SheetModal } from '../src/components/ui/SheetModal';
 import { CategoryPicker } from '../src/components/finance/CategoryPicker';
+import { SplitEditor } from '../src/components/finance/add/SplitEditor';
 import { getPending, deletePending, clearPending, type PendingTxn } from '../src/db/queries/pending';
 import { insertTxn } from '../src/db/queries/transactions';
-import { getMe } from '../src/db/queries/persons';
+import { getMe, getGroupMembers, type Person } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories, type Category } from '../src/db/queries/categories';
-import { parseToPaise, formatRupees } from '../src/lib/money';
+import { parseToPaise, formatRupees, splitByMode } from '../src/lib/money';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
-import type { TxnKind } from '../src/constants/enums';
+import type { TxnKind, SplitMode } from '../src/constants/enums';
 
-// dest = 'personal' or a group id. Group rows are split in the editor (step 2).
+// dest = 'personal' or a group id. Group rows are split inline in step 2.
 type RowEdit = { kind: TxnKind; category: string; amount: string; dest: string };
+type SplitState = { included: string[]; mode: SplitMode; values: Record<string, string> };
 type Step = 'classify' | 'split';
 
 export default function ReviewScreen() {
@@ -39,21 +41,27 @@ export default function ReviewScreen() {
   const [step, setStep] = useState<Step>('classify');
   const [catPickerFor, setCatPickerFor] = useState<string | null>(null);
   const [destSheetFor, setDestSheetFor] = useState<string | null>(null);
+  const [splits, setSplits] = useState<Record<string, SplitState>>({});
+  const [expandedSplit, setExpandedSplit] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const { data, loading, error, reload } = useScreenData(async (db) => {
     const me = await getMe(db);
     const groups = await getAllGroups(db);
     const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
-    const [pending, expenseCats, incomeCats] = await Promise.all([
+    const shared = groups.filter(g => g.is_personal !== 1);
+    const [pending, expenseCats, incomeCats, ...memberLists] = await Promise.all([
       getPending(db),
       getCategories(db, 'expense'),
       getCategories(db, 'income'),
+      ...shared.map(g => getGroupMembers(db, g.id)),
     ]);
+    const groupMembers: Record<string, Person[]> = {};
+    shared.forEach((g, i) => { groupMembers[g.id] = memberLists[i] as Person[]; });
     return {
       pending, meId: me?.id ?? '', personalId,
-      sharedGroups: groups.filter(g => g.is_personal !== 1).map(g => ({ id: g.id, name: g.name })),
-      expenseCats, incomeCats,
+      sharedGroups: shared.map(g => ({ id: g.id, name: g.name })),
+      groupMembers, expenseCats, incomeCats,
     };
   }, []);
 
@@ -118,13 +126,41 @@ export default function ReviewScreen() {
     reload();
   }
 
-  /** Hand a group row to the editor to split (Equal/Specific/Percent/Shares), carrying its category. */
-  async function splitInEditor(row: PendingTxn) {
+  /** Effective inline-split state for a group row (defaults: everyone in, equal). */
+  function splitState(row: PendingTxn): SplitState {
+    const s = splits[row.id];
+    const members = data?.groupMembers[eff(row).dest] ?? [];
+    return {
+      included: s?.included ?? members.map(m => m.id),
+      mode: s?.mode ?? 'equal',
+      values: s?.values ?? {},
+    };
+  }
+  const patchSplit = (row: PendingTxn, p: Partial<SplitState>) =>
+    setSplits(prev => ({ ...prev, [row.id]: { ...splitState(row), ...p } }));
+
+  /** Confirm a group row: record the expense in its group, split per the inline editor. */
+  async function confirmGroupRow(row: PendingTxn) {
+    if (saving || !data?.meId) return;
     const v = eff(row);
-    const cat = v.category ? `&category=${encodeURIComponent(v.category)}` : '';
-    await deletePending(db, row.id);
-    refresh();
-    router.push(`/add/quick?kind=${v.kind === 'income' ? 'income' : 'expense'}&groupId=${v.dest}&amount=${row.amount}&note=${encodeURIComponent(row.description)}&date=${row.date}${cat}` as any);
+    const st = splitState(row);
+    const shares = splitByMode(row.amount, st.included, st.mode, st.values);
+    setSaving(true);
+    try {
+      await insertTxn(db, {
+        groupId: v.dest, kind: 'expense', entryMode: 'quick', date: row.date,
+        category: v.category || 'Other', note: row.description,
+        payments: [{ personId: data.meId, amount: row.amount }],
+        shares: st.included.map(id => ({ personId: id, amount: shares[id] ?? 0 })),
+      });
+      await deletePending(db, row.id);
+      haptic.success();
+      setExpandedSplit(null);
+      refresh();
+      reload();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleClearAll() {
@@ -196,23 +232,60 @@ export default function ReviewScreen() {
   function SplitRow({ row }: { row: PendingTxn }) {
     const v = eff(row);
     const groupName = data?.sharedGroups.find(g => g.id === v.dest)?.name ?? 'group';
+    const gm = data?.groupMembers[v.dest] ?? [];
+    const expanded = expandedSplit === row.id;
+    const st = splitState(row);
+    const shares = splitByMode(row.amount, st.included, st.mode, st.values);
+    const assigned = st.included.reduce((s, id) => s + (shares[id] ?? 0), 0);
+    const remainder = row.amount - assigned;
+    const balanced = st.included.length > 0 && remainder === 0;
     return (
       <View style={styles.card}>
-        <View style={styles.rowTop}>
-          <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
+        <TouchableOpacity style={styles.rowTop} onPress={() => setExpandedSplit(expanded ? null : row.id)} accessibilityRole="button">
+          <View style={{ flex: 1 }}>
+            <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
+            <Text style={styles.splitMeta} numberOfLines={1}>{v.category || 'Uncategorized'} · {groupName} · {st.included.length}/{gm.length} people</Text>
+          </View>
           <Text style={styles.amtStatic}>{formatRupees(row.amount)}</Text>
-        </View>
-        <View style={styles.controls}>
-          <Text style={styles.splitMeta} numberOfLines={1}>{v.category || 'Uncategorized'} · {groupName}</Text>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity style={styles.discardBtn} onPress={() => discardRow(row)} accessibilityRole="button" accessibilityLabel="Discard">
-            <Feather name="trash-2" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.splitBtn} onPress={() => splitInEditor(row)} accessibilityRole="button" accessibilityLabel={`Split in ${groupName}`}>
-            <Feather name="users" size={14} color={colors.bg} />
-            <Text style={styles.splitBtnText}>Split</Text>
-          </TouchableOpacity>
-        </View>
+          <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
+        </TouchableOpacity>
+
+        {expanded && (
+          <View style={{ gap: space.sm }}>
+            <SplitEditor
+              members={gm}
+              included={st.included}
+              onToggle={(id) => patchSplit(row, { included: st.included.includes(id) ? st.included.filter(x => x !== id) : [...st.included, id] })}
+              mode={st.mode}
+              onMode={(m) => patchSplit(row, { mode: m })}
+              rawValue={(id) => st.values[id] ?? ''}
+              onValue={(id, val) => patchSplit(row, { values: { ...st.values, [id]: val } })}
+              result={(id) => shares[id] ?? 0}
+            />
+            <Text style={[styles.splitMeta, { color: balanced ? colors.income : colors.expense, textAlign: 'right' }]}>
+              {st.included.length === 0 ? 'Pick who shares this'
+                : remainder === 0 ? 'Balanced'
+                : remainder > 0 ? `${formatRupees(remainder)} unassigned`
+                : `${formatRupees(-remainder)} over`}
+            </Text>
+            <View style={styles.controls}>
+              <TouchableOpacity style={styles.discardBtn} onPress={() => discardRow(row)} accessibilityRole="button" accessibilityLabel="Discard">
+                <Feather name="trash-2" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={[styles.splitBtn, !balanced && { opacity: 0.5 }]}
+                onPress={() => balanced && confirmGroupRow(row)}
+                disabled={!balanced || saving}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm split"
+              >
+                <Feather name="check" size={14} color={colors.bg} />
+                <Text style={styles.splitBtnText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
