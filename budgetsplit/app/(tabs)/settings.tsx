@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
@@ -15,6 +15,7 @@ import { haptic } from '../../src/lib/haptics';
 import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getCategories } from '../../src/db/queries/categories';
+import { seedGlobalCategories } from '../../src/db/seedCategories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -50,23 +51,26 @@ export default function SettingsScreen() {
 
   const [devTaps, setDevTaps] = useState(0);
 
-  useEffect(() => {
+  // Re-runs on focus so the category count reflects changes made elsewhere.
+  useFocusEffect(useCallback(() => {
     (async () => {
       setMe(await getMe(db));
       const allPersons = await getAllPersons(db);
       setContactCount(allPersons.filter(p => !p.is_me).length);
       const grps = await getAllGroups(db);
       const personalGroup = grps.find(g => g.is_personal === 1);
-      const gid = personalGroup?.id ?? grps[0]?.id;
       setPersonalGroupId(personalGroup?.id ?? null);
-      setCategoryCount((await getCategories(db, 'expense')).length);
+      // Self-heal an empty catalog (same as the Categories/Budget screens).
+      let count = (await getCategories(db, 'expense')).length;
+      if (count === 0) { await seedGlobalCategories(db); count = (await getCategories(db, 'expense')).length; }
+      setCategoryCount(count);
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
-  }, []);
+  }, [db]));
 
   async function toggle(persist: (v: boolean) => Promise<void>, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
