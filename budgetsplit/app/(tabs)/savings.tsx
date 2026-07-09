@@ -61,7 +61,8 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import type { Insight } from '../../src/lib/savingsInsights';
 import type { TotalMoney, MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { useRefreshOnDataChange, useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
 
 const GOAL_ICONS = ['smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield', 'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target'];
 const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060'];
@@ -118,7 +119,7 @@ export default function SavingsScreen() {
   const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, []));
-  useRefreshOnDataChange(load);
+  useReloadOnDataChange(load);
   const { refresh } = useDataRefresh();
   const { refreshing, onRefresh } = useRefresh(() => load());
 

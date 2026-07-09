@@ -351,6 +351,12 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     -- filter recur_state with no group_id, so they can't use the group_id-leading
     -- index above — this recur_state-leading partial index serves them.
     CREATE INDEX IF NOT EXISTS idx_txn_recur_state ON txn(recur_state) WHERE recur_freq IS NOT NULL;
+    -- getTransactionsInRange(groupId=null, ...) (Home, savings/cash, reports) filters
+    -- date + is_deleted=0 + recur_freq IS NULL with no group_id, so the group_id-leading
+    -- index can't serve it — this date-leading partial index matches that hot predicate.
+    CREATE INDEX IF NOT EXISTS idx_txn_date ON txn(date) WHERE is_deleted = 0 AND recur_freq IS NULL;
+    -- category-frequency / uncategorized / duplicate scans group & filter on category.
+    CREATE INDEX IF NOT EXISTS idx_txn_group_category ON txn(group_id, category);
     CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
   `);
 

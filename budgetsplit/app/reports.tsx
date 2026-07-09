@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator,
@@ -11,7 +11,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import {
   startOfMonth, endOfMonth, addMonths, subMonths, format,
-  startOfYear, endOfYear, getDate, getDaysInMonth, addDays,
+  startOfYear, endOfYear, getDate, getDaysInMonth,
 } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
@@ -116,20 +116,38 @@ export default function ReportsScreen() {
 
       const fromMs = startOfMonth(month).getTime();
       const toMs = endOfMonth(month).getTime();
-
-      const sums: GroupSummary[] = [];
-      const anMap: Record<string, BudgetAnalytics> = {};
-      for (const g of grps) {
-        const txns = await getTransactionsInRange(db, g.id, fromMs, toMs);
-        sums.push(buildSummary(g, txns));
-        anMap[g.id] = await getBudgetAnalytics(db, g, month);
-      }
-      setSummaries(sums);
-      setAnalyticsByGroup(anMap);
-
       const yFrom = startOfYear(month).getTime();
       const yTo = endOfYear(month).getTime();
-      const yearTxns = await getTransactionsInRange(db, null, yFrom, yTo);
+      const pStart = startOfMonth(subMonths(month, 1)).getTime();
+      const pEnd = endOfMonth(subMonths(month, 1)).getTime();
+      // 6-month trend window (oldest → newest) ending at the selected month.
+      const trendMonths = Array.from({ length: 6 }, (_, i) => subMonths(month, 5 - i));
+
+      // Fire every independent read concurrently instead of awaiting each in series
+      // (this loader used to do ~12 sequential round-trips). Ranges that were queried
+      // more than once (current month, prior month) are fetched here and reused below.
+      const [perGroup, yearTxns, allMonthTxns, knownExpenseCats, pTxns, trendTxnsByMonth] =
+        await Promise.all([
+          Promise.all(grps.map(async (g) => {
+            const [gTxns, an] = await Promise.all([
+              getTransactionsInRange(db, g.id, fromMs, toMs),
+              getBudgetAnalytics(db, g, month),
+            ]);
+            return { summary: buildSummary(g, gTxns), analytics: an };
+          })),
+          getTransactionsInRange(db, null, yFrom, yTo),
+          getTransactionsInRange(db, null, fromMs, toMs),
+          getCategories(db, 'expense'),
+          getTransactionsInRange(db, null, pStart, pEnd),
+          Promise.all(trendMonths.map((m) =>
+            getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime()))),
+        ]);
+
+      const sums: GroupSummary[] = perGroup.map((r) => r.summary);
+      const anMap: Record<string, BudgetAnalytics> = {};
+      grps.forEach((g, i) => { anMap[g.id] = perGroup[i].analytics; });
+      setSummaries(sums);
+      setAnalyticsByGroup(anMap);
 
       let yIncome = 0;
       let yExpense = 0;
@@ -160,12 +178,9 @@ export default function ReportsScreen() {
           monthCatMap[c.name] = (monthCatMap[c.name] ?? 0) + c.amount;
         }
       }
-      // Add all categories from all groups (not just top 3)
-      const fromMs2 = startOfMonth(month).getTime();
-      const toMs2 = endOfMonth(month).getTime();
-      const allMonthTxns = await getTransactionsInRange(db, null, fromMs2, toMs2);
-      // Adopted expense category names — anything else folds into "Others".
-      const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
+      // Add all categories from all groups (not just top 3). `allMonthTxns` and the
+      // adopted expense category names were already fetched above.
+      const knownExpense = new Set(knownExpenseCats.map(c => c.name));
       const fullCatMapRaw: Record<string, number> = {};
       for (const t of allMonthTxns) {
         if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
@@ -182,9 +197,7 @@ export default function ReportsScreen() {
       }
       setMonthSpent(mSpent);
       setMonthEarned(mEarned);
-      const pStart = startOfMonth(subMonths(month, 1)).getTime();
-      const pEnd = endOfMonth(subMonths(month, 1)).getTime();
-      const pTxns = await getTransactionsInRange(db, null, pStart, pEnd);
+      // prior month (`pTxns`) was already fetched above.
       let pSpent = 0, pEarned = 0;
       for (const t of pTxns) {
         if (t.kind === 'expense') pSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
@@ -203,13 +216,10 @@ export default function ReportsScreen() {
 
       // 6-month spending trend ending at the selected month — overall + per-category,
       // so picking a category in the donut/labels redraws this chart for that category.
-      const months: MonthPoint[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const m = subMonths(month, i);
-        const mTxns = await getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime());
+      const months: MonthPoint[] = trendMonths.map((m, idx) => {
         let mTotal = 0;
         const byCatRaw: Record<string, number> = {};
-        for (const t of mTxns) {
+        for (const t of trendTxnsByMonth[idx]) {
           if (t.kind !== 'expense') continue;
           const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
           mTotal += amt;
@@ -217,40 +227,39 @@ export default function ReportsScreen() {
         }
         // Fold unknown names into "Others" so the trend matches the donut/labels
         // (selecting the Others slice shows its 6-month total too).
-        months.push({ label: format(m, 'MMM'), total: mTotal, byCat: foldUncategorized(byCatRaw, knownExpense) });
-      }
+        return { label: format(m, 'MMM'), total: mTotal, byCat: foldUncategorized(byCatRaw, knownExpense) };
+      });
       setMonthly(months);
 
       // Build daily cumulative spending forecast (current month only)
       const now = new Date();
-      const monthStart = startOfMonth(month);
       const daysInMonth = getDaysInMonth(month);
       const dayOfMonth = getDate(now);
       const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
 
       // Forecast needs a few days of signal — see forecast.ts (FORECAST_MIN_DAYS).
       if (isCurrentMonth && dayOfMonth >= FORECAST_MIN_DAYS) {
-        // Daily cumulative spending up to today (the "actual" line).
+        // Daily cumulative spending up to today (the "actual" line). Reuse the
+        // already-fetched current-month txns and bucket by calendar day once instead
+        // of re-filtering the whole list for every day.
         const dailyCumulative: Array<{ value: number; label?: string }> = [];
+        const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed by day-of-month
+        for (const t of allMonthTxns) {
+          if (t.kind !== 'expense') continue; // soft-deleted already excluded by the query
+          const d = getDate(new Date(t.date));
+          if (d >= 1 && d <= daysInMonth) {
+            spendByDay[d] += t.shares.reduce((x, sh) => x + sh.amount, 0);
+          }
+        }
         let runningTotal = 0;
-        const allMonthExpenses = (await getTransactionsInRange(db, null, monthStart.getTime(), endOfMonth(month).getTime()))
-          .filter(t => t.kind === 'expense'); // soft-deleted already excluded by the query
-
         for (let d = 1; d <= dayOfMonth; d++) {
-          const dayStart = addDays(monthStart, d - 1).getTime();
-          const dayEnd = addDays(monthStart, d).getTime() - 1;
-          const daySpend = allMonthExpenses
-            .filter(t => t.date >= dayStart && t.date <= dayEnd)
-            .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
-          runningTotal += daySpend;
+          runningTotal += spendByDay[d];
           dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 2 === 1 ? `${d}` : '' });
         }
 
         // Prior-month actual total anchors the projection so an early spike doesn't
-        // explode the forecast (blended model — see forecast.ts).
-        const prevStart = startOfMonth(subMonths(month, 1)).getTime();
-        const prevEnd = endOfMonth(subMonths(month, 1)).getTime();
-        const priorMonthTotal = (await getTransactionsInRange(db, null, prevStart, prevEnd))
+        // explode the forecast (blended model — see forecast.ts). Reuse `pTxns`.
+        const priorMonthTotal = pTxns
           .filter(t => t.kind === 'expense')
           .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
 
@@ -384,14 +393,16 @@ export default function ReportsScreen() {
   );
 
   // 6-month bars, keyed to the selected category (or total when none selected).
-  // Derived in render from `selectedCat` so picking a category instantly redraws.
+  // Memoized on [monthly, selectedCat] so `trendBars` keeps a stable identity —
+  // otherwise the BarChart gets a new data array every render and replays its full
+  // grow-in animation on every unrelated state change (e.g. exporting).
   const trendColor = selectedCat ? (categoryVisual(selectedCat).color || colors.accent) : colors.accent;
-  const trendBars = monthly.map(m => ({
+  const trendBars = useMemo(() => monthly.map(m => ({
     value: Math.round((selectedCat ? (m.byCat[selectedCat] ?? 0) : m.total) / 100),
     label: m.label,
     frontColor: trendColor,
-  }));
-  const trendMax = Math.max(1, ...trendBars.map(b => b.value));
+  })), [monthly, selectedCat, trendColor]);
+  const trendMax = useMemo(() => Math.max(1, ...trendBars.map(b => b.value)), [trendBars]);
 
   return (
     <View style={styles.container}>

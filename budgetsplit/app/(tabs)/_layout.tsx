@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -56,8 +56,17 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   return (
     <View style={[styles.bar, { height: layout.tabBarHeight + insets.bottom, paddingBottom: insets.bottom }]}>
       <View style={StyleSheet.absoluteFill}>
-        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(13,18,20,0.45)' }]} />
+        {/* iOS gets a live blur; on Android BlurView must recomposite the scrolling
+            content behind it every frame (scroll jank), so use a near-opaque fill
+            that reads the same over the dark background. */}
+        {Platform.OS === 'ios' ? (
+          <>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(13,18,20,0.45)' }]} />
+          </>
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(13,18,20,0.94)' }]} />
+        )}
       </View>
       <View style={styles.row}>
         {LEFT.map(tab)}

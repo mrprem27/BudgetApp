@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Animated, Dimensions,
-  KeyboardAvoidingView, Platform, Keyboard,
+  View, Text, StyleSheet, Pressable, Dimensions,
+  KeyboardAvoidingView, Platform, Keyboard, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate,
+  Extrapolation, runOnJS,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, shadow } from '../tokens';
 
@@ -28,13 +32,16 @@ type Props = {
  * of a `transparentModal` route screen (the route is the overlay; nesting a
  * Modal there collapses to a black screen once the keyboard opens). For an
  * inline sheet over a normal screen, use {@link SheetModal}, which wraps this in
- * a Modal. Drag is powered by react-native-gesture-handler.
+ * a Modal. Drag is powered by react-native-gesture-handler + Reanimated, so the
+ * gesture and the sheet transform stay on the UI thread (no JS-thread stutter).
  */
 export function DraggableSheet({ onClose, title, children, scroll = true, headerRight }: Props) {
   const insets = useSafeAreaInsets();
-  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  const translateY = useSharedValue(SCREEN_H);
+  // Scroll offset as a shared value so the pan worklet can read it on the UI thread
+  // (only start a drag-to-dismiss when the inner list is at the top).
+  const scrollY = useSharedValue(0);
   const [kbVisible, setKbVisible] = useState(false);
-  const scrollY = useRef(0);
   // Guards so onClose fires exactly once and never after unmount: drag-dismiss,
   // backdrop-tap and a parent flipping `visible` can otherwise overlap.
   const closingRef = useRef(false);
@@ -49,44 +56,59 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
 
   // Spring in on mount.
   useEffect(() => {
-    translateY.setValue(SCREEN_H);
-    Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 2, speed: 14 }).start();
+    translateY.value = SCREEN_H;
+    translateY.value = withSpring(0, { damping: 16, stiffness: 170, mass: 0.7 });
   }, [translateY]);
+
+  const finishClose = () => { if (mountedRef.current) onClose(); };
 
   const animateClose = () => {
     if (closingRef.current) return;
     closingRef.current = true;
-    Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(({ finished }) => {
-      if (finished && mountedRef.current) onClose();
+    translateY.value = withTiming(SCREEN_H, { duration: 200 }, (finished) => {
+      'worklet';
+      if (finished) runOnJS(finishClose)();
     });
   };
-  const springBack = () => Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 0, speed: 16 }).start();
 
   const nativeGesture = useMemo(() => Gesture.Native(), []);
   const pan = useMemo(
     () => Gesture.Pan()
-      // These callbacks drive RN Animated (translateY.setValue / Animated.timing),
-      // which is JS-thread only. With Reanimated present, gesture-handler would
-      // otherwise workletize them onto the UI thread and crash — so pin to JS.
-      .runOnJS(true)
       .activeOffsetY(12)
-      .onUpdate((e) => { if (e.translationY > 0 && scrollY.current <= 0) translateY.setValue(e.translationY); })
+      .onUpdate((e) => {
+        'worklet';
+        if (e.translationY > 0 && scrollY.value <= 0) translateY.value = e.translationY;
+      })
       .onEnd((e) => {
-        if (scrollY.current <= 0 && (e.translationY > DISMISS_DY || e.velocityY > DISMISS_VY)) animateClose();
-        else springBack();
+        'worklet';
+        if (scrollY.value <= 0 && (e.translationY > DISMISS_DY || e.velocityY > DISMISS_VY)) {
+          runOnJS(animateClose)();
+        } else {
+          translateY.value = withSpring(0, { damping: 30, stiffness: 300 });
+        }
       })
       .simultaneousWithExternalGesture(nativeGesture),
     [nativeGesture], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const backdropOpacity = translateY.interpolate({ inputRange: [0, SCREEN_H], outputRange: [1, 0], extrapolate: 'clamp' });
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateY.value, [0, SCREEN_H], [1, 0], Extrapolation.CLAMP),
+  }));
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
   // Keep a small sensible gap above the keyboard (not flush), and the full
   // safe-area + margin when the keyboard is down.
   const bottomPad = kbVisible ? space.md : insets.bottom + space.md;
 
+  const onBodyScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollY.value = e.nativeEvent.contentOffset.y;
+  };
+
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[styles.backdrop, backdropStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} accessibilityRole="button" accessibilityLabel="Close" />
       </Animated.View>
       <KeyboardAvoidingView
@@ -95,7 +117,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
         pointerEvents="box-none"
       >
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, { paddingBottom: bottomPad, transform: [{ translateY }] }]}>
+          <Animated.View style={[styles.sheet, { paddingBottom: bottomPad }, sheetStyle]}>
             <View style={styles.grabber}>
               <View style={styles.handle} />
               {(title || headerRight) ? (
@@ -112,7 +134,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
                   showsVerticalScrollIndicator={false}
                   bounces={false}
                   scrollEventThrottle={16}
-                  onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+                  onScroll={onBodyScroll}
                   style={styles.bodyWrap}
                   contentContainerStyle={styles.content}
                 >

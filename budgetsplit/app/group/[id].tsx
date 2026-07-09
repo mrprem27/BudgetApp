@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, SectionList, StyleSheet, TouchableOpacity, Alert, ScrollView, Switch,
 } from 'react-native';
@@ -14,7 +14,7 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
 import { getTransactionsForGroup, softDeleteTxn, restoreTxn, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { useUndo } from '../../src/components/system/UndoToast';
-import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
@@ -107,7 +107,7 @@ export default function GroupDetailScreen() {
   const [budgetFilter, setBudgetFilter] = useState('all');
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
-  useRefreshOnDataChange(load);
+  useReloadOnDataChange(load);
 
   async function load() {
     const [grp, txnList, memberList, meRow] = await Promise.all([
@@ -191,8 +191,15 @@ export default function GroupDetailScreen() {
     router.push(`/txn/${txn.id}`);
   }
 
-  const settlements = simplifyOn ? simplify(net) : rawDebts(txns);
-  const personMap = new Map(members.map(m => [m.id, m]));
+  // simplify(net) is reused by both the settlements list and the balance card; keep
+  // one memoized result so it isn't recomputed twice per render (and not at all on
+  // unrelated re-renders like search keystrokes). rawDebts is O(txns×shares×payments).
+  const simplifiedSettles = useMemo(() => simplify(net), [net]);
+  const settlements = useMemo(
+    () => (simplifyOn ? simplifiedSettles : rawDebts(txns)),
+    [simplifyOn, simplifiedSettles, txns],
+  );
+  const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -202,6 +209,27 @@ export default function GroupDetailScreen() {
       return true;
     });
   }, [txns, filterKind, search]);
+
+  // Pre-group into date sections so the SectionList's `sections` prop keeps a stable
+  // identity between renders (rebuilding it inline defeats cell recycling/diffing).
+  const txnSections = useMemo(() => groupTxnsByDate(filteredTxns), [filteredTxns]);
+
+  // Stable renderItem so TransactionRow's React.memo actually holds; handlers are
+  // read through refs to stay current without re-creating the callback each render.
+  const handleDeleteRef = useRef(handleDelete);
+  handleDeleteRef.current = handleDelete;
+  const handleEditRef = useRef(handleEditTxn);
+  handleEditRef.current = handleEditTxn;
+  const renderTxn = useCallback(({ item }: { item: TxnWithSplits }) => (
+    <TransactionRow
+      txn={item}
+      myId={me?.id ?? ''}
+      onDelete={() => handleDeleteRef.current(item.id)}
+      onPress={() => handleEditRef.current(item)}
+      members={members}
+      isPersonal={isPersonal}
+    />
+  ), [me?.id, members, isPersonal]);
 
   // "Who paid what" — sum each member's expense payments, vs the equal fair share.
   // net > 0 means the member is ahead (the group owes them); net < 0 means they owe.
@@ -225,6 +253,19 @@ export default function GroupDetailScreen() {
         .sort((a, b) => b.paid - a.paid),
     };
   }, [txns, members, net]);
+
+  // My spend this month (personal groups' hero subtitle) — avoid the inline reduce
+  // over all txns re-running on every render/keystroke.
+  const personalMonthSpend = useMemo(() => {
+    if (!isPersonal) return 0;
+    const monthStart = startOfMonth(new Date()).getTime();
+    return txns.reduce(
+      (s, t) => (t.kind === 'expense' && t.date >= monthStart
+        ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0)
+        : s),
+      0,
+    );
+  }, [txns, me?.id, isPersonal]);
 
   // Recurring monthly total for summary pill
   const recurringMonthlyTotal = useMemo(() => {
@@ -290,11 +331,7 @@ export default function GroupDetailScreen() {
           <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
           {isPersonal ? (
             <Text style={styles.heroSub} numberOfLines={1}>
-              {(() => {
-                const monthStart = startOfMonth(new Date()).getTime();
-                const monthSpend = txns.reduce((s, t) => (t.kind === 'expense' && t.date >= monthStart ? s + (t.shares.find(x => x.personId === me?.id)?.amount ?? 0) : s), 0);
-                return `${formatCompact(monthSpend)} this month`;
-              })()}
+              {`${formatCompact(personalMonthSpend)} this month`}
             </Text>
           ) : (
             <View style={styles.heroMembers}>
@@ -309,7 +346,7 @@ export default function GroupDetailScreen() {
       {!isPersonal && (() => {
         const myNet = net[me?.id ?? ''] ?? 0;
         if (myNet === 0) return null;
-        const mySettles = simplify(net);
+        const mySettles = simplifiedSettles;
         const ov = oweView(myNet);
         const isOwe = ov.direction === 'owe';
         const primarySettle = isOwe
@@ -365,9 +402,13 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'transactions' && (
         <SectionList
-          sections={groupTxnsByDate(filteredTxns)}
+          sections={txnSections}
           keyExtractor={t => t.id}
           contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
             txns.length > 0 ? (
@@ -395,16 +436,7 @@ export default function GroupDetailScreen() {
           renderSectionHeader={({ section }) =>
             section.data.length ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
           }
-          renderItem={({ item }) => (
-            <TransactionRow
-              txn={item}
-              myId={me?.id ?? ''}
-              onDelete={() => handleDelete(item.id)}
-              onPress={() => handleEditTxn(item)}
-              members={members}
-              isPersonal={isPersonal}
-            />
-          )}
+          renderItem={renderTxn}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListEmptyComponent={
             txns.length === 0 ? (

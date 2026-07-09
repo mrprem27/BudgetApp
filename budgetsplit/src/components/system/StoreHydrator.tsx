@@ -19,8 +19,13 @@ export function StoreHydrator() {
   const hydrate = useCallback(async () => {
     try {
       const [me, groups] = await Promise.all([getMe(db), getAllGroups(db)]);
-      setMe(me ?? null);
-      setGroups(groups);
+      // Most cross-screen writes (a new expense, a budget edit, a savings deposit)
+      // touch neither the current user nor the groups list. Diff before writing so
+      // those refreshes don't churn the store and re-render every consumer.
+      const state = useStore.getState();
+      const nextMe = me ?? null;
+      if (JSON.stringify(state.me) !== JSON.stringify(nextMe)) setMe(nextMe);
+      if (JSON.stringify(state.groups) !== JSON.stringify(groups)) setGroups(groups);
     } catch {
       // Non-fatal: screens still load their own data via useScreenData.
     }

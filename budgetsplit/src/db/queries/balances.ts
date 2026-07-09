@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { simplify } from '../../lib/settle';
 
 export type NetBalance = Record<string, number>;
 
@@ -113,7 +114,6 @@ export async function getFriendBalances(
   );
 
   const net = await getGlobalNet(db);
-  const { simplify } = await import('../../lib/settle');
   const settlements = simplify(net);
 
   return rows.map(r => {

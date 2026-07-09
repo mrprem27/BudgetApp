@@ -20,6 +20,23 @@ export type CashPosition = {
   savings: number;       // currently set aside in goals
 };
 
+/** The four running sums computeCash accumulates — also what the aggregated SQL
+ *  path (getCashPosition) computes directly in the DB. */
+export type CashTotals = {
+  income: number;        // my payments on income txns
+  paidExpenses: number;  // my payments on expense txns (cash out the moment you paid)
+  settledOut: number;    // my payments on settlement txns
+  settledIn: number;     // my shares on settlement txns (cash received)
+};
+
+/** Final cash math, shared by the JS reducer (computeCash) and the SQL-aggregated
+ *  path so both produce byte-identical CashPositions. */
+export function cashPositionFromTotals(t: CashTotals, savings: number, openingCash = 0): CashPosition {
+  const s = Math.max(0, savings);
+  const available = openingCash + t.income - t.paidExpenses - t.settledOut + t.settledIn - s;
+  return { available, openingCash, income: t.income, paidExpenses: t.paidExpenses, settledOut: t.settledOut, settledIn: t.settledIn, savings: s };
+}
+
 export function computeCash(txns: CashTxn[], myId: string, savings: number, openingCash = 0): CashPosition {
   let income = 0, paidExpenses = 0, settledOut = 0, settledIn = 0;
   for (const t of txns) {
@@ -30,8 +47,7 @@ export function computeCash(txns: CashTxn[], myId: string, savings: number, open
     else if (t.kind === 'expense') paidExpenses += pay;       // cash out the moment you paid
     else if (t.kind === 'settlement') { settledOut += pay; settledIn += share; }
   }
-  const available = openingCash + income - paidExpenses - settledOut + settledIn - Math.max(0, savings);
-  return { available, openingCash, income, paidExpenses, settledOut, settledIn, savings: Math.max(0, savings) };
+  return cashPositionFromTotals({ income, paidExpenses, settledOut, settledIn }, savings, openingCash);
 }
 
 // --- Total Money -----------------------------------------------------------

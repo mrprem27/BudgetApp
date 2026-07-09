@@ -90,15 +90,33 @@ export function useScreenData<T>(
   // Load on mount + whenever deps (via `run`) change.
   useEffect(() => { void run('load'); }, [run]);
 
+  // Track focus so a cross-screen write only re-queries the screen the user is
+  // actually looking at. Backgrounded tabs (Home/Groups/Savings all stay mounted)
+  // just mark themselves dirty and reload the next time they regain focus —
+  // otherwise one write fans out into a full re-query of every mounted screen.
+  const isFocused = useRef(false);
+  const dirty = useRef(false);
+
   // Reload on refocus, skipping the initial mount focus (the effect above already loaded).
   const firstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
-    if (firstFocus.current) { firstFocus.current = false; return; }
-    if (refetchOnFocus) void run('load');
+    isFocused.current = true;
+    if (firstFocus.current) {
+      firstFocus.current = false;
+    } else if (refetchOnFocus || dirty.current) {
+      dirty.current = false;
+      void run('load');
+    }
+    return () => { isFocused.current = false; };
   }, [run, refetchOnFocus]));
 
-  // Reload on a cross-screen write (this helper already skips the initial mount).
-  useRefreshOnDataChange(() => { if (refetchOnDataChange) void run('load'); });
+  // Cross-screen write: reload now if we're the focused screen, otherwise defer to
+  // next focus. (This helper already skips the initial mount.)
+  useRefreshOnDataChange(() => {
+    if (!refetchOnDataChange) return;
+    if (isFocused.current) void run('load');
+    else dirty.current = true;
+  });
 
   return { data, loading, error, refreshing, onRefresh, reload };
 }

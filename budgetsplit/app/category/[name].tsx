@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,14 +159,21 @@ export default function CategoryDetailScreen() {
   // No recurring budget set at all → prompt to set one (applies to every period).
   const showSetBudget = dailyRate === 0;
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + space.xs }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Minimal back-link */}
+  const renderTxn = useCallback(({ item: txn }: { item: typeof view.txns[number] }) => (
+    <TransactionRow
+      txn={txn}
+      myId={myId}
+      onPress={() => router.push(`/txn/${txn.id}` as any)}
+      groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
+    />
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [myId, personalGroupId, groupNames]);
+
+  // Everything above the transaction list — rendered as the FlatList header so the
+  // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
+  const listHeader = (
+    <>
+      {/* Minimal back-link */}
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="chevron-left" size={18} color={colors.accent} />
           <Text style={styles.backText}>Back</Text>
@@ -321,30 +328,40 @@ export default function CategoryDetailScreen() {
               </View>
             )}
 
-            {/* Transactions */}
-            {view.txns.length > 0 ? (
-              <View>
-                <Text style={styles.txnLabel}>Transactions</Text>
-                {view.txns.map((txn, i) => (
-                  <React.Fragment key={txn.id}>
-                    <TransactionRow
-                      txn={txn}
-                      myId={myId}
-                      onPress={() => router.push(`/txn/${txn.id}` as any)}
-                      groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
-                    />
-                    {i < view.txns.length - 1 && <View style={styles.txnDivider} />}
-                  </React.Fragment>
-                ))}
-              </View>
-            ) : (
-              <EmptyState icon="inbox" title="No transactions" body={`No expenses in this category ${PERIOD_NOUN[period]}.`} />
-            )}
+            {/* Transactions header — the rows themselves are the FlatList data below */}
+            {view.txns.length > 0 && <Text style={styles.txnLabel}>Transactions</Text>}
           </>
         )}
-      </ScrollView>
+    </>
+  );
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + space.xs }]}
+        showsVerticalScrollIndicator={false}
+        data={loading ? [] : view.txns}
+        keyExtractor={(txn) => txn.id}
+        renderItem={renderTxn}
+        ItemSeparatorComponent={TxnDivider}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        removeClippedSubviews
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          loading ? null : (
+            <EmptyState icon="inbox" title="No transactions" body={`No expenses in this category ${PERIOD_NOUN[period]}.`} />
+          )
+        }
+      />
     </View>
   );
+}
+
+function TxnDivider() {
+  return <View style={styles.txnDivider} />;
 }
 
 const styles = StyleSheet.create({

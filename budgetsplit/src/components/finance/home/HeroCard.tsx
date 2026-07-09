@@ -67,12 +67,12 @@ export function HeroCard({
   // compact-formatted amount changes its width each frame, which shoves the
   // delta beside it around. The bar tween below carries the "smooth" feel.
 
-  // Tween the pace bar width to match.
-  const barAnim = useRef(new Animated.Value(barPct)).current;
+  // Tween the pace bar to match — left-anchored scaleX so it runs on the native/UI
+  // thread (animating `width %` would force useNativeDriver:false).
+  const barAnim = useRef(new Animated.Value(barPct / 100)).current;
   useEffect(() => {
-    Animated.timing(barAnim, { toValue: barPct, duration: 450, useNativeDriver: false }).start();
+    Animated.timing(barAnim, { toValue: barPct / 100, duration: 450, useNativeDriver: true }).start();
   }, [barPct, barAnim]);
-  const barWidth = barAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
 
   // Sweep the health ring to its score.
   const showRing = healthScore != null && isFinite(healthScore);
@@ -143,7 +143,7 @@ export function HeroCard({
 
       {/* Track — always present (muted when no budget) so height is constant. */}
       <View style={styles.track}>
-        {hasBudget && <Animated.View style={[styles.fill, { width: barWidth, backgroundColor: paceColor }]} />}
+        {hasBudget && <Animated.View style={[styles.fill, { backgroundColor: paceColor, transform: [{ scaleX: barAnim }] }]} />}
       </View>
 
       {/* Secondary row — always one line tall, content varies by state. */}
@@ -177,8 +177,8 @@ const styles = StyleSheet.create({
   numberRow: { flexDirection: 'row', alignItems: 'flex-end' },
   deltaWrap: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, height: 16 },
   deltaText: { ...type.label },
-  track: { height: 4, backgroundColor: colors.bgElevated, borderRadius: 2, marginTop: space.md, marginBottom: space.sm },
-  fill: { height: 4, borderRadius: 2 },
+  track: { height: 4, backgroundColor: colors.bgElevated, borderRadius: 2, marginTop: space.md, marginBottom: space.sm, overflow: 'hidden' },
+  fill: { height: 4, width: '100%', borderRadius: 2, transformOrigin: 'left' },
   // minHeight keeps the row exactly one line tall in every state → no jump.
   paceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 18 },
   paceLeft: { flexDirection: 'row', alignItems: 'center', gap: 5 },

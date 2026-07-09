@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
@@ -61,6 +61,51 @@ function rangeStart(range: string): number | undefined {
 
 type Section = { title: string; data: AuditLog[] };
 
+/** One date-grouped card. Memoized so off-screen sections don't re-render (and the
+ *  per-entry date formatting only runs when the section is actually rendered). */
+const SectionCard = React.memo(function SectionCard({ section }: { section: Section }) {
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>{section.title}</Text>
+      <View style={styles.card}>
+        {section.data.map((item, i) => {
+          const dotColor = DOT_COLOR[item.action] ?? colors.accent;
+          const label = ACTION_LABEL[item.action] ?? 'Change';
+          const badge = BADGE_LABEL[item.action];
+          const itemDate = new Date(item.created_at);
+          const dateStr = isFinite(itemDate.getTime())
+            ? (isSameDay(itemDate, new Date()) ? `Today ${format(itemDate, 'h:mm a')}` : `${format(itemDate, 'MMM d')} · ${format(itemDate, 'h:mm a')}`)
+            : '';
+          const amtColor = item.action === 'settled' ? colors.income : item.action === 'deleted' || item.action === 'created' ? colors.expense : undefined;
+
+          return (
+            <View
+              key={item.id}
+              style={[styles.entry, i < section.data.length - 1 && styles.entryBorder]}
+            >
+              <View style={[styles.entryDot, { backgroundColor: dotColor }]} />
+              <View style={styles.entryBody}>
+                <Text style={styles.entryLabel}>{label}</Text>
+                <Text style={styles.entrySummary} numberOfLines={2}>{item.summary}</Text>
+                {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
+              </View>
+              {badge ? (
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? '#2A1714' : '#221A00' }]}>
+                  <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : '#F5B301' }]}>{badge}</Text>
+                </View>
+              ) : item.amount != null ? (
+                <Text style={[styles.entryAmt, { color: amtColor ?? colors.textSecondary }]}>
+                  {item.action === 'settled' ? '+' : item.action === 'created' ? '−' : ''}{formatCompact(item.amount)}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
 export default function HistoryScreen() {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const router = useRouter();
@@ -87,6 +132,11 @@ export default function HistoryScreen() {
 
   const hasMore = entries.length > pageLimit;
 
+  const renderSection = useCallback(
+    ({ item }: { item: Section }) => <SectionCard section={item} />,
+    [],
+  );
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Audit log" onBack={() => router.back()} />
@@ -94,62 +144,27 @@ export default function HistoryScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-        <ScrollView
+        <FlatList
+          data={sections}
+          keyExtractor={(s) => s.title}
+          renderItem={renderSection}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
-        >
-          <Text style={styles.subtitle}>Every change made to your data, in order.</Text>
-
-          {sections.length === 0 ? (
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          removeClippedSubviews
+          ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
+          ListEmptyComponent={
             <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
-          ) : (
-            sections.map(section => (
-              <View key={section.title}>
-                <Text style={styles.sectionLabel}>{section.title}</Text>
-                <View style={styles.card}>
-                  {section.data.map((item, i) => {
-                    const dotColor = DOT_COLOR[item.action] ?? colors.accent;
-                    const label = ACTION_LABEL[item.action] ?? 'Change';
-                    const badge = BADGE_LABEL[item.action];
-                    const itemDate = new Date(item.created_at);
-                    const dateStr = isFinite(itemDate.getTime())
-                      ? (isSameDay(itemDate, new Date()) ? `Today ${format(itemDate, 'h:mm a')}` : `${format(itemDate, 'MMM d')} · ${format(itemDate, 'h:mm a')}`)
-                      : '';
-                    const amtColor = item.action === 'settled' ? colors.income : item.action === 'deleted' || item.action === 'created' ? colors.expense : undefined;
-
-                    return (
-                      <View
-                        key={item.id}
-                        style={[styles.entry, i < section.data.length - 1 && styles.entryBorder]}
-                      >
-                        <View style={[styles.entryDot, { backgroundColor: dotColor }]} />
-                        <View style={styles.entryBody}>
-                          <Text style={styles.entryLabel}>{label}</Text>
-                          <Text style={styles.entrySummary} numberOfLines={2}>{item.summary}</Text>
-                          {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
-                        </View>
-                        {badge ? (
-                          <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? '#2A1714' : '#221A00' }]}>
-                            <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : '#F5B301' }]}>{badge}</Text>
-                          </View>
-                        ) : item.amount != null ? (
-                          <Text style={[styles.entryAmt, { color: amtColor ?? colors.textSecondary }]}>
-                            {item.action === 'settled' ? '+' : item.action === 'created' ? '−' : ''}{formatCompact(item.amount)}
-                          </Text>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ))
-          )}
-
-          {hasMore && (
-            <TouchableOpacity style={styles.loadMore} onPress={() => setPageLimit(p => p + PAGE_SIZE)} accessibilityRole="button">
-              <Text style={styles.loadMoreText}>Load older entries</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <TouchableOpacity style={styles.loadMore} onPress={() => setPageLimit(p => p + PAGE_SIZE)} accessibilityRole="button">
+                <Text style={styles.loadMoreText}>Load older entries</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
       )}
     </View>
   );

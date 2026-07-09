@@ -3,7 +3,8 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { planAutoAllocations, planOverspendRaid } from '../../lib/savingsEngine';
 import { generateInsights, type Insight, type CategorySpend } from '../../lib/savingsInsights';
-import { computeCash, computeTotalMoney, type CashPosition, type TotalMoney } from '../../lib/cash';
+import { cashPositionFromTotals, computeTotalMoney, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
+import { CASH_TOTALS_SQL } from './cashQuery';
 import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups } from './groups';
 import { getMe } from './persons';
@@ -307,12 +308,16 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
   const me = await getMe(db);
   const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0 };
   if (!me) return empty;
-  const [txns, savedTotal, profile] = await Promise.all([
-    getTransactionsInRange(db, null, 0, Date.now()),
+  // Aggregate the four running sums in SQL instead of loading every txn + all its
+  // split rows across all history and reducing in JS. Parity with computeCash() is
+  // locked by cashSql.test.ts.
+  const [row, savedTotal, profile] = await Promise.all([
+    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [me.id, me.id, Date.now()]),
     getTotalSaved(db),
     getMoneyProfile(db),
   ]);
-  return computeCash(txns, me.id, savedTotal, profile.openingCash);
+  const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0 };
+  return cashPositionFromTotals(totals, savedTotal, profile.openingCash);
 }
 
 /** The single "Total Money" figure + breakdown for the Plan screen. */

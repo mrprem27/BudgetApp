@@ -12,7 +12,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
-import { useRefreshOnDataChange } from '../../src/components/system/DataRefreshProvider';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
 import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -62,7 +62,7 @@ export default function GroupsScreen() {
   useFocusEffect(useCallback(() => {
     loadGroups();
   }, []));
-  useRefreshOnDataChange(loadGroups);
+  useReloadOnDataChange(loadGroups);
 
   async function loadGroups() {
     try {
@@ -161,7 +161,7 @@ export default function GroupsScreen() {
     );
 
     return (
-      <FadeIn delay={index * 55}>
+      <FadeIn delay={Math.min(index, 6) * 55}>
         <Swipeable
           ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
           renderRightActions={item.is_personal ? undefined : renderRightActions}
@@ -291,6 +291,10 @@ export default function GroupsScreen() {
           keyExtractor={g => g.id}
           renderItem={renderGroup}
           contentContainerStyle={styles.list}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          removeClippedSubviews
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={viewMode === 'active' ? <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text> : null}
           ListFooterComponent={viewMode === 'active' ? renderBalances() : null}

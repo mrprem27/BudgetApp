@@ -7,16 +7,18 @@ import { formatCompact } from '../../../lib/money';
 
 export type CategoryRow = { name: string; paise: number };
 
-/** A category bar fill that grows in on mount and tweens when its value changes. */
+/** A category bar fill that grows in on mount and tweens when its value changes.
+ *  Uses a left-anchored scaleX so the animation runs on the native/UI thread
+ *  (animating `width %` forces useNativeDriver:false → JS-thread work every tween,
+ *  and these bars re-tween on every Today/Month/Year switch). */
 function AnimatedBar({ pct, color }: { pct: number; color: string }) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(anim, { toValue: pct, duration: 450, useNativeDriver: false }).start();
+    Animated.timing(anim, { toValue: Math.max(0, Math.min(1, pct / 100)), duration: 450, useNativeDriver: true }).start();
   }, [pct, anim]);
-  const width = anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
   return (
     <View style={styles.track}>
-      <Animated.View style={[styles.fill, { width, backgroundColor: color }]} />
+      <Animated.View style={[styles.fill, { backgroundColor: color, transform: [{ scaleX: anim }] }]} />
     </View>
   );
 }
@@ -134,8 +136,8 @@ const styles = StyleSheet.create({
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   // flex (not a fixed width) so longer names get more room and truncate with … instead of a hard cut.
   name: { ...type.label, color: colors.textSecondary, flex: 1 },
-  track: { flex: 2, height: 3, backgroundColor: colors.bgElevated, borderRadius: 2 },
-  fill: { height: 3, borderRadius: 2 },
+  track: { flex: 2, height: 3, backgroundColor: colors.bgElevated, borderRadius: 2, overflow: 'hidden' },
+  fill: { height: 3, width: '100%', borderRadius: 2, transformOrigin: 'left' },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary, width: 52, textAlign: 'right' },
   more: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   moreSlot: { height: 18, justifyContent: 'center' },
