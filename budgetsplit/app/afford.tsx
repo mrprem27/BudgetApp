@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -24,12 +24,13 @@ export default function AffordScreen() {
   const [snap, setSnap] = useState<AffordSnapshot | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Refetch on focus so the affordability snapshot reflects txns added elsewhere.
+  useFocusEffect(useCallback(() => {
     (async () => {
       try { setSnap(await getAffordSnapshot(db)); }
       catch { setSnap({ available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }); }
     })();
-  }, []);
+  }, [db]));
 
   const amount = parseToPaise(amountText);
   const available = snap?.available ?? 0;

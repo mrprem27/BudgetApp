@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -304,7 +304,9 @@ export default function ReportsScreen() {
     }
   }, [db, month]);
 
-  useEffect(() => { load(); }, [load]);
+  // Re-run on focus (and when the month changes) so returning after adding a
+  // transaction shows fresh analytics — `load` is memoised on [db, month].
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function exportCSV() {
     setExporting(true);

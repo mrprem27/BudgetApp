@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -75,7 +75,8 @@ export default function CategoryDetailScreen() {
     };
   }, []);
 
-  useEffect(() => {
+  // Refetch on focus so returning after adding/editing a txn shows fresh data.
+  useFocusEffect(useCallback(() => {
     (async () => {
       if (!categoryName) { setLoading(false); return; }
       const me = await getMe(db);
@@ -99,7 +100,7 @@ export default function CategoryDetailScreen() {
       setGoals(allGoals.filter(g => g.category === categoryName));
       setLoading(false);
     })();
-  }, [db, categoryName, ranges]);
+  }, [db, categoryName, ranges]));
 
   // The category's recurring budget, normalized to a per-day rate so it can be
   // prorated onto any period. Prefer monthly, then yearly, then daily; a
