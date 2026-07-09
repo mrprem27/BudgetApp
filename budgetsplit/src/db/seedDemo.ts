@@ -310,9 +310,16 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await fundGoal(db, almost.id, R(19500), 'manual');
   await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
 
-  // --- Uncategorized: a category not in the catalog → folds into "Others" in
-  // Reports and appears under Categories → Uncategorized (adopt-or-leave flow).
-  await exp('Pet Care', 800, thisMonth(9), { note: 'Vet visit' });
+  // --- Uncategorized: a co-member (Aarav) used a category that ISN'T in your
+  // catalog to split an expense in a shared group you're in → it shows under
+  // Categories → Uncategorized (adopt-or-leave) and folds into "Others" in your
+  // analytics until you adopt it. This is the real "someone else's category" case.
+  await insertTxn(db, {
+    groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9),
+    category: 'Poker Night', note: "Aarav's game night",
+    payments: [{ personId: aarav.id, amount: R(1200) }],
+    shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }],
+  });
 
   // --- Import inbox: pending transactions to exercise the GPay import → Review
   // wizard (dashboard badge, Step 1 classify, Step 2 group split). Mix of
