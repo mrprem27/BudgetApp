@@ -16,6 +16,7 @@ import { Input } from '../src/components/ui/Input';
 import {
   getCategories, getUncategorizedNames, insertCategory, deleteCategory, renameCategory,
 } from '../src/db/queries/categories';
+import { seedGlobalCategories } from '../src/db/seedCategories';
 import { haptic } from '../src/lib/haptics';
 import {
   CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection, categoryVisual,
@@ -53,7 +54,14 @@ export default function CategoriesScreen() {
   // Categories are a single global catalog now — no group scoping.
   async function loadCats(k: CategoryKind) {
     try {
-      const [cats, unc] = await Promise.all([getCategories(db, k), getUncategorizedNames(db, k)]);
+      let cats = await getCategories(db, k);
+      // Self-heal: the base catalog is app structure and should never be empty.
+      // If it is (e.g. an older DB that once wiped categories), reseed defaults.
+      if (cats.length === 0) {
+        await seedGlobalCategories(db);
+        cats = await getCategories(db, k);
+      }
+      const unc = await getUncategorizedNames(db, k);
       setCategories(cats);
       setUncategorized(unc);
       setLoadError(false);

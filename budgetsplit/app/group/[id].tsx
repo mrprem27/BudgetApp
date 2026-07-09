@@ -31,7 +31,6 @@ import { categoryVisual, categorySection, SECTION_ORDER } from '../../src/consta
 import { haptic } from '../../src/lib/haptics';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { BalanceRow } from '../../src/components/finance/BalanceRow';
-import { InsightsTab } from '../../src/components/finance/group/InsightsTab';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -44,7 +43,7 @@ import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-type TabKey = 'transactions' | 'budget' | 'members' | 'insights' | 'recurring';
+type TabKey = 'transactions' | 'budget' | 'members' | 'recurring';
 
 function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
   return h === 'red' ? colors.healthRed : h === 'amber' ? colors.healthAmber : h === 'green' ? colors.healthGreen : colors.textSecondary;
@@ -227,20 +226,6 @@ export default function GroupDetailScreen() {
     };
   }, [txns, members, net]);
 
-  // Per-category spending for Insights TOP CATEGORIES (all-time, top 3)
-  const topCategories = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const t of txns) {
-      if (t.is_deleted || t.kind !== 'expense') continue;
-      totals[t.category] = (totals[t.category] ?? 0) + t.payments.reduce((s, p) => s + p.amount, 0);
-    }
-    const max = Math.max(1, ...Object.values(totals));
-    return Object.entries(totals)
-      .map(([cat, amt]) => ({ cat, amt, frac: amt / max }))
-      .sort((a, b) => b.amt - a.amt)
-      .slice(0, 3);
-  }, [txns]);
-
   // Recurring monthly total for summary pill
   const recurringMonthlyTotal = useMemo(() => {
     return recurringRules.reduce((sum, r) => {
@@ -269,7 +254,6 @@ export default function GroupDetailScreen() {
         { key: 'recurring', label: 'Recurring' },
         { key: 'budget', label: 'Budget' },
         { key: 'members', label: 'Members' },
-        { key: 'insights', label: 'Insights' },
       ];
 
   if (!group) return null;
@@ -725,9 +709,6 @@ export default function GroupDetailScreen() {
         </ScrollView>
       )}
 
-      {activeTab === 'insights' && !isPersonal && (
-        <InsightsTab contributions={contributions} topCategories={topCategories} analytics={analytics} />
-      )}
 
       {activeTab === 'recurring' && !isPersonal && (
         <ScrollView contentContainerStyle={styles.listContent}>
@@ -937,21 +918,9 @@ const styles = StyleSheet.create({
   linkBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   linkBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 
-  // Insights tab
+  // Contributions overview card (Members area)
   insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8 },
   insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
-  insightMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  insightBarTrack: { height: 8, backgroundColor: colors.bgMuted, borderRadius: 4, marginBottom: 3 },
-  insightBarFill: { height: 8, borderRadius: 4 },
-  insightMemberAmt: { fontSize: 10, color: colors.textMuted },
-  catTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: space.md, paddingVertical: 12 },
-  catTopEmoji: { fontSize: 20, width: 28, textAlign: 'center', flexShrink: 0 },
-  catTopName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 3 },
-  catTopAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, flexShrink: 0 },
-  trendCallout: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#081F16', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#0C3D22', marginBottom: space.md },
-  trendDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.income, flexShrink: 0, marginTop: 3 },
-  trendTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.income, marginBottom: 3 },
-  trendSub: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
   // Recurring tab
   recurSummaryCard: { backgroundColor: '#1A1A3A', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
   recurSummaryTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },

@@ -17,6 +17,7 @@ import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
+import { seedGlobalCategories } from '../../../src/db/seedCategories';
 import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
@@ -110,11 +111,16 @@ export default function BudgetEditorScreen() {
   async function load() {
     if (!id) return;
     try {
-      const [cats, budgets, dc] = await Promise.all([
+      let [cats, budgets, dc] = await Promise.all([
         getCategoriesByFrequency(db, id),
         getCategoryBudgets(db, id),
         settings.defaultCadence(),
       ]);
+      // Self-heal: the expense catalog should never be empty. Reseed if it is.
+      if (cats.length === 0) {
+        await seedGlobalCategories(db);
+        cats = await getCategoriesByFrequency(db, id);
+      }
       if (dc) setDefaultCadence(dc as BudgetCadence);
       setAllCategories(cats);
       const amt: Record<string, string> = {};
