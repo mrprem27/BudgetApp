@@ -65,6 +65,10 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   const nativeGesture = useMemo(() => Gesture.Native(), []);
   const pan = useMemo(
     () => Gesture.Pan()
+      // These callbacks drive RN Animated (translateY.setValue / Animated.timing),
+      // which is JS-thread only. With Reanimated present, gesture-handler would
+      // otherwise workletize them onto the UI thread and crash — so pin to JS.
+      .runOnJS(true)
       .activeOffsetY(12)
       .onUpdate((e) => { if (e.translationY > 0 && scrollY.current <= 0) translateY.setValue(e.translationY); })
       .onEnd((e) => {

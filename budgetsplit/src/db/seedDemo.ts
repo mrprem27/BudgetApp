@@ -232,20 +232,27 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await insertTxn(db, { groupId: goa.id, kind: 'expense', entryMode: 'quick', date: monthsBack(1, 15), category: 'Cab & Auto', note: 'Airport transfers', payments: [{ personId: rohan.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(1500) }, { personId: rohan.id, amount: R(1500) }, { personId: sneha.id, amount: R(1500) }, { personId: vikram.id, amount: R(1500) }] });
   // Activities — SHARES/weights split (me 2 · Rohan 1 · Sneha 2 · Vikram 1 of ₹8,000).
   await insertTxn(db, { groupId: goa.id, kind: 'expense', entryMode: 'quick', date: monthsBack(1, 16), category: 'Entertainment', note: 'Water sports', payments: [{ personId: sneha.id, amount: R(8000) }], shares: [{ personId: meId, amount: 266667 }, { personId: rohan.id, amount: 133333 }, { personId: sneha.id, amount: 266667 }, { personId: vikram.id, amount: 133333 }] });
-  // Itemized dinner — line items + tax/tip, paid by Vikram, split equally for the demo.
-  await insertItemizedTxn(db, {
-    groupId: goa.id, kind: 'expense', entryMode: 'itemized', date: monthsBack(1, 16), category: 'Eating Out', note: 'Seafood dinner',
-    payments: [{ personId: vikram.id, amount: R(4400) }],
-    shares: [{ personId: meId, amount: R(1100) }, { personId: rohan.id, amount: R(1100) }, { personId: sneha.id, amount: R(1100) }, { personId: vikram.id, amount: R(1100) }],
-    adjustments: [{ label: 'GST', type: 'tax', mode: 'percent', value: '5' }, { label: 'Tip', type: 'tip', mode: 'percent', value: '10' }, { label: 'Coupon', type: 'discount', mode: 'flat', value: '200' }],
-    items: [
-      // Showcases the per-item split modes: percent, single, shares, equal.
-      { name: 'Grilled Prawns', qty: 2, unitPrice: R(650), assignedTo: [meId, rohan.id], splitMode: 'percent', splitValues: { [meId]: '60', [rohan.id]: '40' } },
-      { name: 'Fish Curry', qty: 1, unitPrice: R(450), assignedTo: [sneha.id] },
-      { name: 'Beer (x4)', qty: 4, unitPrice: R(200), assignedTo: [meId, rohan.id, sneha.id, vikram.id], splitMode: 'shares', splitValues: { [meId]: '2', [rohan.id]: '2', [sneha.id]: '1', [vikram.id]: '1' } },
-      { name: 'Rice & Naan', qty: 3, unitPrice: R(150), assignedTo: [meId, rohan.id, sneha.id, vikram.id] },
-    ],
-  });
+  // Itemized dinner — line items + tax/tip, paid by Vikram, with per-item split
+  // modes (percent/shares) to showcase itemized splitting. Wrapped so that if an
+  // itemized insert ever fails on an odd DB state, the rest of the demo (budgets,
+  // savings, pending inbox) still seeds instead of the whole load aborting.
+  try {
+    await insertItemizedTxn(db, {
+      groupId: goa.id, kind: 'expense', entryMode: 'itemized', date: monthsBack(1, 16), category: 'Eating Out', note: 'Seafood dinner',
+      payments: [{ personId: vikram.id, amount: R(4400) }],
+      shares: [{ personId: meId, amount: R(1100) }, { personId: rohan.id, amount: R(1100) }, { personId: sneha.id, amount: R(1100) }, { personId: vikram.id, amount: R(1100) }],
+      adjustments: [{ label: 'GST', type: 'tax', mode: 'percent', value: '5' }, { label: 'Tip', type: 'tip', mode: 'percent', value: '10' }, { label: 'Coupon', type: 'discount', mode: 'flat', value: '200' }],
+      items: [
+        // Showcases the per-item split modes: percent, single, shares, equal.
+        { name: 'Grilled Prawns', qty: 2, unitPrice: R(650), assignedTo: [meId, rohan.id], splitMode: 'percent', splitValues: { [meId]: '60', [rohan.id]: '40' } },
+        { name: 'Fish Curry', qty: 1, unitPrice: R(450), assignedTo: [sneha.id] },
+        { name: 'Beer (x4)', qty: 4, unitPrice: R(200), assignedTo: [meId, rohan.id, sneha.id, vikram.id], splitMode: 'shares', splitValues: { [meId]: '2', [rohan.id]: '2', [sneha.id]: '1', [vikram.id]: '1' } },
+        { name: 'Rice & Naan', qty: 3, unitPrice: R(150), assignedTo: [meId, rohan.id, sneha.id, vikram.id] },
+      ],
+    });
+  } catch (e) {
+    console.warn('[seedDemo] itemized bill skipped:', e);
+  }
 
   // --- Office Lunch: fully settled (tests the "all settled up" state) ------
   await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: thisMonth(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
