@@ -1,7 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_CATEGORIES, TRANSFER_SECTIONS } from '../constants/categories';
+import { CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS } from '../constants/categories';
+import { seedGlobalCategories } from './seedCategories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -412,20 +413,9 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // Leave categories as-is if the global migration fails.
   }
 
-  // Ensure the global catalog contains every default category (idempotent via
-  // UNIQUE(name, kind)). This is the ONLY category seeding now — groups no longer
-  // seed their own copies.
-  const seedGlobal = async (defs: { name: string; icon: string; color: string }[], kind: string) => {
-    for (const c of defs) {
-      await db.runAsync(
-        "INSERT OR IGNORE INTO category (id, group_id, name, icon, color, kind) VALUES (?, NULL, ?, ?, ?, ?)",
-        [uuid(), c.name, c.icon, c.color, kind],
-      );
-    }
-  };
-  await seedGlobal(DEFAULT_CATEGORIES, 'expense');
-  await seedGlobal(INCOME_CATEGORIES, 'income');
-  await seedGlobal(TRANSFER_CATEGORIES, 'transfer');
+  // Ensure the global catalog contains every default category (idempotent).
+  // This is the ONLY category seeding — groups/demo never make their own copies.
+  await seedGlobalCategories(db);
 
   // Backfill the section column per kind so a name shared across kinds (e.g.
   // 'Rent', 'Other') lands in the right section for its own kind.

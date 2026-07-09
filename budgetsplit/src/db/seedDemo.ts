@@ -21,25 +21,34 @@ import { pauseRecurring, endRecurring } from './queries/transactions';
 import { setCategoryBudgets } from './queries/categoryBudgets';
 import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
 import { insertPending } from './queries/pending';
+import { seedGlobalCategories } from './seedCategories';
 import { setMoneyProfile } from './queries/moneyProfile';
 import type { RecurFreq, PayMethod } from '../constants/enums';
 
 /** Rupees → integer paise. */
 const R = (rupees: number) => Math.round(rupees * 100);
 
+// NOTE: `category` is intentionally NOT here — it's the single global catalog
+// (seeded in openDB / seedGlobalCategories), not per-run data. Wiping it would
+// leave every transaction "uncategorized" (folded into Others). `category_budget`
+// IS wiped (budgets are per-run demo data) and re-created below.
 const ALL_TABLES = [
   'txn_payment', 'txn_share', 'line_item', 'recur_skip', 'txn',
-  'category_budget', 'category', 'group_member', 'budget_group',
+  'category_budget', 'group_member', 'budget_group',
   'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
 ];
 
-/** Delete every row from every data table (settings/feature-flags untouched). */
+/** Delete every row from every data table (settings/feature-flags + the global
+ *  category catalog are untouched). */
 export async function wipeAllData(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA foreign_keys=OFF;');
   for (const t of ALL_TABLES) {
     await db.runAsync(`DELETE FROM ${t}`);
   }
   await db.execAsync('PRAGMA foreign_keys=ON;');
+  // Self-heal: guarantee the global catalog exists (idempotent) so categories
+  // always resolve after a wipe, even on an older DB that once wiped them.
+  await seedGlobalCategories(db);
 }
 
 /** Re-seed only the base "me" + Personal group + categories (empty-state baseline). */
