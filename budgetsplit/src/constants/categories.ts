@@ -124,11 +124,16 @@ export const TRANSFER_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Other', names: ['Other'] },
 ];
 
+// Name→section for the name-only fallback. Expense sections are spread LAST so
+// that a name shared across kinds (e.g. 'Rent' is both an expense and a transfer
+// category) resolves to its EXPENSE section — the most common context. Kind-
+// specific screens read the per-kind `section` column instead of this fallback.
 const SECTION_OF: Record<string, string> = Object.fromEntries(
-  [...CATEGORY_SECTIONS, ...INCOME_SECTIONS, ...TRANSFER_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
+  [...TRANSFER_SECTIONS, ...INCOME_SECTIONS, ...CATEGORY_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
 );
 
-/** The section a category belongs to (defaults to "Other" for custom ones). */
+/** The section a category belongs to by NAME (expense-biased for shared names).
+ *  Prefer a category row's own `section` column when you have it. */
 export function categorySection(name: string): string {
   return SECTION_OF[name] ?? 'Other';
 }

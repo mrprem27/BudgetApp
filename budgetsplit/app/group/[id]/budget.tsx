@@ -128,12 +128,15 @@ export default function BudgetEditorScreen() {
       setAmounts(amt);
       setCadences(cad);
       // Collapse sections that have no budget set yet; keep the ones in use open.
-      const budgetedSections = new Set(Object.keys(amt).map(categorySection));
-      const allSections = new Set(cats.map(c => categorySection(c.name)));
+      // Group by each row's own DB section (kind-correct), not the name-only map.
+      const secMap = new Map(cats.map(c => [c.name, c.section]));
+      const secOf = (name: string): string => secMap.get(name) ?? categorySection(name);
+      const budgetedSections = new Set(Object.keys(amt).map(secOf));
+      const allSections = new Set(cats.map(c => secOf(c.name)));
       if (focusCategory) {
         // Deep-linked to one category: collapse every other section so its field
         // is right at the top, ready to type into.
-        const target = categorySection(focusCategory);
+        const target = secOf(focusCategory);
         setCollapsed(new Set([...allSections].filter(s => s !== target)));
       } else {
         setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
@@ -143,6 +146,12 @@ export default function BudgetEditorScreen() {
       setLoadError(true);
     }
   }
+
+  // Section for a category — prefer its authoritative per-kind DB `section`
+  // column (so a name shared across kinds like 'Rent' groups correctly), falling
+  // back to the name-only lookup for custom/unbackfilled ones.
+  const sectionByName = new Map(allCategories.map(c => [c.name, c.section]));
+  const sectionOf = (name: string): string => sectionByName.get(name) ?? categorySection(name);
 
   const cadenceOf = (cat: string): BudgetCadence => cadences[cat] ?? defaultCadence;
   const monthlyApprox = allCategories.reduce(
@@ -154,7 +163,7 @@ export default function BudgetEditorScreen() {
   const sections: SectionGroup[] = (() => {
     const byTitle = new Map<string, Category[]>();
     for (const c of allCategories) {
-      const t = categorySection(c.name);
+      const t = sectionOf(c.name);
       const arr = byTitle.get(t) ?? [];
       arr.push(c);
       byTitle.set(t, arr);
