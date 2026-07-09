@@ -20,6 +20,7 @@ import { insertTxn, insertItemizedTxn, recordSettlement, softDeleteTxn } from '.
 import { pauseRecurring, endRecurring } from './queries/transactions';
 import { setCategoryBudgets } from './queries/categoryBudgets';
 import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
+import { insertPending } from './queries/pending';
 import { setMoneyProfile } from './queries/moneyProfile';
 import type { RecurFreq, PayMethod } from '../constants/enums';
 
@@ -229,9 +230,10 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     shares: [{ personId: meId, amount: R(1100) }, { personId: rohan.id, amount: R(1100) }, { personId: sneha.id, amount: R(1100) }, { personId: vikram.id, amount: R(1100) }],
     adjustments: [{ label: 'GST', type: 'tax', mode: 'percent', value: '5' }, { label: 'Tip', type: 'tip', mode: 'percent', value: '10' }, { label: 'Coupon', type: 'discount', mode: 'flat', value: '200' }],
     items: [
-      { name: 'Grilled Prawns', qty: 2, unitPrice: R(650), assignedTo: [meId, rohan.id] },
+      // Showcases the per-item split modes: percent, single, shares, equal.
+      { name: 'Grilled Prawns', qty: 2, unitPrice: R(650), assignedTo: [meId, rohan.id], splitMode: 'percent', splitValues: { [meId]: '60', [rohan.id]: '40' } },
       { name: 'Fish Curry', qty: 1, unitPrice: R(450), assignedTo: [sneha.id] },
-      { name: 'Beer (x4)', qty: 4, unitPrice: R(200), assignedTo: [meId, rohan.id, sneha.id, vikram.id] },
+      { name: 'Beer (x4)', qty: 4, unitPrice: R(200), assignedTo: [meId, rohan.id, sneha.id, vikram.id], splitMode: 'shares', splitValues: { [meId]: '2', [rohan.id]: '2', [sneha.id]: '1', [vikram.id]: '1' } },
       { name: 'Rice & Naan', qty: 3, unitPrice: R(150), assignedTo: [meId, rohan.id, sneha.id, vikram.id] },
     ],
   });
@@ -298,6 +300,25 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   const almost = await insertGoal(db, { name: 'Weekend Getaway', target: R(20000), priority: 'medium', icon: 'map', color: '#2DD4BF' });
   await fundGoal(db, almost.id, R(19500), 'manual');
   await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
+
+  // --- Uncategorized: a category not in the catalog → folds into "Others" in
+  // Reports and appears under Categories → Uncategorized (adopt-or-leave flow).
+  await exp('Pet Care', 800, thisMonth(9), { note: 'Vet visit' });
+
+  // --- Import inbox: pending transactions to exercise the GPay import → Review
+  // wizard (dashboard badge, Step 1 classify, Step 2 group split). Mix of
+  // expense/income, some pre-categorized, one shareable-in-a-group, one uncategorized.
+  await insertPending(db, [
+    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
+    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', raw: null },
+    { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', raw: null },
+    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', raw: null },
+    { date: thisMonth(18), amount: R(1000), description: 'PREM PURUSHOTTAM BHATI', kind: 'income', category: null, direction: 'credit', raw: null },
+    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', raw: null },
+    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', raw: null },
+    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', raw: null },
+    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', raw: null },
+  ]);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.
   const counts = await db.getFirstAsync<{ txns: number; people: number; groups: number; goals: number }>(
