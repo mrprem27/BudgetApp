@@ -79,9 +79,13 @@ export default function ImportScreen() {
     const parsed = parseAny(extracted);
     if (parsed.rows.length === 0) {
       haptic.warning();
+      // Distinguish "extracted nothing" from "extracted text but parser found no rows".
+      const chars = extracted.trim().length;
       Alert.alert(
-        'Couldn’t read that PDF',
-        'We couldn’t pull transactions from this PDF. Open the statement, select all the text, and paste it below — it’ll parse the same way.',
+        'No transactions found in that PDF',
+        chars === 0
+          ? 'pdf.js read the PDF but got 0 characters of text (it may be a scanned/image PDF). Open the statement, select all, and paste below.'
+          : `Extracted ${chars} characters but the parser matched 0 transactions — the layout may differ from a Google Pay statement. Try pasting the text, or send me a sample. First 200 chars:\n\n${extracted.trim().slice(0, 200)}`,
       );
       return;
     }
@@ -90,14 +94,12 @@ export default function ImportScreen() {
     haptic.success();
   }
 
-  function onPdfError() {
+  function onPdfError(message: string) {
     setPdfBase64(null);
     setExtracting(false);
     haptic.warning();
-    Alert.alert(
-      'Couldn’t read that PDF',
-      'The PDF reader couldn’t load (it needs a connection the first time). Open the statement, select all the text, and paste it below instead.',
-    );
+    // Surface the REAL failure (from pdf.js / the WebView), not a generic message.
+    Alert.alert('PDF read failed', `${message}\n\nYou can still open the statement, select all the text, and paste it below.`);
   }
 
   async function handleAdd() {
