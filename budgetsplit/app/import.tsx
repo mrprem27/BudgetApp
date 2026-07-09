@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -58,12 +58,12 @@ export default function ImportScreen() {
       const isPdf = asset.mimeType === 'application/pdf' || /\.pdf$/i.test(asset.name ?? '');
       if (isPdf) {
         // Extract text via pdf.js in an off-screen WebView (handles compressed PDFs).
-        const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
+        const b64 = await new File(asset.uri).base64();
         setExtracting(true);
         setPdfBase64(b64);
         return;
       }
-      const content = await FileSystem.readAsStringAsync(asset.uri);
+      const content = await new File(asset.uri).text();
       setText(content);
       setResult(parseAny(content));
       haptic.success();
