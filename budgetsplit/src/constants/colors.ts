@@ -31,6 +31,18 @@ export const colors = {
   border: '#21302E',
   borderFocus: '#20C4B8',
 
+  /** Text/icon color on accent/gradient/coloured fills (was raw '#fff' ~15 places). */
+  onAccent: '#FFFFFF',
+
+  /** Tinted surfaces for semantic cards (was re-invented as raw hex across ~20 files).
+   *  Each has a soft (card bg) and strong (border/hover) variant. */
+  expenseTint: '#2A1714',
+  expenseTintStrong: '#3A1F1C',
+  incomeTint: '#081F16',
+  incomeTintStrong: '#0C3D22',
+  settleTint: '#1A1A3A',
+  settleTintStrong: '#2A2A5A',
+
   /** Modal / sheet scrim behind bottom sheets and dialogs. */
   overlay: 'rgba(0,0,0,0.6)',
 };

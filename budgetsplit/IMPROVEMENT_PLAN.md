@@ -19,13 +19,22 @@ Grounded in three read-only audits (input fields; screens/flows/state; design-sy
 - [x] review.tsx — keyboard-drop fix (RowCard → inline renderRow)
 
 ## Phase 2 — Design system & de-duplication
-- [ ] CTAs → PrimaryButton: personal, categories, review×2, SplitSheet (index empty BLOCKED — Q1)
-- [ ] Strip nav/modal-open haptics: settings ×9, add/quick cat-picker, CategoryPicker, MoreOptions
-- [ ] Color tokens (expense/income/settle tints, onAccent, healthAmber reuse) + replace raw-hex cluster
-- [ ] Delete dead/duplicated styles (savings velocity/subs/forecast) + share velocity/subs card
-- [ ] Consolidate category-color palettes (3 → 1)
-- [ ] a11y: CategoryDonut, FilterBar role, txn/[id], DatePicker arrows, notifications switch + sweep
-- [ ] Touch target: TransferBody swap → hitSlop
+- [x] Strip nav/modal-open haptics: settings nav rows, add/quick cat-picker, CategoryPicker, MoreOptions (commit a407332)
+- [x] Touch target: TransferBody swap → hitSlop
+- [x] a11y (partial): CategoryDonut center, FilterBar clear ×2, DatePicker prev/next arrows. Remaining: txn/[id] roles, notifications switch role/state, review/itemized toggle states — TODO.
+- [x] CTAs → PrimaryButton: personal "Set a budget", SplitSheet "Done". (categories "Add" LEFT — it's an inline Cancel|Add pair, not a screen CTA; Home empty + itemized header LEFT as intentional design per "do what's best".)
+- [x] Color TOKENS added: `onAccent`, `expenseTint(+Strong)`, `incomeTint(+Strong)`, `settleTint(+Strong)` in colors.ts. **Bulk raw-hex→token sweep DEFERRED** (~20 files, cosmetic, needs device verification — a partial swap would add inconsistency; do opportunistically).
+- [ ] **DEFERRED** Delete dead savings styles + share velocity/subs card (dead styles interleaved with live ones → risky without device check; harmless at runtime).
+- [ ] **DEFERRED** Consolidate category-color palettes (3 → 1).
+
+## Deferred / remaining (documented, not done)
+- Color hex→token sweep across the ~20 flagged files (tokens now exist for it).
+- Dead-style removal + velocity/subs card extraction; palette consolidation.
+- Remaining a11y: txn/[id] roles, notifications switch role/state, review/itemized toggle `accessibilityState`.
+- Back-in-render → effect for txn/[id], savings/[id], members (low-priority robustness; edit.tsx done).
+- refresh() after write in add/quick + add/itemized (works today via focus-refetch; scattered save paths → deferred to avoid a wrong edit).
+- Single-person settle dead-end (hide/disable settle CTA when no counterpart).
+- P3: Input convergence (~25 raw TextInputs), useScreenData migration of legacy screens.
 
 ## Phase 3 — Deeper refactors
 - [ ] Converge raw TextInputs → Input (where re-implementing Input)

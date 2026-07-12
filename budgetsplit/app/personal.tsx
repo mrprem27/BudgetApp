@@ -11,6 +11,7 @@ import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { getMyActivity, getRecurringForGroup, type TxnWithSplits } from '../src/db/queries/transactions';
 import { getAllGroups } from '../src/db/queries/groups';
@@ -240,10 +241,7 @@ export default function PersonalScreen() {
                   <Feather name="target" size={22} color={colors.accent} />
                   <Text style={styles.budgetTitle}>No budget yet</Text>
                   <Text style={styles.budgetBody}>Set category limits measured against your total spending — personal plus your share of group expenses.</Text>
-                  <TouchableOpacity style={styles.budgetBtn} onPress={openBudgetEditor} accessibilityRole="button">
-                    <Text style={styles.budgetBtnText}>Set a budget</Text>
-                    <Feather name="chevron-right" size={16} color={colors.bg} />
-                  </TouchableOpacity>
+                  <PrimaryButton label="Set a budget" onPress={openBudgetEditor} style={{ marginTop: space.xs }} />
                 </View>
               ) : (
                 <>
