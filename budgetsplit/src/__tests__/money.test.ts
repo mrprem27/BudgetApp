@@ -1,4 +1,18 @@
-import { parseToPaise, splitEqual, splitByPercent, splitByShares, splitByMode, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, formatChangeMagnitude } from '../lib/money';
+import { parseToPaise, splitEqual, splitByPercent, splitByShares, splitByMode, formatRupees, formatRupeesShort, formatCompact, formatCompactMajor, formatComparison, formatChangeMagnitude, sanitizeAmountInput, MAX_PAISE, MAX_INT_DIGITS } from '../lib/money';
+
+describe('amount cap (overflow guard)', () => {
+  it('parseToPaise clamps absurd input to MAX_PAISE', () => {
+    expect(parseToPaise('999999999999999999999')).toBe(MAX_PAISE);
+    expect(parseToPaise('450')).toBe(45000); // normal values unaffected
+  });
+  it('sanitizeAmountInput caps the integer part to MAX_INT_DIGITS and 2 decimals', () => {
+    const long = '1'.repeat(20) + '.999';
+    const out = sanitizeAmountInput(long);
+    expect(out.split('.')[0].length).toBe(MAX_INT_DIGITS);
+    expect(out.split('.')[1]).toBe('99');
+    expect(sanitizeAmountInput('12.5')).toBe('12.5'); // normal untouched
+  });
+});
 
 describe('splitByMode', () => {
   it('equal splits evenly and exact-sums', () => {
