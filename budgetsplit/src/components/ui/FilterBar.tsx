@@ -102,7 +102,7 @@ export function FilterBar({
                 onBlur={() => { if (!search) closeSearch(); }}
               />
               {!!search && (
-                <TouchableOpacity onPress={() => onSearch?.('')} hitSlop={8} accessibilityLabel="Clear search">
+                <TouchableOpacity onPress={() => onSearch?.('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
                   <Feather name="x" size={15} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
@@ -154,7 +154,7 @@ export function FilterBar({
             returnKeyType="search"
           />
           {!!search && (
-            <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+            <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
               <Feather name="x" size={15} color={colors.textMuted} />
             </TouchableOpacity>
           )}

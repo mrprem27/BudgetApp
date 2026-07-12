@@ -116,7 +116,7 @@ export function CategoryDonut({ data, total, onOpen, selectedName, onSelect }: P
         {/* Floating center overlay — box-none so SVG receives touches behind empty area */}
         <View style={styles.center} pointerEvents="box-none">
           {selected ? (
-            <TouchableOpacity style={styles.centerContent} onPress={() => onOpen(selected)}>
+            <TouchableOpacity style={styles.centerContent} onPress={() => onOpen(selected)} accessibilityRole="button" accessibilityLabel={`View ${selected.name} details`}>
               <View style={styles.dotRow}>
                 <View style={[styles.dot, { backgroundColor: selected.color }]} />
                 <Text style={styles.catName} numberOfLines={1}>{selected.name}</Text>

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space } from '../tokens';
-import { haptic } from '../../lib/haptics';
 
 type Props = {
   /** Muted hint shown beside the label when collapsed, e.g. "Split · Attach". */
@@ -21,7 +20,7 @@ export function MoreOptions({ hint, forceOpen = false, children }: Props) {
       {!forceOpen && (
         <TouchableOpacity
           style={styles.toggle}
-          onPress={() => { haptic.selection(); setOpen(v => !v); }}
+          onPress={() => setOpen(v => !v)}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           accessibilityLabel="More options"

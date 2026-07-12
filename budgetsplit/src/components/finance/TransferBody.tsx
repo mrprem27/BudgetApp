@@ -78,7 +78,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
           <Text style={styles.dirName} numberOfLines={1}>{nameOf(from, 'Pick')}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.swapBtn} onPress={() => { haptic.selection(); onSwap(); }} accessibilityRole="button" accessibilityLabel="Swap from and to">
+        <TouchableOpacity style={styles.swapBtn} hitSlop={10} onPress={() => { haptic.selection(); onSwap(); }} accessibilityRole="button" accessibilityLabel="Swap from and to">
           <Feather name="repeat" size={16} color={colors.settle} />
         </TouchableOpacity>
 

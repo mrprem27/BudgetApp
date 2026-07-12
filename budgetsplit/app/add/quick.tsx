@@ -575,7 +575,7 @@ export default function QuickAddScreen() {
         <View style={styles.pillsRow}>
           <TouchableOpacity
             style={styles.catPill}
-            onPress={() => { Keyboard.dismiss(); haptic.light(); setShowCatPicker(true); }}
+            onPress={() => { Keyboard.dismiss(); setShowCatPicker(true); }}
             accessibilityRole="button"
             accessibilityLabel={selectedCategory ? `${kind === 'transfer' ? 'Reason' : 'Category'}: ${selectedCategory.name}` : (kind === 'transfer' ? 'Choose reason' : 'Choose category')}
           >

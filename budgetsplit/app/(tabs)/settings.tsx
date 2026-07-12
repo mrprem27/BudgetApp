@@ -154,14 +154,14 @@ export default function SettingsScreen() {
           icon="users"
           label="People"
           value={contactCount > 0 ? `${contactCount} contact${contactCount !== 1 ? 's' : ''}` : undefined}
-          onPress={() => { haptic.light(); router.push('/friends'); }}
+          onPress={() => { router.push('/friends'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow
           icon="tag"
           label="Categories"
           value={categoryCount > 0 ? `${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}` : undefined}
-          onPress={() => { haptic.light(); router.push('/categories'); }}
+          onPress={() => { router.push('/categories'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow
@@ -169,7 +169,6 @@ export default function SettingsScreen() {
           label="Budget"
           value="Personal budget"
           onPress={() => {
-            haptic.light();
             if (personalGroupId) router.push(`/group/${personalGroupId}/budget` as any);
             else router.push('/groups');
           }}
@@ -183,7 +182,7 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { haptic.light(); router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { router.push('/features'); }} />
       </View>
 
       {/* SECURITY */}
@@ -200,16 +199,16 @@ export default function SettingsScreen() {
       {flags.reminders && (<>
       <Text style={styles.sectionTitle}>Notifications</Text>
       <View style={styles.card}>
-        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { haptic.light(); router.push('/settings/notifications' as any); }} />
+        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { router.push('/settings/notifications' as any); }} />
       </View>
       </>)}
 
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { haptic.light(); router.push('/import' as any); }} />
+        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import' as any); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
+        <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow
           icon="database"
@@ -219,11 +218,11 @@ export default function SettingsScreen() {
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
         />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
+        <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="clock" label="Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
+        <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
       </View>
 
       {/* About — tap version 7× to open developer storage screen */}
