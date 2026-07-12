@@ -348,7 +348,6 @@ export default function CategoryDetailScreen() {
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={11}
-        removeClippedSubviews
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
           loading ? null : (

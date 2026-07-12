@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -14,6 +14,8 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
 import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
+import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
+import { shareCsv } from '../../src/lib/shareCsv';
 import { getCategories } from '../../src/db/queries/categories';
 import { seedGlobalCategories } from '../../src/db/seedCategories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
@@ -43,6 +45,24 @@ export default function SettingsScreen() {
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
+  const [exportingAll, setExportingAll] = useState(false);
+
+  async function handleExportAll() {
+    if (exportingAll) return;
+    setExportingAll(true);
+    haptic.light();
+    try {
+      const groups = await getAllGroups(db);
+      const { csv, rowCount } = await buildAllGroupsExportCsv(db, groups);
+      if (rowCount === 0) { Alert.alert('Nothing to export', 'There are no transactions yet.'); return; }
+      const { uri, shared } = await shareCsv(csv, 'budgetsplit_all.csv', 'Export all data');
+      if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingAll(false);
+    }
+  }
   const [hideAmounts, setHideAmounts] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
@@ -190,6 +210,14 @@ export default function SettingsScreen() {
         <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { haptic.light(); router.push('/import' as any); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="database"
+          label="Export all data"
+          value={exportingAll ? undefined : 'CSV'}
+          onPress={exportingAll ? undefined : handleExportAll}
+          right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
+        />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
         <View style={settingsRowDivider} />

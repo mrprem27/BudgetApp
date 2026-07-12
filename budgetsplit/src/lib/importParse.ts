@@ -18,6 +18,9 @@ export type ParsedRow = {
   direction: ParsedDirection;
   /** debit → expense, credit → income (the user can change it in Review). */
   kind: TxnKind;
+  /** Known category when the source carries one (our own export). Otherwise the
+   *  Review flow guesses it via `matchCategory`. */
+  category?: string;
   raw: string;
 };
 
@@ -133,6 +136,93 @@ export function parseStatement(text: string): ParseResult {
       .sort((a, b) => b.length - a.length)[0] ?? 'Imported';
 
     rows.push({ date, amount, description, direction, kind, raw: line });
+  }
+
+  return { rows, skipped };
+}
+
+// --- BudgetSplit's own export format ---------------------------------------
+// Re-importing a file produced by the per-group "Export as CSV" action. Unlike a
+// bank statement, this format is precise: it carries Category and Kind, so we
+// parse it exactly (preserving both) instead of guessing.
+
+/** The header row every group export starts with. Also its detection signature. */
+export const GROUP_EXPORT_HEADER = 'Date,Group,Category,Kind,Amount,Note';
+
+/** Split one CSV line, honouring double-quoted fields and "" escapes. */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+        else inQuotes = false;
+      } else cur += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      out.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/** First non-empty line matches our export header (BOM-tolerant, case-insensitive). */
+export function isBudgetSplitExport(text: string): boolean {
+  const first = (text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim()).find(Boolean);
+  return !!first && first.toLowerCase() === GROUP_EXPORT_HEADER.toLowerCase();
+}
+
+function normalizeKind(field: string): TxnKind {
+  const k = field.trim().toLowerCase();
+  return k === 'income' || k === 'settlement' ? k : 'expense';
+}
+
+/** Parse an export date to epoch ms. Accepts `yyyy-MM-dd` plus an optional
+ *  ` HH:mm` / `THH:mm(:ss)` time (interpreted in local time); falls back to now. */
+function parseExportDate(field: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(field.trim());
+  if (m) {
+    const d = new Date(
+      Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+      Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0),
+    );
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  return Date.now();
+}
+
+/** Parse a BudgetSplit group-export CSV. Category and Kind are preserved. */
+export function parseBudgetSplitExport(text: string): ParseResult {
+  const lines = (text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim());
+  const rows: ParsedRow[] = [];
+  let skipped = 0;
+  let headerSeen = false;
+
+  for (const line of lines) {
+    if (!line) continue;
+    if (!headerSeen && line.toLowerCase() === GROUP_EXPORT_HEADER.toLowerCase()) { headerSeen = true; continue; }
+
+    const fields = splitCsvLine(line);
+    if (fields.length < 5) { skipped += 1; continue; }
+    const [dateStr, , categoryStr, kindStr, amountStr, noteStr = ''] = fields;
+
+    const amount = parseToPaise(amountStr);
+    if (!(amount > 0)) { skipped += 1; continue; }
+
+    const kind = normalizeKind(kindStr);
+    const category = categoryStr.trim() || undefined;
+    const note = noteStr.trim();
+    const description = note || category || 'Imported';
+    const direction: ParsedDirection = kind === 'income' ? 'credit' : 'debit';
+
+    rows.push({ date: parseExportDate(dateStr), amount, description, direction, kind, category, raw: line });
   }
 
   return { rows, skipped };

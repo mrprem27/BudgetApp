@@ -343,6 +343,17 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', raw: null },
   ]);
 
+  // Mark everything this seeder created as demo data (loadDemoData wipes first, so
+  // all rows here are demo — except the preserved real "me" person and the real
+  // Personal group). A flag for future "exclude demo" needs; nothing excludes on it yet.
+  await db.execAsync(`
+    UPDATE txn SET is_demo = 1;
+    UPDATE savings_goal SET is_demo = 1;
+    UPDATE pending_txn SET is_demo = 1;
+    UPDATE budget_group SET is_demo = 1 WHERE is_personal = 0;
+    UPDATE person SET is_demo = 1 WHERE is_me = 0;
+  `);
+
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.
   const counts = await db.getFirstAsync<{ txns: number; people: number; groups: number; goals: number }>(
     `SELECT (SELECT COUNT(*) FROM txn WHERE is_deleted = 0)   AS txns,

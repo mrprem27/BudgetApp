@@ -1,4 +1,9 @@
-import { parseStatement } from '../lib/importParse';
+import {
+  parseStatement,
+  isBudgetSplitExport,
+  parseBudgetSplitExport,
+  GROUP_EXPORT_HEADER,
+} from '../lib/importParse';
 
 describe('parseStatement', () => {
   it('parses a simple comma CSV with signed amount', () => {
@@ -44,5 +49,47 @@ describe('parseStatement', () => {
   it('returns empty for blank input', () => {
     expect(parseStatement('')).toEqual({ rows: [], skipped: 0 });
     expect(parseStatement('   \n  ')).toEqual({ rows: [], skipped: 0 });
+  });
+});
+
+describe('BudgetSplit export round-trip', () => {
+  const sample = [
+    GROUP_EXPORT_HEADER,
+    '2026-07-01 14:30,"Personal","Groceries",expense,1234.50,"Weekly, big shop"',
+    '2026-07-02 09:05,"Personal","Salary",income,85000.00,"Monthly salary"',
+    '2026-07-03,"Personal","Rent",expense,22000.00,""',
+  ].join('\n');
+
+  it('detects its own export by the header (BOM/case tolerant)', () => {
+    expect(isBudgetSplitExport(sample)).toBe(true);
+    expect(isBudgetSplitExport('\uFEFF' + sample)).toBe(true);
+    expect(isBudgetSplitExport('Date,Description,Amount\n01/06/2026,Uber,-200')).toBe(false);
+    expect(isBudgetSplitExport('')).toBe(false);
+  });
+
+  it('parses rows preserving category, kind and quoted commas', () => {
+    const { rows, skipped } = parseBudgetSplitExport(sample);
+    expect(skipped).toBe(0);
+    expect(rows).toHaveLength(3);
+    // Amounts are paise; embedded comma in the note survives the CSV quoting.
+    expect(rows[0]).toMatchObject({ amount: 123450, kind: 'expense', direction: 'debit', category: 'Groceries', description: 'Weekly, big shop' });
+    expect(rows[1]).toMatchObject({ amount: 8500000, kind: 'income', direction: 'credit', category: 'Salary' });
+    // Empty note → description falls back to the category.
+    expect(rows[2]).toMatchObject({ amount: 2200000, kind: 'expense', category: 'Rent', description: 'Rent' });
+  });
+
+  it('preserves the exact time from the Date column', () => {
+    const { rows } = parseBudgetSplitExport(sample);
+    const d0 = new Date(rows[0].date);
+    expect([d0.getFullYear(), d0.getMonth(), d0.getDate(), d0.getHours(), d0.getMinutes()])
+      .toEqual([2026, 6, 1, 14, 30]);
+    // A date with no time parses to local midnight.
+    const d2 = new Date(rows[2].date);
+    expect([d2.getHours(), d2.getMinutes()]).toEqual([0, 0]);
+  });
+
+  it('routes an export back through the generic parser only via detection', () => {
+    // A plain statement must NOT be treated as an export.
+    expect(isBudgetSplitExport('2026-06-01,Swiggy order,-450')).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
-import { parseStatement, type ParseResult } from '../src/lib/importParse';
+import { parseStatement, isBudgetSplitExport, parseBudgetSplitExport, type ParseResult } from '../src/lib/importParse';
 import { isGpayStatement, parseGpayStatement } from '../src/lib/gpayParse';
 import { PdfTextExtractor } from '../src/components/system/PdfTextExtractor';
 import { matchCategory } from '../src/lib/smartCategory';
@@ -36,8 +36,10 @@ export default function ImportScreen() {
   const [extracting, setExtracting] = useState(false);
 
   // The source picker chooses the parser: Google Pay's block layout vs. the
-  // tolerant CSV/UPI parser. (GPay is also auto-detected as a safety net.)
+  // tolerant CSV/UPI parser. A BudgetSplit group export is auto-detected first
+  // and parsed exactly (it carries Category + Kind). (GPay is also auto-detected.)
   function parseAny(content: string): ParseResult {
+    if (isBudgetSplitExport(content)) return parseBudgetSplitExport(content);
     const gpay = source === 'gpay' || isGpayStatement(content);
     return gpay ? parseGpayStatement(content) : parseStatement(content);
   }
@@ -111,7 +113,9 @@ export default function ImportScreen() {
         amount: r.amount,
         description: r.description,
         kind: r.kind,
-        category: matchCategory(r.description, r.kind === 'income' ? INCOME_CATEGORIES : DEFAULT_CATEGORIES),
+        // Keep the category when the source already carries one (our own export);
+        // otherwise guess it from the description.
+        category: r.category ?? matchCategory(r.description, r.kind === 'income' ? INCOME_CATEGORIES : DEFAULT_CATEGORIES),
         direction: r.direction,
         raw: r.raw,
       })));
@@ -129,8 +133,8 @@ export default function ImportScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
-            Import a Google Pay statement (or a bank / UPI export) — pick a file or paste the rows.
-            You confirm and fix each one in Review before anything is saved.
+            Import a Google Pay statement, a bank / UPI export, or a BudgetSplit CSV export — pick a
+            file or paste the rows. You confirm and fix each one in Review before anything is saved.
           </Text>
 
           {/* Source picker — tells us which format to parse. */}

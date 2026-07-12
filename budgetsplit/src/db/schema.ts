@@ -190,7 +190,9 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   category    TEXT,                        -- suggested category (may be null)
   direction   TEXT NOT NULL DEFAULT 'unknown' CHECK(direction IN ('debit','credit','unknown')),
   raw         TEXT,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  dest_group_id TEXT,                       -- Review draft: target group (null = Personal)
+  split_draft   TEXT                        -- Review draft: JSON {included, mode, values}
 );
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 `;
@@ -240,6 +242,18 @@ const COLUMN_MIGRATIONS = [
   // Per-item split mode/values so an itemized bill round-trips its splits on edit.
   "ALTER TABLE line_item ADD COLUMN split_mode TEXT",
   "ALTER TABLE line_item ADD COLUMN split_values TEXT",
+  // Review redesign: pending rows auto-save their in-progress draft (target group +
+  // split) so a half-reviewed inbox survives leaving and returning to the screen.
+  "ALTER TABLE pending_txn ADD COLUMN dest_group_id TEXT",
+  "ALTER TABLE pending_txn ADD COLUMN split_draft TEXT",
+  // Demo/QA data marker. loadDemoData sets it on the rows it seeds so demo data
+  // can be identified (and optionally excluded) later. No exclusion logic uses it
+  // yet — it's purely a flag for future use.
+  "ALTER TABLE txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE budget_group ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE person ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE savings_goal ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE pending_txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

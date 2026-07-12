@@ -294,7 +294,6 @@ export default function GroupsScreen() {
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={9}
-          removeClippedSubviews
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={viewMode === 'active' ? <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text> : null}
           ListFooterComponent={viewMode === 'active' ? renderBalances() : null}

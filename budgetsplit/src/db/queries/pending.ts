@@ -15,9 +15,16 @@ export type PendingTxn = {
   direction: ParsedDirection;
   raw: string | null;
   created_at: number;
+  /** Review draft: target group id, or null = Personal. */
+  dest_group_id: string | null;
+  /** Review draft: JSON {included, mode, values} for a group split, or null. */
+  split_draft: string | null;
 };
 
-export type NewPending = Omit<PendingTxn, 'id' | 'created_at'>;
+export type NewPending = Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft'>;
+
+/** The subset of a pending row the Review screen auto-saves as you edit it. */
+export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft'>>;
 
 export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[]): Promise<void> {
   if (rows.length === 0) return;
@@ -35,6 +42,38 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
 
 export async function getPending(db: SQLite.SQLiteDatabase): Promise<PendingTxn[]> {
   return db.getAllAsync<PendingTxn>('SELECT * FROM pending_txn ORDER BY date DESC, created_at DESC');
+}
+
+/** Auto-save a Review row's in-progress edits. Only the provided fields change. */
+export async function updatePendingDraft(
+  db: SQLite.SQLiteDatabase,
+  id: string,
+  d: PendingDraft,
+): Promise<void> {
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if (d.kind !== undefined) { sets.push('kind=?'); args.push(d.kind); }
+  if (d.category !== undefined) { sets.push('category=?'); args.push(d.category); }
+  if (d.amount !== undefined) { sets.push('amount=?'); args.push(d.amount); }
+  if (d.dest_group_id !== undefined) { sets.push('dest_group_id=?'); args.push(d.dest_group_id); }
+  if (d.split_draft !== undefined) { sets.push('split_draft=?'); args.push(d.split_draft); }
+  if (sets.length === 0) return;
+  args.push(id);
+  await db.runAsync(`UPDATE pending_txn SET ${sets.join(', ')} WHERE id=?`, args);
+}
+
+/** Re-insert a pending row verbatim (its id + drafts) — the Undo of a delete or
+ *  a commit in Review. */
+export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO pending_txn
+       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
+      row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
+    ],
+  );
 }
 
 export async function getPendingCount(db: SQLite.SQLiteDatabase): Promise<number> {

@@ -39,6 +39,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { FAB } from '../../src/components/ui/FAB';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
+import { buildGroupExportCsv } from '../../src/lib/groupExport';
+import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -143,6 +145,24 @@ export default function GroupDetailScreen() {
   }
 
   const isPersonal = group?.is_personal === 1;
+
+  async function handleExport() {
+    if (!group) return;
+    setShowMenu(false);
+    try {
+      const { csv, rowCount } = await buildGroupExportCsv(db, group);
+      if (rowCount === 0) {
+        Alert.alert('Nothing to export', 'This group has no transactions yet.');
+        return;
+      }
+      const fileName = `budgetsplit_${csvFileSlug(group.name)}.csv`;
+      const { uri, shared } = await shareCsv(csv, fileName, `Export ${group.name}`);
+      haptic.success();
+      if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function handleToggleSimplify(on: boolean) {
     setSimplifyOn(on);
@@ -408,7 +428,6 @@ export default function GroupDetailScreen() {
           initialNumToRender={12}
           maxToRenderPerBatch={10}
           windowSize={11}
-          removeClippedSubviews
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
             txns.length > 0 ? (
@@ -819,6 +838,8 @@ export default function GroupDetailScreen() {
         <View style={styles.menuCard}>
           {/* Recurring & Members live in their own tabs now — kept out of this menu. */}
           <SettingsRow icon="clock" label="Audit log" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
           {!isPersonal && <View style={settingsRowDivider} />}
           {!isPersonal && (
             <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />

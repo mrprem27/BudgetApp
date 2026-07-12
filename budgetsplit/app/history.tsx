@@ -152,7 +152,6 @@ export default function HistoryScreen() {
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={9}
-          removeClippedSubviews
           ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
           ListEmptyComponent={
             <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />

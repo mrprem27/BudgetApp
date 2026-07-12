@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -26,6 +26,8 @@ import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
+import { buildGroupExportCsv } from '../src/lib/groupExport';
+import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
 
 type TabKey = 'activity' | 'budget' | 'recurring';
 const TABS: { key: TabKey; label: string }[] = [
@@ -101,9 +103,40 @@ export default function PersonalScreen() {
     if (pg) router.push(`/group/${pg.id}/budget` as any);
   }
 
+  async function handleExport() {
+    const pg = groups.find(g => g.is_personal === 1);
+    if (!pg) return;
+    try {
+      const { csv, rowCount } = await buildGroupExportCsv(db, pg);
+      if (rowCount === 0) {
+        Alert.alert('Nothing to export', 'You have no personal transactions yet.');
+        return;
+      }
+      const fileName = `budgetsplit_${csvFileSlug(pg.name)}.csv`;
+      const { uri, shared } = await shareCsv(csv, fileName, 'Export Personal');
+      haptic.success();
+      if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Personal" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Personal"
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity
+            onPress={handleExport}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Export Personal as CSV"
+          >
+            <Feather name="download" size={20} color={colors.accent} />
+          </TouchableOpacity>
+        }
+      />
 
       {loadError ? (
         <ErrorState onRetry={reload} />
