@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -18,19 +18,16 @@ import {
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
 
 export default function AffordScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const [amountText, setAmountText] = useState('');
-  const [snap, setSnap] = useState<AffordSnapshot | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
-  // Refetch on focus so the affordability snapshot reflects txns added elsewhere.
-  useFocusEffect(useCallback(() => {
-    (async () => {
-      try { setSnap(await getAffordSnapshot(db)); }
-      catch { setSnap({ available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }); }
-    })();
-  }, [db]));
+  // Refetch on focus (via useScreenData) so the snapshot reflects txns added elsewhere.
+  // The loader swallows errors into an empty snapshot, matching the prior behavior.
+  const { data: snap } = useScreenData(async (db): Promise<AffordSnapshot> => {
+    try { return await getAffordSnapshot(db); }
+    catch { return { available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }; }
+  }, []);
 
   const amount = parseToPaise(amountText);
   const available = snap?.available ?? 0;
