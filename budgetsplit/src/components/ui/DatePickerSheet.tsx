@@ -44,11 +44,11 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
   return (
     <SheetModal visible={visible} onClose={onClose} title="Select date" scroll={false}>
       <View style={styles.navRow}>
-        <TouchableOpacity onPress={() => setViewMonth(m => subMonths(m, 1))} hitSlop={10} accessibilityLabel="Previous month">
+        <TouchableOpacity onPress={() => setViewMonth(m => subMonths(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
           <Feather name="chevron-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.monthLabel}>{format(viewMonth, 'MMMM yyyy')}</Text>
-        <TouchableOpacity onPress={() => setViewMonth(m => addMonths(m, 1))} hitSlop={10} accessibilityLabel="Next month">
+        <TouchableOpacity onPress={() => setViewMonth(m => addMonths(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Next month">
           <Feather name="chevron-right" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>

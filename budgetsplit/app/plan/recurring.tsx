@@ -10,6 +10,7 @@ import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { categoryVisual } from '../../src/constants/categories';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -30,7 +31,7 @@ export default function SubscriptionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const now = Date.now();
     const grps = await getAllGroups(db);
     const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
@@ -56,6 +57,9 @@ export default function SubscriptionsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Recurring" onBack={() => router.back()} />
+      {error ? (
+        <ErrorState onRetry={reload} />
+      ) : (
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -118,6 +122,7 @@ export default function SubscriptionsScreen() {
           </>
         )}
       </ScrollView>
+      )}
     </View>
   );
 }

@@ -78,7 +78,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
       {!hideTrigger && (
       <TouchableOpacity
         style={styles.field}
-        onPress={() => { haptic.light(); setOpen(true); }}
+        onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={value ? `Category: ${value.name}` : 'Choose category'}
       >

@@ -8,6 +8,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, shadow, layout } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { SheetModal } from '../src/components/ui/SheetModal';
 import { Input } from '../src/components/ui/Input';
@@ -36,7 +37,7 @@ export default function FriendsScreen() {
   const [addName, setAddName] = useState('');
   const [query, setQuery] = useState('');
 
-  const { data, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const [all, bals] = await Promise.all([
       getAllPersons(db),
       me ? getFriendBalances(db, me.id) : Promise.resolve([] as FriendBalance[]),
@@ -105,7 +106,11 @@ export default function FriendsScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <Text style={styles.intro}>People you split with. No account needed — names only.</Text>
 
           {/* YOU */}

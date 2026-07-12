@@ -50,9 +50,9 @@ export default function EditGroupScreen() {
     }
   }
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { if (!id) { router.back(); return; } load(); }, [id]);
 
-  if (!id) { router.back(); return null; }
+  if (!id) return null;
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -67,6 +67,9 @@ export default function EditGroupScreen() {
       }
       haptic.success();
       router.back();
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn’t save changes', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setSaving(false);
     }

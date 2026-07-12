@@ -15,6 +15,7 @@ import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { useUndo } from '../../../src/components/system/UndoToast';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
@@ -39,7 +40,7 @@ export default function MembersScreen() {
   const [renameText, setRenameText] = useState('');
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  const { data, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const [members, allPersons, net] = await Promise.all([
       getGroupMembers(db, groupId),
       getAllPersons(db),
@@ -130,7 +131,11 @@ export default function MembersScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {members.length > 0 && (
           <View style={styles.membersCard}>
             {members.map((item, index) => {

@@ -54,6 +54,7 @@ export default function GroupsScreen() {
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [loadError, setLoadError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
   const [memberMap, setMemberMap] = useState<Record<string, Person[]>>({});
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
@@ -95,6 +96,8 @@ export default function GroupsScreen() {
       setLoadError(false);
     } catch {
       setLoadError(true);
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -299,7 +302,7 @@ export default function GroupsScreen() {
           ListFooterComponent={viewMode === 'active' ? renderBalances() : null}
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={
-            viewMode === 'active' ? (
+            !loaded ? null : viewMode === 'active' ? (
               <EmptyState
                 icon="users"
                 title="No groups yet"

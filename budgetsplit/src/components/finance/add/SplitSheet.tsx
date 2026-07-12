@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, StyleSheet 
 import { colors, type, space, radius } from '../../tokens';
 import { splitEqual, splitByPercent, splitByShares, parseToPaise, formatRupees } from '../../../lib/money';
 import { SplitEditor } from './SplitEditor';
+import { PrimaryButton } from '../../ui/PrimaryButton';
 import type { Person } from '../../../db/queries/persons';
 import { type SplitMode } from '../../../constants/enums';
 
@@ -94,9 +95,7 @@ export function SplitSheet({
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.doneBtn} onPress={onClose} accessibilityRole="button">
-            <Text style={styles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
+          <PrimaryButton label="Done" onPress={onClose} style={{ marginTop: space.md }} />
         </Pressable>
       </Pressable>
     </Modal>

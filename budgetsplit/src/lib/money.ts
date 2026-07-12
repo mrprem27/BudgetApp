@@ -116,13 +116,21 @@ export function formatCompact(smallestUnit: number, currency: CurrencyCode = DEF
   return formatCompactMajor(smallestUnit / divisor, currency);
 }
 
-/** Keep only digits + a single decimal point (max 2 places) from typed amount input. */
+/** Hard cap on a single amount: up to 12 integer digits of rupees. Prevents
+ *  absurd/overflow values from entering the DB and blowing out compact
+ *  formatting; stays well inside Number.MAX_SAFE_INTEGER even in paise. */
+export const MAX_INT_DIGITS = 12;
+export const MAX_PAISE = (10 ** MAX_INT_DIGITS - 1) * 100;
+
+/** Keep only digits + a single decimal point (max 2 places), and cap the
+ *  integer part to MAX_INT_DIGITS, from typed amount input. */
 export function sanitizeAmountInput(text: string): string {
   let cleaned = text.replace(/[^0-9.]/g, '');
   const parts = cleaned.split('.');
   if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
   const [intPart, decPart] = cleaned.split('.');
-  return decPart !== undefined ? `${intPart}.${decPart.slice(0, 2)}` : cleaned;
+  const intCapped = (intPart ?? '').slice(0, MAX_INT_DIGITS);
+  return decPart !== undefined ? `${intCapped}.${decPart.slice(0, 2)}` : intCapped;
 }
 
 /** Display a raw amount string as "₹10,000" (en-IN grouping), preserving an in-progress decimal. */
@@ -136,7 +144,8 @@ export function formatAmountInput(raw: string): string {
 export function parseToPaise(input: string): number {
   const n = parseFloat(input.replace(/[^0-9.]/g, ''));
   if (isNaN(n)) return 0;
-  return Math.round(n * 100);
+  // Clamp to the app-wide max so an over-long paste can't overflow layouts/math.
+  return Math.min(Math.round(n * 100), MAX_PAISE);
 }
 
 /** Compact ₹ axis/short label, e.g. ₹0, ₹450, ₹12K, ₹2L, ₹1Cr. Accepts the
