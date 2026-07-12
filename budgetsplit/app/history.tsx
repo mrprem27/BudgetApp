@@ -20,10 +20,10 @@ const PAGE_SIZE = 30;
 
 const DOT_COLOR: Record<AuditAction, string> = {
   created: colors.accent,
-  updated: '#F5B301',
+  updated: colors.healthAmber,
   deleted: colors.expense,
   settled: colors.settle,
-  paused:  '#F5B301',
+  paused:  colors.healthAmber,
   resumed: colors.income,
   ended:   colors.textMuted,
 };
@@ -91,8 +91,8 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
                 {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
               </View>
               {badge ? (
-                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? '#2A1714' : '#221A00' }]}>
-                  <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : '#F5B301' }]}>{badge}</Text>
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : '#221A00' }]}>
+                  <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : colors.healthAmber }]}>{badge}</Text>
                 </View>
               ) : item.amount != null ? (
                 <Text style={[styles.entryAmt, { color: amtColor ?? colors.textSecondary }]}>

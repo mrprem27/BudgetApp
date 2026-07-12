@@ -205,7 +205,7 @@ export default function TxnDetailScreen() {
         title="Transaction"
         onBack={() => router.back()}
         right={canEdit ? (
-          <TouchableOpacity onPress={() => router.push(editHref as never)} hitSlop={10} accessibilityLabel="Edit">
+          <TouchableOpacity onPress={() => router.push(editHref as never)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit">
             <Feather name="edit-2" size={18} color={colors.accent} />
           </TouchableOpacity>
         ) : undefined}
@@ -439,7 +439,7 @@ export default function TxnDetailScreen() {
       {!!txn.attachment_uri && (
         <Modal visible={showAttachment} transparent animationType="fade" onRequestClose={() => setShowAttachment(false)}>
           <View style={styles.attachOverlay}>
-            <TouchableOpacity style={styles.attachClose} onPress={() => setShowAttachment(false)} hitSlop={10} accessibilityLabel="Close">
+            <TouchableOpacity style={styles.attachClose} onPress={() => setShowAttachment(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <Feather name="x" size={24} color="#fff" />
             </TouchableOpacity>
             <ScrollView

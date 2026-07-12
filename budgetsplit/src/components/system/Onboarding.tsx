@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   budgetPresetChipActive: { backgroundColor: colors.accent },
   budgetPresetText: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   budgetPresetTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  budgetSuggest: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#081F16', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#0C3D22', alignSelf: 'stretch' },
+  budgetSuggest: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.incomeTint, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.incomeTintStrong, alignSelf: 'stretch' },
   budgetSuggestDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.income, flexShrink: 0 },
   budgetSuggestText: { fontSize: 12, color: colors.income, fontFamily: 'Inter_400Regular', flex: 1 },
   budgetSuggestAmt: { fontFamily: 'SpaceMono_400Regular', fontWeight: '700' },

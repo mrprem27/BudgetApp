@@ -161,7 +161,7 @@ export default function InsightsScreen() {
                       <Text style={styles.shiftCat}>{s.cat}</Text>
                       <Text style={styles.shiftAmt}>{formatCompact(s.thisAmt)} this month</Text>
                     </View>
-                    <View style={[styles.shiftBadge, { backgroundColor: up ? '#2A1714' : down ? '#081F16' : colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
+                    <View style={[styles.shiftBadge, { backgroundColor: up ? colors.expenseTint : down ? colors.incomeTint : colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
                       {up && <Feather name="arrow-up" size={10} color={colors.expense} />}
                       {down && <Feather name="arrow-down" size={10} color={colors.income} />}
                       <Text style={[styles.shiftBadgeText, { color: up ? colors.expense : down ? colors.income : colors.textMuted }]}>
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   monthPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
   eyebrow: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
 
-  velocityCard: { backgroundColor: '#1A1014', borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: '#3A1F1C' },
+  velocityCard: { backgroundColor: '#1A1014', borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: colors.expenseTintStrong },
   velocityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   velocityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.expense },
   velocityLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.expense, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -256,18 +256,18 @@ const styles = StyleSheet.create({
   netAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
   netDivider: { height: 1, backgroundColor: colors.border, marginBottom: 10 },
   netTilesRow: { flexDirection: 'row', gap: 6 },
-  netTile: { flex: 1, backgroundColor: '#081F16', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#0C3D22' },
+  netTile: { flex: 1, backgroundColor: colors.incomeTint, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.incomeTintStrong },
   netTileLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 },
   netTileAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, letterSpacing: -0.5 },
   netTilePeople: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
 
-  subsCard: { backgroundColor: '#1A1A3A', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: colors.settle, marginTop: space.xs },
+  subsCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: colors.settle, marginTop: space.xs },
   subsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   subsDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.settle },
   subsLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8 },
   subsTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 4 },
   subsSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
   subsActions: { flexDirection: 'row', gap: 6, marginTop: 12 },
-  subsReviewBtn: { flex: 1, backgroundColor: '#13203A', borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A5A' },
+  subsReviewBtn: { flex: 1, backgroundColor: '#13203A', borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: colors.settleTintStrong },
   subsReviewText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.settle },
 });
