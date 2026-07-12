@@ -10,6 +10,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -34,7 +35,7 @@ function dueLabel(days: number): string {
 export default function RemindersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const me = await getMe(db);
     if (!me) return { bills: [] as UpcomingItem[], settles: [] as SettleReminder[] };
     const grps = await getAllGroups(db);
@@ -63,6 +64,9 @@ export default function RemindersScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Reminders" onBack={() => router.back()} />
+      {error ? (
+        <ErrorState onRetry={reload} />
+      ) : (
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -145,6 +149,7 @@ export default function RemindersScreen() {
           <Feather name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>
       </ScrollView>
+      )}
     </View>
   );
 }

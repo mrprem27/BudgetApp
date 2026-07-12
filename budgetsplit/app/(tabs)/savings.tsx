@@ -117,6 +117,7 @@ export default function SavingsScreen() {
   const [newDate, setNewDate] = useState<number | null>(null);
 
   const [loadError, setLoadError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, []));
   useReloadOnDataChange(load);
@@ -177,6 +178,8 @@ export default function SavingsScreen() {
       setLoadError(false);
     } catch {
       setLoadError(true);
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -353,7 +356,7 @@ export default function SavingsScreen() {
             )}
           </>
           );
-        })() : (
+        })() : !loaded ? null : (
           <EmptyState
             icon="target"
             title="No savings goals yet"

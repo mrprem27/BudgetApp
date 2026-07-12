@@ -34,6 +34,8 @@ import { BalanceRow } from '../../src/components/finance/BalanceRow';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { FAB } from '../../src/components/ui/FAB';
@@ -107,40 +109,49 @@ export default function GroupDetailScreen() {
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
   const [budgetFilter, setBudgetFilter] = useState('all');
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
   useReloadOnDataChange(load);
 
   async function load() {
-    const [grp, txnList, memberList, meRow] = await Promise.all([
-      getGroupById(db, id),
-      getTransactionsForGroup(db, id),
-      getGroupMembers(db, id),
-      getMe(db),
-    ]);
-    setGroup(grp);
-    setTxns(txnList);
-    setMembers(memberList);
-    setMe(meRow);
-    if (grp) setSimplifyOn(grp.simplify_debt === 1);
-
-    const netMap = await getGroupNet(db, id);
-    setNet(netMap);
-
-    if (grp) {
-      // Budgets are individual: count only MY share of each (shared) expense.
-      const [usage, cs, an] = await Promise.all([
-        getBudgetUsage(db, grp, 'monthly'),
-        getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
-        getBudgetAnalytics(db, grp, new Date(), meRow?.id),
+    try {
+      setLoadError(false);
+      const [grp, txnList, memberList, meRow] = await Promise.all([
+        getGroupById(db, id),
+        getTransactionsForGroup(db, id),
+        getGroupMembers(db, id),
+        getMe(db),
       ]);
-      setBudgetUsage(usage);
-      setCatStatus(cs);
-      setAnalytics(an);
-      if (grp.is_personal !== 1) {
-        const rules = await getRecurringForGroup(db, id);
-        setRecurringRules(rules.filter(r => r.recur_state === 'active'));
+      setGroup(grp);
+      setTxns(txnList);
+      setMembers(memberList);
+      setMe(meRow);
+      if (grp) setSimplifyOn(grp.simplify_debt === 1);
+
+      const netMap = await getGroupNet(db, id);
+      setNet(netMap);
+
+      if (grp) {
+        // Budgets are individual: count only MY share of each (shared) expense.
+        const [usage, cs, an] = await Promise.all([
+          getBudgetUsage(db, grp, 'monthly'),
+          getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
+          getBudgetAnalytics(db, grp, new Date(), meRow?.id),
+        ]);
+        setBudgetUsage(usage);
+        setCatStatus(cs);
+        setAnalytics(an);
+        if (grp.is_personal !== 1) {
+          const rules = await getRecurringForGroup(db, id);
+          setRecurringRules(rules.filter(r => r.recur_state === 'active'));
+        }
       }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -317,7 +328,33 @@ export default function GroupDetailScreen() {
         { key: 'members', label: 'Members' },
       ];
 
-  if (!group) return null;
+  // A query threw (or the group vanished): show a recoverable state, never a
+  // blank dead-end. Distinguish "load failed" (retry) from "not found" (deleted/
+  // archived elsewhere) from "still loading" (brief).
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Group" onBack={() => router.back()} />
+        <ErrorState onRetry={() => load()} />
+      </View>
+    );
+  }
+  if (loaded && !group) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Group" onBack={() => router.back()} />
+        <EmptyState
+          icon="alert-circle"
+          title="Group not found"
+          body="This group may have been deleted or archived."
+          actionLabel="Back to Groups"
+          onAction={() => router.back()}
+          tint={colors.textSecondary}
+        />
+      </View>
+    );
+  }
+  if (!group) return null; // first load in flight — resolves quickly
 
   return (
     <View style={styles.container}>

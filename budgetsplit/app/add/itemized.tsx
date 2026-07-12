@@ -295,7 +295,7 @@ export default function ItemizedScreen() {
       <View style={styles.totalCard}>
         <View style={styles.totalCardLeft}>
           <Text style={styles.totalCardLabel}>TOTAL</Text>
-          <Text style={styles.totalCardAmount} numberOfLines={1}>{formatRupees(total)}</Text>
+          <Text style={styles.totalCardAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatRupees(total)}</Text>
         </View>
         <View style={styles.totalCardRight}>
           <Text style={styles.totalCardMeta} numberOfLines={1}>{stepTitle}</Text>
@@ -774,13 +774,13 @@ const styles = StyleSheet.create({
   itemName: { ...type.body, color: colors.textPrimary },
   itemSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   itemTotal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  itemEditName: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, paddingVertical: 6 },
+  itemEditName: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, paddingVertical: space.sm },
   itemEditRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  itemEditQty: { width: 44, textAlign: 'center', ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingVertical: 6 },
+  itemEditQty: { width: 44, textAlign: 'center', ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingVertical: space.sm },
   itemEditTimes: { ...type.caption, color: colors.textMuted },
   itemEditPriceWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm },
   itemEditRupee: { ...type.body, color: colors.textMuted },
-  itemEditPrice: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: 6 },
+  itemEditPrice: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.sm },
   itemDoneBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm },

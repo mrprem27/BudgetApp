@@ -19,6 +19,7 @@ import { TimePickerSheet, type TimeValue } from '../src/components/ui/TimePicker
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { CategoryPicker } from '../src/components/finance/CategoryPicker';
 import { SplitEditor } from '../src/components/finance/add/SplitEditor';
 import {
@@ -83,7 +84,7 @@ export default function ReviewScreen() {
 
   useEffect(() => { loadViews().then(setSavedViews).catch(() => {}); }, []);
 
-  const { data, loading, error, reload } = useScreenData(async (db) => {
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const me = await getMe(db);
     const groups = await getAllGroups(db);
     const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
@@ -433,7 +434,11 @@ export default function ReviewScreen() {
   }
 
   // ---- row renderer --------------------------------------------------------
-  function RowCard({ row }: { row: PendingTxn }) {
+  // A plain render function (NOT a nested component): rendering <RowCard/> as a
+  // component defined inside ReviewScreen remounts it on every keystroke, which
+  // drops focus and closes the keyboard while typing the amount. Inlining keeps
+  // the TextInput mounted across re-renders.
+  const renderRow = (row: PendingTxn) => {
     const v = eff(row);
     const vis = categoryVisual(v.category);
     const isGroup = v.dest !== 'personal';
@@ -614,7 +619,8 @@ export default function ReviewScreen() {
         <FlatList
           data={visibleRows}
           keyExtractor={r => r.id}
-          renderItem={({ item }) => <RowCard row={item} />}
+          renderItem={({ item }) => renderRow(item)}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 96 }]}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={12}

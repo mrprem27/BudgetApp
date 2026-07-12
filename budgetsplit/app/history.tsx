@@ -11,6 +11,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
@@ -111,7 +112,7 @@ export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
-  const { data, error: loadError, reload } = useScreenData(
+  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(
     (db) => getAuditLog(db, { groupId: groupId || undefined }),
     [groupId],
   );
@@ -152,6 +153,7 @@ export default function HistoryScreen() {
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={9}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
           ListEmptyComponent={
             <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />

@@ -9,6 +9,7 @@ import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
+import { EmptyState } from '../../src/components/ui/EmptyState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { getTxnById, softDeleteTxn, restoreTxn, getLineItems, setTxnAttachment } from '../../src/db/queries/transactions';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../../src/lib/attachment';
@@ -49,6 +50,7 @@ export default function TxnDetailScreen() {
   const [items, setItems] = useState<LineItem[]>([]);
   const [parentRule, setParentRule] = useState<TxnWithSplits | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [showAttachment, setShowAttachment] = useState(false);
   const { width: winW, height: winH } = useWindowDimensions();
 
@@ -78,6 +80,8 @@ export default function TxnDetailScreen() {
       setLoadError(false);
     } catch {
       setLoadError(true);
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -136,6 +140,22 @@ export default function TxnDetailScreen() {
     );
   }
 
+  // Loaded but no row → it was deleted/settled (e.g. opened from a stale list).
+  if (loaded && !txn) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Transaction" onBack={() => router.back()} />
+        <EmptyState
+          icon="file-minus"
+          title="Transaction not found"
+          body="It may have been deleted or settled. It's no longer available to view."
+          actionLabel="Go back"
+          onAction={() => router.back()}
+          tint={colors.textSecondary}
+        />
+      </View>
+    );
+  }
   if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
 
   const nameOf = (pid: string) => members.find(m => m.id === pid)?.name ?? 'Someone';

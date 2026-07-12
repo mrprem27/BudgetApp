@@ -11,6 +11,7 @@ import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
+import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import {
   getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
   skipNextOccurrence, undoNextSkip, getSkipsMap,
@@ -60,7 +61,7 @@ export default function RecurringScreen() {
   const router = useRouter();
   const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
 
-  const { data, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const rs = await getRecurringForGroup(db, id);
     return { rules: rs, skips: await getSkipsMap(db, rs.map(r => r.id)) };
   }, [id]);
@@ -128,7 +129,10 @@ export default function RecurringScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {rules.length === 0 ? (
           <EmptyState
             icon="repeat"
