@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Animated,
 } from 'react-native';
@@ -52,7 +52,8 @@ export default function MembersScreen() {
   const allPersons = data?.allPersons ?? [];
   const net = data?.net ?? {};
 
-  if (!groupId) { router.back(); return null; }
+  useEffect(() => { if (!groupId) router.back(); }, [groupId]);
+  if (!groupId) return null;
 
   const memberIds = new Set(members.map(m => m.id));
 

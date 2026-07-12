@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl },
   danger: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   dangerBtn: { flex: 1, alignItems: 'center', paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  deleteBtn: { backgroundColor: '#2A1714', borderColor: '#3A1F1C' },
+  deleteBtn: { backgroundColor: colors.expenseTint, borderColor: colors.expenseTintStrong },
   dangerArchive: { ...type.body, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   dangerDelete: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 });

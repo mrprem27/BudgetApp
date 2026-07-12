@@ -76,9 +76,9 @@ export default function GoalDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(useCallback(() => { load(); }, [id]));
+  useFocusEffect(useCallback(() => { if (!id) { router.back(); return; } load(); }, [id]));
 
-  if (!id) { router.back(); return null; }
+  if (!id) return null;
 
   async function load() {
     try {

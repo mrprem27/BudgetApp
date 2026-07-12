@@ -94,7 +94,7 @@ export function ForecastCard({
                 <Text style={styles.shiftCat} numberOfLines={1}>{topShift.cat}</Text>
                 <Text style={styles.shiftAmt}>{mask(topShift.thisAmt)} this month</Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: up ? '#2A1714' : down ? '#081F16' : colors.bgCard }]}>
+              <View style={[styles.badge, { backgroundColor: up ? colors.expenseTint : down ? colors.incomeTint : colors.bgCard }]}>
                 {up && <Feather name="arrow-up" size={10} color={colors.expense} />}
                 {down && <Feather name="arrow-down" size={10} color={colors.income} />}
                 <Text style={[styles.badgeText, { color: up ? colors.expense : down ? colors.income : colors.textMuted }]}>

@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   factorDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
   factorPts: { fontFamily: 'SpaceMono_400Regular', fontSize: 11 },
 
-  improveCard: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, backgroundColor: '#081F16', borderRadius: radius.lg, borderWidth: 1, borderColor: '#0C3D22', padding: space.md },
+  improveCard: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, backgroundColor: colors.incomeTint, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.incomeTintStrong, padding: space.md },
   improveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.income, marginTop: 5 },
   improveTitle: { ...type.label, color: colors.income, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
   improveDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },

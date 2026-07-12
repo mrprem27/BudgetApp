@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
   intro: { ...type.label, color: colors.textMuted, marginBottom: space.xs, lineHeight: 19 },
-  summaryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A3A', borderRadius: 16, padding: space.md, borderWidth: 1.5, borderColor: colors.settle },
+  summaryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.settleTint, borderRadius: 16, padding: space.md, borderWidth: 1.5, borderColor: colors.settle },
   summaryLabel: { fontSize: 11, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: 4 },
   summaryRight: { alignItems: 'flex-end' },
   summaryCount: { ...type.caption, color: colors.textSecondary },

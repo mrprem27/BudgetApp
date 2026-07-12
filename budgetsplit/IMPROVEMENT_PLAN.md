@@ -27,14 +27,21 @@ Grounded in three read-only audits (input fields; screens/flows/state; design-sy
 - [ ] **DEFERRED** Delete dead savings styles + share velocity/subs card (dead styles interleaved with live ones → risky without device check; harmless at runtime).
 - [ ] **DEFERRED** Consolidate category-color palettes (3 → 1).
 
-## Deferred / remaining (documented, not done)
-- Color hex→token sweep across the ~20 flagged files (tokens now exist for it).
-- Dead-style removal + velocity/subs card extraction; palette consolidation.
-- Remaining a11y: txn/[id] roles, notifications switch role/state, review/itemized toggle `accessibilityState`.
-- Back-in-render → effect for txn/[id], savings/[id], members (low-priority robustness; edit.tsx done).
-- refresh() after write in add/quick + add/itemized (works today via focus-refetch; scattered save paths → deferred to avoid a wrong edit).
-- Single-person settle dead-end (hide/disable settle CTA when no counterpart).
-- P3: Input convergence (~25 raw TextInputs), useScreenData migration of legacy screens.
+## Done since (commits 3ca5e21, a377a6f)
+- [x] Single-person settle dead-end — Settle button only shows with a real counterpart
+- [x] Back-in-render → effect: txn/[id], savings/[id], members (edit.tsx earlier)
+- [x] refresh() after write in add/quick + add/itemized
+- [x] Color hex→token sweep (10 files, exact-match, visually identical)
+- [x] Remaining a11y: txn/[id] roles, notification steppers (notifications switch already had role+state)
+
+## Phase 3 — DEFERRED by repo policy + risk (decision for user)
+AGENTS.md: "Migrate legacy screens to useScreenData **opportunistically** … **no big-bang migration**." A wholesale 15-screen migration + ~25-input `Input` swap is high-churn and not device-verifiable here, so it's intentionally NOT done. Recommend keeping it opportunistic (convert a screen when next editing it). Awaiting user call on whether to override.
+
+## Still deferred (cosmetic / low-value)
+- Dead-style removal + velocity/subs card extraction; category-palette consolidation.
+- Remaining raw hex that has no exact token (one-off greens like #14271F) + '#fff'→onAccent sweep.
+- Spacing/typography raw-pixel token sweep.
+- review/itemized toggle `accessibilityState` polish.
 
 ## Phase 3 — Deeper refactors
 - [ ] Converge raw TextInputs → Input (where re-implementing Input)

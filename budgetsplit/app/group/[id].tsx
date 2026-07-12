@@ -415,8 +415,8 @@ export default function GroupDetailScreen() {
         const balColor = ov.color;
         return (
           <View style={[styles.balCard, {
-            backgroundColor: isOwe ? '#2A1714' : '#14271F',
-            borderColor: isOwe ? '#3A1F1C' : '#1A3527',
+            backgroundColor: isOwe ? colors.expenseTint : '#14271F',
+            borderColor: isOwe ? colors.expenseTintStrong : '#1A3527',
           }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.balCardLabel, { color: balColor }]}>
@@ -426,18 +426,18 @@ export default function GroupDetailScreen() {
                 {formatCompact(Math.abs(myNet))}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.balCardBtn}
-              onPress={() => {
-                // Consistent with the dashboard/friends/groups — open the global Settle flow.
-                if (primaryPerson) router.push(`/add/quick?kind=transfer&to=${primaryPerson.id}`);
-                else router.push('/add/quick?kind=transfer');
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Settle up"
-            >
-              <Text style={styles.balCardBtnText}>Settle up</Text>
-            </TouchableOpacity>
+            {/* Only offer Settle when there's a real counterpart — otherwise the
+                transfer form opens with an empty payee and can't be completed. */}
+            {primaryPerson && (
+              <TouchableOpacity
+                style={styles.balCardBtn}
+                onPress={() => router.push(`/add/quick?kind=transfer&to=${primaryPerson.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Settle up with ${primaryPerson.name}`}
+              >
+                <Text style={styles.balCardBtnText}>Settle up</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
       })()}
@@ -1012,7 +1012,7 @@ const styles = StyleSheet.create({
   insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8 },
   insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
   // Recurring tab
-  recurSummaryCard: { backgroundColor: '#1A1A3A', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
+  recurSummaryCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
   recurSummaryTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
   recurSummaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.settle, letterSpacing: -0.5 },
   recurSummarySub: { fontSize: 12, color: colors.textMuted },
@@ -1023,7 +1023,7 @@ const styles = StyleSheet.create({
   recurItemShare: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary, letterSpacing: -0.5 },
   recurItemShareLabel: { fontSize: 10, color: colors.textMuted, textAlign: 'right' },
   variableBadge: { backgroundColor: '#221A00', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  variableBadgeText: { fontSize: 9, color: '#F5B301', fontFamily: 'Inter_600SemiBold' },
+  variableBadgeText: { fontSize: 9, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
   addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0E2C29', borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: 12, padding: 12, marginBottom: space.md },
   addRecurBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.accent },
   addRecurBtnSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },

@@ -47,6 +47,7 @@ import { Input } from '../../src/components/ui/Input';
 import { haptic } from '../../src/lib/haptics';
 import { pickAttachment, AttachmentStorageError } from '../../src/lib/attachment';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
@@ -62,6 +63,7 @@ export default function QuickAddScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { flags } = useFeatureFlags();
+  const { refresh } = useDataRefresh();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
@@ -368,6 +370,7 @@ export default function QuickAddScreen() {
         });
       }
       haptic.success();
+      refresh();
       router.back();
     } catch {
       haptic.error();
@@ -461,6 +464,7 @@ export default function QuickAddScreen() {
           shares: finalShares,
         });
         haptic.success();
+        refresh();
         router.back();
       };
 

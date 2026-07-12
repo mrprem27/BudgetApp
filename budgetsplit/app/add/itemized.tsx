@@ -30,6 +30,7 @@ import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
 import type { BudgetGroup } from '../../src/db/queries/groups';
@@ -43,6 +44,7 @@ export default function ItemizedScreen() {
   const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
+  const { refresh } = useDataRefresh();
   const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('items');
@@ -251,6 +253,7 @@ export default function ItemizedScreen() {
       if (isEditing) await updateItemizedTxn(db, editId!, payload);
       else await insertItemizedTxn(db, payload);
       haptic.success();
+      refresh();
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save. Try again.');
