@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -24,12 +24,13 @@ export default function AffordScreen() {
   const [snap, setSnap] = useState<AffordSnapshot | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Refetch on focus so the affordability snapshot reflects txns added elsewhere.
+  useFocusEffect(useCallback(() => {
     (async () => {
       try { setSnap(await getAffordSnapshot(db)); }
       catch { setSnap({ available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }); }
     })();
-  }, []);
+  }, [db]));
 
   const amount = parseToPaise(amountText);
   const available = snap?.available ?? 0;
@@ -52,9 +53,9 @@ export default function AffordScreen() {
   const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare } = result;
 
   const V = {
-    [AffordVerdict.Comfortable]: { color: colors.income, icon: 'check-circle' as const, title: 'Yes — you can afford it' },
-    [AffordVerdict.Tight]:       { color: colors.healthAmber, icon: 'alert-circle' as const, title: 'Yes, but think twice' },
-    [AffordVerdict.No]:          { color: colors.expense, icon: 'x-circle' as const, title: 'Not right now' },
+    [AffordVerdict.Comfortable]: { color: colors.income, emoji: '🎉', title: 'Yes — you can afford it' },
+    [AffordVerdict.Tight]:       { color: colors.healthAmber, emoji: '🤔', title: 'Possible, but tight' },
+    [AffordVerdict.No]:          { color: colors.expense, emoji: '🛑', title: 'Not right now' },
   }[verdict];
 
   // Turn each engine reason into a plain-English line with the real numbers.
@@ -155,13 +156,20 @@ export default function AffordScreen() {
                 </View>
               </>
             )}
+            {showResult && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={[styles.cashRow, styles.leftAfterRow, { backgroundColor: V.color + '14' }]}>
+                  <Text style={[styles.cashLabel, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>Left after purchase</Text>
+                  <Text style={[styles.cashVal, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>{formatRupees(remaining)}</Text>
+                </View>
+              </>
+            )}
           </View>
 
           {showResult && (
             <View style={[styles.resultCard, { borderColor: V.color + '55' }]}>
-              <View style={[styles.resultIcon, { backgroundColor: V.color + '22' }]}>
-                <Feather name={V.icon} size={22} color={V.color} />
-              </View>
+              <Text style={styles.resultEmoji}>{V.emoji}</Text>
               <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
               {lines.map((l, i) => (
                 <View key={i} style={styles.reasonRow}>
@@ -174,10 +182,15 @@ export default function AffordScreen() {
 
           {showResult && (
             <View style={{ gap: space.sm, marginTop: space.sm }}>
-              {verdict !== AffordVerdict.No && (
-                <PrimaryButton label="Looks good — log the expense" onPress={() => router.replace('/add/quick')} />
-              )}
-              <SecondaryButton label="Save toward it in a goal instead" onPress={() => router.replace('/savings')} />
+              <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings')} />
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.replace('/add/quick')} accessibilityRole="button">
+                  <Text style={styles.ghostBtnText}>{verdict === AffordVerdict.No ? 'Buy anyway' : 'Log it'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.back()} accessibilityRole="button">
+                  <Text style={styles.ghostBtnText}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </ScrollView>
@@ -201,8 +214,12 @@ const styles = StyleSheet.create({
   cashLabel: { ...type.body, color: colors.textSecondary },
   cashVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
   resultCard: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, padding: space.lg, ...shadow.sm },
-  resultIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  resultEmoji: { fontSize: 34, marginBottom: 2 },
   resultTitle: { ...type.subheading, marginBottom: space.xs },
+  leftAfterRow: { borderRadius: radius.md, paddingHorizontal: space.md, marginVertical: space.xs },
+  actionRow: { flexDirection: 'row', gap: space.sm },
+  ghostBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  ghostBtnText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   reasonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, alignSelf: 'stretch' },
   reasonDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
   reasonText: { ...type.body, color: colors.textSecondary, flex: 1 },

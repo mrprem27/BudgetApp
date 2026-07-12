@@ -12,32 +12,31 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
-import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe } from '../../src/db/queries/groups';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
+import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { getMe, getGroupMembers, getAllPersons } from '../../src/db/queries/persons';
-import { getGlobalNet, getFriendBalances, type FriendBalance } from '../../src/db/queries/balances';
+import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
+import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
-import { simplify } from '../../src/lib/settle';
 import { formatCompact } from '../../src/lib/money';
+import { oweView } from '../../src/lib/owe';
+import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { AvatarStack } from '../../src/components/finance/AvatarStack';
+import { BalanceChip } from '../../src/components/ui/BalanceChip';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
-import { FAB } from '../../src/components/ui/FAB';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { haptic } from '../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
+import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
-function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
-  return `${pct}%`;
-}
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
@@ -48,57 +47,51 @@ export default function GroupsScreen() {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string>(GROUP_ICONS[0]);
   const [color, setColor] = useState<string>(GROUP_COLORS[0]);
-  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number }>>({});
+  const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
+  const [allPersons, setAllPersons] = useState<Person[]>([]);
+  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number }>>({});
   const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [listMode, setListMode] = useState<'groups' | 'budget'>('groups');
   const [loadError, setLoadError] = useState(false);
-  const [bal, setBal] = useState<{ net: number; youOwe: number; youAreOwed: number; rows: Array<{ key: string; otherId: string; name: string; color: string; label: string; amount: number }> } | null>(null);
   const [friends, setFriends] = useState<FriendBalance[]>([]);
+  const [memberMap, setMemberMap] = useState<Record<string, Person[]>>({});
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   const { refreshing, onRefresh } = useRefresh(() => loadGroups());
 
   useFocusEffect(useCallback(() => {
     loadGroups();
   }, []));
+  useReloadOnDataChange(loadGroups);
 
   async function loadGroups() {
     try {
       const grps = await getAllGroups(db);
       setGroups(grps);
       setArchived(await getArchivedGroups(db));
-      // Per-group usage + member counts in parallel rather than serially.
+      const me = await getMe(db);
+      // Per-group usage + member counts + my net balance, in parallel.
       const h: typeof health = {};
+      const mm: Record<string, Person[]> = {};
       await Promise.all(grps.map(async g => {
-        const [analytics, mems] = await Promise.all([
+        const [analytics, mems, gnet] = await Promise.all([
           getBudgetAnalytics(db, g),
           getGroupMembers(db, g.id),
+          getGroupNet(db, g.id),
         ]);
         const pct = analytics.utilizationPct;
         const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
-        h[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length };
+        h[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length, net: me ? (gnet[me.id] ?? 0) : 0 };
+        mm[g.id] = mems;
       }));
       setHealth(h);
+      setMemberMap(mm);
 
-      // Balances hero — who-owes-whom across all shared groups, from my view.
-      const [net, persons, me] = await Promise.all([getGlobalNet(db), getAllPersons(db), getMe(db)]);
-      if (me) {
-        const pmap = new Map(persons.map(p => [p.id, p]));
-        const mine = simplify(net).filter(s => s.from === me.id || s.to === me.id);
-        let youOwe = 0, youAreOwed = 0;
-        const rows = mine.map(s => {
-          const iPay = s.from === me.id;
-          if (iPay) youOwe += s.amount; else youAreOwed += s.amount;
-          const otherId = iPay ? s.to : s.from;
-          const other = pmap.get(otherId);
-          return { key: `${s.from}-${s.to}`, otherId, name: other?.name ?? 'Someone', color: other?.avatar_color ?? colors.accent, label: iPay ? 'you owe' : 'owes you', amount: s.amount };
-        });
-        setBal({ net: youAreOwed - youOwe, youOwe, youAreOwed, rows });
-        setFriends(await getFriendBalances(db, me.id));
-      } else {
-        setBal(null);
-        setFriends([]);
-      }
+      // People balances — who-owes-whom across all groups, from my view.
+      // Single source of truth: getMyExposure (per-person, after all settlements).
+      const persons = await getAllPersons(db);
+      setAllPersons(persons.filter(p => !p.is_me));
+      setFriends(me ? (await getMyExposure(db, me.id)).perPerson : []);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -120,15 +113,29 @@ export default function GroupsScreen() {
     }
   }
 
+  function openCreate() {
+    setName('');
+    setIcon(GROUP_TYPES[0].icon);
+    setColor(GROUP_TYPES[0].color);
+    setGroupMembers([]);
+    setDefaultSplit('equal');
+    setShowCreate(true);
+  }
+
+  function toggleMember(id: string) {
+    setGroupMembers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     try {
       const me = await getMe(db);
       if (!me) return;
-      const group = await insertGroup(db, name.trim(), icon, color, [me.id]);
+      const group = await insertGroup(db, name.trim(), icon, color, [me.id, ...groupMembers], defaultSplit);
       haptic.success();
       setShowCreate(false);
       setName('');
+      setGroupMembers([]);
       await loadGroups();
       router.push(`/group/${group.id}`);
     } catch {
@@ -154,7 +161,7 @@ export default function GroupsScreen() {
     );
 
     return (
-      <FadeIn delay={index * 55}>
+      <FadeIn delay={Math.min(index, 6) * 55}>
         <Swipeable
           ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
           renderRightActions={item.is_personal ? undefined : renderRightActions}
@@ -163,7 +170,7 @@ export default function GroupsScreen() {
         >
           <PressableScale
             style={[styles.groupCard, isArchivedView && styles.groupCardArchived]}
-            onPress={() => isArchivedView ? handleRestore(item) : router.push(`/group/${item.id}`)}
+            onPress={() => isArchivedView ? handleRestore(item) : router.push((item.is_personal === 1 ? '/personal' : `/group/${item.id}`) as any)}
             accessibilityLabel={item.name}
           >
             <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
@@ -175,9 +182,16 @@ export default function GroupsScreen() {
               <Text style={styles.groupSub} numberOfLines={1}>
                 {isArchivedView
                   ? 'Archived — tap to restore'
-                  : `${formatCompact(h?.spent ?? 0)} this month${item.is_personal !== 1 && h ? ` · ${h.members} member${h.members === 1 ? '' : 's'}` : ''}`
+                  : item.is_personal === 1
+                  ? `Everything involving you · ${formatCompact(h?.spent ?? 0)}/mo`
+                  : `${h?.members ?? 0} ${(h?.members ?? 0) === 1 ? 'member' : 'members'} · ${formatCompact(h?.spent ?? 0)} this month`
                 }
               </Text>
+              {!isArchivedView && item.is_personal !== 1 && (memberMap[item.id]?.length ?? 0) > 0 && (
+                <View style={styles.stackRow}>
+                  <AvatarStack people={memberMap[item.id] ?? []} size={22} max={3} />
+                </View>
+              )}
               {!isArchivedView && h && h.pct !== null && (
                 <View style={styles.budgetRow}>
                   <View style={{ flex: 1 }}>
@@ -188,67 +202,59 @@ export default function GroupsScreen() {
                 </View>
               )}
             </View>
-            {!isArchivedView && <Feather name="chevron-right" size={18} color={colors.textMuted} />}
-            {isArchivedView && <Feather name="rotate-ccw" size={16} color={colors.accent} />}
+            {isArchivedView ? (
+              <Feather name="rotate-ccw" size={16} color={colors.accent} />
+            ) : (h?.net ?? 0) !== 0 ? (
+              <BalanceChip net={h?.net ?? 0} />
+            ) : (
+              <Feather name="chevron-right" size={18} color={colors.textMuted} />
+            )}
           </PressableScale>
         </Swipeable>
       </FadeIn>
     );
   }
 
-  // Personal lives under the Money tab now — Groups is shared splitting only.
-  const activeGroups = groups.filter(g => g.is_personal !== 1);
+  // Personal ("Just you") pinned on top, then the shared groups (design Screens 2).
+  const sharedGroups = groups.filter(g => g.is_personal !== 1);
+  const personalGroup = groups.find(g => g.is_personal === 1);
+  const activeGroups = personalGroup ? [personalGroup, ...sharedGroups] : sharedGroups;
 
   function renderBalances() {
-    if (!bal || bal.rows.length === 0) return null;
     const activeFriends = friends.filter(f => f.net !== 0);
+    if (activeFriends.length === 0) return null;
     return (
       <View style={styles.balancesWrap}>
-        <View style={styles.balHero}>
-          <Text style={styles.balCaption}>Net balance · {bal.rows.length} {bal.rows.length === 1 ? 'person' : 'people'}</Text>
-          <AmountText paise={bal.net} size="xl" forceColor={bal.net < 0 ? colors.expense : colors.income} compact />
-          <View style={styles.balSplit}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.balCaption}>You owe</Text>
-              <AmountText paise={bal.youOwe} size="md" forceColor={colors.expense} compact />
-            </View>
-            <View style={styles.balDivider} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.balCaption}>You're owed</Text>
-              <AmountText paise={bal.youAreOwed} size="md" forceColor={colors.income} compact />
-            </View>
-          </View>
-        </View>
-
-        {/* People section */}
-        <Text style={styles.balListLabel}>
-          People{activeFriends.length > 0 ? ` · ${activeFriends.length} ${activeFriends.length === 1 ? 'friend' : 'friends'}` : ''}
-        </Text>
-        {activeFriends.length > 0 ? (
-          <View style={styles.balList}>
-            {activeFriends.map((f, i) => (
+        <Text style={styles.balListLabel}>People</Text>
+        <View style={styles.balList}>
+          {activeFriends.map((f, i) => (
+            <View
+              key={f.personId}
+              style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
+            >
+              <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
+                {(() => {
+                  const ov = oweView(f.net);
+                  return (
+                    <Text style={[styles.balSub, { color: ov.color }]}>
+                      {ov.label} {formatCompact(ov.amount)}
+                    </Text>
+                  );
+                })()}
+              </View>
               <TouchableOpacity
-                key={f.personId}
-                style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
-                onPress={() => router.push(`/settle?focus=${f.personId}`)}
+                style={styles.settleChip}
+                onPress={() => router.push(`/add/quick?kind=transfer&to=${f.personId}`)}
                 accessibilityRole="button"
                 accessibilityLabel={`Settle with ${f.name}`}
               >
-                <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
-                  <Text style={styles.balSub}>{f.net > 0 ? 'owes you' : 'you owe'} · {f.groupCount} {f.groupCount === 1 ? 'group' : 'groups'}</Text>
-                </View>
-                <Text style={[styles.balAmt, { color: f.net > 0 ? colors.income : colors.expense }]}>{formatCompact(Math.abs(f.net))}</Text>
-                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                <Text style={styles.settleChipText}>Settle</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.allSettled}>All settled up</Text>
-        )}
-
-        <Text style={styles.balListLabel}>Your groups</Text>
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
@@ -256,20 +262,23 @@ export default function GroupsScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={styles.title}>Groups</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={[styles.headerIconBtn, listMode === 'budget' && styles.headerIconBtnActive]}
-            onPress={() => setListMode(m => m === 'groups' ? 'budget' : 'groups')}
-            accessibilityRole="button"
-            accessibilityLabel={listMode === 'budget' ? 'Show groups view' : 'Show budget overview'}
-            hitSlop={8}
-          >
-            <Feather name="bar-chart-2" size={18} color={listMode === 'budget' ? colors.accent : colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.friendsBtn} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Manage friends">
-            <Feather name="users" size={18} color={colors.accent} />
-          </TouchableOpacity>
+        <Text style={styles.title}>{viewMode === 'archived' ? 'Archived' : 'Groups'}</Text>
+        <View style={styles.headerActions}>
+          {(archived.length > 0 || viewMode === 'archived') && (
+            <TouchableOpacity
+              style={styles.headerAdd}
+              onPress={() => setViewMode(v => (v === 'active' ? 'archived' : 'active'))}
+              accessibilityRole="button"
+              accessibilityLabel={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
+            >
+              <Feather name={viewMode === 'archived' ? 'arrow-left' : 'archive'} size={18} color={viewMode === 'archived' ? colors.accent : colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+          {viewMode === 'active' && (
+            <TouchableOpacity style={styles.headerAdd} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
+              <Feather name="plus" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -277,81 +286,17 @@ export default function GroupsScreen() {
         <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
       ) : (
         <>
-      {/* Filter chips — only in groups list mode */}
-      {listMode === 'groups' && archived.length > 0 && (
-        <View style={styles.filterRow}>
-          <TouchableOpacity
-            style={[styles.filterChip, viewMode === 'active' && styles.filterChipActive]}
-            onPress={() => setViewMode('active')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'active' }}
-          >
-            <Text style={[styles.filterChipText, viewMode === 'active' && styles.filterChipTextActive]}>Active ({activeGroups.length})</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, viewMode === 'archived' && styles.filterChipActive]}
-            onPress={() => setViewMode('archived')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'archived' }}
-          >
-            <Feather name="archive" size={13} color={viewMode === 'archived' ? colors.accent : colors.textMuted} />
-            <Text style={[styles.filterChipText, viewMode === 'archived' && styles.filterChipTextActive]}>Archived ({archived.length})</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {listMode === 'budget' ? (
-        <FlatList
-          data={activeGroups
-            .filter(g => health[g.id]?.pct !== null && health[g.id]?.pct !== undefined)
-            .sort((a, b) => (health[b.id]?.pct ?? 0) - (health[a.id]?.pct ?? 0))}
-          keyExtractor={g => g.id}
-          contentContainerStyle={styles.list}
-          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={<Text style={styles.budgetOverviewHeader}>Budget overview</Text>}
-          ItemSeparatorComponent={() => <View style={{ height: space.xs }} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="bar-chart-2"
-              title="No budgets set"
-              body="Set budgets for your groups to track spending here."
-              tint={colors.textSecondary}
-            />
-          }
-          renderItem={({ item }) => {
-            const h = health[item.id];
-            if (!h || h.pct === null) return null;
-            const hColor = h.health === 'red' ? colors.expense : h.health === 'amber' ? colors.healthAmber : colors.income;
-            return (
-              <FadeIn>
-                <PressableScale
-                  style={styles.budgetOverviewRow}
-                  onPress={() => router.push(`/group/${item.id}/budget` as any)}
-                  accessibilityLabel={item.name}
-                >
-                  <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
-                    <Feather name={asFeather(item.icon, 'credit-card')} size={18} color={item.color} />
-                  </View>
-                  <View style={styles.budgetOverviewInfo}>
-                    <View style={styles.budgetOverviewNameRow}>
-                      <Text style={styles.budgetOverviewName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={[styles.budgetOverviewPct, { color: hColor }]}>{utilLabel(h.pct)}</Text>
-                    </View>
-                    <BudgetBar pct={h.pct} health={h.health} height={6} />
-                  </View>
-                </PressableScale>
-              </FadeIn>
-            );
-          }}
-        />
-      ) : (
-        <FlatList
+      <FlatList
           data={viewMode === 'active' ? activeGroups : archived}
           keyExtractor={g => g.id}
           renderItem={renderGroup}
           contentContainerStyle={styles.list}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={9}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={viewMode === 'active' ? renderBalances() : null}
+          ListHeaderComponent={viewMode === 'active' ? <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text> : null}
+          ListFooterComponent={viewMode === 'active' ? renderBalances() : null}
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={
             viewMode === 'active' ? (
@@ -360,7 +305,7 @@ export default function GroupsScreen() {
                 title="No groups yet"
                 body="Create a group to track shared expenses with friends, family or roommates."
                 actionLabel="New Group"
-                onAction={() => setShowCreate(true)}
+                onAction={openCreate}
               />
             ) : (
               <EmptyState
@@ -372,56 +317,25 @@ export default function GroupsScreen() {
             )
           }
         />
-      )}
         </>
       )}
 
-      <FAB
-        actions={[
-          { label: 'New Group', icon: 'users', tint: colors.accent, description: 'Share expenses with others', onPress: () => setShowCreate(true) },
-          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
-        ]}
-      />
+      {/* FAB now lives in the custom tab bar; New Group is the header + button. */}
 
       <SheetModal visible={showCreate} onClose={() => setShowCreate(false)} title="New Group">
-        <TextInput
-          style={styles.input}
-          placeholder="Group name"
-          placeholderTextColor={colors.textMuted}
-          value={name}
-          onChangeText={setName}
-          autoFocus
+        <GroupForm
+          values={{ name, icon, color, members: groupMembers, defaultSplit }}
+          onChange={(patch) => {
+            if (patch.name !== undefined) setName(patch.name);
+            if (patch.icon !== undefined) setIcon(patch.icon);
+            if (patch.color !== undefined) setColor(patch.color);
+            if (patch.members !== undefined) setGroupMembers(patch.members);
+            if (patch.defaultSplit !== undefined) setDefaultSplit(patch.defaultSplit);
+          }}
+          allPersons={allPersons}
+          autoFocusName
         />
-
-        <Text style={styles.fieldLabel}>Icon</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.iconRow} keyboardShouldPersistTaps="handled">
-          {GROUP_ICONS.map(ic => (
-            <TouchableOpacity
-              key={ic}
-              style={[styles.iconOption, icon === ic && styles.iconSelected]}
-              onPress={() => setIcon(ic)}
-              accessibilityRole="button"
-              accessibilityLabel={ic}
-            >
-              <Feather name={ic} size={20} color={icon === ic ? colors.bg : colors.textPrimary} />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.fieldLabel}>Color</Text>
-        <View style={styles.colorRow}>
-          {GROUP_COLORS.map(c => (
-            <TouchableOpacity
-              key={c}
-              style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSelected]}
-              onPress={() => setColor(c)}
-              accessibilityRole="button"
-              accessibilityLabel={c}
-            />
-          ))}
-        </View>
-
-        <PrimaryButton label="Create Group" onPress={handleCreate} disabled={!name.trim()} />
+        <PrimaryButton label="Create Group" onPress={handleCreate} disabled={!name.trim()} style={{ marginTop: space.md }} />
       </SheetModal>
     </View>
   );
@@ -430,13 +344,10 @@ export default function GroupsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   title: { ...type.title, color: colors.textPrimary },
   friendsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  filterRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  filterChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs + 2, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  filterChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  filterChipText: { ...type.label, color: colors.textMuted },
-  filterChipTextActive: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
   balancesWrap: { marginBottom: space.sm },
   balHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
@@ -465,19 +376,25 @@ const styles = StyleSheet.create({
   headerButtons: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted },
   headerIconBtnActive: { backgroundColor: colors.accentMuted },
-  budgetOverviewHeader: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm },
-  budgetOverviewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  budgetOverviewInfo: { flex: 1, gap: space.xs },
-  budgetOverviewNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  budgetOverviewName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  budgetOverviewPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13 },
   overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  fieldLabel: { ...type.label, color: colors.textSecondary },
+  fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  typeChip: { paddingHorizontal: space.md, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
+  typeChipText: { ...type.label, color: colors.textSecondary },
+  memberRow: { gap: space.md, paddingVertical: space.xs, paddingRight: space.md },
+  memberPick: { alignItems: 'center', gap: 4, width: 52 },
+  memberAvatarWrap: { borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
+  memberAvatarOn: { borderColor: colors.accent },
+  memberCheck: { position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
+  memberPickName: { ...type.caption, color: colors.textSecondary, fontSize: 10 },
   iconRow: { marginBottom: space.xs },
   iconOption: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center', marginRight: space.xs },
   iconSelected: { backgroundColor: colors.accent },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   colorSwatch: { width: 32, height: 32, borderRadius: 16 },
   colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
+  stackRow: { marginTop: 4 },
+  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: colors.accent + '44' },
+  settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

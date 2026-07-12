@@ -1,17 +1,9 @@
-import { computeNet, simplify, rawDebts } from '../lib/settle';
+import { simplify, rawDebts } from '../lib/settle';
 
 const txn = (payments: [string, number][], shares: [string, number][], kind = 'expense') => ({
   kind,
   payments: payments.map(([personId, amount]) => ({ personId, amount })),
   shares: shares.map(([personId, amount]) => ({ personId, amount })),
-});
-
-describe('computeNet', () => {
-  it('nets paid minus share per person', () => {
-    const net = computeNet([txn([['a', 1000]], [['a', 500], ['b', 500]])]);
-    expect(net.a).toBe(500);
-    expect(net.b).toBe(-500);
-  });
 });
 
 describe('simplify', () => {

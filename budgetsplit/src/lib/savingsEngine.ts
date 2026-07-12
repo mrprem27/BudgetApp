@@ -1,7 +1,6 @@
 import {
   differenceInCalendarDays, differenceInCalendarMonths, differenceInCalendarYears,
   addDays, addWeeks, addMonths, addYears,
-  startOfMonth, endOfMonth, subMonths, format, parseISO,
 } from 'date-fns';
 import { PRIORITY_RANK } from './savings';
 import type { Priority, SavingsFrequency } from '../db/queries/savings';
@@ -37,23 +36,29 @@ export type GoalLike = {
   allocation: number;
   frequency: SavingsFrequency;
   priority: Priority;
+  /** Manual drag rank — when present it drives funding order; falls back to priority. */
+  sort_order?: number;
   anchor: number; // last_auto_at ?? created_at
 };
+
+/** Funding order key: manual drag rank when set, else the High→Med→Low bucket. */
+const rankKey = (g: { sort_order?: number; priority: Priority }) =>
+  g.sort_order ?? PRIORITY_RANK[g.priority];
 
 export type AutoAllocation = { goalId: string; amount: number; newAnchor: number };
 
 /**
  * Plan scheduled auto-funding (pure). Each eligible goal is due its fixed
  * allocation × elapsed periods (capped at what's left to its target). Due
- * amounts are satisfied from the unallocated pool in priority order (High →
+ * amounts are funded directly from available cash in priority order (High →
  * Medium → Low). The schedule anchor only advances for periods actually funded
- * (or for completed goals), so a short pool back-funds gradually rather than
+ * (or for completed goals), so short cash back-funds gradually rather than
  * skipping periods. Returns only goals whose anchor moves and/or get funded.
  */
 export function planAutoAllocations(
   goals: GoalLike[],
   saved: Record<string, number>,
-  poolUnallocated: number,
+  availableCash: number,
   nowMs: number,
 ): AutoAllocation[] {
   const eligible = goals
@@ -66,13 +71,13 @@ export function planAutoAllocations(
     })
     .filter(x => x.periods >= 1);
 
-  eligible.sort((a, b) => PRIORITY_RANK[a.g.priority] - PRIORITY_RANK[b.g.priority] || a.g.anchor - b.g.anchor);
+  eligible.sort((a, b) => rankKey(a.g) - rankKey(b.g) || a.g.anchor - b.g.anchor);
 
-  let poolLeft = Math.max(0, poolUnallocated);
+  let cashLeft = Math.max(0, availableCash);
   const out: AutoAllocation[] = [];
   for (const x of eligible) {
-    const amount = Math.min(x.due, poolLeft);
-    poolLeft -= amount;
+    const amount = Math.min(x.due, cashLeft);
+    cashLeft -= amount;
     // Fully satisfied (incl. completed goals where due was capped) → advance all
     // elapsed periods; otherwise advance only the periods we could fund.
     const advance = amount >= x.due ? x.periods : Math.floor(amount / x.g.allocation);
@@ -83,50 +88,28 @@ export function planAutoAllocations(
   return out;
 }
 
-// --- Leftover sweep ------------------------------------------------------
+// --- Overspend raid (protect high-priority goals) ------------------------
+
+export type RaidGoal = { id: string; priority: Priority; locked: number; sort_order?: number };
+export type GoalRaid = { goalId: string; amount: number };
 
 /**
- * Which completed months to sweep budget leftover for. `marker` is the last
- * month already swept ('YYYY-MM'), or null on first run. Returns the month
- * ranges to sweep (never the in-progress month) and the new marker. On first
- * run it returns no months (we start fresh — no retroactive surprise deposit).
+ * Cover a cash overspend by pulling money out of the lowest-priority *unlocked*
+ * goals first, until the `deficit` is covered (or goals run dry). Locked and
+ * higher-priority goals are protected; investments are never touched. Pure.
  */
-export function monthsToSweep(marker: string | null, now: Date): { months: { start: number; end: number }[]; newMarker: string } {
-  const lastCompleted = subMonths(startOfMonth(now), 1); // start of last finished month
-  const newMarker = format(lastCompleted, 'yyyy-MM');
-  if (!marker) return { months: [], newMarker };
-
-  const months: { start: number; end: number }[] = [];
-  let m = addMonths(startOfMonth(parseISO(marker + '-01')), 1);
-  while (m.getTime() <= lastCompleted.getTime()) {
-    months.push({ start: startOfMonth(m).getTime(), end: endOfMonth(m).getTime() });
-    m = addMonths(m, 1);
-  }
-  return { months, newMarker };
-}
-
-// --- Auto-reduce (protect high-priority goals) ---------------------------
-
-export type ReduceGoal = { id: string; priority: Priority; locked: number };
-export type Reduction = { goalId: string; reduceBy: number };
-
-/**
- * When allocated savings exceed what the pool can back, pull funds out of the
- * lowest-priority *unlocked* goals first until the excess is covered. Locked
- * and higher-priority goals are protected. Pure.
- */
-export function planReduction(goals: ReduceGoal[], saved: Record<string, number>, excess: number): Reduction[] {
-  if (excess <= 0) return [];
+export function planOverspendRaid(goals: RaidGoal[], saved: Record<string, number>, deficit: number): GoalRaid[] {
+  if (deficit <= 0) return [];
   const order = goals
     .filter(g => g.locked !== 1 && (saved[g.id] ?? 0) > 0)
-    .sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]); // low priority first
+    .sort((a, b) => rankKey(b) - rankKey(a)); // lowest rank (bottom of list) raided first
 
-  let left = excess;
-  const out: Reduction[] = [];
+  let left = deficit;
+  const out: GoalRaid[] = [];
   for (const g of order) {
     if (left <= 0) break;
-    const reduceBy = Math.min(saved[g.id] ?? 0, left);
-    if (reduceBy > 0) { out.push({ goalId: g.id, reduceBy }); left -= reduceBy; }
+    const amount = Math.min(saved[g.id] ?? 0, left);
+    if (amount > 0) { out.push({ goalId: g.id, amount }); left -= amount; }
   }
   return out;
 }

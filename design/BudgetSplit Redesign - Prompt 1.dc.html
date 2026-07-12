@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { background: #070C0E; margin: 0; font-family: 'Inter', system-ui, sans-serif; color: #ECF3F1; }
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #21302E; border-radius: 2px; }
+
+    .snav a { display: block; padding: 6px 10px 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #5A6B69; text-decoration: none; border-left: 2px solid transparent; margin-bottom: 1px; transition: color 0.12s, background 0.12s; }
+    .snav a:hover { color: #8FA3A0; background: #13201F; }
+    .snav a.active { color: #20C4B8; background: #0E2C29; border-left-color: #20C4B8; }
+    .snav .group-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: #2A3C39; padding: 12px 14px 4px; }
+
+    .b-keep   { display:inline-block; background:#0C2B1F; color:#2BD49B; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap; }
+    .b-merge  { display:inline-block; background:#0E2C29; color:#20C4B8; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap; }
+    .b-move   { display:inline-block; background:#1A1A3A; color:#8B7CF8; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap; }
+    .b-gate   { display:inline-block; background:#2A1714; color:#FF6F61; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap; }
+    .b-fold   { display:inline-block; background:#221A00; color:#F5B301; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap; }
+
+    .spec-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .spec-table th { text-align:left; padding:8px 12px; color:#5A6B69; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; border-bottom:1px solid #1B302D; }
+    .spec-table td { padding:9px 12px; border-bottom:1px solid #0E1F1C; vertical-align:top; line-height:1.55; color:#8FA3A0; }
+    .spec-table td:first-child { color:#ECF3F1; font-family:'Space Mono', monospace; font-size:11px; }
+    .spec-table tr:last-child td { border-bottom:none; }
+    .spec-table tr:hover td { background:rgba(32,196,184,0.025); }
+
+    .state-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .state-table th { padding:8px 10px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; border-bottom:1px solid #1B302D; text-align:left; }
+    .state-table td { padding:8px 10px; border-bottom:1px solid #0E1F1C; vertical-align:top; font-size:11.5px; color:#8FA3A0; line-height:1.5; }
+    .state-table td:first-child { color:#ECF3F1; font-weight:600; font-size:11px; white-space:nowrap; }
+    .state-table tr:last-child td { border-bottom:none; }
+
+    .sec-num { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:#0E2C29; border-radius:6px; font-size:12px; font-weight:700; color:#20C4B8; font-family:'Space Mono',monospace; flex-shrink:0; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:100px; font-size:11px; font-weight:600; }
+    .call-out { background:#0D1A17; border:1px solid #1E3633; border-left:3px solid #20C4B8; border-radius:0 8px 8px 0; padding:12px 16px; font-size:13px; color:#8FA3A0; line-height:1.6; }
+    .call-out strong { color:#ECF3F1; }
+    .warn-out { background:#12100A; border:1px solid #2A2000; border-left:3px solid #F5B301; border-radius:0 8px 8px 0; padding:12px 16px; font-size:12.5px; color:#8FA3A0; line-height:1.6; }
+
+    @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .fade-up { animation: fadeUp 0.35s ease both; }
+
+    /* Phone mock shared */
+    .phone { width:260px; flex:none; border-radius:34px; background:#0A0F11; border:1.5px solid #1E3633; overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,0.7); font-family:'Inter',sans-serif; }
+    .phone-status { height:34px; padding:10px 18px 0; display:flex; justify-content:space-between; align-items:center; }
+    .phone-tab-bar { height:54px; border-top:1px solid #21302E; display:flex; align-items:center; justify-content:space-around; background:rgba(10,15,17,0.97); }
+    .ptab { display:flex; flex-direction:column; align-items:center; gap:2px; }
+    .ptab span { font-size:8.5px; font-family:'Inter',sans-serif; }
+
+    /* Flow step */
+    .flow-step { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid #0E1F1C; }
+    .flow-step:last-child { border-bottom:none; }
+    .step-num { width:22px; height:22px; border-radius:50%; background:#0E2C29; border:1px solid #20C4B8; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#20C4B8; flex-shrink:0; font-family:'Space Mono',monospace; }
+    .step-content h4 { font-size:13px; font-weight:600; color:#ECF3F1; margin-bottom:3px; }
+    .step-content p { font-size:12px; color:#8FA3A0; line-height:1.55; margin:0; }
+    .step-content code { font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8; background:#0E2C29; padding:1px 5px; border-radius:3px; }
+
+    .phase-card { background:#13201F; border:1px solid #1E3633; border-radius:12px; padding:20px 24px; flex:1; min-width:220px; }
+    .phase-num { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#20C4B8; margin-bottom:6px; }
+    .phase-title { font-size:16px; font-weight:700; color:#ECF3F1; margin-bottom:10px; }
+    .phase-item { font-size:12px; color:#8FA3A0; padding:4px 0; border-bottom:1px solid #0E1F1C; line-height:1.5; }
+    .phase-item:last-child { border-bottom:none; }
+    .phase-item::before { content:"→ "; color:#20C4B8; font-weight:600; }
+  </style>
+</helmet>
+
+<!-- ══ TOP BAR ══════════════════════════════════════════════ -->
+<div style="position:sticky; top:0; z-index:100; height:52px; background:rgba(7,12,14,0.96); border-bottom:1px solid #1B302D; display:flex; align-items:center; padding:0 24px; gap:12px; backdrop-filter:blur(8px);">
+  <div style="width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#20C4B8,#15A89D); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+    <span style="font-family:'Space Mono',monospace; font-size:10px; font-weight:700; color:#0A0F11; letter-spacing:-0.5px;">BS</span>
+  </div>
+  <span style="font-size:14px; font-weight:700; color:#ECF3F1; letter-spacing:-0.2px;">BudgetSplit</span>
+  <span style="font-size:13px; color:#5A6B69;">Redesign</span>
+  <div style="flex:1;"></div>
+  <span style="font-size:11px; font-weight:600; color:#20C4B8; background:#0E2C29; padding:3px 10px; border-radius:100px;">Prompt 1 · UX Spec</span>
+  <span style="font-size:11px; color:#5A6B69;">June 2026</span>
+</div>
+
+<!-- ══ BODY ══════════════════════════════════════════════════ -->
+<div style="display:flex; min-height:calc(100vh - 52px);">
+
+  <!-- SIDEBAR -->
+  <aside style="width:200px; flex-shrink:0; position:sticky; top:52px; height:calc(100vh - 52px); overflow-y:auto; border-right:1px solid #13201F; padding:16px 8px;">
+    <nav class="snav">
+      <div class="group-label">Deliverables</div>
+      <a href="#s1" data-navlink="s1">1 · Identity</a>
+      <a href="#s2" data-navlink="s2">2 · Navigation</a>
+      <a href="#s3" data-navlink="s3">3 · Home Screen</a>
+      <a href="#s4" data-navlink="s4">4 · Add Expense</a>
+      <a href="#s5" data-navlink="s5">5 · Money Between People</a>
+      <a href="#s6" data-navlink="s6">6 · State Matrix</a>
+      <a href="#s7" data-navlink="s7">7 · Visual System</a>
+      <a href="#s8" data-navlink="s8">8 · Relocation Map</a>
+      <div class="group-label" style="margin-top:8px;">Phases</div>
+      <a href="#phases">Phase Plan</a>
+    </nav>
+    <div style="margin:24px 14px 0; padding:12px; background:#13201F; border-radius:8px; border:1px solid #1E3633;">
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:6px;">Identity</div>
+      <div style="font-size:11px; color:#8FA3A0; line-height:1.6;">One number. Always honest.</div>
+      <div style="font-size:10px; color:#20C4B8; margin-top:6px; font-weight:600;">"Am I on pace?"</div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main style="flex:1; padding:0 48px 80px; max-width:960px; min-width:0;">
+
+    <!-- ── SECTION 1: IDENTITY ─────────────────────────────── -->
+    <section id="s1" data-sec="s1" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">1</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Identity Statement</h2>
+      </div>
+
+      <div style="background:#13201F; border-radius:14px; padding:28px 32px; margin-bottom:24px; border:1px solid #1E3633;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#20C4B8; margin-bottom:14px;">The One Sentence</div>
+        <p style="font-size:18px; color:#ECF3F1; line-height:1.6; margin:0; font-weight:500; letter-spacing:-0.2px;">BudgetSplit tells you <em style="color:#20C4B8; font-style:normal; font-weight:700;">exactly where your money went</em> and whether you're on pace — across your own spending, your shared tabs, your goals, and your bills.</p>
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px; background:#0D1A17; border-radius:10px; padding:16px 20px; border:1px solid #1B302D;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#5A6B69; margin-bottom:8px;">Primary User</div>
+          <div style="font-size:13px; color:#8FA3A0; line-height:1.65;">Urban Indian, 22–35. Daily UPI user. Splitting costs with flatmates, paying for group trips, managing their own grocery and subscription budget. Has never opened a spreadsheet for finances but absolutely checks their UPI app history.</div>
+        </div>
+        <div style="flex:1; min-width:200px; background:#0D1A17; border-radius:10px; padding:16px 20px; border:1px solid #1B302D;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#5A6B69; margin-bottom:8px;">Single Question on Open</div>
+          <div style="font-size:20px; color:#ECF3F1; font-weight:700; font-family:'Space Mono',monospace; margin-bottom:8px;">"Am I on pace this month?"</div>
+          <div style="font-size:12px; color:#5A6B69; line-height:1.6;">This resolves to a single number (spent vs. budget pace) or a single verdict (on track / over pace). Every home screen element must directly support or contextualise this answer — not add noise alongside it.</div>
+        </div>
+        <div style="flex:1; min-width:200px; background:#0D1A17; border-radius:10px; padding:16px 20px; border:1px solid #1B302D;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#5A6B69; margin-bottom:8px;">Logo Animation</div>
+          <div style="font-size:13px; color:#8FA3A0; line-height:1.65;">The entry logo animation is <span style="color:#2BD49B; font-weight:600;">preserved entirely</span>. No changes to onboarding animation or splash. The only onboarding addition: a single routing question after the animation — "Here to track your own spending, split with people, or both?" — that sets a soft preference, not a hard gate.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 2: NAVIGATION ───────────────────────────── -->
+    <section id="s2" data-sec="s2" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">2</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Navigation Architecture</h2>
+      </div>
+
+      <!-- 4-tab justification -->
+      <div style="display:flex; gap:8px; margin-bottom:28px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:160px; background:#13201F; border-radius:10px; padding:14px 16px; border:1px solid #1E3633; border-top:2px solid #20C4B8;">
+          <div style="font-size:11px; font-weight:700; color:#ECF3F1; margin-bottom:4px;">🏠 Home</div>
+          <div style="font-size:11px; color:#5A6B69; line-height:1.5;">Am I okay this month? Hero number + balances + health.</div>
+        </div>
+        <div style="flex:1; min-width:160px; background:#13201F; border-radius:10px; padding:14px 16px; border:1px solid #1E3633; border-top:2px solid #8B7CF8;">
+          <div style="font-size:11px; font-weight:700; color:#ECF3F1; margin-bottom:4px;">👥 Groups</div>
+          <div style="font-size:11px; color:#5A6B69; line-height:1.5;">Who owes what? Shared expenses, splits, settle up.</div>
+        </div>
+        <div style="flex:1; min-width:160px; background:#13201F; border-radius:10px; padding:14px 16px; border:1px solid #1E3633; border-top:2px solid #F5B301;">
+          <div style="font-size:11px; font-weight:700; color:#ECF3F1; margin-bottom:4px;">📊 Plan</div>
+          <div style="font-size:11px; color:#5A6B69; line-height:1.5;">Where is it going? Budgets + goals + upcoming bills.</div>
+        </div>
+        <div style="flex:1; min-width:160px; background:#13201F; border-radius:10px; padding:14px 16px; border:1px solid #1E3633; border-top:2px solid #5A6B69;">
+          <div style="font-size:11px; font-weight:700; color:#ECF3F1; margin-bottom:4px;">⚙️ Settings</div>
+          <div style="font-size:11px; color:#5A6B69; line-height:1.5;">Config. Categories, preferences, people, help.</div>
+        </div>
+      </div>
+
+      <div class="warn-out" style="margin-bottom:24px;">
+        <strong>Why 4 tabs, not 5:</strong> The current "Money" tab is renamed "Plan" and absorbs the budget-view responsibilities that currently have no home. Reports is removed as a tab entirely — its two useful charts fold into Home (trend bar) and Group detail (spend breakdown). A Reports tab with <code style="font-family:'Space Mono',monospace; font-size:11px; background:#1B302D; padding:1px 4px; border-radius:3px;">href:null</code> that nobody can reach is a dead feature, not a tab.
+      </div>
+
+      <!-- Full routing table -->
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px;">Every Current Screen → Decision → New Home</div>
+      <div style="background:#0D1A17; border-radius:12px; border:1px solid #1B302D; overflow:hidden;">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th style="width:28%;">Screen / Route</th>
+              <th style="width:12%;">Decision</th>
+              <th>New Home &amp; Rationale</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>(tabs)/index.tsx</td><td><span class="b-keep">KEEP</span></td><td style="color:#ECF3F1;">Home tab — refactored to hero-first layout (§3)</td></tr>
+            <tr><td>(tabs)/groups.tsx</td><td><span class="b-keep">KEEP</span></td><td>Groups tab — already the clearest screen; minor hierarchy polish only</td></tr>
+            <tr><td>(tabs)/savings.tsx</td><td><span class="b-merge">RENAME</span></td><td>Plan tab — "Money" renamed "Plan"; absorbs upcoming/recurring from group sub-tab; kitchen-sink dismantled into 3 named sections</td></tr>
+            <tr><td>(tabs)/reports.tsx</td><td><span class="b-fold">FOLD</span></td><td>Tab removed. Trend sparkline → Home hero card. Category spend chart → Group detail. Full transaction list → Home → "All activity". PDF export → Settings. File stays but href remains null until refactored.</td></tr>
+            <tr><td>(tabs)/settings.tsx</td><td><span class="b-keep">KEEP</span></td><td>Settings tab — add categories &amp; people here</td></tr>
+            <tr><td>add/quick.tsx</td><td><span class="b-keep">KEEP</span></td><td>FAB → primary action (bottom sheet). Monolith extracted §7.</td></tr>
+            <tr><td>add/income.tsx</td><td><span class="b-merge">MERGE</span></td><td>Inside quick add — kind toggle (Expense / Income) at top of sheet. No separate route needed.</td></tr>
+            <tr><td>add/itemized.tsx</td><td><span class="b-merge">MERGE</span></td><td>Quick add → "Split by items" progressive disclosure option. Fires existing screen but removes it from FAB menu.</td></tr>
+            <tr><td>add/transfer.tsx</td><td><span class="b-merge">MERGE</span></td><td>Merged into SettleFlow sheet (§5). "Record a payment I already made" mode inside settle. Route deprecated.</td></tr>
+            <tr><td>afford.tsx</td><td><span class="b-move">RELOCATE</span></td><td>Contextual nudge row inside quick add (§4). Afford logic wired live: shows budget remaining or safe-to-spend. Standalone screen removed.</td></tr>
+            <tr><td>settle.tsx</td><td><span class="b-merge">MERGE</span></td><td>Unified SettleFlow bottom sheet (§5). Global settle + group SettleSheet + transfer merge into one guided flow. Route deprecated.</td></tr>
+            <tr><td>friends.tsx</td><td><span class="b-move">RELOCATE</span></td><td>Settings → "People" — same data, clearer home. Also surfaced in Groups tab "People" section header.</td></tr>
+            <tr><td>categories.tsx</td><td><span class="b-move">RELOCATE</span></td><td>Settings → "Categories" — one management flow per group removes split-brain.</td></tr>
+            <tr><td>history.tsx</td><td><span class="b-move">RELOCATE</span></td><td>Home header → audit icon → full activity log. Still a stack-push screen.</td></tr>
+            <tr><td>search.tsx</td><td><span class="b-move">RELOCATE</span></td><td>Home header → search icon. Reachable, not buried.</td></tr>
+            <tr><td>help.tsx</td><td><span class="b-keep">KEEP</span></td><td>Settings → Help. No change.</td></tr>
+            <tr><td>storage.tsx</td><td><span class="b-gate">DEV-GATE</span></td><td>Hidden behind: long-press Settings icon 5×. Not user-facing. Zero impact on feature set.</td></tr>
+            <tr><td>features.tsx</td><td><span class="b-gate">DEV-GATE</span></td><td>Same dev-gate as above. Flag toggles stay available for development; invisible to users.</td></tr>
+            <tr><td>group/[id]</td><td><span class="b-keep">KEEP</span></td><td>Groups → group card → detail. Breadcrumb added (Groups › Name).</td></tr>
+            <tr><td>group/[id]/budget</td><td><span class="b-keep">KEEP</span></td><td>Group detail sub-tab. No change.</td></tr>
+            <tr><td>group/[id]/insights</td><td><span class="b-keep">KEEP</span></td><td>Group detail sub-tab. No change.</td></tr>
+            <tr><td>group/[id]/members</td><td><span class="b-keep">KEEP</span></td><td>Group detail sub-tab. No change.</td></tr>
+            <tr><td>group/[id]/recurring</td><td><span class="b-move">RELOCATE</span></td><td>Plan tab → "Upcoming" section surfaces all recurring across groups. Group sub-tab kept as drill-through.</td></tr>
+            <tr><td>txn/[id]</td><td><span class="b-keep">KEEP</span></td><td>Any transaction list → detail. No change.</td></tr>
+            <tr><td>category/[name]</td><td><span class="b-keep">KEEP</span></td><td>Home → category bar tap → detail. No change.</td></tr>
+            <tr><td>savings/[id]</td><td><span class="b-keep">KEEP</span></td><td>Plan → goal → detail. No change.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Off-nav contextual features -->
+      <div style="margin-top:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px;">Off-Nav → Contextual (not tabs, not orphans)</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div style="background:#13201F; border-radius:8px; padding:10px 14px; border:1px solid #1E3633; flex:1; min-width:200px;">
+          <div style="font-size:11px; font-weight:600; color:#20C4B8; margin-bottom:3px;">Afford check</div>
+          <div style="font-size:11px; color:#5A6B69;">Lives inside add expense as a live budget nudge row — contextual where it matters, zero navigation overhead.</div>
+        </div>
+        <div style="background:#13201F; border-radius:8px; padding:10px 14px; border:1px solid #1E3633; flex:1; min-width:200px;">
+          <div style="font-size:11px; font-weight:600; color:#F5B301; margin-bottom:3px;">Subscription detection</div>
+          <div style="font-size:11px; color:#5A6B69;">Plan tab → Upcoming section. Detected subs appear alongside manual recurring. "Manage" action prompts categorise or ignore.</div>
+        </div>
+        <div style="background:#13201F; border-radius:8px; padding:10px 14px; border:1px solid #1E3633; flex:1; min-width:200px;">
+          <div style="font-size:11px; font-weight:600; color:#8B7CF8; margin-bottom:3px;">Financial health score</div>
+          <div style="font-size:11px; color:#5A6B69;">Home → health band chip (1 line). Tap → bottom sheet. Wired to real data; visible by default. Not flag-gated.</div>
+        </div>
+        <div style="background:#13201F; border-radius:8px; padding:10px 14px; border:1px solid #1E3633; flex:1; min-width:200px;">
+          <div style="font-size:11px; font-weight:600; color:#2BD49B; margin-bottom:3px;">Forecast + savings insights</div>
+          <div style="font-size:11px; color:#5A6B69;">Plan tab → month-end projection row + per-goal nudge. Data exists; it just needs a home. These are it.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 3: HOME SCREEN ──────────────────────────── -->
+    <section id="s3" data-sec="s3" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">3</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Home Screen Spec</h2>
+      </div>
+
+      <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
+        <!-- Left: spec text -->
+        <div style="flex:1.2; min-width:300px;">
+          <div class="call-out" style="margin-bottom:20px;">
+            <strong>The Hero:</strong> "₹X,XXX spent this month" — one SpaceMono XL number, always available regardless of setup, directly answering "how much have I spent?" Pace bar appears once a budget is set; health chip appears once 1+ periods of data exist. Both are graceful additions, never blockers.
+          </div>
+
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px;">Ranked Sections (descending importance)</div>
+          <div style="background:#0D1A17; border-radius:10px; border:1px solid #1B302D; overflow:hidden; margin-bottom:16px;">
+            <div style="padding:11px 14px; border-bottom:1px solid #0E1F1C; display:flex; gap:10px; align-items:flex-start;">
+              <span style="font-size:10px; font-weight:700; color:#20C4B8; font-family:'Space Mono',monospace; flex-shrink:0; padding-top:1px;">01</span>
+              <div><div style="font-size:12.5px; font-weight:600; color:#ECF3F1; margin-bottom:2px;">Hero card — Spent this month</div><div style="font-size:11.5px; color:#5A6B69; line-height:1.55;">Data: <code style="font-family:'Space Mono',monospace; font-size:10px; color:#20C4B8;">getTransactionsInRange(me.id)</code> → my share. Tap-through: category breakdown (same screen, scroll down). Tab pills: Today / Month / Year drive the number.</div></div>
+            </div>
+            <div style="padding:11px 14px; border-bottom:1px solid #0E1F1C; display:flex; gap:10px; align-items:flex-start;">
+              <span style="font-size:10px; font-weight:700; color:#8B7CF8; font-family:'Space Mono',monospace; flex-shrink:0; padding-top:1px;">02</span>
+              <div><div style="font-size:12.5px; font-weight:600; color:#ECF3F1; margin-bottom:2px;">Balance strip — You owe / Owed</div><div style="font-size:11.5px; color:#5A6B69; line-height:1.55;">Data: <code style="font-family:'Space Mono',monospace; font-size:10px; color:#20C4B8;">getGlobalNet()</code>. Tap "Settle →": opens unified SettleFlow sheet. Hidden when all zeros.</div></div>
+            </div>
+            <div style="padding:11px 14px; border-bottom:1px solid #0E1F1C; display:flex; gap:10px; align-items:flex-start;">
+              <span style="font-size:10px; font-weight:700; color:#F5B301; font-family:'Space Mono',monospace; flex-shrink:0; padding-top:1px;">03</span>
+              <div><div style="font-size:12.5px; font-weight:600; color:#ECF3F1; margin-bottom:2px;">Where it went — top 3 categories</div><div style="font-size:11.5px; color:#5A6B69; line-height:1.55;">Data: same txn range aggregated by category. Bar width = % of total spend. Tap → <code style="font-family:'Space Mono',monospace; font-size:10px; color:#20C4B8;">category/[name]</code> detail. "+ N more" collapses the rest.</div></div>
+            </div>
+            <div style="padding:11px 14px; border-bottom:1px solid #0E1F1C; display:flex; gap:10px; align-items:flex-start;">
+              <span style="font-size:10px; font-weight:700; color:#FF6F61; font-family:'Space Mono',monospace; flex-shrink:0; padding-top:1px;">04</span>
+              <div><div style="font-size:12.5px; font-weight:600; color:#ECF3F1; margin-bottom:2px;">Coming up — next 3 recurring items</div><div style="font-size:11.5px; color:#5A6B69; line-height:1.55;">Data: <code style="font-family:'Space Mono',monospace; font-size:10px; color:#20C4B8;">materializeDueOccurrences()</code> + detected subs. Shows next payment name, amount, days until. Tap → Plan tab.</div></div>
+            </div>
+            <div style="padding:11px 14px; display:flex; gap:10px; align-items:flex-start;">
+              <span style="font-size:10px; font-weight:700; color:#2BD49B; font-family:'Space Mono',monospace; flex-shrink:0; padding-top:1px;">05</span>
+              <div><div style="font-size:12.5px; font-weight:600; color:#ECF3F1; margin-bottom:2px;">Health band — 1-line verdict</div><div style="font-size:11.5px; color:#5A6B69; line-height:1.55;">Data: <code style="font-family:'Space Mono',monospace; font-size:10px; color:#20C4B8;">computeHealthScore()</code> — already computed from hero data. Renders amber/red/green chip + single worst-factor text. Tap → detail sheet (all 5 dimensions). Default-on, no flag gate.</div></div>
+            </div>
+          </div>
+
+          <div style="background:#2A1714; border-radius:8px; padding:12px 16px; border:1px solid #3A1F1C;">
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#FF6F61; margin-bottom:6px;">❌ NOT on Home</div>
+            <div style="font-size:12px; color:#8FA3A0; line-height:1.7;">Savings pool balance · Savings goal list · Full charts · Insights carousel · Income breakdown · Spending forecast · Audit log · Group-by-group budget bars · Financial health score as a full section · Tracking streak (demoted to Settings profile).</div>
+          </div>
+        </div>
+
+        <!-- Right: phone wireframe -->
+        <div style="flex-shrink:0;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px; text-align:center;">Home · Full State</div>
+          <div class="phone">
+            <div class="phone-status">
+              <span style="font-family:'Space Mono',monospace; font-size:10px; color:#8FA3A0;">9:41</span>
+              <div style="display:flex; gap:4px; align-items:center;">
+                <svg width="11" height="8" viewBox="0 0 12 9"><rect x="0" y="5" width="2" height="4" rx="0.5" fill="#8FA3A0"/><rect x="3" y="3" width="2" height="6" rx="0.5" fill="#8FA3A0"/><rect x="6" y="1" width="2" height="8" rx="0.5" fill="#8FA3A0"/><rect x="9" y="0" width="3" height="9" rx="0.5" fill="#ECF3F1"/></svg>
+                <svg width="13" height="9" viewBox="0 0 14 10"><path d="M1 3.5A8.5 8.5 0 0 1 13 3.5" stroke="#ECF3F1" stroke-width="1.5" stroke-linecap="round"/><path d="M3 6A5.5 5.5 0 0 1 11 6" stroke="#ECF3F1" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="9" r="1" fill="#ECF3F1"/></svg>
+                <div style="width:20px;height:9px;border:1px solid #8FA3A0;border-radius:2px;padding:1.5px;"><div style="width:70%;height:100%;background:#ECF3F1;border-radius:1px;"></div></div>
+              </div>
+            </div>
+            <!-- header -->
+            <div style="padding:8px 14px 6px; display:flex; justify-content:space-between; align-items:flex-end;">
+              <div>
+                <div style="font-size:10px; color:#5A6B69;">Good morning</div>
+                <div style="font-size:16px; font-weight:700; color:#ECF3F1; letter-spacing:-0.3px;">Arjun</div>
+              </div>
+              <div style="display:flex; gap:10px; padding-bottom:1px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </div>
+            </div>
+            <!-- hero -->
+            <div style="margin:2px 10px 7px; background:#13201F; border-radius:14px; padding:14px; border:1px solid #1E3633;">
+              <div style="font-size:8px; color:#5A6B69; text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:5px;">SPENT THIS MONTH</div>
+              <div style="font-size:26px; color:#ECF3F1; font-family:'Space Mono',monospace; letter-spacing:-1px; margin-bottom:9px;">₹18,450</div>
+              <div style="height:3px; background:#1E3633; border-radius:2px; margin-bottom:6px;"><div style="height:3px; width:72%; background:#20C4B8; border-radius:2px;"></div></div>
+              <div style="display:flex; justify-content:space-between;">
+                <span style="font-size:10px; color:#2BD49B; font-weight:600;">✓ On pace · 72%</span>
+                <span style="font-size:10px; color:#5A6B69;">₹7.2k left</span>
+              </div>
+            </div>
+            <!-- tab pills -->
+            <div style="margin:0 10px 7px; display:flex; gap:4px;">
+              <div style="padding:4px 9px; background:#20C4B8; border-radius:100px; font-size:9px; color:#0A0F11; font-weight:700;">Month</div>
+              <div style="padding:4px 9px; background:#1B302D; border-radius:100px; font-size:9px; color:#8FA3A0;">Today</div>
+              <div style="padding:4px 9px; background:#1B302D; border-radius:100px; font-size:9px; color:#8FA3A0;">Year</div>
+            </div>
+            <!-- balance strip -->
+            <div style="margin:0 10px 7px; background:#13201F; border-radius:10px; padding:9px 12px; display:flex; align-items:center; gap:10px; border:1px solid #1E3633;">
+              <div style="flex:1;"><div style="font-size:8px; color:#5A6B69; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">You owe</div><div style="font-size:13px; color:#FF6F61; font-family:'Space Mono',monospace; font-weight:700;">₹2,100</div></div>
+              <div style="width:1px; height:26px; background:#21302E;"></div>
+              <div style="flex:1;"><div style="font-size:8px; color:#5A6B69; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Owed to you</div><div style="font-size:13px; color:#2BD49B; font-family:'Space Mono',monospace; font-weight:700;">₹800</div></div>
+              <div style="font-size:10px; color:#20C4B8; font-weight:600;">Settle →</div>
+            </div>
+            <!-- where it went -->
+            <div style="margin:0 10px 4px; padding:0 2px;">
+              <div style="font-size:8px; color:#5A6B69; letter-spacing:1px; text-transform:uppercase; font-weight:700; margin-bottom:5px;">WHERE IT WENT</div>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:10px; width:13px;">🍕</span><span style="font-size:9.5px; color:#8FA3A0; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Food</span><div style="flex:2; height:2.5px; background:#1E3633; border-radius:2px;"><div style="width:60%; height:2.5px; background:#20C4B8; border-radius:2px;"></div></div><span style="font-size:9px; color:#ECF3F1; font-family:'Space Mono',monospace; width:34px; text-align:right; flex-shrink:0;">₹4.2k</span></div>
+                <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:10px; width:13px;">🏠</span><span style="font-size:9.5px; color:#8FA3A0; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Rent</span><div style="flex:2; height:2.5px; background:#1E3633; border-radius:2px;"><div style="width:86%; height:2.5px; background:#FF6F61; border-radius:2px;"></div></div><span style="font-size:9px; color:#ECF3F1; font-family:'Space Mono',monospace; width:34px; text-align:right; flex-shrink:0;">₹6.0k</span></div>
+                <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:10px; width:13px;">🚗</span><span style="font-size:9.5px; color:#8FA3A0; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Transport</span><div style="flex:2; height:2.5px; background:#1E3633; border-radius:2px;"><div style="width:30%; height:2.5px; background:#20C4B8; border-radius:2px;"></div></div><span style="font-size:9px; color:#ECF3F1; font-family:'Space Mono',monospace; width:34px; text-align:right; flex-shrink:0;">₹1.8k</span></div>
+              </div>
+            </div>
+            <!-- coming up -->
+            <div style="margin:6px 10px 5px; padding:0 2px;">
+              <div style="font-size:8px; color:#5A6B69; text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:4px;">COMING UP</div>
+              <div style="background:#13201F; border-radius:8px; padding:7px 10px; border:1px solid #1E3633; display:flex; justify-content:space-between; align-items:center;">
+                <div><div style="font-size:10px; color:#ECF3F1; font-weight:500;">Netflix · in 3 days</div></div>
+                <div style="font-size:11px; color:#8B7CF8; font-family:'Space Mono',monospace;">₹649</div>
+              </div>
+            </div>
+            <!-- health -->
+            <div style="margin:0 10px 6px; background:#221A00; border-radius:8px; padding:7px 10px; display:flex; align-items:center; justify-content:space-between; border:1px solid #3A2C00;">
+              <div style="display:flex; align-items:center; gap:7px;">
+                <div style="width:24px; height:24px; border-radius:50%; background:#0A0F11; border:2px solid #F5B301; display:flex; align-items:center; justify-content:center; font-family:'Space Mono',monospace; font-size:8px; color:#F5B301; font-weight:700;">58</div>
+                <div><div style="font-size:10px; color:#F5B301; font-weight:600;">Fair · Health</div><div style="font-size:8.5px; color:#8FA3A0;">2 categories over budget</div></div>
+              </div>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <!-- tab bar -->
+            <div class="phone-tab-bar">
+              <div class="ptab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#20C4B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span style="color:#20C4B8; font-weight:700;">Home</span></div>
+              <div class="ptab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A6B69" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span style="color:#5A6B69;">Groups</span></div>
+              <div class="ptab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A6B69" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span style="color:#5A6B69;">Plan</span></div>
+              <div class="ptab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A6B69" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span style="color:#5A6B69;">Settings</span></div>
+            </div>
+          </div>
+
+          <!-- FAB overlay label -->
+          <div style="margin-top:-26px; margin-right:18px; display:flex; justify-content:flex-end;">
+            <div style="width:46px; height:46px; border-radius:50%; background:linear-gradient(135deg,#FF6F61,#cc4c3f); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(255,111,97,0.5);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+          <div style="text-align:right; margin-right:18px; margin-top:4px; font-size:9px; color:#5A6B69;">FAB · one tap → add expense</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 4: ADD EXPENSE FLOW ────────────────────── -->
+    <section id="s4" data-sec="s4" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">4</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Primary Add Expense Flow</h2>
+      </div>
+
+      <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="flex:1.2; min-width:280px;">
+          <div class="call-out" style="margin-bottom:20px;">
+            <strong>One tap.</strong> FAB → bottom sheet (SheetModal). No menu, no four options. The default mode is always "expense for me." Every other mode — income, itemized, split, recurring — is a progressive disclosure from inside the sheet.
+          </div>
+
+          <div style="background:#0D1A17; border-radius:10px; border:1px solid #1B302D; overflow:hidden; margin-bottom:16px;">
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">1</div>
+              <div class="step-content"><h4>Amount</h4><p>Full-width numpad. SpaceMono 36px. No label — the ₹ symbol is the label. Amount field is auto-focused on sheet open.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">2</div>
+              <div class="step-content"><h4>Category + Date pills</h4><p>Smart-matched from note text (<code>learnedMatch</code> → <code>matchCategory</code>). Tappable to override. Date defaults today. Both in one horizontal row below amount.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">3</div>
+              <div class="step-content"><h4>Note (optional)</h4><p>Single text field. Drives smart category matching. Placeholder: "What was it for?"</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num" style="background:#0C2B1F; border-color:#2BD49B; color:#2BD49B;">★</div>
+              <div class="step-content"><h4>Budget nudge row <span style="color:#2BD49B; font-size:11px;">(NEW — Afford context)</span></h4><p>Live: queries <code>getCategoryBudget()</code> and current spend in that category. Shows: <strong>"₹2,800 left in Food this month"</strong> in green / amber / red. No category budget → shows <code>getCashPosition().available</code> as safe-to-spend. Both null → row hidden. No navigation needed — afford check is answered inline.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">4</div>
+              <div class="step-content"><h4>Split selector</h4><p>"Just me ▾" → taps to expand member picker + split type (equal / exact / percent / shares). Collapses back when no members selected.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">5</div>
+              <div class="step-content"><h4>▸ More options (progressive disclosure)</h4><p>Single row below split: "Income · By items · Recurring". Each toggles a mode. <strong>Income</strong>: flips kind. <strong>By items</strong>: pushes itemized screen. <strong>Recurring</strong>: expands freq/end picker inline.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">6</div>
+              <div class="step-content"><h4>Log expense button</h4><p>PrimaryButton full-width. On save: haptic success, sheet dismisses, home data refreshes. Duplicate detection: shows inline warning (not blocking alert).</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add expense wireframe -->
+        <div style="flex-shrink:0;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px; text-align:center;">Add Expense · with Nudge + Split</div>
+          <div class="phone" style="border-radius:24px 24px 34px 34px;">
+            <!-- Drag handle -->
+            <div style="padding:10px 0 6px; display:flex; justify-content:center;"><div style="width:32px; height:3px; background:#1E3633; border-radius:2px;"></div></div>
+            <div style="padding:4px 14px 6px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:14px; font-weight:700; color:#ECF3F1;">Add expense</span>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <div style="padding:3px 8px; background:#1B302D; border-radius:100px; font-size:9.5px; color:#8FA3A0;">Expense</div>
+                <div style="padding:3px 8px; background:#1B302D; border-radius:100px; font-size:9.5px; color:#8FA3A0;">Income</div>
+              </div>
+            </div>
+            <!-- amount -->
+            <div style="padding:10px 14px 8px; text-align:center; border-bottom:1px solid #1E3633;">
+              <div style="font-size:34px; color:#ECF3F1; font-family:'Space Mono',monospace; letter-spacing:-1.5px;">₹650</div>
+            </div>
+            <!-- category + date -->
+            <div style="padding:10px 14px 0; display:flex; gap:6px;">
+              <div style="display:flex; align-items:center; gap:5px; background:#1B302D; border-radius:100px; padding:5px 10px; flex:1;">
+                <span style="font-size:11px;">🍕</span>
+                <span style="font-size:10.5px; color:#ECF3F1; font-weight:600;">Food</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div style="display:flex; align-items:center; gap:5px; background:#1B302D; border-radius:100px; padding:5px 10px;">
+                <span style="font-size:10.5px; color:#8FA3A0;">Today</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <!-- note -->
+            <div style="padding:8px 14px 0;">
+              <div style="background:#162825; border-radius:8px; padding:8px 10px; border:1px solid #1E3633;">
+                <span style="font-size:11px; color:#8FA3A0;">Lunch with Priya</span>
+              </div>
+            </div>
+            <!-- budget nudge ★ -->
+            <div style="margin:8px 14px 0; background:#0C2B1F; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:7px; border:1px solid #1E4A2E;">
+              <div style="width:6px; height:6px; border-radius:50%; background:#2BD49B; flex-shrink:0;"></div>
+              <span style="font-size:11px; color:#2BD49B; font-weight:500;">₹2,800 left in Food this month</span>
+            </div>
+            <!-- split -->
+            <div style="padding:8px 14px 0;">
+              <div style="background:#1B302D; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:11px; color:#8FA3A0;">Split with</span>
+                <div style="display:flex; gap:-4px; align-items:center;">
+                  <div style="width:20px; height:20px; border-radius:50%; background:#4F46E5; display:flex; align-items:center; justify-content:center; font-size:8px; color:#fff; border:1.5px solid #0A0F11; font-weight:700;">R</div>
+                  <div style="width:20px; height:20px; border-radius:50%; background:#E53E3E; display:flex; align-items:center; justify-content:center; font-size:8px; color:#fff; border:1.5px solid #0A0F11; font-weight:700; margin-left:-4px;">P</div>
+                  <span style="font-size:10px; color:#20C4B8; margin-left:6px;">Equal · ₹217 each</span>
+                </div>
+              </div>
+            </div>
+            <!-- more -->
+            <div style="padding:6px 14px 0;">
+              <div style="padding:6px 0; display:flex; align-items:center; gap:5px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                <span style="font-size:10.5px; color:#8FA3A0;">Income · By items · Recurring</span>
+              </div>
+            </div>
+            <!-- CTA -->
+            <div style="padding:8px 14px 12px;">
+              <div style="background:#20C4B8; border-radius:10px; padding:11px; text-align:center;">
+                <span style="font-size:13px; font-weight:700; color:#0A0F11;">Log expense</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 5: MONEY BETWEEN PEOPLE ────────────────── -->
+    <section id="s5" data-sec="s5" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">5</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Money Between People — Unified Flow</h2>
+      </div>
+
+      <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="flex:1.2; min-width:280px;">
+          <div class="call-out" style="margin-bottom:20px;">
+            <strong>One model:</strong> "Settle up" is the single entry point for all money that moves between people. The distinction between "transfer" (you paid them directly) and "settle" (marking a split resolved) is an implementation detail — the user never chooses between them. The flow presents the decision they actually need to make: <em>who, how much, and how it was paid.</em>
+          </div>
+
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px;">Merge Plan</div>
+          <div style="background:#0D1A17; border-radius:10px; border:1px solid #1B302D; padding:14px 16px; margin-bottom:16px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><span style="font-family:'Space Mono',monospace; font-size:10px; color:#FF6F61; background:#2A1714; padding:2px 6px; border-radius:4px; white-space:nowrap;">app/settle.tsx</span><span style="color:#5A6B69;">+</span><span style="font-family:'Space Mono',monospace; font-size:10px; color:#FF6F61; background:#2A1714; padding:2px 6px; border-radius:4px; white-space:nowrap;">SettleSheet.tsx</span><span style="color:#5A6B69;">+</span><span style="font-family:'Space Mono',monospace; font-size:10px; color:#FF6F61; background:#2A1714; padding:2px 6px; border-radius:4px; white-space:nowrap;">add/transfer.tsx</span></div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#5A6B69;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#20C4B8" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>Merge into single <span style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8; background:#0E2C29; padding:2px 6px; border-radius:4px;">SettleFlow</span> bottom sheet. All three write the same <code style="font-family:'Space Mono',monospace; font-size:10px; color:#8FA3A0;">kind:'settlement'</code> txn via <code style="font-family:'Space Mono',monospace; font-size:10px; color:#8FA3A0;">insertTxn()</code>.</div>
+          </div>
+
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px;">Entry Points → All Open Same Sheet</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
+            <div style="background:#13201F; border-radius:7px; padding:7px 11px; font-size:11px; color:#8FA3A0; border:1px solid #1E3633;">Home → balance strip → "Settle →"</div>
+            <div style="background:#13201F; border-radius:7px; padding:7px 11px; font-size:11px; color:#8FA3A0; border:1px solid #1E3633;">Groups → person balance row</div>
+            <div style="background:#13201F; border-radius:7px; padding:7px 11px; font-size:11px; color:#8FA3A0; border:1px solid #1E3633;">Group detail → member balance</div>
+          </div>
+
+          <div style="background:#0D1A17; border-radius:10px; border:1px solid #1B302D; overflow:hidden;">
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">1</div>
+              <div class="step-content"><h4>WHO + AMOUNT (pre-filled)</h4><p>Pre-populated from context: <code>simplify(getGlobalNet())</code> determines recommended person and amount. User can change person via picker or adjust amount (partial settle). Direction is stated plainly: "Rahul owes you ₹2,100" — no debit/credit ambiguity.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">2</div>
+              <div class="step-content"><h4>HOW (replaces transfer screen)</h4><p>Three chips: 💵 Cash · 📱 UPI · 🏦 Bank. Optional note. This replaces <code>add/transfer.tsx</code> entirely — the payment method is the only decision left, and it's one tap.</p></div>
+            </div>
+            <div class="flow-step" style="padding:12px 14px;">
+              <div class="step-num">3</div>
+              <div class="step-content"><h4>CONFIRM + WRITE</h4><p>Writes <code>kind:'settlement'</code> txn in the common group (uses existing <code>getCommonGroupId()</code>). If no shared group, surfaces the existing alert inline — not buried in async error. Haptic + dismiss. Balances update immediately.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settle wireframe -->
+        <div style="flex-shrink:0;">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:10px; text-align:center;">Settle Flow · Step 1</div>
+          <div class="phone" style="border-radius:24px 24px 34px 34px;">
+            <div style="padding:10px 0 6px; display:flex; justify-content:center;"><div style="width:32px; height:3px; background:#1E3633; border-radius:2px;"></div></div>
+            <div style="padding:4px 14px 14px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:14px; font-weight:700; color:#ECF3F1;">Settle up</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8FA3A0" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+            <!-- person card -->
+            <div style="margin:0 14px 12px; background:#13201F; border-radius:12px; padding:16px; border:1px solid #1E3633; text-align:center;">
+              <div style="width:44px; height:44px; border-radius:50%; background:#4F46E5; margin:0 auto 8px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:#fff;">R</div>
+              <div style="font-size:13px; font-weight:600; color:#ECF3F1; margin-bottom:4px;">Rahul</div>
+              <div style="font-size:11px; color:#5A6B69; margin-bottom:12px;">owes you</div>
+              <div style="font-size:30px; color:#2BD49B; font-family:'Space Mono',monospace; letter-spacing:-1px;">₹2,100</div>
+            </div>
+            <!-- amount input -->
+            <div style="margin:0 14px 12px;">
+              <div style="font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:6px;">AMOUNT</div>
+              <div style="background:#162825; border:1px solid #20C4B8; border-radius:8px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:16px; color:#ECF3F1; font-family:'Space Mono',monospace; font-weight:700;">₹2,100</span>
+                <span style="font-size:10px; color:#20C4B8;">Full balance</span>
+              </div>
+            </div>
+            <!-- how paid -->
+            <div style="margin:0 14px 12px;">
+              <div style="font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:6px;">HOW WAS THIS PAID?</div>
+              <div style="display:flex; gap:6px;">
+                <div style="flex:1; background:#0E2C29; border-radius:8px; padding:8px 6px; text-align:center; border:1px solid #20C4B8;">
+                  <div style="font-size:14px; margin-bottom:2px;">📱</div>
+                  <div style="font-size:9.5px; color:#20C4B8; font-weight:600;">UPI</div>
+                </div>
+                <div style="flex:1; background:#1B302D; border-radius:8px; padding:8px 6px; text-align:center; border:1px solid #1E3633;">
+                  <div style="font-size:14px; margin-bottom:2px;">💵</div>
+                  <div style="font-size:9.5px; color:#8FA3A0;">Cash</div>
+                </div>
+                <div style="flex:1; background:#1B302D; border-radius:8px; padding:8px 6px; text-align:center; border:1px solid #1E3633;">
+                  <div style="font-size:14px; margin-bottom:2px;">🏦</div>
+                  <div style="font-size:9.5px; color:#8FA3A0;">Bank</div>
+                </div>
+              </div>
+            </div>
+            <!-- CTA -->
+            <div style="padding:0 14px 14px;">
+              <div style="background:#8B7CF8; border-radius:10px; padding:11px; text-align:center;">
+                <span style="font-size:13px; font-weight:700; color:#fff;">Mark as settled</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 6: STATE MATRIX ─────────────────────────── -->
+    <section id="s6" data-sec="s6" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">6</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Per-Screen State Matrix</h2>
+      </div>
+      <div class="call-out" style="margin-bottom:20px;">Every kept screen ships all four states. No bare <code style="font-family:'Space Mono',monospace; font-size:11px; background:#1B302D; padding:1px 5px; border-radius:3px; color:#ECF3F1;">"No data yet"</code> text. Use existing <code style="font-family:'Space Mono',monospace; font-size:11px; background:#1B302D; padding:1px 5px; border-radius:3px; color:#ECF3F1;">EmptyState</code>, <code style="font-family:'Space Mono',monospace; font-size:11px; background:#1B302D; padding:1px 5px; border-radius:3px; color:#ECF3F1;">SkeletonCard</code>, <code style="font-family:'Space Mono',monospace; font-size:11px; background:#1B302D; padding:1px 5px; border-radius:3px; color:#ECF3F1;">ErrorState</code> components throughout.</div>
+      <div style="background:#0D1A17; border-radius:12px; border:1px solid #1B302D; overflow:hidden; overflow-x:auto;">
+        <table class="state-table">
+          <thead>
+            <tr>
+              <th style="width:13%;">Screen</th>
+              <th style="width:22%;">Empty</th>
+              <th style="width:22%;">Loading</th>
+              <th style="width:22%;">Error</th>
+              <th>Full</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Home</td>
+              <td>EmptyState: "Add your first expense →" with FAB highlight pulse. Hero shows ₹0. Balance strip hidden.</td>
+              <td>SkeletonCard for hero + 3 category rows. Tab pills still interactive.</td>
+              <td>ErrorState with retry. Hero shows last cached value with "Offline" badge.</td>
+              <td>All sections visible per hierarchy; sections with no data (e.g. no upcoming bills) are hidden — not empty placeholders.</td>
+            </tr>
+            <tr>
+              <td>Groups</td>
+              <td>EmptyState: "Create a group to start splitting." + primary CTA button.</td>
+              <td>2× SkeletonCard at group card height.</td>
+              <td>ErrorState with retry. No stale data shown.</td>
+              <td>Groups listed, balances shown per group, budget bars where set.</td>
+            </tr>
+            <tr>
+              <td>Plan</td>
+              <td>Three sections: goals empty → "Set a savings goal"; budgets empty → "Set a budget in a group"; upcoming empty → hidden section.</td>
+              <td>SkeletonCard per section.</td>
+              <td>ErrorState. Last cached pool balance shown if available.</td>
+              <td>Pool card → goals → upcoming → what-if row. Insights shown if ≥2 periods of data.</td>
+            </tr>
+            <tr>
+              <td>Group detail</td>
+              <td>No transactions → EmptyState: "Add the first expense for [Group name]." Pre-fills groupId in add flow.</td>
+              <td>Skeleton transaction list (3 rows).</td>
+              <td>ErrorState with retry. Back navigation preserved.</td>
+              <td>Txn list + balance rows + sub-tabs (Budget / Insights / Members / Recurring).</td>
+            </tr>
+            <tr>
+              <td>Add expense</td>
+              <td>N/A (modal, always fresh).</td>
+              <td>Category list loads inline — shows placeholder chips while loading. Amount field available immediately.</td>
+              <td>Category load failure → fallback to "Other" with toast. Save failure → inline error row, sheet stays open.</td>
+              <td>Full flow. Budget nudge row visible if budget data available; hidden otherwise (not an error state).</td>
+            </tr>
+            <tr>
+              <td>Settle flow</td>
+              <td>No balances to settle → "All settled up!" with ✓ illustration. CTA: "View groups".</td>
+              <td>Spinner on balance load (fast — single query). Person picker available immediately.</td>
+              <td>getCommonGroupId fails → inline "These people don't share a group" message. No sheet dismiss.</td>
+              <td>Pre-filled person + amount + method chips. Confirm button active.</td>
+            </tr>
+            <tr>
+              <td>category/[name]</td>
+              <td>No transactions in period → "Nothing in [Category] for this period." Period tabs still interactive.</td>
+              <td>Skeleton list (4 rows).</td>
+              <td>ErrorState with retry.</td>
+              <td>Sorted txn list + budget utilisation bar at top if budget is set.</td>
+            </tr>
+            <tr>
+              <td>savings/[id]</td>
+              <td>Goal created, ₹0 saved → "Make your first allocation →" with CTA.</td>
+              <td>Skeleton for progress ring + txn list.</td>
+              <td>ErrorState.</td>
+              <td>Progress ring + allocation history + auto-schedule summary.</td>
+            </tr>
+            <tr>
+              <td>txn/[id]</td>
+              <td>N/A (navigated with ID).</td>
+              <td>Skeleton of detail card.</td>
+              <td>Txn not found → "This transaction may have been deleted." Back CTA.</td>
+              <td>Full detail: amount, splits, payers, receipt, tags, edit/delete actions.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── SECTION 7: VISUAL SYSTEM ───────────────────────── -->
+    <section id="s7" data-sec="s7" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">7</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Visual System Refinements</h2>
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px;">
+        <!-- Hierarchy -->
+        <div style="flex:1; min-width:240px; background:#0D1A17; border-radius:10px; padding:18px 20px; border:1px solid #1B302D;">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#20C4B8; margin-bottom:12px;">Hierarchy Rules</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-family:'Space Mono',monospace; font-size:20px; color:#ECF3F1; letter-spacing:-0.5px;">₹X</span><span style="font-size:11px; color:#5A6B69;">36px SpaceMono — one per screen, hero only</span></div>
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-family:'Space Mono',monospace; font-size:14px; color:#ECF3F1;">₹X</span><span style="font-size:11px; color:#5A6B69;">24px — secondary amounts (balance strip)</span></div>
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-size:16px; font-weight:700; color:#ECF3F1;">Title</span><span style="font-size:11px; color:#5A6B69;">20px Inter SemiBold — screen headings</span></div>
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-size:13px; font-weight:600; color:#ECF3F1;">Label</span><span style="font-size:11px; color:#5A6B69;">13px Inter SemiBold — card headings</span></div>
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-size:11px; color:#8FA3A0;">Body</span><span style="font-size:11px; color:#5A6B69;">13px Inter Regular — metadata, notes</span></div>
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-size:9px; font-weight:700; color:#5A6B69; text-transform:uppercase; letter-spacing:0.8px;">SECTION</span><span style="font-size:11px; color:#5A6B69;">11px caps textMuted — ALL section labels</span></div>
+          </div>
+        </div>
+        <!-- Modal metaphor -->
+        <div style="flex:1; min-width:240px; background:#0D1A17; border-radius:10px; padding:18px 20px; border:1px solid #1B302D;">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#20C4B8; margin-bottom:12px;">One Modal Metaphor: SheetModal</div>
+          <div style="display:flex; flex-direction:column; gap:8px; font-size:12px; color:#8FA3A0; line-height:1.55;">
+            <div><span style="color:#2BD49B; font-weight:600;">✓ Bottom sheet (SheetModal)</span> for all "do and return" actions: add expense, settle up, create group, add goal, edit txn.</div>
+            <div><span style="color:#2BD49B; font-weight:600;">✓ Stack-push</span> for "navigate into detail": group detail, txn detail, goal detail, category detail, settings sub-screens.</div>
+            <div><span style="color:#FF6F61; font-weight:600;">✗ RN Modal</span> removed from add/quick, add/income, add/itemized. These already use SheetModal for sub-pickers; the outer wrapper must match.</div>
+            <div style="padding:8px 10px; background:#13201F; border-radius:6px; border:1px solid #1E3633; font-size:11px; color:#5A6B69;">Why: Consistent gesture-to-dismiss (swipe down), consistent backdrop, no double-modal nesting.</div>
+          </div>
+        </div>
+        <!-- Spacing rhythm -->
+        <div style="flex:1; min-width:240px; background:#0D1A17; border-radius:10px; padding:18px 20px; border:1px solid #1B302D;">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.9px; color:#20C4B8; margin-bottom:12px;">Spacing Rhythm</div>
+          <div style="display:flex; flex-direction:column; gap:6px; font-size:12px; color:#8FA3A0;">
+            <div style="display:flex; justify-content:space-between;"><span>Screen horizontal padding</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">16px</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Card internal padding</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">16px</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Items within a card</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">8px gap</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Between cards in a section</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">12px gap</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Between sections</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">24px</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Section label top margin</span><span style="font-family:'Space Mono',monospace; color:#ECF3F1; font-size:11px;">20px</span></div>
+            <div style="display:flex; justify-content:space-between; padding-top:6px; border-top:1px solid #1E3633; margin-top:4px;"><span>Accent color usage</span><span style="color:#20C4B8; font-size:11px; font-weight:600;">CTAs + active tab only</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Component extraction -->
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#5A6B69; margin-bottom:12px;">5 Monolith Screens → Extract These Named Sections</div>
+      <div style="background:#0D1A17; border-radius:12px; border:1px solid #1B302D; overflow:hidden;">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th style="width:22%;">File</th>
+              <th style="width:8%;">Lines</th>
+              <th>Extract into these named section components</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>index.tsx</td>
+              <td style="color:#FF6F61; font-family:'Space Mono',monospace;">805</td>
+              <td><code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">HeroCard</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">BalanceStrip</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">CategoryRankList</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">ComingUpList</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">HealthBand</code>. Load order: hero + tab pills first (fast path), then balance + categories (after interaction), then coming up + health (deferred via InteractionManager).</td>
+            </tr>
+            <tr>
+              <td>reports.tsx</td>
+              <td style="color:#FF6F61; font-family:'Space Mono',monospace;">801</td>
+              <td>File stays but href remains null. Extract <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">TrendSparkline</code> (→ HeroCard), <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">CategoryPieChart</code> (→ Group detail). Full reports screen untouched until Phase 3.</td>
+            </tr>
+            <tr>
+              <td>add/quick.tsx</td>
+              <td style="color:#FF6F61; font-family:'Space Mono',monospace;">816</td>
+              <td><code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">AmountInput</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">CategoryDateRow</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">BudgetNudge</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">SplitRow</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">RecurRow</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">MoreOptions</code>. Root screen should be &lt;250 lines after extraction.</td>
+            </tr>
+            <tr>
+              <td>add/itemized.tsx</td>
+              <td style="color:#F5B301; font-family:'Space Mono',monospace;">705</td>
+              <td><code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">LineItemList</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">AdjustmentsRow</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">ItemizedSummary</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">PersonAssignmentRow</code>. Extract recurrence (it doesn't have it; parity with quick add is a Phase 2 task).</td>
+            </tr>
+            <tr>
+              <td>savings.tsx → Plan</td>
+              <td style="color:#F5B301; font-family:'Space Mono',monospace;">544</td>
+              <td><code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">PoolCard</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">GoalList</code> · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">UpcomingList</code> (new — surfaces group/[id]/recurring data cross-group) · <code style="font-family:'Space Mono',monospace; font-size:10.5px; color:#20C4B8;">WhatIfRow</code>. Subscription detection appears inside UpcomingList.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── SECTION 8: RELOCATION MAP ─────────────────────── -->
+    <section id="s8" data-sec="s8" style="padding:48px 0 40px; border-bottom:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="sec-num">8</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Feature Home / Relocation Map</h2>
+      </div>
+      <div class="call-out" style="margin-bottom:20px;">
+        Every feature has a home under the "where money goes" spine. The column "How reached" is the navigation path a user follows to find it — if it requires more than 3 taps from any tab, the home is wrong.
+      </div>
+      <div style="background:#0D1A17; border-radius:12px; border:1px solid #1B302D; overflow:hidden; overflow-x:auto;">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th style="width:20%;">Feature</th>
+              <th style="width:18%;">New Home</th>
+              <th style="width:28%;">How Reached</th>
+              <th>Justification</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Quick expense add</td><td style="color:#20C4B8;">FAB → Add sheet</td><td>1 tap from anywhere</td><td>Primary action. Always reachable, never buried.</td></tr>
+            <tr><td>Income entry</td><td style="color:#20C4B8;">FAB → Add sheet → Income toggle</td><td>2 taps</td><td>Same flow, different kind. Not a separate entry point.</td></tr>
+            <tr><td>Itemized split</td><td style="color:#20C4B8;">FAB → Add sheet → By items</td><td>2 taps</td><td>Mode of adding, not a separate concept.</td></tr>
+            <tr><td>Recurring expense</td><td style="color:#20C4B8;">FAB → Add sheet → Recurring</td><td>2 taps</td><td>Inline recurrence picker replaces 3-surface confusion.</td></tr>
+            <tr><td>Afford check</td><td style="color:#2BD49B;">Contextual nudge in Add sheet</td><td>Always visible when adding</td><td>Afford is a question asked mid-flow, not a screen to navigate to.</td></tr>
+            <tr><td>Settle up</td><td style="color:#8B7CF8;">Groups · Home balance strip</td><td>1–2 taps from Groups or Home</td><td>Money between people lives where people and groups live.</td></tr>
+            <tr><td>Group expenses</td><td style="color:#8B7CF8;">Groups tab → group card</td><td>1 tap</td><td>Core feature, unchanged home.</td></tr>
+            <tr><td>Per-group budget</td><td style="color:#8B7CF8;">Groups → group → Budget tab</td><td>2 taps</td><td>Budget belongs to the group it was set in.</td></tr>
+            <tr><td>Financial health score</td><td style="color:#20C4B8;">Home → health band chip</td><td>Always visible on Home; tap for detail</td><td>Health summarises the home question "am I okay?" — it belongs there, always on.</td></tr>
+            <tr><td>Savings goals</td><td style="color:#F5B301;">Plan tab → Goals section</td><td>1 tap</td><td>"Where it's going" tab owns future-facing money.</td></tr>
+            <tr><td>Savings pool</td><td style="color:#F5B301;">Plan tab → Pool card (top)</td><td>1 tap</td><td>Pool is the container for all goals — top of Plan.</td></tr>
+            <tr><td>Budget (personal)</td><td style="color:#F5B301;">Plan tab → Budgets (link to group/[id]/budget)</td><td>1–2 taps</td><td>Personal budget is inside the Personal group; Plan surfaces a summary and links through.</td></tr>
+            <tr><td>Upcoming / recurring bills</td><td style="color:#F5B301;">Plan tab → Upcoming section</td><td>1 tap</td><td>Cross-group recurring surfaced in one place: "what's coming out of my money?"</td></tr>
+            <tr><td>Subscription detection</td><td style="color:#F5B301;">Plan → Upcoming section (flagged)</td><td>1 tap</td><td>Detected subs live next to the recurring expenses they resemble. "Manage" action provided.</td></tr>
+            <tr><td>Spending forecast</td><td style="color:#F5B301;">Plan tab → month-end projection row</td><td>1 tap</td><td>Forecast is a forward-looking "where it's going" signal — belongs in Plan, near budgets.</td></tr>
+            <tr><td>Savings insights / nudges</td><td style="color:#F5B301;">Plan tab → per-goal insight row</td><td>1–2 taps</td><td>Insight lives next to the goal it's about. No separate screen; one sentence per goal.</td></tr>
+            <tr><td>Transaction history / audit</td><td style="color:#20C4B8;">Home → 🕐 icon → history screen</td><td>2 taps</td><td>History is a global view; home header is where global actions live.</td></tr>
+            <tr><td>Search</td><td style="color:#20C4B8;">Home → 🔍 icon</td><td>1 tap</td><td>Search is a power-user shortcut; header is the right place.</td></tr>
+            <tr><td>Categories management</td><td style="color:#5A6B69;">Settings → Categories</td><td>2 taps</td><td>Admin task; doesn't belong in daily-use nav. One flow per group.</td></tr>
+            <tr><td>People / friends</td><td style="color:#5A6B69;">Settings → People</td><td>2 taps</td><td>Admin task. Also surfaced contextually in group members tab.</td></tr>
+            <tr><td>OCR receipt capture</td><td style="color:#20C4B8;">Add sheet → attach icon</td><td>2 taps</td><td>OCR is a way to fill the amount/category fields — it belongs in the add flow, not a screen.</td></tr>
+            <tr><td>Location tagging</td><td style="color:#5A6B69;">Stored silently on txn; shown in txn/[id] detail</td><td>Background → txn detail</td><td>User doesn't interact with location — it enriches txn detail view. No change needed.</td></tr>
+            <tr><td>Debug: storage, features</td><td style="color:#FF6F61;">Dev-gated (long-press ×5)</td><td>Not user-facing</td><td>These are development tools. Zero user impact from hiding them.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:20px; background:#2A1714; border-radius:10px; padding:16px 20px; border:1px solid #3A1F1C;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#FF6F61; margin-bottom:8px;">Proposed Removals — Flagged for Owner Approval</div>
+        <div style="font-size:12.5px; color:#8FA3A0; line-height:1.65;">
+          <strong style="color:#ECF3F1;">None.</strong> Zero features removed. Every feature in the codebase has a home under the "where money goes" spine. The features that were described as "debt" in the teardown (health score, afford, forecast, subscription detection, savings insights, OCR) are <em>relocated and wired</em>, not cut. If after Phase 1 review the owner decides a specific feature is truly not useful, it should be flagged explicitly at that point — not as part of this spec.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PHASE PLAN ──────────────────────────────────────── -->
+    <section id="phases" style="padding:48px 0 40px;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:#221A00; border-radius:6px; font-size:12px; font-weight:700; color:#F5B301; font-family:'Space Mono',monospace;">▶</div>
+        <h2 style="font-size:22px; font-weight:700; color:#ECF3F1; margin:0; letter-spacing:-0.3px;">Phased Implementation Plan</h2>
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+        <div class="phase-card" style="border-top:2px solid #20C4B8;">
+          <div class="phase-num">Phase 1 · Smallest shippable</div>
+          <div class="phase-title">Identity + Home + Add</div>
+          <div class="phase-item">Rebuild Home: hero card, balance strip, category rank, coming up, health band — extract 5 section components from index.tsx</div>
+          <div class="phase-item">Add flow: wire BudgetNudge row (afford context inline), merge income toggle, extract 5 components from quick.tsx</div>
+          <div class="phase-item">FAB: single-tap → SheetModal. Remove 4-option fan-out menu</div>
+          <div class="phase-item">Dev-gate storage.tsx + features.tsx (long-press sequence)</div>
+          <div class="phase-item">Rename "Money" tab → "Plan"</div>
+          <div class="phase-item">Financial health: remove flag gate, show band chip on Home by default</div>
+          <div style="margin-top:14px; padding:8px 10px; background:#0E2C29; border-radius:6px; font-size:11px; color:#20C4B8; font-weight:600;">✓ Review: Home wireframe vs. live screen matches spec</div>
+        </div>
+
+        <div class="phase-card" style="border-top:2px solid #8B7CF8;">
+          <div class="phase-num">Phase 2 · Unify + state matrix</div>
+          <div class="phase-title">Money Between People + States</div>
+          <div class="phase-item">Build SettleFlow bottom sheet — merge settle.tsx + SettleSheet.tsx + add/transfer.tsx</div>
+          <div class="phase-item">Wire SettleFlow from all 3 entry points (Home strip, Groups, Group detail)</div>
+          <div class="phase-item">Plan tab: extract PoolCard, GoalList, UpcomingList (cross-group recurring), WhatIfRow from savings.tsx</div>
+          <div class="phase-item">UpcomingList: surface group/[id]/recurring data cross-group; include detected subscriptions</div>
+          <div class="phase-item">Every kept screen: swap bare "No data yet" for EmptyState / SkeletonCard / ErrorState</div>
+          <div class="phase-item">Fix store/DB divergence: Zustand txns[] as single read source</div>
+          <div style="margin-top:14px; padding:8px 10px; background:#1A1A3A; border-radius:6px; font-size:11px; color:#8B7CF8; font-weight:600;">✓ Review: settle flow end-to-end, all screen states verified</div>
+        </div>
+
+        <div class="phase-card" style="border-top:2px solid #F5B301;">
+          <div class="phase-num">Phase 3 · Polish + monolith refactor</div>
+          <div class="phase-title">Visual Polish + Remaining Monoliths</div>
+          <div class="phase-item">Extract components from add/itemized.tsx + reports.tsx (fold charts)</div>
+          <div class="phase-item">Token discipline pass: replace all inline hex values with constants tokens</div>
+          <div class="phase-item">Unify copy-pasted helpers (utilLabel, healthColor, fmtY) into shared lib</div>
+          <div class="phase-item">Categories: single management flow per group, resolve split-brain constants/screen</div>
+          <div class="phase-item">Settings: consolidate 3 stores (FeatureFlags + AsyncStorage + SQLite settings) into one source</div>
+          <div class="phase-item">OCR: wire receipt capture into add flow attach icon</div>
+          <div class="phase-item">Recurrence: remove 3-surface confusion, single RecurRow component everywhere</div>
+          <div style="margin-top:14px; padding:8px 10px; background:#221A00; border-radius:6px; font-size:11px; color:#F5B301; font-weight:600;">✓ Review: full visual audit, token consistency check, test suite green</div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px; background:#13201F; border-radius:10px; padding:16px 20px; border:1px solid #1E3633; font-size:12.5px; color:#8FA3A0; line-height:1.7;">
+        <strong style="color:#ECF3F1;">Tests:</strong> Existing test suite (<code style="font-family:'Space Mono',monospace; font-size:11px; color:#20C4B8;">afford</code>, <code style="font-family:'Space Mono',monospace; font-size:11px; color:#20C4B8;">settle</code>, <code style="font-family:'Space Mono',monospace; font-size:11px; color:#20C4B8;">savings</code>, <code style="font-family:'Space Mono',monospace; font-size:11px; color:#20C4B8;">recurrence</code>, etc.) must stay green after each phase. Component extractions are pure refactors — no logic changes — so tests should require no updates in Phase 1. Phase 2 settle merge changes the flow but not the <code style="font-family:'Space Mono',monospace; font-size:11px; color:#20C4B8;">insertTxn</code> call — update settle tests to call through the new SettleFlow logic. Phase 3 settings consolidation will require updating any test that reads AsyncStorage directly for prefs.
+      </div>
+    </section>
+
+    <!-- footer -->
+    <div style="padding:24px 0 40px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid #13201F;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg,#20C4B8,#15A89D); display:flex; align-items:center; justify-content:center;"><span style="font-family:'Space Mono',monospace; font-size:8px; font-weight:700; color:#0A0F11;">BS</span></div>
+        <span style="font-size:12px; color:#5A6B69;">BudgetSplit · Prompt 1 Output · June 2026</span>
+      </div>
+      <span style="font-size:11px; color:#2A3C39;">8 sections · 3 phases · 0 features cut</span>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    const sections = document.querySelectorAll('[data-sec]');
+    const links = document.querySelectorAll('.snav a[data-navlink]');
+    if (!sections.length || !links.length) return;
+
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const id = e.target.dataset.sec;
+          links.forEach(l => l.classList.toggle('active', l.dataset.navlink === id));
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '-10% 0px -65% 0px' });
+
+    sections.forEach(s => obs.observe(s));
+    this._obs = obs;
+  }
+
+  componentWillUnmount() {
+    if (this._obs) this._obs.disconnect();
+  }
+
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

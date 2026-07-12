@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { format, addDays, addWeeks, addMonths } from 'date-fns';
 import { colors } from '../../../src/constants/colors';
@@ -57,12 +58,14 @@ export default function RecurringScreen() {
   const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [skips, setSkips] = useState<Map<string, Set<number>>>(new Map());
-  const [loadError, setLoadError] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
 
-  useFocusEffect(useCallback(() => { load(); }, [id]));
+  const { data, error: loadError, reload } = useScreenData(async (db) => {
+    const rs = await getRecurringForGroup(db, id);
+    return { rules: rs, skips: await getSkipsMap(db, rs.map(r => r.id)) };
+  }, [id]);
+  const rules = data?.rules ?? [];
+  const skips = data?.skips ?? new Map<string, Set<number>>();
 
   useEffect(() => {
     if (!focus) return;
@@ -73,23 +76,12 @@ export default function RecurringScreen() {
 
   if (!id) { router.back(); return null; }
 
-  async function load() {
-    try {
-      const rs = await getRecurringForGroup(db, id);
-      setRules(rs);
-      setSkips(await getSkipsMap(db, rs.map(r => r.id)));
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
-
   async function onSkipNext(r: Rule) {
     try {
       const skipped = await skipNextOccurrence(db, r.id);
       if (skipped === null) { Alert.alert('Nothing to skip', 'This series has no upcoming occurrence.'); return; }
       haptic.warning();
-      await load();
+      await reload();
     } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
 
@@ -98,7 +90,7 @@ export default function RecurringScreen() {
       const restored = await undoNextSkip(db, r.id);
       if (restored === null) { Alert.alert('No skips to undo', 'There are no upcoming skipped occurrences.'); return; }
       haptic.success();
-      await load();
+      await reload();
     } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
 
@@ -107,18 +99,18 @@ export default function RecurringScreen() {
   }
 
   async function onPause(r: Rule) {
-    try { await pauseRecurring(db, r.id); haptic.warning(); await load(); }
+    try { await pauseRecurring(db, r.id); haptic.warning(); await reload(); }
     catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
   async function onResume(r: Rule) {
-    try { await resumeRecurring(db, r.id); haptic.success(); await load(); }
+    try { await resumeRecurring(db, r.id); haptic.success(); await reload(); }
     catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
   }
   function onEnd(r: Rule) {
     Alert.alert('Stop this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Stop', style: 'destructive', onPress: async () => {
-        try { await endRecurring(db, r.id); haptic.warning(); await load(); }
+        try { await endRecurring(db, r.id); haptic.warning(); await reload(); }
         catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
       } },
     ]);
@@ -134,7 +126,7 @@ export default function RecurringScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Recurring" onBack={() => router.back()} />
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {rules.length === 0 ? (

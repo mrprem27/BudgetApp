@@ -42,28 +42,34 @@ function compactNum(n: number, decimals: number): string {
   return s;
 }
 
-/** How period-over-period changes are phrased in insights. User preference. */
-export enum ComparisonFormat {
-  /** "up 40% from last month" */
-  Percent = 'percent',
-  /** "1.4× last month" */
-  Multiple = 'multiple',
+/**
+ * App-wide rule for a period-over-period change shown in a tight label: a plain
+ * percentage up to ±100%, but past +100% it switches to a multiple of the
+ * baseline because "230% more" reads worse than "3.3×". Returns only the
+ * magnitude token (no "vs …" suffix) so callers append their own period label.
+ *   45  → "45%"   (1.45× baseline)
+ *   230 → "3.3×"  (3.3× baseline)
+ *   -30 → "30%"
+ * A spend can't drop below 0, so deltaPct never goes past −100 — only increases
+ * cross the 100 threshold. This is the single source of truth for the %/×
+ * choice (there is no user toggle).
+ */
+export function formatChangeMagnitude(deltaPct: number): string {
+  if (!isFinite(deltaPct)) return '0%';
+  if (Math.abs(deltaPct) > 100) return `${compactNum(1 + deltaPct / 100, 1)}×`;
+  return `${Math.round(Math.abs(deltaPct))}%`;
 }
 
 /**
- * Render a signed period-over-period change as a sentence fragment that slots
- * into "<Category> is <fragment>". `deltaPct` is the % change vs the baseline
- * (+40 = 40% higher, -30 = 30% lower).
- *   Percent  → "up 40% from last month" / "down 30% from last month"
- *   Multiple → "1.4× last month" / "0.7× last month"
- * Multiples read more intuitively to some people than percentages; the choice
- * is a single global setting. Baseline is assumed > 0 (callers gate on that).
+ * Sentence-form of {@link formatChangeMagnitude} for insight copy that slots
+ * into "<Category> is <fragment>". Same >100%→× rule, with direction words:
+ *   40   → "up 40% from last month"
+ *   -30  → "down 30% from last month"
+ *   230  → "3.3× last month"
+ * Baseline is assumed > 0 (callers gate on that).
  */
-export function formatComparison(deltaPct: number, format: ComparisonFormat): string {
-  if (format === ComparisonFormat.Multiple) {
-    const ratio = Math.max(0, 1 + deltaPct / 100);
-    return `${compactNum(ratio, 2)}× last month`;
-  }
+export function formatComparison(deltaPct: number): string {
+  if (Math.abs(deltaPct) > 100) return `${compactNum(1 + deltaPct / 100, 1)}× last month`;
   const up = deltaPct >= 0;
   return `${up ? 'up' : 'down'} ${Math.abs(Math.round(deltaPct))}% from last month`;
 }
@@ -110,10 +116,40 @@ export function formatCompact(smallestUnit: number, currency: CurrencyCode = DEF
   return formatCompactMajor(smallestUnit / divisor, currency);
 }
 
+/** Keep only digits + a single decimal point (max 2 places) from typed amount input. */
+export function sanitizeAmountInput(text: string): string {
+  let cleaned = text.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
+  const [intPart, decPart] = cleaned.split('.');
+  return decPart !== undefined ? `${intPart}.${decPart.slice(0, 2)}` : cleaned;
+}
+
+/** Display a raw amount string as "₹10,000" (en-IN grouping), preserving an in-progress decimal. */
+export function formatAmountInput(raw: string): string {
+  if (!raw) return '';
+  const [intPart, decPart] = raw.split('.');
+  const grouped = intPart ? Number(intPart).toLocaleString('en-IN') : '0';
+  return raw.includes('.') ? `₹${grouped}.${decPart ?? ''}` : `₹${grouped}`;
+}
+
 export function parseToPaise(input: string): number {
   const n = parseFloat(input.replace(/[^0-9.]/g, ''));
   if (isNaN(n)) return 0;
   return Math.round(n * 100);
+}
+
+/** Compact ₹ axis/short label, e.g. ₹0, ₹450, ₹12K, ₹2L, ₹1Cr. Accepts the
+ *  string gifted-charts passes to formatYLabel, or a number. */
+export function formatAxisShort(v: string | number): string {
+  const n = Math.round(Number(v));
+  if (!isFinite(n)) return '₹0';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs < 1000) return sign + '₹' + abs;
+  if (abs < 100000) return sign + '₹' + Math.round(abs / 1000) + 'K';
+  if (abs < 10000000) return sign + '₹' + Math.round(abs / 100000) + 'L';
+  return sign + '₹' + Math.round(abs / 10000000) + 'Cr';
 }
 
 export function splitEqual(total: number, n: number): number[] {
@@ -143,4 +179,36 @@ export function splitByShares(total: number, ratios: number[]): number[] {
     if (remainder > 0) { remainder--; return v + 1; }
     return v;
   });
+}
+
+/**
+ * Split a total (paise) among member ids by mode → { id: paise }. The single
+ * split engine reused by Quick, Itemized and the import group-split. `values`
+ * holds the per-member raw input (₹ for exact, % for percent, count for shares);
+ * ignored for equal. Exact reads inputs verbatim (any shortfall is the user's
+ * remainder to reconcile).
+ */
+export function splitByMode(
+  total: number,
+  ids: string[],
+  mode: 'equal' | 'exact' | 'percent' | 'shares',
+  values: Record<string, string>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (ids.length === 0) return out;
+  if (mode === 'exact') {
+    ids.forEach(id => { out[id] = parseToPaise(values[id] ?? '0'); });
+  } else if (mode === 'percent') {
+    const pcts = ids.map(id => { const p = parseInt(values[id] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+    const amts = splitByPercent(total, pcts);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  } else if (mode === 'shares') {
+    const rs = ids.map(id => { const r = parseInt(values[id] ?? '1', 10); return Number.isFinite(r) && r > 0 ? r : 1; });
+    const amts = splitByShares(total, rs);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  } else {
+    const amts = splitEqual(total, ids.length);
+    ids.forEach((id, i) => { out[id] = amts[i]; });
+  }
+  return out;
 }

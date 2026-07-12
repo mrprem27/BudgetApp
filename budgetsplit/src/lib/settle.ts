@@ -79,20 +79,3 @@ export function rawDebts(
   return result.sort((a, b) => b.amount - a.amount);
 }
 
-export function computeNet(
-  txns: Array<{
-    payments: Array<{ personId: string; amount: number }>;
-    shares:   Array<{ personId: string; amount: number }>;
-  }>,
-): Record<string, number> {
-  const net: Record<string, number> = {};
-  for (const txn of txns) {
-    for (const p of txn.payments) {
-      net[p.personId] = (net[p.personId] ?? 0) + p.amount;
-    }
-    for (const s of txn.shares) {
-      net[s.personId] = (net[s.personId] ?? 0) - s.amount;
-    }
-  }
-  return net;
-}

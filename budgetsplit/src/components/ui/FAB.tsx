@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import {
-  TouchableOpacity, View, Text, StyleSheet, Modal, Pressable, Animated,
+  TouchableOpacity, View, Text, StyleSheet, Modal, Pressable, Animated, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,15 +21,23 @@ export type Action = {
 };
 
 type Props = {
-  actions: Action[];
+  /** Multi-action fan-out menu. Ignored when `onPress` is given. */
+  actions?: Action[];
+  /** Single-tap action — fires directly, no menu. Takes precedence over `actions`. */
+  onPress?: () => void;
   /** Lift the FAB above the tab bar. Set false on pushed screens (no tab bar). */
   aboveTabBar?: boolean;
 };
 
-export function FAB({ actions, aboveTabBar = true }: Props) {
+export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
   const [open, setOpen] = React.useState(false);
   const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  // Defer an action's navigation until the menu modal has fully dismissed —
+  // navigating while it's mid-dismiss races a modal-present and flashes black on iOS.
+  const pendingAction = useRef<(() => void) | null>(null);
+  // Single-tap mode when an onPress is supplied; otherwise fan out the menu.
+  const single = typeof onPress === 'function';
 
   function pressIn() {
     Animated.spring(scaleAnim, { toValue: 0.9, useNativeDriver: true, speed: 40 }).start();
@@ -40,18 +48,31 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
 
   return (
     <>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      {!single && (
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+        onDismiss={() => { const fn = pendingAction.current; pendingAction.current = null; fn?.(); }}
+      >
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
             <View style={styles.handle} />
-            {actions.map((a) => {
+            {(actions ?? []).map((a) => {
               const tint = a.disabled ? colors.textMuted : (a.tint ?? colors.accent);
               return (
                 <TouchableOpacity
                   key={a.label}
                   style={[styles.action, a.disabled && styles.actionDisabled]}
                   disabled={a.disabled}
-                  onPress={() => { haptic.light(); setOpen(false); a.onPress(); }}
+                  onPress={() => {
+                    haptic.light();
+                    // iOS: run after the menu's onDismiss (avoids black-screen race).
+                    // Android: no onDismiss, so run on the next tick after closing.
+                    if (Platform.OS === 'ios') { pendingAction.current = a.onPress; setOpen(false); }
+                    else { setOpen(false); setTimeout(a.onPress, 0); }
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={a.label}
                 >
@@ -69,27 +90,34 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
           </View>
         </Pressable>
       </Modal>
+      )}
 
       <Animated.View
         style={[
           styles.fab,
-          {
-            // Tab screens: clear the frosted tab bar. Pushed screens: a small
-            // fixed gap above the home indicator — no leftover empty space below.
-            bottom: aboveTabBar
-              ? insets.bottom + layout.tabBarHeight + space.sm
-              : insets.bottom + space.sm,
-            transform: [{ scale: scaleAnim }],
-          },
+          aboveTabBar
+            ? {
+                // Tab screens: centered + straddling the tab bar top (the 50% point
+                // sits in the gap between Groups and Plan, so it covers no icon).
+                left: '50%',
+                bottom: insets.bottom + layout.tabBarHeight - 24,
+                transform: [{ translateX: -28 }, { scale: scaleAnim }],
+              }
+            : {
+                // Pushed screens (no tab bar): bottom-right, small fixed gap.
+                right: space.lg,
+                bottom: insets.bottom + space.sm,
+                transform: [{ scale: scaleAnim }],
+              },
         ]}
       >
         <TouchableOpacity
           activeOpacity={0.9}
           onPressIn={pressIn}
           onPressOut={pressOut}
-          onPress={() => { haptic.light(); setOpen(true); }}
+          onPress={() => { haptic.light(); if (single) { onPress!(); } else { setOpen(true); } }}
           accessibilityRole="button"
-          accessibilityLabel="Add transaction"
+          accessibilityLabel="Add expense"
         >
           <LinearGradient
             colors={gradients.brand}
@@ -108,7 +136,6 @@ export function FAB({ actions, aboveTabBar = true }: Props) {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    right: space.lg,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -124,7 +151,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {

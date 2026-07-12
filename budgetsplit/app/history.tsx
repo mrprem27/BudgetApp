@@ -1,29 +1,53 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, SectionList } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { format, isSameDay, startOfDay, startOfMonth, subDays } from 'date-fns';
+import { format, isSameDay, isYesterday, startOfDay, startOfMonth, subDays } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
-import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
-import { FilterBar } from '../src/components/ui/FilterBar';
+import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
 import type { AuditLog, AuditAction } from '../src/db/queries/audit';
 
-const ACTION_ICON: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
-  created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
-  updated:  { icon: 'edit-2', color: colors.accent, label: 'Edited' },
-  deleted:  { icon: 'trash-2', color: colors.expense, label: 'Deleted' },
-  settled:  { icon: 'check-circle', color: colors.settle, label: 'Settled' },
-  paused:   { icon: 'pause-circle', color: colors.healthAmber, label: 'Paused' },
-  resumed:  { icon: 'play-circle', color: colors.income, label: 'Resumed' },
-  ended:    { icon: 'x-circle', color: colors.textMuted, label: 'Ended' },
+const PAGE_SIZE = 30;
+
+const DOT_COLOR: Record<AuditAction, string> = {
+  created: colors.accent,
+  updated: '#F5B301',
+  deleted: colors.expense,
+  settled: colors.settle,
+  paused:  '#F5B301',
+  resumed: colors.income,
+  ended:   colors.textMuted,
 };
+
+const ACTION_LABEL: Record<AuditAction, string> = {
+  created: 'Expense added',
+  updated: 'Expense edited',
+  deleted: 'Expense deleted',
+  settled: 'Settlement recorded',
+  paused:  'Recurring paused',
+  resumed: 'Recurring resumed',
+  ended:   'Recurring ended',
+};
+
+const BADGE_LABEL: Record<string, string> = {
+  updated: 'EDIT',
+  deleted: 'DEL',
+};
+
+function dateLabel(d: Date): string {
+  const now = new Date();
+  if (isSameDay(d, now)) return 'TODAY';
+  if (isYesterday(d)) return 'YESTERDAY';
+  return format(d, 'dd MMM yyyy').toUpperCase();
+}
 
 function rangeStart(range: string): number | undefined {
   const now = new Date();
@@ -35,103 +59,111 @@ function rangeStart(range: string): number | undefined {
   }
 }
 
+type Section = { title: string; data: AuditLog[] };
+
+/** One date-grouped card. Memoized so off-screen sections don't re-render (and the
+ *  per-entry date formatting only runs when the section is actually rendered). */
+const SectionCard = React.memo(function SectionCard({ section }: { section: Section }) {
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>{section.title}</Text>
+      <View style={styles.card}>
+        {section.data.map((item, i) => {
+          const dotColor = DOT_COLOR[item.action] ?? colors.accent;
+          const label = ACTION_LABEL[item.action] ?? 'Change';
+          const badge = BADGE_LABEL[item.action];
+          const itemDate = new Date(item.created_at);
+          const dateStr = isFinite(itemDate.getTime())
+            ? (isSameDay(itemDate, new Date()) ? `Today ${format(itemDate, 'h:mm a')}` : `${format(itemDate, 'MMM d')} · ${format(itemDate, 'h:mm a')}`)
+            : '';
+          const amtColor = item.action === 'settled' ? colors.income : item.action === 'deleted' || item.action === 'created' ? colors.expense : undefined;
+
+          return (
+            <View
+              key={item.id}
+              style={[styles.entry, i < section.data.length - 1 && styles.entryBorder]}
+            >
+              <View style={[styles.entryDot, { backgroundColor: dotColor }]} />
+              <View style={styles.entryBody}>
+                <Text style={styles.entryLabel}>{label}</Text>
+                <Text style={styles.entrySummary} numberOfLines={2}>{item.summary}</Text>
+                {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
+              </View>
+              {badge ? (
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? '#2A1714' : '#221A00' }]}>
+                  <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : '#F5B301' }]}>{badge}</Text>
+                </View>
+              ) : item.amount != null ? (
+                <Text style={[styles.entryAmt, { color: amtColor ?? colors.textSecondary }]}>
+                  {item.action === 'settled' ? '+' : item.action === 'created' ? '−' : ''}{formatCompact(item.amount)}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
 export default function HistoryScreen() {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
-  const [entries, setEntries] = useState<AuditLog[]>([]);
-  const [action, setAction] = useState('all');
-  const [range, setRange] = useState('all');
-  const [loadError, setLoadError] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
+  const { data, error: loadError, reload } = useScreenData(
+    (db) => getAuditLog(db, { groupId: groupId || undefined }),
+    [groupId],
+  );
+  const entries = data ?? [];
 
-  useFocusEffect(useCallback(() => { load(); }, [groupId, action, range]));
-
-  async function load() {
-    try {
-      const rows = await getAuditLog(db, {
-        groupId: groupId || undefined,
-        action: action === 'all' ? undefined : (action as AuditAction),
-        fromMs: rangeStart(range),
-      });
-      setEntries(rows);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
-
-  const sections = useMemo(() => {
+  const sections: Section[] = useMemo(() => {
+    const visible = entries.slice(0, pageLimit);
     const map = new Map<string, AuditLog[]>();
-    for (const e of entries) {
+    for (const e of visible) {
       const d = new Date(e.created_at);
       if (!isFinite(d.getTime())) continue;
-      const key = isSameDay(d, new Date()) ? 'Today' : format(d, 'dd MMM yyyy');
+      const key = dateLabel(d);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
-  }, [entries]);
+  }, [entries, pageLimit]);
+
+  const hasMore = entries.length > pageLimit;
+
+  const renderSection = useCallback(
+    ({ item }: { item: Section }) => <SectionCard section={item} />,
+    [],
+  );
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="History" onBack={() => router.back()} />
-      <View style={styles.filters}>
-        <FilterBar
-          selected={{ action, range }}
-          onSelect={(k, v) => (k === 'action' ? setAction(v) : setRange(v))}
-          groups={[
-            { key: 'action', options: [
-              { label: 'All', value: 'all' },
-              { label: 'Added', value: 'created' },
-              { label: 'Edited', value: 'updated' },
-              { label: 'Deleted', value: 'deleted' },
-              { label: 'Settled', value: 'settled' },
-            ] },
-            { key: 'range', options: [
-              { label: 'All time', value: 'all' },
-              { label: 'Today', value: 'today' },
-              { label: '7 days', value: 'week' },
-              { label: 'This month', value: 'month' },
-            ] },
-          ]}
-        />
-      </View>
+      <ScreenHeader title="Audit log" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
-      <SectionList
-        sections={sections}
-        keyExtractor={e => e.id}
-        contentContainerStyle={styles.list}
-        renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
-        renderItem={({ item }) => {
-          const meta = ACTION_ICON[item.action] ?? ACTION_ICON.updated;
-          const itemDate = new Date(item.created_at);
-          const timeStr = isFinite(itemDate.getTime()) ? format(itemDate, 'h:mm a') : null;
-          return (
-            <View style={styles.row}>
-              <View style={[styles.iconDot, { backgroundColor: meta.color + '22' }]}>
-                <Feather name={meta.icon} size={15} color={meta.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.summary} numberOfLines={2}>{item.summary}</Text>
-                <Text style={styles.time}>
-                  <Text style={{ color: meta.color }}>{meta.label}</Text>
-                  {timeStr ? `  ·  ${timeStr}` : ''}
-                </Text>
-              </View>
-              {item.amount != null && (
-                <Text style={[styles.amount, { color: meta.color }]}>{formatCompact(item.amount)}</Text>
-              )}
-            </View>
-          );
-        }}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
-        ListEmptyComponent={
-          <EmptyState icon="clock" title="No history yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
-        }
-      />
+        <FlatList
+          data={sections}
+          keyExtractor={(s) => s.title}
+          renderItem={renderSection}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
+          ListEmptyComponent={
+            <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <TouchableOpacity style={styles.loadMore} onPress={() => setPageLimit(p => p + PAGE_SIZE)} accessibilityRole="button">
+                <Text style={styles.loadMoreText}>Load older entries</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
       )}
     </View>
   );
@@ -139,13 +171,24 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  filters: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
-  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.lg, marginBottom: space.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
-  iconDot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  summary: { ...type.body, color: colors.textPrimary, lineHeight: 20 },
-  time: { ...type.caption, color: colors.textMuted, marginTop: 3 },
-  amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  sep: { height: 1, backgroundColor: colors.border, marginLeft: 34 + space.md },
+  header: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  backText: { fontSize: 13, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  scroll: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
+  title: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.5, paddingBottom: 6 },
+  subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: 16, lineHeight: 18 },
+  sectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8, marginTop: 4 },
+  card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10, overflow: 'hidden', ...shadow.sm },
+  entry: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  entryBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  entryDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0, marginTop: 5 },
+  entryBody: { flex: 1 },
+  entryLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 2 },
+  entrySummary: { fontSize: 11, color: colors.textMuted, marginBottom: 2, lineHeight: 15 },
+  entryTime: { fontSize: 10, color: '#2A3C39' },
+  entryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, flexShrink: 0 },
+  actionBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
+  actionBadgeText: { fontSize: 10, fontFamily: 'Inter_600SemiBold' },
+  loadMore: { alignItems: 'center', paddingVertical: space.md },
+  loadMoreText: { fontSize: 12, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

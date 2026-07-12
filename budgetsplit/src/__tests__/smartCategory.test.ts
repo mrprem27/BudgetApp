@@ -38,9 +38,9 @@ describe('matchCategory', () => {
   });
 
   it('prefers the more specific match', () => {
-    const cats = [{ name: 'Shopping' }, { name: 'Subscriptions' }, { name: 'Fuel' }];
-    // single words: earlier rule (Subscriptions) wins over Shopping for "prime"
-    expect(matchCategory('amazon prime', cats)).toBe('Subscriptions');
+    const cats = [{ name: 'Shopping' }, { name: 'Entertainment' }, { name: 'Fuel' }];
+    // single words: earlier rule (Entertainment) wins over Shopping for "prime"
+    expect(matchCategory('amazon prime', cats)).toBe('Entertainment');
     // a multi-word phrase ("gas station") dominates a single word
     expect(matchCategory('shell gas station', cats)).toBe('Fuel');
   });

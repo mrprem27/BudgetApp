@@ -1,28 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../src/lib/settings';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
-import { getMe, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { getAllGroups } from '../../src/db/queries/groups';
+import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
+import { shareCsv } from '../../src/lib/shareCsv';
+import { getCategories } from '../../src/db/queries/categories';
+import { seedGlobalCategories } from '../../src/db/seedCategories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
-import { AUTO_SWEEP_KEY } from '../../src/db/queries/savings';
-import { requestNotificationPermission, sendTestReminder } from '../../src/lib/notifications';
-import {
-  getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
-  MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
-} from '../../src/lib/reminders';
-import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
-import { ComparisonFormat, formatComparison } from '../../src/lib/money';
-import { getComparisonFormat, setComparisonFormat } from '../../src/lib/displayPrefs';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -35,12 +31,6 @@ import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
 
-const COMPARE_FMT_LABELS: Record<ComparisonFormat, string> = {
-  [ComparisonFormat.Percent]: 'Percentage',
-  [ComparisonFormat.Multiple]: 'Multiple (×)',
-};
-const COMPARE_FMT_KEYS: ComparisonFormat[] = [ComparisonFormat.Percent, ComparisonFormat.Multiple];
-
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -50,85 +40,68 @@ export default function SettingsScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
+  const [contactCount, setContactCount] = useState(0);
+  const [categoryCount, setCategoryCount] = useState(0);
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
-  const [saveLocation, setSaveLocation] = useState(false);
-  const [autoSweep, setAutoSweep] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+
+  async function handleExportAll() {
+    if (exportingAll) return;
+    setExportingAll(true);
+    haptic.light();
+    try {
+      const groups = await getAllGroups(db);
+      const { csv, rowCount } = await buildAllGroupsExportCsv(db, groups);
+      if (rowCount === 0) { Alert.alert('Nothing to export', 'There are no transactions yet.'); return; }
+      const { uri, shared } = await shareCsv(csv, 'budgetsplit_all.csv', 'Export all data');
+      if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingAll(false);
+    }
+  }
+  const [hideAmounts, setHideAmounts] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-  const [compareFmt, setCompareFmt] = useState<ComparisonFormat>(ComparisonFormat.Percent);
-  const [showCompareFmt, setShowCompareFmt] = useState(false);
+  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
 
-  const [reminders, setReminders] = useState<ReminderPrefs | null>(null);
-  const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
+  const [devTaps, setDevTaps] = useState(0);
 
-  useEffect(() => {
+  // Re-runs on focus so the category count reflects changes made elsewhere.
+  useFocusEffect(useCallback(() => {
     (async () => {
       setMe(await getMe(db));
-      setBiometric((await AsyncStorage.getItem('biometric_enabled')) === 'true');
-      setPrivacyScreen((await AsyncStorage.getItem('privacy_screen')) !== 'false');
-      setSaveLocation((await AsyncStorage.getItem('save_location')) === 'true');
-      setAutoSweep((await AsyncStorage.getItem(AUTO_SWEEP_KEY)) === 'true');
-      setReminders(await getReminderPrefs());
-      const dc = await AsyncStorage.getItem('default_cadence');
+      const allPersons = await getAllPersons(db);
+      setContactCount(allPersons.filter(p => !p.is_me).length);
+      const grps = await getAllGroups(db);
+      const personalGroup = grps.find(g => g.is_personal === 1);
+      setPersonalGroupId(personalGroup?.id ?? null);
+      // Self-heal an empty catalog (same as the Categories/Budget screens).
+      let count = (await getCategories(db, 'expense')).length;
+      if (count === 0) { await seedGlobalCategories(db); count = (await getCategories(db, 'expense')).length; }
+      setCategoryCount(count);
+      setBiometric(await settings.biometricEnabled());
+      setPrivacyScreen(await settings.privacyScreen());
+      setHideAmounts(await settings.hideAmounts());
+      const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
-      setCompareFmt(await getComparisonFormat());
     })();
-  }, []);
+  }, [db]));
 
-  // Any reminder change persists the prefs and rebuilds the schedule. Turning a
-  // reminder ON requests permission first. In Expo Go this is a harmless no-op.
-  async function updateReminders(patch: Partial<ReminderPrefs>, turningOn = false) {
-    haptic.selection();
-    if (turningOn) {
-      const ok = await requestNotificationPermission();
-      if (!ok) {
-        Alert.alert('Notifications off', 'Enable notifications for BudgetSplit in your phone’s Settings to get reminders.');
-        return;
-      }
-    }
-    const next = await setReminderPrefs(patch);
-    setReminders(next);
-    await rescheduleReminders(db);
-  }
-
-  function onSaveTime(time: ReminderTime) {
-    if (timeEditing === 'renewal') updateReminders({ renewalTime: time });
-    else if (timeEditing === 'daily') updateReminders({ dailyTime: time });
-    setTimeEditing(null);
-  }
-
-  async function toggle(key: string, val: boolean, setter: (v: boolean) => void) {
+  async function toggle(persist: (v: boolean) => Promise<void>, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
     setter(val);
-    await AsyncStorage.setItem(key, val ? 'true' : 'false');
+    await persist(val);
   }
 
   async function pickCadence(c: BudgetCadence) {
     setDefaultCadence(c);
     setShowCadence(false);
-    await AsyncStorage.setItem('default_cadence', c);
-  }
-
-  async function pickCompareFmt(f: ComparisonFormat) {
-    haptic.selection();
-    setCompareFmt(f);
-    setShowCompareFmt(false);
-    await setComparisonFormat(f);
-  }
-
-  async function onTestReminder() {
-    haptic.light();
-    const res = await sendTestReminder();
-    if (res === 'scheduled') {
-      Alert.alert('Test sent', 'A reminder will appear in about 5 seconds. Lock your phone or switch apps to see the banner.');
-    } else if (res === 'denied') {
-      Alert.alert('Notifications off', 'Allow notifications for BudgetSplit in your phone’s Settings, then try again.');
-    } else {
-      Alert.alert('Not available here', 'Test reminders need a dev build (they don’t fire in Expo Go).');
-    }
+    await settings.setDefaultCadence(c);
   }
 
   async function saveName() {
@@ -147,110 +120,132 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
       </View>
 
-      {/* Profile */}
-      <Text style={styles.sectionTitle}>Account</Text>
-      <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button">
-        <View>
+      {/* Profile card — hero */}
+      <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
+        <TouchableOpacity
+          onPress={me ? async () => {
+            const uri = await pickAndSaveAvatar(me.id);
+            if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); }
+          } : undefined}
+          accessibilityLabel="Change avatar"
+          hitSlop={4}
+        >
           <MemberAvatar
             name={me?.name ?? '?'}
             color={me?.avatar_color ?? colors.accent}
-            size={44}
+            size={56}
             imageUri={me?.image_uri}
-            onPress={me ? async () => { const uri = await pickAndSaveAvatar(me.id); if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); } } : undefined}
           />
           <View style={styles.cameraBadge} pointerEvents="none">
             <Feather name="camera" size={10} color={colors.bg} />
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
-          <Text style={styles.profileSub}>Tap photo to change · name to rename</Text>
+          <Text style={styles.profileSub}>Offline-first · no accounts</Text>
         </View>
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {/* Security */}
-      <Text style={styles.sectionTitle}>Security</Text>
+      {/* MANAGE */}
+      <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Manage</Text>
       <View style={styles.card}>
-        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle('biometric_enabled', v, setBiometric)} />
+        <SettingsRow
+          icon="users"
+          label="People"
+          value={contactCount > 0 ? `${contactCount} contact${contactCount !== 1 ? 's' : ''}` : undefined}
+          onPress={() => { haptic.light(); router.push('/friends'); }}
+        />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle('privacy_screen', v, setPrivacyScreen)} />
+        <SettingsRow
+          icon="tag"
+          label="Categories"
+          value={categoryCount > 0 ? `${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}` : undefined}
+          onPress={() => { haptic.light(); router.push('/categories'); }}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="target"
+          label="Budget"
+          value="Personal budget"
+          onPress={() => {
+            haptic.light();
+            if (personalGroupId) router.push(`/group/${personalGroupId}/budget` as any);
+            else router.push('/groups');
+          }}
+        />
       </View>
 
-      {/* Reminders — local, on-device notifications (work in a dev build) */}
-      <Text style={styles.sectionTitle}>Reminders</Text>
+      {/* PREFERENCES */}
+      <Text style={styles.sectionTitle}>Preferences</Text>
       <View style={styles.card}>
-        <ToggleRow icon="bell" label="Renewal reminders" value={!!reminders?.renewals} onValueChange={(v) => updateReminders({ renewals: v }, v)} />
-        {reminders?.renewals && (
-          <>
-            <View style={settingsRowDivider} />
-            <View style={styles.stepperRow}>
-              <View style={styles.toggleIcon}><Feather name="calendar" size={16} color={colors.accent} /></View>
-              <Text style={styles.stepperLabel}>Start {reminders.renewalLeadDays} day{reminders.renewalLeadDays === 1 ? '' : 's'} before</Text>
-              <View style={styles.stepper}>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => updateReminders({ renewalLeadDays: reminders.renewalLeadDays - 1 })} disabled={reminders.renewalLeadDays <= 1} accessibilityLabel="Fewer days">
-                  <Feather name="minus" size={16} color={reminders.renewalLeadDays <= 1 ? colors.textMuted : colors.accent} />
-                </TouchableOpacity>
-                <Text style={styles.stepperVal}>{reminders.renewalLeadDays}</Text>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => updateReminders({ renewalLeadDays: reminders.renewalLeadDays + 1 })} disabled={reminders.renewalLeadDays >= MAX_LEAD_DAYS} accessibilityLabel="More days">
-                  <Feather name="plus" size={16} color={reminders.renewalLeadDays >= MAX_LEAD_DAYS ? colors.textMuted : colors.accent} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={settingsRowDivider} />
-            <SettingsRow icon="clock" label="Reminder time" value={formatReminderTime(reminders.renewalTime)} onPress={() => setTimeEditing('renewal')} />
-          </>
-        )}
+        <SettingsRow icon="globe" label="Currency" value="INR" onPress={undefined} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="calendar" label="Daily log reminder" value={!!reminders?.daily} onValueChange={(v) => updateReminders({ daily: v }, v)} />
-        {reminders?.daily && (
-          <>
-            <View style={settingsRowDivider} />
-            <SettingsRow icon="clock" label="Daily reminder time" value={formatReminderTime(reminders.dailyTime)} onPress={() => setTimeEditing('daily')} />
-          </>
-        )}
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="send" label="Send a test reminder" onPress={onTestReminder} />
-      </View>
-      <Text style={styles.featureCaption}>Pick how many days before a charge to start, and the exact time. All on-device — nothing leaves your phone.</Text>
-
-      {/* Budget & Data */}
-      <Text style={styles.sectionTitle}>Budget & Data</Text>
-      <View style={styles.card}>
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="percent" label="Insight comparisons" value={COMPARE_FMT_LABELS[compareFmt]} onPress={() => setShowCompareFmt(true)} />
-        <View style={settingsRowDivider} />
-        <ToggleRow icon="map-pin" label="Save transaction location" value={saveLocation} onValueChange={(v) => toggle('save_location', v, setSaveLocation)} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Feature management" onPress={() => { haptic.light(); router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { haptic.light(); router.push('/features'); }} />
       </View>
 
-      {/* Manage */}
-      <Text style={styles.sectionTitle}>Manage</Text>
+      {/* SECURITY */}
+      <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
-        <SettingsRow icon="search" label="Search transactions" onPress={() => { haptic.light(); router.push('/search'); }} />
+        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle(settings.setBiometricEnabled, v, setBiometric)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="tag" label="Categories" onPress={() => { haptic.light(); router.push('/categories'); }} />
+        <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="clock" label="History" onPress={() => { haptic.light(); router.push('/history'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="hard-drive" label="Storage" onPress={() => { haptic.light(); router.push('/storage'); }} />
+        <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
       </View>
 
-      {/* Help & Support */}
-      <Text style={styles.sectionTitle}>Help & Support</Text>
+      {/* NOTIFICATIONS & REMINDERS — all reminder config lives on its own screen now */}
+      {flags.reminders && (<>
+      <Text style={styles.sectionTitle}>Notifications</Text>
       <View style={styles.card}>
-        <SettingsRow icon="help-circle" label="Help & Guide" onPress={() => { haptic.light(); router.push('/help'); }} />
+        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { haptic.light(); router.push('/settings/notifications' as any); }} />
+      </View>
+      </>)}
+
+      {/* DATA & HELP */}
+      <Text style={styles.sectionTitle}>Data & Help</Text>
+      <View style={styles.card}>
+        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { haptic.light(); router.push('/import' as any); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await AsyncStorage.removeItem('onboarding_done'); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { haptic.light(); router.push('/reports'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="database"
+          label="Export all data"
+          value={exportingAll ? undefined : 'CSV'}
+          onPress={exportingAll ? undefined : handleExportAll}
+          right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { haptic.light(); router.push('/help'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        <View style={settingsRowDivider} />
+        <SettingsRow icon="clock" label="Audit log" onPress={() => { haptic.light(); router.push('/history'); }} />
       </View>
 
-      {/* About */}
+      {/* About — tap version 7× to open developer storage screen */}
       <Text style={styles.sectionTitle}>About</Text>
       <View style={styles.card}>
-        <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
-        <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+        <TouchableOpacity
+          onPress={() => {
+            const next = devTaps + 1;
+            setDevTaps(next);
+            if (next >= 7) {
+              setDevTaps(0);
+              haptic.success();
+              router.push('/storage');
+            }
+          }}
+          activeOpacity={0.7}
+          accessibilityLabel="App version"
+        >
+          <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
+          <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+          <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>
+        </TouchableOpacity>
       </View>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
@@ -266,29 +261,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ))}
       </SheetModal>
-
-      <SheetModal visible={showCompareFmt} onClose={() => setShowCompareFmt(false)} title="Insight comparisons" scroll={false}>
-        <Text style={styles.sheetHint}>How insights phrase a change from last month.</Text>
-        {COMPARE_FMT_KEYS.map(f => (
-          <TouchableOpacity key={f} style={[styles.cadOption, compareFmt === f && styles.cadOptionActive]} onPress={() => pickCompareFmt(f)} accessibilityRole="button">
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cadOptionText, compareFmt === f && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{COMPARE_FMT_LABELS[f]}</Text>
-              <Text style={styles.cadOptionExample}>e.g. Dining is {formatComparison(40, f)}</Text>
-            </View>
-            {compareFmt === f && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
-
-      {reminders && (
-        <TimePickerSheet
-          visible={timeEditing !== null}
-          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Renewal reminder time'}
-          value={timeEditing === 'daily' ? reminders.dailyTime : reminders.renewalTime}
-          onClose={() => setTimeEditing(null)}
-          onSave={onSaveTime}
-        />
-      )}
 
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
@@ -313,13 +285,14 @@ const styles = StyleSheet.create({
   title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  profileName: { ...type.subheading, color: colors.textPrimary },
-  profileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.lg, ...shadow.sm },
+  profileName: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  profileSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.textMuted, marginTop: 2 },
   cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
 
   aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },
-  aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 2 },
+  aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingTop: 2 },
+  aboutHint: { ...type.caption, color: colors.textMuted, fontSize: 10, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 6 },
   nameInputGap: { marginBottom: space.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
@@ -330,10 +303,5 @@ const styles = StyleSheet.create({
   cadOptionText: { ...type.body, color: colors.textPrimary },
   cadOptionExample: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   sheetHint: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
-  stepperLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  stepperBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  stepperVal: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', minWidth: 18, textAlign: 'center' },
 });
 

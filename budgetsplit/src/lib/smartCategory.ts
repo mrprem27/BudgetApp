@@ -22,8 +22,7 @@ const RULES: { category: string; keywords: string[] }[] = [
   { category: 'Electricity', keywords: ['electricity', 'power bill', 'current bill', 'eb bill', 'electricity bill', 'bescom', 'tata power', 'adani electricity', 'lpg', 'gas cylinder', 'water bill'] },
   { category: 'Mobile Recharge', keywords: ['recharge', 'jio', 'airtel', 'vi', 'vodafone', 'mobile bill', 'postpaid', 'prepaid', 'phone recharge', 'bsnl', 'sim'] },
   { category: 'WiFi & Broadband', keywords: ['wifi', 'broadband', 'internet', 'fiber', 'fibre', 'act fibernet', 'jio fiber', 'airtel xstream', 'hathway', 'router'] },
-  { category: 'Subscriptions', keywords: ['netflix', 'spotify', 'prime', 'amazon prime', 'hotstar', 'disney', 'subscription', 'youtube premium', 'icloud', 'sony liv', 'sonyliv', 'zee5', 'jiocinema', 'apple music', 'chatgpt', 'membership', 'renewal'] },
-  { category: 'Entertainment', keywords: ['movie', 'film', 'cinema', 'pvr', 'inox', 'concert', 'game', 'gaming', 'bookmyshow', 'standup', 'stand up', 'comedy', 'show', 'amusement park', 'theme park', 'bowling', 'arcade', 'club', 'play'] },
+  { category: 'Entertainment', keywords: ['netflix', 'spotify', 'prime', 'amazon prime', 'hotstar', 'disney', 'youtube premium', 'sony liv', 'sonyliv', 'zee5', 'jiocinema', 'apple music', 'movie', 'film', 'cinema', 'pvr', 'inox', 'concert', 'game', 'gaming', 'bookmyshow', 'standup', 'stand up', 'comedy', 'show', 'amusement park', 'theme park', 'bowling', 'arcade', 'club', 'play'] },
   { category: 'Gym & Fitness', keywords: ['gym', 'fitness', 'cult', 'cultfit', 'workout', 'yoga', 'zumba', 'protein', 'supplement', 'trainer', 'crossfit', 'membership fee'] },
   { category: 'Salon & Grooming', keywords: ['salon', 'haircut', 'spa', 'grooming', 'barber', 'parlour', 'parlor', 'facial', 'waxing', 'manicure', 'pedicure', 'massage', 'beard'] },
   { category: 'Shopping', keywords: ['amazon', 'flipkart', 'myntra', 'ajio', 'shopping', 'clothes', 'clothing', 'shoes', 'shoe', 'shirt', 'tshirt', 'pant', 'pants', 'jeans', 'kurta', 'saree', 'dress', 'mall', 'meesho', 'nykaa', 'watch', 'bag', 'wallet', 'sunglasses', 'apparel', 'footwear', 'jacket', 'sneakers'] },
@@ -58,7 +57,7 @@ function normalize(s: string): string {
  * When several keywords hit, the most *specific* wins:
  *   1. a multi-word phrase beats any single word (strong, deliberate signal);
  *   2. otherwise the earlier rule wins — RULES is ordered most-specific first,
- *      so e.g. "amazon prime" resolves to Subscriptions (prime) over Shopping.
+ *      so e.g. "amazon prime" resolves to Entertainment (prime) over Shopping.
  */
 export function matchCategory(title: string, available: { name: string }[]): string | null {
   const t = normalize(title);

@@ -9,41 +9,67 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
-import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
-import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { DraggableList } from '../../src/components/ui/DraggableList';
 import { Input } from '../../src/components/ui/Input';
 import { InsightText } from '../../src/components/finance/InsightText';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
-import { getTransactionsInRange } from '../../src/db/queries/transactions';
-import { detectSubscriptions, type DetectedSub } from '../../src/lib/subscriptions';
-import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
-import { goalProgress } from '../../src/lib/savings';
+import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
+import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
+import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
+import { GoalCard } from '../../src/components/finance/plan/GoalCard';
+import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard';
+import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
+import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
+import { formatCompact, parseToPaise } from '../../src/lib/money';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
+import { getMe } from '../../src/db/queries/persons';
+import { getDate, getDaysInMonth, format, addMonths, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { forecastMonthEnd as computeForecastMonthEnd } from '../../src/lib/forecast';
+
+// Goal deadline as quick durations (avoids a fragile date-picker modal-in-modal).
+const DEADLINE_OPTS: { label: string; months: number | null }[] = [
+  { label: 'None', months: null },
+  { label: '3 mo', months: 3 },
+  { label: '6 mo', months: 6 },
+  { label: '1 yr', months: 12 },
+  { label: '2 yr', months: 24 },
+];
+function deadlineOn(dateMs: number | null, months: number | null): boolean {
+  if (months === null) return dateMs === null;
+  if (dateMs === null) return false;
+  const t = addMonths(new Date(), months);
+  const d = new Date(dateMs);
+  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth();
+}
 import { haptic } from '../../src/lib/haptics';
 import {
-  getGoals, getGoalSavedMap, getPoolSummary, getCashPosition, addToPool, withdrawFromPool, insertGoal, runSavingsMaintenance, buildSavingsInsights,
-  type SavingsGoal, type PoolSummary, type Priority, type SavingsFrequency,
+  getGoals, getGoalSavedMap, getTotalMoney, fundGoal, insertGoal, reorderGoals,
+  runSavingsMaintenance, undoOverspendRaid, buildSavingsInsights,
+  type SavingsGoal, type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../../src/db/queries/savings';
+import { getMoneyProfile, setMoneyProfile } from '../../src/db/queries/moneyProfile';
 import { getAllGroups } from '../../src/db/queries/groups';
 import type { Insight } from '../../src/lib/savingsInsights';
-import type { CashPosition } from '../../src/lib/cash';
+import type { TotalMoney, MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
 
 const GOAL_ICONS = ['smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield', 'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target'];
 const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060'];
 
-const PRIORITIES: { key: Priority; label: string }[] = [
-  { key: 'high', label: 'High' },
-  { key: 'medium', label: 'Medium' },
-  { key: 'low', label: 'Low' },
-];
+// Plan screen (design Screen 3) = Pool + Goals + Upcoming + Forecast only.
+// Everything else the app had is hidden behind this toggle for now — handle later.
+
 const FREQS: { key: SavingsFrequency; label: string }[] = [
   { key: 'none', label: 'None' },
   { key: 'daily', label: 'Daily' },
@@ -51,10 +77,6 @@ const FREQS: { key: SavingsFrequency; label: string }[] = [
   { key: 'monthly', label: 'Monthly' },
   { key: 'yearly', label: 'Yearly' },
 ];
-
-export function priorityColor(p: Priority): string {
-  return p === 'high' ? colors.coral : p === 'medium' ? colors.healthAmber : colors.textMuted;
-}
 
 function insightTint(tone: Insight['tone']): string {
   switch (tone) {
@@ -72,17 +94,17 @@ export default function SavingsScreen() {
   const { flags } = useFeatureFlags();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [saved, setSaved] = useState<Record<string, number>>({});
-  const [pool, setPool] = useState<PoolSummary>({ total: 0, allocated: 0, unallocated: 0 });
-  const [cash, setCash] = useState<CashPosition | null>(null);
-  const [subs, setSubs] = useState<DetectedSub[]>([]);
-  const [personalId, setPersonalId] = useState('');
+  const [money, setMoney] = useState<TotalMoney | null>(null);
+  const [profile, setProfile] = useState<MoneyProfile>({ openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 });
   const [insights, setInsights] = useState<Insight[]>([]);
-  const [whatIfCat, setWhatIfCat] = useState<{ name: string; monthly: number } | null>(null);
-  const [whatIfPct, setWhatIfPct] = useState(20);
+  const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
+  const [forecastBudget, setForecastBudget] = useState(0);
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [overspend, setOverspend] = useState<OverspendRaid | null>(null);
 
-  const [showAddPool, setShowAddPool] = useState(false);
-  const [showWithdrawPool, setShowWithdrawPool] = useState(false);
-  const [poolAmt, setPoolAmt] = useState('');
+  const [showMoneyEditor, setShowMoneyEditor] = useState(false);
+  const [fundGoalId, setFundGoalId] = useState<string | null>(null);
+  const [fundAmt, setFundAmt] = useState('');
 
   const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState('');
@@ -92,33 +114,29 @@ export default function SavingsScreen() {
   const [color, setColor] = useState(GOAL_COLORS[0]);
   const [allocation, setAllocation] = useState('');
   const [frequency, setFrequency] = useState<SavingsFrequency>('none');
+  const [newDate, setNewDate] = useState<number | null>(null);
+
+  const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(useCallback(() => { load(); }, []));
+  useReloadOnDataChange(load);
+  const { refresh } = useDataRefresh();
   const { refreshing, onRefresh } = useRefresh(() => load());
 
   async function load() {
-    await runSavingsMaintenance(db); // sweep + schedule + reconcile
-    const [g, s, p, ins, c] = await Promise.all([getGoals(db), getGoalSavedMap(db), getPoolSummary(db), buildSavingsInsights(db), getCashPosition(db)]);
+    try {
+    // Scheduled goal funding + overspend auto-raid. Surface a notice if a raid happened.
+    const raid = await runSavingsMaintenance(db);
+    if (raid.total > 0) setOverspend(raid);
+    const [g, s, tm, mp, ins] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db), buildSavingsInsights(db)]);
     setGoals(g);
     setSaved(s);
-    setPool(p);
+    setMoney(tm);
+    setProfile(mp);
     setInsights(ins);
-    setCash(c);
     const grps = await getAllGroups(db);
-    setPersonalId(grps.find(g => g.is_personal === 1)?.id ?? '');
 
-    if (flags.subscriptions) {
-      const now = Date.now();
-      const txns = await getTransactionsInRange(db, null, now - 150 * 24 * 60 * 60 * 1000, now);
-      const expenses = txns
-        .filter(t => t.kind === 'expense' && !t.parent_recur_id && !t.recur_freq)
-        .map(t => ({ category: t.category, amount: t.payments.reduce((x, p) => x + p.amount, 0), date: t.date }));
-      setSubs(detectSubscriptions(expenses));
-    } else {
-      setSubs([]);
-    }
-
-    // Load current month's top spending category for the what-if simulator.
+    // Current month's category spend — feeds the month-end forecast + what-if simulator.
     const monthStart = new Date();
     monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
     const monthTxns = await getTransactionsInRange(db, null, monthStart.getTime(), Date.now());
@@ -129,33 +147,84 @@ export default function SavingsScreen() {
         catMap[t.category] = (catMap[t.category] ?? 0) + amt;
       }
     }
-    const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
-    setWhatIfCat(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
+    // Month-end spend forecast — same credibility-weighted model as Reports
+    // (lib/forecast), blended with last month's actual. Hidden until day 3.
+    const today2 = new Date();
+    const dayOfMonth = getDate(today2);
+    const daysInMonth = getDaysInMonth(today2);
+    const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
+    const prevTxns = await getTransactionsInRange(db, null, startOfMonth(subMonths(today2, 1)).getTime(), endOfMonth(subMonths(today2, 1)).getTime());
+    let priorMonthTotal = 0;
+    for (const t of prevTxns) {
+      if (t.kind === 'expense') priorMonthTotal += t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+    }
+    const f = computeForecastMonthEnd(totalMonthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
+    setForecastMonthEnd(f.ready ? f.projected : null);
+
+    // Budget total across all groups for the forecast over/under line.
+    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
+    let bTotal = 0;
+    for (const a of analyticsAll) bTotal += a.totalAllocated;
+    setForecastBudget(bTotal);
+
+    // Compute net across all non-personal groups (for ACROSS ALL GROUPS section).
+    const me2 = await getMe(db);
+    if (me2) {
+      // Upcoming recurring bills across all groups (design Screen 3).
+      const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+      setUpcoming(buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5));
+    }
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
   }
 
-  async function handleAddPool() {
-    const amt = parseToPaise(poolAmt);
-    if (amt <= 0) return;
-    await addToPool(db, amt);
+  async function handleSaveMoney(p: MoneyProfile) {
+    await setMoneyProfile(db, p);
     haptic.success();
-    setPoolAmt('');
-    setShowAddPool(false);
+    setShowMoneyEditor(false);
     await load();
+    refresh();
   }
 
-  async function handleWithdrawPool() {
-    const amt = Math.min(parseToPaise(poolAmt), pool.unallocated);
-    if (amt <= 0) return;
-    await withdrawFromPool(db, amt);
+  const fundGoalObj = goals.find(g => g.id === fundGoalId) ?? null;
+
+  async function handleFundGoal() {
+    const amt = parseToPaise(fundAmt);
+    if (!fundGoalId || amt <= 0) return;
+    await fundGoal(db, fundGoalId, amt);
     haptic.success();
-    setPoolAmt('');
-    setShowWithdrawPool(false);
+    setFundAmt('');
+    setFundGoalId(null);
     await load();
+    refresh();
+  }
+
+  async function handleUndoOverspend() {
+    if (!overspend) return;
+    await undoOverspendRaid(db, overspend.withdrawals);
+    haptic.success();
+    setOverspend(null);
+    await load();
+    refresh();
   }
 
   function resetNew() {
     setName(''); setTarget(''); setPriority('medium'); setIcon(GOAL_ICONS[0]);
-    setColor(GOAL_COLORS[0]); setAllocation(''); setFrequency('none');
+    setColor(GOAL_COLORS[0]); setAllocation(''); setFrequency('none'); setNewDate(null);
+  }
+
+  // Persist a drag reorder → new funding priority. Reorder local state to match
+  // so the screen doesn't need a full reload.
+  async function handleReorder(ids: string[]) {
+    // Only the active goals are draggable; preserve any goals not in `ids` (completed).
+    setGoals(prev => {
+      const reordered = ids.map(id => prev.find(g => g.id === id)).filter((g): g is SavingsGoal => !!g);
+      const rest = prev.filter(g => !ids.includes(g.id));
+      return [...reordered, ...rest];
+    });
+    await reorderGoals(db, ids);
   }
 
   async function handleCreate() {
@@ -163,121 +232,66 @@ export default function SavingsScreen() {
     if (!name.trim() || t <= 0) return;
     await insertGoal(db, {
       name: name.trim(), target: t, priority, icon, color, category: name.trim(),
-      allocation: parseToPaise(allocation), frequency,
+      allocation: parseToPaise(allocation), frequency, target_date: newDate,
     });
     haptic.success();
     setShowNew(false);
     resetNew();
     await load();
+    refresh();
   }
 
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="Money"
+        title="Plan"
         large
         right={
-          <TouchableOpacity
-            onPress={() => router.push('/afford')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Can I afford something?"
-            style={styles.headerAction}
-          >
-            <Feather name="help-circle" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {[
+              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' },
+              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/recurring' },
+              // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
+              { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' },
+            ].filter(m => m.show).map(m => (
+              <TouchableOpacity key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to as any)} accessibilityRole="button" accessibilityLabel={m.label}>
+                <Feather name={m.icon} size={18} color={colors.accent} />
+              </TouchableOpacity>
+            ))}
+          </View>
         }
       />
+      {loadError ? (
+        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {/* Cash available — your real money */}
-        {cash && (
-          <View style={styles.cashCard}>
-            <Text style={styles.cashLabel}>Cash available</Text>
-            <AmountText paise={cash.available} size="xl" forceColor={cash.available >= 0 ? colors.textPrimary : colors.expense} compact />
-            <Text style={styles.cashBreak}>
-              <Text style={{ color: colors.income }}>{formatCompact(cash.income)} in</Text>
-              <Text style={styles.cashBreakSep}> · </Text>
-              <Text style={{ color: colors.expense }}>{formatCompact(cash.paidExpenses + cash.settledOut)} out</Text>
-              <Text style={styles.cashBreakSep}> · </Text>
-              <Text style={{ color: colors.accent }}>{formatCompact(cash.savings)} saved</Text>
-            </Text>
-          </View>
-        )}
+        {/* Total Money — cash + investments + available credit, with breakdown */}
+        {money && <TotalMoneyCard money={money} onEdit={() => setShowMoneyEditor(true)} />}
 
-        {flags.affordCheck && (
-          <TouchableOpacity style={styles.affordBtn} onPress={() => router.push('/afford')} accessibilityRole="button" accessibilityLabel="Can I afford something?">
-            <View style={styles.affordIcon}><Feather name="help-circle" size={16} color={colors.accent} /></View>
-            <Text style={styles.affordBtnText}>Can I afford something?</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-
-        {flags.subscriptions && subs.length > 0 && (
-          <View style={styles.subsCard}>
-            <View style={styles.subsHead}>
-              <Text style={styles.moneySection}>Looks like subscriptions</Text>
-              <Text style={styles.subsTotal}>{formatCompact(subs.reduce((s, x) => s + x.monthlyEquivalent, 0))}/mo</Text>
+        {/* Overspend notice — money auto-pulled from lowest-priority goals to cover a deficit */}
+        {overspend && overspend.total > 0 && (
+          <View style={styles.overspendCard}>
+            <View style={styles.overspendIcon}>
+              <Feather name="alert-triangle" size={16} color={colors.expense} />
             </View>
-            {subs.slice(0, 5).map(s => (
-              <View key={`${s.category}-${s.amount}`} style={styles.subRow}>
-                <View style={[styles.subDot, { backgroundColor: categoryVisual(s.category).color + '22' }]}>
-                  <Feather name={asFeather(categoryVisual(s.category).icon, 'refresh-cw')} size={13} color={categoryVisual(s.category).color} />
-                </View>
-                <Text style={styles.subName} numberOfLines={1}>{s.category}</Text>
-                <Text style={styles.subCadence}>{s.cadence}</Text>
-                <Text style={styles.subAmt}>{formatCompact(s.amount)}</Text>
-              </View>
-            ))}
-            <Text style={styles.subsHint}>Spotted from charges you log regularly. Set them up as recurring to track automatically.</Text>
-          </View>
-        )}
-
-        {/* Personal budget & spending (the personal ledger lives here now) */}
-        {!!personalId && (
-          <>
-            <Text style={styles.moneySection}>Spending & budget</Text>
-            <TouchableOpacity style={styles.personalCard} onPress={() => router.push(`/group/${personalId}` as any)} accessibilityRole="button" accessibilityLabel="Personal budget and spending">
-              <View style={styles.personalIcon}><Feather name="book" size={18} color={colors.accent} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.personalTitle}>Personal budget & spending</Text>
-                <Text style={styles.personalSub}>Your ledger, categories & limits</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Savings pool */}
-        <Text style={styles.moneySection}>Savings</Text>
-        <View style={styles.poolCard}>
-          <Text style={styles.poolLabel}>Savings Pool</Text>
-          <AmountText paise={pool.total} size="xl" forceColor={colors.textPrimary} compact />
-          <View style={styles.poolRow}>
-            <View style={styles.poolStat}>
-              <Text style={styles.poolStatLabel}>Allocated</Text>
-              <AmountText paise={pool.allocated} size="sm" forceColor={colors.accent} compact />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.overspendTitle}>Covered {formatCompact(overspend.total)} overspend</Text>
+              <Text style={styles.overspendBody} numberOfLines={2}>
+                Pulled from {overspend.withdrawals.map(w => w.name).join(', ')} (lowest priority).
+              </Text>
             </View>
-            <View style={styles.poolDivider} />
-            <View style={styles.poolStat}>
-              <Text style={styles.poolStatLabel}>Available</Text>
-              <AmountText paise={pool.unallocated} size="sm" forceColor={colors.income} compact />
-            </View>
-          </View>
-          <View style={styles.poolActions}>
-            <TouchableOpacity style={styles.addPoolBtn} onPress={() => { setPoolAmt(''); setShowAddPool(true); }} accessibilityRole="button">
-              <Feather name="plus" size={16} color={colors.accent} />
-              <Text style={styles.addPoolText}>Add</Text>
-            </TouchableOpacity>
-            {pool.unallocated > 0 && (
-              <TouchableOpacity style={styles.withdrawPoolBtn} onPress={() => { setPoolAmt(''); setShowWithdrawPool(true); }} accessibilityRole="button">
-                <Feather name="arrow-up" size={16} color={colors.textSecondary} />
-                <Text style={styles.withdrawPoolText}>Withdraw</Text>
+            <View style={styles.overspendActions}>
+              <TouchableOpacity onPress={handleUndoOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo">
+                <Text style={styles.overspendUndo}>Undo</Text>
               </TouchableOpacity>
-            )}
+              <TouchableOpacity onPress={() => setOverspend(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+                <Feather name="x" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Insights */}
+        {/* Savings insights — opportunity-cost / habit nudges */}
         {flags.savingsInsights && insights.length > 0 && (
           <View style={styles.insightsCard}>
             <Text style={styles.insightsTitle}>Insights</Text>
@@ -295,77 +309,51 @@ export default function SavingsScreen() {
           </View>
         )}
 
-        {/* What if — cut top category and see savings */}
-        {whatIfCat && (
-          <View style={styles.whatIfCard}>
-            <Text style={styles.moneySection}>What if…</Text>
-            <Text style={styles.whatIfLead}>
-              Cut <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold' }}>{whatIfCat.name}</Text> by
-            </Text>
-            <View style={styles.whatIfChips}>
-              {[10, 20, 30].map(p => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.whatIfChip, whatIfPct === p && styles.whatIfChipActive]}
-                  onPress={() => setWhatIfPct(p)}
-                  accessibilityRole="button"
-                >
-                  <Text style={[styles.whatIfChipText, whatIfPct === p && { color: colors.bg }]}>{p}%</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.whatIfResult}>
-              <Text style={styles.whatIfSave}>
-                You'd save{' '}
-                <Text style={{ color: colors.income, fontFamily: 'Inter_600SemiBold' }}>
-                  {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100))}
-                </Text>
-                /mo
-              </Text>
-              <Text style={styles.whatIfYear}>
-                ≈ {formatCompact(Math.round((whatIfCat.monthly * whatIfPct) / 100) * 12)} a year
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Goals */}
-        {goals.length > 0 ? (
+        {/* Goals — active are drag-rankable for funding priority; completed sink to the bottom */}
+        {flags.savingsGoals && (goals.length > 0 ? (() => {
+          const activeGoals = goals.filter(g => (saved[g.id] ?? 0) < g.target);
+          const completedGoals = goals.filter(g => (saved[g.id] ?? 0) >= g.target);
+          return (
           <>
             <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>Goals</Text>
+              <View>
+                <Text style={styles.sectionTitle}>Goals</Text>
+                {activeGoals.length > 1 && <Text style={styles.sectionHint}>Hold &amp; drag to set funding priority</Text>}
+              </View>
               <TouchableOpacity style={styles.newPill} onPress={() => { resetNew(); setShowNew(true); }} accessibilityRole="button">
                 <Feather name="plus" size={13} color={colors.accent} />
                 <Text style={styles.newPillText}>New</Text>
               </TouchableOpacity>
             </View>
-            {goals.map(g => {
-              const p = goalProgress(saved[g.id] ?? 0, g.target);
-              return (
-                <PressableScale key={g.id} style={styles.goalCard} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityLabel={g.name}>
-                  <View style={styles.goalTop}>
-                    <View style={[styles.goalIcon, { backgroundColor: (g.color ?? colors.accent) + '22' }]}>
-                      <Feather name={asFeather(g.icon, 'target')} size={18} color={g.color ?? colors.accent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.goalName} numberOfLines={1}>{g.name}</Text>
-                      <Text style={styles.goalSub}>{formatCompact(p.saved)} <Text style={styles.goalSubMuted}>of {formatCompact(p.target)}</Text></Text>
-                    </View>
-                    <View style={[styles.prioChip, { backgroundColor: priorityColor(g.priority) + '22' }]}>
-                      <Text style={[styles.prioText, { color: priorityColor(g.priority) }]}>{g.priority}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.goalBarRow}>
-                    <View style={{ flex: 1 }}>
-                      <BudgetBar pct={p.pct} health={p.done ? 'green' : 'green'} height={6} />
-                    </View>
-                    <Text style={styles.goalPct}>{p.pct}%</Text>
-                  </View>
-                </PressableScale>
-              );
-            })}
+            {activeGoals.length > 0 && (
+              <DraggableList
+                data={activeGoals}
+                keyExtractor={(g) => g.id}
+                onReorder={handleReorder}
+                renderItem={(g, isActive) => (
+                  <GoalCard
+                    goal={g}
+                    saved={saved[g.id] ?? 0}
+                    isActive={isActive}
+                    onPress={() => router.push(`/savings/${g.id}` as any)}
+                    onAdd={() => { setFundAmt(''); setFundGoalId(g.id); }}
+                  />
+                )}
+              />
+            )}
+            {completedGoals.length > 0 && (
+              <View style={styles.completedSection}>
+                <Text style={styles.completedLabel}>COMPLETED · {completedGoals.length}</Text>
+                <View style={{ gap: space.sm }}>
+                  {completedGoals.map(g => (
+                    <GoalCard key={g.id} goal={g} saved={saved[g.id] ?? 0} isActive={false} completed onPress={() => router.push(`/savings/${g.id}` as any)} />
+                  ))}
+                </View>
+              </View>
+            )}
           </>
-        ) : (
+          );
+        })() : (
           <EmptyState
             icon="target"
             title="No savings goals yet"
@@ -373,41 +361,47 @@ export default function SavingsScreen() {
             actionLabel="New goal"
             onAction={() => { resetNew(); setShowNew(true); }}
           />
+        ))}
+
+
+        {/* Upcoming this month — recurring bills (design Screen 3) */}
+        {upcoming.length > 0 && (
+          <ComingUpList items={upcoming} title="UPCOMING THIS MONTH" showIcon />
+        )}
+
+        {/* Month-end spend forecast */}
+        {forecastMonthEnd !== null && (
+          <ForecastCard forecastMonthEnd={forecastMonthEnd} forecastBudget={forecastBudget} />
         )}
 
         <View style={{ height: space.lg }} />
       </ScrollView>
+      )}
 
-      {/* Add to pool sheet */}
-      <SheetModal visible={showAddPool} onClose={() => setShowAddPool(false)} title="Add to savings">
+      {/* Edit Total Money inputs (cash / investments / credit) */}
+      <MoneyEditorSheet
+        visible={showMoneyEditor}
+        onClose={() => setShowMoneyEditor(false)}
+        initial={profile}
+        onSave={handleSaveMoney}
+      />
+
+      {/* Fund a goal directly from cash */}
+      <SheetModal visible={fundGoalId !== null} onClose={() => setFundGoalId(null)} title={fundGoalObj ? `Add to ${fundGoalObj.name}` : 'Add to goal'}>
         <TextInput
           style={styles.amountInput}
-          value={poolAmt}
-          onChangeText={setPoolAmt}
+          value={fundAmt}
+          onChangeText={setFundAmt}
           keyboardType="decimal-pad"
           placeholder="₹0"
           placeholderTextColor={colors.textMuted}
           autoFocus
           accessibilityLabel="Amount"
         />
-        <Text style={styles.hint}>Money goes to your unallocated pool — assign it to goals anytime.</Text>
-        <PrimaryButton label="Add" onPress={handleAddPool} disabled={parseToPaise(poolAmt) <= 0} />
-      </SheetModal>
-
-      {/* Withdraw from pool sheet */}
-      <SheetModal visible={showWithdrawPool} onClose={() => setShowWithdrawPool(false)} title="Withdraw from savings">
-        <TextInput
-          style={styles.amountInput}
-          value={poolAmt}
-          onChangeText={setPoolAmt}
-          keyboardType="decimal-pad"
-          placeholder="₹0"
-          placeholderTextColor={colors.textMuted}
-          autoFocus
-          accessibilityLabel="Amount"
-        />
-        <Text style={styles.hint}>{formatCompact(pool.unallocated)} available · returns to your spending money.</Text>
-        <PrimaryButton label="Withdraw" onPress={handleWithdrawPool} disabled={parseToPaise(poolAmt) <= 0} />
+        <Text style={styles.hint}>
+          {money ? `${formatCompact(money.cashAvailable)} cash available · ` : ''}comes out of your Cash available.
+        </Text>
+        <PrimaryButton label="Add to goal" onPress={handleFundGoal} disabled={parseToPaise(fundAmt) <= 0} />
       </SheetModal>
 
       {/* New goal sheet */}
@@ -417,15 +411,7 @@ export default function SavingsScreen() {
 
           <Text style={styles.fieldLabel}>Target amount</Text>
           <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" style={styles.inputGap} />
-
-          <Text style={styles.fieldLabel}>Priority</Text>
-          <View style={styles.segRow}>
-            {PRIORITIES.map(p => (
-              <TouchableOpacity key={p.key} style={[styles.seg, priority === p.key && { backgroundColor: priorityColor(p.key) + '22', borderColor: priorityColor(p.key) }]} onPress={() => setPriority(p.key)} accessibilityRole="button">
-                <Text style={[styles.segText, priority === p.key && { color: priorityColor(p.key), fontFamily: 'Inter_600SemiBold' }]}>{p.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Priority is set by drag order in the Goals list — no bucket picker here. */}
 
           <Text style={styles.fieldLabel}>Icon</Text>
           <View style={styles.iconGrid}>
@@ -451,6 +437,25 @@ export default function SavingsScreen() {
             ))}
           </View>
 
+          <Text style={styles.fieldLabel}>Target date (optional)</Text>
+          <View style={styles.segRow}>
+            {DEADLINE_OPTS.map(o => {
+              const on = deadlineOn(newDate, o.months);
+              return (
+                <TouchableOpacity
+                  key={o.label}
+                  style={[styles.segSm, on && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]}
+                  onPress={() => setNewDate(o.months === null ? null : addMonths(new Date(), o.months).getTime())}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.segText, on && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {newDate != null && <Text style={styles.deadlineHint}>Target: {format(newDate, 'MMMM yyyy')}</Text>}
+
           <PrimaryButton label="Create goal" onPress={handleCreate} disabled={!name.trim() || parseToPaise(target) <= 0} style={{ marginTop: space.md }} />
         </KeyboardAvoidingView>
       </SheetModal>
@@ -462,24 +467,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
-  personalCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  personalIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  personalTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  personalSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  cashCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
-  affordBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  affordIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  affordBtnText: { ...type.body, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
-  cashLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  cashBreak: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  cashBreakSep: { color: colors.textMuted },
-  poolCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
-  poolLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  poolRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
-  poolStat: { flex: 1, alignItems: 'center', gap: 2 },
-  poolStatLabel: { ...type.caption, color: colors.textMuted },
-  poolDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  poolActions: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  overspendCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.expense + '14', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.expense + '40', padding: space.md },
+  overspendIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.expense + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  overspendTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  overspendBody: { ...type.caption, color: colors.textSecondary, marginTop: 1 },
+  overspendActions: { flexDirection: 'row', alignItems: 'center', gap: space.md, flexShrink: 0 },
+  overspendUndo: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  // Teal gradient pool card with accent label (design Screen 3). Gradient supplies the fill.
+  poolCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.accent + '33', padding: space.lg, ...shadow.md },
+  poolLabel: { ...type.caption, color: colors.accent, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  poolMainRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md },
+  poolSub: { ...type.caption, color: colors.textMuted, marginTop: 4 },
+  poolActions: { flexDirection: 'row', gap: space.sm },
+  poolActionBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg + '66' },
   addPoolBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent },
   addPoolText: { ...type.button, color: colors.accent },
   withdrawPoolBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
@@ -494,7 +494,10 @@ const styles = StyleSheet.create({
 
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
-  moneySection: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
+  sectionHint: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  completedSection: { marginTop: space.md, gap: space.sm },
+  completedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
+  dragHandle: { marginLeft: space.xs },
   subsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm, gap: space.sm },
   subsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   subsTotal: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
@@ -504,34 +507,65 @@ const styles = StyleSheet.create({
   subCadence: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
   subAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, minWidth: 56, textAlign: 'right' },
   subsHint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  // Insights sections
+  velocityCard: { backgroundColor: '#1A1014', borderRadius: 18, padding: 18, marginBottom: 10, borderWidth: 1.5, borderColor: '#3A1F1C' },
+  velocityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  velocityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.expense },
+  velocityLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.expense, textTransform: 'uppercase', letterSpacing: 0.8 },
+  velocityMsg: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3, marginBottom: 6, lineHeight: 23 },
+  velocityBarRow: { marginBottom: 12 },
+  velocityBarTrack: { height: 6, backgroundColor: colors.bgMuted, borderRadius: 3, overflow: 'hidden' },
+  velocityBarFill: { height: 6, borderRadius: 3, backgroundColor: colors.expense },
+  velocityCta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border },
+  velocityCtaText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  insightSecLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8, marginTop: 4 },
+  insightSecCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
+  shiftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: space.md, paddingVertical: 11 },
+  shiftEmoji: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  shiftCat: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
+  shiftAmt: { fontSize: 11, color: colors.textMuted },
+  shiftBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  shiftBadgeText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  groupNetAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
+  groupNetTile: { flex: 1, backgroundColor: '#081F16', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#0C3D22' },
+  groupNetTileLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 },
+  groupNetTileAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, letterSpacing: -0.5 },
+  subsNudgeCard: { backgroundColor: '#1A1A3A', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1.5, borderColor: colors.settle },
+  subsNudgeDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.settle, flexShrink: 0 },
+  subsNudgeLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8 },
+  subsNudgeTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 4 },
+  subsNudgeSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
+  subsReviewBtn: { flex: 1, backgroundColor: '#13203A', borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A5A' },
+  subsReviewBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.settle },
+  subsDismissBtn: { flex: 1, borderRadius: 8, padding: 8, alignItems: 'center' },
+  subsDismissBtnText: { fontSize: 12, color: colors.textMuted },
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
-  goalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
-  goalTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  goalIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  goalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  goalCardActive: { borderColor: colors.accent },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  goalIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  goalNameRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: space.sm, marginBottom: 6 },
   goalName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  goalSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
-  goalSubMuted: { color: colors.textMuted },
-  prioChip: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
-  prioText: { ...type.caption, fontFamily: 'Inter_600SemiBold', textTransform: 'capitalize' },
-  goalBarRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  goalPct: { ...type.caption, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
+  goalSub: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 1 },
+  goalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary, letterSpacing: -0.3 },
+  goalBarWrap: { marginBottom: 5 },
+  goalMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  goalMeta: { ...type.caption, color: colors.textMuted, flexShrink: 1 },
+  goalMetaRight: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
 
-  headerAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  whatIfCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
-  whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
-  whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
-  whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
-  whatIfChipActive: { backgroundColor: colors.accent },
-  whatIfChipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  whatIfResult: { gap: 2 },
-  whatIfSave: { ...type.body, color: colors.textPrimary },
-  whatIfYear: { ...type.caption, color: colors.textMuted },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  headerIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
+  deadlineHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  dateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderWidth: 1, borderColor: colors.border },
+  dateBtnText: { ...type.body, color: colors.textMuted },
+  dateClear: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   segRow: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
   seg: { flex: 1, minWidth: 80, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   segSm: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
@@ -541,4 +575,9 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   swatch: { width: 28, height: 28, borderRadius: 14 },
   swatchActive: { borderWidth: 3, borderColor: colors.textPrimary },
+  forecastCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', padding: space.md, flexDirection: 'row', alignItems: 'center', ...shadow.sm },
+  forecastLabel: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  forecastSub: { ...type.caption, color: colors.textMuted },
+  forecastAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, color: colors.textPrimary, letterSpacing: -0.5 },
+  forecastDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
 });

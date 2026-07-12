@@ -1,4 +1,5 @@
 import 'react-native-get-random-values';
+import 'react-native-reanimated';
 import React, { useEffect, useState } from 'react';
 import { View, AppState } from 'react-native';
 import { Stack } from 'expo-router';
@@ -18,6 +19,8 @@ import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 import { FeatureFlagsProvider } from '../src/components/system/FeatureFlagsProvider';
+import { DataRefreshProvider } from '../src/components/system/DataRefreshProvider';
+import { StoreHydrator } from '../src/components/system/StoreHydrator';
 import { UndoProvider } from '../src/components/system/UndoToast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -89,6 +92,8 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
         <SQLiteProvider databaseName="budgetsplit.db">
           <FeatureFlagsProvider>
+          <DataRefreshProvider>
+          <StoreHydrator />
           <UndoProvider>
           <StatusBar style="light" />
           <LockGate>
@@ -101,14 +106,14 @@ export default function RootLayout() {
                 }}
               >
                 <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="add/quick" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/income" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/itemized" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="add/transfer" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                {/* Full-screen (not the iOS inset 'modal' sheet) so they read like the Settle screen. */}
+                <Stack.Screen name="add/quick" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="add/itemized" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               </Stack>
             </OnboardingGate>
           </LockGate>
           </UndoProvider>
+          </DataRefreshProvider>
           </FeatureFlagsProvider>
         </SQLiteProvider>
         <PrivacyScreen />

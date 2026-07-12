@@ -30,6 +30,9 @@ export const colors = {
 
   border: '#21302E',
   borderFocus: '#20C4B8',
+
+  /** Modal / sheet scrim behind bottom sheets and dialogs. */
+  overlay: 'rgba(0,0,0,0.6)',
 };
 
 /** Gradient stops for striking surfaces (FAB, hero accents). */

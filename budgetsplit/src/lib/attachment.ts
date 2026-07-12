@@ -5,6 +5,14 @@ import { v4 as uuid } from 'uuid';
 
 const ATTACHMENT_DIR = new Directory(Paths.document, 'attachments');
 
+/** Thrown when the receipt can't be saved to disk (e.g. device out of storage). */
+export class AttachmentStorageError extends Error {
+  constructor() {
+    super('Could not save the receipt photo — device storage may be full.');
+    this.name = 'AttachmentStorageError';
+  }
+}
+
 async function ensureDir() {
   if (!ATTACHMENT_DIR.exists) ATTACHMENT_DIR.create();
 }
@@ -29,12 +37,18 @@ export async function pickAttachment(source: 'camera' | 'gallery'): Promise<stri
 
   if (result.canceled || !result.assets?.[0]) return null;
 
-  await ensureDir();
-  const ext = result.assets[0].uri.split('.').pop() ?? 'jpg';
-  const dest = new File(ATTACHMENT_DIR, uuid() + '.' + ext);
-  const src = new File(result.assets[0].uri);
-  src.copy(dest);
-  return dest.uri;
+  try {
+    await ensureDir();
+    const ext = result.assets[0].uri.split('.').pop() ?? 'jpg';
+    const dest = new File(ATTACHMENT_DIR, uuid() + '.' + ext);
+    const src = new File(result.assets[0].uri);
+    src.copy(dest);
+    return dest.uri;
+  } catch {
+    // Copy failed — most commonly the device is out of storage. Surface a typed
+    // error so the caller can let the user save the expense without the photo.
+    throw new AttachmentStorageError();
+  }
 }
 
 export async function deleteAttachment(uri: string): Promise<void> {

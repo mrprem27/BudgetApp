@@ -1,21 +1,23 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, Keyboard, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../../src/lib/settings';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
+import { seedGlobalCategories } from '../../../src/db/seedCategories';
 import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
@@ -60,9 +62,12 @@ function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
 
 export default function BudgetEditorScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, category: focusCategoryRaw } = useLocalSearchParams<{ id: string; category?: string }>();
+  // Deep-linked from a category's "Set budget" CTA → jump straight to its field.
+  const focusCategory = focusCategoryRaw ? decodeURIComponent(focusCategoryRaw) : undefined;
   const db = useSQLiteContext();
   const router = useRouter();
+  const { refresh } = useDataRefresh();
   const insets = useSafeAreaInsets();
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -72,17 +77,50 @@ export default function BudgetEditorScreen() {
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [loadError, setLoadError] = useState(false);
+  const [kbVisible, setKbVisible] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const focusRowRef = useRef<View>(null);
+  const scrolledToFocus = useRef(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  // Deep-linked from a category: once its row is laid out, center it in the
+  // visible area above the keyboard (the field would otherwise sit under it).
+  useEffect(() => {
+    if (scrolledToFocus.current || !focusCategory || allCategories.length === 0) return;
+    scrolledToFocus.current = true;
+    const t = setTimeout(() => {
+      const node = scrollRef.current ? findNodeHandle(scrollRef.current) : null;
+      if (focusRowRef.current && node != null) {
+        focusRowRef.current.measureLayout(
+          node,
+          (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true }),
+          () => {},
+        );
+      }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [focusCategory, allCategories.length]);
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
   async function load() {
     if (!id) return;
     try {
-      const [cats, budgets, dc] = await Promise.all([
+      let [cats, budgets, dc] = await Promise.all([
         getCategoriesByFrequency(db, id),
         getCategoryBudgets(db, id),
-        AsyncStorage.getItem('default_cadence'),
+        settings.defaultCadence(),
       ]);
+      // Self-heal: the expense catalog should never be empty. Reseed if it is.
+      if (cats.length === 0) {
+        await seedGlobalCategories(db);
+        cats = await getCategoriesByFrequency(db, id);
+      }
       if (dc) setDefaultCadence(dc as BudgetCadence);
       setAllCategories(cats);
       const amt: Record<string, string> = {};
@@ -96,15 +134,30 @@ export default function BudgetEditorScreen() {
       setAmounts(amt);
       setCadences(cad);
       // Collapse sections that have no budget set yet; keep the ones in use open.
-      const budgetedSections = new Set(Object.keys(amt).map(categorySection));
-      const allSections = new Set(cats.map(c => categorySection(c.name)));
-      const toCollapse = new Set([...allSections].filter(s => !budgetedSections.has(s)));
-      setCollapsed(toCollapse);
+      // Group by each row's own DB section (kind-correct), not the name-only map.
+      const secMap = new Map(cats.map(c => [c.name, c.section]));
+      const secOf = (name: string): string => secMap.get(name) ?? categorySection(name);
+      const budgetedSections = new Set(Object.keys(amt).map(secOf));
+      const allSections = new Set(cats.map(c => secOf(c.name)));
+      if (focusCategory) {
+        // Deep-linked to one category: collapse every other section so its field
+        // is right at the top, ready to type into.
+        const target = secOf(focusCategory);
+        setCollapsed(new Set([...allSections].filter(s => s !== target)));
+      } else {
+        setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
+      }
       setLoadError(false);
     } catch {
       setLoadError(true);
     }
   }
+
+  // Section for a category — prefer its authoritative per-kind DB `section`
+  // column (so a name shared across kinds like 'Rent' groups correctly), falling
+  // back to the name-only lookup for custom/unbackfilled ones.
+  const sectionByName = new Map(allCategories.map(c => [c.name, c.section]));
+  const sectionOf = (name: string): string => sectionByName.get(name) ?? categorySection(name);
 
   const cadenceOf = (cat: string): BudgetCadence => cadences[cat] ?? defaultCadence;
   const monthlyApprox = allCategories.reduce(
@@ -116,7 +169,7 @@ export default function BudgetEditorScreen() {
   const sections: SectionGroup[] = (() => {
     const byTitle = new Map<string, Category[]>();
     for (const c of allCategories) {
-      const t = categorySection(c.name);
+      const t = sectionOf(c.name);
       const arr = byTitle.get(t) ?? [];
       arr.push(c);
       byTitle.set(t, arr);
@@ -150,6 +203,7 @@ export default function BudgetEditorScreen() {
         .map(c => ({ category: c.name, cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? '') }))
         .filter(e => e.amount > 0);
       await setCategoryBudgets(db, id, entries);
+      refresh(); // tell Home / group detail their budget data changed
       haptic.success();
       router.back();
     } catch {
@@ -167,7 +221,7 @@ export default function BudgetEditorScreen() {
         <ErrorState onRetry={() => { setLoadError(false); load(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
@@ -209,7 +263,7 @@ export default function BudgetEditorScreen() {
                   const amt = amounts[c.name] ?? '';
                   const hasAmt = parseToPaise(amt) > 0;
                   return (
-                    <View key={c.name}>
+                    <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
                       <View style={styles.divider} />
                       <View style={styles.rowItem}>
                         <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
@@ -240,6 +294,7 @@ export default function BudgetEditorScreen() {
                             placeholder="0"
                             placeholderTextColor={colors.textMuted}
                             accessibilityLabel={`${c.name} budget`}
+                            autoFocus={c.name === focusCategory}
                           />
                         </View>
                       </View>
@@ -252,10 +307,10 @@ export default function BudgetEditorScreen() {
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
 
-          <View style={{ height: 100 }} />
+          <View style={{ height: kbVisible ? space.lg : 100 }} />
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+        <View style={[styles.footer, { paddingBottom: (kbVisible ? space.sm : insets.bottom) + space.md }]}>
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>

@@ -2,10 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
-export type AuditEntityType = 'txn' | 'group' | 'member' | 'budget' | 'recurring' | 'settlement';
-export type AuditAction =
-  | 'created' | 'updated' | 'deleted' | 'settled'
-  | 'paused' | 'resumed' | 'ended';
+import type { AuditAction, AuditEntityType } from '../../constants/enums';
+export type { AuditAction, AuditEntityType } from '../../constants/enums';
 
 export type AuditLog = {
   id: string;

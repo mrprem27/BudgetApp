@@ -40,7 +40,6 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 
   // Lifestyle
   { name: 'Shopping',         icon: 'shopping-bag',   color: '#A78BFA' },
-  { name: 'Subscriptions',    icon: 'repeat',         color: '#2DD4BF' },
   { name: 'Entertainment',    icon: 'film',           color: '#F87171' },
   { name: 'Gym & Fitness',    icon: 'activity',       color: '#34D399' },
   { name: 'Salon & Grooming', icon: 'scissors',       color: '#E879F9' },
@@ -92,17 +91,49 @@ export const CATEGORY_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Food', names: ['Groceries', 'Food Delivery', 'Eating Out', 'Chai & Snacks'] },
   { title: 'Transport', names: ['Cab & Auto', 'Metro & Bus', 'Fuel', 'Parking & Toll'] },
   { title: 'Bills & Utilities', names: ['Electricity', 'Mobile Recharge', 'WiFi & Broadband', 'Bills'] },
-  { title: 'Lifestyle', names: ['Shopping', 'Subscriptions', 'Entertainment', 'Gym & Fitness', 'Salon & Grooming', 'Electronics', 'Gifts'] },
+  { title: 'Lifestyle', names: ['Shopping', 'Entertainment', 'Gym & Fitness', 'Salon & Grooming', 'Electronics', 'Gifts'] },
   { title: 'Health', names: ['Health & Pharmacy', 'Insurance'] },
   { title: 'Money & Growth', names: ['Investments / SIP', 'Savings', 'EMI & Loans', 'Education', 'Taxes'] },
   { title: 'Other', names: ['Travel', 'Family & Support', 'Other'] },
 ];
 
+/** Income categories grouped into sections (mirrors expense sectioning). */
+export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
+  { title: 'Earnings', names: ['Salary', 'Freelance', 'Business', 'Bonus'] },
+  { title: 'Investments', names: ['Interest', 'Dividends', 'Rent Received'] },
+  { title: 'Other', names: ['Refunds', 'Cashback', 'Gifts Received', 'Other Income'] },
+];
+
+/**
+ * Transfer (settlement) categories — the "reason" a person moved money to another
+ * is now a real category (kind = 'transfer'), managed in the Categories screen and
+ * picked with the same UI as expense/income. Seeded per group.
+ */
+export const TRANSFER_CATEGORIES: CategoryDef[] = [
+  { name: 'Repayment',   icon: 'corner-up-left',  color: '#8B7CF8' },
+  { name: 'Rent',        icon: 'home',            color: '#A78BFA' },
+  { name: 'Shared Bill', icon: 'file-text',       color: '#7C6AF7' },
+  { name: 'Lent',        icon: 'arrow-up-right',  color: '#22D3EE' },
+  { name: 'Borrowed',    icon: 'arrow-down-left', color: '#F0A500' },
+  { name: 'Other',       icon: 'more-horizontal', color: '#8B8A99' },
+];
+
+/** Transfer categories grouped into sections (single section for now). */
+export const TRANSFER_SECTIONS: { title: string; names: string[] }[] = [
+  { title: 'Transfers', names: ['Repayment', 'Rent', 'Shared Bill', 'Lent', 'Borrowed'] },
+  { title: 'Other', names: ['Other'] },
+];
+
+// Name→section for the name-only fallback. Expense sections are spread LAST so
+// that a name shared across kinds (e.g. 'Rent' is both an expense and a transfer
+// category) resolves to its EXPENSE section — the most common context. Kind-
+// specific screens read the per-kind `section` column instead of this fallback.
 const SECTION_OF: Record<string, string> = Object.fromEntries(
-  CATEGORY_SECTIONS.flatMap(s => s.names.map(n => [n, s.title])),
+  [...TRANSFER_SECTIONS, ...INCOME_SECTIONS, ...CATEGORY_SECTIONS].flatMap(s => s.names.map(n => [n, s.title])),
 );
 
-/** The section a category belongs to (defaults to "Other" for custom ones). */
+/** The section a category belongs to by NAME (expense-biased for shared names).
+ *  Prefer a category row's own `section` column when you have it. */
 export function categorySection(name: string): string {
   return SECTION_OF[name] ?? 'Other';
 }
@@ -110,15 +141,19 @@ export function categorySection(name: string): string {
 /** Ordered list of section titles for grouping UIs. */
 export const SECTION_ORDER = CATEGORY_SECTIONS.map(s => s.title);
 
-/** name → {icon,color} lookup for rendering any stored category by name. */
+/** name → {icon,color} lookup for rendering any stored category by name.
+ *  Transfer cats listed last; on a name collision (e.g. 'Rent', 'Other') the
+ *  expense/income visual wins, which is fine — they're near-identical. */
 export const CATEGORY_LOOKUP: Record<string, { icon: FeatherName; color: string }> = Object.fromEntries(
-  [...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
+  [...TRANSFER_CATEGORIES, ...DEFAULT_CATEGORIES, ...INCOME_CATEGORIES].map(c => [c.name, { icon: c.icon, color: c.color }]),
 );
 
 /** Special non-catalog categories that still need an icon/colour. */
 const EXTRA_LOOKUP: Record<string, { icon: FeatherName; color: string }> = {
-  Settlement: { icon: 'check-circle', color: '#7C6AF7' },
-  Income:     { icon: 'trending-up',  color: '#3ECF8E' },
+  Settlement: { icon: 'check-circle',   color: '#7C6AF7' },
+  Income:     { icon: 'trending-up',    color: '#3ECF8E' },
+  // The combined bucket for un-adopted category names (see lib/categoryFold).
+  Others:     { icon: 'more-horizontal', color: '#8B8A99' },
 };
 
 /** Resolve icon + colour for any category name, with a sensible fallback. */

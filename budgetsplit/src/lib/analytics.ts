@@ -6,9 +6,9 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending } from './budget';
-import { formatCompact, formatComparison, ComparisonFormat } from './money';
-import { getComparisonFormat } from './displayPrefs';
+import { getCategorySpending, utilLabel, budgetHealth } from './budget';
+import { forecastMonthEnd } from './forecast';
+import { formatCompact, formatComparison } from './money';
 
 export type BudgetStatus = 'over' | 'near' | 'under' | 'none';
 
@@ -58,69 +58,6 @@ export type BudgetAnalytics = {
   recommendations: Recommendation[];
 };
 
-export type GroupInsight = Recommendation & {
-  groupId: string;
-  groupName: string;
-};
-
-/**
- * Cross-group insights for the dashboard. Runs the per-group analytics for
- * every group, then merges and ranks their recommendations so the home screen
- * can surface the few that matter most (warnings first, then movers, then a
- * single positive note). Each insight carries its origin group so a tap can
- * deep-link to that group's budget.
- */
-export async function getDashboardInsights(
-  db: SQLite.SQLiteDatabase,
-  groups: BudgetGroup[],
-  now = new Date(),
-  limit = 3,
-): Promise<GroupInsight[]> {
-  const perGroup = await Promise.all(
-    groups.map(async g => ({ group: g, analytics: await getBudgetAnalytics(db, g, now) })),
-  );
-  return rankInsights(perGroup, limit);
-}
-
-/**
- * Pure ranking of per-group analytics into a short, prioritized insight list.
- * Split from {@link getDashboardInsights} so callers that already hold the
- * analytics array (e.g. the dashboard) don't re-run the spending queries.
- */
-export function rankInsights(
-  perGroup: Array<{ group: BudgetGroup; analytics: BudgetAnalytics }>,
-  limit = 3,
-): GroupInsight[] {
-  const all: GroupInsight[] = [];
-  for (const { group, analytics } of perGroup) {
-    for (const r of analytics.recommendations) {
-      // The "all on track" filler is per-group noise on a multi-group dashboard;
-      // we synthesize a single positive note below only if nothing else surfaces.
-      if (r.id === 'ontrack') continue;
-      all.push({ ...r, groupId: group.id, groupName: group.name });
-    }
-  }
-
-  const severityRank: Record<Recommendation['severity'], number> = { warn: 0, info: 1, good: 2 };
-  all.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
-
-  const ranked = all.slice(0, limit);
-
-  // Nothing noteworthy but the user does budget → reassure rather than show blank.
-  if (ranked.length === 0) {
-    const hasBudgets = perGroup.some(p => p.analytics.totalAllocated > 0);
-    if (hasBudgets) {
-      return [{
-        id: 'ontrack', severity: 'good', icon: 'check-circle',
-        text: 'All budgets are on track across your groups. Nice work.',
-        groupId: perGroup.find(p => p.analytics.totalAllocated > 0)!.group.id,
-        groupName: '',
-      }];
-    }
-  }
-  return ranked;
-}
-
 function currentWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } {
   switch (cadence) {
     case 'daily':   return { from: startOfDay(now).getTime(), to: endOfDay(now).getTime() };
@@ -154,10 +91,9 @@ export async function getBudgetAnalytics(
   db: SQLite.SQLiteDatabase,
   group: BudgetGroup,
   now = new Date(),
-  comparisonFormat?: ComparisonFormat,
+  /** When set, spend counts only this person's share (individual budget). */
+  meId?: string,
 ): Promise<BudgetAnalytics> {
-  // Read the user's preferred phrasing (%, vs ×) unless a caller pins it (tests).
-  const cmpFormat = comparisonFormat ?? await getComparisonFormat();
   const budgets = await getCategoryBudgets(db, group.id);
 
   // No budgets → nothing to analyse; skip the spending queries entirely (perf).
@@ -176,9 +112,9 @@ export async function getBudgetAnalytics(
   const prevByCad: Record<string, Record<string, number>> = {};
   await Promise.all(cadences.map(async cad => {
     const cw = currentWindow(cad, now);
-    curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to);
+    curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to, meId);
     const pw = previousWindow(cad, now);
-    prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to) : {};
+    prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to, meId) : {};
   }));
 
   const dayOfMonth = getDate(now);
@@ -186,7 +122,9 @@ export async function getBudgetAnalytics(
     const spent = curByCad[b.cadence]?.[b.category] ?? 0;
     const prevSpent = prevByCad[b.cadence]?.[b.category] ?? 0;
     const pct = b.amount > 0 ? Math.round((spent / b.amount) * 100) : null;
-    const status: BudgetStatus = pct === null ? 'none' : pct >= 100 ? 'over' : pct >= 80 ? 'near' : 'under';
+    // Shares the 80/100 thresholds with lib/budget.budgetHealth (one source).
+    const h = budgetHealth(pct);
+    const status: BudgetStatus = h === 'red' ? 'over' : h === 'amber' ? 'near' : h === 'green' ? 'under' : 'none';
     // Days until limit, only meaningful for monthly cadence mid-month.
     let daysToLimit: number | null = null;
     if (b.cadence === 'monthly' && b.amount > 0 && spent > 0 && spent < b.amount) {
@@ -232,12 +170,12 @@ export async function getBudgetAnalytics(
   }
 
   const totalMonthSpent = Object.values(monthSpend).reduce((s, v) => s + v, 0);
+  const priorMonthTotal = Object.values(prevMonthSpend).reduce((s, v) => s + v, 0);
   const daysInMonth = getDaysInMonth(now);
-  const projectedMonthEnd = Math.round((totalMonthSpent / Math.max(1, dayOfMonth)) * daysInMonth);
+  // One forecast model everywhere: credibility-weighted blend (lib/forecast),
+  // not a raw linear run-rate. Floors at spend-so-far; 0 before day 3.
+  const projectedMonthEnd = forecastMonthEnd(totalMonthSpent, dayOfMonth, daysInMonth, priorMonthTotal).projected;
   const monthlyBudgetTotal = budgets.filter(b => b.cadence === 'monthly').reduce((s, b) => s + b.amount, 0);
-
-  const utilLabel = (pct: number | null) =>
-    pct !== null && pct > 100 ? `${(pct / 100).toFixed(1)}X` : `${pct ?? '?'}%`;
 
   // --- Rule-based recommendations ---
   const recommendations: Recommendation[] = [];
@@ -261,13 +199,13 @@ export async function getBudgetAnalytics(
   if (biggestIncrease && (biggestIncrease.deltaPct ?? 0) >= 15) {
     recommendations.push({
       id: 'increase', severity: 'warn', icon: 'trending-up',
-      text: `${biggestIncrease.category} is ${formatComparison(biggestIncrease.deltaPct ?? 0, cmpFormat)}.`,
+      text: `${biggestIncrease.category} is ${formatComparison(biggestIncrease.deltaPct ?? 0)}.`,
     });
   }
   if (biggestDecrease && (biggestDecrease.deltaPct ?? 0) <= -15) {
     recommendations.push({
       id: 'decrease', severity: 'good', icon: 'trending-down',
-      text: `${biggestDecrease.category} is ${formatComparison(biggestDecrease.deltaPct ?? 0, cmpFormat)} — nice.`,
+      text: `${biggestDecrease.category} is ${formatComparison(biggestDecrease.deltaPct ?? 0)} — nice.`,
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {

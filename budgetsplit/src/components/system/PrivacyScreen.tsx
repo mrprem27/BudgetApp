@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AppState, View, Text, Image, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { settings } from '../../lib/settings';
 import { colors, type, space } from '../tokens';
 
 const LOGO = require('../../../assets/splash-icon.png');
@@ -16,11 +16,11 @@ export function PrivacyScreen() {
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem('privacy_screen').then(v => setEnabled(v !== 'false'));
+    settings.privacyScreen().then(setEnabled);
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') {
         setHidden(false);
-        AsyncStorage.getItem('privacy_screen').then(v => setEnabled(v !== 'false'));
+        settings.privacyScreen().then(setEnabled);
       } else {
         // Cover immediately (synchronously) so the snapshot is masked.
         setHidden(true);

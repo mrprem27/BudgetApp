@@ -1,7 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { INCOME_CATEGORIES, CATEGORY_SECTIONS } from '../constants/categories';
+import { CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS } from '../constants/categories';
+import { seedGlobalCategories } from './seedCategories';
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -30,12 +31,14 @@ CREATE TABLE IF NOT EXISTS budget_group (
   is_archived    INTEGER NOT NULL DEFAULT 0,
   is_personal    INTEGER NOT NULL DEFAULT 0,
   simplify_debt  INTEGER NOT NULL DEFAULT 1,
+  default_split  TEXT NOT NULL DEFAULT 'equal' CHECK(default_split IN ('equal','exact','percent','shares')),
   created_at     INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS group_member (
   group_id   TEXT NOT NULL REFERENCES budget_group(id),
   person_id  TEXT NOT NULL REFERENCES person(id),
+  joined_at  INTEGER,                       -- when this person joined the group (epoch ms)
   PRIMARY KEY (group_id, person_id)
 );
 
@@ -50,7 +53,7 @@ CREATE TABLE IF NOT EXISTS txn (
   attachment_uri TEXT,
   tags           TEXT,
   adjustments    TEXT,
-  recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','custom')),
+  recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','yearly','custom')),
   recur_interval INTEGER,
   recur_end      INTEGER,
   recur_override_date INTEGER,
@@ -60,6 +63,7 @@ CREATE TABLE IF NOT EXISTS txn (
   lat            REAL,
   lng            REAL,
   place_label    TEXT,
+  pay_method     TEXT,
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -92,16 +96,22 @@ CREATE TABLE IF NOT EXISTS line_item (
   name         TEXT NOT NULL,
   qty          INTEGER NOT NULL DEFAULT 1,
   unit_price   INTEGER NOT NULL,
-  assigned_to  TEXT NOT NULL
+  assigned_to  TEXT NOT NULL,
+  split_mode   TEXT,          -- per-item split mode (equal/exact/percent/shares); NULL = equal
+  split_values TEXT           -- JSON: per-member raw input for non-equal modes
 );
 
+-- Categories are a single GLOBAL catalog per kind (group_id NULL = global).
+-- UNIQUE(name, kind) keeps one row per name within a kind.
 CREATE TABLE IF NOT EXISTS category (
   id        TEXT PRIMARY KEY,
-  group_id  TEXT NOT NULL REFERENCES budget_group(id),
+  group_id  TEXT REFERENCES budget_group(id),
   name      TEXT NOT NULL,
   icon      TEXT,
   color     TEXT,
-  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income'))
+  kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+  section   TEXT,
+  UNIQUE(name, kind)
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -147,6 +157,8 @@ CREATE TABLE IF NOT EXISTS savings_goal (
   locked       INTEGER NOT NULL DEFAULT 0,  -- protect from auto-reallocation
   is_archived  INTEGER NOT NULL DEFAULT 0,
   last_auto_at INTEGER,                      -- schedule anchor for auto-funding
+  target_date  INTEGER,                      -- optional deadline (epoch ms) → "needed/mo" + countdown
+  sort_order   INTEGER NOT NULL DEFAULT 0,   -- manual drag rank → funding order (lower = funded first)
   created_at   INTEGER NOT NULL
 );
 
@@ -165,6 +177,24 @@ CREATE TABLE IF NOT EXISTS savings_txn (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_savings_txn_goal ON savings_txn(goal_id);
+
+-- Imported rows awaiting Review (Import → Review inbox). Heuristically parsed from
+-- a pasted statement; the user classifies each, then it becomes a real txn (and is
+-- deleted here) or is discarded. Never feeds balances/budgets until confirmed.
+CREATE TABLE IF NOT EXISTS pending_txn (
+  id          TEXT PRIMARY KEY,
+  date        INTEGER NOT NULL,
+  amount      INTEGER NOT NULL,            -- paise (positive)
+  description TEXT NOT NULL,
+  kind        TEXT NOT NULL CHECK(kind IN ('income','expense','settlement')),
+  category    TEXT,                        -- suggested category (may be null)
+  direction   TEXT NOT NULL DEFAULT 'unknown' CHECK(direction IN ('debit','credit','unknown')),
+  raw         TEXT,
+  created_at  INTEGER NOT NULL,
+  dest_group_id TEXT,                       -- Review draft: target group (null = Personal)
+  split_draft   TEXT                        -- Review draft: JSON {included, mode, values}
+);
+CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 `;
 
 /**
@@ -199,6 +229,31 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN adjustments TEXT",
   // Recurring occurrences materialize into real rows linked back to their rule.
   "ALTER TABLE txn ADD COLUMN parent_recur_id TEXT",
+  // Settlements record how they were paid (upi/cash/bank) as a real field, not a note.
+  "ALTER TABLE txn ADD COLUMN pay_method TEXT",
+  // Savings goals can carry an optional deadline → needed-per-month + countdown.
+  "ALTER TABLE savings_goal ADD COLUMN target_date INTEGER",
+  // Manual drag rank → funding order (lower = funded first). Replaces priority buckets.
+  "ALTER TABLE savings_goal ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+  // When a person joined a group → "Joined {month year}" on the Members sub-tab.
+  "ALTER TABLE group_member ADD COLUMN joined_at INTEGER",
+  // A group's default split mode, picked at creation → seeds the Add-expense split.
+  "ALTER TABLE budget_group ADD COLUMN default_split TEXT NOT NULL DEFAULT 'equal'",
+  // Per-item split mode/values so an itemized bill round-trips its splits on edit.
+  "ALTER TABLE line_item ADD COLUMN split_mode TEXT",
+  "ALTER TABLE line_item ADD COLUMN split_values TEXT",
+  // Review redesign: pending rows auto-save their in-progress draft (target group +
+  // split) so a half-reviewed inbox survives leaving and returning to the screen.
+  "ALTER TABLE pending_txn ADD COLUMN dest_group_id TEXT",
+  "ALTER TABLE pending_txn ADD COLUMN split_draft TEXT",
+  // Demo/QA data marker. loadDemoData sets it on the rows it seeds so demo data
+  // can be identified (and optionally excluded) later. No exclusion logic uses it
+  // yet — it's purely a flag for future use.
+  "ALTER TABLE txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE budget_group ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE person ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE savings_goal ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE pending_txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -213,8 +268,126 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     }
   }
 
+  // One-time rebuild: the original txn table had CHECK(recur_freq IN
+  // ('daily','weekly','monthly','custom')) which rejects 'yearly'. SQLite can't
+  // ALTER a CHECK, so recreate the table without the stale constraint, copying
+  // every row by column name. Detected by the absence of 'yearly' in its DDL.
+  try {
+    const txnDef = await db.getFirstAsync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='txn'",
+    );
+    if (txnDef && !txnDef.sql.includes("'yearly'")) {
+      const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
+        + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
+        + 'tz,lat,lng,place_label,pay_method,currency,is_deleted,created_at,updated_at';
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE txn_new (
+          id             TEXT PRIMARY KEY,
+          group_id       TEXT NOT NULL REFERENCES budget_group(id),
+          kind           TEXT NOT NULL CHECK(kind IN ('income','expense','settlement')),
+          entry_mode     TEXT NOT NULL CHECK(entry_mode IN ('quick','itemized')),
+          date           INTEGER NOT NULL,
+          category       TEXT NOT NULL,
+          note           TEXT,
+          attachment_uri TEXT,
+          tags           TEXT,
+          adjustments    TEXT,
+          recur_freq     TEXT CHECK(recur_freq IN ('daily','weekly','monthly','yearly','custom')),
+          recur_interval INTEGER,
+          recur_end      INTEGER,
+          recur_override_date INTEGER,
+          parent_recur_id TEXT,
+          recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
+          tz             TEXT,
+          lat            REAL,
+          lng            REAL,
+          place_label    TEXT,
+          pay_method     TEXT,
+          currency       TEXT,
+          is_deleted     INTEGER NOT NULL DEFAULT 0,
+          created_at     INTEGER NOT NULL,
+          updated_at     INTEGER NOT NULL
+        );
+        INSERT INTO txn_new (${cols}) SELECT ${cols} FROM txn;
+        DROP TABLE txn;
+        ALTER TABLE txn_new RENAME TO txn;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  } catch {
+    // If the rebuild fails, leave the original table intact (yearly stays unavailable).
+  }
+
+  // One-time rebuild: the original category table had
+  // CHECK(kind IN ('expense','income')) which rejects 'transfer'. SQLite can't
+  // ALTER a CHECK, so recreate it without the stale constraint. Detected by the
+  // absence of 'transfer' in its DDL.
+  try {
+    const catDef = await db.getFirstAsync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='category'",
+    );
+    if (catDef && !catDef.sql.includes("'transfer'")) {
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE category_new (
+          id        TEXT PRIMARY KEY,
+          group_id  TEXT NOT NULL REFERENCES budget_group(id),
+          name      TEXT NOT NULL,
+          icon      TEXT,
+          color     TEXT,
+          kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+          section   TEXT
+        );
+        INSERT INTO category_new (id,group_id,name,icon,color,kind,section)
+          SELECT id,group_id,name,icon,color,kind,section FROM category;
+        DROP TABLE category;
+        ALTER TABLE category_new RENAME TO category;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  } catch {
+    // If the rebuild fails, leave the original table intact (transfer cats stay unavailable).
+  }
+
+  // Hot-path indexes. Created here (not inline in SCHEMA) because the one-time
+  // txn rebuild above drops & recreates the txn table, which would wipe any
+  // index defined alongside it. IF NOT EXISTS keeps this idempotent on every open.
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
+    CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
+    CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
+    -- Cross-group recurring scans (materializeDueOccurrences / getActiveRecurringRules)
+    -- filter recur_state with no group_id, so they can't use the group_id-leading
+    -- index above — this recur_state-leading partial index serves them.
+    CREATE INDEX IF NOT EXISTS idx_txn_recur_state ON txn(recur_state) WHERE recur_freq IS NOT NULL;
+    -- getTransactionsInRange(groupId=null, ...) (Home, savings/cash, reports) filters
+    -- date + is_deleted=0 + recur_freq IS NULL with no group_id, so the group_id-leading
+    -- index can't serve it — this date-leading partial index matches that hot predicate.
+    CREATE INDEX IF NOT EXISTS idx_txn_date ON txn(date) WHERE is_deleted = 0 AND recur_freq IS NULL;
+    -- category-frequency / uncategorized / duplicate scans group & filter on category.
+    CREATE INDEX IF NOT EXISTS idx_txn_group_category ON txn(group_id, category);
+    CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
+  `);
+
   // One-time fix: 'wallet' is not a valid Feather icon
   await db.execAsync("UPDATE budget_group SET icon='credit-card' WHERE icon='wallet';");
+  // Savings Pool removed: goals are now funded directly from cash. Drop the old
+  // pool-level ledger rows (goal_id IS NULL = deposits/withdrawals to the pool).
+  // Per-goal balances (goal_id NOT NULL) are untouched; any unallocated pool
+  // money simply stops being "set aside" and folds back into Cash available.
+  await db.execAsync("DELETE FROM savings_txn WHERE goal_id IS NULL;");
+  // 'Subscriptions' is no longer a category — a subscription is a recurring billing
+  // pattern, and its spend belongs to a normal category (e.g. Entertainment).
+  // Reclassify existing transactions, drop now-orphaned Subscriptions budgets, then
+  // remove the category from every group's picker.
+  await db.execAsync("UPDATE txn SET category='Entertainment' WHERE category='Subscriptions';");
+  await db.execAsync("DELETE FROM category_budget WHERE category='Subscriptions';");
+  await db.execAsync("DELETE FROM category WHERE name='Subscriptions';");
   // The seeded Personal group (oldest, name 'Personal') is the single-user space.
   await db.execAsync(
     "UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1);",
@@ -224,37 +397,63 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     "UPDATE person SET email='hello123@vortiqal.com' WHERE is_me=1 AND (email IS NULL OR email='');",
   );
 
-  // Phase G: reclassify legacy income-named categories, then backfill the
-  // income category set into any group that doesn't have it yet.
+  // Reclassify legacy income-named categories before the global dedupe, so a
+  // legacy 'Salary' (seeded as expense) merges into the income catalog.
   await db.execAsync("UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income');");
-  const groups = await db.getAllAsync<{ id: string }>('SELECT id FROM budget_group');
-  for (const g of groups) {
-    for (const cat of INCOME_CATEGORIES) {
-      const exists = await db.getFirstAsync<{ one: number }>(
-        'SELECT 1 as one FROM category WHERE group_id=? AND name=?', [g.id, cat.name],
-      );
-      if (!exists) {
-        await db.runAsync(
-          "INSERT INTO category (id, group_id, name, icon, color, kind) VALUES (?, ?, ?, ?, ?, 'income')",
-          [uuid(), g.id, cat.name, cat.icon, cat.color],
+
+  // Phase GC: collapse the per-group category rows into a single GLOBAL catalog
+  // (group_id NULL = global), deduped by (name, kind). One-time, flagged — the
+  // rebuild also drops the old NOT NULL on group_id and adds UNIQUE(name,kind).
+  try {
+    const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key='category_global_v1'");
+    if (!done) {
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE category_g (
+          id        TEXT PRIMARY KEY,
+          group_id  TEXT REFERENCES budget_group(id),
+          name      TEXT NOT NULL,
+          icon      TEXT,
+          color     TEXT,
+          kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+          section   TEXT,
+          UNIQUE(name, kind)
         );
-      }
+        INSERT INTO category_g (id, group_id, name, icon, color, kind, section)
+          SELECT id, NULL, name, icon, color, kind, section FROM category GROUP BY name, kind;
+        DROP TABLE category;
+        ALTER TABLE category_g RENAME TO category;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+      await db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES ('category_global_v1', '1')");
     }
+  } catch {
+    // Leave categories as-is if the global migration fails.
   }
 
-  // Backfill section column for all categories that don't have one yet.
-  for (const sec of CATEGORY_SECTIONS) {
-    if (sec.names.length > 0) {
+  // Ensure the global catalog contains every default category (idempotent).
+  // This is the ONLY category seeding — groups/demo never make their own copies.
+  await seedGlobalCategories(db);
+
+  // Backfill the section column per kind so a name shared across kinds (e.g.
+  // 'Rent', 'Other') lands in the right section for its own kind.
+  const backfillSections = async (kind: string, secs: { title: string; names: string[] }[]) => {
+    for (const sec of secs) {
+      if (sec.names.length === 0) continue;
       const placeholders = sec.names.map(() => '?').join(',');
       await db.runAsync(
-        `UPDATE category SET section=? WHERE section IS NULL AND name IN (${placeholders})`,
-        [sec.title, ...sec.names],
+        `UPDATE category SET section=? WHERE section IS NULL AND kind=? AND name IN (${placeholders})`,
+        [sec.title, kind, ...sec.names],
       );
     }
-  }
-  await db.runAsync(
-    "UPDATE category SET section='Income' WHERE section IS NULL AND kind='income'",
-  );
+  };
+  await backfillSections('expense', CATEGORY_SECTIONS);
+  await backfillSections('income', INCOME_SECTIONS);
+  await backfillSections('transfer', TRANSFER_SECTIONS);
+  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='income'");
+  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='transfer'");
 
   return db;
 }

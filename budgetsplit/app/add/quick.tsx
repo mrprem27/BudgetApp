@@ -2,15 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   ScrollView, Alert, Modal, Pressable, Switch, Image,
-  KeyboardAvoidingView, Platform, ActionSheetIOS,
+  Platform, ActionSheetIOS, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { format, isSameDay } from 'date-fns';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrentPlace } from '../../src/lib/location';
+import { nthOccurrenceMs } from '../../src/lib/recurrence';
+import { settings } from '../../src/lib/settings';
+import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { asFeather } from '../../src/constants/palette';
 import { matchCategory } from '../../src/lib/smartCategory';
@@ -19,41 +20,71 @@ import { categoryVisual } from '../../src/constants/categories';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout } from '../../src/constants/layout';
 import { DEFAULT_CURRENCY, type CurrencyCode, CURRENCY_MAP } from '../../src/constants/currencies';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees, splitEqual, splitByPercent, splitByShares } from '../../src/lib/money';
+import { getAllGroups, getGroupById } from '../../src/db/queries/groups';
+import { getGroupMembers, getMe, getAllPersons } from '../../src/db/queries/persons';
+import { getFriendBalances } from '../../src/db/queries/balances';
+import { TransferBody } from '../../src/components/finance/TransferBody';
+import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../../src/lib/settleScope';
+import { getCategoriesByFrequency, insertCategory, type CategoryKind } from '../../src/db/queries/categories';
+import { insertTxn, updateTxn, getTxnById, splitRecurringSeries, findRecentDuplicate, recordSettlement } from '../../src/db/queries/transactions';
+import { parseToPaise, formatRupees, formatCompact, splitEqual, splitByPercent, splitByShares, formatAmountInput, sanitizeAmountInput } from '../../src/lib/money';
+import { getAffordSnapshot, type AffordSnapshot } from '../../src/db/queries/savings';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { SplitSheet } from '../../src/components/finance/add/SplitSheet';
+import { RecurringControls } from '../../src/components/finance/add/RecurringControls';
+import { PayersSheet } from '../../src/components/finance/add/PayersSheet';
+import { TransferSlotSheet } from '../../src/components/finance/add/TransferSlotSheet';
+import { AvatarStack } from '../../src/components/finance/AvatarStack';
+import { GroupSelector } from '../../src/components/finance/GroupSelector';
+import { ModalHeader } from '../../src/components/ui/ModalHeader';
+import { MoreOptions } from '../../src/components/ui/MoreOptions';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { Input } from '../../src/components/ui/Input';
 import { haptic } from '../../src/lib/haptics';
-import { pickAttachment } from '../../src/lib/attachment';
+import { pickAttachment, AttachmentStorageError } from '../../src/lib/attachment';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import type { Person } from '../../src/db/queries/persons';
 import type { Category } from '../../src/db/queries/categories';
-
-type SplitType = 'equal' | 'exact' | 'percent' | 'shares';
+import { type SplitMode, type RecurFreq, type PayMethod } from '../../src/constants/enums';
+import { oweView } from '../../src/lib/owe';
 
 export default function QuickAddScreen() {
-  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId } = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string }>();
+  const insets = useSafeAreaInsets();
+  const { groupId: paramGroupId, kind: paramKind, editId, recurEditId, from: paramFrom, to: paramTo, amount: paramAmount, note: paramNote, date: paramDate, category: paramCategory } =
+    useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string }>();
   const isEditing = !!editId;
   const isRecurEdit = !!recurEditId; // "this & future" edit of a recurring series
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
 
   const [groups, setGroups] = useState<BudgetGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
-  const [kind, setKind] = useState<'income' | 'expense'>(paramKind === 'income' ? 'income' : 'expense');
-  const [amountText, setAmountText] = useState('');
-  const [note, setNote] = useState('');
+  const [kind, setKind] = useState<'income' | 'expense' | 'transfer'>(
+    paramKind === 'income' ? 'income' : paramKind === 'transfer' ? 'transfer' : 'expense',
+  );
+  // Optional deep-link prefill (e.g. "Settle with Rahul" → kind=transfer&to=…).
+  // Purely additive: with no params these all fall back to the normal defaults.
+  const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? (parseInt(paramAmount, 10) / 100).toString() : '');
+  // Transfer (settlement) state — only used when kind === 'transfer'.
+  const [allPersons, setAllPersons] = useState<Person[]>([]);
+  // Net balance with each person (>0 = they owe me, <0 = I owe them) — shown in the transfer picker.
+  const [personNet, setPersonNet] = useState<Record<string, number>>({});
+  const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
+  const [transferToId, setTransferToId] = useState(paramTo ?? '');
+  const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null); // which slot the picker fills
+  // Launched from a group's FAB → pre-select that group's transfer scope.
+  const [transferScope, setTransferScope] = useState<'all' | string>(paramGroupId ?? 'all');
+  const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
+  const [payMethod, setPayMethod] = useState<PayMethod>('upi');
+  const [transferNote, setTransferNote] = useState('');
+  const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
+  const [title, setTitle] = useState(''); // smart-category title (drives category); separate from Note
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [catManual, setCatManual] = useState(false); // user overrode the smart guess
@@ -64,7 +95,7 @@ export default function QuickAddScreen() {
   // we can't confidently place falls back to "Other" (the catch-all) rather than
   // silently leaving whatever was preselected.
   function onTitleChange(text: string) {
-    setNote(text);
+    setTitle(text);
     if (flags.smartCategory && !catManual && text.trim()) {
       const name = learnedMatch(text, learned, categories) ?? matchCategory(text, categories) ?? 'Other';
       const c = categories.find(cat => cat.name === name);
@@ -75,9 +106,9 @@ export default function QuickAddScreen() {
   const [me, setMe] = useState<Person | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   const [showPayers, setShowPayers] = useState(false);
-  const [txnDate, setTxnDate] = useState(Date.now());
+  const [txnDate, setTxnDate] = useState(paramDate && /^\d+$/.test(paramDate) ? parseInt(paramDate, 10) : Date.now());
   const [showDate, setShowDate] = useState(false);
-  const [splitType, setSplitType] = useState<SplitType>('equal');
+  const [splitType, setSplitType] = useState<SplitMode>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [percentages, setPercentages] = useState<Record<string, string>>({});
@@ -85,13 +116,19 @@ export default function QuickAddScreen() {
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
+  const [place, setPlace] = useState<CapturedPlace | null>(null);
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [capturingLoc, setCapturingLoc] = useState(false);
   const [recurEnabled, setRecurEnabled] = useState(false);
-  const [recurFreq, setRecurFreq] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
+  const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
+  const [recurEndMode, setRecurEndMode] = useState<'never' | 'date' | 'count'>('never');
+  const [recurCount, setRecurCount] = useState('12');
   const [showEndDate, setShowEndDate] = useState(false);
-  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
+  const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -100,7 +137,8 @@ export default function QuickAddScreen() {
       const meRow = await getMe(db);
       setMe(meRow);
       loadLearned().then(setLearned).catch(() => {});
-      const savedCur = await AsyncStorage.getItem('default_currency');
+      getAffordSnapshot(db).then(setSnapshot).catch(() => {});
+      const savedCur = await settings.defaultCurrency();
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
       const loadId = editId ?? recurEditId;
@@ -108,12 +146,21 @@ export default function QuickAddScreen() {
         const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
-          await loadGroup(txn.group_id, meRow, txn.category);
-          setKind(txn.kind === 'income' ? 'income' : 'expense');
+          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
+          setKind(txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
+
+          if (txn.kind === 'settlement') {
+            setTransferFromId(txn.payments[0]?.personId ?? '');
+            setTransferToId(txn.shares[0]?.personId ?? '');
+            setTransferScope(txn.group_id);
+            setPayMethod((txn.pay_method ?? 'upi'));
+            // Reason is now the category (loaded above); the note is the plain note.
+            setTransferNote(txn.note ?? '');
+          }
           // Reconstruct the split/payers as explicit amounts so a *shared*
           // expense stays editable exactly as it was. In a personal (solo)
           // ledger there's only one member who always owns 100% and is the sole
@@ -134,21 +181,26 @@ export default function QuickAddScreen() {
             setRecurEnabled(true);
             setRecurFreq(txn.recur_freq);
             setRecurInterval(String(txn.recur_interval ?? 1));
-            if (txn.recur_end) setRecurEndMs(txn.recur_end);
+            if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode('date'); }
           }
         }
         return;
       }
 
-      const gid = paramGroupId ?? grps[0]?.id ?? '';
+      // Initial category set must match the starting kind (deep-link ?kind=income
+      // / ?kind=transfer never fires a toggle, so load the right catalog here).
+      let gid = paramGroupId ?? grps[0]?.id ?? '';
+      if (kind === 'income') gid = grps.find(g => g.is_personal === 1)?.id ?? gid;
       setSelectedGroupId(gid);
-      if (gid) await loadGroup(gid, meRow);
+      // Prefill category (e.g. handed off from import Review) so it carries through.
+      const preCat = typeof paramCategory === 'string' && paramCategory ? paramCategory : undefined;
+      if (gid) await loadGroup(gid, meRow, preCat, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
     })();
   }, []);
 
-  async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string) {
+  async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string, catKind: CategoryKind = 'expense') {
     const [cats, mems] = await Promise.all([
-      getCategoriesByFrequency(db, gid),
+      getCategoriesByFrequency(db, gid, catKind),
       getGroupMembers(db, gid),
     ]);
     setCategories(cats);
@@ -158,9 +210,43 @@ export default function QuickAddScreen() {
     const me_ = meRow ?? me;
     setSplitMembers(mems.map(m => m.id));
     if (me_) setPayerAmounts({ [me_.id]: '' });
+    // Seed the split mode from the group's default (new expenses in shared groups
+    // only — editing reconstructs its own split, solo groups stay equal).
+    if (!isEditing && mems.length > 1) {
+      const g = await getGroupById(db, gid);
+      if (g) setSplitType(g.default_split);
+    }
   }
 
+  // Transfer: load everyone, default the payer to me, and (re)compute the balance
+  // per shared group + combined whenever either side changes.
+  useEffect(() => { getAllPersons(db).then(setAllPersons).catch(() => {}); }, [db]);
+  useEffect(() => {
+    if (!me) return;
+    getFriendBalances(db, me.id)
+      .then(fb => setPersonNet(Object.fromEntries(fb.map(f => [f.personId, f.net]))))
+      .catch(() => {});
+  }, [db, me]);
+  useEffect(() => { if (!transferFromId && me) setTransferFromId(me.id); }, [me, transferFromId]);
+  useEffect(() => {
+    if (kind !== 'transfer' || !transferFromId || !transferToId || transferFromId === transferToId) { setTransferScopes(null); return; }
+    let alive = true;
+    computeTransferScopes(db, transferFromId, transferToId)
+      .then(s => { if (alive) setTransferScopes(s); })
+      .catch(() => { if (alive) setTransferScopes(null); });
+    return () => { alive = false; };
+  }, [db, kind, transferFromId, transferToId]);
+
   const total = parseToPaise(amountText);
+  const transferScopeBal = transferScope === 'all'
+    ? (transferScopes?.all.amount ?? 0)
+    : (transferScopes?.groups.find(g => g.groupId === transferScope)?.amount ?? 0);
+
+  // With smart-category on, Title (drives category) and Note are separate fields,
+  // composed into the single saved note. Otherwise the one field is the note.
+  const composedNote = (flags.smartCategory
+    ? [title.trim(), note.trim()].filter(Boolean).join(' — ')
+    : note.trim()) || undefined;
 
   function computeShares(): Array<{ personId: string; amount: number }> {
     const selected = members.filter(m => splitMembers.includes(m.id));
@@ -210,13 +296,89 @@ export default function QuickAddScreen() {
   const remainder = total - sharesTotal;
   const paymentRemainder = total - paymentsTotal;
 
-  const canSave = total > 0
-    && selectedCategory !== null
-    && selectedGroupId !== ''
-    && (kind === 'income' || (remainder === 0 && paymentRemainder === 0))
-    && (kind === 'income' ? paymentsTotal === total : true);
+  // BudgetNudge: how much budget remains in the selected category this month.
+  const nudgeStat = selectedCategory ? snapshot?.byCategory[selectedCategory.name] : null;
+  const nudgeRemaining = nudgeStat?.budget != null ? nudgeStat.budget - nudgeStat.spentThisMonth : null;
+  const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
+  const nudgeColor = nudgePct == null ? null : nudgePct > 0.2 ? colors.income : nudgePct > 0 ? colors.healthAmber : colors.expense;
+
+  const canSave = kind === 'transfer'
+    ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId && selectedCategory !== null)
+    : (total > 0
+        && selectedCategory !== null
+        && selectedGroupId !== ''
+        && (kind === 'income' || (remainder === 0 && paymentRemainder === 0))
+        && (kind === 'income' ? paymentsTotal === total : true));
+
+  // Location tagging — capture once on open when the user has it enabled, and
+  // surface it in the form so they can see / clear it before saving.
+  async function captureLocation() {
+    setCapturingLoc(true);
+    try { setPlace(await getCurrentPlace()); } finally { setCapturingLoc(false); }
+  }
+  useEffect(() => {
+    if (isEditing) return;
+    (async () => {
+      const on = await settings.saveLocation();
+      setLocEnabled(on);
+      if (on) await captureLocation();
+    })();
+  }, [isEditing]);
+
+  async function handleSaveTransfer() {
+    if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
+    // Reason is now the chosen transfer category; the note is plain free text.
+    const transferCategory = selectedCategory?.name ?? 'Settlement';
+    const transferFullNote = transferNote.trim() || undefined;
+    setSaving(true);
+    try {
+      // Editing an existing settlement → update that single row in its group.
+      if (isEditing) {
+        await updateTxn(db, {
+          id: editId!, groupId: transferScope === 'all' ? selectedGroupId : transferScope,
+          kind: 'settlement', date: txnDate, category: transferCategory,
+          note: transferFullNote, payMethod,
+          payments: [{ personId: transferFromId, amount: total }],
+          shares: [{ personId: transferToId, amount: total }],
+        });
+        haptic.success();
+        router.back();
+        return;
+      }
+
+      // New transfer. Specific group → one row; "All groups" → split largest-first,
+      // all rows in the chosen from→to direction.
+      const plans = transferScope === 'all'
+        ? planAllGroupsSettlement(transferScopes ?? { groups: [], all: { amount: 0, from: transferFromId, to: transferToId } }, total, transferFromId, transferToId)
+        : [{ groupId: transferScope, from: transferFromId, to: transferToId, amount: total }];
+
+      // Fallback: "All groups" with no known balances — post the full amount to the
+      // first group both belong to (or fail if they share none).
+      let finalPlans = plans;
+      if (finalPlans.length === 0) {
+        const firstGroup = transferScopes?.groups[0];
+        if (!firstGroup) { Alert.alert('No shared group', 'These two people don’t share a group to transfer in.'); setSaving(false); return; }
+        finalPlans = [{ groupId: firstGroup.groupId, from: transferFromId, to: transferToId, amount: total }];
+      }
+
+      for (const p of finalPlans) {
+        await recordSettlement(db, {
+          groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
+          date: txnDate, note: transferFullNote, payMethod, category: transferCategory,
+        });
+      }
+      haptic.success();
+      router.back();
+    } catch {
+      haptic.error();
+      Alert.alert('Error', 'Could not save the transfer.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSave() {
+    if (kind === 'transfer') return handleSaveTransfer();
     if (!canSave || saving) return;
     setSaving(true);
     try {
@@ -234,7 +396,7 @@ export default function QuickAddScreen() {
           kind,
           date: txnDate,
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           payments: finalPayments,
           shares: finalShares,
         });
@@ -252,7 +414,7 @@ export default function QuickAddScreen() {
           entryMode: 'quick',
           date: txnDate, // overridden to the split date inside the query
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           recurFreq: recurFreq,
           recurInterval: recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
@@ -264,23 +426,29 @@ export default function QuickAddScreen() {
         return;
       }
 
-      // End date is optional; only valid if it's after the start date.
-      const recurEnd = (recurEnabled && recurEndMs && recurEndMs > txnDate) ? recurEndMs : undefined;
+      // Resolve the end date from the chosen "Ends" mode. "After N times" is
+      // converted to the date of the Nth occurrence so the engine needs no count column.
+      const recurIntervalN = recurFreq === 'custom' ? (parseInt(recurInterval, 10) || 1) : 1;
+      let recurEnd: number | undefined;
+      if (recurEnabled) {
+        if (recurEndMode === 'date') {
+          recurEnd = recurEndMs && recurEndMs > txnDate ? recurEndMs : undefined;
+        } else if (recurEndMode === 'count') {
+          const n = Math.max(1, parseInt(recurCount, 10) || 1);
+          recurEnd = nthOccurrenceMs(txnDate, recurFreq, recurIntervalN, n);
+        }
+      }
 
       const commit = async () => {
-        // Optional, user-controlled location capture (Settings → Privacy).
-        let place: { lat: number; lng: number; label: string | null } | null = null;
-        try {
-          if ((await AsyncStorage.getItem('save_location')) === 'true') place = await getCurrentPlace();
-        } catch { /* best-effort */ }
-
+        // Location was captured into `place` on open (when enabled) and may have
+        // been cleared by the user — use whatever is in state at save time.
         await insertTxn(db, {
           groupId: selectedGroupId,
           kind,
           entryMode: 'quick',
           date: txnDate,
           category: selectedCategory!.name,
-          note: note.trim() || undefined,
+          note: composedNote,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurFreq : undefined,
           recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
@@ -323,249 +491,343 @@ export default function QuickAddScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerClose} accessibilityRole="button" accessibilityLabel="Close">
-          <Feather name="x" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isRecurEdit ? 'Edit Recurring' : isEditing ? (kind === 'income' ? 'Edit Income' : 'Edit Expense') : (kind === 'income' ? 'Add Income' : 'Add Expense')}</Text>
-        <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
-          <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Header: ✕ left · title centered · ✓ save right */}
+      <ModalHeader
+        title={isRecurEdit ? 'Edit recurring' : isEditing ? (kind === 'income' ? 'Edit income' : kind === 'transfer' ? 'Edit settlement' : 'Edit expense') : (kind === 'income' ? 'Add income' : kind === 'transfer' ? 'Settle up' : 'Add expense')}
+        onClose={() => router.back()}
+        right={
+          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Feather name="check" size={24} color={(!canSave || saving) ? colors.textMuted : colors.accent} />
+          </TouchableOpacity>
+        }
+      />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Income has its own dedicated screen (add/income); this screen is expense-only. */}
-
-        <View style={styles.amountRow}>
-          {/* INR-only for v1 — currency picker hidden; static symbol. */}
-          <View style={styles.currencyBadge}>
-            <Text style={styles.currencyBadgeText}>{CURRENCY_MAP[currency].symbol}</Text>
+      {/* Expense / Income toggle — centered, just below the title */}
+      {!isEditing && !isRecurEdit && (
+        <View style={styles.kindToggleRow}>
+          <View style={styles.kindRow}>
+            <TouchableOpacity
+              style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExpenseActive]}
+              onPress={() => {
+                setKind('expense'); haptic.selection();
+                // Reload the expense category set (income/expense have separate catalogs).
+                if (selectedGroupId) loadGroup(selectedGroupId, me, undefined, 'expense');
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'expense' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'expense' && styles.kindLabelActive]}>Expense</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
+              onPress={() => {
+                setKind('transfer'); haptic.selection();
+                // Transfer reason = a 'transfer' category. They're seeded identically
+                // in every group, so load (and create) from the current group.
+                const gid = selectedGroupId || groups.find(g => g.is_personal === 1)?.id || groups[0]?.id || '';
+                if (gid) loadGroup(gid, me, undefined, 'transfer');
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'transfer' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'transfer' && styles.kindLabelTransferActive]}>Transfer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
+              onPress={() => {
+                setKind('income'); haptic.selection();
+                // Income is always personal — never a shared group — and uses the
+                // income category catalog (not expense).
+                const p = groups.find(g => g.is_personal === 1);
+                const gid = p?.id ?? selectedGroupId;
+                if (p && p.id !== selectedGroupId) setSelectedGroupId(p.id);
+                if (gid) loadGroup(gid, me, undefined, 'income');
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === 'income' }}
+            >
+              <Text style={[styles.kindLabel, kind === 'income' && styles.kindLabelIncomeActive]}>Income</Text>
+            </TouchableOpacity>
           </View>
+        </View>
+      )}
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+
+        {/* Large centered amount */}
+        <View style={styles.amountBlock}>
           <TextInput
-            style={styles.amountInput}
-            value={amountText}
-            onChangeText={setAmountText}
+            style={[styles.amountInput, { color: kind === 'income' ? colors.income : kind === 'transfer' ? colors.settle : colors.textPrimary }]}
+            value={formatAmountInput(amountText)}
+            onChangeText={(t) => setAmountText(sanitizeAmountInput(t))}
             keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor={colors.textMuted}
+            placeholder={kind === 'transfer' && transferScopeBal > 0 ? formatRupees(transferScopeBal) : '₹0'}
+            placeholderTextColor={kind === 'income' ? colors.income + '55' : colors.textMuted}
             accessibilityLabel="Amount"
             autoFocus={!isEditing}
           />
+          <View style={[styles.amountCursor, { backgroundColor: kind === 'income' ? colors.income : kind === 'transfer' ? colors.settle : colors.accent }]} />
         </View>
 
-        {groups.length > 1 && (() => {
-          const selectedGroup = groups.find(g => g.id === selectedGroupId);
-          return (
-            <TouchableOpacity
-              style={styles.groupSelector}
-              onPress={() => setShowGroupPicker(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Select group"
-            >
-              <View style={[styles.groupSelectorIcon, { backgroundColor: (selectedGroup?.color ?? colors.accent) + '22' }]}>
-                <Feather name={asFeather(selectedGroup?.icon, 'layers')} size={16} color={selectedGroup?.color ?? colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.groupSelectorLabel}>Group</Text>
-                <Text style={styles.groupSelectorName}>{selectedGroup?.name ?? 'Select'}</Text>
-              </View>
-              <Feather name="chevron-down" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          );
-        })()}
-
-        {flags.smartCategory ? (
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>What for?</Text>
-            <Input
-              value={note}
-              onChangeText={onTitleChange}
-              placeholder="e.g. Uber, Groceries, Netflix"
-              accessibilityLabel="Title"
-              autoCapitalize="sentences"
-              maxLength={80}
-            />
-            {!catManual && selectedCategory ? (
-              <TouchableOpacity style={styles.smartCatChip} onPress={() => setCatManual(true)} accessibilityRole="button" accessibilityLabel="Change category">
-                <View style={[styles.smartCatDot, { backgroundColor: categoryVisual(selectedCategory.name).color + '22' }]}>
-                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={categoryVisual(selectedCategory.name).color} />
-                </View>
-                <Text style={styles.smartCatName}>{selectedCategory.name}</Text>
-                <Text style={styles.smartCatHint}>auto · tap to change</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ marginTop: space.sm }}>
-                <CategoryPicker
-                  categories={categories}
-                  value={selectedCategory}
-                  onChange={(c) => {
-                    setSelectedCategory(c);
-                    setCatManual(true);
-                    // Learn from the correction so this title picks `c` next time.
-                    if (note.trim()) recordCorrection(note, c.name).then(setLearned).catch(() => {});
-                  }}
-                  onCreate={async (name) => {
-                    const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-                    setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-                    return created;
-                  }}
-                />
-              </View>
-            )}
-          </View>
-        ) : (
-          <>
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Category</Text>
-              <CategoryPicker
-                categories={categories}
-                value={selectedCategory}
-                onChange={setSelectedCategory}
-                onCreate={async (name) => {
-                  const created = await insertCategory(db, selectedGroupId, name, 'tag', colors.accent);
-                  setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-                  return created;
-                }}
-              />
-            </View>
-
-            <Input
-              value={note}
-              onChangeText={setNote}
-              placeholder="Note (optional)"
-              accessibilityLabel="Note"
-              maxLength={80}
-            />
-          </>
-        )}
-
-        {attachmentUri ? (
-          <View style={styles.attachRow}>
-            <Image source={{ uri: attachmentUri }} style={styles.attachThumb} />
-            <Text style={styles.attachName} numberOfLines={1}>Receipt attached</Text>
-            <TouchableOpacity onPress={() => setAttachmentUri(null)} hitSlop={10} accessibilityLabel="Remove attachment">
-              <Feather name="x" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        ) : (
+        {/* Category + Date pills row — shared selection UI across Expense / Income /
+            Transfer. For transfer the category IS the reason. */}
+        <View style={styles.pillsRow}>
           <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={() => {
-              if (Platform.OS === 'ios') {
-                ActionSheetIOS.showActionSheetWithOptions(
-                  { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-                  async (i) => {
-                    if (i === 1) { const u = await pickAttachment('camera'); if (u) setAttachmentUri(u); }
-                    if (i === 2) { const u = await pickAttachment('gallery'); if (u) setAttachmentUri(u); }
-                  },
-                );
-              } else {
-                pickAttachment('camera').then(u => { if (u) setAttachmentUri(u); });
-              }
-            }}
+            style={styles.catPill}
+            onPress={() => { Keyboard.dismiss(); haptic.light(); setShowCatPicker(true); }}
             accessibilityRole="button"
-            accessibilityLabel="Attach receipt"
+            accessibilityLabel={selectedCategory ? `${kind === 'transfer' ? 'Reason' : 'Category'}: ${selectedCategory.name}` : (kind === 'transfer' ? 'Choose reason' : 'Choose category')}
           >
-            <Feather name="paperclip" size={16} color={colors.accent} />
-            <Text style={styles.attachBtnText}>Attach receipt</Text>
+            {selectedCategory ? (
+              <>
+                <View style={[styles.catPillDot, { backgroundColor: (selectedCategory.color ?? colors.accent) + '22' }]}>
+                  <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={selectedCategory.color ?? colors.accent} />
+                </View>
+                <Text style={styles.catPillText}>{selectedCategory.name}</Text>
+              </>
+            ) : (
+              <Text style={styles.catPillPlaceholder}>{kind === 'transfer' ? 'Reason' : 'Category'}</Text>
+            )}
+            <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
+          <TouchableOpacity style={styles.datePill} onPress={() => { Keyboard.dismiss(); setShowDate(true); }} accessibilityRole="button" accessibilityLabel="Date">
+            <Text style={styles.datePillText}>
+              {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'dd MMM')}
+            </Text>
+            <Feather name="chevron-down" size={12} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Hidden CategoryPicker controlled by showCatPicker pill */}
+        <CategoryPicker
+          categories={categories}
+          value={selectedCategory}
+          hideTrigger
+          forceOpen={showCatPicker}
+          onClose={() => setShowCatPicker(false)}
+          onChange={(c) => {
+            setSelectedCategory(c);
+            setCatManual(true);
+            setShowCatPicker(false);
+            if (kind !== 'transfer' && title.trim()) recordCorrection(title, c.name).then(setLearned).catch(() => {});
+          }}
+          onCreate={async (name) => {
+            const created = await insertCategory(db, name, 'tag', colors.accent, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
+            setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+            return created;
+          }}
+        />
+
+        {kind === 'transfer' && (
+          <TransferBody
+            me={me}
+            persons={allPersons}
+            fromId={transferFromId}
+            toId={transferToId}
+            onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
+            onSwap={() => { setTransferFromId(transferToId); setTransferToId(transferFromId); }}
+            scopes={transferScopes}
+            scope={transferScope}
+            onScope={setTransferScope}
+            payMethod={payMethod}
+            onPayMethod={setPayMethod}
+            note={transferNote}
+            onNote={setTransferNote}
+          />
         )}
 
-        <Text style={styles.fieldLabel}>{recurEnabled ? 'Starts on' : 'Date'}</Text>
-        <TouchableOpacity style={styles.dateField} onPress={() => setShowDate(true)} accessibilityRole="button" accessibilityLabel="Date">
-          <Feather name="calendar" size={16} color={colors.accent} />
-          <Text style={styles.dateText}>
-            {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'EEE, dd MMM yyyy')}
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
+        {kind !== 'transfer' && (<>
 
-        {!isEditing && flags.recurring && (
-        <View style={styles.scheduleRow}>
-          <Text style={[styles.fieldLabel, recurEnabled && { color: colors.accent }]}>
-            {recurEnabled ? `Repeats ${recurFreq}` : 'Repeat this'}
-          </Text>
-          <Switch
-            value={recurEnabled}
-            onValueChange={setRecurEnabled}
-            trackColor={{ true: colors.accent, false: colors.bgMuted }}
-            thumbColor={colors.textPrimary}
-            accessibilityLabel="Repeat on a schedule"
+        {/* Group selector — expense only (income is always Personal). Inline chips
+            for faster group switching without opening a modal. */}
+        {kind === 'expense' && groups.length > 1 && (
+          <GroupSelector
+            groups={groups}
+            selectedId={selectedGroupId}
+            onSelect={async (gid) => {
+              Keyboard.dismiss();
+              setSelectedGroupId(gid);
+              await loadGroup(gid, me);
+            }}
+            label="In"
+          />
+        )}
+
+        {/* Top field: Title (drives category) when smart-category is on, else the Note. */}
+        <View style={styles.noteCard}>
+          <TextInput
+            style={styles.noteCardInput}
+            value={flags.smartCategory ? title : note}
+            onChangeText={flags.smartCategory ? onTitleChange : setNote}
+            placeholder={flags.smartCategory
+              ? (kind === 'income' ? 'e.g. Salary, Freelance, Dividend' : 'e.g. Uber, Groceries, Netflix')
+              : (kind === 'income' ? 'Source (optional)' : 'Note (optional)')}
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
+            autoCapitalize="sentences"
+            maxLength={80}
           />
         </View>
+
+        {/* Budget nudge — dot + text (green = remaining, red = over) */}
+        {kind === 'expense' && nudgeColor != null && nudgeRemaining != null && (
+          <View style={styles.nudge}>
+            <View style={[styles.nudgeDot, { backgroundColor: nudgeColor }]} />
+            <Text style={[styles.nudgeText, { color: nudgeColor }]}>
+              {nudgeRemaining >= 0
+                ? `${formatCompact(nudgeRemaining)} left in ${selectedCategory!.name} this month`
+                : `${formatCompact(-nudgeRemaining)} over budget in ${selectedCategory!.name}`}
+            </Text>
+          </View>
         )}
 
-        {!isEditing && recurEnabled && (
-          <View style={styles.recurOptions}>
-            <View style={styles.splitTypeRow}>
-              {(['daily', 'weekly', 'monthly', 'custom'] as const).map(f => (
-                <TouchableOpacity
-                  key={f}
-                  style={[styles.splitTypeBtn, recurFreq === f && styles.splitTypeActive]}
-                  onPress={() => setRecurFreq(f)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: recurFreq === f }}
-                >
-                  <Text style={[styles.splitTypeLabel, recurFreq === f && { color: colors.bg }]}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {recurFreq === 'custom' && (
-              <View style={styles.recurIntervalRow}>
-                <Text style={styles.fieldLabel}>Every</Text>
+        {/* More options — Attach receipt + Recurring. (Income is the header
+            toggle; Itemized is a separate FAB action.) */}
+        <MoreOptions hint="Split · Attach" forceOpen={isEditing}>
+            {/* Note lives here when the top field is the Title (smart-category on). */}
+            {flags.smartCategory && (
+              <View style={styles.noteCard}>
                 <TextInput
-                  style={styles.recurIntervalInput}
-                  value={recurInterval}
-                  onChangeText={setRecurInterval}
-                  keyboardType="number-pad"
-                  placeholder="1"
+                  style={styles.noteCardInput}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="Note (optional)"
                   placeholderTextColor={colors.textMuted}
-                  accessibilityLabel="Interval days"
+                  accessibilityLabel="Note"
+                  autoCapitalize="sentences"
+                  maxLength={120}
                 />
-                <Text style={styles.fieldLabel}>days</Text>
               </View>
             )}
 
-            <Text style={styles.fieldLabel}>Ends</Text>
-            <View style={styles.endRow}>
-              <TouchableOpacity style={styles.endDateBtn} onPress={() => setShowEndDate(true)} accessibilityRole="button" accessibilityLabel="End date">
-                <Feather name="calendar" size={15} color={colors.accent} />
-                <Text style={styles.dateText}>{recurEndMs ? format(new Date(recurEndMs), 'dd MMM yyyy') : 'Never'}</Text>
+            {/* Split by items — expense-only; income has no items to split. */}
+            {!isEditing && kind !== 'income' && (
+              <TouchableOpacity
+                style={styles.byItemsRow}
+                onPress={() => router.push(`/add/itemized${selectedGroupId ? `?groupId=${selectedGroupId}` : ''}` as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Split by items"
+              >
+                <Feather name="list" size={16} color={colors.accent} />
+                <Text style={styles.byItemsText}>Split by items</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
               </TouchableOpacity>
-              {recurEndMs != null && (
-                <TouchableOpacity style={styles.endNeverBtn} onPress={() => setRecurEndMs(null)} accessibilityRole="button" accessibilityLabel="No end date">
-                  <Text style={styles.endNeverText}>Never</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
+            )}
 
-        {kind === 'expense' && members.length > 1 && total > 0 && (
-          <View style={styles.sentenceRow}>
-            <Text style={styles.sentenceText}>Paid by</Text>
-            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowPayers(true)} accessibilityRole="button" accessibilityLabel="Who paid">
-              <Text style={styles.sentencePillText}>
-                {payments.length === 1
-                  ? payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone'
-                  : `${payments.length} people`}
-              </Text>
-              <Feather name="chevron-down" size={14} color={colors.accent} />
-            </TouchableOpacity>
-            <Text style={styles.sentenceDot}>·</Text>
-            <Text style={styles.sentenceText}>split</Text>
-            <TouchableOpacity style={styles.sentencePill} onPress={() => setShowSplit(true)} accessibilityRole="button" accessibilityLabel="Configure split">
-              <Text style={styles.sentencePillText}>
-                {splitType === 'equal' ? 'equally' : splitType}
-              </Text>
-              <Feather name="chevron-down" size={14} color={colors.accent} />
-            </TouchableOpacity>
-          </View>
-        )}
+            {attachmentUri ? (
+              <View style={styles.attachRow}>
+                <Image source={{ uri: attachmentUri }} style={styles.attachThumb} />
+                <Text style={styles.attachName} numberOfLines={1}>Receipt attached</Text>
+                <TouchableOpacity onPress={() => setAttachmentUri(null)} hitSlop={10} accessibilityLabel="Remove attachment">
+                  <Feather name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.attachBtn}
+                onPress={() => {
+                  const attach = async (src: 'camera' | 'gallery') => {
+                    try {
+                      const u = await pickAttachment(src);
+                      if (u) setAttachmentUri(u);
+                    } catch (e) {
+                      // Out of storage — the design lets the user keep going without a photo.
+                      if (e instanceof AttachmentStorageError) {
+                        Alert.alert(
+                          'Photo couldn’t be saved',
+                          'Your device is low on storage. Free up space and try again — your expense will still save without the photo.',
+                          [
+                            { text: 'Storage settings', onPress: () => router.push('/storage' as any) },
+                            { text: 'OK', style: 'cancel' },
+                          ],
+                        );
+                      }
+                    }
+                  };
+                  if (Platform.OS === 'ios') {
+                    ActionSheetIOS.showActionSheetWithOptions(
+                      { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+                      (i) => { if (i === 1) attach('camera'); if (i === 2) attach('gallery'); },
+                    );
+                  } else {
+                    attach('camera');
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Attach receipt"
+              >
+                <Feather name="paperclip" size={16} color={colors.accent} />
+                <Text style={styles.attachBtnText}>Attach receipt</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Location — shown when the user has location tagging on (Settings). */}
+            {locEnabled && !isEditing && (
+              <View style={styles.attachRow}>
+                <Feather name="map-pin" size={16} color={place ? colors.accent : colors.textMuted} />
+                <Text style={styles.attachName} numberOfLines={1}>
+                  {capturingLoc ? 'Locating…' : place?.label || (place ? 'Location tagged' : 'No location yet')}
+                </Text>
+                {place ? (
+                  <TouchableOpacity onPress={() => setPlace(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
+                    <Feather name="x" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={captureLocation} hitSlop={10} disabled={capturingLoc} accessibilityRole="button" accessibilityLabel="Capture location">
+                    <Feather name="refresh-cw" size={15} color={colors.accent} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Recurring — design: Screens 4, "Recurring expanded inline". */}
+            {!isEditing && flags.recurring && (
+              <RecurringControls
+                enabled={recurEnabled} setEnabled={setRecurEnabled}
+                freq={recurFreq} setFreq={setRecurFreq}
+                interval={recurInterval} setInterval={setRecurInterval}
+                endMode={recurEndMode} setEndMode={setRecurEndMode}
+                endMs={recurEndMs} setEndMs={setRecurEndMs}
+                count={recurCount} setCount={setRecurCount}
+                txnDate={txnDate}
+                onPickEndDate={() => setShowEndDate(true)}
+              />
+            )}
+        </MoreOptions>
+
+        {kind === 'expense' && members.length > 1 && total > 0 && (() => {
+          const inSplit = members.filter(m => splitMembers.includes(m.id));
+          const perEach = inSplit.length > 0 ? Math.round(total / inSplit.length) : 0;
+          const summary = splitType === 'equal'
+            ? `Equal · ${formatCompact(perEach)} each`
+            : splitType.charAt(0).toUpperCase() + splitType.slice(1);
+          const payerName = payments.length === 1
+            ? (payments[0].personId === me?.id ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone')
+            : `${payments.length} people`;
+          const payers = payments
+            .map(p => members.find(m => m.id === p.personId))
+            .filter((m): m is Person => !!m);
+          return (
+            <View>
+              {/* Split with [avatars] · Equal · ₹217 each (design Screen 2) */}
+              <TouchableOpacity style={styles.splitWithRow} onPress={() => { Keyboard.dismiss(); setShowSplit(true); }} accessibilityRole="button" accessibilityLabel="Configure split">
+                <Text style={styles.splitWithLabel}>Split with</Text>
+                <View style={styles.splitWithRight}>
+                  <AvatarStack people={inSplit} size={24} max={4} />
+                  <Text style={styles.splitWithValue}>{summary}</Text>
+                </View>
+              </TouchableOpacity>
+              {/* Who paid — prominent; shows payer avatars when more than one person paid. */}
+              <TouchableOpacity style={styles.paidByLine} onPress={() => { Keyboard.dismiss(); setShowPayers(true); }} accessibilityRole="button" accessibilityLabel="Who paid">
+                <Text style={styles.paidByLabel}>Paid by</Text>
+                {payments.length > 1 && <AvatarStack people={payers} size={20} max={3} />}
+                <Text style={styles.paidByValue}>{payerName}</Text>
+                <Feather name="chevron-right" size={15} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         {kind === 'expense' && total > 0 && (paymentRemainder !== 0 || remainder !== 0) && (
           <Text style={styles.remainderWarning}>
@@ -574,107 +836,29 @@ export default function QuickAddScreen() {
               : remainder > 0 ? `${formatRupees(remainder)} unassigned` : `${formatRupees(-remainder)} over-assigned`}
           </Text>
         )}
+        </>)}
 
+        {/* No bottom CTA — the ✓ in the header saves. */}
       </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={showSplit} transparent animationType="slide" onRequestClose={() => setShowSplit(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowSplit(false)}>
-          <Pressable style={styles.splitSheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.splitTitle}>Split</Text>
-
-            <View style={styles.splitTypeRow}>
-              {(['equal', 'exact', 'percent', 'shares'] as SplitType[]).map(st => (
-                <TouchableOpacity
-                  key={st}
-                  style={[styles.splitTypeBtn, splitType === st && styles.splitTypeActive]}
-                  onPress={() => setSplitType(st)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: splitType === st }}
-                >
-                  <Text style={[styles.splitTypeLabel, splitType === st && { color: colors.bg }]}>
-                    {st.charAt(0).toUpperCase() + st.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView style={{ maxHeight: 300 }}>
-              {members.map(m => {
-                const included = splitMembers.includes(m.id);
-                let inputEl = null;
-                if (included && splitType === 'exact') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={exactAmounts[m.id] ?? ''}
-                      onChangeText={v => setExactAmounts(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="decimal-pad"
-                      placeholder="₹0"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'percent') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={percentages[m.id] ?? ''}
-                      onChangeText={v => setPercentages(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="number-pad"
-                      placeholder="%"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'shares') {
-                  inputEl = (
-                    <TextInput
-                      style={styles.splitInput}
-                      value={ratios[m.id] ?? '1'}
-                      onChangeText={v => setRatios(prev => ({ ...prev, [m.id]: v }))}
-                      keyboardType="number-pad"
-                      placeholder="1"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  );
-                } else if (included && splitType === 'equal') {
-                  const idx = splitMembers.indexOf(m.id);
-                  const eq = splitEqual(total, splitMembers.length);
-                  inputEl = <Text style={styles.eqAmount}>{formatRupees(eq[idx] ?? 0)}</Text>;
-                }
-                return (
-                  <View key={m.id} style={styles.splitRow}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} onPress={() => {
-                      setSplitMembers(prev =>
-                        prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                      );
-                    }} selected={included} />
-                    <Text style={styles.splitName}>{m.name}</Text>
-                    {inputEl}
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.remainderBar}>
-              <Text style={[styles.remainderText, { color: remainder === 0 ? colors.income : colors.expense }]}>
-                {remainder === 0
-                  ? 'Balanced'
-                  : remainder > 0
-                  ? `${formatRupees(remainder)} unassigned`
-                  : `${formatRupees(-remainder)} over-assigned`}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => setShowSplit(false)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <SplitSheet
+        visible={showSplit}
+        onClose={() => setShowSplit(false)}
+        members={members}
+        splitMembers={splitMembers}
+        setSplitMembers={setSplitMembers}
+        splitType={splitType}
+        setSplitType={setSplitType}
+        exactAmounts={exactAmounts}
+        setExactAmounts={setExactAmounts}
+        percentages={percentages}
+        setPercentages={setPercentages}
+        ratios={ratios}
+        setRatios={setRatios}
+        total={total}
+        remainder={remainder}
+      />
 
       <DatePickerSheet visible={showDate} value={txnDate} onClose={() => setShowDate(false)} onChange={setTxnDate} />
       <DatePickerSheet
@@ -684,133 +868,114 @@ export default function QuickAddScreen() {
         onChange={setRecurEndMs}
       />
 
-      <SheetModal visible={showGroupPicker} onClose={() => setShowGroupPicker(false)} title="Select group" scroll={false}>
-        {groups.map(g => (
-          <TouchableOpacity
-            key={g.id}
-            style={[styles.groupPickerRow, selectedGroupId === g.id && styles.groupPickerRowActive]}
-            onPress={async () => { setSelectedGroupId(g.id); await loadGroup(g.id, me); setShowGroupPicker(false); }}
-            accessibilityRole="button"
-          >
-            <View style={[styles.groupPickerIcon, { backgroundColor: g.color + '22' }]}>
-              <Feather name={asFeather(g.icon, 'layers')} size={16} color={g.color} />
-            </View>
-            <Text style={styles.groupPickerName}>{g.name}</Text>
-            {selectedGroupId === g.id && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
+      {/* Group picker modal removed — replaced by inline GroupSelector chips above. */}
+
+      {/* Transfer: pick the payer / recipient for the active slot */}
+      <TransferSlotSheet
+        slot={transferSlot}
+        persons={allPersons}
+        me={me}
+        fromId={transferFromId}
+        toId={transferToId}
+        personNet={personNet}
+        onClose={() => setTransferSlot(null)}
+        onPick={(pid) => {
+          // Keep the two slots distinct: picking a person already in the other slot swaps them.
+          if (transferSlot === 'from') {
+            if (pid === transferToId) setTransferToId(transferFromId);
+            setTransferFromId(pid);
+          } else if (transferSlot === 'to') {
+            if (pid === transferFromId) setTransferFromId(transferToId);
+            setTransferToId(pid);
+          }
+          setTransferSlot(null);
+        }}
+      />
 
       {/* Currency picker hidden for v1 (INR-only). */}
 
       {/* Paid by sheet — set one or more payers */}
-      <SheetModal visible={showPayers} onClose={() => setShowPayers(false)} title="Who paid?">
-        <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
-        {members.map(m => (
-          <View key={m.id} style={styles.payerSheetRow}>
-            <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
-            <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
-            <View style={styles.payerInputWrap}>
-              <Text style={styles.payerRupee}>₹</Text>
-              <TextInput
-                style={styles.payerSheetInput}
-                value={payerAmounts[m.id] ?? ''}
-                onChangeText={v => setPayerAmounts(prev => ({ ...prev, [m.id]: v }))}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
-        ))}
-        <TouchableOpacity
-          style={styles.payerQuickBtn}
-          onPress={() => me && setPayerAmounts({ [me.id]: (total / 100).toString() })}
-          accessibilityRole="button"
-        >
-          <Feather name="user" size={14} color={colors.accent} />
-          <Text style={styles.payerQuickText}>I paid the whole bill</Text>
-        </TouchableOpacity>
-        <View style={styles.remainderBar}>
-          <Text style={[styles.remainderText, { color: paymentRemainder === 0 ? colors.income : colors.expense }]}>
-            {paymentRemainder === 0 ? 'Balanced' : paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left to assign` : `${formatRupees(-paymentRemainder)} over`}
-          </Text>
-        </View>
-        <PrimaryButton label="Done" onPress={() => setShowPayers(false)} disabled={paymentRemainder !== 0} />
-      </SheetModal>
+      <PayersSheet
+        visible={showPayers}
+        onClose={() => setShowPayers(false)}
+        members={members}
+        me={me}
+        payerAmounts={payerAmounts}
+        setPayerAmounts={setPayerAmounts}
+        total={total}
+        paymentRemainder={paymentRemainder}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, minHeight: 44 },
-  title: { ...type.heading, color: colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: space.sm },
-  headerSave: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold', minWidth: 40, textAlign: 'right' },
-  headerClose: { minWidth: 40, alignItems: 'flex-start' },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.sm },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  currencyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgMuted, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, borderWidth: 1, borderColor: colors.border },
-  currencyBadgeText: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  amountInput: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, textAlign: 'center', borderBottomWidth: 1, borderColor: colors.border, paddingBottom: space.sm },
-  field: { gap: space.xs },
-  smartCatChip: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.xs },
+  // paddingTop clears the native sheet's grabber so the title isn't tucked under it.
+  kindToggleRow: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
+  // Header kind toggle
+  kindRow: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border },
+  kindBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
+  kindBtnExpenseActive: { backgroundColor: colors.accent },
+  kindBtnIncomeActive: { backgroundColor: colors.income },
+  kindBtnTransferActive: { backgroundColor: colors.settle },
+  kindLabel: { fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_600SemiBold' },
+  kindLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  kindLabelIncomeActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  kindLabelTransferActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+  // Large centered amount
+  amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: colors.border + '55' },
+  // No lineHeight (it clipped the top of the glyphs on iOS); vertical padding gives headroom.
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, textAlign: 'center', letterSpacing: -1.5, paddingVertical: 4, alignSelf: 'stretch', width: '100%' },
+  amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: 4 },
+
+  // Category + date pills row
+  pillsRow: { flexDirection: 'row', gap: space.sm },
+  catPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  catPillDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  catPillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  catPillPlaceholder: { fontSize: 13, color: colors.textMuted, flex: 1 },
+  datePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
+
+  // Note card
+  noteCard: { backgroundColor: colors.bgCard, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  noteCardInput: { fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
+
+  // Budget nudge dot style
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  nudgeDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
+  nudgeText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
+
+  // More-options expander
+  byItemsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  byItemsText: { ...type.body, color: colors.textPrimary },
+
+  // Recurring purple card (design: Screens 4)
+  // Neutral card with the app's teal accent (matches the rest of the app — no off-theme purple).
+  // SemiBold on both states so the active pill doesn't change width (no resize on select).
+
   smartCatDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   smartCatName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   smartCatHint: { ...type.caption, color: colors.textMuted },
-  fieldLabel: { ...type.label, color: colors.textSecondary },
-  groupSelector: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  groupSelectorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  groupSelectorLabel: { ...type.caption, color: colors.textMuted },
-  groupSelectorName: { ...type.body, color: colors.textPrimary },
-  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
-  groupPickerRowActive: { backgroundColor: colors.accentMuted },
-  groupPickerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as any },
   attachBtnText: { ...type.body, color: colors.accent },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   attachThumb: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
   attachName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  dateField: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.md },
-  dateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  sentenceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs, padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  sentenceText: { ...type.body, color: colors.textSecondary },
-  sentencePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, minHeight: 32 },
-  sentencePillText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  sentenceDot: { ...type.body, color: colors.textMuted },
+  // "Split with [avatars] · Equal · ₹217 each" row (design Screen 2)
+  splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  splitWithLabel: { ...type.body, color: colors.textSecondary },
+  splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  splitWithValue: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingTop: space.sm + 2 },
+  paidByLabel: { ...type.body, color: colors.textSecondary },
+  paidByValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
-  saveBtn: { marginTop: space.md },
-  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
-  scheduleBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recurOptions: { gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  splitSheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
-  splitTitle: { ...type.subheading, color: colors.textPrimary },
-  splitTypeRow: { flexDirection: 'row', gap: space.xs, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  splitTypeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm },
-  splitTypeActive: { backgroundColor: colors.accent },
-  splitTypeLabel: { ...type.caption, color: colors.textSecondary },
-  splitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  splitName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  splitInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, width: 80, textAlign: 'right', borderWidth: 1, borderColor: colors.border },
-  eqAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textSecondary },
-  remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
-  remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
-  payerHint: { ...type.caption, color: colors.textMuted },
-  payerSheetRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.xs },
-  payerSheetName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  payerInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 100 },
-  payerRupee: { ...type.body, color: colors.textMuted },
-  payerSheetInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
-  payerQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted },
-  payerQuickText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   endRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   endDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   endNeverBtn: { paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '44' },
   endNeverText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  doneBtnText: { ...type.button, color: colors.bg },
 });

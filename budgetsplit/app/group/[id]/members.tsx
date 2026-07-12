@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Animated,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../../../src/hooks/useScreenData';
+
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
@@ -13,6 +14,8 @@ import { space, radius, shadow, layout } from '../../../src/constants/layout';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { useUndo } from '../../../src/components/system/UndoToast';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
@@ -21,6 +24,7 @@ import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
+import { oweView } from '../../../src/lib/owe';
 import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 
@@ -28,43 +32,41 @@ export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const [members, setMembers] = useState<Person[]>([]);
-  const [allPersons, setAllPersons] = useState<Person[]>([]);
-  const [net, setNet] = useState<Record<string, number>>({});
+  const { showUndo } = useUndo();
   const [showAdd, setShowAdd] = useState(false);
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
-  const [loadError, setLoadError] = useState(false);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  useFocusEffect(useCallback(() => { load(); }, [groupId]));
+  const { data, error: loadError, reload } = useScreenData(async (db) => {
+    const [members, allPersons, net] = await Promise.all([
+      getGroupMembers(db, groupId),
+      getAllPersons(db),
+      getGroupNet(db, groupId),
+    ]);
+    return { members, allPersons, net };
+  }, [groupId]);
+  const members = data?.members ?? [];
+  const allPersons = data?.allPersons ?? [];
+  const net = data?.net ?? {};
 
   if (!groupId) { router.back(); return null; }
 
-  async function load() {
-    try {
-      const [m, all, n] = await Promise.all([
-        getGroupMembers(db, groupId),
-        getAllPersons(db),
-        getGroupNet(db, groupId),
-      ]);
-      setMembers(m);
-      setAllPersons(all);
-      setNet(n);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
-
   const memberIds = new Set(members.map(m => m.id));
 
-  async function handleAdd(personId: string) {
+  function togglePending(id: string) {
+    setPendingIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function commitAdd() {
+    if (pendingIds.length === 0) return;
     try {
-      await addMemberToGroup(db, groupId, personId);
+      for (const pid of pendingIds) await addMemberToGroup(db, groupId, pid);
+      haptic.success();
       setShowAdd(false);
-      await load();
+      setPendingIds([]);
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -83,7 +85,7 @@ export default function MembersScreen() {
       await updatePersonName(db, renamePerson.id, trimmed);
       haptic.success();
       setRenamePerson(null);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -107,7 +109,11 @@ export default function MembersScreen() {
         onPress: async () => {
           try {
             await removeMemberFromGroup(db, groupId, person.id);
-            await load();
+            await reload();
+            showUndo({
+              message: `Removed ${person.name}`,
+              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id); await reload(); } catch { /* ignore */ } },
+            });
           } catch {
             haptic.error();
             Alert.alert('Something went wrong', 'Please try again.');
@@ -119,15 +125,10 @@ export default function MembersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={14} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Members</Text>
-      </View>
+      <ScreenHeader title="Members" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       ) : (
       <ScrollView contentContainerStyle={styles.list}>
         {members.length > 0 && (
@@ -158,7 +159,7 @@ export default function MembersScreen() {
                       color={item.avatar_color}
                       size={36}
                       imageUri={item.image_uri}
-                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await load(); } }}
+                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); } }}
                     />
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -167,11 +168,14 @@ export default function MembersScreen() {
                       accessibilityLabel={`Rename ${item.name}`}
                     >
                       <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-                      {net[item.id] !== undefined && net[item.id] !== 0 && (
-                        <Text style={[styles.netText, { color: net[item.id] > 0 ? colors.income : colors.expense }]}>
-                          {net[item.id] > 0 ? `Owed ${formatRupees(net[item.id])}` : `Owes ${formatRupees(-net[item.id])}`}
-                        </Text>
-                      )}
+                      {net[item.id] !== undefined && net[item.id] !== 0 && (() => {
+                        const ov = oweView(net[item.id]);
+                        return (
+                          <Text style={[styles.netText, { color: ov.color }]}>
+                            {ov.thirdPerson} {formatRupees(ov.amount)}
+                          </Text>
+                        );
+                      })()}
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
                       <Feather name="edit-2" size={15} color={colors.textMuted} />
@@ -184,7 +188,7 @@ export default function MembersScreen() {
         )}
 
         <View style={styles.addButtons}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityRole="button">
+          <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
             <View style={styles.addBtnIcon}>
               <Feather name="user-plus" size={16} color={colors.accent} />
             </View>
@@ -195,21 +199,25 @@ export default function MembersScreen() {
       </ScrollView>
       )}
 
-      {/* Add person sheet — search existing or create new */}
-      <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add to group">
+      {/* Add person sheet — search + multi-select existing, or create new */}
+      <SheetModal visible={showAdd} onClose={() => { setShowAdd(false); setPendingIds([]); }} title="Add to group">
         <PersonPicker
           persons={allPersons}
-          selected={members.map(m => m.id)}
+          selected={pendingIds}
           exclude={members.map(m => m.id)}
-          onToggle={handleAdd}
+          onToggle={togglePending}
           onCreate={async (name) => {
             const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
-            await addMemberToGroup(db, groupId, person.id);
-            setShowAdd(false);
-            await load();
+            reload();
             return person;
           }}
           placeholder="Search or create a person…"
+        />
+        <PrimaryButton
+          label={pendingIds.length > 0 ? `Add ${pendingIds.length} ${pendingIds.length === 1 ? 'person' : 'people'}` : 'Select people to add'}
+          onPress={commitAdd}
+          disabled={pendingIds.length === 0}
+          style={styles.addCommit}
         />
       </SheetModal>
 
@@ -255,6 +263,7 @@ const styles = StyleSheet.create({
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
 
   renameGap: { marginBottom: space.md },
+  addCommit: { marginTop: space.sm },
   addButtons: { gap: space.sm },
   addBtn: {
     flexDirection: 'row',

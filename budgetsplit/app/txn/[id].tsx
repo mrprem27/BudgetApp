@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal, useWindowDimensions, Platform, ActionSheetIOS } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -10,8 +10,10 @@ import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { getTxnById, softDeleteTxn, restoreTxn, getLineItems } from '../../src/db/queries/transactions';
+import { getTxnById, softDeleteTxn, restoreTxn, getLineItems, setTxnAttachment } from '../../src/db/queries/transactions';
+import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../../src/lib/attachment';
 import { useUndo } from '../../src/components/system/UndoToast';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { getGroupById } from '../../src/db/queries/groups';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getAuditLog } from '../../src/db/queries/audit';
@@ -37,6 +39,7 @@ export default function TxnDetailScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
+  const { refresh } = useDataRefresh();
   const [txn, setTxn] = useState<TxnWithSplits | null>(null);
   const [members, setMembers] = useState<Person[]>([]);
   const [me, setMe] = useState<Person | null>(null);
@@ -78,6 +81,52 @@ export default function TxnDetailScreen() {
     }
   }
 
+  async function attachReceipt(source: 'camera' | 'gallery') {
+    try {
+      const uri = await pickAttachment(source);
+      if (!uri) return;
+      // Replacing an existing receipt → remove the old file from disk first.
+      if (txn?.attachment_uri) await deleteAttachment(txn.attachment_uri);
+      await setTxnAttachment(db, id, uri);
+      haptic.success();
+      await load();
+    } catch (e) {
+      if (e instanceof AttachmentStorageError) {
+        Alert.alert('Low on storage', 'Your device is low on storage. Free up space and try again.');
+      } else {
+        Alert.alert('Something went wrong', 'Could not attach the receipt.');
+      }
+    }
+  }
+
+  function chooseReceiptSource() {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancel', 'Take photo', 'Choose from library'], cancelButtonIndex: 0 },
+        (i) => { if (i === 1) attachReceipt('camera'); if (i === 2) attachReceipt('gallery'); },
+      );
+    } else {
+      attachReceipt('camera');
+    }
+  }
+
+  function removeReceipt() {
+    if (!txn?.attachment_uri) return;
+    Alert.alert('Remove receipt?', 'The photo will be deleted from this device.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive', onPress: async () => {
+          const old = txn.attachment_uri;
+          await setTxnAttachment(db, id, null);
+          if (old) await deleteAttachment(old);
+          haptic.warning();
+          setShowAttachment(false);
+          await load();
+        },
+      },
+    ]);
+  }
+
   if (loadError) {
     return (
       <View style={styles.container}>
@@ -102,8 +151,8 @@ export default function TxnDetailScreen() {
   const editHref = isItemized
     ? `/add/itemized?editId=${id}`
     : isSettlement
-    ? `/add/transfer?editId=${id}`
-    : `/add/${isIncome ? 'income' : 'quick'}?editId=${id}&groupId=${txn.group_id}`;
+    ? `/add/quick?kind=transfer&editId=${id}`
+    : `/add/quick?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
@@ -115,10 +164,11 @@ export default function TxnDetailScreen() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await softDeleteTxn(db, id);
+          refresh();
           haptic.warning();
           showUndo({
             message: 'Transaction deleted',
-            onUndo: async () => { try { await restoreTxn(db, id); haptic.success(); } catch { /* ignore */ } },
+            onUndo: async () => { try { await restoreTxn(db, id); refresh(); haptic.success(); } catch { /* ignore */ } },
           });
           router.back();
         } catch {
@@ -168,6 +218,12 @@ export default function TxnDetailScreen() {
           <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
+          {isSettlement && txn.pay_method && (
+            <>
+              <View style={styles.divider} />
+              <Row label="Paid via" value={{ upi: 'UPI', cash: 'Cash', bank: 'Bank' }[txn.pay_method]} />
+            </>
+          )}
           {/* "Added by" is shared-group attribution — meaningless in the solo ledger. */}
           {!isPersonal && (
             <>
@@ -215,16 +271,44 @@ export default function TxnDetailScreen() {
           )}
         </View>
 
-        {/* Attachment */}
-        {!!txn.attachment_uri && (
-          <TouchableOpacity style={styles.attachCard} onPress={() => setShowAttachment(true)} accessibilityLabel="View receipt">
-            <Image source={{ uri: txn.attachment_uri }} style={styles.attachThumb} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.attachLabel}>Receipt attached</Text>
-              <Text style={styles.attachHint}>Tap to view full size</Text>
+        {/* Receipt — preview when present, attach CTA otherwise. Not for settlements. */}
+        {!isSettlement && (
+        <>
+        <Text style={styles.receiptLabel}>RECEIPT</Text>
+        {txn.attachment_uri ? (
+          <>
+            <TouchableOpacity style={styles.attachCard} onPress={() => setShowAttachment(true)} accessibilityLabel="View receipt">
+              <Image source={{ uri: txn.attachment_uri }} style={styles.attachThumb} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.attachLabel}>Receipt attached</Text>
+                <Text style={styles.attachHint}>Tap to view full size</Text>
+              </View>
+              <Feather name="maximize-2" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            <View style={styles.receiptActions}>
+              <TouchableOpacity style={styles.receiptBtn} onPress={chooseReceiptSource} accessibilityRole="button">
+                <Feather name="refresh-cw" size={14} color={colors.accent} />
+                <Text style={styles.receiptBtnText}>Replace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.receiptBtn} onPress={removeReceipt} accessibilityRole="button">
+                <Feather name="trash-2" size={14} color={colors.expense} />
+                <Text style={[styles.receiptBtnText, { color: colors.expense }]}>Remove</Text>
+              </TouchableOpacity>
             </View>
-            <Feather name="maximize-2" size={16} color={colors.textMuted} />
+          </>
+        ) : (
+          <TouchableOpacity style={styles.attachAddCard} onPress={chooseReceiptSource} accessibilityRole="button" accessibilityLabel="Add receipt">
+            <View style={styles.attachAddIcon}>
+              <Feather name="camera" size={18} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.attachAddTitle}>Add receipt</Text>
+              <Text style={styles.attachHint}>Camera · Photo library</Text>
+            </View>
+            <Feather name="plus" size={18} color={colors.textMuted} />
           </TouchableOpacity>
+        )}
+        </>
         )}
 
         {/* Split summary — who paid, then who owes — one card, not two forms. */}
@@ -326,12 +410,10 @@ export default function TxnDetailScreen() {
           })}
         </View>
 
-        {(!isSettlement || isItemized) && (
-          <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
-            <Feather name="trash-2" size={16} color={colors.expense} />
-            <Text style={styles.deleteText}>Delete transaction</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
+          <Feather name="trash-2" size={16} color={colors.expense} />
+          <Text style={styles.deleteText}>Delete {isSettlement ? 'settlement' : 'transaction'}</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {!!txn.attachment_uri && (
@@ -421,10 +503,17 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 
+  receiptLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.xs },
   attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   attachThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
   attachLabel: { ...type.body, color: colors.textPrimary },
   attachHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  attachAddCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', padding: space.md },
+  attachAddIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  attachAddTitle: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  receiptActions: { flexDirection: 'row', gap: space.sm },
+  receiptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  receiptBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   attachOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   attachClose: { position: 'absolute', top: 56, right: 20, zIndex: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   attachZoom: { justifyContent: 'center', alignItems: 'center' },

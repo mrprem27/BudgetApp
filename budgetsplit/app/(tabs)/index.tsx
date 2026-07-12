@@ -1,8 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, InteractionManager, Alert,
-} from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { settings } from '../../src/lib/settings';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -15,35 +13,35 @@ import {
 } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, layout, radius, shadow } from '../../src/constants/layout';
+import { space, layout, radius } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
 import { getAllPersons } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getGlobalNet } from '../../src/db/queries/balances';
-import { getPoolSummary, getGoals, getCashPosition } from '../../src/db/queries/savings';
-import { getTransactionsInRange, getTrackingStreak, type TxnWithSplits } from '../../src/db/queries/transactions';
-import { AmountText } from '../../src/components/ui/AmountText';
-import { BudgetBar } from '../../src/components/finance/BudgetBar';
-import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { FAB, type Action } from '../../src/components/ui/FAB';
+import { getMyExposure } from '../../src/db/queries/balances';
+import { getPendingCount } from '../../src/db/queries/pending';
+import { getCategories } from '../../src/db/queries/categories';
+import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
+import { foldUncategorized } from '../../src/lib/categoryFold';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
-import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { PressableScale } from '../../src/components/ui/PressableScale';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
-import { getBudgetUsage } from '../../src/lib/budget';
-import { getBudgetAnalytics, rankInsights } from '../../src/lib/analytics';
-import type { GroupInsight, CategoryTrend } from '../../src/lib/analytics';
-import { categoryVisual } from '../../src/constants/categories';
-import { asFeather } from '../../src/constants/palette';
-import { formatCompact } from '../../src/lib/money';
+import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { CategoryDonut, type DonutSeg } from '../../src/components/finance/CategoryDonut';
-import { InsightText } from '../../src/components/finance/InsightText';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { computeHealthScore, type HealthResult, type HealthDimension } from '../../src/lib/financialHealth';
-import { SheetModal } from '../../src/components/ui/SheetModal';
+import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
+import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
+import { forecastMonthEnd, type Forecast } from '../../src/lib/forecast';
+import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { HeroCard } from '../../src/components/finance/home/HeroCard';
+import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
+import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
+import { ForecastCard, type ForecastShift } from '../../src/components/finance/home/ForecastCard';
+import { HealthBand } from '../../src/components/finance/home/HealthBand';
+import { StreakCard } from '../../src/components/finance/home/StreakCard';
+import { HealthSheet } from '../../src/components/finance/HealthSheet';
+import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 
 type TabKey = 'today' | 'month' | 'year';
 
@@ -56,38 +54,34 @@ function getRange(tab: TabKey): { from: number; to: number } {
   }
 }
 
+// "Till now" comparison: the prior period only up to the SAME elapsed point we're
+// at in the current one (e.g. month-to-date vs same-day-last-month-to-date), so the
+// delta isn't unfairly low early in a period. Capped at the prior period's real end.
 function getPrevRange(tab: TabKey): { from: number; to: number } {
   const now = new Date();
+  const elapsed = now.getTime() - getRange(tab).from;
   switch (tab) {
-    case 'today': { const d = subDays(now, 1);   return { from: startOfDay(d).getTime(), to: endOfDay(d).getTime() }; }
-    case 'month': { const d = subMonths(now, 1); return { from: startOfMonth(d).getTime(), to: endOfMonth(d).getTime() }; }
-    case 'year':  { const d = subYears(now, 1);  return { from: startOfYear(d).getTime(), to: endOfYear(d).getTime() }; }
+    case 'today': { const d = subDays(now, 1);   const from = startOfDay(d).getTime();   return { from, to: Math.min(from + elapsed, endOfDay(d).getTime()) }; }
+    case 'month': { const d = subMonths(now, 1); const from = startOfMonth(d).getTime(); return { from, to: Math.min(from + elapsed, endOfMonth(d).getTime()) }; }
+    case 'year':  { const d = subYears(now, 1);  const from = startOfYear(d).getTime();  return { from, to: Math.min(from + elapsed, endOfYear(d).getTime()) }; }
   }
 }
 
 const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
+const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', month: 'SPENT THIS MONTH', year: 'SPENT THIS YEAR' };
 
-function greeting(): string {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
-
-const CHART_COLORS = [
-  '#F0A500', '#3ECF8E', '#7C6AF7', '#F06060', '#60A5FA',
-  '#FB923C', '#F472B6', '#34D399', '#A78BFA', '#8B8A99',
+// Month is the default and sits in the centre (Today · Month · Year).
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'month', label: 'Month' },
+  { key: 'year',  label: 'Year' },
 ];
-
-function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
-  if (pct > 100) return `${(pct / 100).toFixed(1)}X`;
-  return `${pct}%`;
-}
 
 export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setPersons, setGroups } = useStore();
+  const { setGroups } = useStore();
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
   const [spending, setSpending] = useState(0);
@@ -95,34 +89,38 @@ export default function DashboardScreen() {
   const [income, setIncome] = useState(0);
   const [oweTotal, setOweTotal] = useState(0);
   const [owedTotal, setOwedTotal] = useState(0);
-  const [groupHealth, setGroupHealth] = useState<Array<{ id: string; name: string; pct: number | null; health: 'green' | 'amber' | 'red' | 'none' }>>([]);
-  const [donutData, setDonutData] = useState<DonutSeg[]>([]);
-  const [donutTotal, setDonutTotal] = useState(0);
-  const [budgetSummary, setBudgetSummary] = useState<{ allocated: number; spent: number; over: number; near: number; onTrack: number }>({ allocated: 0, spent: 0, over: 0, near: 0, onTrack: 0 });
-  const [budgetTopCats, setBudgetTopCats] = useState<CategoryTrend[]>([]);
-  const [showBudgetSheet, setShowBudgetSheet] = useState(false);
-  const [savings, setSavings] = useState<{ total: number; unallocated: number; goals: number }>({ total: 0, unallocated: 0, goals: 0 });
-  const [cashAvailable, setCashAvailable] = useState<number | null>(null);
-  const [streak, setStreak] = useState<{ count: number; loggedToday: boolean } | null>(null);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [budget, setBudget] = useState<{ allocated: number; spent: number }>({ allocated: 0, spent: 0 });
+  const [catRows, setCatRows] = useState<CategoryRow[]>([]);
+  const [catTotal, setCatTotal] = useState(0);
+  // Once the user has any spend, keep the category card mounted across period
+  // switches so it never collapses (a period with no spend shows an empty slot).
+  const [everHadCats, setEverHadCats] = useState(false);
+  const [catExpanded, setCatExpanded] = useState(false);
   const [health, setHealth] = useState<HealthResult | null>(null);
-  const [selectedDim, setSelectedDim] = useState<HealthDimension | null>(null);
-  const [insights, setInsights] = useState<GroupInsight[]>([]);
-  const { refreshing, onRefresh } = useRefresh(() => load());
-  const [loading, setLoading] = useState(true);
-  const [chartsReady, setChartsReady] = useState(false);
-  const [meId, setMeId] = useState('');
+  const [healthInputs, setHealthInputs] = useState<HealthInputs | null>(null);
+  const [showHealth, setShowHealth] = useState(false);
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [topShift, setTopShift] = useState<ForecastShift | null>(null);
   const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
-  const groups = useStore(s => s.groups);
+  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [hideAmounts, setHideAmounts] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [streakLoggedDays, setStreakLoggedDays] = useState<Set<string>>(new Set());
+  const [catchUpBanner, setCatchUpBanner] = useState<{ days: number; ruleCount: number } | null>(null);
+  const { refreshing, onRefresh } = useRefresh(() => load());
 
-  useEffect(() => {
-    if (!loading) {
-      const handle = InteractionManager.runAfterInteractions(() => setChartsReady(true));
-      return () => handle.cancel();
-    }
-  }, [loading]);
   async function load() {
+    // No loading UI on period switch — data is local, so only the VALUES change;
+    // positions/sections stay put (nothing vanishes and re-appears).
     try {
       await loadInner();
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -130,21 +128,18 @@ export default function DashboardScreen() {
 
   async function loadInner() {
     const persons = await getAllPersons(db);
-    setPersons(persons);
     const grps = await getAllGroups(db);
     setGroups(grps);
+    setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id ?? null);
 
     const me = persons.find(p => p.is_me === 1);
     if (!me) return;
-    setMeId(me.id);
     setMeInfo({ name: me.name, color: me.avatar_color, image: me.image_uri });
 
     const { from, to } = getRange(tab);
-
-    // Single source of truth: materialization-aware query feeds the headline
-    // numbers, the pie, and the bar chart so they always agree (incl. recurring).
+    // Single source of truth: materialization-aware query feeds the hero number
+    // and the category breakdown so they always agree (incl. recurring).
     const txns = await getTransactionsInRange(db, null, from, to);
-
     let sp = 0;
     let inc = 0;
     const catMap: Record<string, number> = {};
@@ -161,7 +156,27 @@ export default function DashboardScreen() {
     setSpending(sp);
     setIncome(inc);
 
-    // Previous-period spending (my share) for period-over-period comparison.
+    // Compute daily streak from month transactions
+    const loggedDays = new Set<string>();
+    for (const t of txns) {
+      if (t.is_deleted) continue;
+      const d = new Date(t.date);
+      if (!isFinite(d.getTime())) continue;
+      loggedDays.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    setStreakLoggedDays(loggedDays);
+    // Count consecutive days backwards from today
+    const today3 = new Date();
+    let s = 0;
+    for (let i = 0; i < 31; i++) {
+      const check = new Date(today3.getFullYear(), today3.getMonth(), today3.getDate() - i);
+      const key = `${check.getFullYear()}-${String(check.getMonth() + 1).padStart(2, '0')}-${String(check.getDate()).padStart(2, '0')}`;
+      if (loggedDays.has(key)) s++;
+      else break;
+    }
+    setStreak(s);
+
+    // Prior-period spend (my share) for the hero delta.
     const prev = getPrevRange(tab);
     const prevTxns = await getTransactionsInRange(db, null, prev.from, prev.to);
     let prevSp = 0;
@@ -171,20 +186,14 @@ export default function DashboardScreen() {
     }
     setPrevSpending(prevSp);
 
-    const net = await getGlobalNet(db);
-    const myNet = net[me.id] ?? 0;
-    setOweTotal(myNet < 0 ? -myNet : 0);
-    setOwedTotal(myNet > 0 ? myNet : 0);
+    // Who owes whom — single source of truth (per-person, after all settlements),
+    // so owe AND owed can both show (matches Insights / Personal / Groups).
+    const exp = await getMyExposure(db, me.id);
+    setOweTotal(exp.owe);
+    setOwedTotal(exp.owed);
+    setReviewCount(await getPendingCount(db));
 
-    const health = await Promise.all(
-      grps.map(async g => {
-        const usage = await getBudgetUsage(db, g, 'monthly');
-        return { id: g.id, name: g.name, pct: usage.pct, health: usage.health };
-      }),
-    );
-    setGroupHealth(health);
-
-    // Budget rollup across all groups for the dashboard tiles + health score.
+    // Budget rollup (monthly) for the hero pace bar + the health engine.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
     let bAlloc = 0, bSpent = 0, over = 0, near = 0, totalBudgeted = 0;
     for (const a of analyticsAll) {
@@ -194,20 +203,13 @@ export default function DashboardScreen() {
       near += a.nearLimit.length;
       totalBudgeted += a.overBudget.length + a.nearLimit.length + a.underBudget.length;
     }
-    const onTrack = analyticsAll.reduce((s, a) => s + a.underBudget.length, 0);
-    setBudgetSummary({ allocated: bAlloc, spent: bSpent, over, near, onTrack });
-    const topBudgetCats = [...analyticsAll.flatMap(a => a.overBudget), ...analyticsAll.flatMap(a => a.nearLimit)]
-      .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))
-      .slice(0, 5);
-    setBudgetTopCats(topBudgetCats);
-
-    // Worst single category across all groups (for the health engine).
+    setBudget({ allocated: bAlloc, spent: bSpent });
     const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
     allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
     const worstCat = allBudgetedCats[0] ?? null;
 
     const now2 = new Date();
-    setHealth(computeHealthScore({
+    const healthInputsNow: HealthInputs = {
       spendPaise: sp,
       incomePaise: inc,
       prevSpendPaise: prevSp,
@@ -218,54 +220,102 @@ export default function DashboardScreen() {
       totalBudgeted,
       worstCategoryPct: worstCat?.pct ?? null,
       worstCategoryName: worstCat?.category ?? null,
-      netOwedPaise: oweTotal - owedTotal,
+      netOwedPaise: exp.owe - exp.owed,
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
-    }));
+    };
+    setHealth(computeHealthScore(healthInputsNow));
+    setHealthInputs(healthInputsNow);
 
-    // Reuse the analytics we just computed — rank the top cross-group insights.
-    setInsights(rankInsights(grps.map((g, i) => ({ group: g, analytics: analyticsAll[i] }))));
+    // Category breakdown for "Where it went" (largest first). Names not in the
+    // global catalog fold into one "Others" row (catMap itself is left intact so
+    // budget attribution above stays per-name).
+    const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
+    const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
+    setCatRows(sorted.map(([name, paise]) => ({ name, paise })));
+    setCatTotal(sorted.reduce((s, [, v]) => s + v, 0));
+    if (sorted.length > 0) setEverHadCats(true);
 
-    // Savings pool snapshot for the dashboard card.
-    const [savePool, saveGoals, cashPos, strk] = await Promise.all([getPoolSummary(db), getGoals(db), getCashPosition(db), getTrackingStreak(db)]);
-    setSavings({ total: savePool.total, unallocated: savePool.unallocated, goals: saveGoals.length });
-    setCashAvailable(cashPos.available);
-    setStreak(strk);
+    // Coming up: next recurring bills across all groups.
+    const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+    // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
+    // Drives the bell badge only (the list moved to the Reminders screen). Count
+    // all bills due within the next 14 days — same window the Reminders screen uses.
+    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14));
 
-    // Build donut data (spending by category, sorted largest first)
-    const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-    const total = sorted.reduce((s, [, v]) => s + v, 0);
-    setDonutTotal(total);
-    setDonutData(sorted.map(([name, paise], i) => ({
-      name,
-      paise,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-    })));
+    // Month-end forecast + biggest category shift vs last month (Month view only).
+    if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
+      const now = new Date();
+      const lmStart = startOfMonth(subMonths(now, 1)).getTime();
+      const lmEnd = endOfMonth(subMonths(now, 1)).getTime();
+      const lmTxns = await getTransactionsInRange(db, null, lmStart, lmEnd);
+      let lmSpend = 0;
+      const lmCat: Record<string, number> = {};
+      for (const t of lmTxns) {
+        if (t.is_deleted || t.kind !== 'expense') continue;
+        const share = t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+        if (share <= 0) continue;
+        lmSpend += share;
+        lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
+      }
+      setForecast(forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend));
+      // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
+      const shift = Object.entries(catMap)
+        .filter(([cat]) => lmCat[cat])
+        .map(([cat, thisAmt]) => ({ cat, thisAmt, pct: lmCat[cat] > 0 ? Math.round(((thisAmt - lmCat[cat]) / lmCat[cat]) * 100) : 0 }))
+        .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0] ?? null;
+      setTopShift(shift);
+    } else {
+      setForecast(null);
+      setTopShift(null);
+    }
+
     setLoading(false);
   }
 
-  useFocusEffect(useCallback(() => { load(); }, [tab]));
+  useFocusEffect(useCallback(() => {
+    load();
+    settings.hideAmounts().then(setHideAmounts);
+    checkCatchUp();
+  }, [tab]));
+  // Reflect writes from other screens (e.g. saving a budget) while Home is visible;
+  // if Home is backgrounded, the useFocusEffect above reloads it on next focus
+  // instead of re-querying this heavy loader off-screen.
+  useReloadOnDataChange(load);
 
-  // One-shot: if onboarding ended with "Add my first expense", open the add flow.
+  // Onboarding's "add my first expense" hand-off: open Add once, then clear the
+  // one-shot flag so it never re-fires.
   useEffect(() => {
     (async () => {
-      try {
-        if ((await AsyncStorage.getItem('pending_first_add')) === 'true') {
-          await AsyncStorage.removeItem('pending_first_add');
-          setTimeout(() => router.push('/add/quick'), 350);
-        }
-      } catch { /* best-effort */ }
+      if (await settings.pendingFirstAdd()) {
+        await settings.clearPendingFirstAdd();
+        router.push('/add/quick?kind=expense');
+      }
     })();
   }, []);
 
-  const net = income - spending;
-  const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
+  async function checkCatchUp() {
+    const now = Date.now();
+    const lastOpen = (await settings.appLastOpen()) ?? now;
+    // Record current open time immediately so the next open can compare.
+    await settings.setAppLastOpen(now);
+    const gapDays = Math.floor((now - lastOpen) / (1000 * 60 * 60 * 24));
+    if (gapDays < 30) return;
+    // Count active recurring rules across all groups.
+    const grps = await getAllGroups(db);
+    const rulesPerGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+    const ruleCount = rulesPerGroup.flat().filter(r => r.recur_freq && r.recur_state !== 'paused').length;
+    if (ruleCount > 0) {
+      setCatchUpBanner({ days: gapDays, ruleCount });
+    }
+  }
 
-  const TABS: { key: TabKey; label: string }[] = [
-    { key: 'today', label: 'Today' },
-    { key: 'month', label: 'Month' },
-    { key: 'year',  label: 'Year' },
-  ];
+  // Budgets are stored monthly; scale to the active period so the pace line
+  // shows on every tab when a budget exists (Today = per-day, Year = ×12).
+  const paceAllocated = budget.allocated <= 0 ? 0
+    : tab === 'today' ? Math.round(budget.allocated / getDaysInMonth(new Date()))
+    : tab === 'year' ? budget.allocated * 12
+    : budget.allocated;
 
   return (
     <View style={styles.container}>
@@ -279,438 +329,176 @@ export default function DashboardScreen() {
             <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
           </View>
           <View style={styles.headerRight}>
-            {flags.streak && streak && streak.count > 0 && (
-              <TouchableOpacity
-                onPress={() => Alert.alert(
-                  `${streak.count}-day tracking streak`,
-                  `${streak.loggedToday ? 'You’ve logged today — nice.' : 'You haven’t logged today yet.'}\n\nYour streak counts each day in a row that you log at least one entry. Miss a day and it resets. A gentle nudge to keep your money picture current — never a guilt trip.`,
-                  [{ text: 'Got it' }],
-                )}
-                hitSlop={8}
-                style={[styles.streakChip, !streak.loggedToday && styles.streakChipDim]}
-                accessibilityRole="button"
-                accessibilityLabel={`${streak.count} day tracking streak`}
-              >
-                <Feather name="zap" size={13} color={colors.accent} />
-                <Text style={styles.streakChipText}>{streak.count}</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => router.push('/reports')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Reports">
-              <Feather name="bar-chart-2" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-            {meInfo && <MemberAvatar name={meInfo.name} color={meInfo.color} size={40} imageUri={meInfo.image} />}
-          </View>
-        </View>
-
-        <View style={styles.tabRow}>
-          <TabPills
-            tabs={TABS}
-            active={tab}
-            onChange={(key) => { setTab(key as TabKey); }}
-          />
-        </View>
-
-        {loading ? (
-          <View style={{ gap: space.md }}>
-            <SkeletonCard height={148} />
-            <SkeletonCard height={64} />
-            <SkeletonCard height={210} />
-            <SkeletonCard height={120} />
-          </View>
-        ) : (
-        <FadeIn>
-        {/* Spending card */}
-        <View style={styles.spendingCard}>
-          <Text style={styles.spendingLabel}>My spending</Text>
-          <AmountText paise={spending} size="xl" forceColor={colors.textPrimary} compact zeroDash />
-          {(spending > 0 || prevSpending > 0) && (() => {
-            const delta = spending - prevSpending;
-            const pct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
-            const up = delta > 0;
-            const color = delta === 0 ? colors.textMuted : up ? colors.expense : colors.income;
-            return (
-              <View style={styles.deltaRow}>
-                <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={color} />
-                <Text style={[styles.deltaText, { color }]}>
-                  {pct === null ? formatCompact(Math.abs(delta)) : `${Math.abs(pct)}%`} vs {PREV_LABEL[tab]}
-                </Text>
-              </View>
-            );
-          })()}
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Income</Text>
-              <AmountText paise={income} size="md" forceColor={colors.income} compact />
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Net</Text>
-              <AmountText paise={net} size="md" compact />
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Savings</Text>
-              <Text style={[styles.savingsRate, { color: savingsRate >= 0 ? colors.income : colors.expense }]}>
-                {savingsRate}%
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Cash + Balances — side by side mini cards */}
-        {((flags.dashboardCash && cashAvailable !== null) || (flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0))) && (
-          <View style={styles.cashBalRow}>
-            {flags.dashboardCash && cashAvailable !== null && (
-              <TouchableOpacity
-                style={styles.miniCard}
-                activeOpacity={0.85}
-                onPress={() => router.push('/savings' as any)}
-                accessibilityRole="button"
-                accessibilityLabel="Cash available"
-              >
-                <Text style={styles.miniCardLabel}>Cash</Text>
-                <AmountText paise={cashAvailable} size="md" forceColor={cashAvailable >= 0 ? colors.income : colors.expense} compact />
-                <Text style={styles.miniCardSub}>liquid funds</Text>
-              </TouchableOpacity>
-            )}
-            {flags.dashboardBalances && (oweTotal > 0 || owedTotal > 0) && (
-              <TouchableOpacity
-                style={styles.miniCard}
-                onPress={() => router.push('/settle')}
-                accessibilityRole="button"
-                accessibilityLabel="Settle up"
-              >
-                <Text style={styles.miniCardLabel}>Balances</Text>
-                {oweTotal > 0 && <Text style={[styles.miniCardAmt, { color: colors.expense }]}>Owe {formatCompact(oweTotal)}</Text>}
-                {owedTotal > 0 && <Text style={[styles.miniCardAmt, { color: colors.income }]}>Owed {formatCompact(owedTotal)}</Text>}
-                <Text style={styles.miniCardSettle}>Settle Up →</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* Financial health — 3 circular rings, each grouping related signals */}
-        {flags.healthScore && health && (() => {
-          const h = health;
-          const hColor = h.band === 'great' ? colors.income : h.band === 'good' ? colors.accent : h.band === 'fair' ? colors.healthAmber : colors.expense;
-          const hLabel = h.band === 'great' ? 'Great shape' : h.band === 'good' ? 'On track' : h.band === 'fair' ? 'Needs care' : 'Needs attention';
-          const sevColor = (sev: string) =>
-            sev === 'good' ? colors.income : sev === 'bad' ? colors.expense : sev === 'warn' ? colors.healthAmber : colors.textMuted;
-          const R = 30;
-          const CIRC = 2 * Math.PI * R;
-          return (
-            <View style={styles.healthCard}>
-              <View style={styles.healthCardHead}>
-                <Text style={styles.healthLabel}>Financial health</Text>
-                <View style={[styles.healthBandChip, { backgroundColor: hColor + '22' }]}>
-                  <Text style={[styles.healthBandText, { color: hColor }]}>{hLabel}</Text>
+            {reviewCount > 0 && (
+              <TouchableOpacity onPress={() => router.push('/review' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
+                <Feather name="inbox" size={18} color={colors.textSecondary} />
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{reviewCount > 9 ? '9+' : reviewCount}</Text>
                 </View>
-              </View>
-              <View style={styles.healthDimRow}>
-                {h.dimensions.map(dim => {
-                  const dc = sevColor(dim.severity);
-                  const offset = CIRC * (1 - dim.pct / 100);
-                  return (
-                    <TouchableOpacity
-                      key={dim.label}
-                      style={styles.healthDimWrap}
-                      onPress={() => setSelectedDim(dim)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${dim.label}: ${dim.score} of ${dim.max}`}
-                    >
-                      <View style={styles.healthDimRing}>
-                        <Svg width={76} height={76} viewBox="0 0 76 76">
-                          <Circle cx={38} cy={38} r={R} stroke={colors.bgMuted} strokeWidth={6} fill="none" />
-                          <Circle
-                            cx={38} cy={38} r={R}
-                            stroke={dc} strokeWidth={6} fill="none"
-                            strokeDasharray={`${CIRC} ${CIRC}`}
-                            strokeDashoffset={offset}
-                            strokeLinecap="round"
-                            rotation={-90}
-                            origin="38, 38"
-                          />
-                        </Svg>
-                        <View style={[StyleSheet.absoluteFill, styles.healthDimCenter]}>
-                          <Text style={[styles.healthDimScore, { color: dc }]}>{dim.score}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.healthDimLabel}>{dim.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* Budget rollup — prominent, before the donut */}
-        {flags.dashboardBudget && budgetSummary.allocated > 0 && (() => {
-          const bUtil = Math.round((budgetSummary.spent / budgetSummary.allocated) * 100);
-          const bLeft = budgetSummary.allocated - budgetSummary.spent;
-          const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
-          return (
-          <TouchableOpacity
-            style={styles.budgetHero}
-            activeOpacity={0.85}
-            onPress={() => setShowBudgetSheet(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Budget details"
-          >
-            <View style={styles.budgetCardHead}>
-              <Text style={styles.budgetCardTitle}>Budget</Text>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
-            </View>
-            <View style={styles.budgetHeroRow}>
-              <Text style={[styles.budgetUtil, { color: bHealth }]}>{utilLabel(bUtil)}</Text>
-              <View style={{ flex: 1 }}>
-                <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
-                <Text style={styles.budgetLeft}>
-                  {bLeft >= 0 ? `${formatCompact(bLeft)} left of ${formatCompact(budgetSummary.allocated)}` : `Over by ${formatCompact(-bLeft)}`}
-                </Text>
-              </View>
-            </View>
-            {(budgetSummary.over > 0 || budgetSummary.near > 0) && (
-              <View style={styles.budgetBadgeRow}>
-                {budgetSummary.over > 0 && (
-                  <View style={[styles.budgetBadge, { backgroundColor: colors.expense + '22' }]}>
-                    <Text style={[styles.budgetBadgeText, { color: colors.expense }]}>{budgetSummary.over} over</Text>
-                  </View>
-                )}
-                {budgetSummary.near > 0 && (
-                  <View style={[styles.budgetBadge, { backgroundColor: colors.healthAmber + '22' }]}>
-                    <Text style={[styles.budgetBadgeText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
-                  </View>
-                )}
-              </View>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-          );
-        })()}
-
-        {/* Where it went — interactive SVG donut */}
-        {flags.dashboardDonut && chartsReady && donutData.length > 0 && (
-          <View style={styles.donutCard}>
-            <Text style={styles.chartTitle}>Where it went</Text>
-            <CategoryDonut
-              data={donutData}
-              total={donutTotal}
-              onOpen={(seg) => router.push(`/category/${encodeURIComponent(seg.name)}` as any)}
+            <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
+              <Feather name="search" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/reminders' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Reminders${upcoming.length > 0 ? `, ${upcoming.length} upcoming` : ''}`}>
+              <Feather name="bell" size={18} color={colors.textSecondary} />
+              {upcoming.length > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{upcoming.length > 9 ? '9+' : upcoming.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <MemberAvatar
+              name={meInfo?.name ?? ''}
+              color={meInfo?.color ?? colors.accent}
+              imageUri={meInfo?.image}
+              size={36}
+              onPress={() => router.push('/settings')}
             />
           </View>
-        )}
+        </View>
 
-
-        {/* Savings pool */}
-        {flags.dashboardSavings && (savings.total > 0 || savings.goals > 0) && (
-          <TouchableOpacity
-            style={styles.savingsCard}
-            activeOpacity={0.85}
-            onPress={() => router.push('/savings' as any)}
-            accessibilityRole="button"
-            accessibilityLabel="Savings"
-          >
-            <View style={styles.budgetCardHead}>
-              <View style={styles.savingsTitleRow}>
-                <Feather name="target" size={15} color={colors.accent} />
-                <Text style={styles.budgetCardTitle}>Savings</Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
-            </View>
-            <View style={styles.savingsTiles}>
-              <View style={styles.savingsTile}>
-                <Text style={styles.savingsTileLabel}>Pool</Text>
-                <AmountText paise={savings.total} size="sm" forceColor={colors.textPrimary} compact />
-              </View>
-              <View style={styles.savingsTileDivider} />
-              <View style={styles.savingsTile}>
-                <Text style={styles.savingsTileLabel}>Available</Text>
-                <AmountText paise={savings.unallocated} size="sm" forceColor={colors.income} compact />
-              </View>
-              <View style={styles.savingsTileDivider} />
-              <View style={styles.savingsTile}>
-                <Text style={styles.savingsTileLabel}>Goals</Text>
-                <Text style={styles.savingsGoalCount}>{savings.goals}</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {/* Top Insights — top cross-group analytics, tap to manage that group's budget */}
-        {flags.dashboardInsights && insights.length > 0 && (
-          <View style={styles.insightsCard}>
-            <Text style={styles.chartTitle}>Top insights</Text>
-            <View style={{ gap: space.sm }}>
-              {insights.map(ins => {
-                const tint = ins.severity === 'warn' ? colors.expense
-                  : ins.severity === 'good' ? colors.income : colors.accent;
-                return (
-                  <TouchableOpacity
-                    key={ins.id + ins.groupId}
-                    style={styles.insightRow}
-                    activeOpacity={0.7}
-                    onPress={() => router.push(`/group/${ins.groupId}/budget`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={ins.text}
-                  >
-                    <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
-                      <Feather name={ins.icon} size={14} color={tint} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <InsightText text={ins.text} color={tint} style={styles.insightText} />
-                      {!!ins.groupName && <Text style={styles.insightGroup}>{ins.groupName}</Text>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* Group health */}
-        {groupHealth.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Groups</Text>
-            <View style={styles.groupList}>
-              {groupHealth.map((g, gi) => (
-                <PressableScale
-                  key={g.id}
-                  style={[styles.groupListItem, gi === groupHealth.length - 1 && { borderBottomWidth: 0 }]}
-                  onPress={() => router.push(`/group/${g.id}`)}
-                  accessibilityLabel={g.name}
-                >
-                  <View style={[styles.groupIcon, { backgroundColor: colors.accent + '22' }]}>
-                    <Text style={styles.groupIconText}>{g.name.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={styles.groupName}>{g.name}</Text>
-                    {g.pct !== null && (
-                      <View style={styles.groupBudgetRow}>
-                        <View style={{ flex: 1 }}>
-                          <BudgetBar pct={g.pct} health={g.health} height={4} />
-                        </View>
-                        <Text style={[styles.groupPct, g.pct > 100 && { color: colors.expense }]}>
-                          {g.pct > 100 ? `${(g.pct / 100).toFixed(1)}X` : `${g.pct}%`}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                </PressableScale>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {spending === 0 && income === 0 && (
-          <EmptyState
-            icon="edit-3"
-            title="Nothing logged yet"
-            body="Track your first expense or income to see your spending, budgets and insights here."
-            actionLabel="Add expense"
-            onAction={() => router.push('/add/quick?kind=expense')}
+        {/* No loading skeleton — local data loads instantly; render nothing until
+            ready so we never flash the empty-home at a user who has data. */}
+        {loadError ? (
+          <ErrorState
+            title="Couldn't load your data"
+            body="Something went wrong reading your data. It's safe on your device — try again."
+            onRetry={() => { setLoadError(false); setLoading(true); load(); }}
           />
-        )}
-        </FadeIn>
+        ) : loading ? null : (
+          <FadeIn>
+            {/* Recurring catch-up — surfaces when rules ran while the app was closed 30+ days */}
+            {catchUpBanner && (
+              <View style={styles.catchUpBanner}>
+                <View style={styles.catchUpRow}>
+                  <Feather name="refresh-cw" size={16} color={colors.healthAmber} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.catchUpTitle}>Recurring catch-up complete</Text>
+                    <Text style={styles.catchUpText}>
+                      {catchUpBanner.ruleCount} recurring {catchUpBanner.ruleCount === 1 ? 'rule' : 'rules'} ran while the app was closed ({catchUpBanner.days} days). Review the new entries.
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.catchUpActions}>
+                  <TouchableOpacity onPress={() => router.push('/history' as any)} accessibilityRole="button" style={styles.catchUpBtn}>
+                    <Text style={styles.catchUpBtnText}>Review entries</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setCatchUpBanner(null)} accessibilityRole="button" style={styles.catchUpDismiss}>
+                    <Text style={styles.catchUpDismissText}>Dismiss</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {(spending === 0 && income === 0 && budget.allocated <= 0 && !everHadCats) ? (
+              <>
+                {/* Dedicated first-run empty home (design Screen 6) */}
+                <View style={styles.emptyHero}>
+                  <View style={styles.emptyHeroTile}><Text style={styles.emptyHeroZero}>₹0</Text></View>
+                  <Text style={styles.emptyHeroTitle}>Nothing logged yet</Text>
+                  <Text style={styles.emptyHeroBody}>Log your first expense to see where your money's going.</Text>
+                  <TouchableOpacity style={styles.emptyHeroCta} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button" accessibilityLabel="Log first expense">
+                    <Text style={styles.emptyHeroCtaText}>Log first expense</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.getStartedLabel}>GET STARTED</Text>
+                <View style={{ gap: space.sm }}>
+                  <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget` as any)} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.healthAmber + '22' }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Set a monthly budget</Text>
+                      <Text style={styles.startSub}>Know your limits before you hit them</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Create a group</Text>
+                      <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: colors.income + '22' }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.startTitle}>Add people you split with</Text>
+                      <Text style={styles.startSub}>Name-only — no account needed</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+            <>
+            <HeroCard
+              spent={spending}
+              periodLabel={PERIOD_LABEL[tab]}
+              budgetAllocated={paceAllocated}
+              prevSpending={prevSpending}
+              prevLabel={PREV_LABEL[tab]}
+              obfuscate={hideAmounts}
+              healthScore={health ? health.score : null}
+              healthColor={health ? healthBandColor(health.band) : colors.accent}
+              onPressHealth={() => setShowHealth(true)}
+            />
+
+            <View style={styles.tabRow}>
+              <TabPills tabs={TABS} active={tab} onChange={(key) => { setTab(key as TabKey); setCatExpanded(false); }} />
+            </View>
+
+            {everHadCats && (
+              <CategoryRankList
+                rows={catRows}
+                total={catTotal}
+                topN={3}
+                expanded={catExpanded}
+                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}` as any)}
+                onMore={() => setCatExpanded(e => !e)}
+              />
+            )}
+
+            {/* Settle-up sits below the bars. */}
+            {(oweTotal > 0 || owedTotal > 0) && (
+              <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
+            )}
+
+            {/* Month-end forecast (+ insight teaser) — below the owe/owed strip, Month view only */}
+            {tab === 'month' && flags.forecast && forecast?.ready && (
+              <ForecastCard
+                projected={forecast.projected}
+                budget={budget.allocated}
+                spentSoFar={spending}
+                dayOfMonth={getDate(new Date())}
+                daysInMonth={getDaysInMonth(new Date())}
+                topShift={flags.dashboardInsights ? topShift : null}
+                obfuscate={hideAmounts}
+                onPressInsights={() => router.push('/insights')}
+              />
+            )}
+
+            {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
+            {flags.streak && (
+              <StreakCard
+                streak={streak}
+                daysInMonth={getDaysInMonth(new Date())}
+                loggedDays={streakLoggedDays}
+              />
+            )}
+
+            </>
+            )}
+          </FadeIn>
         )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      <FAB
-        actions={[
-          { label: 'Expense', icon: 'minus-circle', tint: colors.expense, description: 'Record spending', onPress: () => router.push('/add/quick?kind=expense') },
-          { label: 'Income',  icon: 'plus-circle',  tint: colors.income, description: 'Money you received', onPress: () => router.push('/add/income') },
-          { label: 'Transfer', icon: 'repeat', tint: colors.settle, description: 'Move money between people', onPress: () => router.push('/add/transfer') },
-          ...(flags.itemizedOcr ? [{ label: 'Itemized Bill', icon: 'list', tint: colors.accent, description: 'Split a bill line by line', onPress: () => router.push('/add/itemized') }] as Action[] : []),
-        ]}
-      />
+      {/* FAB now lives in the custom tab bar (centered, docked). */}
 
-      {/* Budget detail sheet */}
-      <SheetModal visible={showBudgetSheet} onClose={() => setShowBudgetSheet(false)} title="Budget">
-        {(() => {
-          const bUtil = budgetSummary.allocated > 0 ? Math.round((budgetSummary.spent / budgetSummary.allocated) * 100) : 0;
-          const bHealth = bUtil >= 100 ? colors.expense : bUtil >= 80 ? colors.healthAmber : colors.income;
-          const bLeft = budgetSummary.allocated - budgetSummary.spent;
-          return (
-            <>
-              <View style={styles.bsUtilRow}>
-                <Text style={[styles.bsUtilBig, { color: bHealth }]}>{utilLabel(bUtil)}</Text>
-                <View style={{ flex: 1 }}>
-                  <BudgetBar allocated={budgetSummary.allocated} spent={budgetSummary.spent} height={8} />
-                  <Text style={styles.bsUtilSub}>
-                    {bLeft >= 0 ? `${formatCompact(bLeft)} left of ${formatCompact(budgetSummary.allocated)}` : `Over by ${formatCompact(-bLeft)}`}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.bsChips}>
-                {budgetSummary.over > 0 && (
-                  <View style={[styles.bsChip, { backgroundColor: colors.expense + '22' }]}>
-                    <Text style={[styles.bsChipText, { color: colors.expense }]}>{budgetSummary.over} over</Text>
-                  </View>
-                )}
-                {budgetSummary.near > 0 && (
-                  <View style={[styles.bsChip, { backgroundColor: colors.healthAmber + '22' }]}>
-                    <Text style={[styles.bsChipText, { color: colors.healthAmber }]}>{budgetSummary.near} near limit</Text>
-                  </View>
-                )}
-                {budgetSummary.onTrack > 0 && (
-                  <View style={[styles.bsChip, { backgroundColor: colors.income + '22' }]}>
-                    <Text style={[styles.bsChipText, { color: colors.income }]}>{budgetSummary.onTrack} on track</Text>
-                  </View>
-                )}
-              </View>
-              {budgetTopCats.length > 0 && (
-                <View style={styles.bsCatList}>
-                  {budgetTopCats.map(c => {
-                    const vis = categoryVisual(c.category);
-                    const fc = c.status === 'over' ? colors.expense : colors.healthAmber;
-                    return (
-                      <View key={c.category} style={styles.bsCatRow}>
-                        <View style={[styles.bsCatIcon, { backgroundColor: vis.color + '22' }]}>
-                          <Feather name={asFeather(vis.icon, 'tag')} size={13} color={vis.color} />
-                        </View>
-                        <Text style={styles.bsCatName} numberOfLines={1}>{c.category}</Text>
-                        <Text style={[styles.bsCatPct, { color: fc }]}>{utilLabel(c.pct)}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.bsReportLink}
-                onPress={() => { setShowBudgetSheet(false); router.push('/reports' as any); }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.bsReportLinkText}>View full report</Text>
-                <Feather name="chevron-right" size={14} color={colors.accent} />
-              </TouchableOpacity>
-            </>
-          );
-        })()}
-      </SheetModal>
-
-      {/* Health dimension detail sheet — shown when user taps a ring */}
-      <SheetModal
-        visible={!!selectedDim}
-        onClose={() => setSelectedDim(null)}
-        title={selectedDim?.label ?? ''}
-      >
-        {selectedDim?.factors.map(f => {
-          const fc = f.severity === 'good' ? colors.income : f.severity === 'bad' ? colors.expense : f.severity === 'warn' ? colors.healthAmber : colors.textMuted;
-          const fi: keyof typeof Feather.glyphMap = f.severity === 'good' ? 'check-circle' : f.severity === 'bad' ? 'x-circle' : f.severity === 'warn' ? 'alert-triangle' : 'minus';
-          return (
-            <View key={f.label} style={styles.dimFactorRow}>
-              <View style={[styles.dimFactorIcon, { backgroundColor: fc + '22' }]}>
-                <Feather name={fi} size={14} color={fc} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dimFactorLabel}>{f.label}</Text>
-                <Text style={styles.dimFactorDetail}>{f.detail}</Text>
-              </View>
-              <Text style={[styles.dimFactorPts, { color: fc }]}>{f.points}/{f.max}</Text>
-            </View>
-          );
-        })}
-      </SheetModal>
+      <HealthSheet visible={showHealth} onClose={() => setShowHealth(false)} result={health} inputs={healthInputs} />
     </View>
   );
 }
@@ -718,88 +506,37 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
+  emptyHints: { gap: space.xs, marginTop: space.sm },
+  emptyHintRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
+  emptyHintText: { ...type.label, color: colors.textSecondary },
+  // Dedicated first-run empty home (design Screen 6)
+  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: 32, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
+  emptyHeroZero: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, color: colors.accent, letterSpacing: -1 },
+  emptyHeroTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 6 },
+  emptyHeroBody: { ...type.label, color: colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 240, marginBottom: space.lg },
+  emptyHeroCta: { alignSelf: 'stretch', backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
+  emptyHeroCtaText: { ...type.button, color: colors.bg },
+  getStartedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: 14, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  startTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  startSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   greeting: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
-  appName: { ...type.title, color: colors.textPrimary },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  tabRow: { marginBottom: space.lg },
-  spendingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md },
-  spendingLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
-  deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: space.xs },
-  deltaText: { ...type.label },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md, gap: space.sm },
-  stat: { flex: 1, alignItems: 'center' },
-  statLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
-  savingsRate: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  budgetHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm },
-  budgetHeroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  budgetCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  budgetCardTitle: { ...type.subheading, color: colors.textPrimary },
-  budgetUtil: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, letterSpacing: -0.5 },
-  budgetLeft: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  budgetBadgeRow: { flexDirection: 'row', gap: space.sm },
-  budgetBadge: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
-  budgetBadgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  savingsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.sm, marginBottom: space.md },
-  savingsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  savingsGoalCount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },
-  savingsTiles: { flexDirection: 'row', alignItems: 'center' },
-  savingsTile: { flex: 1, alignItems: 'center', gap: 2 },
-  savingsTileLabel: { ...type.caption, color: colors.textMuted },
-  savingsTileDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  donutCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
-  insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  insightText: { ...type.body, color: colors.textPrimary, lineHeight: 19 },
-  insightGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  healthCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, marginBottom: space.md },
-  healthCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
-  healthLabel: { ...type.label, color: colors.textSecondary },
-  healthBandChip: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
-  healthBandText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  healthDimRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  healthDimWrap: { alignItems: 'center', gap: space.xs },
-  healthDimRing: { width: 76, height: 76, position: 'relative' },
-  healthDimCenter: { alignItems: 'center', justifyContent: 'center' },
-  healthDimScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 18 },
-  healthDimLabel: { ...type.caption, color: colors.textSecondary, textAlign: 'center' },
-  dimFactorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.xs },
-  dimFactorIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
-  dimFactorLabel: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  dimFactorDetail: { ...type.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 16 },
-  dimFactorPts: { ...type.caption, fontFamily: 'SpaceMono_400Regular', fontSize: 11, marginTop: 3 },
-  streakChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: space.sm, height: 30, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
-  streakChipDim: { opacity: 0.6 },
-  streakChipText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  cashBalRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
-  miniCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.xs },
-  miniCardLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  miniCardSub: { ...type.caption, color: colors.textMuted },
-  miniCardAmt: { ...type.body, fontFamily: 'Inter_600SemiBold' },
-  miniCardSettle: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
-  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.md },
-  section: { marginBottom: space.md },
-  sectionTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
-  groupList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  groupListItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingVertical: space.md, gap: space.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  groupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  groupBudgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  groupPct: { ...type.caption, color: colors.textMuted, minWidth: 28, textAlign: 'right' },
-  groupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  groupIconText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.accent },
-  bsUtilRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
-  bsUtilBig: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, letterSpacing: -0.5 },
-  bsUtilSub: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  bsChips: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md },
-  bsChip: { paddingHorizontal: space.md, paddingVertical: space.xs + 2, borderRadius: radius.pill },
-  bsChipText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  bsCatList: { gap: space.xs, marginBottom: space.md },
-  bsCatRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
-  bsCatIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  bsCatName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  bsCatPct: { ...type.label, fontFamily: 'Inter_600SemiBold' },
-  bsReportLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.xs, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  bsReportLinkText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
+  notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: '#fff' },
+  tabRow: { marginBottom: space.md },
+  catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
+  catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  catchUpTitle: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  catchUpText: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
+  catchUpActions: { flexDirection: 'row', gap: space.sm },
+  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '33', borderRadius: 20, borderWidth: 1, borderColor: colors.healthAmber + '66' },
+  catchUpBtnText: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
+  catchUpDismiss: { paddingHorizontal: space.md, paddingVertical: space.xs },
+  catchUpDismissText: { ...type.label, color: colors.textMuted },
 });

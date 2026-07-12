@@ -2,7 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
-export type BudgetCadence = 'once' | 'daily' | 'monthly' | 'yearly';
+import type { BudgetCadence } from '../../constants/enums';
+export type { BudgetCadence } from '../../constants/enums';
 
 export type CategoryBudget = {
   id: string;
@@ -21,7 +22,9 @@ export async function getCategoryBudgets(
   groupId: string,
 ): Promise<CategoryBudget[]> {
   const rows = await db.getAllAsync<CategoryBudget & { period?: string }>(
-    'SELECT id, group_id, category, cadence, amount FROM category_budget WHERE group_id = ?',
+    // Deterministic order so the de-dupe below is stable: 'monthly' sorts after
+    // 'yearly' under DESC, so a monthly line deterministically wins the tiebreak.
+    'SELECT id, group_id, category, cadence, amount FROM category_budget WHERE group_id = ? ORDER BY cadence DESC, id ASC',
     [groupId],
   );
   // De-dupe by category (legacy data may have had monthly+yearly rows) — keep last.
