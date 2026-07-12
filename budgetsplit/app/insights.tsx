@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { getDate, getDaysInMonth, format } from 'date-fns';
@@ -11,7 +11,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
-import { AppRefreshControl, useRefresh } from '../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../src/lib/analytics';
 import { getAllGroups } from '../src/db/queries/groups';
@@ -20,25 +20,13 @@ import { formatCompact } from '../src/lib/money';
 type Shift = { cat: string; thisAmt: number; pct: number };
 
 export default function InsightsScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const [loading, setLoading] = useState(true);
-  const [personalId, setPersonalId] = useState('');
-  const [monthSpend, setMonthSpend] = useState(0);
-  const [budget, setBudget] = useState(0);
-  const [projected, setProjected] = useState(0);
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [whatIf, setWhatIf] = useState<{ name: string; monthly: number } | null>(null);
   const [cutPct, setCutPct] = useState(20);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
-  const { refreshing, onRefresh } = useRefresh(() => load());
-
-  async function load() {
+  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
     const grps = await getAllGroups(db);
-    setPersonalId(grps.find(g => g.is_personal === 1)?.id ?? '');
+    const personalId = grps.find(g => g.is_personal === 1)?.id ?? '';
 
     // This month vs last month spend by category (for shifts + velocity).
     const monthStart = new Date();
@@ -59,25 +47,24 @@ export default function InsightsScreen() {
       const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
       lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + amt;
     }
-    const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
-    setMonthSpend(totalMonthSpend);
+    const monthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
 
     // Top spending category powers the "What if I cut…" simulator.
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
-    setWhatIf(topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null);
+    const whatIf = topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null;
 
     // Month-end projection from daily pace.
     const today = new Date();
     const dayOfMonth = getDate(today);
     const daysInMonth = getDaysInMonth(today);
-    setProjected(dayOfMonth > 0 ? Math.round((totalMonthSpend / dayOfMonth) * daysInMonth) : 0);
+    const projected = dayOfMonth > 0 ? Math.round((monthSpend / dayOfMonth) * daysInMonth) : 0;
 
     // Total budget across all groups.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
-    setBudget(analyticsAll.reduce((s, a) => s + a.totalAllocated, 0));
+    const budget = analyticsAll.reduce((s, a) => s + a.totalAllocated, 0);
 
     // Biggest category shifts vs last month.
-    const computed: Shift[] = Object.entries(catMap)
+    const shifts: Shift[] = Object.entries(catMap)
       .filter(([cat]) => lastCatMap[cat])
       .map(([cat, thisAmt]) => {
         const lastAmt = lastCatMap[cat] ?? 0;
@@ -85,10 +72,16 @@ export default function InsightsScreen() {
       })
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 3);
-    setShifts(computed);
 
-    setLoading(false);
-  }
+    return { personalId, monthSpend, budget, projected, shifts, whatIf };
+  }, []);
+
+  const personalId = data?.personalId ?? '';
+  const monthSpend = data?.monthSpend ?? 0;
+  const budget = data?.budget ?? 0;
+  const projected = data?.projected ?? 0;
+  const shifts = data?.shifts ?? [];
+  const whatIf = data?.whatIf ?? null;
 
   const today = new Date();
   const dayOfMonth = getDate(today);

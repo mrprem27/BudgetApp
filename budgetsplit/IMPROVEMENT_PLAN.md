@@ -34,8 +34,14 @@ Grounded in three read-only audits (input fields; screens/flows/state; design-sy
 - [x] Color hex→token sweep (10 files, exact-match, visually identical)
 - [x] Remaining a11y: txn/[id] roles, notification steppers (notifications switch already had role+state)
 
-## Phase 3 — RESOLVED: opportunistic (user decision + AGENTS.md)
-Per user (2026-07-12) and AGENTS.md's "opportunistic, no big-bang migration" rule: the wholesale `useScreenData` migration, ~25-input `Input` convergence, and spacing/typography sweep are intentionally NOT done as a batch. They happen incrementally — convert a screen/input when next editing it for a feature. Not a pending item.
+## Phase 3 — doing it in small, verified phases (per user 2026-07-12)
+Reconciles with AGENTS.md by going screen-by-screen in reviewable, committed batches (not one big-bang diff). Each phase: tsc + tests + commit + merge.
+- [x] **P3.1 pilot** — `afford.tsx`, `insights.tsx` migrated to `useScreenData` (pattern established).
+- [ ] **P3.2** — reports, categories, storage, settings/notifications
+- [ ] **P3.3** — category/[name], group/[id]/budget, group/[id]/edit, savings/[id], txn/[id]
+- [ ] **P3.4** — big tab screens (index, groups, savings, group/[id]) — highest risk, careful/last
+- [ ] **P3.5** — Input convergence (safe re-implemented fields, screen by screen)
+- [ ] **P3.6** — spacing/typography token sweep
 
 ## Still deferred (cosmetic / low-value)
 - Dead-style removal + velocity/subs card extraction; category-palette consolidation.
