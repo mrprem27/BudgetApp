@@ -34,8 +34,8 @@ Grounded in three read-only audits (input fields; screens/flows/state; design-sy
 - [x] Color hex→token sweep (10 files, exact-match, visually identical)
 - [x] Remaining a11y: txn/[id] roles, notification steppers (notifications switch already had role+state)
 
-## Phase 3 — DEFERRED by repo policy + risk (decision for user)
-AGENTS.md: "Migrate legacy screens to useScreenData **opportunistically** … **no big-bang migration**." A wholesale 15-screen migration + ~25-input `Input` swap is high-churn and not device-verifiable here, so it's intentionally NOT done. Recommend keeping it opportunistic (convert a screen when next editing it). Awaiting user call on whether to override.
+## Phase 3 — RESOLVED: opportunistic (user decision + AGENTS.md)
+Per user (2026-07-12) and AGENTS.md's "opportunistic, no big-bang migration" rule: the wholesale `useScreenData` migration, ~25-input `Input` convergence, and spacing/typography sweep are intentionally NOT done as a batch. They happen incrementally — convert a screen/input when next editing it for a feature. Not a pending item.
 
 ## Still deferred (cosmetic / low-value)
 - Dead-style removal + velocity/subs card extraction; category-palette consolidation.
