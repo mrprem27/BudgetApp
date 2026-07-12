@@ -54,9 +54,9 @@ export default function TxnDetailScreen() {
   const [showAttachment, setShowAttachment] = useState(false);
   const { width: winW, height: winH } = useWindowDimensions();
 
-  useFocusEffect(useCallback(() => { load(); }, [id]));
+  useFocusEffect(useCallback(() => { if (!id) { router.back(); return; } load(); }, [id]));
 
-  if (!id) { router.back(); return null; }
+  if (!id) return null;
 
   async function load() {
     try {

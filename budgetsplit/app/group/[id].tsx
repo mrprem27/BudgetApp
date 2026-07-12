@@ -426,18 +426,18 @@ export default function GroupDetailScreen() {
                 {formatCompact(Math.abs(myNet))}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.balCardBtn}
-              onPress={() => {
-                // Consistent with the dashboard/friends/groups — open the global Settle flow.
-                if (primaryPerson) router.push(`/add/quick?kind=transfer&to=${primaryPerson.id}`);
-                else router.push('/add/quick?kind=transfer');
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Settle up"
-            >
-              <Text style={styles.balCardBtnText}>Settle up</Text>
-            </TouchableOpacity>
+            {/* Only offer Settle when there's a real counterpart — otherwise the
+                transfer form opens with an empty payee and can't be completed. */}
+            {primaryPerson && (
+              <TouchableOpacity
+                style={styles.balCardBtn}
+                onPress={() => router.push(`/add/quick?kind=transfer&to=${primaryPerson.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Settle up with ${primaryPerson.name}`}
+              >
+                <Text style={styles.balCardBtnText}>Settle up</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
       })()}
