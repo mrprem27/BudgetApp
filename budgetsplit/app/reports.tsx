@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -52,6 +53,8 @@ type GroupSummary = {
 
 type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
 
+type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
+
 function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
   let income = 0;
   let expense = 0;
@@ -81,38 +84,17 @@ export default function ReportsScreen() {
   const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
   const [month, setMonth] = useState(() => new Date());
-  const [groups, setGroups] = useState<BudgetGroup[]>([]);
-  const [summaries, setSummaries] = useState<GroupSummary[]>([]);
-  const [analyticsByGroup, setAnalyticsByGroup] = useState<Record<string, BudgetAnalytics>>({});
-  const [yearIncome, setYearIncome] = useState(0);
-  const [yearExpense, setYearExpense] = useState(0);
-  const [yearTopCat, setYearTopCat] = useState('—');
-  const [biggestTxn, setBiggestTxn] = useState(0);
-  const [monthSpent, setMonthSpent] = useState(0);
-  const [monthEarned, setMonthEarned] = useState(0);
-  const [prevSpent, setPrevSpent] = useState(0);
-  const [prevEarned, setPrevEarned] = useState(0);
-  const [pieData, setPieData] = useState<DonutSeg[]>([]);
-  const [pieTotal, setPieTotal] = useState(0);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [catExpanded, setCatExpanded] = useState(false);
-  const [monthly, setMonthly] = useState<MonthPoint[]>([]);
-  type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
-  const [forecastActual, setForecastActual] = useState<LinePoint[]>([]);
-  const [forecastProjected, setForecastProjected] = useState<LinePoint[]>([]);
-  const [projectedTotal, setProjectedTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // Re-run on focus (and when the month changes) via useScreenData so returning
+  // after adding a transaction shows fresh analytics — keyed on [month].
+  const { data, loading, error, reload } = useScreenData(async (db) => {
     const startedAt = Date.now();
     try {
-      setLoadError(false);
       const grps = await getAllGroups(db);
-      setGroups(grps);
 
       const fromMs = startOfMonth(month).getTime();
       const toMs = endOfMonth(month).getTime();
@@ -146,8 +128,6 @@ export default function ReportsScreen() {
       const sums: GroupSummary[] = perGroup.map((r) => r.summary);
       const anMap: Record<string, BudgetAnalytics> = {};
       grps.forEach((g, i) => { anMap[g.id] = perGroup[i].analytics; });
-      setSummaries(sums);
-      setAnalyticsByGroup(anMap);
 
       let yIncome = 0;
       let yExpense = 0;
@@ -165,11 +145,7 @@ export default function ReportsScreen() {
         }
       }
 
-      setYearIncome(yIncome);
-      setYearExpense(yExpense);
-      setBiggestTxn(biggest);
       const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
-      setYearTopCat(topCat);
 
       // Build spending-by-category pie chart data for the selected month
       const monthCatMap: Record<string, number> = {};
@@ -195,28 +171,24 @@ export default function ReportsScreen() {
         if (t.kind === 'expense') mSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
         else if (t.kind === 'income') mEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
       }
-      setMonthSpent(mSpent);
-      setMonthEarned(mEarned);
       // prior month (`pTxns`) was already fetched above.
       let pSpent = 0, pEarned = 0;
       for (const t of pTxns) {
         if (t.kind === 'expense') pSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
         else if (t.kind === 'income') pEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
       }
-      setPrevSpent(pSpent);
-      setPrevEarned(pEarned);
 
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
-      setPieData(sortedCats.slice(0, 8).map(([name, val], i) => ({
+      const pieData: DonutSeg[] = sortedCats.slice(0, 8).map(([name, val], i) => ({
         name,
         paise: val,
         color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
-      })));
-      setPieTotal(sortedCats.reduce((s, [, v]) => s + v, 0));
+      }));
+      const pieTotal = sortedCats.reduce((s, [, v]) => s + v, 0);
 
       // 6-month spending trend ending at the selected month — overall + per-category,
       // so picking a category in the donut/labels redraws this chart for that category.
-      const months: MonthPoint[] = trendMonths.map((m, idx) => {
+      const monthly: MonthPoint[] = trendMonths.map((m, idx) => {
         let mTotal = 0;
         const byCatRaw: Record<string, number> = {};
         for (const t of trendTxnsByMonth[idx]) {
@@ -229,13 +201,16 @@ export default function ReportsScreen() {
         // (selecting the Others slice shows its 6-month total too).
         return { label: format(m, 'MMM'), total: mTotal, byCat: foldUncategorized(byCatRaw, knownExpense) };
       });
-      setMonthly(months);
 
       // Build daily cumulative spending forecast (current month only)
       const now = new Date();
       const daysInMonth = getDaysInMonth(month);
       const dayOfMonth = getDate(now);
       const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
+
+      let forecastActual: LinePoint[] = [];
+      let forecastProjected: LinePoint[] = [];
+      let projectedTotal = 0;
 
       // Forecast needs a few days of signal — see forecast.ts (FORECAST_MIN_DAYS).
       if (isCurrentMonth && dayOfMonth >= FORECAST_MIN_DAYS) {
@@ -272,7 +247,7 @@ export default function ReportsScreen() {
           // chart's primary series, so it owns the x-axis labels — that's what
           // makes the axis run the complete month. Days 1..today trace the real
           // cumulative spend; today..month-end is the forecast.
-          const projectedLine = Array.from({ length: daysInMonth }, (_, i) => {
+          forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
             const d = i + 1;
             const value = d <= dayOfMonth
               ? dailyCumulative[d - 1].value
@@ -282,7 +257,7 @@ export default function ReportsScreen() {
 
           // The ACTUAL line (days 1..today) is overlaid solid on top, marking
           // "today". Labels live on the projected series, so this carries none.
-          const actualLine = dailyCumulative.map((p, i) => ({
+          forecastActual = dailyCumulative.map((p, i) => ({
             value: p.value,
             label: '',
             hideDataPoint: i !== dayOfMonth - 1, // only mark "today"
@@ -290,32 +265,53 @@ export default function ReportsScreen() {
             dataPointRadius: 5,
           }));
 
-          setForecastActual(actualLine);
-          setForecastProjected(projectedLine);
-          setProjectedTotal(Math.round(fc.projected / 100));
-        } else {
-          setForecastActual([]);
-          setForecastProjected([]);
-          setProjectedTotal(0);
+          projectedTotal = Math.round(fc.projected / 100);
         }
-      } else {
-        setForecastActual([]);
-        setForecastProjected([]);
-        setProjectedTotal(0);
       }
-    } catch {
-      setLoadError(true);
+
+      return {
+        groups: grps,
+        summaries: sums,
+        analyticsByGroup: anMap,
+        yearIncome: yIncome,
+        yearExpense: yExpense,
+        yearTopCat: topCat,
+        biggestTxn: biggest,
+        monthSpent: mSpent,
+        monthEarned: mEarned,
+        prevSpent: pSpent,
+        prevEarned: pEarned,
+        pieData,
+        pieTotal,
+        monthly,
+        forecastActual,
+        forecastProjected,
+        projectedTotal,
+      };
     } finally {
       // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
       if (elapsed < 450) await new Promise(r => setTimeout(r, 450 - elapsed));
-      setLoading(false);
     }
-  }, [db, month]);
+  }, [month]);
 
-  // Re-run on focus (and when the month changes) so returning after adding a
-  // transaction shows fresh analytics — `load` is memoised on [db, month].
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const groups = data?.groups ?? [];
+  const summaries = data?.summaries ?? [];
+  const analyticsByGroup = data?.analyticsByGroup ?? {};
+  const yearIncome = data?.yearIncome ?? 0;
+  const yearExpense = data?.yearExpense ?? 0;
+  const yearTopCat = data?.yearTopCat ?? '—';
+  const biggestTxn = data?.biggestTxn ?? 0;
+  const monthSpent = data?.monthSpent ?? 0;
+  const monthEarned = data?.monthEarned ?? 0;
+  const prevSpent = data?.prevSpent ?? 0;
+  const prevEarned = data?.prevEarned ?? 0;
+  const pieData = data?.pieData ?? [];
+  const pieTotal = data?.pieTotal ?? 0;
+  const monthly = data?.monthly ?? [];
+  const forecastActual = data?.forecastActual ?? [];
+  const forecastProjected = data?.forecastProjected ?? [];
+  const projectedTotal = data?.projectedTotal ?? 0;
 
   async function exportCSV() {
     setExporting(true);
@@ -435,8 +431,8 @@ export default function ReportsScreen() {
           <SkeletonCard height={120} />
           <SkeletonCard height={150} />
         </View>
-      ) : loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      ) : error ? (
+        <ErrorState onRetry={() => { reload(); }} />
       ) : (
         <>
           {/* Summary totals — Spent / Earned with vs-last-month deltas (design Screen 7) */}

@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, Keyboard, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useScreenData } from '../../../src/hooks/useScreenData';
 import { settings } from '../../../src/lib/settings';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
@@ -69,24 +70,75 @@ export default function BudgetEditorScreen() {
   const router = useRouter();
   const { refresh } = useDataRefresh();
   const insets = useSafeAreaInsets();
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [cadences, setCadences] = useState<Record<string, BudgetCadence>>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
-  const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
-  const [loadError, setLoadError] = useState(false);
   const [kbVisible, setKbVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const focusRowRef = useRef<View>(null);
   const scrolledToFocus = useRef(false);
+
+  // Initial DATA load (existing categories + saved budgets + the user's default
+  // cadence). Form state below (amounts/cadences/collapsed) is *seeded* from this
+  // once it arrives — those stay editable local state. `refetchOnDataChange` is off
+  // to match the prior behavior (this editor only reloaded on focus, and a mid-edit
+  // reseed would wipe unsaved amounts).
+  const { data, error, reload } = useScreenData(async (db) => {
+    if (!id) return { cats: [] as Category[], budgets: [], defaultCadence: 'monthly' as BudgetCadence };
+    let [cats, budgets, dc] = await Promise.all([
+      getCategoriesByFrequency(db, id),
+      getCategoryBudgets(db, id),
+      settings.defaultCadence(),
+    ]);
+    // Self-heal: the expense catalog should never be empty. Reseed if it is.
+    if (cats.length === 0) {
+      await seedGlobalCategories(db);
+      cats = await getCategoriesByFrequency(db, id);
+    }
+    return { cats, budgets, defaultCadence: dc ? (dc as BudgetCadence) : 'monthly' };
+  }, [id], { refetchOnDataChange: false });
+
+  const allCategories = data?.cats ?? [];
+  const defaultCadence = data?.defaultCadence ?? 'monthly';
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
     const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
+
+  // Seed editable form state (amounts/cadences/collapsed) from the loaded data
+  // whenever it (re)arrives — mirrors what the old `load()` did inline.
+  useEffect(() => {
+    if (!data) return;
+    const { cats, budgets } = data;
+    const amt: Record<string, string> = {};
+    const cad: Record<string, BudgetCadence> = {};
+    for (const b of budgets) {
+      if (b.amount > 0) {
+        amt[b.category] = (b.amount / 100).toString();
+        cad[b.category] = b.cadence;
+      }
+    }
+    setAmounts(amt);
+    setCadences(cad);
+    // Collapse sections that have no budget set yet; keep the ones in use open.
+    // Group by each row's own DB section (kind-correct), not the name-only map.
+    const secMap = new Map(cats.map(c => [c.name, c.section]));
+    const secOf = (name: string): string => secMap.get(name) ?? categorySection(name);
+    const budgetedSections = new Set(Object.keys(amt).map(secOf));
+    const allSections = new Set(cats.map(c => secOf(c.name)));
+    if (focusCategory) {
+      // Deep-linked to one category: collapse every other section so its field
+      // is right at the top, ready to type into.
+      const target = secOf(focusCategory);
+      setCollapsed(new Set([...allSections].filter(s => s !== target)));
+    } else {
+      setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
+    }
+  }, [data, focusCategory]);
 
   // Deep-linked from a category: once its row is laid out, center it in the
   // visible area above the keyboard (the field would otherwise sit under it).
@@ -105,53 +157,6 @@ export default function BudgetEditorScreen() {
     }, 450);
     return () => clearTimeout(t);
   }, [focusCategory, allCategories.length]);
-
-  useFocusEffect(useCallback(() => { load(); }, [id]));
-
-  async function load() {
-    if (!id) return;
-    try {
-      let [cats, budgets, dc] = await Promise.all([
-        getCategoriesByFrequency(db, id),
-        getCategoryBudgets(db, id),
-        settings.defaultCadence(),
-      ]);
-      // Self-heal: the expense catalog should never be empty. Reseed if it is.
-      if (cats.length === 0) {
-        await seedGlobalCategories(db);
-        cats = await getCategoriesByFrequency(db, id);
-      }
-      if (dc) setDefaultCadence(dc as BudgetCadence);
-      setAllCategories(cats);
-      const amt: Record<string, string> = {};
-      const cad: Record<string, BudgetCadence> = {};
-      for (const b of budgets) {
-        if (b.amount > 0) {
-          amt[b.category] = (b.amount / 100).toString();
-          cad[b.category] = b.cadence;
-        }
-      }
-      setAmounts(amt);
-      setCadences(cad);
-      // Collapse sections that have no budget set yet; keep the ones in use open.
-      // Group by each row's own DB section (kind-correct), not the name-only map.
-      const secMap = new Map(cats.map(c => [c.name, c.section]));
-      const secOf = (name: string): string => secMap.get(name) ?? categorySection(name);
-      const budgetedSections = new Set(Object.keys(amt).map(secOf));
-      const allSections = new Set(cats.map(c => secOf(c.name)));
-      if (focusCategory) {
-        // Deep-linked to one category: collapse every other section so its field
-        // is right at the top, ready to type into.
-        const target = secOf(focusCategory);
-        setCollapsed(new Set([...allSections].filter(s => s !== target)));
-      } else {
-        setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
-      }
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
 
   // Section for a category — prefer its authoritative per-kind DB `section`
   // column (so a name shared across kinds like 'Rent' groups correctly), falling
@@ -217,8 +222,8 @@ export default function BudgetEditorScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Set Budget" onBack={() => router.back()} />
-      {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      {error ? (
+        <ErrorState onRetry={() => { void reload(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

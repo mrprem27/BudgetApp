@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingV
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScreenData } from '../../../src/hooks/useScreenData';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout } from '../../../src/constants/layout';
@@ -26,31 +27,36 @@ export default function EditGroupScreen() {
   const [color, setColor] = useState(GROUP_COLORS[0]);
   const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
   const [members, setMembers] = useState<string[]>([]);     // selected non-me ids
-  const [initialMembers, setInitialMembers] = useState<string[]>([]);
-  const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [isPersonal, setIsPersonal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState(false);
 
-  async function load() {
-    if (!id) return;
-    try {
-      const g = await getGroupById(db, id);
-      if (!g) { Alert.alert('Group not found', 'This group may have been deleted.'); router.back(); return; }
-      setName(g.name); setIcon(g.icon); setColor(g.color); setDefaultSplit(g.default_split); setIsPersonal(g.is_personal === 1);
-      const [mems, persons, me] = await Promise.all([getGroupMembers(db, id), getAllPersons(db), getMe(db)]);
-      const meId = me?.id;
-      const memberIds = mems.filter(p => p.id !== meId).map(p => p.id);
-      setMembers(memberIds);
-      setInitialMembers(memberIds);
-      setAllPersons(persons.filter(p => p.id !== meId));
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }
+  // Read-only load: the group's current values + selectable persons + the
+  // initial-members snapshot (used by handleSave to diff adds/removals).
+  const { data, error, reload } = useScreenData(async (db) => {
+    const group = id ? await getGroupById(db, id) : null;
+    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[] };
+    const [mems, persons, me] = await Promise.all([getGroupMembers(db, id), getAllPersons(db), getMe(db)]);
+    const meId = me?.id;
+    const initialMembers = mems.filter(p => p.id !== meId).map(p => p.id);
+    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers };
+  }, [id]);
 
-  useEffect(() => { if (!id) { router.back(); return; } load(); }, [id]);
+  const allPersons = data?.allPersons ?? [];
+  const initialMembers = data?.initialMembers ?? [];
+
+  // Seed the editable form fields once the read-only data arrives.
+  useEffect(() => {
+    if (!id || !data) return;
+    if (!data.group) { Alert.alert('Group not found', 'This group may have been deleted.'); router.back(); return; }
+    setName(data.group.name);
+    setIcon(data.group.icon);
+    setColor(data.group.color);
+    setDefaultSplit(data.group.default_split);
+    setIsPersonal(data.group.is_personal === 1);
+    setMembers(data.initialMembers);
+  }, [data]);
+
+  useEffect(() => { if (!id) router.back(); }, [id]);
 
   if (!id) return null;
 
@@ -99,8 +105,8 @@ export default function EditGroupScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Edit group" onBack={() => router.back()} />
-      {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      {error ? (
+        <ErrorState onRetry={reload} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import {
   startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear,
@@ -45,23 +45,12 @@ const sumMyShare = (arr: TxnWithSplits[], myId: string) =>
 
 export default function CategoryDetailScreen() {
   const { name, period: periodParam } = useLocalSearchParams<{ name?: string; period?: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const categoryName = name ? decodeURIComponent(name) : '';
 
-  const [loading, setLoading] = useState(true);
-  const [myId, setMyId] = useState('');
   // Pre-select whatever was active on the Dashboard when a category bar was tapped.
   const [period, setPeriod] = useState<Period>(() => paramToPeriod(periodParam));
-  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
-  // All of this year's expenses (every category) — period subsets are derived client-side
-  // so switching tabs is instant and needs no re-query.
-  const [yearExpenses, setYearExpenses] = useState<TxnWithSplits[]>([]);
-  const [catBudgets, setCatBudgets] = useState<CategoryBudget[]>([]);
-  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
-  const [recurRules, setRecurRules] = useState<TxnWithSplits[]>([]);
-  const [goals, setGoals] = useState<SavingsGoal[]>([]);
 
   const visual = categoryVisual(categoryName);
 
@@ -75,32 +64,49 @@ export default function CategoryDetailScreen() {
     };
   }, []);
 
-  // Refetch on focus so returning after adding/editing a txn shows fresh data.
-  useFocusEffect(useCallback(() => {
-    (async () => {
-      if (!categoryName) { setLoading(false); return; }
-      const me = await getMe(db);
-      if (me) setMyId(me.id);
+  // Refetch on focus (via useScreenData) so returning after adding/editing a txn shows fresh data.
+  // All of this year's expenses (every category) are fetched — period subsets are derived
+  // client-side so switching tabs is instant and needs no re-query.
+  const { data, loading } = useScreenData(async (db): Promise<{
+    myId: string;
+    personalGroupId: string | null;
+    groupNames: Record<string, string>;
+    yearExpenses: TxnWithSplits[];
+    catBudgets: CategoryBudget[];
+    recurRules: TxnWithSplits[];
+    goals: SavingsGoal[];
+  }> => {
+    if (!categoryName) {
+      return { myId: '', personalGroupId: null, groupNames: {}, yearExpenses: [], catBudgets: [], recurRules: [], goals: [] };
+    }
+    const me = await getMe(db);
+    const groups = await getAllGroups(db);
+    const personal = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
+    const [yearTxns, rules, allGoals, ...budgetArrays] = await Promise.all([
+      getTransactionsInRange(db, null, ranges.year[0], ranges.year[1]),
+      getActiveRecurringRules(db),
+      getGoals(db),
+      ...groups.map(g => getCategoryBudgets(db, g.id)),
+    ]);
+    const budgets = budgetArrays.flat();
+    return {
+      myId: me?.id ?? '',
+      personalGroupId: personal,
+      groupNames: Object.fromEntries(groups.map(g => [g.id, g.name])),
+      yearExpenses: yearTxns.filter(t => t.kind === 'expense' && !t.is_deleted),
+      catBudgets: budgets.filter(b => b.category === categoryName),
+      recurRules: rules.filter(r => r.category === categoryName),
+      goals: allGoals.filter(g => g.category === categoryName),
+    };
+  }, [categoryName, ranges]);
 
-      const groups = await getAllGroups(db);
-      const personal = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
-      setPersonalGroupId(personal);
-      setGroupNames(Object.fromEntries(groups.map(g => [g.id, g.name])));
-      const [yearTxns, rules, allGoals, ...budgetArrays] = await Promise.all([
-        getTransactionsInRange(db, null, ranges.year[0], ranges.year[1]),
-        getActiveRecurringRules(db),
-        getGoals(db),
-        ...groups.map(g => getCategoryBudgets(db, g.id)),
-      ]);
-      const budgets = budgetArrays.flat();
-
-      setYearExpenses(yearTxns.filter(t => t.kind === 'expense' && !t.is_deleted));
-      setCatBudgets(budgets.filter(b => b.category === categoryName));
-      setRecurRules(rules.filter(r => r.category === categoryName));
-      setGoals(allGoals.filter(g => g.category === categoryName));
-      setLoading(false);
-    })();
-  }, [db, categoryName, ranges]));
+  const myId = data?.myId ?? '';
+  const personalGroupId = data?.personalGroupId ?? null;
+  const groupNames = data?.groupNames ?? {};
+  const yearExpenses = data?.yearExpenses ?? [];
+  const catBudgets = data?.catBudgets ?? [];
+  const recurRules = data?.recurRules ?? [];
+  const goals = data?.goals ?? [];
 
   // The category's recurring budget, normalized to a per-day rate so it can be
   // prorated onto any period. Prefer monthly, then yearly, then daily; a

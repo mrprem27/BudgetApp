@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Notifications from 'expo-notifications';
+import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -22,21 +22,24 @@ type PermStatus = 'granted' | 'denied' | 'undetermined';
 export default function NotificationsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const [prefs, setPrefs] = useState<ReminderPrefs | null>(null);
   const [permStatus, setPermStatus] = useState<PermStatus>('undetermined');
   const [testSent, setTestSent] = useState(false);
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
 
-  async function load() {
-    const [p, perm] = await Promise.all([
+  // Reminder prefs + OS permission load on focus / cross-screen write via useScreenData.
+  const { data, reload } = useScreenData(async () => {
+    const [prefs, perm] = await Promise.all([
       getReminderPrefs(),
       Notifications.getPermissionsAsync(),
     ]);
-    setPrefs(p);
-    setPermStatus(perm.granted ? 'granted' : perm.canAskAgain ? 'undetermined' : 'denied');
-  }
+    const status: PermStatus = perm.granted ? 'granted' : perm.canAskAgain ? 'undetermined' : 'denied';
+    return { prefs, permStatus: status };
+  }, []);
+  const prefs = data?.prefs ?? null;
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  // Mirror the loaded OS permission into local state so toggle() can still apply its
+  // optimistic 'granted'/'denied' updates; each (re)load re-syncs to OS truth.
+  useEffect(() => { if (data) setPermStatus(data.permStatus); }, [data]);
 
   // Turning a reminder ON asks for permission first; off needs none.
   async function toggle(key: 'renewals' | 'daily') {
@@ -52,9 +55,9 @@ export default function NotificationsScreen() {
 
   // Lead-days / time changes — the reminder is already on, no permission prompt.
   async function patchPrefs(patch: Partial<ReminderPrefs>) {
-    const next = await setReminderPrefs(patch);
-    setPrefs(next);
+    await setReminderPrefs(patch);
     await rescheduleReminders(db);
+    await reload();
   }
 
   function onSaveTime(time: ReminderTime) {
