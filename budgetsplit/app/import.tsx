@@ -13,6 +13,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { parseStatement, isBudgetSplitExport, parseBudgetSplitExport, type ParseResult } from '../src/lib/importParse';
 import { isGpayStatement, parseGpayStatement } from '../src/lib/gpayParse';
+import { parseTransactionEmail } from '../src/lib/emailTxnParse';
 import { PdfTextExtractor } from '../src/components/system/PdfTextExtractor';
 import { matchCategory } from '../src/lib/smartCategory';
 import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../src/constants/categories';
@@ -27,7 +28,7 @@ export default function ImportScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
-  const [source, setSource] = useState<'gpay' | 'other'>('gpay');
+  const [source, setSource] = useState<'gpay' | 'other' | 'email'>('gpay');
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
@@ -40,6 +41,7 @@ export default function ImportScreen() {
   // and parsed exactly (it carries Category + Kind). (GPay is also auto-detected.)
   function parseAny(content: string): ParseResult {
     if (isBudgetSplitExport(content)) return parseBudgetSplitExport(content);
+    if (source === 'email') return parseTransactionEmail(content);
     const gpay = source === 'gpay' || isGpayStatement(content);
     return gpay ? parseGpayStatement(content) : parseStatement(content);
   }
@@ -133,14 +135,14 @@ export default function ImportScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
-            Import a Google Pay statement, a bank / UPI export, or a BudgetSplit CSV export — pick a
-            file or paste the rows. You confirm and fix each one in Review before anything is saved.
+            Import a Google Pay statement, a bank / UPI export, a transaction-alert email, or a
+            BudgetSplit CSV export — pick a file or paste it. You confirm each one in Review first.
           </Text>
 
           {/* Source picker — tells us which format to parse. */}
           <Text style={styles.sourceLabel}>STATEMENT SOURCE</Text>
           <View style={styles.sourceRow}>
-            {([['gpay', 'Google Pay'], ['other', 'Bank / UPI (CSV)']] as const).map(([key, label]) => (
+            {([['gpay', 'Google Pay'], ['other', 'Bank / UPI (CSV)'], ['email', 'Email alert']] as const).map(([key, label]) => (
               <TouchableOpacity
                 key={key}
                 style={[styles.sourceChip, source === key && styles.sourceChipOn]}
@@ -156,6 +158,12 @@ export default function ImportScreen() {
             <Text style={styles.sourceHint}>
               Open your Google Pay statement PDF → Select All → Copy → paste below. (Direct PDF upload
               works too when its text is readable.)
+            </Text>
+          )}
+          {source === 'email' && (
+            <Text style={styles.sourceHint}>
+              Forward or copy a bank / UPI transaction-alert email (HDFC, ICICI, GPay, PhonePe…) and
+              paste it below — one alert = one transaction. You confirm it in Review.
             </Text>
           )}
 
