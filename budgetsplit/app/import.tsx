@@ -14,6 +14,8 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { parseStatement, isBudgetSplitExport, parseBudgetSplitExport, type ParseResult } from '../src/lib/importParse';
 import { isGpayStatement, parseGpayStatement } from '../src/lib/gpayParse';
 import { parseTransactionEmail } from '../src/lib/emailTxnParse';
+import { detectPayMethod } from '../src/lib/payMethodDetect';
+import type { TxnSource } from '../src/constants/enums';
 import { PdfTextExtractor } from '../src/components/system/PdfTextExtractor';
 import { matchCategory } from '../src/lib/smartCategory';
 import { DEFAULT_CATEGORIES, INCOME_CATEGORIES } from '../src/constants/categories';
@@ -44,6 +46,14 @@ export default function ImportScreen() {
     if (source === 'email') return parseTransactionEmail(content);
     const gpay = source === 'gpay' || isGpayStatement(content);
     return gpay ? parseGpayStatement(content) : parseStatement(content);
+  }
+
+  /** Which `source` each parsed row is stamped with — must mirror parseAny's choice
+   *  so the Review inbox groups rows under the right section. */
+  function resolveSource(content: string): TxnSource {
+    if (source === 'email') return 'email';
+    if (source === 'gpay' || isGpayStatement(content)) return 'gpay';
+    return 'bank_csv'; // BudgetSplit export + generic bank/UPI CSV
   }
 
   function handleParse() {
@@ -109,6 +119,7 @@ export default function ImportScreen() {
   async function handleAdd() {
     if (!result || result.rows.length === 0) return;
     setSaving(true);
+    const rowSource = resolveSource(text);
     try {
       await insertPending(db, result.rows.map(r => ({
         date: r.date,
@@ -119,6 +130,10 @@ export default function ImportScreen() {
         // otherwise guess it from the description.
         category: r.category ?? matchCategory(r.description, r.kind === 'income' ? INCOME_CATEGORIES : DEFAULT_CATEGORIES),
         direction: r.direction,
+        source: rowSource,
+        // Prefer the parser's detected method; else sniff the row's raw text. Null
+        // when nothing matches — the user sets it in Review.
+        pay_method: r.payMethod ?? detectPayMethod(r.raw) ?? null,
         raw: r.raw,
       })));
       haptic.success();

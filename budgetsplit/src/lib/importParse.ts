@@ -1,5 +1,5 @@
 import { parseToPaise } from './money';
-import type { TxnKind } from '../constants/enums';
+import type { TxnKind, PayMethod } from '../constants/enums';
 
 /**
  * Tolerant statement parser for the Import → Review flow. Bank/UPI exports vary
@@ -21,6 +21,9 @@ export type ParsedRow = {
   /** Known category when the source carries one (our own export). Otherwise the
    *  Review flow guesses it via `matchCategory`. */
   category?: string;
+  /** Detected payment method when the source text carries a cue (email/notification
+   *  alerts). Undefined for plain CSV rows; the Review inbox lets the user set it. */
+  payMethod?: PayMethod;
   raw: string;
 };
 

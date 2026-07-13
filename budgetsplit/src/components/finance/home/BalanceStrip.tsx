@@ -12,7 +12,7 @@ type Props = {
 };
 
 /**
- * "You owe / Owed to you" strip with a Settle entry point. The caller hides this
+ * "You owe / You're owed" strip with a Settle entry point. The caller hides this
  * entirely when both totals are zero (per design — no empty placeholder).
  */
 export function BalanceStrip({ oweTotal, owedTotal, onSettle }: Props) {
@@ -24,7 +24,7 @@ export function BalanceStrip({ oweTotal, owedTotal, onSettle }: Props) {
       </View>
       <View style={styles.divider} />
       <View style={styles.half}>
-        <Text style={styles.label}>Owed to you</Text>
+        <Text style={styles.label}>You're owed</Text>
         <Text style={[styles.amount, { color: colors.income }]}>{formatCompact(owedTotal)}</Text>
       </View>
       <TouchableOpacity onPress={onSettle} style={styles.settleBtn} accessibilityRole="button" accessibilityLabel="Settle up">

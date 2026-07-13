@@ -192,7 +192,9 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   raw         TEXT,
   created_at  INTEGER NOT NULL,
   dest_group_id TEXT,                       -- Review draft: target group (null = Personal)
-  split_draft   TEXT                        -- Review draft: JSON {included, mode, values}
+  split_draft   TEXT,                       -- Review draft: JSON {included, mode, values}
+  source      TEXT NOT NULL DEFAULT 'manual', -- where it came from (email/gpay/bank_csv/…); drives sectioned Review
+  pay_method  TEXT                          -- detected payment method (upi/card/…); pre-filled in Review, editable
 );
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 `;
@@ -254,6 +256,10 @@ const COLUMN_MIGRATIONS = [
   "ALTER TABLE person ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE savings_goal ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE pending_txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  // P4.1 ingestion: where a pending row came from (sectioned Review) + its detected
+  // payment method. Additive — pre-existing rows default to 'manual' / null.
+  "ALTER TABLE pending_txn ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'",
+  "ALTER TABLE pending_txn ADD COLUMN pay_method TEXT",
 ];
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {

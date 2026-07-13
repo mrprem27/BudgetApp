@@ -67,4 +67,16 @@ describe('parseTransactionEmail', () => {
     const { rows } = parseTransactionEmail('Rs 100 debited on 32/13/2026 at Store', NOW);
     expect(rows[0].date).toBe(NOW);
   });
+
+  it('carries a detected pay method through to the parsed row', () => {
+    const upi = parseTransactionEmail("You've paid ₹450 to BigBasket via UPI on 3 Jun 2026", NOW);
+    expect(upi.rows[0].payMethod).toBe('upi');
+    const card = parseTransactionEmail('Rs 1,200.00 debited on your Credit Card ending 4321 to Amazon', NOW);
+    expect(card.rows[0].payMethod).toBe('card');
+  });
+
+  it('leaves payMethod undefined when no cue is present', () => {
+    const { rows } = parseTransactionEmail('Rs 120 debited towards Parking', NOW);
+    expect(rows[0].payMethod).toBeUndefined();
+  });
 });

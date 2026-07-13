@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { format } from 'date-fns';
+import { PAY_METHOD_LABEL } from '../../src/constants/enums';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
@@ -248,10 +249,10 @@ export default function TxnDetailScreen() {
           <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
-          {isSettlement && txn.pay_method && (
+          {txn.pay_method && (
             <>
               <View style={styles.divider} />
-              <Row label="Paid via" value={{ upi: 'UPI', cash: 'Cash', bank: 'Bank' }[txn.pay_method]} />
+              <Row label="Paid via" value={PAY_METHOD_LABEL[txn.pay_method]} />
             </>
           )}
           {/* "Added by" is shared-group attribution — meaningless in the solo ledger. */}

@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import type { TxnKind } from '../../constants/enums';
+import type { TxnKind, TxnSource, PayMethod } from '../../constants/enums';
 import type { ParsedDirection } from '../../lib/importParse';
 
 /** A parsed-but-unconfirmed transaction shown in the Review inbox. */
@@ -19,12 +19,16 @@ export type PendingTxn = {
   dest_group_id: string | null;
   /** Review draft: JSON {included, mode, values} for a group split, or null. */
   split_draft: string | null;
+  /** Where this row was ingested from — drives the sectioned Review inbox. */
+  source: TxnSource;
+  /** Detected/edited payment method carried through ingest → Review → txn. */
+  pay_method: PayMethod | null;
 };
 
 export type NewPending = Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft'>;
 
 /** The subset of a pending row the Review screen auto-saves as you edit it. */
-export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft'>>;
+export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method'>>;
 
 export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[]): Promise<void> {
   if (rows.length === 0) return;
@@ -32,9 +36,9 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
   await db.withTransactionAsync(async () => {
     for (const r of rows) {
       await db.runAsync(
-        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now],
+        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null],
       );
     }
   });
@@ -57,6 +61,7 @@ export async function updatePendingDraft(
   if (d.amount !== undefined) { sets.push('amount=?'); args.push(d.amount); }
   if (d.dest_group_id !== undefined) { sets.push('dest_group_id=?'); args.push(d.dest_group_id); }
   if (d.split_draft !== undefined) { sets.push('split_draft=?'); args.push(d.split_draft); }
+  if (d.pay_method !== undefined) { sets.push('pay_method=?'); args.push(d.pay_method); }
   if (sets.length === 0) return;
   args.push(id);
   await db.runAsync(`UPDATE pending_txn SET ${sets.join(', ')} WHERE id=?`, args);
@@ -67,11 +72,12 @@ export async function updatePendingDraft(
 export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO pending_txn
-       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft, source, pay_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
       row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
+      row.source ?? 'manual', row.pay_method ?? null,
     ],
   );
 }

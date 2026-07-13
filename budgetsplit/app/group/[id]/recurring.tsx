@@ -137,7 +137,7 @@ export default function RecurringScreen() {
           <EmptyState
             icon="repeat"
             title="No recurring transactions"
-            body="Rent, salary, subscriptions and bills you set to repeat will appear here to manage."
+            body="Rent, salary, memberships and bills you set to repeat will appear here to manage."
           />
         ) : (
           rules.map(r => {

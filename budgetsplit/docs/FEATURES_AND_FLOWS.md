@@ -11,8 +11,12 @@
 > (`ModalHeader`). Money is paise internally, shown via `formatRupees`/`formatCompact`.
 > "Flag" = a `useFeatureFlags()` gate.
 >
-> **Status (reconciled 2026-06-27, branch `refactor/phase-1-perf-safety`):** current with the
-> phase-2 redesign. Key shifts from the old baseline: **Settle** is now the Quick-Add
+> **Status (reconciled 2026-07-13, branch `refactor/phase-1-perf-safety`):** current with the
+> phase-2 redesign, the **Import → Review** ingestion feature, the **Total Money** plan-card
+> redesign, and **P4.1** (pay-method on every txn kind + sectioned Review). The monolith
+> screens `add/quick.tsx` and `group/[id].tsx` were split into `finance/add/` + `finance/group/`
+> components with `useAddTxnForm`/`useGroupTxnActions` hooks (behavior unchanged). Key shifts from
+> the old baseline: **Settle** is now the Quick-Add
 > **Transfer pill** everywhere — the standalone `/settle` screen is **deleted**; all entry
 > points open `/add/quick?kind=transfer&to=…`. **Home** shows a **Month-end ForecastCard**
 > (below the Owe/Owed strip) and the **StreakCard** is live. **Group detail** tab order is
@@ -234,12 +238,11 @@ math including exact remainder distribution.
 - **States:** `ErrorState` + retry; pull-to-refresh.
 1. **ScreenHeader** "Plan" (large) + month pill.
 2. **Header icons** (top-right, not pills): `Insights` (always, `/insights`) · `Recurring` (flag `recurring`, `/plan/recurring`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders lives in Settings; Reports is reached from Insights/Settings, not here.)*
-3. **Cash available** card — income in − paid out − saved.
-4. **PoolCard** (`savingsGoals`): total saved, unallocated, goal count; **+** add to pool / withdraw *(sheets)*.
-5. **Savings insights** card (`savingsInsights`): opportunity-cost / habit nudges.
-6. **Goals** (`savingsGoals`): `DraggableList` (drag = funding priority); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → full goal sheet (name, target, icon, color, allocation + frequency, target-date) → `insertGoal`. / **EmptyState**.
-7. **ComingUpList** "Upcoming this month".
-8. **plan/ForecastCard** — month-end projection (distinct component from the Home `home/ForecastCard`).
+3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — net "Total Money": Your money / Cash available / Investments / Credit available / Credit used. Tap **edit** → **MoneyEditorSheet** to set the cash/investment/credit figures. (Replaced the old savings-Pool + "Cash available" cards — funding is now direct to goals, no pool.)
+4. **Savings insights** card (`savingsInsights`): opportunity-cost / habit nudges.
+5. **Goals** (`savingsGoals`): `DraggableList` (drag = funding priority); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → full goal sheet (name, target, icon, color, allocation + frequency, target-date) → `insertGoal`. / **EmptyState**.
+6. **ComingUpList** "Upcoming this month".
+7. **plan/ForecastCard** — month-end projection (distinct component from the Home `home/ForecastCard`).
 
 ### Goal detail — `app/savings/[id].tsx`
 SVG progress ring; Saved/Remaining/Goal tiles; monthly-contribution card with nudge;
@@ -414,7 +417,8 @@ A one-line index of every user-facing capability and where it lives.
 - **Spending forecast** — Bühlmann-blended month-end projection (Home + Plan + Reports).
 - **Reports** — donut, trend, forecast, year-in-review, CSV/PDF export.
 - **Insights** — velocity, shifts, what-if, cross-group net, recurring; **per-category insights page** (spend split, places, recurring, goals) from the Dashboard.
-- **Recurring tracker** — recurring-expense tracker + monthly total + "maybe recurring" detector.
+- **Recurring tracker** — recurring-expense/rule tracker + monthly total + next-charge dates. (The log-scanning "maybe recurring" detector was removed in P5 — recurring is now explicit rules only.)
+- **Import → Review** — paste/pick a Google Pay statement, bank/UPI CSV, BudgetSplit export, or a transaction-alert email (`app/import.tsx` → `parseStatement`/`parseGpayStatement`/`parseBudgetSplitExport`/`parseTransactionEmail`) → rows land in `pending_txn`. **Review** (`app/review.tsx`) is a `SectionList` **grouped by source** (email / Google Pay / bank_csv); each row is editable (amount, kind, category, **pay-method** chip, group + split) and Confirm/Save commits it to a real txn. Dashboard shows an inbox badge with the pending count. **P4.1:** `pay_method` (upi/card/cash/bank/wallet/autopay/other) is detected from alert text (`payMethodDetect`) and carried ingest → Review → txn; the pay-method chip is on every Add kind too.
 - **Undo** — every delete (txn, member, goal) shows a 5s Undo toast.
 - **Reminders** — local renewal + daily-log notifications (dev build).
 - **Afford check** — yes/tight/no purchase decision.
@@ -440,7 +444,7 @@ Reached via **Settings → tap "BudgetSplit v2.0" ×7 → `/storage`**.
   - **Splits:** equal · exact · shares/weights · itemized (tax + tip + **discount**). **Settlements:** partial (live balances) + fully-settled, all pay methods. **simplify-debt OFF** on Goa.
   - **TransactionRow states:** note-primary, **category-primary (no note)**, attachment clip, lent/borrowed attribution, income, settlement (two avatars).
   - **Recurring:** active / paused / ended across daily→weekly→monthly→yearly→**custom**; plus **near-due rules** (1–3 days out) so **Home "Coming up"** + **Plan "Upcoming"** populate.
-  - **Recurring:** tracked rules (varied cadence + next-charge dates) **and** a repeating un-ruled charge that triggers the **"Maybe recurring"** detector.
+  - **Recurring:** tracked rules with varied cadence + next-charge dates.
   - **Budgets:** over / near / under, every cadence (once/daily/monthly/yearly).
   - **Savings — 7 goals:** locked@40% · reached 100% (deadline) · over-funded 120% · partial · 0% empty · withdrawal history · **overdue** (deadline past) · manual + auto funding.
   - **Edge cases:** ₹65k large, ₹5 tiny, soft-deleted txn, location-tagged + attachment rows.
@@ -521,8 +525,12 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `group/InsightsTab` | In-hub group Insights view (member spend bars, top categories, recommendations). |
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |
 | `plan/GoalCard` | Savings goal card — progress bar, deadline, contribution/needed per month. |
-| `plan/PoolCard` | Savings pool card — saved/unallocated + add/withdraw. |
+| `plan/TotalMoneyCard` | Net "Total Money" card — cash / investments / credit available + used. |
+| `plan/MoneyEditorSheet` | Editor *(sheet)* for the cash / investment / credit figures behind Total Money. |
 | `add/SplitSheet` | Split editor *(sheet)* — Equal / Exact / % / Shares. |
+| `add/KindToggle` · `add/AmountField` · `add/CategoryDatePills` · `add/NoteField` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` | Add-flow sub-views extracted from `quick.tsx` (driven by the `useAddTxnForm` hook). |
+| `finance/PayMethodSelector` | Pay-method chip row (UPI/card/cash/bank/wallet/autopay/other); shared by Add expense/income/transfer. |
+| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. |
 
 ### `system/` — global behaviors
 | Component | What it is |
@@ -556,7 +564,7 @@ demo data**, run these:
 | 4 | **Recurring skip / pause / stop** | Active rules incl. **near-due** ones (1–3 days) | Group/Personal → Recurring → a rule → **Skip next / Pause / Stop**. |
 | 5 | **Member remove — blocked vs allowed** | Roommates members have balances; **Office Lunch** is fully settled | Group → Members → swipe-remove: blocked in Roommates ("settle first"), allowed in Office Lunch. |
 | 6 | **Empty states** (within a populated app) | **"Weekend Plans"** group (members, 0 txns) | Open it → empty Expenses & Budget tabs. (Whole-app empty → **Erase all data**.) |
-| 7 | **"Maybe recurring"** detection | 3× un-ruled "Prime Video" ₹199/mo charges | Plan → Recurring → scroll to **"MAYBE RECURRING"**. |
+| 7 | **Import → Review** (pending txns) | seeded `pending_txn` rows from Google Pay + email sources | Dashboard inbox badge → **Review**: rows **grouped by source** ("Google Pay", "Email alert"), each with amount, category, pay-method chip → Confirm/Save. |
 | 8 | **Coming up / Upcoming** | 3 near-due recurring rules (1–3 days out) | Home **"Coming up"** + Plan **"Upcoming this month"** already show them. |
 | 9 | **Smart-category learning** | flag ON; many noted txns to learn from | Add expense → type a title (e.g. "Uber") → category auto-suggests; correct it once → it learns. |
 | 10 | **Itemized split** (4-step wizard) | groups with members | Add → expense → **Split by items** → add items, assign, payers, review → Save. |

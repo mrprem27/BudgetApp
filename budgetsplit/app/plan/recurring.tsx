@@ -27,7 +27,7 @@ function cadenceLabel(freq: string): string {
   return freq === 'daily' ? 'daily' : freq === 'weekly' ? 'weekly' : freq === 'yearly' ? 'yearly' : freq === 'custom' ? 'custom' : 'monthly';
 }
 
-export default function SubscriptionsScreen() {
+export default function RecurringScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
