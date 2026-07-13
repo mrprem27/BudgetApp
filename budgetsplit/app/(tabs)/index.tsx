@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { settings } from '../../src/lib/settings';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -28,11 +28,11 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
+import { useScreenData } from '../../src/hooks/useScreenData';
 import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
 import { forecastMonthEnd, type Forecast } from '../../src/lib/forecast';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
-import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
@@ -81,60 +81,40 @@ export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setGroups } = useStore();
+  const groups = useStore(s => s.groups);
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
-  const [spending, setSpending] = useState(0);
-  const [prevSpending, setPrevSpending] = useState(0);
-  const [income, setIncome] = useState(0);
-  const [oweTotal, setOweTotal] = useState(0);
-  const [owedTotal, setOwedTotal] = useState(0);
-  const [reviewCount, setReviewCount] = useState(0);
-  const [budget, setBudget] = useState<{ allocated: number; spent: number }>({ allocated: 0, spent: 0 });
-  const [catRows, setCatRows] = useState<CategoryRow[]>([]);
-  const [catTotal, setCatTotal] = useState(0);
   // Once the user has any spend, keep the category card mounted across period
   // switches so it never collapses (a period with no spend shows an empty slot).
   const [everHadCats, setEverHadCats] = useState(false);
   const [catExpanded, setCatExpanded] = useState(false);
-  const [health, setHealth] = useState<HealthResult | null>(null);
-  const [healthInputs, setHealthInputs] = useState<HealthInputs | null>(null);
   const [showHealth, setShowHealth] = useState(false);
-  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
-  const [forecast, setForecast] = useState<Forecast | null>(null);
-  const [topShift, setTopShift] = useState<ForecastShift | null>(null);
-  const [meInfo, setMeInfo] = useState<{ name: string; color: string; image: string | null } | null>(null);
-  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
-  const [streak, setStreak] = useState(0);
-  const [streakLoggedDays, setStreakLoggedDays] = useState<Set<string>>(new Set());
   const [catchUpBanner, setCatchUpBanner] = useState<{ days: number; ruleCount: number } | null>(null);
-  const { refreshing, onRefresh } = useRefresh(() => load());
 
-  async function load() {
-    // No loading UI on period switch — data is local, so only the VALUES change;
-    // positions/sections stay put (nothing vanishes and re-appears).
-    try {
-      await loadInner();
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadInner() {
+  // Data load. Groups come from the store (StoreHydrator hydrates them at the root
+  // and re-hydrates on every cross-screen write), so Home no longer queries/sets
+  // them here. useScreenData owns loading/error/refreshing + focus/cross-screen refetch.
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const persons = await getAllPersons(db);
-    const grps = await getAllGroups(db);
-    setGroups(grps);
-    setPersonalGroupId(grps.find(g => g.is_personal === 1)?.id ?? grps[0]?.id ?? null);
+    const personalGroupId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
 
     const me = persons.find(p => p.is_me === 1);
-    if (!me) return;
-    setMeInfo({ name: me.name, color: me.avatar_color, image: me.image_uri });
+    if (!me) {
+      return {
+        personalGroupId,
+        meInfo: null as { name: string; color: string; image: string | null } | null,
+        spending: 0, income: 0, prevSpending: 0,
+        oweTotal: 0, owedTotal: 0, reviewCount: 0,
+        budget: { allocated: 0, spent: 0 },
+        catRows: [] as CategoryRow[], catTotal: 0,
+        health: null as HealthResult | null, healthInputs: null as HealthInputs | null,
+        upcoming: [] as UpcomingItem[],
+        forecast: null as Forecast | null, topShift: null as ForecastShift | null,
+        streak: 0, streakLoggedDays: new Set<string>(),
+      };
+    }
+    const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
 
     const { from, to } = getRange(tab);
     // Single source of truth: materialization-aware query feeds the hero number
@@ -153,8 +133,6 @@ export default function DashboardScreen() {
         inc += txn.payments.find(p => p.personId === me.id)?.amount ?? 0;
       }
     }
-    setSpending(sp);
-    setIncome(inc);
 
     // Compute daily streak from month transactions
     const loggedDays = new Set<string>();
@@ -164,7 +142,6 @@ export default function DashboardScreen() {
       if (!isFinite(d.getTime())) continue;
       loggedDays.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     }
-    setStreakLoggedDays(loggedDays);
     // Count consecutive days backwards from today
     const today3 = new Date();
     let s = 0;
@@ -174,7 +151,6 @@ export default function DashboardScreen() {
       if (loggedDays.has(key)) s++;
       else break;
     }
-    setStreak(s);
 
     // Prior-period spend (my share) for the hero delta.
     const prev = getPrevRange(tab);
@@ -184,17 +160,14 @@ export default function DashboardScreen() {
       if (t.is_deleted || t.kind !== 'expense') continue;
       prevSp += t.shares.find(s => s.personId === me.id)?.amount ?? 0;
     }
-    setPrevSpending(prevSp);
 
     // Who owes whom — single source of truth (per-person, after all settlements),
     // so owe AND owed can both show (matches Insights / Personal / Groups).
     const exp = await getMyExposure(db, me.id);
-    setOweTotal(exp.owe);
-    setOwedTotal(exp.owed);
-    setReviewCount(await getPendingCount(db));
+    const reviewCount = await getPendingCount(db);
 
     // Budget rollup (monthly) for the hero pace bar + the health engine.
-    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
+    const analyticsAll = await Promise.all(groups.map(g => getBudgetAnalytics(db, g)));
     let bAlloc = 0, bSpent = 0, over = 0, near = 0, totalBudgeted = 0;
     for (const a of analyticsAll) {
       bAlloc += a.totalAllocated;
@@ -203,7 +176,6 @@ export default function DashboardScreen() {
       near += a.nearLimit.length;
       totalBudgeted += a.overBudget.length + a.nearLimit.length + a.underBudget.length;
     }
-    setBudget({ allocated: bAlloc, spent: bSpent });
     const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
     allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
     const worstCat = allBudgetedCats[0] ?? null;
@@ -224,26 +196,27 @@ export default function DashboardScreen() {
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
     };
-    setHealth(computeHealthScore(healthInputsNow));
-    setHealthInputs(healthInputsNow);
+    const health = computeHealthScore(healthInputsNow);
+    const healthInputs = healthInputsNow;
 
     // Category breakdown for "Where it went" (largest first). Names not in the
     // global catalog fold into one "Others" row (catMap itself is left intact so
     // budget attribution above stays per-name).
     const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
     const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
-    setCatRows(sorted.map(([name, paise]) => ({ name, paise })));
-    setCatTotal(sorted.reduce((s, [, v]) => s + v, 0));
-    if (sorted.length > 0) setEverHadCats(true);
+    const catRows: CategoryRow[] = sorted.map(([name, paise]) => ({ name, paise }));
+    const catTotal = sorted.reduce((acc, [, v]) => acc + v, 0);
 
     // Coming up: next recurring bills across all groups.
-    const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
+    const recurringByGroup = await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)));
     // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
     // Drives the bell badge only (the list moved to the Reminders screen). Count
     // all bills due within the next 14 days — same window the Reminders screen uses.
-    setUpcoming(buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14));
+    const upcoming = buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14);
 
     // Month-end forecast + biggest category shift vs last month (Month view only).
+    let forecast: Forecast | null = null;
+    let topShift: ForecastShift | null = null;
     if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
       const now = new Date();
       const lmStart = startOfMonth(subMonths(now, 1)).getTime();
@@ -258,30 +231,54 @@ export default function DashboardScreen() {
         lmSpend += share;
         lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
       }
-      setForecast(forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend));
+      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend);
       // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
-      const shift = Object.entries(catMap)
+      topShift = Object.entries(catMap)
         .filter(([cat]) => lmCat[cat])
         .map(([cat, thisAmt]) => ({ cat, thisAmt, pct: lmCat[cat] > 0 ? Math.round(((thisAmt - lmCat[cat]) / lmCat[cat]) * 100) : 0 }))
         .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0] ?? null;
-      setTopShift(shift);
-    } else {
-      setForecast(null);
-      setTopShift(null);
     }
 
-    setLoading(false);
-  }
+    return {
+      personalGroupId, meInfo,
+      spending: sp, income: inc, prevSpending: prevSp,
+      oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
+      budget: { allocated: bAlloc, spent: bSpent },
+      catRows, catTotal, health, healthInputs,
+      upcoming, forecast, topShift,
+      streak: s, streakLoggedDays: loggedDays,
+    };
+  }, [groups, tab, flags.forecast, flags.dashboardInsights]);
 
+  const personalGroupId = data?.personalGroupId ?? null;
+  const meInfo = data?.meInfo ?? null;
+  const spending = data?.spending ?? 0;
+  const income = data?.income ?? 0;
+  const prevSpending = data?.prevSpending ?? 0;
+  const oweTotal = data?.oweTotal ?? 0;
+  const owedTotal = data?.owedTotal ?? 0;
+  const reviewCount = data?.reviewCount ?? 0;
+  const budget = data?.budget ?? { allocated: 0, spent: 0 };
+  const catRows = data?.catRows ?? [];
+  const catTotal = data?.catTotal ?? 0;
+  const health = data?.health ?? null;
+  const healthInputs = data?.healthInputs ?? null;
+  const upcoming = data?.upcoming ?? [];
+  const forecast = data?.forecast ?? null;
+  const topShift = data?.topShift ?? null;
+  const streak = data?.streak ?? 0;
+  const streakLoggedDays = data?.streakLoggedDays ?? new Set<string>();
+
+  // Sticky: once any period has shown spend, keep the category card mounted across
+  // period switches (preserves the prior `if (sorted.length > 0) setEverHadCats(true)`).
+  useEffect(() => { if ((data?.catRows.length ?? 0) > 0) setEverHadCats(true); }, [data]);
+
+  // On-focus maintenance, kept OUT of the data loader: read the hide-amounts
+  // setting and run the recurring catch-up check (a maintenance WRITE, not a read).
   useFocusEffect(useCallback(() => {
-    load();
     settings.hideAmounts().then(setHideAmounts);
     checkCatchUp();
-  }, [tab]));
-  // Reflect writes from other screens (e.g. saving a budget) while Home is visible;
-  // if Home is backgrounded, the useFocusEffect above reloads it on next focus
-  // instead of re-querying this heavy loader off-screen.
-  useReloadOnDataChange(load);
+  }, []));
 
   // Onboarding's "add my first expense" hand-off: open Add once, then clear the
   // one-shot flag so it never re-fires.
@@ -360,11 +357,11 @@ export default function DashboardScreen() {
 
         {/* No loading skeleton — local data loads instantly; render nothing until
             ready so we never flash the empty-home at a user who has data. */}
-        {loadError ? (
+        {error ? (
           <ErrorState
             title="Couldn't load your data"
             body="Something went wrong reading your data. It's safe on your device — try again."
-            onRetry={() => { setLoadError(false); setLoading(true); load(); }}
+            onRetry={() => reload()}
           />
         ) : loading ? null : (
           <FadeIn>

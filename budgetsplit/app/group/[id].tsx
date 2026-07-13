@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, SectionList, StyleSheet, TouchableOpacity, Alert, ScrollView, Switch,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format, startOfMonth } from 'date-fns';
@@ -14,8 +14,8 @@ import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
 import { getTransactionsForGroup, softDeleteTxn, restoreTxn, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { useUndo } from '../../src/components/system/UndoToast';
-import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
-import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { useScreenData } from '../../src/hooks/useScreenData';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { groupByDate } from '../../src/lib/txnGrouping';
@@ -91,69 +91,61 @@ export default function GroupDetailScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
-  const { refreshing, onRefresh } = useRefresh(() => load());
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
-  const [group, setGroup] = useState<BudgetGroup | null>(null);
-  const [txns, setTxns] = useState<TxnWithSplits[]>([]);
-  const [members, setMembers] = useState<Person[]>([]);
-  const [me, setMe] = useState<Person | null>(null);
-  const [net, setNet] = useState<Record<string, number>>({});
-  const [budgetUsage, setBudgetUsage] = useState<any>(null);
-  const [catStatus, setCatStatus] = useState<CategoryBudgetStatus[]>([]);
-  const [analytics, setAnalytics] = useState<BudgetAnalytics | null>(null);
-  const [recurringRules, setRecurringRules] = useState<TxnWithSplits[]>([]);
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [membersExpanded, setMembersExpanded] = useState(false);
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
   const [budgetFilter, setBudgetFilter] = useState('all');
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(useCallback(() => { load(); }, [id]));
-  useReloadOnDataChange(load);
+  // Pure read: group + its txns/members/balances/budget/recurring. Refetches on
+  // focus and on cross-screen writes; retry = reload(). (No store writes here.)
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+    const [grp, txnList, memberList, meRow] = await Promise.all([
+      getGroupById(db, id),
+      getTransactionsForGroup(db, id),
+      getGroupMembers(db, id),
+      getMe(db),
+    ]);
+    const netMap = await getGroupNet(db, id);
 
-  async function load() {
-    try {
-      setLoadError(false);
-      const [grp, txnList, memberList, meRow] = await Promise.all([
-        getGroupById(db, id),
-        getTransactionsForGroup(db, id),
-        getGroupMembers(db, id),
-        getMe(db),
+    let budgetUsage: any = null;
+    let catStatus: CategoryBudgetStatus[] = [];
+    let analytics: BudgetAnalytics | null = null;
+    let recurringRules: TxnWithSplits[] = [];
+    if (grp) {
+      // Budgets are individual: count only MY share of each (shared) expense.
+      const [usage, cs, an] = await Promise.all([
+        getBudgetUsage(db, grp, 'monthly'),
+        getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
+        getBudgetAnalytics(db, grp, new Date(), meRow?.id),
       ]);
-      setGroup(grp);
-      setTxns(txnList);
-      setMembers(memberList);
-      setMe(meRow);
-      if (grp) setSimplifyOn(grp.simplify_debt === 1);
-
-      const netMap = await getGroupNet(db, id);
-      setNet(netMap);
-
-      if (grp) {
-        // Budgets are individual: count only MY share of each (shared) expense.
-        const [usage, cs, an] = await Promise.all([
-          getBudgetUsage(db, grp, 'monthly'),
-          getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
-          getBudgetAnalytics(db, grp, new Date(), meRow?.id),
-        ]);
-        setBudgetUsage(usage);
-        setCatStatus(cs);
-        setAnalytics(an);
-        if (grp.is_personal !== 1) {
-          const rules = await getRecurringForGroup(db, id);
-          setRecurringRules(rules.filter(r => r.recur_state === 'active'));
-        }
+      budgetUsage = usage;
+      catStatus = cs;
+      analytics = an;
+      if (grp.is_personal !== 1) {
+        const rules = await getRecurringForGroup(db, id);
+        recurringRules = rules.filter(r => r.recur_state === 'active');
       }
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoaded(true);
     }
-  }
+    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, budgetUsage, catStatus, analytics, recurringRules };
+  }, [id]);
+
+  const group = data?.group ?? null;
+  const txns = data?.txns ?? [];
+  const members = data?.members ?? [];
+  const me = data?.me ?? null;
+  const net = data?.net ?? {};
+  const budgetUsage = data?.budgetUsage ?? null;
+  const catStatus = data?.catStatus ?? [];
+  const analytics = data?.analytics ?? null;
+  const recurringRules = data?.recurringRules ?? [];
+
+  // simplifyOn is user-toggleable; seed it from the group's saved preference each
+  // time a fresh group row arrives (the toggle write persists via setSimplifyDebt).
+  useEffect(() => { if (data?.group) setSimplifyOn(data.group.simplify_debt === 1); }, [data?.group]);
 
   const isPersonal = group?.is_personal === 1;
 
@@ -184,10 +176,10 @@ export default function GroupDetailScreen() {
   async function deleteTxn(targetId: string, cascade: boolean, message: string) {
     await softDeleteTxn(db, targetId, cascade);
     haptic.warning();
-    await load();
+    await reload();
     showUndo({
       message,
-      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); await load(); } catch { /* ignore */ } },
+      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); await reload(); } catch { /* ignore */ } },
     });
   }
 
@@ -331,15 +323,15 @@ export default function GroupDetailScreen() {
   // A query threw (or the group vanished): show a recoverable state, never a
   // blank dead-end. Distinguish "load failed" (retry) from "not found" (deleted/
   // archived elsewhere) from "still loading" (brief).
-  if (loadError) {
+  if (error) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Group" onBack={() => router.back()} />
-        <ErrorState onRetry={() => load()} />
+        <ErrorState onRetry={() => reload()} />
       </View>
     );
   }
-  if (loaded && !group) {
+  if (!loading && !group) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Group" onBack={() => router.back()} />
