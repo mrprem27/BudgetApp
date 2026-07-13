@@ -576,7 +576,7 @@ export default function ReportsScreen() {
                   pointerLabelComponent: (items: Array<{ value: number }>) => {
                     const val = items[0]?.value ?? 0;
                     return (
-                      <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
+                      <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: space.sm, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
                         <Text style={{ color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', fontSize: 11 }}>
                           {formatAxisShort(val)}
                         </Text>

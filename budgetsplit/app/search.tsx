@@ -235,6 +235,6 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.lg },
   monthLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs },
   rowCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.sm, overflow: 'hidden', ...shadow.sm },
-  moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: space.sm, marginBottom: space.sm },
+  moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, marginBottom: space.sm },
   moreText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

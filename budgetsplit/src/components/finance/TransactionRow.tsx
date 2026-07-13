@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   primaryLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: space.xs,
   },
   primary: {
     ...type.body,

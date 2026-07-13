@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
   ringScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, letterSpacing: -0.5 },
   numberRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  deltaWrap: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, height: 16 },
+  deltaWrap: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 6, height: 16 },
   deltaText: { ...type.label },
   track: { height: 4, backgroundColor: colors.bgElevated, borderRadius: 2, marginTop: space.md, marginBottom: space.sm, overflow: 'hidden' },
   fill: { height: 4, width: '100%', borderRadius: 2, transformOrigin: 'left' },
@@ -186,5 +186,5 @@ const styles = StyleSheet.create({
   paceText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
   paceSub: { ...type.label, color: colors.textMuted },
   empty: { ...type.caption, color: colors.textMuted },
-  obfuscated: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, color: colors.textMuted, letterSpacing: 4, marginBottom: 4 },
+  obfuscated: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, color: colors.textMuted, letterSpacing: 4, marginBottom: space.xs },
 });

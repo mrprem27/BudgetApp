@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   chipText: { ...type.label, color: colors.textSecondary },
   chipTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   memberRow: { gap: space.md, paddingVertical: space.xs, paddingRight: space.md },
-  memberPick: { alignItems: 'center', gap: 4, width: 52 },
+  memberPick: { alignItems: 'center', gap: space.xs, width: 52 },
   memberAvatarWrap: { borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
   memberAvatarOn: { borderColor: colors.accent },
   memberCheck: { position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },

@@ -197,7 +197,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: 48 },
+  scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: space.xxl },
   deniedBanner: { backgroundColor: '#1F0E0E', borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
   deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   configLabel: { ...type.body, color: colors.textSecondary, flex: 1 },
   configValue: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  stepperBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  stepperBtn: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   stepperVal: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', minWidth: 18, textAlign: 'center' },
   toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.bgMuted, justifyContent: 'center', paddingHorizontal: 3, flexShrink: 0 },
   toggleOn: { backgroundColor: colors.accent },

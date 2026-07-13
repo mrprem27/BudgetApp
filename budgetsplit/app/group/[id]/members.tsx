@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   netText: { ...type.caption, marginTop: 2 },
-  swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: 4 },
+  swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },
   swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
 
   renameGap: { marginBottom: space.md },

@@ -140,12 +140,12 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border, marginVertical: space.md },
   shiftLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.6, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   shiftRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  shiftIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  shiftIcon: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   shiftCat: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   shiftAmt: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   badgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
 
-  link: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: space.md, paddingTop: space.sm },
+  link: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, marginTop: space.md, paddingTop: space.sm },
   linkText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

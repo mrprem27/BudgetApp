@@ -37,7 +37,7 @@ export function BalanceStrip({ oweTotal, owedTotal, onSettle }: Props) {
 const styles = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   half: { flex: 1 },
-  label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, letterSpacing: -0.5 },
   divider: { width: 1, height: 36, backgroundColor: colors.border, marginHorizontal: space.md },
   settleBtn: { backgroundColor: colors.accentMuted, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: space.sm },

@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   scopeChipText: { ...type.label, color: colors.textSecondary },
   scopeChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   methodRow: { flexDirection: 'row', gap: space.sm },
-  methodTile: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  methodTile: { flex: 1, alignItems: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   methodTileActive: { borderColor: colors.settle, backgroundColor: colors.settle + '22' },
   methodEmoji: { fontSize: 20 },
   methodLabel: { ...type.label, color: colors.textSecondary },

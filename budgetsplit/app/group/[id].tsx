@@ -811,7 +811,7 @@ export default function GroupDetailScreen() {
           ) : (
             <>
               <View style={styles.recurSummaryCard}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs }}>
                   <Text style={styles.recurSummaryTitle}>Group recurring</Text>
                   <Text style={styles.recurSummaryAmt}>{formatRupees(recurringMonthlyTotal)}/mo</Text>
                 </View>
@@ -915,14 +915,14 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   headerAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgCard + 'AA', alignItems: 'center', justifyContent: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.md },
-  heroIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  heroIcon: { width: 48, height: 48, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   heroName: { ...type.title, fontSize: 26, color: colors.textPrimary },
   heroSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
-  heroMembers: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 4 },
-  budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: 4, marginBottom: space.sm },
+  heroMembers: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xs },
+  budgetHeaderBar: { paddingHorizontal: layout.screenPaddingH, gap: space.xs, marginBottom: space.sm },
   budgetHeaderText: { ...type.caption, color: colors.textMuted },
   tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
-  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 8 },
+  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: radius.sm },
   tabActive: { backgroundColor: colors.accent },
   tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
   tabLabelActive: { color: colors.bg },
@@ -1009,7 +1009,7 @@ const styles = StyleSheet.create({
   linkBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 
   // Contributions overview card (Members area)
-  insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: 8 },
+  insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
   // Recurring tab
   recurSummaryCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
@@ -1024,7 +1024,7 @@ const styles = StyleSheet.create({
   recurItemShareLabel: { fontSize: 10, color: colors.textMuted, textAlign: 'right' },
   variableBadge: { backgroundColor: '#221A00', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   variableBadgeText: { fontSize: 9, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
-  addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0E2C29', borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: 12, padding: 12, marginBottom: space.md },
+  addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0E2C29', borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: radius.md, padding: 12, marginBottom: space.md },
   addRecurBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.accent },
   addRecurBtnSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
 
@@ -1032,7 +1032,7 @@ const styles = StyleSheet.create({
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },
-  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
   breadcrumbBack: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   breadcrumbSep: { ...type.body, color: colors.border, marginHorizontal: 1 },
   breadcrumbCurrent: { ...type.label, color: colors.textSecondary, flex: 1 },

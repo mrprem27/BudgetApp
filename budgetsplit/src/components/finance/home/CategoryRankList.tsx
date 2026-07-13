@@ -130,7 +130,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
 const styles = StyleSheet.create({
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: 4, paddingVertical: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs, paddingVertical: 2 },
   rowSelected: { backgroundColor: colors.bgMuted },
   nameSelected: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

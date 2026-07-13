@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   cat: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   freq: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },
-  statePill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, marginTop: 4 },
+  statePill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, marginTop: space.xs },
   stateText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   metaRow: { flexDirection: 'row', marginTop: space.md, gap: space.lg },
   metaItem: { flex: 1 },

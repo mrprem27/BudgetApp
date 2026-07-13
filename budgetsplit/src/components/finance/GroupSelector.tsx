@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   moreBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: space.xs,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: radius.pill,

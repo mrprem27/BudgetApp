@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   right: { flex: 1 },
   headline: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.textPrimary, marginBottom: 2 },
   sub: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
-  dots: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  dots: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   dot: { width: 10, height: 10, borderRadius: 3 },
   dotLogged: { backgroundColor: '#FF7A6D' },
   dotMissed: { backgroundColor: '#FF7A6D', opacity: 0.2 },

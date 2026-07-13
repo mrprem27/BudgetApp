@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   emptyHintRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   emptyHintText: { ...type.label, color: colors.textSecondary },
   // Dedicated first-run empty home (design Screen 6)
-  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: 32, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: space.xl, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
   emptyHeroZero: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, color: colors.accent, letterSpacing: -1 },
   emptyHeroTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 6 },
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
+  notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: radius.sm, paddingHorizontal: space.xs, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: '#fff' },
   tabRow: { marginBottom: space.md },
   catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
