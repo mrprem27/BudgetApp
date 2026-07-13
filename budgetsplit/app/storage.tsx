@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
@@ -27,10 +28,13 @@ export default function StorageScreen() {
   const router = useRouter();
   const { refresh } = useDataRefresh();
   const { setFlag } = useFeatureFlags();
-  const [usage, setUsage] = useState({ count: 0, bytes: 0 });
   const [busy, setBusy] = useState(false);
 
-  useFocusEffect(useCallback(() => { setUsage(getAttachmentStorage()); }, []));
+  // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
+  // imports/deletes made elsewhere. getAttachmentStorage is sync; db is unused here.
+  const { data, reload } = useScreenData(async () => getAttachmentStorage(), []);
+  const count = data?.count ?? 0;
+  const bytes = data?.bytes ?? 0;
 
   function confirmLoadDemo() {
     Alert.alert(
@@ -89,10 +93,10 @@ export default function StorageScreen() {
   }
 
   function clearAll() {
-    if (usage.count === 0) return;
+    if (count === 0) return;
     Alert.alert(
       'Delete all attachments?',
-      `This permanently removes ${usage.count} receipt ${usage.count === 1 ? 'photo' : 'photos'} (${formatBytes(usage.bytes)}). Your transactions stay; only the photos are removed.`,
+      `This permanently removes ${count} receipt ${count === 1 ? 'photo' : 'photos'} (${formatBytes(bytes)}). Your transactions stay; only the photos are removed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -102,7 +106,7 @@ export default function StorageScreen() {
               clearAllAttachmentFiles();
               await clearAllAttachmentRefs(db);
               haptic.warning();
-              setUsage({ count: 0, bytes: 0 });
+              reload();
             } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
           },
         },
@@ -116,15 +120,15 @@ export default function StorageScreen() {
       <View style={styles.content}>
         <View style={styles.card}>
           <View style={styles.iconCircle}><Feather name="paperclip" size={20} color={colors.accent} /></View>
-          <Text style={styles.amount}>{formatBytes(usage.bytes)}</Text>
-          <Text style={styles.sub}>{usage.count} receipt {usage.count === 1 ? 'photo' : 'photos'} stored on this device</Text>
+          <Text style={styles.amount}>{formatBytes(bytes)}</Text>
+          <Text style={styles.sub}>{count} receipt {count === 1 ? 'photo' : 'photos'} stored on this device</Text>
         </View>
 
         <Text style={styles.note}>
           Receipt photos are compressed on import and never leave your device. Delete them here to free up space — your transactions are kept.
         </Text>
 
-        <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={usage.count === 0} />
+        <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={count === 0} />
 
         {/* Developer / QA — populate or wipe the whole app for testing. */}
         <View style={styles.devSection}>

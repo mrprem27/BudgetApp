@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, addMonths } from 'date-fns';
 import Svg, { Circle } from 'react-native-svg';
@@ -24,10 +24,11 @@ import { haptic } from '../../src/lib/haptics';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory,
   fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
-  type SavingsGoal, type SavingsTxn, type SavingsFrequency,
+  type SavingsTxn, type SavingsFrequency,
 } from '../../src/db/queries/savings';
 import { useUndo } from '../../src/components/system/UndoToast';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { useScreenData } from '../../src/hooks/useScreenData';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -58,10 +59,6 @@ export default function GoalDetailScreen() {
   const { showUndo } = useUndo();
   const { refresh } = useDataRefresh();
 
-  const [goal, setGoal] = useState<SavingsGoal | null>(null);
-  const [saved, setSaved] = useState(0);
-  const [cashAvailable, setCashAvailable] = useState(0);
-  const [history, setHistory] = useState<SavingsTxn[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -73,35 +70,34 @@ export default function GoalDetailScreen() {
   const [adjustDate, setAdjustDate] = useState<number | null>(null);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [amt, setAmt] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(useCallback(() => { if (!id) { router.back(); return; } load(); }, [id]));
+  const { data, loading, error, reload } = useScreenData(async (loadDb) => {
+    const [g, savedMap, money, hist] = await Promise.all([
+      getGoalById(loadDb, id), getGoalSavedMap(loadDb), getTotalMoney(loadDb), getGoalHistory(loadDb, id),
+    ]);
+    return {
+      goal: g,
+      saved: savedMap[id] ?? 0,
+      cashAvailable: money.cashAvailable,
+      history: hist,
+    };
+  }, [id]);
+
+  const goal = data?.goal ?? null;
+  const saved = data?.saved ?? 0;
+  const cashAvailable = data?.cashAvailable ?? 0;
+  const history: SavingsTxn[] = data?.history ?? [];
+
+  // Guard: bail back out if we somehow landed here without an id.
+  useEffect(() => { if (!id) router.back(); }, [id]);
 
   if (!id) return null;
 
-  async function load() {
-    try {
-      const [g, savedMap, money, hist] = await Promise.all([
-        getGoalById(db, id), getGoalSavedMap(db), getTotalMoney(db), getGoalHistory(db, id),
-      ]);
-      setGoal(g);
-      setSaved(savedMap[id] ?? 0);
-      setCashAvailable(money.cashAvailable);
-      setHistory(hist);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loadError) {
+  if (error) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Goal" onBack={() => router.back()} />
-        <ErrorState onRetry={() => { setLoadError(false); setLoading(true); load(); }} />
+        <ErrorState onRetry={reload} />
       </View>
     );
   }
@@ -118,7 +114,9 @@ export default function GoalDetailScreen() {
     );
   }
 
-  if (!goal) {
+  // Not found: reached only after the error/loading guards above, so this is a
+  // clean load (!error && !loading) where the goal simply doesn't exist.
+  if (goal == null) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Goal" onBack={() => router.back()} />
@@ -147,7 +145,7 @@ export default function GoalDetailScreen() {
       await fundGoal(db, id, a);
       haptic.success();
       setAmt(''); setShowAdd(false);
-      await load();
+      await reload();
       if (justCompleted) setCelebrate(true);
     } catch {
       haptic.error();
@@ -162,7 +160,7 @@ export default function GoalDetailScreen() {
       await withdrawFromGoal(db, id, Math.min(a, saved));
       haptic.warning();
       setAmt(''); setShowWithdraw(false);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -199,7 +197,7 @@ export default function GoalDetailScreen() {
       });
       haptic.success();
       setShowAdjust(false);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Could not save changes.');
@@ -211,7 +209,7 @@ export default function GoalDetailScreen() {
   async function toggleLock() {
     await setGoalLocked(db, id, goal!.locked !== 1);
     haptic.selection();
-    await load();
+    await reload();
   }
 
   function confirmDelete() {

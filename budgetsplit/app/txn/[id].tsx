@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal, useWindowDimensions, Platform, ActionSheetIOS } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useScreenData } from '../../src/hooks/useScreenData';
 import { format } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -35,55 +36,64 @@ const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; co
   ended:    { icon: 'x-circle', color: colors.textMuted, label: 'Ended' },
 };
 
+type TxnDetailData = {
+  txn: TxnWithSplits | null;
+  members: Person[];
+  me: Person | null;
+  groupName: string;
+  isPersonal: boolean;
+  history: AuditLog[];
+  items: LineItem[];
+  parentRule: TxnWithSplits | null;
+};
+
 export default function TxnDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
   const { refresh } = useDataRefresh();
-  const [txn, setTxn] = useState<TxnWithSplits | null>(null);
-  const [members, setMembers] = useState<Person[]>([]);
-  const [me, setMe] = useState<Person | null>(null);
-  const [groupName, setGroupName] = useState('');
-  const [isPersonal, setIsPersonal] = useState(false);
-  const [history, setHistory] = useState<AuditLog[]>([]);
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [parentRule, setParentRule] = useState<TxnWithSplits | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [showAttachment, setShowAttachment] = useState(false);
   const { width: winW, height: winH } = useWindowDimensions();
 
-  useFocusEffect(useCallback(() => { if (!id) { router.back(); return; } load(); }, [id]));
+  const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
+    const t = await getTxnById(database, id);
+    if (!t) {
+      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null };
+    }
+    const [grp, mems, meRow, hist, li] = await Promise.all([
+      getGroupById(database, t.group_id),
+      getGroupMembers(database, t.group_id),
+      getMe(database),
+      getAuditLog(database, { entityId: id }),
+      t.entry_mode === 'itemized' ? getLineItems(database, id) : Promise.resolve([]),
+    ]);
+    const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
+    return {
+      txn: t,
+      members: mems,
+      me: meRow,
+      groupName: grp?.name ?? '',
+      isPersonal: grp?.is_personal === 1,
+      history: hist,
+      items: li,
+      parentRule,
+    };
+  }, [id]);
+
+  const txn = data?.txn ?? null;
+  const members = data?.members ?? [];
+  const me = data?.me ?? null;
+  const groupName = data?.groupName ?? '';
+  const isPersonal = data?.isPersonal ?? false;
+  const history = data?.history ?? [];
+  const items = data?.items ?? [];
+  const parentRule = data?.parentRule ?? null;
+
+  // No id → nothing to show; bounce back (kept as an effect so hooks above still run).
+  useEffect(() => { if (!id) router.back(); }, [id, router]);
 
   if (!id) return null;
-
-  async function load() {
-    try {
-      const t = await getTxnById(db, id);
-      setTxn(t);
-      if (!t) { setLoadError(false); return; }
-      const [grp, mems, meRow, hist, li] = await Promise.all([
-        getGroupById(db, t.group_id),
-        getGroupMembers(db, t.group_id),
-        getMe(db),
-        getAuditLog(db, { entityId: id }),
-        t.entry_mode === 'itemized' ? getLineItems(db, id) : Promise.resolve([]),
-      ]);
-      setGroupName(grp?.name ?? '');
-      setIsPersonal(grp?.is_personal === 1);
-      setMembers(mems);
-      setMe(meRow);
-      setHistory(hist);
-      setItems(li);
-      setParentRule(t.parent_recur_id ? await getTxnById(db, t.parent_recur_id) : null);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoaded(true);
-    }
-  }
 
   async function attachReceipt(source: 'camera' | 'gallery') {
     try {
@@ -93,7 +103,7 @@ export default function TxnDetailScreen() {
       if (txn?.attachment_uri) await deleteAttachment(txn.attachment_uri);
       await setTxnAttachment(db, id, uri);
       haptic.success();
-      await load();
+      await reload();
     } catch (e) {
       if (e instanceof AttachmentStorageError) {
         Alert.alert('Low on storage', 'Your device is low on storage. Free up space and try again.');
@@ -125,23 +135,23 @@ export default function TxnDetailScreen() {
           if (old) await deleteAttachment(old);
           haptic.warning();
           setShowAttachment(false);
-          await load();
+          await reload();
         },
       },
     ]);
   }
 
-  if (loadError) {
+  if (error) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Transaction" onBack={() => router.back()} />
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+        <ErrorState onRetry={reload} />
       </View>
     );
   }
 
   // Loaded but no row → it was deleted/settled (e.g. opened from a stale list).
-  if (loaded && !txn) {
+  if (!loading && !error && txn == null) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Transaction" onBack={() => router.back()} />
