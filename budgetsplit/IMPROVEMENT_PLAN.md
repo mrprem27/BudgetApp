@@ -34,14 +34,14 @@ Grounded in three read-only audits (input fields; screens/flows/state; design-sy
 - [x] Color hex→token sweep (10 files, exact-match, visually identical)
 - [x] Remaining a11y: txn/[id] roles, notification steppers (notifications switch already had role+state)
 
-## Phase 3 — doing it in small, verified phases (per user 2026-07-12)
-Reconciles with AGENTS.md by going screen-by-screen in reviewable, committed batches (not one big-bang diff). Each phase: tsc + tests + commit + merge.
-- [x] **P3.1 pilot** — `afford.tsx`, `insights.tsx` migrated to `useScreenData` (pattern established).
-- [ ] **P3.2** — reports, categories, storage, settings/notifications
-- [ ] **P3.3** — category/[name], group/[id]/budget, group/[id]/edit, savings/[id], txn/[id]
-- [ ] **P3.4** — big tab screens (index, groups, savings, group/[id]) — highest risk, careful/last
-- [ ] **P3.5** — Input convergence (safe re-implemented fields, screen by screen)
-- [ ] **P3.6** — spacing/typography token sweep
+## Phase 3 — done in verified per-screen phases (2026-07-13)
+Went screen-by-screen in committed batches (tsc + tests each), not a big-bang diff.
+- [x] **P3.1** — afford, insights (PR #8)
+- [x] **P3.2/P3.3** — reports, categories, settings/notifications, category/[name], group/[id]/budget, group/[id]/edit (bc81acd)
+- [x] **P3.3 rest** — savings/[id], txn/[id], storage (dc12cdd). **11 screens migrated total.**
+- [x] **P3.4 — assessed, correctly NOT migrated.** All four (index, groups, savings, group/[id]) have loads with SIDE EFFECTS or size that make useScreenData wrong: `groups`→`setGroups` (global store), `savings`→`runSavingsMaintenance` (mutation; would loop on refetch), `index`→`setGroups` + focus-tied `setAppLastOpen` write, `group/[id]`→1000 lines + freshly hardened. Left hand-rolled = the correct architecture per AGENTS.md.
+- [x] **P3.6** — property-scoped exact-match spacing/radius token sweep (38 files, pixel-identical).
+- [ ] **P3.5 — opportunistic (not blanket).** The `Input` component's focus-border/label/padding differ from the bespoke inline `TextInput`s, so converging changes appearance and needs device/design verification. Do per-field when editing a screen, not via an unverifiable blanket swap.
 
 ## Still deferred (cosmetic / low-value)
 - Dead-style removal + velocity/subs card extraction; category-palette consolidation.
