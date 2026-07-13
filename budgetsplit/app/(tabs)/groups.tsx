@@ -1,19 +1,20 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Animated, Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
-import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
-import { getAllGroups, insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
+import { useScreenData } from '../../src/hooks/useScreenData';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
@@ -27,7 +28,7 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { BalanceChip } from '../../src/components/ui/BalanceChip';
 import { AmountText } from '../../src/components/ui/AmountText';
-import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -37,74 +38,69 @@ import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palett
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 
+type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number };
+
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { groups, setGroups } = useStore();
+  // Groups come from the global store — hydrated at the root by StoreHydrator and
+  // refreshed on the data-change signal, so this screen neither queries nor sets them.
+  const groups = useStore(s => s.groups);
+  const { refresh } = useDataRefresh();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string>(GROUP_ICONS[0]);
   const [color, setColor] = useState<string>(GROUP_COLORS[0]);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
-  const [allPersons, setAllPersons] = useState<Person[]>([]);
-  const [health, setHealth] = useState<Record<string, { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number }>>({});
-  const [archived, setArchived] = useState<BudgetGroup[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [loadError, setLoadError] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [friends, setFriends] = useState<FriendBalance[]>([]);
-  const [memberMap, setMemberMap] = useState<Record<string, Person[]>>({});
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
-  const { refreshing, onRefresh } = useRefresh(() => loadGroups());
 
-  useFocusEffect(useCallback(() => {
-    loadGroups();
-  }, []));
-  useReloadOnDataChange(loadGroups);
+  // Everything the screen needs besides the groups list itself: archived groups,
+  // per-group health/spend/net, member map, people balances. Recomputes when the
+  // store's groups change (deps: [groups]).
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+    const archived = await getArchivedGroups(db);
+    const me = await getMe(db);
+    // Per-group usage + member counts + my net balance, in parallel.
+    const health: Record<string, GroupHealth> = {};
+    const memberMap: Record<string, Person[]> = {};
+    await Promise.all(groups.map(async g => {
+      const [analytics, mems, gnet] = await Promise.all([
+        getBudgetAnalytics(db, g),
+        getGroupMembers(db, g.id),
+        getGroupNet(db, g.id),
+      ]);
+      const pct = analytics.utilizationPct;
+      const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
+      health[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length, net: me ? (gnet[me.id] ?? 0) : 0 };
+      memberMap[g.id] = mems;
+    }));
 
-  async function loadGroups() {
-    try {
-      const grps = await getAllGroups(db);
-      setGroups(grps);
-      setArchived(await getArchivedGroups(db));
-      const me = await getMe(db);
-      // Per-group usage + member counts + my net balance, in parallel.
-      const h: typeof health = {};
-      const mm: Record<string, Person[]> = {};
-      await Promise.all(grps.map(async g => {
-        const [analytics, mems, gnet] = await Promise.all([
-          getBudgetAnalytics(db, g),
-          getGroupMembers(db, g.id),
-          getGroupNet(db, g.id),
-        ]);
-        const pct = analytics.utilizationPct;
-        const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
-        h[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length, net: me ? (gnet[me.id] ?? 0) : 0 };
-        mm[g.id] = mems;
-      }));
-      setHealth(h);
-      setMemberMap(mm);
+    // People balances — who-owes-whom across all groups, from my view.
+    // Single source of truth: getMyExposure (per-person, after all settlements).
+    const persons = await getAllPersons(db);
+    return {
+      archived,
+      health,
+      memberMap,
+      allPersons: persons.filter(p => !p.is_me),
+      friends: me ? (await getMyExposure(db, me.id)).perPerson : [],
+    };
+  }, [groups]);
 
-      // People balances — who-owes-whom across all groups, from my view.
-      // Single source of truth: getMyExposure (per-person, after all settlements).
-      const persons = await getAllPersons(db);
-      setAllPersons(persons.filter(p => !p.is_me));
-      setFriends(me ? (await getMyExposure(db, me.id)).perPerson : []);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoaded(true);
-    }
-  }
+  const archived: BudgetGroup[] = data?.archived ?? [];
+  const health: Record<string, GroupHealth> = data?.health ?? {};
+  const memberMap: Record<string, Person[]> = data?.memberMap ?? {};
+  const allPersons: Person[] = data?.allPersons ?? [];
+  const friends: FriendBalance[] = data?.friends ?? [];
 
   async function handleRestore(g: BudgetGroup) {
     await unarchiveGroup(db, g.id);
     haptic.success();
-    await loadGroups();
+    refresh();
   }
 
   async function handleArchive(g: BudgetGroup) {
@@ -112,7 +108,7 @@ export default function GroupsScreen() {
     const ok = await archiveGroupSafe(db, g.id);
     if (ok) {
       haptic.warning();
-      await loadGroups();
+      refresh();
     }
   }
 
@@ -139,7 +135,7 @@ export default function GroupsScreen() {
       setShowCreate(false);
       setName('');
       setGroupMembers([]);
-      await loadGroups();
+      refresh();
       router.push(`/group/${group.id}`);
     } catch {
       haptic.error();
@@ -285,8 +281,8 @@ export default function GroupsScreen() {
         </View>
       </View>
 
-      {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); loadGroups(); }} />
+      {error ? (
+        <ErrorState onRetry={() => reload()} />
       ) : (
         <>
       <FlatList
@@ -302,7 +298,7 @@ export default function GroupsScreen() {
           ListFooterComponent={viewMode === 'active' ? renderBalances() : null}
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={
-            !loaded ? null : viewMode === 'active' ? (
+            loading ? null : viewMode === 'active' ? (
               <EmptyState
                 icon="users"
                 title="No groups yet"

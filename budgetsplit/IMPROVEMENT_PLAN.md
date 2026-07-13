@@ -39,9 +39,9 @@ Went screen-by-screen in committed batches (tsc + tests each), not a big-bang di
 - [x] **P3.1** — afford, insights (PR #8)
 - [x] **P3.2/P3.3** — reports, categories, settings/notifications, category/[name], group/[id]/budget, group/[id]/edit (bc81acd)
 - [x] **P3.3 rest** — savings/[id], txn/[id], storage (dc12cdd). **11 screens migrated total.**
-- [x] **P3.4 — assessed, correctly NOT migrated.** All four (index, groups, savings, group/[id]) have loads with SIDE EFFECTS or size that make useScreenData wrong: `groups`→`setGroups` (global store), `savings`→`runSavingsMaintenance` (mutation; would loop on refetch), `index`→`setGroups` + focus-tied `setAppLastOpen` write, `group/[id]`→1000 lines + freshly hardened. Left hand-rolled = the correct architecture per AGENTS.md.
+- [x] **P3.4 — DONE (2026-07-13, 8b1a78b), side effects separated.** index + groups now read `groups` from the store (StoreHydrator owns hydration; screens dropped getAllGroups/setGroups); savings keeps `runSavingsMaintenance` in its own focus effect (loader is pure reads only, no raid-on-refetch loop); group/[id]'s pure load migrated directly. All preserved their states (Home null-while-loading + bespoke empty + checkCatchUp; group/[id] error/not-found/Settle/simplify-seed). NOT device-tested — verify store-fed screens for refetch behavior.
+- [x] **P3.5 — AUDITED, no safe targets (2026-07-13).** The remaining raw `TextInput`s are intentionally bespoke: search bars with a clear (×) button `Input` can't host; inline card-row inputs that per AGENTS.md rule 4 are deliberately border-less (Input is a bordered box); and hero amount fields. Converging them would DEGRADE the design, not clean it. `Input` is already the standard for real form fields (GroupForm, new-goal, etc.). No change made — this is the correct outcome, not a deferral.
 - [x] **P3.6** — property-scoped exact-match spacing/radius token sweep (38 files, pixel-identical).
-- [ ] **P3.5 — opportunistic (not blanket).** The `Input` component's focus-border/label/padding differ from the bespoke inline `TextInput`s, so converging changes appearance and needs device/design verification. Do per-field when editing a screen, not via an unverifiable blanket swap.
 
 ## Still deferred (cosmetic / low-value)
 - Dead-style removal + velocity/subs card extraction; category-palette consolidation.

@@ -21,7 +21,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DraggableList } from '../../src/components/ui/DraggableList';
 import { Input } from '../../src/components/ui/Input';
 import { InsightText } from '../../src/components/finance/InsightText';
-import { AppRefreshControl, useRefresh } from '../../src/components/ui/AppRefreshControl';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
@@ -54,15 +54,15 @@ import { haptic } from '../../src/lib/haptics';
 import {
   getGoals, getGoalSavedMap, getTotalMoney, fundGoal, insertGoal, reorderGoals,
   runSavingsMaintenance, undoOverspendRaid, buildSavingsInsights,
-  type SavingsGoal, type Priority, type SavingsFrequency, type OverspendRaid,
+  type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../../src/db/queries/savings';
 import { getMoneyProfile, setMoneyProfile } from '../../src/db/queries/moneyProfile';
 import { getAllGroups } from '../../src/db/queries/groups';
 import type { Insight } from '../../src/lib/savingsInsights';
-import type { TotalMoney, MoneyProfile } from '../../src/lib/cash';
+import type { MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { useReloadOnDataChange } from '../../src/hooks/useReloadOnDataChange';
+import { useScreenData } from '../../src/hooks/useScreenData';
 
 const GOAL_ICONS = ['smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield', 'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target'];
 const GOAL_COLORS = ['#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060'];
@@ -92,14 +92,6 @@ export default function SavingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
-  const [goals, setGoals] = useState<SavingsGoal[]>([]);
-  const [saved, setSaved] = useState<Record<string, number>>({});
-  const [money, setMoney] = useState<TotalMoney | null>(null);
-  const [profile, setProfile] = useState<MoneyProfile>({ openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 });
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [forecastMonthEnd, setForecastMonthEnd] = useState<number | null>(null);
-  const [forecastBudget, setForecastBudget] = useState(0);
-  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const [overspend, setOverspend] = useState<OverspendRaid | null>(null);
 
   const [showMoneyEditor, setShowMoneyEditor] = useState(false);
@@ -116,25 +108,13 @@ export default function SavingsScreen() {
   const [frequency, setFrequency] = useState<SavingsFrequency>('none');
   const [newDate, setNewDate] = useState<number | null>(null);
 
-  const [loadError, setLoadError] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  useFocusEffect(useCallback(() => { load(); }, []));
-  useReloadOnDataChange(load);
   const { refresh } = useDataRefresh();
-  const { refreshing, onRefresh } = useRefresh(() => load());
 
-  async function load() {
-    try {
-    // Scheduled goal funding + overspend auto-raid. Surface a notice if a raid happened.
-    const raid = await runSavingsMaintenance(db);
-    if (raid.total > 0) setOverspend(raid);
+  // Pure reads — refetch on focus + cross-screen write. The maintenance MUTATION
+  // (scheduled funding + overspend raid) is deliberately kept OUT of this loader so
+  // it can't re-run/raid on every refetch; it lives in its own focus effect below.
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const [g, s, tm, mp, ins] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db), buildSavingsInsights(db)]);
-    setGoals(g);
-    setSaved(s);
-    setMoney(tm);
-    setProfile(mp);
-    setInsights(ins);
     const grps = await getAllGroups(db);
 
     // Current month's category spend — feeds the month-end forecast + what-if simulator.
@@ -144,7 +124,7 @@ export default function SavingsScreen() {
     const catMap: Record<string, number> = {};
     for (const t of monthTxns) {
       if (t.kind === 'expense') {
-        const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+        const amt = t.shares.reduce((sum: number, sh: { amount: number }) => sum + sh.amount, 0);
         catMap[t.category] = (catMap[t.category] ?? 0) + amt;
       }
     }
@@ -153,41 +133,56 @@ export default function SavingsScreen() {
     const today2 = new Date();
     const dayOfMonth = getDate(today2);
     const daysInMonth = getDaysInMonth(today2);
-    const totalMonthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
+    const totalMonthSpend = Object.values(catMap).reduce((sum, v) => sum + v, 0);
     const prevTxns = await getTransactionsInRange(db, null, startOfMonth(subMonths(today2, 1)).getTime(), endOfMonth(subMonths(today2, 1)).getTime());
     let priorMonthTotal = 0;
     for (const t of prevTxns) {
-      if (t.kind === 'expense') priorMonthTotal += t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
+      if (t.kind === 'expense') priorMonthTotal += t.shares.reduce((sum: number, sh: { amount: number }) => sum + sh.amount, 0);
     }
     const f = computeForecastMonthEnd(totalMonthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
-    setForecastMonthEnd(f.ready ? f.projected : null);
+    const forecastMonthEnd = f.ready ? f.projected : null;
 
     // Budget total across all groups for the forecast over/under line.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
     let bTotal = 0;
     for (const a of analyticsAll) bTotal += a.totalAllocated;
-    setForecastBudget(bTotal);
 
-    // Compute net across all non-personal groups (for ACROSS ALL GROUPS section).
+    // Upcoming recurring bills across all groups (design Screen 3).
+    let upcoming: UpcomingItem[] = [];
     const me2 = await getMe(db);
     if (me2) {
-      // Upcoming recurring bills across all groups (design Screen 3).
       const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-      setUpcoming(buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5));
+      upcoming = buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5);
     }
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoaded(true);
-    }
-  }
+
+    return { goals: g, saved: s, money: tm, profile: mp, insights: ins, forecastMonthEnd, forecastBudget: bTotal, upcoming };
+  }, []);
+
+  const goals = data?.goals ?? [];
+  const saved = data?.saved ?? {};
+  const money = data?.money ?? null;
+  const profile = data?.profile ?? { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 };
+  const insights = data?.insights ?? [];
+  const forecastMonthEnd = data?.forecastMonthEnd ?? null;
+  const forecastBudget = data?.forecastBudget ?? 0;
+  const upcoming = data?.upcoming ?? [];
+
+  // Scheduled goal funding + overspend auto-raid — a MUTATION, so it runs on focus
+  // only (never inside the loader, which refetches on every focus/data-change).
+  // After a raid we reload() so the reads reflect the post-maintenance state.
+  useFocusEffect(useCallback(() => {
+    (async () => {
+      const raid = await runSavingsMaintenance(db);
+      if (raid.total > 0) setOverspend(raid);
+      reload();
+    })();
+  }, [db, reload]));
 
   async function handleSaveMoney(p: MoneyProfile) {
     await setMoneyProfile(db, p);
     haptic.success();
     setShowMoneyEditor(false);
-    await load();
+    await reload();
     refresh();
   }
 
@@ -200,7 +195,7 @@ export default function SavingsScreen() {
     haptic.success();
     setFundAmt('');
     setFundGoalId(null);
-    await load();
+    await reload();
     refresh();
   }
 
@@ -209,7 +204,7 @@ export default function SavingsScreen() {
     await undoOverspendRaid(db, overspend.withdrawals);
     haptic.success();
     setOverspend(null);
-    await load();
+    await reload();
     refresh();
   }
 
@@ -218,16 +213,10 @@ export default function SavingsScreen() {
     setColor(GOAL_COLORS[0]); setAllocation(''); setFrequency('none'); setNewDate(null);
   }
 
-  // Persist a drag reorder → new funding priority. Reorder local state to match
-  // so the screen doesn't need a full reload.
+  // Persist a drag reorder → new funding priority, then reload to reflect it.
   async function handleReorder(ids: string[]) {
-    // Only the active goals are draggable; preserve any goals not in `ids` (completed).
-    setGoals(prev => {
-      const reordered = ids.map(id => prev.find(g => g.id === id)).filter((g): g is SavingsGoal => !!g);
-      const rest = prev.filter(g => !ids.includes(g.id));
-      return [...reordered, ...rest];
-    });
     await reorderGoals(db, ids);
+    await reload();
   }
 
   async function handleCreate() {
@@ -240,7 +229,7 @@ export default function SavingsScreen() {
     haptic.success();
     setShowNew(false);
     resetNew();
-    await load();
+    await reload();
     refresh();
   }
 
@@ -264,8 +253,8 @@ export default function SavingsScreen() {
           </View>
         }
       />
-      {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); load(); }} />
+      {error ? (
+        <ErrorState onRetry={() => reload()} />
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Total Money — cash + investments + available credit, with breakdown */}
@@ -356,7 +345,7 @@ export default function SavingsScreen() {
             )}
           </>
           );
-        })() : !loaded ? null : (
+        })() : loading ? null : (
           <EmptyState
             icon="target"
             title="No savings goals yet"
