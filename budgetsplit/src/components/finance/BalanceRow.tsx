@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     marginLeft: -12,
     borderWidth: 2,
     borderColor: colors.bgCard,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   names: {
     flex: 1,

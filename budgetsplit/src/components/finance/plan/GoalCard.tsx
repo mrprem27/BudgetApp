@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   goalCardActive: { borderColor: colors.accent },
   goalCardDone: { borderColor: colors.income + '55', backgroundColor: colors.income + '0D' },
   goalNameDone: { color: colors.textSecondary },
-  doneBadge: { backgroundColor: colors.income + '22', borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 4 },
+  doneBadge: { backgroundColor: colors.income + '22', borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 3, marginLeft: space.xs },
   doneBadgeText: { ...type.caption, color: colors.income, fontFamily: 'Inter_600SemiBold' },
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   goalIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   goalMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
   goalMeta: { ...type.caption, color: colors.textMuted, flexShrink: 1 },
   goalMetaRight: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  dragHandle: { marginLeft: 4 },
+  dragHandle: { marginLeft: space.xs },
   trailing: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   addBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 });

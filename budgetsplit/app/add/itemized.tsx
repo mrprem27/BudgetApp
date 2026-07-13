@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
   totalCardMeta: { ...type.label, color: colors.textMuted },
   categoryChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgMuted, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill },
   categoryChipText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: 48, gap: space.md },
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl, gap: space.md },
 
   sectionLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, marginBottom: -space.sm },
   addCardHeader: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: -space.sm },
@@ -763,8 +763,8 @@ const styles = StyleSheet.create({
   itemAvatars: { marginTop: 6 },
   addNameInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border },
   addRow2: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
-  qtyWrap: { width: 64, gap: 4 },
-  priceWrap: { flex: 1, gap: 4 },
+  qtyWrap: { width: 64, gap: space.xs },
+  priceWrap: { flex: 1, gap: space.xs },
   miniLabel: { ...type.caption, color: colors.textMuted, marginLeft: 2 },
   qtyInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.sm, paddingVertical: space.sm, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
   priceInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border },
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
   itemEditPriceWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm },
   itemEditRupee: { ...type.body, color: colors.textMuted },
   itemEditPrice: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.sm },
-  itemDoneBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  itemDoneBtn: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm },
   summaryLabel: { ...type.body, color: colors.textSecondary, flexShrink: 1 },

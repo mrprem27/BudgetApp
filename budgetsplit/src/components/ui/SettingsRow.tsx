@@ -46,7 +46,7 @@ export function SettingsRow({ icon, label, value, tint = colors.accent, onPress,
 export const settingsRowDivider = {
   height: 1,
   backgroundColor: colors.border,
-  marginLeft: 32 + space.md + space.md,
+  marginLeft: space.xl + space.md + space.md,
 };
 
 const styles = StyleSheet.create({

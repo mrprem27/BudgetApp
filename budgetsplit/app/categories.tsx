@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, LayoutAnimation, UIManager,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { CATEGORY_KIND, type CategoryKind } from '../src/constants/enums';
@@ -37,60 +38,50 @@ if (Platform.OS === 'android') {
 export default function CategoriesScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [uncategorized, setUncategorized] = useState<Array<{ name: string; count: number }>>([]);
   const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [addingToSection, setAddingToSection] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState(COLOR_CHOICES[0]);
-  const [loadError, setLoadError] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState('');
 
-  useFocusEffect(useCallback(() => { loadCats(kindTab); }, [kindTab]));
-
   // Categories are a single global catalog now — no group scoping.
-  async function loadCats(k: CategoryKind) {
-    try {
-      let cats = await getCategories(db, k);
-      // Self-heal: the base catalog is app structure and should never be empty.
-      // If it is (e.g. an older DB that once wiped categories), reseed defaults.
-      if (cats.length === 0) {
-        await seedGlobalCategories(db);
-        cats = await getCategories(db, k);
-      }
-      const unc = await getUncategorizedNames(db, k);
-      setCategories(cats);
-      setUncategorized(unc);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
+  const { data, error: loadError, reload } = useScreenData(async (db) => {
+    let cats = await getCategories(db, kindTab);
+    // Self-heal: the base catalog is app structure and should never be empty.
+    // If it is (e.g. an older DB that once wiped categories), reseed defaults.
+    if (cats.length === 0) {
+      await seedGlobalCategories(db);
+      cats = await getCategories(db, kindTab);
     }
-  }
+    const unc = await getUncategorizedNames(db, kindTab);
+    return { categories: cats, uncategorized: unc };
+  }, [kindTab]);
+  const categories = data?.categories ?? [];
+  const uncategorized = data?.uncategorized ?? [];
 
   // Adopt an uncategorized name into the global catalog (its spend then splits
   // out of "Others"). Defaults from the name's known visual; user can edit after.
   async function adoptCategory(name: string) {
     try {
       const vis = categoryVisual(name);
-      const created = await insertCategory(db, name, vis.icon, vis.color, kindTab, 'Other');
+      await insertCategory(db, name, vis.icon, vis.color, kindTab, 'Other');
       haptic.success();
-      setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-      setUncategorized(prev => prev.filter(u => u.name !== name));
+      reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
     }
   }
 
-  async function switchKind(k: CategoryKind) {
+  function switchKind(k: CategoryKind) {
     haptic.selection();
     setKindTab(k);
     setExpandedSection(null);
     setAddingToSection(null);
-    await loadCats(k);
+    // kindTab is a useScreenData dep → changing it re-runs the loader automatically.
   }
 
   function toggleSection(title: string) {
@@ -116,13 +107,13 @@ export default function CategoriesScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      const created = await insertCategory(db, trimmed, icon, color, kindTab, addingToSection);
+      await insertCategory(db, trimmed, icon, color, kindTab, addingToSection);
       haptic.success();
-      setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       setName('');
       setIcon('tag');
       setColor(COLOR_CHOICES[0]);
       setAddingToSection(null);
+      reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -148,8 +139,8 @@ export default function CategoriesScreen() {
     try {
       await renameCategory(db, cat.id, n);
       haptic.success();
-      setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, name: n } : c)).sort((a, b) => a.name.localeCompare(b.name)));
       setRenamingId(null);
+      reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -168,7 +159,7 @@ export default function CategoriesScreen() {
             try {
               await deleteCategory(db, cat.id);
               haptic.warning();
-              setCategories(prev => prev.filter(c => c.id !== cat.id));
+              reload();
             } catch {
               haptic.error();
               Alert.alert('Something went wrong', 'Please try again.');
@@ -199,7 +190,7 @@ export default function CategoriesScreen() {
       <ScreenHeader title="Categories" onBack={() => router.back()} />
 
       {loadError ? (
-        <ErrorState onRetry={() => { setLoadError(false); loadCats(kindTab); }} />
+        <ErrorState onRetry={() => reload()} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -422,7 +413,7 @@ const styles = StyleSheet.create({
   sectionContent: { paddingHorizontal: space.md, paddingBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  iconDot: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   rowName: { ...type.body, color: colors.textPrimary, flex: 1 },
   renameInput: { flex: 1 },
   empty: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
@@ -430,7 +421,7 @@ const styles = StyleSheet.create({
   addRowText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   uncatHint: { ...type.caption, color: colors.textMuted, marginBottom: space.xs, lineHeight: 16 },
   uncatCount: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  adoptBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
+  adoptBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
   adoptBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addForm: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   inputGap: { marginBottom: space.md },

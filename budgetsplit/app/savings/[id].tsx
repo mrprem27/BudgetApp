@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, addMonths } from 'date-fns';
 import Svg, { Circle } from 'react-native-svg';
@@ -24,10 +24,11 @@ import { haptic } from '../../src/lib/haptics';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory,
   fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
-  type SavingsGoal, type SavingsTxn, type SavingsFrequency,
+  type SavingsTxn, type SavingsFrequency,
 } from '../../src/db/queries/savings';
 import { useUndo } from '../../src/components/system/UndoToast';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { useScreenData } from '../../src/hooks/useScreenData';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -58,10 +59,6 @@ export default function GoalDetailScreen() {
   const { showUndo } = useUndo();
   const { refresh } = useDataRefresh();
 
-  const [goal, setGoal] = useState<SavingsGoal | null>(null);
-  const [saved, setSaved] = useState(0);
-  const [cashAvailable, setCashAvailable] = useState(0);
-  const [history, setHistory] = useState<SavingsTxn[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -73,35 +70,34 @@ export default function GoalDetailScreen() {
   const [adjustDate, setAdjustDate] = useState<number | null>(null);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [amt, setAmt] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(useCallback(() => { if (!id) { router.back(); return; } load(); }, [id]));
+  const { data, loading, error, reload } = useScreenData(async (loadDb) => {
+    const [g, savedMap, money, hist] = await Promise.all([
+      getGoalById(loadDb, id), getGoalSavedMap(loadDb), getTotalMoney(loadDb), getGoalHistory(loadDb, id),
+    ]);
+    return {
+      goal: g,
+      saved: savedMap[id] ?? 0,
+      cashAvailable: money.cashAvailable,
+      history: hist,
+    };
+  }, [id]);
+
+  const goal = data?.goal ?? null;
+  const saved = data?.saved ?? 0;
+  const cashAvailable = data?.cashAvailable ?? 0;
+  const history: SavingsTxn[] = data?.history ?? [];
+
+  // Guard: bail back out if we somehow landed here without an id.
+  useEffect(() => { if (!id) router.back(); }, [id]);
 
   if (!id) return null;
 
-  async function load() {
-    try {
-      const [g, savedMap, money, hist] = await Promise.all([
-        getGoalById(db, id), getGoalSavedMap(db), getTotalMoney(db), getGoalHistory(db, id),
-      ]);
-      setGoal(g);
-      setSaved(savedMap[id] ?? 0);
-      setCashAvailable(money.cashAvailable);
-      setHistory(hist);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loadError) {
+  if (error) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Goal" onBack={() => router.back()} />
-        <ErrorState onRetry={() => { setLoadError(false); setLoading(true); load(); }} />
+        <ErrorState onRetry={reload} />
       </View>
     );
   }
@@ -118,7 +114,9 @@ export default function GoalDetailScreen() {
     );
   }
 
-  if (!goal) {
+  // Not found: reached only after the error/loading guards above, so this is a
+  // clean load (!error && !loading) where the goal simply doesn't exist.
+  if (goal == null) {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Goal" onBack={() => router.back()} />
@@ -147,7 +145,7 @@ export default function GoalDetailScreen() {
       await fundGoal(db, id, a);
       haptic.success();
       setAmt(''); setShowAdd(false);
-      await load();
+      await reload();
       if (justCompleted) setCelebrate(true);
     } catch {
       haptic.error();
@@ -162,7 +160,7 @@ export default function GoalDetailScreen() {
       await withdrawFromGoal(db, id, Math.min(a, saved));
       haptic.warning();
       setAmt(''); setShowWithdraw(false);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -199,7 +197,7 @@ export default function GoalDetailScreen() {
       });
       haptic.success();
       setShowAdjust(false);
-      await load();
+      await reload();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Could not save changes.');
@@ -211,7 +209,7 @@ export default function GoalDetailScreen() {
   async function toggleLock() {
     await setGoalLocked(db, id, goal!.locked !== 1);
     haptic.selection();
-    await load();
+    await reload();
   }
 
   function confirmDelete() {
@@ -495,17 +493,17 @@ const styles = StyleSheet.create({
   heroName: { ...type.subheading, color: colors.textPrimary },
   heroDate: { ...type.label, color: colors.textSecondary, marginTop: 2, marginBottom: space.md, textTransform: 'capitalize' },
   amountsRow: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch' },
-  amtTile: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
+  amtTile: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: space.sm, alignItems: 'center' },
   amtTileValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.5, marginBottom: 2 },
   amtTileLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 10 },
 
   monthlyCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   monthlyRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  monthlySub: { ...type.caption, color: colors.textMuted, marginBottom: 4 },
+  monthlySub: { ...type.caption, color: colors.textMuted, marginBottom: space.xs },
   monthlyAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
   monthlyDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: space.sm, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.healthAmber + '44' },
   nudgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.healthAmber },
   nudgeText: { ...type.caption, color: colors.healthAmber, flex: 1 },
   monthlyHint: { ...type.caption, color: colors.textMuted, marginTop: space.sm, lineHeight: 16 },
@@ -526,7 +524,7 @@ const styles = StyleSheet.create({
   histCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   histRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   histBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  histIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  histIcon: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   histLabel: { ...type.body, color: colors.textPrimary },
   histDate: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   histAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 14 },

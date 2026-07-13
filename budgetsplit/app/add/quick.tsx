@@ -932,8 +932,8 @@ const styles = StyleSheet.create({
   // Large centered amount
   amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: colors.border + '55' },
   // No lineHeight (it clipped the top of the glyphs on iOS); vertical padding gives headroom.
-  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, textAlign: 'center', letterSpacing: -1.5, paddingVertical: 4, alignSelf: 'stretch', width: '100%' },
-  amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: 4 },
+  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, textAlign: 'center', letterSpacing: -1.5, paddingVertical: space.xs, alignSelf: 'stretch', width: '100%' },
+  amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: space.xs },
 
   // Category + date pills row
   pillsRow: { flexDirection: 'row', gap: space.sm },
@@ -941,7 +941,7 @@ const styles = StyleSheet.create({
   catPillDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   catPillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   catPillPlaceholder: { fontSize: 13, color: colors.textMuted, flex: 1 },
-  datePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  datePill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
   datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
 
   // Note card
@@ -949,7 +949,7 @@ const styles = StyleSheet.create({
   noteCardInput: { fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingHorizontal: 14, paddingVertical: 10 },
 
   // Budget nudge dot style
-  nudge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
   nudgeDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
   nudgeText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
 

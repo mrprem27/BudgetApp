@@ -23,6 +23,6 @@ export function BalanceChip({ net }: Props) {
 }
 
 const styles = StyleSheet.create({
-  chip: { borderRadius: 8, paddingHorizontal: space.sm, paddingVertical: 4, flexShrink: 0 },
+  chip: { borderRadius: 8, paddingHorizontal: space.sm, paddingVertical: space.xs, flexShrink: 0 },
   text: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, letterSpacing: -0.5, fontWeight: '700' },
 });
