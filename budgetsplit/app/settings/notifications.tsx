@@ -111,7 +111,7 @@ export default function NotificationsScreen() {
             <Text style={styles.typeEmoji}>📅</Text>
             <View style={styles.typeInfo}>
               <Text style={styles.typeLabel}>Bill reminders</Text>
-              <Text style={styles.typeDesc}>Alert before recurring bills and subscriptions renew</Text>
+              <Text style={styles.typeDesc}>Alert before recurring bills and memberships renew</Text>
             </View>
             <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} />
           </View>

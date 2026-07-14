@@ -332,15 +332,17 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // wizard (dashboard badge, Step 1 classify, Step 2 group split). Mix of
   // expense/income, some pre-categorized, one shareable-in-a-group, one uncategorized.
   await insertPending(db, [
-    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
-    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', raw: null },
-    { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', raw: null },
-    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', raw: null },
-    { date: thisMonth(18), amount: R(1000), description: 'PREM PURUSHOTTAM BHATI', kind: 'income', category: null, direction: 'credit', raw: null },
-    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', raw: null },
-    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', raw: null },
-    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', raw: null },
-    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', raw: null },
+    // Google Pay import (most rows) — a couple carry a detected pay method.
+    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: 'upi', raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
+    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: 'upi', raw: null },
+    { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
+    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: 'wallet', raw: null },
+    { date: thisMonth(18), amount: R(1000), description: 'PREM PURUSHOTTAM BHATI', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
+    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: 'upi', raw: null },
+    // Bank / UPI email alerts — a separate section in Review.
+    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: 'card', raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
+    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: 'upi', raw: 'You paid ₹73 to Rapido via UPI' },
+    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', source: 'email', pay_method: 'autopay', raw: 'E-mandate debit of Rs 6000 towards Flat rent share' },
   ]);
 
   // Mark everything this seeder created as demo data (loadDemoData wipes first, so

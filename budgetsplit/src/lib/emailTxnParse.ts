@@ -1,4 +1,5 @@
 import { parseToPaise } from './money';
+import { detectPayMethod } from './payMethodDetect';
 import type { ParsedRow, ParseResult } from './importParse';
 
 /**
@@ -109,6 +110,7 @@ export function parseTransactionEmail(text: string, nowMs: number = Date.now()):
       description: description || 'Imported',
       direction,
       kind,
+      payMethod: detectPayMethod(raw) ?? undefined,
       raw: raw.slice(0, 300),
     }],
     skipped: 0,

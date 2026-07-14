@@ -167,6 +167,13 @@ Icon in a colored dot:
 
 Never raw hex. Always use tokens.
 
+**Canonical theme = `src/theme/`** — the single source of truth for every design token
+(`colors`, `gradients`, `type`, `line`, `space`, `radius`, `layout`, `shadow`), plus a composed
+`theme` object. Import from `src/theme` (or `../tokens` inside a component subfolder, which
+re-exports it). `src/constants/{colors,typography,layout}` are back-compat re-export shims that
+also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text/icons use
+`colors.onAccent` (never raw `#fff`).
+
 | Token | Color | Use |
 |---|---|---|
 | `colors.accent` | Teal `#20C4B8` | Primary buttons, active tabs, selected borders, links |

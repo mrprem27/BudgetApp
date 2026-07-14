@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,17 +41,21 @@ import { useScreenData } from '../src/hooks/useScreenData';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useUndo } from '../src/components/system/UndoToast';
 import { haptic } from '../src/lib/haptics';
-import type { TxnKind, SplitMode } from '../src/constants/enums';
+import {
+  type TxnKind, type SplitMode, type PayMethod, type TxnSource,
+  PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
+} from '../src/constants/enums';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
 // pending_txn; only Confirm/Save commits a row into a real transaction.
-type RowEdit = { kind: TxnKind; category: string; amount: string; dest: string };
+// payMethod: '' = none/unset (row need not have one).
+type RowEdit = { kind: TxnKind; category: string; amount: string; dest: string; payMethod: PayMethod | '' };
 type SplitState = { included: string[]; mode: SplitMode; values: Record<string, string> };
 
 // A committable row resolved to its insert shape, or the reason it isn't ready.
 type CommitPlan =
-  | { ok: true; groupId: string; kind: TxnKind; payer: string; shares: { personId: string; amount: number }[]; total: number; category: string; snap: PendingTxn; destName: string }
+  | { ok: true; groupId: string; kind: TxnKind; payer: string; shares: { personId: string; amount: number }[]; total: number; category: string; payMethod?: PayMethod; snap: PendingTxn; destName: string }
   | { ok: false };
 
 const BATCH = '__batch__';
@@ -66,6 +70,7 @@ export default function ReviewScreen() {
   const [splits, setSplits] = useState<Record<string, SplitState>>({});
   const [catPickerFor, setCatPickerFor] = useState<string | null>(null);
   const [destSheetFor, setDestSheetFor] = useState<string | null>(null);
+  const [paySheetFor, setPaySheetFor] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   // Selection mode (bulk actions).
   const [selectMode, setSelectMode] = useState(false);
@@ -120,6 +125,7 @@ export default function ReviewScreen() {
       amount: e.amount ?? String(row.amount / 100),
       // Income is always personal (matches Quick) — you don't split income into a group.
       dest: kind === 'income' ? 'personal' : (e.dest ?? persistedDest),
+      payMethod: e.payMethod ?? row.pay_method ?? '',
     };
   }
 
@@ -144,6 +150,7 @@ export default function ReviewScreen() {
     if (p.kind !== undefined) draft.kind = p.kind;
     if (p.category !== undefined) draft.category = p.category;
     if (p.dest !== undefined) draft.dest_group_id = p.dest === 'personal' ? null : p.dest;
+    if (p.payMethod !== undefined) draft.pay_method = p.payMethod === '' ? null : p.payMethod;
     // amount is flushed on blur (below), not on every keystroke.
     if (Object.keys(draft).length) updatePendingDraft(db, id, draft).catch(() => {});
   }
@@ -224,6 +231,7 @@ export default function ReviewScreen() {
       amount: parseToPaise(v.amount),
       dest_group_id: isGroup ? v.dest : null,
       split_draft: isGroup ? JSON.stringify(splitState(row)) : null,
+      pay_method: v.payMethod || null,
     };
   }
 
@@ -244,19 +252,20 @@ export default function ReviewScreen() {
     const total = parseToPaise(v.amount);
     if (total <= 0) return { ok: false };
     const category = v.category || (v.kind === 'income' ? 'Other Income' : 'Other');
+    const payMethod = v.payMethod || undefined;
     if (v.dest !== 'personal') {
       const st = splitState(row);
       const split = splitByMode(total, st.included, st.mode, st.values);
       const assigned = st.included.reduce((s, id) => s + (split[id] ?? 0), 0);
       if (st.included.length === 0 || assigned !== total) return { ok: false };
       return {
-        ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(v.dest), total, category, snap: snapshot(row),
+        ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(v.dest), total, category, payMethod, snap: snapshot(row),
         shares: st.included.map(id => ({ personId: id, amount: split[id] ?? 0 })),
         destName: data.sharedGroups.find(g => g.id === v.dest)?.name ?? 'group',
       };
     }
     return {
-      ok: true, groupId: data.personalId, kind: v.kind, payer: data.meId, total, category, snap: snapshot(row),
+      ok: true, groupId: data.personalId, kind: v.kind, payer: data.meId, total, category, payMethod, snap: snapshot(row),
       // Income has no shares (canonical shape, matches Quick); expense = my full share.
       shares: v.kind === 'income' ? [] : [{ personId: data.meId, amount: total }],
       destName: 'Personal',
@@ -267,7 +276,7 @@ export default function ReviewScreen() {
   async function insertCommit(row: PendingTxn, plan: Extract<CommitPlan, { ok: true }>): Promise<{ txnId: string; snap: PendingTxn }> {
     const txnId = await insertTxn(db, {
       groupId: plan.groupId, kind: plan.kind, entryMode: 'quick', date: row.date,
-      category: plan.category, note: row.description,
+      category: plan.category, note: row.description, payMethod: plan.payMethod,
       payments: [{ personId: plan.payer, amount: plan.total }],
       shares: plan.shares,
     });
@@ -511,6 +520,23 @@ export default function ReviewScreen() {
           )}
         </View>
 
+        {/* Pay method — pre-filled from detection when the source carried a cue. */}
+        <View style={styles.controls}>
+          <TouchableOpacity
+            style={[styles.payPill, v.payMethod !== '' && styles.payPillSet]}
+            onPress={() => setPaySheetFor(row.id)}
+            accessibilityRole="button"
+            accessibilityLabel={v.payMethod ? `Paid via ${PAY_METHOD_LABEL[v.payMethod]}` : 'Set payment method'}
+          >
+            <Text style={styles.payEmoji}>{v.payMethod ? PAY_METHOD_EMOJI[v.payMethod] : '💳'}</Text>
+            <Text style={[styles.pillText, v.payMethod !== '' && { color: colors.textPrimary }]} numberOfLines={1}>
+              {v.payMethod ? PAY_METHOD_LABEL[v.payMethod] : 'Pay method'}
+            </Text>
+            <Feather name="chevron-down" size={12} color={colors.textMuted} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+        </View>
+
         {/* Inline split — shown only when a group is selected. */}
         {isGroup && (
           <View style={{ gap: space.sm }}>
@@ -574,6 +600,14 @@ export default function ReviewScreen() {
 
   const emptyFiltered = pending.length > 0 && visibleRows.length === 0;
 
+  // Group the working set into sections by source, in the canonical source order.
+  // Section headers only appear when more than one source is present (a single
+  // source needs no header — the screen title already says "Review").
+  const sections = TXN_SOURCE
+    .map(src => ({ source: src, data: visibleRows.filter(r => (r.source ?? 'manual') === src) }))
+    .filter(s => s.data.length > 0);
+  const multiSource = sections.length > 1;
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Review" onBack={() => router.back()} right={headerRight} />
@@ -603,7 +637,7 @@ export default function ReviewScreen() {
         <EmptyState
           icon="inbox"
           title="Nothing to review"
-          body="Import a Google Pay or bank statement (Settings → Import) and the transactions show up here to confirm."
+          body="Import a Google Pay statement, a bank / UPI export, or a transaction-alert email (Settings → Import) and the transactions show up here — grouped by source — to confirm."
           actionLabel="Import transactions"
           onAction={() => router.push('/import' as any)}
         />
@@ -616,10 +650,20 @@ export default function ReviewScreen() {
           onAction={exitFocus}
         />
       ) : (
-        <FlatList
-          data={visibleRows}
+        <SectionList
+          sections={sections}
           keyExtractor={r => r.id}
           renderItem={({ item }) => renderRow(item)}
+          renderSectionHeader={({ section }) => multiSource ? (
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Feather name={asFeather(TXN_SOURCE_ICON[(section as { source: TxnSource }).source], 'inbox')} size={12} color={colors.accent} />
+              </View>
+              <Text style={styles.sectionHeaderText}>{TXN_SOURCE_LABEL[(section as { source: TxnSource }).source]}</Text>
+              <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
+            </View>
+          ) : null}
+          stickySectionHeadersEnabled={false}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 96 }]}
           keyboardShouldPersistTaps="handled"
@@ -720,6 +764,31 @@ export default function ReviewScreen() {
             ))}
           </>
         )}
+      </SheetModal>
+
+      {/* Per-row pay-method sheet. */}
+      <SheetModal visible={paySheetFor !== null} onClose={() => setPaySheetFor(null)} title="How was it paid?" scroll={false}>
+        {paySheetFor && (() => {
+          const current = eff(pending.find(r => r.id === paySheetFor)!).payMethod;
+          const choose = (m: PayMethod | '') => { patch(paySheetFor, { payMethod: m }); setPaySheetFor(null); };
+          return (
+            <>
+              {PAY_METHOD.map(m => (
+                <TouchableOpacity key={m} style={[styles.payOption, current === m && styles.payOptionOn]} onPress={() => choose(m)} accessibilityRole="button" accessibilityState={{ selected: current === m }}>
+                  <Text style={styles.payOptionEmoji}>{PAY_METHOD_EMOJI[m]}</Text>
+                  <Text style={[styles.payOptionText, current === m && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{PAY_METHOD_LABEL[m]}</Text>
+                  {current === m && <Feather name="check" size={16} color={colors.accent} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+              {current !== '' && (
+                <TouchableOpacity style={styles.payClear} onPress={() => choose('')} accessibilityRole="button">
+                  <Feather name="x" size={15} color={colors.textMuted} />
+                  <Text style={styles.payClearText}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          );
+        })()}
       </SheetModal>
 
       {/* Bulk group assign sheet — shared, non-archived groups only (no Personal). */}
@@ -1057,6 +1126,19 @@ const styles = StyleSheet.create({
   pillGroup: { borderColor: colors.settle + '55' },
   pillDot: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pillText: { ...type.label, color: colors.textSecondary, flex: 1 },
+  payPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, alignSelf: 'flex-start', maxWidth: '60%' },
+  payPillSet: { borderColor: colors.accent + '55' },
+  payEmoji: { fontSize: 14 },
+  payOption: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.md },
+  payOptionOn: { backgroundColor: colors.bgMuted },
+  payOptionEmoji: { fontSize: 18 },
+  payOptionText: { ...type.body, color: colors.textPrimary },
+  payClear: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  payClearText: { ...type.label, color: colors.textMuted, fontFamily: 'Inter_600SemiBold' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.md, paddingBottom: space.xs },
+  sectionIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  sectionHeaderText: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  sectionHeaderCount: { ...type.caption, color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
   discardBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgMuted },
   splitMeta: { ...type.label, color: colors.textSecondary, flexShrink: 1 },
   confirmBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.accent },

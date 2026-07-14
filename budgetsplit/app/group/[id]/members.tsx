@@ -147,7 +147,7 @@ export default function MembersScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Remove ${item.name}`}
                 >
-                  <Feather name="user-minus" size={16} color="#fff" />
+                  <Feather name="user-minus" size={16} color={colors.onAccent} />
                   <Text style={styles.swipeActionText}>Remove</Text>
                 </TouchableOpacity>
               );
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   netText: { ...type.caption, marginTop: 2 },
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },
-  swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
+  swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
 
   renameGap: { marginBottom: space.md },
   addCommit: { marginTop: space.sm },

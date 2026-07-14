@@ -154,7 +154,7 @@ export default function GroupsScreen() {
         accessibilityRole="button"
         accessibilityLabel={isArchivedView ? 'Restore' : 'Archive'}
       >
-        <Feather name={isArchivedView ? 'rotate-ccw' : 'archive'} size={18} color="#fff" />
+        <Feather name={isArchivedView ? 'rotate-ccw' : 'archive'} size={18} color={colors.onAccent} />
         <Text style={styles.swipeActionText}>{isArchivedView ? 'Restore' : 'Archive'}</Text>
       </TouchableOpacity>
     );
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   balAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
   allSettled: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   swipeAction: { backgroundColor: colors.expense, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', width: 80, marginLeft: space.sm, gap: space.xs },
-  swipeActionText: { ...type.caption, color: '#fff', fontFamily: 'Inter_600SemiBold' },
+  swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
   groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + 4, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   groupCardArchived: { opacity: 0.65, borderStyle: 'dashed' as any },
   cardStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },

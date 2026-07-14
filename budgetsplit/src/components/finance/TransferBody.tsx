@@ -3,17 +3,12 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-nativ
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
+import { PayMethodSelector } from './PayMethodSelector';
 import { formatRupees } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
 import type { PayMethod } from '../../constants/enums';
-
-const PAY_METHODS: { key: PayMethod; label: string; emoji: string }[] = [
-  { key: 'upi',  label: 'UPI',  emoji: '📱' },
-  { key: 'cash', label: 'Cash', emoji: '💵' },
-  { key: 'bank', label: 'Bank', emoji: '🏦' },
-];
 
 type Props = {
   me: Person | null;
@@ -107,20 +102,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 
       {/* How was it paid? */}
       <Text style={styles.label}>HOW WAS IT PAID?</Text>
-      <View style={styles.methodRow}>
-        {PAY_METHODS.map(m => (
-          <TouchableOpacity
-            key={m.key}
-            style={[styles.methodTile, payMethod === m.key && styles.methodTileActive]}
-            onPress={() => { haptic.selection(); onPayMethod(m.key); }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: payMethod === m.key }}
-          >
-            <Text style={styles.methodEmoji}>{m.emoji}</Text>
-            <Text style={[styles.methodLabel, payMethod === m.key && styles.methodLabelActive]}>{m.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <PayMethodSelector value={payMethod} onChange={onPayMethod} accent={colors.settle} />
 
       <Text style={styles.label}>NOTES</Text>
       <TextInput
@@ -165,11 +147,5 @@ const styles = StyleSheet.create({
   scopeChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   scopeChipText: { ...type.label, color: colors.textSecondary },
   scopeChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  methodRow: { flexDirection: 'row', gap: space.sm },
-  methodTile: { flex: 1, alignItems: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  methodTileActive: { borderColor: colors.settle, backgroundColor: colors.settle + '22' },
-  methodEmoji: { fontSize: 20 },
-  methodLabel: { ...type.label, color: colors.textSecondary },
-  methodLabelActive: { color: colors.settle, fontFamily: 'Inter_600SemiBold' },
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.xs },
 });

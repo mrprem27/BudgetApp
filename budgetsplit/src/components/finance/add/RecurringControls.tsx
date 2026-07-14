@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.settle + '44' },
   recurPillActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   recurPillText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  recurPillTextActive: { color: '#fff' },
+  recurPillTextActive: { color: colors.onAccent },
   recurDateChip: { backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.sm + 2, paddingVertical: 6 },
   recurDateChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   recurCountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },

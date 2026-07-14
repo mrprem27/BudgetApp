@@ -29,11 +29,32 @@ export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
 export const ENTRY_MODE = ['quick', 'itemized'] as const;
 export type EntryMode = typeof ENTRY_MODE[number];
 
-/** `txn.pay_method` — nullable. How a payment/settlement was made. */
-export const PAY_METHOD = ['upi', 'cash', 'bank'] as const;
+/** `txn.pay_method` / `pending_txn.pay_method` — nullable. How a payment was made.
+ *  Applies to every txn kind (expense/income/transfer/settlement). Detected from
+ *  imported text (see `payMethodDetect`), pre-filled in Review, always editable. */
+export const PAY_METHOD = ['upi', 'card', 'cash', 'bank', 'wallet', 'autopay', 'other'] as const;
 export type PayMethod = typeof PAY_METHOD[number];
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
-  upi: 'UPI', cash: 'Cash', bank: 'Bank transfer',
+  upi: 'UPI', card: 'Card', cash: 'Cash', bank: 'Bank', wallet: 'Wallet', autopay: 'Autopay', other: 'Other',
+};
+/** Emoji glyph per pay method — the single source for the pay-method chips. */
+export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
+  upi: '📱', card: '💳', cash: '💵', bank: '🏦', wallet: '👛', autopay: '🔁', other: '•',
+};
+
+/** `pending_txn.source` — where an imported/pending row came from. Drives the
+ *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
+ *  are reserved for future ingestion paths (currently de-scoped). */
+export const TXN_SOURCE = ['email', 'gpay', 'bank_csv', 'sms', 'notification', 'manual'] as const;
+export type TxnSource = typeof TXN_SOURCE[number];
+export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
+  email: 'Email alert', gpay: 'Google Pay', bank_csv: 'Bank / CSV',
+  sms: 'SMS', notification: 'Notifications', manual: 'Imported',
+};
+/** Feather icon per source — used by the Review section headers. */
+export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
+  email: 'mail', gpay: 'smartphone', bank_csv: 'file-text',
+  sms: 'message-square', notification: 'bell', manual: 'inbox',
 };
 
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */

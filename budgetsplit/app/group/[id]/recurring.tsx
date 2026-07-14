@@ -137,7 +137,9 @@ export default function RecurringScreen() {
           <EmptyState
             icon="repeat"
             title="No recurring transactions"
-            body="Rent, salary, subscriptions and bills you set to repeat will appear here to manage."
+            body="Rent, salary, memberships and bills you set to repeat will appear here to manage."
+            actionLabel="Add recurring expense"
+            onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           />
         ) : (
           rules.map(r => {
