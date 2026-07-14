@@ -451,7 +451,7 @@ export default function TxnDetailScreen() {
         <Modal visible={showAttachment} transparent animationType="fade" onRequestClose={() => setShowAttachment(false)}>
           <View style={styles.attachOverlay}>
             <TouchableOpacity style={styles.attachClose} onPress={() => setShowAttachment(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
-              <Feather name="x" size={24} color="#fff" />
+              <Feather name="x" size={24} color={colors.onAccent} />
             </TouchableOpacity>
             <ScrollView
               style={{ width: winW, height: winH }}

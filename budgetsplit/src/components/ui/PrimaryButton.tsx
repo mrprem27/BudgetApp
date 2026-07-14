@@ -38,7 +38,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
           style={styles.btn}
         >
           {loading
-            ? <ActivityIndicator color="#fff" />
+            ? <ActivityIndicator color={colors.onAccent} />
             : <Text style={styles.label}>{label}</Text>}
         </LinearGradient>
       </Animated.View>
@@ -63,6 +63,6 @@ const styles = StyleSheet.create({
   },
   label: {
     ...type.button,
-    color: '#fff',
+    color: colors.onAccent,
   },
 });

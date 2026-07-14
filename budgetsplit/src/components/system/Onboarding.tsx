@@ -948,7 +948,7 @@ const styles = StyleSheet.create({
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   personRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   personAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  personAvatarText: { fontFamily: 'Inter_600SemiBold', color: '#fff', fontSize: 14 },
+  personAvatarText: { fontFamily: 'Inter_600SemiBold', color: colors.onAccent, fontSize: 14 },
   personName: { ...type.body, color: colors.textPrimary, flex: 1 },
 
   // Permissions step

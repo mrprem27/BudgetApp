@@ -19,6 +19,7 @@ import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { haptic } from '../lib/haptics';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
+import { useStore } from '../store';
 import { useLocationCapture } from './useLocationCapture';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
@@ -49,7 +50,11 @@ export function useAddTxnForm(params: AddTxnParams) {
   const { flags } = useFeatureFlags();
   const { refresh } = useDataRefresh();
 
-  const [groups, setGroups] = useState<BudgetGroup[]>([]);
+  // groups + me come from the hydrated zustand store (single source of truth).
+  // The mount effect below has a cold-start query fallback for the first-ever open
+  // before hydration completes, so initial group selection + payer seeding are safe.
+  const groups = useStore(s => s.groups);
+  const me = useStore(s => s.me);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
   const [kind, setKind] = useState<AddKind>(
     paramKind === 'income' ? 'income' : paramKind === 'transfer' ? 'transfer' : 'expense',
@@ -70,7 +75,6 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [catManual, setCatManual] = useState(false);
   const [learned, setLearned] = useState<LearnedMap>({});
   const [members, setMembers] = useState<Person[]>([]);
-  const [me, setMe] = useState<Person | null>(null);
   const [txnDate, setTxnDate] = useState(paramDate && /^\d+$/.test(paramDate) ? parseInt(paramDate, 10) : Date.now());
   const [splitType, setSplitType] = useState<SplitMode>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
@@ -120,10 +124,10 @@ export function useAddTxnForm(params: AddTxnParams) {
 
   useEffect(() => {
     (async () => {
-      const grps = await getAllGroups(db);
-      setGroups(grps);
-      const meRow = await getMe(db);
-      setMe(meRow);
+      // Prefer the store (usually hydrated); fall back to a direct read so a cold
+      // first-open still selects a group + seeds the payer synchronously.
+      const grps = groups.length ? groups : await getAllGroups(db);
+      const meRow = me ?? await getMe(db);
       loadLearned().then(setLearned).catch(() => {});
       getAffordSnapshot(db).then(setSnapshot).catch(() => {});
       const savedCur = await settings.defaultCurrency();

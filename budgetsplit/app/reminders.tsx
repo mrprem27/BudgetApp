@@ -121,7 +121,7 @@ export default function RemindersScreen() {
                       );
                     })()}
                     <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}` as any)} accessibilityRole="button">
-                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>Settle now</Text>
+                      <Text style={[styles.actionBtnText, { color: colors.onAccent }]}>Settle now</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

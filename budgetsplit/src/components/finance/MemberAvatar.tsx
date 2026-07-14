@@ -62,6 +62,6 @@ const styles = StyleSheet.create({
   },
   initials: {
     fontFamily: 'Inter_600SemiBold',
-    color: '#fff',
+    color: colors.onAccent,
   },
 });

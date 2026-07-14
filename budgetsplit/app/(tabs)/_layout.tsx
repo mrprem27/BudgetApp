@@ -78,7 +78,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
             accessibilityLabel="Add expense"
           >
             <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fab}>
-              <Feather name="plus" size={28} color="#fff" />
+              <Feather name="plus" size={28} color={colors.onAccent} />
             </LinearGradient>
           </TouchableOpacity>
         </View>
