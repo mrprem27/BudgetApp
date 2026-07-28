@@ -1,8 +1,9 @@
 # BudgetSplit — Debt Tracker
 
-> **Single source of truth for open debt.** Supersedes [BRUTAL_ANALYSIS](./BRUTAL_ANALYSIS.md),
-> [REFACTORING_PLAN](./REFACTORING_PLAN.md), [IMPROVEMENT_PLAN](../IMPROVEMENT_PLAN.md) and
-> [FUTURE_IMPROVEMENTS](./FUTURE_IMPROVEMENTS.md) — all four are now archived. Add new items **here**.
+> **Single source of truth for open debt.** Replaced four overlapping planning docs
+> (BRUTAL_ANALYSIS, REFACTORING_PLAN, IMPROVEMENT_PLAN, FUTURE_IMPROVEMENTS), which were
+> archived once their items were merged here and deleted once all of them were closed.
+> Their reasoning is in git history. Add new items **here**.
 
 **Current — 2026-07-28, after the 🔴 and 🟡 paydown passes** (branch `refactor/phase-1-perf-safety`):
 
@@ -33,9 +34,10 @@ code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
 2. **Every row cites `file:line`.** A claim without evidence gets deleted, not debated.
 3. **Never delete a row** — move it to [§ Resolved](#-resolved) with the date, or to
    [§ Won't fix](#-wont-fix--by-design) with the reason.
-4. **Verify before you carry an item forward.** The archived docs rotted because ~60
-   checkboxes were left unticked after the work shipped. Nine items below were caught that
-   way on 2026-07-28 — already done, still listed as open. Re-check against live code first.
+4. **Verify before you carry an item forward.** The four docs this replaced rotted because
+   ~60 checkboxes were left unticked after the work shipped, so they read as far more broken
+   than the code was. Nine items were caught that way on 2026-07-28 — already done, still
+   listed as open. Re-check against live code before believing any row.
 
 **Severity** — 🔴 breaks or blocks a user · 🟡 inconsistency, risk, or drift · 🟢 cosmetic
 **Status** — `open` · `⏸️ blocked` (needs a decision) · `⛔ external` (blocked outside the codebase)
@@ -147,7 +149,7 @@ These were carried as open work and are verified fixed. This is why rule 4 exist
 
 | Was listed as | Actually |
 |---|---|
-| 4 missing DB indexes (`REFACTORING_PLAN.md:83-86`) | All present — [schema.ts:371-383](../src/db/schema.ts#L371) |
+| 4 missing DB indexes | All present — [schema.ts:371-383](../src/db/schema.ts#L371) |
 | `nextOccurrence` duplicated in `recurring.tsx` | One source at [recurrence.ts:44](../src/lib/recurrence.ts#L44); every caller imports it |
 | `quick.tsx` monolith (1250 LOC) | Extracted — 7 `useState`, out of the top 25 |
 | `group/[id].tsx` monolith (1125 LOC) | Now 310 LOC |

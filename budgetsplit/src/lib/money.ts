@@ -12,24 +12,6 @@ export function formatRupeesShort(paise: number): string {
   return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
 }
 
-/** Multi-currency formatter: formats smallest unit (paise/cents) to display string */
-export function formatAmount(smallestUnit: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
-  const def = CURRENCY_MAP[currency];
-  const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
-  const value = smallestUnit / divisor;
-  return def.symbol + value.toLocaleString(def.locale, {
-    minimumFractionDigits: def.decimals,
-    maximumFractionDigits: def.decimals,
-  });
-}
-
-/** Short (no decimal) multi-currency format for cards/summaries */
-export function formatAmountShort(smallestUnit: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
-  const def = CURRENCY_MAP[currency];
-  const divisor = def.decimals > 0 ? Math.pow(10, def.decimals) : 1;
-  return def.symbol + Math.round(smallestUnit / divisor).toLocaleString(def.locale);
-}
-
 /**
  * Round to up to `decimals` places, then drop trailing zeros:
  * "1.00L"→"1L", "1.20L"→"1.2L", "1.24K" stays. K/L/Cr all use 2-decimal

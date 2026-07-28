@@ -1,21 +1,18 @@
 # BudgetSplit — Architecture
 
-> **Single source of truth for how the app is built.** Grounded in the actual code on
-> branch `redesign/phase-2`. Companion docs: [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md)
-> (what every screen does), [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md),
-> [BRUTAL_ANALYSIS.md](./BRUTAL_ANALYSIS.md), [REFACTORING_PLAN.md](./REFACTORING_PLAN.md).
-> Build/design rules live in [../AGENTS.md](../AGENTS.md).
+> **Single source of truth for how the app is built.** Companion docs:
+> [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) (what every screen does) and
+> [DEBT_TRACKER.md](./DEBT_TRACKER.md) (known debt). Build/design rules live in
+> [../AGENTS.md](../AGENTS.md).
 
-> ⚠️ **Status (reconciled 2026-06-26):** this was written as the *pre-refactor baseline*.
-> The codebase has since completed all of [REFACTORING_PLAN.md](./REFACTORING_PLAN.md)
-> (see its "Completion status"). Changed since: the Zustand store is trimmed to
-> `groups`/`setGroups`; new lib modules `settings.ts`, `onboarding.ts`, `itemized.ts`,
-> `reportExport.ts` + `recordSettlement`; **one** forecast model (`lib/forecast`) and one
-> `budgetHealth`/`utilLabel`; the standalone `/settle` screen, `Card.tsx`,
-> `computeNet`, `getDashboardInsights`/`rankInsights` are **deleted**; settlements record via
-> `recordSettlement`. The dead `settings` table + columns in §5 are still present (left on
-> purpose). Treat data-model/§ details as accurate; treat store/§6, settle, and the
-> "competing forecasts" notes as superseded.
+> ⚠️ **Status (reconciled 2026-07-28).** Written as a pre-refactor baseline and updated
+> twice since. What has changed from the original text:
+> Zustand trimmed to `groups`/`setGroups`; one forecast model (`lib/forecast`) and one
+> `budgetHealth`/`utilLabel`; settlements go through `recordSettlement`; the standalone
+> `/settle` screen, `Card.tsx`, `computeNet` and `getDashboardInsights`/`rankInsights` are
+> **deleted**. Screen logic now lives in `src/hooks/use*Screen|Form|Tab` and `src/lib/*Data`
+> rather than inline (see §Layering). The dead `settings` table + columns in §5 remain on
+> purpose. Anything still inaccurate belongs in [DEBT_TRACKER.md](./DEBT_TRACKER.md).
 
 ---
 
@@ -131,7 +128,7 @@ Custom bottom tab bar (`app/(tabs)/_layout.tsx`): **Home · Groups · [FAB] · P
 Settings**. The center FAB is a coral→teal gradient `+`; tapping it goes straight to
 `/add/quick?kind=expense` (one tap, no fan-out menu). `BlurView` backdrop.
 
-**Modal depth metaphors in use (inconsistent — see BRUTAL_ANALYSIS):**
+**Modal depth metaphors in use:**
 - Add screens (`add/quick`, `add/income`, `add/itemized`) are `presentation:'fullScreenModal'`, slide from bottom.
 - Most detail/management screens are stack-push (slide from right).
 - In-screen sheets use `SheetModal`/`DraggableSheet`; a couple of screens still use raw RN `<Modal>`.
@@ -218,23 +215,25 @@ funding order now driven by `sort_order` drag rank) · `category` · `icon` · `
 Created in DDL, **zero reads/writes**. All key/value settings live in AsyncStorage (§7).
 
 ### Indexing reality
-Only 3 indexes exist (audit ×2, savings_txn ×1). **The hottest path — `txn(group_id,
-date)` filtered by `is_deleted`/`recur_freq` — is unindexed**, as is
-`txn(parent_recur_id)` and `line_item(txn_id)`. See REFACTORING_PLAN.
+Indexed: audit ×2, `savings_txn`, `pending_txn`, and the hot transaction paths —
+`txn(group_id, date)`, `txn(parent_recur_id)`, `txn(group_id, category)`, plus partial
+indexes for recurring rules and non-deleted rows. See `db/schema.ts`.
 
 ---
 
 ## 6. Query & state layers
 
 ### Query layer (`src/db/queries/`)
-Eight files. Multi-table writes correctly use `withTransactionAsync` with two known
-gaps (`splitRecurringSeries` runs two separate transactions; `runLeftoverSweep` mixes
-an AsyncStorage marker with DB writes — both documented in BRUTAL_ANALYSIS).
+Twelve files. Multi-table writes use `withTransactionAsync`. `splitRecurringSeries` is
+now atomic (the new rule and the cap of the old one commit together, so a mid-way failure
+can't leave two overlapping active rules). One known gap remains: `runLeftoverSweep` mixes
+an AsyncStorage marker with DB writes — it's idempotent, and tracked in
+[DEBT_TRACKER.md](./DEBT_TRACKER.md).
 
 | File | Responsibility |
 |---|---|
 | `transactions.ts` (762 L) | All txn CRUD, itemized, recurring rules, materialization, skips, duplicates, streak |
-| `groups.ts` | Group CRUD, members, archive/restore/delete (cascades), `getCommonGroupId` |
+| `groups.ts` | Group CRUD, members, archive/restore/delete (cascades) |
 | `persons.ts` | People CRUD, `getMe`, group membership, avatars |
 | `categories.ts` | Per-group categories CRUD (with usage counts) |
 | `categoryBudgets.ts` | Per-category budget limits (delete-all-then-reinsert) |
@@ -341,9 +340,9 @@ Max 3 sizes per screen.
 | Smart category | `smartCategory.matchCategory` + `smartCategoryLearn` | rules + learned overrides (complementary, not duplicate) |
 
 **Orphan / dead modules:** `subscriptions.ts` (`detectSubscriptions` — never called; the
-subscriptions screen uses recurring *rules* instead), `ocr.ts` (`scanReceipt` — never
-called, yet `expo-ocr` is a dependency and `itemizedOcr` flag defaults on),
-`settle.computeNet`, `analytics.getDashboardInsights`. See BRUTAL_ANALYSIS.
+subscriptions screen uses recurring *rules* instead) and `ocr.ts` (`scanReceipt` — parked
+`@deprecated` on purpose; `expo-ocr` stays a dependency). `settle.computeNet` and
+`analytics.getDashboardInsights` were **deleted**. See [DEBT_TRACKER.md](./DEBT_TRACKER.md).
 
 **Test coverage:** strong for pure engines (afford, cash, donut, financialHealth, forecast,
 money, recurrence, savings*, settle, smartCategory*, upcoming, subscriptions, ocr). Gaps:

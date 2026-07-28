@@ -60,9 +60,6 @@ export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */
 export const RECUR_FREQ = ['daily', 'weekly', 'monthly', 'yearly', 'custom'] as const;
 export type RecurFreq = typeof RECUR_FREQ[number];
-export const RECUR_FREQ_LABEL: Record<RecurFreq, string> = {
-  daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', custom: 'Custom',
-};
 
 /** `txn.recur_state CHECK(recur_state IN ('active','paused','ended'))`. */
 export const RECUR_STATE = ['active', 'paused', 'ended'] as const;
@@ -96,9 +93,6 @@ export type BudgetPeriod = typeof BUDGET_PERIOD[number];
 /** `savings_goal.priority CHECK(priority IN ('high','medium','low'))`. */
 export const PRIORITY = ['high', 'medium', 'low'] as const;
 export type Priority = typeof PRIORITY[number];
-export const PRIORITY_LABEL: Record<Priority, string> = {
-  high: 'High', medium: 'Medium', low: 'Low',
-};
 
 /** `savings_goal.frequency CHECK(... IN ('daily','weekly','monthly','yearly','none'))`. */
 export const SAVINGS_FREQUENCY = ['daily', 'weekly', 'monthly', 'yearly', 'none'] as const;
