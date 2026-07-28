@@ -7,6 +7,7 @@ import { colors, type, space, radius } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
 import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
+import { IconCircle } from '../ui/IconCircle';
 
 type Props = {
   persons: Person[];
@@ -63,7 +64,7 @@ export function PersonPicker({
           returnKeyType="done"
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
             <Feather name="x" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -71,9 +72,7 @@ export function PersonPicker({
 
       {canCreate && (
         <TouchableOpacity style={styles.createRow} onPress={handleCreate} accessibilityRole="button">
-          <View style={styles.createIcon}>
-            <Feather name="plus" size={16} color={colors.accent} />
-          </View>
+          <IconCircle icon="plus" size={28} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
           <Text style={styles.createText}>Create "{query.trim()}"</Text>
         </TouchableOpacity>
       )}
@@ -119,7 +118,6 @@ const styles = StyleSheet.create({
     padding: space.md, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.accent, borderStyle: 'dashed',
   },
-  createIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   createText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,

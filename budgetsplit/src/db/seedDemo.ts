@@ -17,7 +17,7 @@ import { insertGroup } from './queries/groups';
 import { insertPerson } from './queries/persons';
 import { getMe } from './queries/persons';
 import { insertTxn, insertItemizedTxn, recordSettlement, softDeleteTxn } from './queries/transactions';
-import { pauseRecurring, endRecurring } from './queries/transactions';
+import { pauseRecurring, endRecurring } from './queries/recurring';
 import { setCategoryBudgets } from './queries/categoryBudgets';
 import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
 import { insertPending } from './queries/pending';

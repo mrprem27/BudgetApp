@@ -17,6 +17,7 @@ import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { DEFAULTS, type FeatureKey } from '../src/lib/featureFlags';
 import { haptic } from '../src/lib/haptics';
+import { IconCircle } from '../src/components/ui/IconCircle';
 
 function formatBytes(b: number): string {
   if (b <= 0) return '0 KB';
@@ -131,7 +132,7 @@ export default function StorageScreen() {
         ) : (
           <>
             <View style={styles.card}>
-              <View style={styles.iconCircle}><Feather name="paperclip" size={20} color={colors.accent} /></View>
+              <IconCircle icon="paperclip" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
               <Text style={styles.amount}>{formatBytes(bytes)}</Text>
               <Text style={styles.sub}>{count} receipt {count === 1 ? 'photo' : 'photos'} stored on this device</Text>
             </View>
@@ -171,7 +172,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: layout.screenPaddingH, gap: space.lg },
   card: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
-  iconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  iconCircle: { marginBottom: space.xs  },
   amount: { ...type.title, color: colors.textPrimary },
   sub: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
   note: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center' },

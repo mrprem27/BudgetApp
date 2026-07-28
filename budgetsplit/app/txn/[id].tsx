@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Image, Modal, useWindowDimensions, Platform, ActionSheetIOS } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image, Modal, useWindowDimensions } from 'react-native';
+
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -13,19 +13,15 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { getTxnById, softDeleteTxn, restoreTxn, getLineItems, setTxnAttachment } from '../../src/db/queries/transactions';
-import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../../src/lib/attachment';
-import { useUndo } from '../../src/components/system/UndoToast';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { getGroupById } from '../../src/db/queries/groups';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { getAuditLog } from '../../src/db/queries/audit';
+
 import { categoryVisual } from '../../src/constants/categories';
 import { formatRupees } from '../../src/lib/money';
-import { haptic } from '../../src/lib/haptics';
+
 import type { TxnWithSplits, LineItem } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
 import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
+import { IconCircle } from '../../src/components/ui/IconCircle';
+import { useTxnDetail } from '../../src/hooks/useTxnDetail';
 
 const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
   created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
@@ -37,110 +33,22 @@ const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; co
   ended:    { icon: 'x-circle', color: colors.textMuted, label: 'Ended' },
 };
 
-type TxnDetailData = {
-  txn: TxnWithSplits | null;
-  members: Person[];
-  me: Person | null;
-  groupName: string;
-  isPersonal: boolean;
-  history: AuditLog[];
-  items: LineItem[];
-  parentRule: TxnWithSplits | null;
-};
-
 export default function TxnDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
-  const { showUndo } = useUndo();
-  const { refresh } = useDataRefresh();
-  const [showAttachment, setShowAttachment] = useState(false);
   const { width: winW, height: winH } = useWindowDimensions();
 
-  const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
-    const t = await getTxnById(database, id);
-    if (!t) {
-      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null };
-    }
-    const [grp, mems, meRow, hist, li] = await Promise.all([
-      getGroupById(database, t.group_id),
-      getGroupMembers(database, t.group_id),
-      getMe(database),
-      getAuditLog(database, { entityId: id }),
-      t.entry_mode === 'itemized' ? getLineItems(database, id) : Promise.resolve([]),
-    ]);
-    const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
-    return {
-      txn: t,
-      members: mems,
-      me: meRow,
-      groupName: grp?.name ?? '',
-      isPersonal: grp?.is_personal === 1,
-      history: hist,
-      items: li,
-      parentRule,
-    };
-  }, [id]);
-
-  const txn = data?.txn ?? null;
-  const members = data?.members ?? [];
-  const me = data?.me ?? null;
-  const groupName = data?.groupName ?? '';
-  const isPersonal = data?.isPersonal ?? false;
-  const history = data?.history ?? [];
-  const items = data?.items ?? [];
-  const parentRule = data?.parentRule ?? null;
+  const {
+    txn, members, me, groupName, isPersonal, history, items, parentRule,
+    loading, error, reload,
+    showAttachment, setShowAttachment,
+    chooseReceiptSource, removeReceipt, onDelete,
+  } = useTxnDetail(id);
 
   // No id → nothing to show; bounce back (kept as an effect so hooks above still run).
   useEffect(() => { if (!id) router.back(); }, [id, router]);
 
   if (!id) return null;
-
-  async function attachReceipt(source: 'camera' | 'gallery') {
-    try {
-      const uri = await pickAttachment(source);
-      if (!uri) return;
-      // Replacing an existing receipt → remove the old file from disk first.
-      if (txn?.attachment_uri) await deleteAttachment(txn.attachment_uri);
-      await setTxnAttachment(db, id, uri);
-      haptic.success();
-      await reload();
-    } catch (e) {
-      if (e instanceof AttachmentStorageError) {
-        Alert.alert('Low on storage', 'Your device is low on storage. Free up space and try again.');
-      } else {
-        Alert.alert('Something went wrong', 'Could not attach the receipt.');
-      }
-    }
-  }
-
-  function chooseReceiptSource() {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take photo', 'Choose from library'], cancelButtonIndex: 0 },
-        (i) => { if (i === 1) attachReceipt('camera'); if (i === 2) attachReceipt('gallery'); },
-      );
-    } else {
-      attachReceipt('camera');
-    }
-  }
-
-  function removeReceipt() {
-    if (!txn?.attachment_uri) return;
-    Alert.alert('Remove receipt?', 'The photo will be deleted from this device.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove', style: 'destructive', onPress: async () => {
-          const old = txn.attachment_uri;
-          await setTxnAttachment(db, id, null);
-          if (old) await deleteAttachment(old);
-          haptic.warning();
-          setShowAttachment(false);
-          await reload();
-        },
-      },
-    ]);
-  }
 
   if (error) {
     return (
@@ -188,27 +96,6 @@ export default function TxnDetailScreen() {
   const kindLabel = isSettlement
     ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
     : isIncome ? 'Income' : 'Expense';
-
-  function onDelete() {
-    Alert.alert('Delete transaction?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          await softDeleteTxn(db, id);
-          refresh();
-          haptic.warning();
-          showUndo({
-            message: 'Transaction deleted',
-            onUndo: async () => { try { await restoreTxn(db, id); refresh(); haptic.success(); } catch { /* ignore */ } },
-          });
-          router.back();
-        } catch {
-          haptic.error();
-          Alert.alert('Something went wrong', 'Please try again.');
-        }
-      } },
-    ]);
-  }
 
   return (
     <View style={styles.container}>
@@ -329,9 +216,7 @@ export default function TxnDetailScreen() {
           </>
         ) : (
           <TouchableOpacity style={styles.attachAddCard} onPress={chooseReceiptSource} accessibilityRole="button" accessibilityLabel="Add receipt">
-            <View style={styles.attachAddIcon}>
-              <Feather name="camera" size={18} color={colors.accent} />
-            </View>
+            <IconCircle icon="camera" size={40} iconSize={18} color={colors.accent} bg={colors.accentMuted} />
             <View style={{ flex: 1 }}>
               <Text style={styles.attachAddTitle}>Add receipt</Text>
               <Text style={styles.attachHint}>Camera · Photo library</Text>
@@ -540,7 +425,6 @@ const styles = StyleSheet.create({
   attachLabel: { ...type.body, color: colors.textPrimary },
   attachHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   attachAddCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', padding: space.md },
-  attachAddIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   attachAddTitle: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   receiptActions: { flexDirection: 'row', gap: space.sm },
   receiptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },

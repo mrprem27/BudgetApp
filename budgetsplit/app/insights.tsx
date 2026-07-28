@@ -18,18 +18,10 @@ import { ErrorState } from '../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { InsightText } from '../src/components/finance/InsightText';
 import { recBg, recColor } from '../src/components/finance/group/helpers';
-import { getTransactionsInRange } from '../src/db/queries/transactions';
-import { getBudgetAnalytics } from '../src/lib/analytics';
-import { getAllGroups } from '../src/db/queries/groups';
-import { buildSavingsInsights } from '../src/db/queries/savings';
-import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
+
 import type { Insight } from '../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
-
-type Shift = { cat: string; thisAmt: number; pct: number };
-type Rec = { key: string; severity: 'warn' | 'info' | 'good'; icon: string; text: string; group: string };
-type Driver = { key: string; category: string; over: number; group: string };
-type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
+import { loadInsightsData } from '../src/lib/insightsData';
 
 function insightTint(tone: Insight['tone']): string {
   switch (tone) {
@@ -45,107 +37,8 @@ export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
   const [cutPct, setCutPct] = useState(20);
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const grps = await getAllGroups(db);
-    const personalId = grps.find(g => g.is_personal === 1)?.id ?? '';
-
-    // This month vs last month spend by category (for shifts + velocity).
-    const monthStart = new Date();
-    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-    const lastMonthEnd = new Date(monthStart.getTime() - 1);
-    const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
-    const [monthTxns, lastMonthTxns] = await Promise.all([
-      getTransactionsInRange(db, null, monthStart.getTime(), Date.now()),
-      getTransactionsInRange(db, null, lastMonthStart.getTime(), lastMonthEnd.getTime()),
-    ]);
-    const catMap: Record<string, number> = {};
-    const lastCatMap: Record<string, number> = {};
-    for (const t of monthTxns) if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
-      catMap[t.category] = (catMap[t.category] ?? 0) + amt;
-    }
-    for (const t of lastMonthTxns) if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
-      lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + amt;
-    }
-    const monthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
-
-    // Top spending category powers the "What if I cut…" simulator.
-    const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
-    const whatIf = topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null;
-
-    // Month-end projection from daily pace.
-    const today = new Date();
-    const dayOfMonth = getDate(today);
-    const daysInMonth = getDaysInMonth(today);
-    const projected = dayOfMonth > 0 ? Math.round((monthSpend / dayOfMonth) * daysInMonth) : 0;
-
-    // Month-end forecast graph (moved here from Reports): a solid "spent so far"
-    // line and a dashed projection to month-end, using the credibility-weighted
-    // model (src/lib/forecast). Rupee values (÷100) so the chart axis reads in ₹.
-    let forecastActual: LinePoint[] = [];
-    let forecastProjected: LinePoint[] = [];
-    let projectedTotal = 0;
-    if (dayOfMonth >= FORECAST_MIN_DAYS) {
-      const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed
-      for (const t of monthTxns) {
-        if (t.kind !== 'expense') continue;
-        const d = getDate(new Date(t.date));
-        if (d >= 1 && d <= daysInMonth) spendByDay[d] += t.shares.reduce((x: number, sh: { amount: number }) => x + sh.amount, 0);
-      }
-      const dailyCumulative: number[] = [];
-      let running = 0;
-      for (let d = 1; d <= dayOfMonth; d++) { running += spendByDay[d]; dailyCumulative.push(Math.round(running / 100)); }
-      const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
-      const fc = forecastMonthEnd(running, dayOfMonth, daysInMonth, priorMonthTotal);
-      if (fc.ready) {
-        const labelForDay = (d: number) => (d % 2 === 1 ? `${d}` : '');
-        // Projected series owns the x-axis labels and spans the whole month.
-        forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
-          const d = i + 1;
-          const value = d <= dayOfMonth
-            ? dailyCumulative[d - 1]
-            : Math.round(projectedAtDay(running, dayOfMonth, daysInMonth, fc.projected, d) / 100);
-          return { value, label: labelForDay(d), hideDataPoint: true };
-        });
-        // Solid "actual" overlay up to today; marks the "today" point only.
-        forecastActual = dailyCumulative.map((value, i) => ({
-          value, label: '', hideDataPoint: i !== dayOfMonth - 1,
-          dataPointColor: colors.expense, dataPointRadius: 5,
-        }));
-        projectedTotal = Math.round(fc.projected / 100);
-      }
-    }
-
-    // Budget analytics per group — powers the total, plus the recommendations and
-    // "driving overspend" that used to live inside each group's Budget tab. They're
-    // aggregated across every group here and tagged with the group name.
-    const analyticsByGroup = await Promise.all(grps.map(async g => ({ group: g, a: await getBudgetAnalytics(db, g) })));
-    const budget = analyticsByGroup.reduce((s, x) => s + x.a.totalAllocated, 0);
-
-    const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
-      a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
-    );
-    const drivers: Driver[] = analyticsByGroup
-      .flatMap(({ group, a }) => a.overBudget.map(t => ({ key: `${group.id}:${t.category}`, category: t.category, over: t.spent - t.allocated, group: group.name })))
-      .sort((x, y) => y.over - x.over)
-      .slice(0, 6);
-
-    // Savings nudges — moved here from the Plan tab.
-    const savings = await buildSavingsInsights(db);
-
-    // Biggest category shifts vs last month.
-    const shifts: Shift[] = Object.entries(catMap)
-      .filter(([cat]) => lastCatMap[cat])
-      .map(([cat, thisAmt]) => {
-        const lastAmt = lastCatMap[cat] ?? 0;
-        return { cat, thisAmt, pct: lastAmt > 0 ? Math.round(((thisAmt - lastAmt) / lastAmt) * 100) : 0 };
-      })
-      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
-      .slice(0, 3);
-
-    return { personalId, monthSpend, budget, projected, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
-  }, []);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } =
+    useScreenData((db) => loadInsightsData(db), []);
 
   const personalId = data?.personalId ?? '';
   const monthSpend = data?.monthSpend ?? 0;
@@ -213,7 +106,7 @@ export default function InsightsScreen() {
               </View>
               <Text style={styles.velocityLegendMuted}>{pctUsed}% budget used · {daysLeft} days left</Text>
             </View>
-            <TouchableOpacity style={styles.velocityCta} onPress={() => personalId && router.push(`/group/${personalId}` as any)} accessibilityRole="button">
+            <TouchableOpacity style={styles.velocityCta} onPress={() => personalId && router.push(`/group/${personalId}`)} accessibilityRole="button">
               <Text style={styles.velocityCtaText}>See what to cut</Text>
               <Feather name="chevron-right" size={12} color={colors.accent} />
             </TouchableOpacity>
@@ -438,8 +331,6 @@ const styles = StyleSheet.create({
   velocityCtaText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
 
   secLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
-  trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
   whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
@@ -483,22 +374,4 @@ const styles = StyleSheet.create({
   shiftBadge: { flexDirection: 'row', alignItems: 'center', gap: space.xs, borderRadius: 6, paddingHorizontal: space.sm, paddingVertical: 3 },
   shiftBadgeText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
 
-  netRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  netAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
-  netDivider: { height: 1, backgroundColor: colors.border, marginBottom: 10 },
-  netTilesRow: { flexDirection: 'row', gap: 6 },
-  netTile: { flex: 1, backgroundColor: colors.incomeTint, borderRadius: radius.sm, padding: 10, borderWidth: 1, borderColor: colors.incomeTintStrong },
-  netTileLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 },
-  netTileAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, letterSpacing: -0.5 },
-  netTilePeople: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
-
-  subsCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: colors.settle, marginTop: space.xs },
-  subsHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
-  subsDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.settle },
-  subsLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8 },
-  subsTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: space.xs },
-  subsSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
-  subsActions: { flexDirection: 'row', gap: 6, marginTop: 12 },
-  subsReviewBtn: { flex: 1, backgroundColor: '#13203A', borderRadius: radius.sm, padding: space.sm, alignItems: 'center', borderWidth: 1, borderColor: colors.settleTintStrong },
-  subsReviewText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.settle },
 });

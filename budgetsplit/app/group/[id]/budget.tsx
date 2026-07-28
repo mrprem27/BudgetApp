@@ -26,6 +26,7 @@ import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/mone
 import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
+import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 
 const CADENCES: { key: BudgetCadence; label: string }[] = [
   { key: 'once', label: 'One-time' },
@@ -85,7 +86,7 @@ export default function BudgetEditorScreen() {
   // once it arrives — those stay editable local state. `refetchOnDataChange` is off
   // to match the prior behavior (this editor only reloaded on focus, and a mid-edit
   // reseed would wipe unsaved amounts).
-  const { data, error, reload } = useScreenData(async (db) => {
+  const { data, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     if (!id) return { cats: [] as Category[], budgets: [], defaultCadence: 'monthly' as BudgetCadence };
     let [cats, budgets, dc] = await Promise.all([
       getCategoriesByFrequency(db, id),
@@ -226,7 +227,7 @@ export default function BudgetEditorScreen() {
         <ErrorState onRetry={() => { void reload(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>

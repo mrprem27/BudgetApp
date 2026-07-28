@@ -21,6 +21,7 @@ import type { TxnKind } from '../src/constants/enums';
 import { insertPending } from '../src/db/queries/pending';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
+import { IconCircle } from '../src/components/ui/IconCircle';
 
 const SAMPLE = '2026-06-01, Swiggy order, -450\n2026-06-02, Salary, 85000\n2026-06-03, Uber, -220';
 
@@ -166,7 +167,7 @@ export default function ImportScreen() {
       })));
       haptic.success();
       refresh();
-      router.replace('/review' as any);
+      router.replace('/review');
     } finally {
       setSaving(false);
     }
@@ -196,9 +197,7 @@ export default function ImportScreen() {
               detection already answered it. */}
           {fileName && parsed && result && result.rows.length > 0 && (
             <View style={styles.fileCard}>
-              <View style={styles.fileCardIcon}>
-                <Feather name="check" size={16} color={colors.income} />
-              </View>
+              <IconCircle icon="check" size={32} iconSize={16} color={colors.income} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.fileCardTitle} numberOfLines={1}>{parsed.format}</Text>
                 <Text style={styles.fileCardMeta} numberOfLines={1}>
@@ -300,7 +299,6 @@ const styles = StyleSheet.create({
     padding: space.md, borderRadius: radius.lg, backgroundColor: colors.bgCard,
     borderWidth: 1, borderColor: colors.income + '55',
   },
-  fileCardIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.income + '22', alignItems: 'center', justifyContent: 'center' },
   fileCardTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   fileCardMeta: { ...type.caption, color: colors.income, marginTop: 1 },
   fileCardName: { ...type.caption, color: colors.textMuted, marginTop: 1 },

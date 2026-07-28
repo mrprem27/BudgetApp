@@ -49,7 +49,10 @@ export default function AffordScreen() {
     return evaluateAfford(ctx);
   }, [amount, available, upcoming, monthlyIncome, categoryName, catStat]);
 
-  const showResult = amount > 0 && snap !== null;
+  // `snap` is undefined until the first load resolves (never null), so both
+  // guards must test truthiness — otherwise the verdict is computed from zeros
+  // and the screen confidently answers "no" before it knows anything.
+  const showResult = amount > 0 && !!snap;
   const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare } = result;
 
   const V = {
@@ -126,7 +129,7 @@ export default function AffordScreen() {
           <View style={styles.breakdownCard}>
             <View style={styles.cashRow}>
               <Text style={styles.cashLabel}>Spendable cash now</Text>
-              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{snap === null ? '—' : formatRupees(available)}</Text>
+              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{!snap ? '—' : formatRupees(available)}</Text>
             </View>
             {upcoming > 0 && (
               <>

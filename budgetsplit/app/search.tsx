@@ -46,7 +46,7 @@ export default function SearchScreen() {
   const [source, setSource] = useState<SearchSource>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const { data, error, reload } = useScreenData(async (db) => {
+  const { data, loading, error, reload } = useScreenData(async (db) => {
     const now = Date.now();
     const [txns, me, grps] = await Promise.all([
       getTransactionsInRange(db, null, now - THREE_YEARS_MS, now),
@@ -178,14 +178,14 @@ export default function SearchScreen() {
               </View>
             )}
 
-            {sections.length === 0 ? (
+            {sections.length === 0 ? (loading ? null : (
               <EmptyState
                 icon="search"
                 title={hasSearched ? 'No matches' : 'Search your transactions'}
                 body={hasSearched ? 'Try a different word or amount.' : 'Find any past expense, income or settlement by category, note or amount.'}
                 tint={colors.textSecondary}
               />
-            ) : (
+            )) : (
               <SectionList
                 sections={sections}
                 style={styles.listFlex}

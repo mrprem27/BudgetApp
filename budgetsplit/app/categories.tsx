@@ -29,6 +29,7 @@ import {
   asFeather,
 } from '../src/constants/palette';
 import type { Category } from '../src/db/queries/categories';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -48,7 +49,7 @@ export default function CategoriesScreen() {
   const [renameText, setRenameText] = useState('');
 
   // Categories are a single global catalog now — no group scoping.
-  const { data, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     let cats = await getCategories(db, kindTab);
     // Self-heal: the base catalog is app structure and should never be empty.
     // If it is (e.g. an older DB that once wiped categories), reseed defaults.
@@ -193,7 +194,7 @@ export default function CategoriesScreen() {
         <ErrorState onRetry={() => reload()} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
           {CATEGORY_KIND.map(k => (
@@ -277,7 +278,7 @@ export default function CategoriesScreen() {
                     </View>
                   ))}
 
-                  {catsInSection.length === 0 && (
+                  {catsInSection.length === 0 && !loading && (
                     <Text style={styles.empty}>No categories in this section</Text>
                   )}
 

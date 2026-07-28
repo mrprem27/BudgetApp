@@ -27,6 +27,9 @@ const RIGHT = ['savings', 'settings'];
  * above the bar, drawn on top), two tabs. The FAB lives IN the bar so it always
  * renders above the screen content.
  */
+// expo-router does not export the tab-bar render props (BottomTabBarProps is
+// react-navigation's and doesn't match what's passed here). Untyped
+// third-party surface — permitted by AGENTS.md.
 function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();

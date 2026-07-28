@@ -184,11 +184,36 @@ export async function getTotalSaved(db: SQLite.SQLiteDatabase): Promise<number> 
   return Object.values(map).reduce((a, b) => a + Math.max(0, b), 0);
 }
 
-export async function getGoalHistory(db: SQLite.SQLiteDatabase, goalId: string): Promise<SavingsTxn[]> {
+/** How many ledger rows the goal screen renders. It draws them in a ScrollView,
+ *  so this is what keeps an old goal with hundreds of contributions from
+ *  mounting every row at once. */
+export const GOAL_HISTORY_PAGE = 50;
+
+/**
+ * A goal's contribution ledger, newest first.
+ *
+ * `limit` bounds it for display. Pass `null` for the COMPLETE ledger — the
+ * delete-with-undo path needs every row to restore the goal faithfully, so it
+ * must not be capped.
+ */
+export async function getGoalHistory(
+  db: SQLite.SQLiteDatabase,
+  goalId: string,
+  limit: number | null = GOAL_HISTORY_PAGE,
+): Promise<SavingsTxn[]> {
+  const clause = limit === null ? '' : ` LIMIT ${Math.max(1, Math.floor(limit))}`;
   return db.getAllAsync<SavingsTxn>(
-    'SELECT * FROM savings_txn WHERE goal_id = ? ORDER BY date DESC, created_at DESC',
+    `SELECT * FROM savings_txn WHERE goal_id = ? ORDER BY date DESC, created_at DESC${clause}`,
     [goalId],
   );
+}
+
+/** Total ledger rows for a goal — lets the screen say "showing 50 of 214". */
+export async function getGoalHistoryCount(db: SQLite.SQLiteDatabase, goalId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM savings_txn WHERE goal_id = ?', [goalId],
+  );
+  return row?.n ?? 0;
 }
 
 // --- Auto-funding (Phase 2) ---------------------------------------------

@@ -27,6 +27,8 @@ import { SettingsRow, settingsRowDivider } from '../../src/components/ui/Setting
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
+import { useScreenData } from '../../src/hooks/useScreenData';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
@@ -37,11 +39,29 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { flags, setFlag } = useFeatureFlags();
 
-  const [me, setMe] = useState<Person | null>(null);
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
-  const [contactCount, setContactCount] = useState(0);
-  const [categoryCount, setCategoryCount] = useState(0);
+
+  // DB-backed values: one loader, with the hook owning focus refetch + errors.
+  // The self-heal write is idempotent (only fires on an empty catalog), so it's
+  // safe inside a loader that re-runs on focus.
+  const { data, error: loadError, reload } = useScreenData(async (database) => {
+    const [meRow, allPersons, grps] = await Promise.all([
+      getMe(database), getAllPersons(database), getAllGroups(database),
+    ]);
+    let count = (await getCategories(database, 'expense')).length;
+    if (count === 0) { await seedGlobalCategories(database); count = (await getCategories(database, 'expense')).length; }
+    return {
+      me: meRow,
+      contactCount: allPersons.filter(p => !p.is_me).length,
+      personalGroupId: grps.find(g => g.is_personal === 1)?.id ?? null,
+      categoryCount: count,
+    };
+  }, []);
+  const me = data?.me ?? null;
+  const contactCount = data?.contactCount ?? 0;
+  const categoryCount = data?.categoryCount ?? 0;
+  const personalGroupId = data?.personalGroupId ?? null;
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
@@ -67,30 +87,20 @@ export default function SettingsScreen() {
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [showCadence, setShowCadence] = useState(false);
-  const [personalGroupId, setPersonalGroupId] = useState<string | null>(null);
 
   const [devTaps, setDevTaps] = useState(0);
 
-  // Re-runs on focus so the category count reflects changes made elsewhere.
+  // Local preference toggles (AsyncStorage, not the DB) — re-read on focus so a
+  // change made elsewhere is reflected.
   useFocusEffect(useCallback(() => {
     (async () => {
-      setMe(await getMe(db));
-      const allPersons = await getAllPersons(db);
-      setContactCount(allPersons.filter(p => !p.is_me).length);
-      const grps = await getAllGroups(db);
-      const personalGroup = grps.find(g => g.is_personal === 1);
-      setPersonalGroupId(personalGroup?.id ?? null);
-      // Self-heal an empty catalog (same as the Categories/Budget screens).
-      let count = (await getCategories(db, 'expense')).length;
-      if (count === 0) { await seedGlobalCategories(db); count = (await getCategories(db, 'expense')).length; }
-      setCategoryCount(count);
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
-  }, [db]));
+  }, []));
 
   async function toggle(persist: (v: boolean) => Promise<void>, val: boolean, setter: (v: boolean) => void) {
     haptic.selection();
@@ -108,7 +118,7 @@ export default function SettingsScreen() {
     const trimmed = nameText.trim();
     if (!trimmed || !me) return;
     await updatePersonName(db, me.id, trimmed);
-    setMe({ ...me, name: trimmed });
+    await reload();
     haptic.success();
     setShowName(false);
   }
@@ -120,12 +130,20 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
       </View>
 
+      {loadError && (
+        <ErrorState
+          title="Couldn't load your profile"
+          body="Your name, contacts and category count couldn't be read. The settings below still work."
+          onRetry={reload}
+        />
+      )}
+
       {/* Profile card — hero */}
       <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
         <TouchableOpacity
           onPress={me ? async () => {
             const uri = await pickAndSaveAvatar(me.id);
-            if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); setMe({ ...me, image_uri: uri }); }
+            if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); await reload(); }
           } : undefined}
           accessibilityLabel="Change avatar"
           hitSlop={4}
@@ -169,7 +187,7 @@ export default function SettingsScreen() {
           label="Budget"
           value="Personal budget"
           onPress={() => {
-            if (personalGroupId) router.push(`/group/${personalGroupId}/budget` as any);
+            if (personalGroupId) router.push(`/group/${personalGroupId}/budget`);
             else router.push('/groups');
           }}
         />
@@ -199,14 +217,14 @@ export default function SettingsScreen() {
       {flags.reminders && (<>
       <Text style={styles.sectionTitle}>Notifications</Text>
       <View style={styles.card}>
-        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { router.push('/settings/notifications' as any); }} />
+        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { router.push('/settings/notifications'); }} />
       </View>
       </>)}
 
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import' as any); }} />
+        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
         <View style={settingsRowDivider} />
@@ -296,11 +314,8 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
-  featureCaption: { ...type.caption, color: colors.textMuted, paddingHorizontal: space.xs, marginTop: space.sm, marginBottom: space.xs, lineHeight: 17 },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },
   cadOptionText: { ...type.body, color: colors.textPrimary },
-  cadOptionExample: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  sheetHint: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
 });
 

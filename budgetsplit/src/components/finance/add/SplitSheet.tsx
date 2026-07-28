@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 import { splitEqual, splitByPercent, splitByShares, parseToPaise, formatRupees } from '../../../lib/money';
 import { SplitEditor } from './SplitEditor';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import type { Person } from '../../../db/queries/persons';
 import { type SplitMode } from '../../../constants/enums';
+import { SheetModal } from '../../ui/SheetModal';
 
 /**
  * The "Split" bottom-sheet for Quick Add — sheet chrome + remainder + Done around
@@ -67,11 +68,8 @@ export function SplitSheet({
     setSplitMembers(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.splitSheet} onPress={e => e.stopPropagation()}>
-          <Text style={styles.splitTitle}>Split</Text>
-
+    <SheetModal visible={visible} onClose={onClose} title="Split" scroll={false}>
+      <>
           <ScrollView style={{ maxHeight: 340 }}>
             <SplitEditor
               members={members}
@@ -96,18 +94,12 @@ export function SplitSheet({
           </View>
 
           <PrimaryButton label="Done" onPress={onClose} style={{ marginTop: space.md }} />
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  splitSheet: { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, gap: space.md, maxHeight: '80%' },
-  splitTitle: { ...type.subheading, color: colors.textPrimary },
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
   remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
-  doneBtn: { height: 52, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  doneBtnText: { ...type.button, color: colors.bg },
 });

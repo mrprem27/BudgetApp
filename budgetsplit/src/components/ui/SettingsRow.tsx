@@ -23,7 +23,8 @@ type Props = {
  */
 export function SettingsRow({ icon, label, value, tint = colors.accent, onPress, chevron, right, danger }: Props) {
   const showChevron = chevron ?? !!onPress;
-  const Wrapper: any = onPress ? TouchableOpacity : View;
+  // Same props on both branches; React.ElementType keeps it typed without `any`.
+  const Wrapper: React.ElementType = onPress ? TouchableOpacity : View;
   return (
     <Wrapper
       style={styles.row}

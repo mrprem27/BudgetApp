@@ -418,7 +418,7 @@ export default function ReviewScreen() {
       <View style={[styles.card, selectMode && checked && styles.cardChecked]}>
         <View style={styles.rowTop}>
           {selectMode && (
-            <TouchableOpacity onPress={() => toggleSelect(row.id)} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }} style={styles.checkbox}>
+            <TouchableOpacity onPress={() => toggleSelect(row.id)} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`Select ${row.description}`} style={styles.checkbox}>
               <Feather name={checked ? 'check-circle' : 'circle'} size={20} color={checked ? colors.accent : colors.textMuted} />
             </TouchableOpacity>
           )}
@@ -640,7 +640,7 @@ export default function ReviewScreen() {
           title="Nothing to review"
           body="Import a Google Pay statement, a bank / UPI export, or a transaction-alert email (Settings → Import) and the transactions show up here — grouped by source — to confirm."
           actionLabel="Import transactions"
-          onAction={() => router.push('/import' as any)}
+          onAction={() => router.push('/import')}
         />
       ) : emptyFiltered ? (
         <EmptyState
@@ -900,7 +900,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
   headerBlock: { gap: space.xs, marginBottom: space.xs },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   headerAction: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   selectHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectAll: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

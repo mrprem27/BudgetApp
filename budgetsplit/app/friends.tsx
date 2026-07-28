@@ -37,7 +37,7 @@ export default function FriendsScreen() {
   const [addName, setAddName] = useState('');
   const [query, setQuery] = useState('');
 
-  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const [all, bals] = await Promise.all([
       getAllPersons(db),
       me ? getFriendBalances(db, me.id) : Promise.resolve([] as FriendBalance[]),
@@ -154,7 +154,7 @@ export default function FriendsScreen() {
                 </View>
               )}
               <View style={styles.card}>
-                {filtered.length === 0 && <Text style={styles.noMatch}>No people match “{query}”.</Text>}
+                {filtered.length === 0 && !loading && <Text style={styles.noMatch}>No people match “{query}”.</Text>}
                 {filtered.map((p, i) => {
                   const bal = balances[p.id];
                   const net = bal?.net ?? 0;
@@ -249,7 +249,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 56 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  sub: { ...type.caption, marginTop: 2 },
   subMuted: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   chipRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs, flexWrap: 'wrap' },
   balChip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },

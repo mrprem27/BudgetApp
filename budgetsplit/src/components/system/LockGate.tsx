@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius } from '../../constants/layout';
+import { IconCircle } from '../ui/IconCircle';
 
 const LOGO = require('../../../assets/splash-icon.png');
 
@@ -99,9 +100,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
             // Biometric hardware present but nothing enrolled — show escape hatches
             <>
               <View style={styles.notEnrolledCard}>
-                <View style={styles.notEnrolledIcon}>
-                  <Feather name="alert-triangle" size={24} color={colors.expense} />
-                </View>
+                <IconCircle icon="alert-triangle" size={56} iconSize={24} color={colors.expense} />
                 <Text style={styles.notEnrolledTitle}>Face ID not set up</Text>
                 <Text style={styles.notEnrolledBody}>
                   BudgetSplit is locked but Face ID / Touch ID isn't enrolled on this device.{'\n'}Set it up in iOS Settings, or disable the lock here.
@@ -189,7 +188,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
   },
-  notEnrolledIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.expense + '22', alignItems: 'center', justifyContent: 'center' },
   notEnrolledTitle: { ...type.heading, color: colors.expense, textAlign: 'center' },
   notEnrolledBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   settingsBtn: {

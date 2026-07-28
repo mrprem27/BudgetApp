@@ -18,6 +18,7 @@ import { getMe } from '../src/db/queries/persons';
 import { getTransactionsInRange, type TxnWithSplits } from '../src/db/queries/transactions';
 import { foldUncategorized, OTHERS_LABEL } from '../src/lib/categoryFold';
 import { formatCompact } from '../src/lib/money';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 
 // Full transaction magnitude (all shares/payments), used for the "Largest" sort
 // and the header total — matches how Reports totals categories.
@@ -55,7 +56,7 @@ export default function ReportTransactionsScreen() {
     sort: 'date',
   });
 
-  const { data, loading, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const grps = await getAllGroups(db);
     const me = await getMe(db);
     const from = startOfMonth(monthDate).getTime();
@@ -140,6 +141,7 @@ export default function ReportTransactionsScreen() {
         <ErrorState onRetry={reload} />
       ) : (
       <FlatList
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         data={rows}
         keyExtractor={(t) => t.id}
         style={{ flex: 1 }}
@@ -168,7 +170,7 @@ export default function ReportTransactionsScreen() {
                   myId={myId}
                   showDate
                   groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
-                  onPress={() => router.push(`/txn/${item.id}` as any)}
+                  onPress={() => router.push(`/txn/${item.id}`)}
                 />
               </View>
               {!isLast && <View style={styles.rowDivider} />}

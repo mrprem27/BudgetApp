@@ -315,6 +315,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
 
           <Animated.ScrollView
+            // Animated.ScrollView's ref type doesn't unify with ScrollView's.
+            // Third-party typing gap; the runtime ref is a real ScrollView.
             ref={scrollRef as any}
             horizontal
             pagingEnabled
@@ -744,9 +746,6 @@ const styles = StyleSheet.create({
   // Budget stage
   budgetDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 28 },
   budgetDot: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted },
-  budgetAmtCard: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: space.lg, paddingHorizontal: 20, marginBottom: space.md, borderWidth: 1.5, borderColor: colors.accent, alignItems: 'center', alignSelf: 'stretch' },
-  budgetAmtText: { fontFamily: 'SpaceMono_400Regular', fontSize: 44, color: colors.textPrimary, letterSpacing: -2, lineHeight: 48 },
-  budgetAmtSub: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
   budgetPresets: { flexDirection: 'row', gap: space.sm, marginBottom: 20, justifyContent: 'center', flexWrap: 'wrap' },
   budgetPresetChip: { paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.bgCard, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
   budgetPresetChipActive: { backgroundColor: colors.accent },

@@ -79,8 +79,8 @@ export default function NotificationsScreen() {
     }
   }
 
-  const Toggle = ({ on, onPress }: { on: boolean; onPress: () => void }) => (
-    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }}>
+  const Toggle = ({ on, onPress, label }: { on: boolean; onPress: () => void; label: string }) => (
+    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label}>
       <View style={[styles.thumb, on && styles.thumbOn]} />
     </TouchableOpacity>
   );
@@ -121,7 +121,7 @@ export default function NotificationsScreen() {
               <Text style={styles.typeLabel}>Bill reminders</Text>
               <Text style={styles.typeDesc}>Alert before recurring bills and memberships renew</Text>
             </View>
-            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} />
+            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} label="Bill reminders" />
           </View>
           {prefs?.renewals && (
             <>
@@ -154,7 +154,7 @@ export default function NotificationsScreen() {
               <Text style={styles.typeLabel}>Daily log reminder</Text>
               <Text style={styles.typeDesc}>Nudge to log your expenses at the end of the day</Text>
             </View>
-            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} />
+            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} label="Daily log reminder" />
           </View>
           {prefs?.daily && (
             <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('daily')} accessibilityRole="button">

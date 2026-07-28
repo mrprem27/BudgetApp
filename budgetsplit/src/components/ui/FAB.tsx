@@ -56,7 +56,7 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
         onRequestClose={() => setOpen(false)}
         onDismiss={() => { const fn = pendingAction.current; pendingAction.current = null; fn?.(); }}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close menu">
           <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
             <View style={styles.handle} />
             {(actions ?? []).map((a) => {

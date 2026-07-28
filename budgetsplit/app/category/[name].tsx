@@ -24,6 +24,9 @@ import { getGoals, type SavingsGoal } from '../../src/db/queries/savings';
 import { categoryVisual } from '../../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../src/lib/money';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { IconCircle } from '../../src/components/ui/IconCircle';
 
 type Period = 'day' | 'month' | 'year';
 const PERIODS: { key: Period; label: string }[] = [
@@ -68,7 +71,7 @@ export default function CategoryDetailScreen() {
   // Refetch on focus (via useScreenData) so returning after adding/editing a txn shows fresh data.
   // All of this year's expenses (every category) are fetched — period subsets are derived
   // client-side so switching tabs is instant and needs no re-query.
-  const { data, loading, error: loadError, reload } = useScreenData(async (db): Promise<{
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db): Promise<{
     myId: string;
     personalGroupId: string | null;
     groupNames: Record<string, string>;
@@ -170,7 +173,7 @@ export default function CategoryDetailScreen() {
     <TransactionRow
       txn={txn}
       myId={myId}
-      onPress={() => router.push(`/txn/${txn.id}` as any)}
+      onPress={() => router.push(`/txn/${txn.id}`)}
       groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
     />
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,24 +183,11 @@ export default function CategoryDetailScreen() {
   // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
   const listHeader = (
     <View style={styles.headerBlocks}>
-      {/* Minimal back-link */}
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
-          <Feather name="chevron-left" size={18} color={colors.accent} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-
-        {/* Header: icon tile + name + count */}
-        <View style={styles.header}>
-          <View style={[styles.headerIcon, { backgroundColor: visual.color + '22' }]}>
-            <Feather name={visual.icon} size={26} color={visual.color} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>{categoryName}</Text>
-            <Text style={styles.headerSub}>
-              {view.count} {view.count === 1 ? 'transaction' : 'transactions'} {PERIOD_NOUN[period]}
-            </Text>
-          </View>
-        </View>
+        {/* Name + back live in the shared ScreenHeader above the list; this line
+            keeps the count, and the budget card below is the screen's hero. */}
+        <Text style={styles.headerSub}>
+          {view.count} {view.count === 1 ? 'transaction' : 'transactions'} {PERIOD_NOUN[period]}
+        </Text>
 
         {/* Period selector — Today / Month / Year, mirroring the Dashboard */}
         <View style={styles.periodRow}>
@@ -257,7 +247,7 @@ export default function CategoryDetailScreen() {
 
             {/* Set-budget prompt — shown prominently when no monthly budget is set */}
             {showSetBudget && (
-              <TouchableOpacity style={styles.setBudget} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget?category=${encodeURIComponent(categoryName)}` as any)} accessibilityRole="button">
+              <TouchableOpacity style={styles.setBudget} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget?category=${encodeURIComponent(categoryName)}`)} accessibilityRole="button">
                 <View style={styles.setBudgetIcon}>
                   <Feather name="target" size={18} color={colors.accent} />
                 </View>
@@ -309,7 +299,7 @@ export default function CategoryDetailScreen() {
                   const mine = myShareOf(r, myId) || r.shares.reduce((s, x) => s + x.amount, 0);
                   const name = (r.note && r.note.trim()) || r.category;
                   return (
-                    <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/group/${r.group_id}/recurring?focus=${r.id}` as any)} accessibilityRole="button">
+                    <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/group/${r.group_id}/recurring?focus=${r.id}`)} accessibilityRole="button">
                       <Feather name="repeat" size={13} color={colors.settle} />
                       <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{name}</Text>
                       <Text style={styles.insMeta}>{r.recur_freq}</Text>
@@ -325,7 +315,7 @@ export default function CategoryDetailScreen() {
               <View style={styles.card}>
                 <Text style={styles.sectionLabel}>GOALS</Text>
                 {goals.map(g => (
-                  <TouchableOpacity key={g.id} style={styles.insRow} onPress={() => router.push(`/savings/${g.id}` as any)} accessibilityRole="button">
+                  <TouchableOpacity key={g.id} style={styles.insRow} onPress={() => router.push(`/savings/${g.id}`)} accessibilityRole="button">
                     <Feather name="target" size={13} color={g.color ?? colors.accent} />
                     <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{g.name}</Text>
                     <Text style={styles.insAmt}>{formatCompact(g.target)}</Text>
@@ -344,7 +334,13 @@ export default function CategoryDetailScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenHeader
+        title={categoryName}
+        onBack={() => router.back()}
+        right={<IconCircle icon={visual.icon} size={32} iconSize={17} color={visual.color} />}
+      />
       <FlatList
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + space.xs }]}
         showsVerticalScrollIndicator={false}
@@ -383,12 +379,7 @@ const styles = StyleSheet.create({
   // every summary card is evenly separated.
   headerBlocks: { gap: space.md },
 
-  back: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: space.xs, marginLeft: -4 },
-  backText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  headerIcon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  headerTitle: { ...type.title, fontSize: 22, color: colors.textPrimary, letterSpacing: -0.4 },
   headerSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },

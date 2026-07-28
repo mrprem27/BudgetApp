@@ -5,6 +5,9 @@ import { colors, type } from '../tokens';
 import { formatCompact } from '../../lib/money';
 import { computeDonutWedges, type DonutSeg, type DonutWedge } from '../../lib/donut';
 
+// react-native-svg's `G` isn't assignable to createAnimatedComponent's
+// constraint (a known typing gap in the lib, not our code). AGENTS.md permits
+// `any` exactly here: wrapping an untyped third-party API.
 const AG = Animated.createAnimatedComponent(G as any);
 
 // SVG geometry — matches BudgetSplit Design System (2) CategoryDonut spec

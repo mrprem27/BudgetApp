@@ -28,6 +28,7 @@ import { formatRupees } from '../../../src/lib/money';
 import { oweView } from '../../../src/lib/owe';
 import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
+import { IconCircle } from '../../../src/components/ui/IconCircle';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -195,9 +196,7 @@ export default function MembersScreen() {
 
         <View style={styles.addButtons}>
           <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
-            <View style={styles.addBtnIcon}>
-              <Feather name="user-plus" size={16} color={colors.accent} />
-            </View>
+            <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
             <Text style={styles.addBtnText}>Add or create person</Text>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
@@ -248,8 +247,6 @@ export default function MembersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: layout.screenPaddingH, paddingBottom: layout.screenPaddingH },
-  title: { ...type.heading, color: colors.textPrimary },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
 
   membersCard: {
@@ -282,6 +279,5 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadow.sm,
   },
-  addBtnIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 });

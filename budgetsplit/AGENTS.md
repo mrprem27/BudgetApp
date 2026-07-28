@@ -137,13 +137,20 @@ haptic.light()     // ✅ FAB open (one-time, meaningful)
 Verified working icons for group types:
 `credit-card`, `home`, `users`, `map`, `coffee`, `shopping-cart`, `heart`, `zap`, `star`, `briefcase`, `book`, `music`, `camera`, `globe`, `activity`, `award`
 
-Icon in a colored dot:
+Icon in a colored dot — **use the `IconCircle` component**, don't hand-roll it:
 ```tsx
+// Correct
+<IconCircle icon="coffee" color={colors.accent} size={36} />
+<IconCircle icon="bell" color={colors.accent} bg={colors.accentMuted} />   // token bg
+
+// WRONG — this inline shape was copy-pasted ~40 times before IconCircle existed
 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: color + '22', alignItems: 'center', justifyContent: 'center' }}>
   <Feather name={icon} size={18} color={color} />
 </View>
 ```
 
+- `IconCircle` lives in `components/ui/IconCircle.tsx`. Defaults reproduce the old
+  snippet exactly: icon = `size / 2`, background = icon colour + `'22'`.
 - Icon opacity bg = icon color + `'22'` (hex ~13% opacity)
 - Never `'wallet'` — it doesn't exist in Feather. Use `'credit-card'`.
 
@@ -209,6 +216,24 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 - Row separators: 1px `colors.border`, full width OR indented to text (not icon)
 - "Today" / "Yesterday" / "14 Jun" for date section headers
 - Swipe-to-delete with `react-native-gesture-handler`
+
+### Pull-to-refresh — one rule
+
+A screen gets `AppRefreshControl` **iff it loads DB data via `useScreenData`
+AND owns its scroll container.** No exceptions by taste — either it matches or
+it's on the exempt list below.
+
+```tsx
+<ScrollView refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+```
+
+**Exempt, with the reason** (these load data but must NOT have it):
+| Screen | Why |
+|---|---|
+| `search` | Query-driven. The list *is* the query result; pulling would re-run a stale search. |
+| `afford`, `group/[id]/edit`, `settings/notifications` | Forms. A pull gesture fights the keyboard and there's no feed to refresh. |
+| `txn/[id]` | Detail + actions, not a feed. Refetches on focus already. |
+| `add/*` | Wizards. Never. |
 
 ---
 

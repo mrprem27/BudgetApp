@@ -12,10 +12,7 @@ import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import {
-  getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
-  skipNextOccurrence, undoNextSkip, getSkipsMap,
-} from '../../../src/db/queries/transactions';
+import { getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring, skipNextOccurrence, undoNextSkip, getSkipsMap } from '../../../src/db/queries/recurring';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 import { haptic } from '../../../src/lib/haptics';
@@ -61,7 +58,7 @@ export default function RecurringScreen() {
   const router = useRouter();
   const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
 
-  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const rs = await getRecurringForGroup(db, id);
     return { rules: rs, skips: await getSkipsMap(db, rs.map(r => r.id)) };
   }, [id]);
@@ -133,7 +130,7 @@ export default function RecurringScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {rules.length === 0 ? (
+        {rules.length === 0 ? (loading ? null : (
           <EmptyState
             icon="repeat"
             title="No recurring transactions"
@@ -141,7 +138,7 @@ export default function RecurringScreen() {
             actionLabel="Add recurring expense"
             onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           />
-        ) : (
+        )) : (
           rules.map(r => {
             const vis = categoryVisual(r.category);
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;

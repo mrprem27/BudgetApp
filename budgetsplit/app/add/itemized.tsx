@@ -584,7 +584,6 @@ const styles = StyleSheet.create({
   shareRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
   shareNameMe: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   shareAmountMe: { color: colors.accent },
-  unassignedWarn: { ...type.label, color: colors.expense, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
   unassignedBanner: { backgroundColor: colors.expense + '18', borderRadius: radius.md, borderWidth: 1, borderColor: colors.expense + '55', padding: space.sm, gap: space.xs },
   unassignedBannerRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   unassignedBannerText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold', flex: 1 },

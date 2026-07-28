@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
-import { materializeDueOccurrences } from '../src/db/queries/transactions';
+import { materializeDueOccurrences } from '../src/db/queries/recurring';
 import { rescheduleReminders } from '../src/lib/reminders';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';

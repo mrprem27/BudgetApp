@@ -8,13 +8,14 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
-import { getTransactionsForGroup, getRecurringForGroup } from '../../src/db/queries/transactions';
+import { getTransactionsForGroup } from '../../src/db/queries/transactions';
+import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
-import type { CategoryBudgetStatus } from '../../src/lib/budget';
+import type { CategoryBudgetStatus, BudgetUsage } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
@@ -60,7 +61,7 @@ export default function GroupDetailScreen() {
     ]);
     const netMap = await getGroupNet(db, id);
 
-    let budgetUsage: any = null;
+    let budgetUsage: BudgetUsage | null = null;
     let catStatus: CategoryBudgetStatus[] = [];
     let analytics: BudgetAnalytics | null = null;
     let recurringRules: TxnWithSplits[] = [];
@@ -236,7 +237,7 @@ export default function GroupDetailScreen() {
           simplifyOn={simplifyOn}
           onToggleSimplify={handleToggleSimplify}
           onInvite={() => router.push(`/group/${id}/members`)}
-          onSettlePair={(from, to, amount) => router.push(`/add/quick?kind=transfer&from=${from}&to=${to}&amount=${amount}&groupId=${id}` as any)}
+          onSettlePair={(from, to, amount) => router.push(`/add/quick?kind=transfer&from=${from}&to=${to}&amount=${amount}&groupId=${id}`)}
           groupName={group.name}
         />
       )}

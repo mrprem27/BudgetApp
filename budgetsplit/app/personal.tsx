@@ -13,7 +13,8 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-import { getMyActivity, getRecurringForGroup, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getMyActivity, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getRecurringForGroup } from '../src/db/queries/recurring';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
@@ -101,7 +102,7 @@ export default function PersonalScreen() {
 
   function openBudgetEditor() {
     const pg = groups.find(g => g.is_personal === 1);
-    if (pg) router.push(`/group/${pg.id}/budget` as any);
+    if (pg) router.push(`/group/${pg.id}/budget`);
   }
 
   async function handleExport() {
@@ -354,8 +355,6 @@ const styles = StyleSheet.create({
   budgetCard: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
   budgetTitle: { ...type.subheading, color: colors.textPrimary },
   budgetBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  budgetBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.lg, paddingVertical: 12, marginTop: space.xs },
-  budgetBtnText: { ...type.button, color: colors.bg },
   budgetHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.accentMuted },

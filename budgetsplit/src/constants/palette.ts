@@ -49,9 +49,24 @@ export const CATEGORY_COLOR_CHOICES: readonly string[] = [
   '#10B981', '#818CF8', '#E879F9', '#94A3B8',
 ];
 
+/** Feather icons offered when creating a savings goal. */
+export const GOAL_ICONS: readonly FeatherName[] = [
+  'smartphone', 'monitor', 'map', 'navigation', 'home', 'gift', 'umbrella', 'shield',
+  'headphones', 'watch', 'camera', 'book', 'star', 'heart', 'award', 'target',
+];
+
+/** Swatches offered when creating a savings goal (decorative picker palette). */
+export const GOAL_COLORS: readonly string[] = [
+  '#20C4B8', '#F0A500', '#7C6AF7', '#3ECF8E', '#F472B6', '#FB923C', '#60A5FA', '#F06060',
+];
+
 /**
  * Series colors for charts — leads with brand/semantic tokens, then distinct
  * decorative hues for additional slices.
+ *
+ * This is the ONLY chart palette. A second, divergent `CHART_COLORS` used to
+ * live in `components/finance/home/helpers.ts`; it had no consumers and was
+ * deleted 2026-07-28. Add series colours here, never in a screen or helper.
  */
 export const CHART_COLORS: readonly string[] = [
   colors.accent, colors.coral, colors.settle, colors.income, colors.healthAmber,
