@@ -130,7 +130,9 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
 const styles = StyleSheet.create({
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs, paddingVertical: 2 },
+  // Fixed height — must match placeholderRow so the card never resizes between a
+  // filled period and an empty/partial one (the icon is 28, comfortably inside 32).
+  row: { height: 32, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs },
   rowSelected: { backgroundColor: colors.bgMuted },
   nameSelected: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -141,8 +143,8 @@ const styles = StyleSheet.create({
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textPrimary, width: 52, textAlign: 'right' },
   more: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   moreSlot: { height: 18, justifyContent: 'center' },
-  // Empty category slot — same height as a real row, but just a quiet line.
-  placeholderRow: { height: 28, flexDirection: 'row', alignItems: 'center' },
+  // Empty category slot — same height as a real row (32), but just a quiet line.
+  placeholderRow: { height: 32, flexDirection: 'row', alignItems: 'center' },
   emptyLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.bgElevated },
   emptyMsg: { ...type.label, color: colors.textMuted },
   skelBlock: { backgroundColor: colors.bgElevated, borderRadius: 6 },

@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   created_at  INTEGER NOT NULL,
   dest_group_id TEXT,                       -- Review draft: target group (null = Personal)
   split_draft   TEXT,                       -- Review draft: JSON {included, mode, values}
+  counterparty_id TEXT,                     -- Review draft: the other person on a group transfer
   source      TEXT NOT NULL DEFAULT 'manual', -- where it came from (email/gpay/bank_csv/…); drives sectioned Review
   pay_method  TEXT                          -- detected payment method (upi/card/…); pre-filled in Review, editable
 );
@@ -248,6 +249,9 @@ const COLUMN_MIGRATIONS = [
   // split) so a half-reviewed inbox survives leaving and returning to the screen.
   "ALTER TABLE pending_txn ADD COLUMN dest_group_id TEXT",
   "ALTER TABLE pending_txn ADD COLUMN split_draft TEXT",
+  // Review can turn an imported transfer into a real settlement with a group
+  // member; this holds that person until the row is confirmed.
+  "ALTER TABLE pending_txn ADD COLUMN counterparty_id TEXT",
   // Demo/QA data marker. loadDemoData sets it on the rows it seeds so demo data
   // can be identified (and optionally excluded) later. No exclusion logic uses it
   // yet — it's purely a flag for future use.

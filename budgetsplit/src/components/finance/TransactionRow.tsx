@@ -59,7 +59,9 @@ export const TransactionRow = React.memo(function TransactionRow({
   } else if (txn.kind === 'settlement') {
     const fromId = txn.payments[0]?.personId;
     const toId = txn.shares[0]?.personId;
-    const amount = txn.payments[0]?.amount ?? 0;
+    // A personal transfer records only the side that moved (payment = money out,
+    // share = money in), so fall back to the share when there is no payment.
+    const amount = txn.payments[0]?.amount ?? txn.shares[0]?.amount ?? 0;
     const iPaid = fromId === myId;
     const iGot = toId === myId;
     displayAmount = iPaid ? -amount : amount;

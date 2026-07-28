@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, startOfMonth } from 'date-fns';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { space, radius, layout } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -35,6 +35,13 @@ function txnTotal(t: TxnWithSplits): number {
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
+  // Debounced copy drives filtering so we don't re-scan up to 3 years of txns on
+  // every keystroke; the TextInput and clear button stay bound to `query` (instant).
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(id);
+  }, [query]);
   const [kind, setKind] = useState<KindFilter>('all');
   const [source, setSource] = useState<SearchSource>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -60,14 +67,15 @@ export default function SearchScreen() {
   const groupNames = data?.groupNames ?? {};
 
   const { sections, totalCount, totalAmount } = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    // Strip commas so "1,200" and "1200" match either way against the amount.
+    const q = debouncedQuery.trim().toLowerCase().replace(/,/g, '');
     const filtered = all.filter(t => {
       if (kind !== 'all' && t.kind !== kind) return false;
       if (source === 'personal' && personalGroupId && t.group_id !== personalGroupId) return false;
       if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;
       if (!q) return true;
       const total = txnTotal(t);
-      const hay = `${t.category} ${t.note ?? ''} ${formatRupees(total)} ${Math.round(total / 100)}`.toLowerCase();
+      const hay = `${t.category} ${t.note ?? ''} ${formatRupees(total)} ${Math.round(total / 100)}`.toLowerCase().replace(/,/g, '');
       return hay.includes(q);
     });
 
@@ -93,9 +101,11 @@ export default function SearchScreen() {
     });
     const totalAmt = filtered.filter(t => t.kind === 'expense').reduce((s, t) => s + txnTotal(t), 0);
     return { sections: secs, totalCount: filtered.length, totalAmount: totalAmt };
-  }, [all, query, kind, source, personalGroupId, expanded]);
+  }, [all, debouncedQuery, kind, source, personalGroupId, expanded]);
 
   const hasQuery = query.trim().length > 0;
+  // Results reflect the debounced query — key the empty-state copy off it too.
+  const hasSearched = debouncedQuery.trim().length > 0;
 
   return (
     <View style={styles.container}>
@@ -127,8 +137,10 @@ export default function SearchScreen() {
             </View>
           </View>
 
-          {/* Filters: source · kind (centralized enums) */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+          {/* Filters: source · kind (centralized enums). `flexGrow:0` is critical —
+              a horizontal ScrollView in a flex column otherwise stretches to fill the
+              whole screen and shoves the results off. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
             {SEARCH_SOURCE.map(s => (
               <TouchableOpacity
                 key={s}
@@ -154,60 +166,76 @@ export default function SearchScreen() {
             ))}
           </ScrollView>
 
-          {totalCount > 0 && (
-            <View style={styles.resultHeader}>
-              <Text style={styles.resultCount}>
-                {totalCount} {totalCount === 1 ? 'result' : 'results'}
-                {totalAmount > 0 ? <Text style={styles.resultAmt}> · {formatCompact(totalAmount)} total</Text> : null}
-              </Text>
-            </View>
-          )}
+          {/* Results fill the remaining space so the list scrolls and the empty
+              state sits in a stable region below the filters. */}
+          <View style={styles.results}>
+            {totalCount > 0 && (
+              <View style={styles.resultHeader}>
+                <Text style={styles.resultCount}>
+                  {totalCount} {totalCount === 1 ? 'result' : 'results'}
+                  {totalAmount > 0 ? <Text style={styles.resultAmt}> · {formatCompact(totalAmount)} total</Text> : null}
+                </Text>
+              </View>
+            )}
 
-          {sections.length === 0 ? (
-            <EmptyState
-              icon="search"
-              title={hasQuery ? 'No matches' : 'Search your transactions'}
-              body={hasQuery ? 'Try a different word or amount.' : 'Find any past expense, income or settlement by category, note or amount.'}
-              tint={colors.textSecondary}
-            />
-          ) : (
-            <SectionList
-              sections={sections}
-              keyExtractor={(item) => isMore(item) ? `more-${item.section}` : item.id}
-              contentContainerStyle={styles.list}
-              keyboardShouldPersistTaps="handled"
-              stickySectionHeadersEnabled={false}
-              renderSectionHeader={({ section }) => <Text style={styles.monthLabel}>{section.title}</Text>}
-              renderItem={({ item }) => {
-                if (isMore(item)) {
+            {sections.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title={hasSearched ? 'No matches' : 'Search your transactions'}
+                body={hasSearched ? 'Try a different word or amount.' : 'Find any past expense, income or settlement by category, note or amount.'}
+                tint={colors.textSecondary}
+              />
+            ) : (
+              <SectionList
+                sections={sections}
+                style={styles.listFlex}
+                keyExtractor={(item) => isMore(item) ? `more-${item.section}` : item.id}
+                contentContainerStyle={styles.list}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                stickySectionHeadersEnabled={false}
+                renderSectionHeader={({ section }) => <Text style={styles.monthLabel}>{section.title}</Text>}
+                renderItem={({ item, index, section }) => {
+                  // Rows in a month join into ONE card: top row rounds the top, last
+                  // row rounds the bottom, hairline dividers sit between them.
+                  const isFirst = index === 0;
+                  const isLast = index === section.data.length - 1;
+                  const cell = [styles.cell, isFirst && styles.cellFirst, isLast && styles.cellLast];
+                  if (isMore(item)) {
+                    return (
+                      <View style={cell}>
+                        <TouchableOpacity
+                          style={styles.moreRow}
+                          onPress={() => setExpanded(prev => new Set(prev).add(item.section))}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Show ${item.count} more in ${item.monthName}`}
+                        >
+                          <Text style={styles.moreText}>Show {item.count} more in {item.monthName.charAt(0) + item.monthName.slice(1).toLowerCase()}</Text>
+                          <Feather name="chevron-down" size={16} color={colors.accent} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+                  const isPersonalTxn = item.group_id === personalGroupId;
                   return (
-                    <TouchableOpacity
-                      style={styles.moreRow}
-                      onPress={() => setExpanded(prev => new Set(prev).add(item.section))}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Show ${item.count} more in ${item.monthName}`}
-                    >
-                      <Text style={styles.moreText}>Show {item.count} more in {item.monthName.charAt(0) + item.monthName.slice(1).toLowerCase()}</Text>
-                      <Feather name="chevron-down" size={16} color={colors.accent} />
-                    </TouchableOpacity>
+                    <View style={cell}>
+                      <View style={styles.cellInner}>
+                        <TransactionRow
+                          txn={item}
+                          myId={myId}
+                          showDate
+                          highlight={query.trim()}
+                          groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
+                          onPress={() => router.push(`/txn/${item.id}`)}
+                        />
+                      </View>
+                      {!isLast && <View style={styles.rowDivider} />}
+                    </View>
                   );
-                }
-                const isPersonalTxn = item.group_id === personalGroupId;
-                return (
-                  <View style={styles.rowCard}>
-                    <TransactionRow
-                      txn={item}
-                      myId={myId}
-                      showDate
-                      highlight={query.trim()}
-                      groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
-                      onPress={() => router.push(`/txn/${item.id}`)}
-                    />
-                  </View>
-                );
-              }}
-            />
-          )}
+                }}
+              />
+            )}
+          </View>
         </>
       )}
     </View>
@@ -223,18 +251,28 @@ const styles = StyleSheet.create({
     height: 48, paddingHorizontal: 14,
   },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingVertical: 0 },
+  chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { flexDirection: 'row', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, alignItems: 'center' },
-  chipDivider: { width: 1, height: 20, backgroundColor: colors.border, marginHorizontal: 2 },
-  chip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
+  chipDivider: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: space.xs, alignSelf: 'center' },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
   chipActive: { backgroundColor: colors.accent },
   chipText: { ...type.label, color: colors.textSecondary },
-  chipTextActive: { color: colors.bg },
+  chipTextActive: { color: colors.onAccent },
+  results: { flex: 1 },
   resultHeader: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
   resultCount: { ...type.caption, color: colors.textMuted },
   resultAmt: { color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
+  listFlex: { flex: 1 },
   list: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.lg },
-  monthLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.md, marginBottom: space.xs },
-  rowCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.sm, overflow: 'hidden', ...shadow.sm },
-  moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, marginBottom: space.sm },
+  monthLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
+  // A month's rows share ONE card: side borders always; the first row rounds the
+  // top, the last rounds the bottom; hairline dividers (indented past the icon)
+  // separate rows within the card.
+  cell: { backgroundColor: colors.bgCard, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
+  cellFirst: { borderTopWidth: 1, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  cellLast: { borderBottomWidth: 1, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  cellInner: { paddingHorizontal: space.md },
+  rowDivider: { height: 1, backgroundColor: colors.border, marginLeft: 64, marginRight: space.md },
+  moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.md },
   moreText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

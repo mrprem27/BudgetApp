@@ -153,7 +153,7 @@ export function parseStatement(text: string): ParseResult {
 export const GROUP_EXPORT_HEADER = 'Date,Group,Category,Kind,Amount,Note';
 
 /** Split one CSV line, honouring double-quoted fields and "" escapes. */
-function splitCsvLine(line: string): string[] {
+export function splitCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = '';
   let inQuotes = false;

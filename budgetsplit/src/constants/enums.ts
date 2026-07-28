@@ -45,15 +45,15 @@ export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
 /** `pending_txn.source` — where an imported/pending row came from. Drives the
  *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
  *  are reserved for future ingestion paths (currently de-scoped). */
-export const TXN_SOURCE = ['email', 'gpay', 'bank_csv', 'sms', 'notification', 'manual'] as const;
+export const TXN_SOURCE = ['email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'manual'] as const;
 export type TxnSource = typeof TXN_SOURCE[number];
 export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
-  email: 'Email alert', gpay: 'Google Pay', bank_csv: 'Bank / CSV',
+  email: 'Email alert', gpay: 'Google Pay', paytm: 'Paytm', bank_csv: 'Bank / CSV',
   sms: 'SMS', notification: 'Notifications', manual: 'Imported',
 };
 /** Feather icon per source — used by the Review section headers. */
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
-  email: 'mail', gpay: 'smartphone', bank_csv: 'file-text',
+  email: 'mail', gpay: 'smartphone', paytm: 'credit-card', bank_csv: 'file-text',
   sms: 'message-square', notification: 'bell', manual: 'inbox',
 };
 

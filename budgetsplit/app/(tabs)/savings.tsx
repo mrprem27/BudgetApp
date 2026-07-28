@@ -20,7 +20,6 @@ import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DraggableList } from '../../src/components/ui/DraggableList';
 import { Input } from '../../src/components/ui/Input';
-import { InsightText } from '../../src/components/finance/InsightText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
 import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
@@ -53,12 +52,11 @@ function deadlineOn(dateMs: number | null, months: number | null): boolean {
 import { haptic } from '../../src/lib/haptics';
 import {
   getGoals, getGoalSavedMap, getTotalMoney, fundGoal, insertGoal, reorderGoals,
-  runSavingsMaintenance, undoOverspendRaid, buildSavingsInsights,
+  runSavingsMaintenance, undoOverspendRaid,
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../../src/db/queries/savings';
 import { getMoneyProfile, setMoneyProfile } from '../../src/db/queries/moneyProfile';
 import { getAllGroups } from '../../src/db/queries/groups';
-import type { Insight } from '../../src/lib/savingsInsights';
 import type { MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
@@ -77,15 +75,6 @@ const FREQS: { key: SavingsFrequency; label: string }[] = [
   { key: 'monthly', label: 'Monthly' },
   { key: 'yearly', label: 'Yearly' },
 ];
-
-function insightTint(tone: Insight['tone']): string {
-  switch (tone) {
-    case 'achieve': return colors.income;
-    case 'warn': return colors.healthAmber;
-    case 'progress': return colors.income;
-    default: return colors.accent; // motivate, compare
-  }
-}
 
 export default function SavingsScreen() {
   const db = useSQLiteContext();
@@ -114,7 +103,7 @@ export default function SavingsScreen() {
   // (scheduled funding + overspend raid) is deliberately kept OUT of this loader so
   // it can't re-run/raid on every refetch; it lives in its own focus effect below.
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [g, s, tm, mp, ins] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db), buildSavingsInsights(db)]);
+    const [g, s, tm, mp] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db)]);
     const grps = await getAllGroups(db);
 
     // Current month's category spend — feeds the month-end forecast + what-if simulator.
@@ -155,14 +144,13 @@ export default function SavingsScreen() {
       upcoming = buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5);
     }
 
-    return { goals: g, saved: s, money: tm, profile: mp, insights: ins, forecastMonthEnd, forecastBudget: bTotal, upcoming };
+    return { goals: g, saved: s, money: tm, profile: mp, forecastMonthEnd, forecastBudget: bTotal, upcoming };
   }, []);
 
   const goals = data?.goals ?? [];
   const saved = data?.saved ?? {};
   const money = data?.money ?? null;
   const profile = data?.profile ?? { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 };
-  const insights = data?.insights ?? [];
   const forecastMonthEnd = data?.forecastMonthEnd ?? null;
   const forecastBudget = data?.forecastBudget ?? 0;
   const upcoming = data?.upcoming ?? [];
@@ -283,23 +271,7 @@ export default function SavingsScreen() {
           </View>
         )}
 
-        {/* Savings insights — opportunity-cost / habit nudges */}
-        {flags.savingsInsights && insights.length > 0 && (
-          <View style={styles.insightsCard}>
-            <Text style={styles.insightsTitle}>Insights</Text>
-            {insights.map((ins, i) => {
-              const tint = insightTint(ins.tone);
-              return (
-                <View key={ins.text} style={[styles.insightRow, i > 0 && styles.insightBorder]}>
-                  <View style={[styles.insightIcon, { backgroundColor: tint + '22' }]}>
-                    <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
-                  </View>
-                  <InsightText text={ins.text} color={tint} style={styles.insightText} />
-                </View>
-              );
-            })}
-          </View>
-        )}
+        {/* Savings insights moved to the global Insights screen (header link above). */}
 
         {/* Goals — active are drag-rankable for funding priority; completed sink to the bottom */}
         {flags.savingsGoals && (goals.length > 0 ? (() => {
@@ -476,13 +448,6 @@ const styles = StyleSheet.create({
   addPoolText: { ...type.button, color: colors.accent },
   withdrawPoolBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   withdrawPoolText: { ...type.button, color: colors.textSecondary },
-
-  insightsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm, ...shadow.sm },
-  insightsTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.xs, marginBottom: space.xs },
-  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.sm },
-  insightBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  insightIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  insightText: { ...type.body, color: colors.textSecondary, flex: 1, lineHeight: 20 },
 
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },

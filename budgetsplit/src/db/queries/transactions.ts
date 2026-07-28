@@ -249,10 +249,13 @@ async function insertTxnRows(
 
     const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
     if (input.kind === 'settlement') {
+      // A personal transfer records only the side that moved, so money arriving
+      // has no payment row — read the amount off the shares instead of logging ₹0.
+      const moved = totalPaid || input.shares.reduce((a, s) => a + s.amount, 0);
       await logAudit(db, {
         entityType: 'settlement', entityId: id, groupId: input.groupId,
-        action: 'settled', amount: totalPaid,
-        summary: `Settled ${formatRupees(totalPaid)}`,
+        action: 'settled', amount: moved,
+        summary: `Settled ${formatRupees(moved)}`,
       });
     } else {
       const label = input.kind === 'income' ? 'income' : 'expense';
