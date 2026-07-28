@@ -4,12 +4,16 @@ import { colors, space } from '../../tokens';
 
 export type AddKind = 'income' | 'expense' | 'transfer';
 
-type Props = { kind: AddKind; onSelect: (k: AddKind) => void };
+type Props = { kind: AddKind; onSelect: (k: AddKind) => void; showTransfer?: boolean };
 
 /** Expense / Transfer / Income segmented toggle at the top of Add. Presentational —
  *  the side effects of switching kind (reloading the category catalog, picking the
- *  right group) live in the form hook via `onSelect`. */
-export function KindToggle({ kind, onSelect }: Props) {
+ *  right group) live in the form hook via `onSelect`.
+ *
+ *  `showTransfer` is false when the user has splitting switched off — a settlement
+ *  needs someone to settle with. Callers must still pass true while *editing* an
+ *  existing transfer, or the pill would vanish from a row that already is one. */
+export function KindToggle({ kind, onSelect, showTransfer = true }: Props) {
   return (
     <View style={styles.kindToggleRow}>
       <View style={styles.kindRow}>
@@ -21,14 +25,16 @@ export function KindToggle({ kind, onSelect }: Props) {
         >
           <Text style={[styles.kindLabel, kind === 'expense' && styles.kindLabelActive]}>Expense</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
-          onPress={() => onSelect('transfer')}
-          accessibilityRole="button"
-          accessibilityState={{ selected: kind === 'transfer' }}
-        >
-          <Text style={[styles.kindLabel, kind === 'transfer' && styles.kindLabelTransferActive]}>Transfer</Text>
-        </TouchableOpacity>
+        {showTransfer && (
+          <TouchableOpacity
+            style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
+            onPress={() => onSelect('transfer')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: kind === 'transfer' }}
+          >
+            <Text style={[styles.kindLabel, kind === 'transfer' && styles.kindLabelTransferActive]}>Transfer</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
           onPress={() => onSelect('income')}

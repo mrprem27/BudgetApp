@@ -3,18 +3,29 @@ import { getMe, updatePersonName, insertPerson } from '../db/queries/persons';
 import { getAllGroups } from '../db/queries/groups';
 import { setCategoryBudgets } from '../db/queries/categoryBudgets';
 import { insertTxn } from '../db/queries/transactions';
+import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
 import { settings } from './settings';
+import { setFlag } from './featureFlags';
+import { personaChangedKeys, personaFlags, type OnboardingIntent } from './personaDefaults';
 import { GROUP_COLORS } from '../constants/palette';
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
 export type OnboardingData = {
+  intent: OnboardingIntent;
   name: string;
   incomeNum: number;
   payday: number;
   budgetNum: number;
   people: string[];
   addFirst: boolean;
+  /** Opening money position, already in integer paise. */
+  money: {
+    openingCash: number;
+    investments: number;
+    creditLimit: number;
+    creditUsed: number;
+  };
 };
 
 /**
@@ -38,11 +49,25 @@ export function paydayAnchor(day: number, now: Date = new Date()): number {
  * a failure in one (e.g. a contact) must never block finishing onboarding.
  * Returns true if it completed without a thrown error (the caller maps that to
  * a success/error haptic and always proceeds).
+ *
+ * "Single" is literal: the money profile used to be written by a second call in the
+ * screen, so "what does onboarding persist?" needed two files to answer (DEBT-12).
  */
 export async function finalizeOnboarding(
   db: SQLite.SQLiteDatabase,
   data: OnboardingData,
 ): Promise<boolean> {
+  // The persona, and the feature flags it implies. First, because it decides which
+  // app the user lands in and it must survive a failure further down.
+  try {
+    await settings.setOnboardingIntent(data.intent);
+    const flags = personaFlags(data.intent);
+    // Only the keys that deviate — see personaChangedKeys for why not all of them.
+    for (const key of personaChangedKeys(data.intent)) {
+      try { await setFlag(key, flags[key]); } catch { /* best-effort, per key */ }
+    }
+  } catch { /* the app still works on DEFAULTS */ }
+
   try {
     const grps = await getAllGroups(db);
     const me = await getMe(db);
@@ -61,8 +86,12 @@ export async function finalizeOnboarding(
         payments: [{ personId: me.id, amount: paise }],
         shares: [{ personId: me.id, amount: paise }],
       });
-      try { await settings.setMonthlyIncome(data.incomeNum); } catch { /* best-effort */ }
-      try { await settings.setPayday(data.payday); } catch { /* best-effort */ }
+      // The income figure and pay-day are NOT stored as preferences. Both used to
+      // be, and nothing ever read either one. The salary rule above is the real
+      // record of both: its amount is the income, and `paydayAnchor(data.payday)`
+      // is the pay-day. The afford engine derives monthly income from the last 30
+      // days of income transactions (queries/savings.ts), which tracks what
+      // actually happens rather than a number typed once during setup.
     }
 
     // Whole monthly budget (the user's own number — no % of income).
@@ -79,6 +108,9 @@ export async function finalizeOnboarding(
       if (!t) continue;
       try { await insertPerson(db, t, GROUP_COLORS[ci % GROUP_COLORS.length]); ci++; } catch { /* skip one bad contact */ }
     }
+
+    // Opening money position (cash / investments / credit).
+    try { await setMoneyProfile(db, data.money); } catch { /* best-effort */ }
 
     if (data.addFirst) { try { await settings.setPendingFirstAdd(true); } catch { /* best-effort */ } }
     return true;

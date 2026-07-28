@@ -19,14 +19,13 @@ type Props = {
   analytics: BudgetAnalytics | null;
   catStatus: CategoryBudgetStatus[];
   contributions: Contributions;
-  isPersonal: boolean;
   onEditBudget: () => void;
   onCreateBudget: () => void;
 };
 
 /** Group Budget tab: overview + recommendations + driving-overspend + who-paid-what
  *  + per-category sectioned list. Owns its own status filter (tab-local). */
-export function BudgetTab({ analytics, catStatus, contributions, isPersonal, onEditBudget, onCreateBudget }: Props) {
+export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget }: Props) {
   const [budgetFilter, setBudgetFilter] = useState('all');
 
   if (catStatus.length === 0) {
@@ -95,7 +94,7 @@ export function BudgetTab({ analytics, catStatus, contributions, isPersonal, onE
       {/* Budget recommendations and the "driving overspend" breakdown are Insights —
           they live on the global Insights screen (aggregated across groups), not here. */}
 
-      {!isPersonal && contributions.total > 0 && (
+      {contributions.total > 0 && (
         <View style={styles.contribCard}>
           <Text style={styles.contribTitle}>Who paid what</Text>
           {contributions.rows.map((r, i) => (

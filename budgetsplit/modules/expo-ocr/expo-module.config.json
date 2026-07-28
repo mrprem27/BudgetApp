@@ -1,9 +1,6 @@
 {
-  "platforms": ["apple", "android"],
+  "platforms": ["apple"],
   "apple": {
     "modules": ["ExpoOcrModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.ocr.ExpoOcrModule"]
   }
 }

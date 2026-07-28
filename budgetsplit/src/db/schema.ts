@@ -4,7 +4,12 @@ import { v4 as uuid } from 'uuid';
 import { CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS } from '../constants/categories';
 import { seedGlobalCategories } from './seedCategories';
 
-const SCHEMA = `
+/**
+ * Exported so tests can build the REAL schema instead of a hand-written subset —
+ * a subset is one more thing that drifts from the code it is meant to verify.
+ * See `src/__tests__/helpers/testDb.ts`.
+ */
+export const SCHEMA = `
 PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS person (
@@ -204,7 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
  * Columns added after v1 shipped. SQLite has no `ADD COLUMN IF NOT EXISTS`,
  * so each ALTER is wrapped — a duplicate-column error means it already exists.
  */
-const COLUMN_MIGRATIONS = [
+export const COLUMN_MIGRATIONS = [
   "ALTER TABLE budget_group ADD COLUMN is_personal INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE budget_group ADD COLUMN simplify_debt INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE txn ADD COLUMN recur_state TEXT NOT NULL DEFAULT 'active'",
@@ -252,19 +257,105 @@ const COLUMN_MIGRATIONS = [
   // Review can turn an imported transfer into a real settlement with a group
   // member; this holds that person until the row is confirmed.
   "ALTER TABLE pending_txn ADD COLUMN counterparty_id TEXT",
-  // Demo/QA data marker. loadDemoData sets it on the rows it seeds so demo data
-  // can be identified (and optionally excluded) later. No exclusion logic uses it
-  // yet — it's purely a flag for future use.
-  "ALTER TABLE txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE budget_group ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE person ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE savings_goal ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE pending_txn ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+  // NOTE: `is_demo` used to be added to five tables here and stamped by
+  // loadDemoData, as a marker for a demo-exclusion feature that was never built.
+  // Nothing ever read it, so it looked like a safety mechanism while excluding
+  // nothing from exports or reports. Removed rather than left as a false promise.
+  // Databases created before this keep an unused column — harmless, and cheaper
+  // than a five-table rebuild. Demo data is wiped by "erase all data", not filtered.
   // P4.1 ingestion: where a pending row came from (sectioned Review) + its detected
   // payment method. Additive — pre-existing rows default to 'manual' / null.
   "ALTER TABLE pending_txn ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'",
   "ALTER TABLE pending_txn ADD COLUMN pay_method TEXT",
 ];
+
+/**
+ * One-time DATA fixes (not schema changes) that must run at most once per
+ * database. Unlike the ALTERs above — which are naturally idempotent because a
+ * duplicate column just errors — these reclassify or DELETE rows, so re-running
+ * them undoes whatever the user did afterwards. While they ran unconditionally,
+ * a user who recreated a "Subscriptions" category had it silently deleted on the
+ * next launch.
+ *
+ * Completion is recorded in the `settings` table, the same mechanism the
+ * category-global migration already used. Add a NEW key for a new fix; never
+ * reuse or rename one, or it will re-run on every existing install.
+ *
+ * Kept as data (not inline `execAsync` calls) so `schemaFixes.test.ts` can run
+ * the real SQL against an in-process SQLite and prove that a second pass leaves
+ * user data alone — the same reason `cashQuery.ts` exports its SQL.
+ */
+export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
+  // 'wallet' is not a valid Feather icon.
+  {
+    key: 'fix_wallet_icon_v1',
+    sql: ["UPDATE budget_group SET icon='credit-card' WHERE icon='wallet'"],
+  },
+  // Savings Pool removed: goals are now funded directly from cash. Drop the old
+  // pool-level ledger rows (goal_id IS NULL = deposits/withdrawals to the pool).
+  // Per-goal balances (goal_id NOT NULL) are untouched; any unallocated pool
+  // money simply stops being "set aside" and folds back into Cash available.
+  {
+    key: 'fix_drop_savings_pool_v1',
+    sql: ['DELETE FROM savings_txn WHERE goal_id IS NULL'],
+  },
+  // 'Subscriptions' is no longer a *seeded* category — a subscription is a
+  // recurring billing pattern, and its spend belongs to a normal category (e.g.
+  // Entertainment). Reclassify existing transactions, drop now-orphaned
+  // Subscriptions budgets, then remove the seeded category. Guarded because a
+  // user is free to create their own "Subscriptions" category afterwards, and it
+  // must survive every later launch.
+  {
+    key: 'fix_subscriptions_category_v1',
+    sql: [
+      "UPDATE txn SET category='Entertainment' WHERE category='Subscriptions'",
+      "DELETE FROM category_budget WHERE category='Subscriptions'",
+      "DELETE FROM category WHERE name='Subscriptions'",
+    ],
+  },
+  // Legacy repair: the seeded Personal group (oldest) is the single-user space.
+  // New databases don't need it — seedIfNeeded/createMeAndPersonal already insert
+  // the Personal group with is_personal=1.
+  {
+    key: 'fix_personal_group_v1',
+    sql: ['UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1)'],
+  },
+  // NOTE: a fix here used to stamp a hardcoded placeholder address
+  // ('hello123@vortiqal.com') onto the local user. Nothing reads person.email —
+  // the app has no accounts — so it was a stray literal in a shipping data path.
+  // Removed, along with the matching write in seed.ts. The column stays for the
+  // day identity is real; it is simply left NULL. Do not reuse this key.
+  // Reclassify legacy income-named categories before the global dedupe, so a
+  // legacy 'Salary' (seeded as expense) merges into the income catalog. Guarded
+  // both because it is a one-time repair and because re-running it would flip a
+  // user's own same-named expense category and trip UNIQUE(name, kind).
+  {
+    key: 'fix_income_category_kind_v1',
+    sql: ["UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income')"],
+  },
+];
+
+/**
+ * Apply every fix this database hasn't had yet, recording each key as it lands.
+ * A failure leaves that key unwritten so the fix retries on the next launch.
+ * Engine-agnostic (callbacks, not a driver) so the test can drive it with
+ * `node:sqlite`. Returns the keys applied on this run.
+ */
+export async function applyOneTimeFixes(
+  loadApplied: () => Promise<Set<string>>,
+  exec: (sql: string) => Promise<void>,
+  markApplied: (key: string) => Promise<void>,
+): Promise<string[]> {
+  const applied = await loadApplied();
+  const ran: string[] = [];
+  for (const fix of ONE_TIME_FIXES) {
+    if (applied.has(fix.key)) continue;
+    for (const sql of fix.sql) await exec(sql);
+    await markApplied(fix.key);
+    ran.push(fix.key);
+  }
+  return ran;
+}
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('budgetsplit.db');
@@ -384,32 +475,24 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
   `);
 
-  // One-time fix: 'wallet' is not a valid Feather icon
-  await db.execAsync("UPDATE budget_group SET icon='credit-card' WHERE icon='wallet';");
-  // Savings Pool removed: goals are now funded directly from cash. Drop the old
-  // pool-level ledger rows (goal_id IS NULL = deposits/withdrawals to the pool).
-  // Per-goal balances (goal_id NOT NULL) are untouched; any unallocated pool
-  // money simply stops being "set aside" and folds back into Cash available.
-  await db.execAsync("DELETE FROM savings_txn WHERE goal_id IS NULL;");
-  // 'Subscriptions' is no longer a category — a subscription is a recurring billing
-  // pattern, and its spend belongs to a normal category (e.g. Entertainment).
-  // Reclassify existing transactions, drop now-orphaned Subscriptions budgets, then
-  // remove the category from every group's picker.
-  await db.execAsync("UPDATE txn SET category='Entertainment' WHERE category='Subscriptions';");
-  await db.execAsync("DELETE FROM category_budget WHERE category='Subscriptions';");
-  await db.execAsync("DELETE FROM category WHERE name='Subscriptions';");
-  // The seeded Personal group (oldest, name 'Personal') is the single-user space.
-  await db.execAsync(
-    "UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1);",
+  // --- One-time DATA fixes -------------------------------------------------
+  // Legacy repairs that reclassify and DELETE user rows. Each runs at most once
+  // per database (see ONE_TIME_FIXES) — they used to run on every launch, which
+  // silently undid the user's own later edits. Must stay AHEAD of the
+  // category-global migration below: the income reclassification has to happen
+  // before the (name, kind) dedupe.
+  await applyOneTimeFixes(
+    async () => {
+      const keys = ONE_TIME_FIXES.map(f => f.key);
+      const rows = await db.getAllAsync<{ key: string }>(
+        `SELECT key FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`,
+        keys,
+      );
+      return new Set(rows.map(r => r.key));
+    },
+    (sql) => db.execAsync(sql),
+    (key) => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", [key]).then(() => undefined),
   );
-  // Ensure the local user has a unique identifier (MVP default).
-  await db.execAsync(
-    "UPDATE person SET email='hello123@vortiqal.com' WHERE is_me=1 AND (email IS NULL OR email='');",
-  );
-
-  // Reclassify legacy income-named categories before the global dedupe, so a
-  // legacy 'Salary' (seeded as expense) merges into the income catalog.
-  await db.execAsync("UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income');");
 
   // Phase GC: collapse the per-group category rows into a single GLOBAL catalog
   // (group_id NULL = global), deduped by (name, kind). One-time, flagged — the

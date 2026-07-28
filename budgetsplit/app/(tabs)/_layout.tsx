@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients } from '../../src/constants/colors';
 import { layout, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   index: 'home',
@@ -19,7 +20,7 @@ const TAB_LABEL: Record<string, string> = {
   index: 'Home', groups: 'Groups', savings: 'Plan', settings: 'Settings',
 };
 // Order around the centered FAB: Home · Groups · [FAB] · Plan · Settings.
-const LEFT = ['index', 'groups'];
+// The second slot is Groups or Personal depending on `flags.splitting` — see AppTabBar.
 const RIGHT = ['savings', 'settings'];
 
 /**
@@ -33,6 +34,7 @@ const RIGHT = ['savings', 'settings'];
 function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { flags } = useFeatureFlags();
   const activeName = state.routes[state.index]?.name;
 
   const tab = (name: string) => {
@@ -72,7 +74,25 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
         )}
       </View>
       <View style={styles.row}>
-        {LEFT.map(tab)}
+        {tab('index')}
+        {/* Slot 2 depends on whether this user splits with anyone. With splitting off
+            there are no groups to list, so the slot goes straight to the Personal
+            ledger — which is that user's whole app. It pushes rather than switching
+            tabs (`/personal` is a root route, not a tab), so it never reads as
+            focused; that's the deliberate cost of not duplicating the screen into
+            the tab group. */}
+        {flags.splitting ? tab('groups') : (
+          <TouchableOpacity
+            key="personal"
+            style={styles.slot}
+            onPress={() => router.push('/personal')}
+            accessibilityRole="button"
+            accessibilityLabel="Personal"
+          >
+            <Feather name="user" size={22} color={colors.textMuted} />
+            <Text style={[styles.label, { color: colors.textMuted }]}>Personal</Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.fabSlot}>
           <TouchableOpacity
             activeOpacity={0.9}

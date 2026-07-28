@@ -318,20 +318,31 @@ Static config list (loaded once; no loading/error state).
 
 ## 11. Optional modules
 
+All 12 keys below gate a real surface and appear in Feature Management. Eight further keys
+(`dashboardCash/Budget/Donut/Balances/Savings`, `budgetInsights`, `itemizedOcr`) were **deleted
+on 2026-07-28** — they gated nothing, and five of them rendered as working switches that did
+nothing. `src/__tests__/featureFlags.test.ts` now fails if a key stops gating something or stops
+being listed in the screen, so this table can't drift back.
+
 | Module | Flag | Surface(s) | Status |
 |---|---|---|---|
-| Savings goals + pool | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
-| Spending forecast | `forecast` | **Home ForecastCard** + Plan forecast card + Reports line | ✅ wired |
-| Dashboard insight teaser | `dashboardInsights` | Home ForecastCard shift teaser | ✅ wired |
+| Savings goals | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
+| Spending forecast | `forecast` | Home `ForecastCard` (Month view) | ✅ wired |
+| Spending insights | `dashboardInsights` | Home ForecastCard shift teaser + Insights | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` | ✅ wired |
+| Savings insights | `savingsInsights` | Insights screen nudges | ✅ wired |
 | Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build for OS notifications) |
 | Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked recurring rules (the log-scanning "detector" was removed in P5) |
 | Smart category | `smartCategory` (off) | Quick-add note | ✅ wired |
-| Reports & charts | `reportsDonut`/`reportsTrend` | `reports.tsx` (Plan chip) | ✅ wired |
+| Reports donut | `reportsDonut` | `reports.tsx` category donut | ✅ wired |
+| Reports trend | `reportsTrend` | `reports.tsx` 6-month bars | ✅ wired |
 | Afford check | `affordCheck` (off) | Plan chip → `afford.tsx` | ✅ wired |
 | Tracking streak | `streak` (off) | Home `StreakCard` | ✅ wired (self-hides < 3 days) |
-| OCR receipt scan | `itemizedOcr` (on) | — | ❌ parked — `ocr.ts` never called (camera capture only) |
-| Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired |
+| Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired — a `settings` pref, **not** a feature flag, despite sitting in the same list |
+
+Receipt OCR has **no flag**: the engine (`src/lib/ocr.ts`, `modules/expo-ocr/`) is parked because
+it could read a bill's total but not its line items, and its entry point was removed. It is
+dormant, not broken — see AUDIT F-31 / INT-09.
 
 ### Reports — `app/reports.tsx` (the analytics home)
 `ScreenHeader` "Reports" + CSV/PDF export (right slot). Month nav; SPENT/EARNED cards; then the
@@ -398,37 +409,20 @@ Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/
 
 ---
 
-## 14. Feature catalog
+## 14. Feature catalog — moved
 
-A one-line index of every user-facing capability and where it lives.
+This section was a second, differently-grained inventory of the same features covered by
+[AUDIT.md](./AUDIT.md) §1 (F-01 … F-34), with no shared IDs between the two. Two catalogues of
+one app guarantee they drift apart, and this one already had: it described onboarding as
+8 stages (it is 9) and inherited the feature-flag model from `ARCHITECTURE.md` §10, which was
+substantially wrong (see [AUDIT_DOC_DRIFT.md](./AUDIT_DOC_DRIFT.md), DRIFT-20 / DRIFT-21).
 
-- **Log expense** — FAB / Quick Add → `insertTxn`.
-- **Log income** — Add Income / kind toggle → `insertTxn` (personal).
-- **Split a bill (equal/exact/%/shares)** — Quick Add split rows + `SplitSheet`.
-- **Itemized split** — 4-step Itemized wizard.
-- **Settle a debt** — Quick-Add Transfer pill (min-transaction `simplify` / largest-first); the picker shows your balance with each person + per-group scope amounts.
-- **Personal** — unified "everything involving me" view (`/personal`): Owe/Lent/Net + Activity (filters, my-share, source-linked) + global Budget + Recurring-by-group.
-- **Groups** — create/edit/archive/delete; members; per-group default split; simplify-debts toggle.
-- **People / friends** — cross-group balances; add/rename; avatars.
-- **Budgets** — individual & **my-share**: a global personal budget (across all groups) + optional per-group budget; per-category cadence (once/daily/monthly/yearly).
-- **Recurring transactions** — rules with skip/pause/resume/end; materialized on open.
-- **Savings goals + pool** — manual + auto-funding (drag-rank), lock, overfund; **completed goals** sort to the bottom with a distinct card.
-- **Financial health score** — 5-factor engine + improvement projection.
-- **Spending forecast** — Bühlmann-blended month-end projection (Home + Plan + Reports).
-- **Reports** — donut, trend, forecast, year-in-review, CSV/PDF export.
-- **Insights** — velocity, shifts, what-if, cross-group net, recurring; **per-category insights page** (spend split, places, recurring, goals) from the Dashboard.
-- **Recurring tracker** — recurring-expense/rule tracker + monthly total + next-charge dates. (The log-scanning "maybe recurring" detector was removed in P5 — recurring is now explicit rules only.)
-- **Import → Review** — paste/pick a Google Pay statement, bank/UPI CSV, BudgetSplit export, or a transaction-alert email (`app/import.tsx` → `parseStatement`/`parseGpayStatement`/`parseBudgetSplitExport`/`parseTransactionEmail`) → rows land in `pending_txn`. **Review** (`app/review.tsx`) is a `SectionList` **grouped by source** (email / Google Pay / bank_csv); each row is editable (amount, kind, category, **pay-method** chip, group + split) and Confirm/Save commits it to a real txn. Dashboard shows an inbox badge with the pending count. **P4.1:** `pay_method` (upi/card/cash/bank/wallet/autopay/other) is detected from alert text (`payMethodDetect`) and carried ingest → Review → txn; the pay-method chip is on every Add kind too.
-- **Undo** — every delete (txn, member, goal) shows a 5s Undo toast.
-- **Reminders** — local renewal + daily-log notifications (dev build).
-- **Afford check** — yes/tight/no purchase decision.
-- **Smart categories** — keyword guess + learned corrections.
-- **Receipt photos** — local attach/view/zoom; storage management.
-- **Location tagging** — captured on add; Maps link on detail.
-- **Audit log** — every data change, filterable by group.
-- **Search** — across category/note/amount, grouped by month.
-- **Privacy** — biometric lock, app-switcher cover, hide-amounts.
-- **Onboarding** — 8-stage intent → name → income → budget → people → permissions.
+**Use [AUDIT.md](./AUDIT.md) §1 instead.** It carries stable IDs, a status per feature
+(`working` / `partial` / `dormant`), the files behind each one, and what gates it — all derived
+from source rather than from another document.
+
+The screen-by-screen narrative in sections 1–13 above is kept: it explains *why* screens behave
+as they do, which the audit's inventory deliberately does not.
 
 ---
 

@@ -14,7 +14,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
-import type { AuditLog, AuditAction } from '../src/db/queries/audit';
+import type { AuditLog, AuditAction, AuditEntityType } from '../src/db/queries/audit';
 
 const PAGE_SIZE = 30;
 
@@ -22,25 +22,39 @@ const DOT_COLOR: Record<AuditAction, string> = {
   created: colors.accent,
   updated: colors.healthAmber,
   deleted: colors.expense,
+  archived: colors.textMuted,
   settled: colors.settle,
   paused:  colors.healthAmber,
   resumed: colors.income,
   ended:   colors.textMuted,
 };
 
-const ACTION_LABEL: Record<AuditAction, string> = {
-  created: 'Expense added',
-  updated: 'Expense edited',
-  deleted: 'Expense deleted',
-  settled: 'Settlement recorded',
-  paused:  'Recurring paused',
-  resumed: 'Recurring resumed',
-  ended:   'Recurring ended',
+// The label is built from BOTH columns: the entity supplies the noun, the action
+// the verb. Hardcoding "Expense …" made a group archive read "Expense deleted".
+const ENTITY_NOUN: Record<AuditEntityType, string> = {
+  txn:        'Expense',
+  group:      'Group',
+  member:     'Member',
+  budget:     'Budget',
+  recurring:  'Recurring',
+  settlement: 'Settlement',
+};
+
+const ACTION_VERB: Record<AuditAction, string> = {
+  created:  'added',
+  updated:  'edited',
+  deleted:  'deleted',
+  archived: 'archived',
+  settled:  'recorded',
+  paused:   'paused',
+  resumed:  'resumed',
+  ended:    'ended',
 };
 
 const BADGE_LABEL: Record<string, string> = {
-  updated: 'EDIT',
-  deleted: 'DEL',
+  updated:  'EDIT',
+  deleted:  'DEL',
+  archived: 'ARCH',
 };
 
 function dateLabel(d: Date): string {
@@ -71,7 +85,9 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
       <View style={styles.card}>
         {section.data.map((item, i) => {
           const dotColor = DOT_COLOR[item.action] ?? colors.accent;
-          const label = ACTION_LABEL[item.action] ?? 'Change';
+          const noun = ENTITY_NOUN[item.entity_type] ?? 'Item';
+          const verb = ACTION_VERB[item.action] ?? 'changed';
+          const label = `${noun} ${verb}`;
           const badge = BADGE_LABEL[item.action];
           const itemDate = new Date(item.created_at);
           const dateStr = isFinite(itemDate.getTime())

@@ -23,6 +23,8 @@ import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
 import { formatCompact } from '../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../src/lib/reportExport';
+import { settings } from '../src/lib/settings';
+import { rescheduleReminders } from '../src/lib/reminders';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { AmountText } from '../src/components/ui/AmountText';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
@@ -36,10 +38,12 @@ import type { TxnWithSplits } from '../src/db/queries/transactions';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../src/lib/reportsData';
 import { alpha } from '../src/theme';
+import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { flags } = useFeatureFlags();
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
@@ -80,6 +84,14 @@ export default function ReportsScreen() {
   // history but never into a future month.
   const canGoNext = format(month, 'yyyy-MM') !== format(new Date(), 'yyyy-MM');
 
+  // A real export resets the monthly "back up your data" nudge's clock — no
+  // point nagging someone right after they just backed up.
+  function markBackedUp() {
+    settings.setBackupAnchorAt(Date.now())
+      .then(() => rescheduleReminders(db))
+      .catch(() => {});
+  }
+
   async function exportCSV() {
     setExporting(true);
     try {
@@ -88,6 +100,7 @@ export default function ReportsScreen() {
       const file = new File(Paths.cache, fileName);
       file.create({ overwrite: true });
       file.write(csv);
+      markBackedUp();
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The CSV was saved to:\n${file.uri}`);
         return;
@@ -106,6 +119,7 @@ export default function ReportsScreen() {
     try {
       const html = await buildReportHtml(db, summaries, month);
       const { uri } = await Print.printToFileAsync({ html });
+      markBackedUp();
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The PDF was saved to:\n${uri}`);
         return;
@@ -255,18 +269,22 @@ export default function ReportsScreen() {
                 onPressCategory={(name) => setSelectedCat(c => (c === name ? null : name))}
               />
 
+              {/* Both charts off → no empty card shell. */}
+              {(flags.reportsDonut || flags.reportsTrend) && (
               <View style={styles.card}>
-                <CategoryDonut
-                  data={pieData}
-                  total={pieTotal}
-                  // Center "View →" opens the month-scoped transaction drill-down
-                  // for the selected category.
-                  onOpen={(seg) => router.push(`/report-transactions?month=${format(month, 'yyyy-MM')}&category=${encodeURIComponent(seg.name)}`)}
-                  selectedName={selectedCat}
-                  onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
-                />
+                {flags.reportsDonut && (
+                  <CategoryDonut
+                    data={pieData}
+                    total={pieTotal}
+                    // Center "View →" opens the month-scoped transaction drill-down
+                    // for the selected category.
+                    onOpen={(seg) => router.push(`/report-transactions?month=${format(month, 'yyyy-MM')}&category=${encodeURIComponent(seg.name)}`)}
+                    selectedName={selectedCat}
+                    onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
+                  />
+                )}
 
-                {trendValues.length > 0 && (
+                {flags.reportsTrend && trendValues.length > 0 && (
                   <View style={styles.trendBlock}>
                     <View style={styles.trendHeader}>
                       <Text style={styles.chartTitle}>
@@ -282,6 +300,7 @@ export default function ReportsScreen() {
                   </View>
                 )}
               </View>
+              )}
             </>
           )}
 

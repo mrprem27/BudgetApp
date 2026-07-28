@@ -21,12 +21,12 @@ const K = {
   saveLocation: 'save_location',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
-  monthlyIncome: 'monthly_income',
-  payday: 'payday',
   appLastOpen: 'app_last_open',
   onboardingDone: 'onboarding_done',
   onboardingIntent: 'onboarding_intent',
   pendingFirstAdd: 'pending_first_add',
+  lockExplainerSeen: 'lock_explainer_seen',
+  backupAnchorAt: 'backup_anchor_at',
 } as const;
 
 export const SETTINGS_KEYS = K;
@@ -70,11 +70,10 @@ export const settings = {
   defaultCurrency: () => getString(K.defaultCurrency),
   setDefaultCurrency: (v: string) => setString(K.defaultCurrency, v),
 
-  // Onboarding-captured figures
-  monthlyIncome: () => getNumber(K.monthlyIncome),
-  setMonthlyIncome: (v: number) => setNumber(K.monthlyIncome, v),
-  payday: () => getNumber(K.payday),
-  setPayday: (v: number) => setNumber(K.payday, v),
+  // NOTE: `monthlyIncome` / `payday` accessors were removed — onboarding wrote
+  // both and nothing ever read them. Onboarding's salary recurring rule already
+  // records the amount and the pay-day anchor, and the afford engine derives
+  // income from actual income transactions. See lib/onboarding.ts.
 
   // App lifecycle
   appLastOpen: () => getNumber(K.appLastOpen),
@@ -87,4 +86,13 @@ export const settings = {
   pendingFirstAdd: () => getBool(K.pendingFirstAdd, false),
   setPendingFirstAdd: (v: boolean) => setBool(K.pendingFirstAdd, v),
   clearPendingFirstAdd: () => AsyncStorage.removeItem(K.pendingFirstAdd),
+
+  // Goal "protect" (overspend-raid shield) one-time explainer
+  lockExplainerSeen: () => getBool(K.lockExplainerSeen, false),
+  setLockExplainerSeen: (v: boolean) => setBool(K.lockExplainerSeen, v),
+
+  // Backup reminder cadence anchor — last real export, or when the reminder
+  // was first turned on if the user hasn't exported yet.
+  backupAnchorAt: () => getNumber(K.backupAnchorAt),
+  setBackupAnchorAt: (v: number) => setNumber(K.backupAnchorAt, v),
 };

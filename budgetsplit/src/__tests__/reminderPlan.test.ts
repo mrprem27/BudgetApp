@@ -5,6 +5,7 @@ import {
   formatReminderTime,
   limitReminders,
   atTimeOfDay,
+  nextMonthlyAnchor,
   DEFAULT_DAILY_TIME,
   DEFAULT_LEAD_DAYS,
   DEFAULT_RENEWAL_TIME,
@@ -67,10 +68,11 @@ describe('clampTime', () => {
 });
 
 describe('defaultReminderPrefs', () => {
-  it('starts with both reminders off (never opt-in by default)', () => {
+  it('starts with every reminder off (never opt-in by default)', () => {
     const p = defaultReminderPrefs();
     expect(p.renewals).toBe(false);
     expect(p.daily).toBe(false);
+    expect(p.backup).toBe(false);
   });
   it('uses the documented default times and lead', () => {
     const p = defaultReminderPrefs();
@@ -152,5 +154,27 @@ describe('atTimeOfDay', () => {
     const base = new Date(2026, 2, 3, 11, 11).getTime();
     const once = atTimeOfDay(base, { hour: 8, minute: 15 });
     expect(atTimeOfDay(once, { hour: 8, minute: 15 })).toBe(once);
+  });
+});
+
+describe('nextMonthlyAnchor', () => {
+  it('advances by one month when the anchor already passed', () => {
+    const anchor = new Date(2026, 0, 15).getTime(); // Jan 15
+    const now = new Date(2026, 1, 1).getTime();     // Feb 1 — anchor already passed
+    const out = new Date(nextMonthlyAnchor(anchor, now));
+    expect(out.getMonth()).toBe(1); // Feb
+    expect(out.getDate()).toBe(15);
+  });
+  it('keeps stepping forward until strictly after now, across several missed cycles', () => {
+    const anchor = new Date(2026, 0, 15).getTime(); // Jan 15
+    const now = new Date(2026, 3, 20).getTime();    // Apr 20 — 3 cycles missed
+    const out = new Date(nextMonthlyAnchor(anchor, now));
+    expect(out.getMonth()).toBe(4); // May — first Jan-15-anniversary after Apr 20
+    expect(out.getDate()).toBe(15);
+  });
+  it('returns a time strictly after now, never equal', () => {
+    const anchor = new Date(2026, 0, 15, 9, 0).getTime();
+    const now = anchor; // now exactly equals the anchor
+    expect(nextMonthlyAnchor(anchor, now)).toBeGreaterThan(now);
   });
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Notifications from 'expo-notifications';
@@ -16,6 +16,7 @@ import {
 } from '../../src/lib/reminders';
 import { sendTestReminder } from '../../src/lib/notifications';
 import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
+import { settings } from '../../src/lib/settings';
 import { haptic } from '../../src/lib/haptics';
 import { alpha } from '../../src/theme';
 
@@ -44,13 +45,18 @@ export default function NotificationsScreen() {
   useEffect(() => { if (data) setPermStatus(data.permStatus); }, [data]);
 
   // Turning a reminder ON asks for permission first; off needs none.
-  async function toggle(key: 'renewals' | 'daily') {
+  async function toggle(key: 'renewals' | 'daily' | 'backup') {
     if (!prefs) return;
     haptic.selection();
     if (!prefs[key] && permStatus !== 'granted') {
       const result = await Notifications.requestPermissionsAsync();
       if (!result.granted) { setPermStatus('denied'); return; }
       setPermStatus('granted');
+    }
+    // First time the backup reminder is turned on, anchor its monthly cadence
+    // to now — otherwise there's nothing to count a month from yet.
+    if (key === 'backup' && !prefs.backup && (await settings.backupAnchorAt()) === null) {
+      await settings.setBackupAnchorAt(Date.now());
     }
     await patchPrefs({ [key]: !prefs[key] });
   }
@@ -71,12 +77,27 @@ export default function NotificationsScreen() {
   async function runTest() {
     if (permStatus !== 'granted') return;
     haptic.light();
-    try {
-      await sendTestReminder();
+    // sendTestReminder reports WHY it couldn't fire; act on it. This used to
+    // show "Sent!" unconditionally and swallow every failure, so a user on Expo
+    // Go — where local notifications silently do nothing — had no way to tell a
+    // working setup from a broken one.
+    const result = await sendTestReminder().catch(() => 'unavailable' as const);
+    if (result === 'scheduled') {
       setTestSent(true);
       setTimeout(() => setTestSent(false), 6000);
-    } catch {
-      // Expo Go silently fails — local notifications need a dev build.
+      return;
+    }
+    haptic.error();
+    if (result === 'denied') {
+      Alert.alert(
+        'Notifications are off',
+        'Allow notifications for BudgetSplit in your phone’s Settings, then try again.',
+      );
+    } else {
+      Alert.alert(
+        'Couldn’t send the test',
+        'Local notifications don’t run in Expo Go — they need a development build. Reminders you set will still be scheduled.',
+      );
     }
   }
 
@@ -165,6 +186,17 @@ export default function NotificationsScreen() {
               <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
+
+          {/* Backup reminder — there's no cloud sync, so this is the only nudge
+              that a lost/broken phone won't silently take everything with it. */}
+          <View style={[styles.typeRow, styles.typeRowBorder]}>
+            <Text style={styles.typeEmoji}>💾</Text>
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Back up your data</Text>
+              <Text style={styles.typeDesc}>Monthly nudge to export a CSV/PDF — your data lives only on this phone</Text>
+            </View>
+            <Toggle on={!!prefs?.backup} onPress={() => toggle('backup')} label="Back up your data" />
+          </View>
         </View>
 
         {/* Test notification */}

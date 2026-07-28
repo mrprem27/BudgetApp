@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
-import { ensurePdfJsSource, PDFJS_CDN } from '../../lib/pdfjsCache';
+import { ensurePdfJsSource, PDFJS_CDN, PDFJS_SRI, PdfJsIntegrityError } from '../../lib/pdfjsCache';
 
 /**
  * Off-screen WebView that extracts text from a PDF using Mozilla's pdf.js.
@@ -52,11 +52,16 @@ function inlineHtml(base64: string, main: string, worker: string): string {
 </body></html>`;
 }
 
+// Fallback when the cache path is unusable. `integrity` makes the WebView itself
+// reject a bundle whose bytes don't match the pin, so this route is verified too
+// — without it, a cache failure would silently downgrade to executing whatever
+// the CDN served. `onerror` fires on an integrity mismatch as well as a network
+// failure, so the existing error path already covers both.
 function cdnHtml(base64: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
-<script src="${PDFJS_CDN}/pdf.min.js" onerror="window.__pdfLoadErr=1"></script>
+<script src="${PDFJS_CDN}/pdf.min.js" integrity="${PDFJS_SRI['pdf.min.js']}" crossorigin="anonymous" onerror="window.__pdfLoadErr=1"></script>
 <script>${EXTRACT(base64, `
-  if (window.__pdfLoadErr) { post('error', 'Could not download pdf.js from ${PDFJS_CDN}/pdf.min.js (offline or blocked).'); return; }
+  if (window.__pdfLoadErr || typeof pdfjsLib === 'undefined') { post('error', 'Could not load pdf.js from ${PDFJS_CDN}/pdf.min.js — it was unreachable, or failed its integrity check.'); return; }
   pdfjsLib.GlobalWorkerOptions.workerSrc = '${PDFJS_CDN}/pdf.worker.min.js';`)}</script>
 </body></html>`;
 }
@@ -72,11 +77,20 @@ export function PdfTextExtractor({ base64, onText, onError }: Props) {
 
   useEffect(() => {
     let alive = true;
-    // Prefer the offline cache; on any cache/FileSystem error, fall back to CDN
+    // Prefer the offline cache; on a cache/FileSystem error fall back to the CDN
     // (so a broken cache path still extracts when online).
     ensurePdfJsSource()
       .then(({ main, worker }) => { if (alive) setHtml(inlineHtml(base64, main, worker)); })
-      .catch(() => { if (alive) setHtml(cdnHtml(base64)); });
+      .catch((e) => {
+        if (!alive) return;
+        // An integrity failure is NOT a cache problem — the bytes were wrong.
+        // Falling back would re-fetch the same suspect source, so stop instead.
+        if (e instanceof PdfJsIntegrityError) {
+          onError('pdf.js failed its integrity check, so it was not run. Import the statement as CSV or paste the text instead.');
+          return;
+        }
+        setHtml(cdnHtml(base64));
+      });
     return () => { alive = false; };
   }, [base64]);
 

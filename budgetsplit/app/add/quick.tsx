@@ -64,8 +64,10 @@ export default function QuickAddScreen() {
         }
       />
 
+      {/* `|| kind === 'transfer'` so an existing settlement stays editable even after
+          the user switches splitting off. */}
       {!isEditing && !isRecurEdit && (
-        <KindToggle kind={kind} onSelect={f.onSelectKind} />
+        <KindToggle kind={kind} onSelect={f.onSelectKind} showTransfer={flags.splitting || kind === 'transfer'} />
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>

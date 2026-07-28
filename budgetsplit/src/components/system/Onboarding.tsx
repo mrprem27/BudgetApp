@@ -1,21 +1,18 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React from 'react';
 import {
   View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity,
-  Animated, Easing, ScrollView, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
+  Animated, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { useSQLiteContext } from 'expo-sqlite';
-import { settings } from '../../lib/settings';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius, layout, shadow } from '../../constants/layout';
-import * as Location from 'expo-location';
-import { requestNotificationPermission } from '../../lib/notifications';
-import { setReminderPrefs } from '../../lib/reminders';
-import { finalizeOnboarding } from '../../lib/onboarding';
-import { setMoneyProfile } from '../../db/queries/moneyProfile';
+import type { OnboardingIntent } from '../../lib/personaDefaults';
+import {
+  useOnboardingForm, setupSteps, type OnboardingStage,
+} from '../../hooks/useOnboardingForm';
 import { GROUP_COLORS } from '../../constants/palette';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { FadeIn } from '../ui/FadeIn';
@@ -76,15 +73,14 @@ const SLIDES: Slide[] = [
   },
 ];
 
-type Stage = 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget' | 'people' | 'permissions';
-type IntentKey = 'personal' | 'split' | 'both';
-
-// The four setup steps after the name screen drive the progress dots.
-const SETUP_STEPS: Stage[] = ['income', 'money', 'budget', 'people', 'permissions'];
+// The stage machine and the persona→steps rule live with the state, in the hook.
+type Stage = OnboardingStage;
+// The persona type is owned by lib/personaDefaults, which maps it to feature flags.
+type IntentKey = OnboardingIntent;
 
 const INTENT_OPTIONS: { key: IntentKey; emoji: string; label: string; desc: string }[] = [
   { key: 'personal', emoji: '💰', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
-  { key: 'split',    emoji: '👥', label: 'Split with people',      desc: 'Groups, shared tabs, settle up' },
+  { key: 'split',    emoji: '👥', label: 'Split with people',      desc: 'Groups, roommates, couples — shared tabs, settle up' },
   { key: 'both',     emoji: '✨', label: 'Both',                   desc: 'Full experience — most popular' },
 ];
 
@@ -103,12 +99,13 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-/** Progress dots across the four setup steps (income → budget → people → permissions). */
-function SetupDots({ step }: { step: Stage }) {
-  const idx = SETUP_STEPS.indexOf(step);
+/** Progress dots across the setup steps (income → money → budget → [people] → permissions). */
+function SetupDots({ step, intent }: { step: Stage; intent: IntentKey }) {
+  const steps = setupSteps(intent);
+  const idx = steps.indexOf(step);
   return (
     <View style={styles.budgetDots}>
-      {SETUP_STEPS.map((s, i) => (
+      {steps.map((s, i) => (
         <View key={s} style={[styles.budgetDot, { backgroundColor: i === idx ? colors.accent : colors.bgMuted, width: i === idx ? 20 : 8 }]} />
       ))}
     </View>
@@ -116,117 +113,24 @@ function SetupDots({ step }: { step: Stage }) {
 }
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const [stage, setStage] = useState<Stage>('hero');
-  const [page, setPage] = useState(0);
-  const [intent, setIntent] = useState<IntentKey>('both');
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [incomeText, setIncomeText] = useState('');     // free take-home entry (rupees)
-  const [payday, setPayday] = useState(1);              // day of month salary lands
-  const [budgetText, setBudgetText] = useState('');     // free monthly-budget entry (rupees)
-  const [cashText, setCashText] = useState('');         // total cash available (rupees)
-  const [investText, setInvestText] = useState('');     // total investments (rupees)
-  const [creditLimitText, setCreditLimitText] = useState(''); // credit card limit (rupees)
-  const [creditUsedText, setCreditUsedText] = useState('');   // credit already used (rupees)
-  const [people, setPeople] = useState<string[]>([]);   // contacts added during onboarding
-  const [personDraft, setPersonDraft] = useState('');
-  const [notifPerm, setNotifPerm] = useState(false);
-  const [locPerm, setLocPerm] = useState(false);
-  const addFirstRef = useRef(false);
-  // Parsed numeric views of the free-text amounts (0 when blank/invalid).
-  const incomeNum = Math.max(0, Math.round(Number(incomeText.replace(/[^0-9.]/g, '')) || 0));
-  const budgetNum = Math.max(0, Math.round(Number(budgetText.replace(/[^0-9.]/g, '')) || 0));
-  const scrollRef = useRef<any>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const progress = useRef(new Animated.Value(1 / SLIDES.length)).current; // top progress bar fill
-  // Source of truth for the current page. `page` state drives the dots/button
-  // label, but navigation reads this ref so the "last slide → name" transition
-  // fires even after a slow drag-release (which never emits onMomentumScrollEnd).
-  const pageRef = useRef(0);
   const bottomPad = insets.bottom + space.xl;
 
-  // Synced on BOTH drag-end and momentum-end so a slow drag can't leave us stale.
-  function syncPage(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const p = Math.round(e.nativeEvent.contentOffset.x / width);
-    pageRef.current = p;
-    setPage(prev => (prev === p ? prev : p));
-  }
-
-  function goToPage(p: number) {
-    pageRef.current = p;
-    setPage(p);
-    scrollRef.current?.scrollTo?.({ x: p * width, animated: true });
-  }
-
-  function enterIntent() {
-    setStage('intent');
-  }
-
-  function enterFeatures() {
-    // Capture the persona as a soft preference. Not wired to feature flags yet —
-    // stored so a later pass can tailor default toggles to it.
-    settings.setOnboardingIntent(intent).catch(() => { /* best-effort */ });
-    pageRef.current = 0;
-    setPage(0);
-    setStage('features');
-  }
-
-  function advance() {
-    if (pageRef.current < SLIDES.length - 1) {
-      goToPage(pageRef.current + 1);
-    } else {
-      setStage('name'); // always reach the (mandatory) name screen
-    }
-  }
-
-  function backFromFeatures() {
-    if (pageRef.current > 0) {
-      goToPage(pageRef.current - 1);
-    } else {
-      setStage('intent');
-    }
-  }
-
-  // Animate the top progress bar as the slide changes.
-  useEffect(() => {
-    Animated.timing(progress, {
-      toValue: (page + 1) / SLIDES.length,
-      duration: 300,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [page, progress]);
-
-  // Single commit point for the whole questionnaire — see lib/onboarding.ts.
-  // rupees text → integer paise
-  const toPaise = (t: string) => Math.max(0, Math.round((Number(t.replace(/[^0-9.]/g, '')) || 0) * 100));
-
-  async function finalize() {
-    setSaving(true);
-    const ok = await finalizeOnboarding(db, {
-      name, incomeNum, payday, budgetNum, people, addFirst: addFirstRef.current,
-    });
-    await setMoneyProfile(db, {
-      openingCash: toPaise(cashText),
-      investments: toPaise(investText),
-      creditLimit: toPaise(creditLimitText),
-      creditUsed: toPaise(creditUsedText),
-    }).catch(() => { /* best-effort */ });
-    if (ok) haptic.success(); else haptic.error();
-    setSaving(false);
-    onDone();
-  }
-
-  function addPerson() {
-    const t = personDraft.trim();
-    if (!t) return;
-    haptic.selection();
-    setPeople(prev => (prev.some(p => p.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]));
-    setPersonDraft('');
-  }
+  // All state, the stage machine and the commit live in the hook — this component is
+  // render-only (AUDIT DEBT-12), matching useAddTxnForm / useItemizedForm.
+  const {
+    stage, setStage, afterBudget, beforePermissions,
+    page, scrollRef, scrollX, progress, syncPage, advance, backFromFeatures,
+    intent, setIntent, enterIntent, enterFeatures,
+    name, setName, incomeText, setIncomeText, incomeNum, payday, setPayday,
+    budgetText, setBudgetText, budgetNum,
+    cashText, setCashText, investText, setInvestText,
+    creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
+    people, setPeople, personDraft, setPersonDraft, addPerson,
+    notifPerm, locPerm, allowNotifications, allowLocation,
+    addFirstRef, saving, finalize,
+  } = useOnboardingForm({ onDone, slideCount: SLIDES.length, width });
 
   return (
     <KeyboardAvoidingView
@@ -410,7 +314,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="income" />
+            <SetupDots step="income" intent={intent} />
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>What's your monthly take-home?</Text>
             <Text style={styles.slideBody}>A rough number is fine — it just sets up your income. You can change it any time.</Text>
 
@@ -462,7 +366,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="money" />
+            <SetupDots step="money" intent={intent} />
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>What do you have right now?</Text>
             <Text style={styles.slideBody}>Sets up your “Total Money”. Rough numbers are fine — you can edit anytime on the Plan screen.</Text>
 
@@ -506,7 +410,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="budget" />
+            <SetupDots step="budget" intent={intent} />
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Set your monthly budget</Text>
             <Text style={styles.slideBody}>How much do you want to cap your spending at each month? Enter whatever works for you.</Text>
 
@@ -542,8 +446,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             )}
           </ScrollView>
           <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => setStage('people')} />
-            <TouchableOpacity onPress={() => { setBudgetText(''); setStage('people'); }} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
+            <PrimaryButton label="Continue" onPress={() => setStage(afterBudget)} />
+            <TouchableOpacity onPress={() => { setBudgetText(''); setStage(afterBudget); }} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
               <Text style={styles.skipText}>Skip — I'll set it later</Text>
             </TouchableOpacity>
           </View>
@@ -557,7 +461,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="people" />
+            <SetupDots step="people" intent={intent} />
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Anyone you split with?</Text>
             <Text style={styles.slideBody}>Add flatmates, friends or family now — or skip and add them later.</Text>
 
@@ -607,17 +511,17 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       {/* PERMISSIONS STEP — notifications + location priming */}
       {stage === 'permissions' && (
         <FadeIn key="permissions" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('people')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
+          <TouchableOpacity onPress={() => setStage(beforePermissions)} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
             <Feather name="chevron-left" size={26} color={colors.textSecondary} />
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="permissions" />
+            <SetupDots step="permissions" intent={intent} />
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Stay on top of things</Text>
             <Text style={styles.slideBody}>Both are optional and fully on-device. You can change them in Settings any time.</Text>
 
             <TouchableOpacity
               style={[styles.permCard, notifPerm && styles.permCardOn]} accessibilityState={{ selected: notifPerm }}
-              onPress={async () => { haptic.selection(); const ok = await requestNotificationPermission(); setNotifPerm(ok); if (ok) { try { await setReminderPrefs({ renewals: true }); } catch { /* best-effort */ } } }}
+              onPress={allowNotifications}
               disabled={notifPerm}
               accessibilityRole="button"
             >
@@ -631,13 +535,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
             <TouchableOpacity
               style={[styles.permCard, locPerm && styles.permCardOn]} accessibilityState={{ selected: locPerm }}
-              onPress={async () => {
-                haptic.selection();
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                const ok = status === 'granted';
-                setLocPerm(ok);
-                if (ok) { try { await settings.setSaveLocation(true); } catch { /* best-effort */ } }
-              }}
+              onPress={allowLocation}
               disabled={locPerm}
               accessibilityRole="button"
             >

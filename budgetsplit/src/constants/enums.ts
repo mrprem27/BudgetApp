@@ -104,7 +104,7 @@ export type SavingsTxnKind = typeof SAVINGS_TXN_KIND[number];
 
 // --- Audit ---------------------------------------------------------------
 
-export const AUDIT_ACTION = ['created', 'updated', 'deleted', 'settled', 'paused', 'resumed', 'ended'] as const;
+export const AUDIT_ACTION = ['created', 'updated', 'deleted', 'archived', 'settled', 'paused', 'resumed', 'ended'] as const;
 export type AuditAction = typeof AUDIT_ACTION[number];
 
 export const AUDIT_ENTITY_TYPE = ['txn', 'group', 'member', 'budget', 'recurring', 'settlement'] as const;

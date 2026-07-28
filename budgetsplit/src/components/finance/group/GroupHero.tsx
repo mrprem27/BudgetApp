@@ -3,7 +3,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../../tokens';
 import { asFeather } from '../../../constants/palette';
-import { formatCompact } from '../../../lib/money';
 import { AvatarStack } from '../AvatarStack';
 import type { BudgetGroup } from '../../../db/queries/groups';
 import type { Person } from '../../../db/queries/persons';
@@ -11,13 +10,11 @@ import { alpha } from '../../../theme';
 
 type Props = {
   group: BudgetGroup;
-  isPersonal: boolean;
   members: Person[];
-  personalMonthSpend: number;
 };
 
-/** Group Detail hero: icon tile + name + (personal: month spend | shared: member stack). */
-export function GroupHero({ group, isPersonal, members, personalMonthSpend }: Props) {
+/** Group Detail hero: icon tile + name + member stack. */
+export function GroupHero({ group, members }: Props) {
   return (
     <View style={styles.hero}>
       <View style={[styles.heroIcon, { backgroundColor: alpha(group.color, 20) }]}>
@@ -25,14 +22,10 @@ export function GroupHero({ group, isPersonal, members, personalMonthSpend }: Pr
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.heroName} numberOfLines={1}>{group.name}</Text>
-        {isPersonal ? (
-          <Text style={styles.heroSub} numberOfLines={1}>{`${formatCompact(personalMonthSpend)} this month`}</Text>
-        ) : (
-          <View style={styles.heroMembers}>
-            <AvatarStack people={members} size={20} max={4} ringColor={colors.bg} />
-            <Text style={styles.heroSub}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
-          </View>
-        )}
+        <View style={styles.heroMembers}>
+          <AvatarStack people={members} size={20} max={4} ringColor={colors.bg} />
+          <Text style={styles.heroSub}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
+        </View>
       </View>
     </View>
   );

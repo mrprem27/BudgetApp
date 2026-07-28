@@ -1,4 +1,4 @@
-import { getPeriodRange, getPriorPeriodRange } from '../lib/budget';
+import { getPeriodRange } from '../lib/budget';
 
 // Local-time ms helper (budget.ts uses date-fns, which works in local time).
 const at = (y: number, m: number, d: number, h = 0, mi = 0, s = 0, ms = 0) =>
@@ -24,22 +24,6 @@ describe('getPeriodRange', () => {
   });
 });
 
-describe('getPriorPeriodRange', () => {
-  it('daily → the previous day', () => {
-    const { from, to } = getPriorPeriodRange('daily', new Date(2026, 5, 15, 9));
-    expect(from).toBe(at(2026, 5, 14));
-    expect(to).toBe(at(2026, 5, 14, 23, 59, 59, 999));
-  });
-
-  it('monthly → previous month, crossing the year boundary (Jan → prior Dec)', () => {
-    const { from, to } = getPriorPeriodRange('monthly', new Date(2026, 0, 10));
-    expect(from).toBe(at(2025, 11, 1));
-    expect(to).toBe(at(2025, 11, 31, 23, 59, 59, 999));
-  });
-
-  it('yearly → the previous year', () => {
-    const { from, to } = getPriorPeriodRange('yearly', new Date(2026, 5, 1));
-    expect(from).toBe(at(2025, 0, 1));
-    expect(to).toBe(at(2025, 11, 31, 23, 59, 59, 999));
-  });
-});
+// getPriorPeriodRange's tests went with it — it existed only to compute the
+// previous period's unused budget for group-level carry-over, which was removed
+// (nothing ever wrote budget_group.limit_*, so it could not run).

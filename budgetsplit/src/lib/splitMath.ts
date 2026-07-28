@@ -50,6 +50,22 @@ export function computeShares(i: ShareInputs): Share[] {
   return [];
 }
 
+/**
+ * Is this set of shares a complete allocation of `total`?
+ *
+ * The single source for "does this split add up", shared by the Quick-Add save
+ * path and the Review commit path so the two can't drift. `exact` mode reads the
+ * user's inputs verbatim and deliberately does NOT reconcile a shortfall
+ * (see splitByMode) — this is the check that stops an unbalanced one being
+ * written, rather than silently fixing it up.
+ *
+ * `delta` is what's still unallocated: positive = short, negative = over.
+ */
+export function validateShares(total: number, shares: Share[]): { ok: boolean; assigned: number; delta: number } {
+  const assigned = shares.reduce((s, x) => s + x.amount, 0);
+  return { ok: shares.length > 0 && assigned === total, assigned, delta: total - assigned };
+}
+
 /** Resolve who paid (paise). No explicit payers → the current user paid the full total. */
 export function computePayments(
   payerAmounts: Record<string, string>,

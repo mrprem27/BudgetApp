@@ -28,6 +28,7 @@ const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; co
   created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
   updated:  { icon: 'edit-2', color: colors.accent, label: 'Edited' },
   deleted:  { icon: 'trash-2', color: colors.expense, label: 'Deleted' },
+  archived: { icon: 'archive', color: colors.textMuted, label: 'Archived' },
   settled:  { icon: 'check-circle', color: colors.settle, label: 'Settled' },
   paused:   { icon: 'pause-circle', color: colors.healthAmber, label: 'Paused' },
   resumed:  { icon: 'play-circle', color: colors.income, label: 'Resumed' },

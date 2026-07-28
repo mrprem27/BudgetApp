@@ -15,7 +15,7 @@ import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categ
 import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement } from '../db/queries/transactions';
 import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseToPaise, formatRupees } from '../lib/money';
-import { computeShares as calcShares, computePayments as calcPayments } from '../lib/splitMath';
+import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { haptic } from '../lib/haptics';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
@@ -210,9 +210,11 @@ export function useAddTxnForm(params: AddTxnParams) {
     ? []
     : calcShares({ members, splitMembers, splitType, total, exactAmounts, percentages, ratios });
   const payments = calcPayments(payerAmounts, me?.id, total);
-  const sharesTotal = shares.reduce((s, x) => s + x.amount, 0);
   const paymentsTotal = payments.reduce((s, x) => s + x.amount, 0);
-  const remainder = total - sharesTotal;
+  // Same allocation rule the Review commit path uses (lib/splitMath.validateShares).
+  const shareCheck = validateShares(total, shares);
+  const sharesTotal = shareCheck.assigned;
+  const remainder = shareCheck.delta;
   const paymentRemainder = total - paymentsTotal;
 
   // Budget nudge: how much remains in the selected category this month.
@@ -303,6 +305,24 @@ export function useAddTxnForm(params: AddTxnParams) {
     try {
       const finalPayments = kind === 'income' ? [{ personId: me!.id, amount: total }] : payments;
       const finalShares = kind === 'income' ? [] : shares;
+
+      // Defence in depth: canSave already blocks an unbalanced split, but this is
+      // the write boundary — an `exact` split is read verbatim, so a shortfall
+      // must never reach insertTxn/updateTxn. Refuse; never silently reconcile.
+      if (kind !== 'income') {
+        const check = validateShares(total, finalShares);
+        if (!check.ok) {
+          setSaving(false);
+          haptic.error();
+          Alert.alert(
+            'Split doesn’t add up',
+            check.delta > 0
+              ? `${formatRupees(check.delta)} is still unassigned. Adjust the split so it totals ${formatRupees(total)}.`
+              : `The split is over by ${formatRupees(-check.delta)}. It must total ${formatRupees(total)}.`,
+          );
+          return;
+        }
+      }
 
       if (isEditing) {
         await updateTxn(db, {

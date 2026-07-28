@@ -14,11 +14,12 @@ import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/recurring';
 import { rescheduleReminders } from '../src/lib/reminders';
+import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
-import { FeatureFlagsProvider } from '../src/components/system/FeatureFlagsProvider';
+import { FeatureFlagsProvider, FlagsGate } from '../src/components/system/FeatureFlagsProvider';
 import { DataRefreshProvider } from '../src/components/system/DataRefreshProvider';
 import { StoreHydrator } from '../src/components/system/StoreHydrator';
 import { UndoProvider } from '../src/components/system/UndoToast';
@@ -46,7 +47,11 @@ export default function RootLayout() {
         // Catch-up: any recurring occurrence that came due (incl. across a missed
         // "midnight") materializes into a real editable row the moment the app loads.
         await materializeDueOccurrences(db);
-        await runSavingsMaintenance(db); // sweep leftover → schedule → reconcile
+        // Sweep leftover → schedule → reconcile. A raid here happens before the
+        // user is looking at the Savings tab, so persist the result — otherwise
+        // it's invisible by the time they get there (cash is already fixed up).
+        const raid = await runSavingsMaintenance(db);
+        if (raid.total > 0) setPendingOverspendNotice(raid).catch(() => {});
         rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)
         if (alive) { setDbReady(true); setDbError(false); }
       } catch {
@@ -60,7 +65,9 @@ export default function RootLayout() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && dbRef) {
         materializeDueOccurrences(dbRef).catch(() => {});
-        runSavingsMaintenance(dbRef).catch(() => {});
+        runSavingsMaintenance(dbRef)
+          .then((raid) => { if (raid.total > 0) return setPendingOverspendNotice(raid); })
+          .catch(() => {});
         rescheduleReminders(dbRef).catch(() => {});
       }
     });
@@ -92,6 +99,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
         <SQLiteProvider databaseName="budgetsplit.db">
           <FeatureFlagsProvider>
+          <FlagsGate>
           <DataRefreshProvider>
           <StoreHydrator />
           <UndoProvider>
@@ -114,6 +122,7 @@ export default function RootLayout() {
           </LockGate>
           </UndoProvider>
           </DataRefreshProvider>
+          </FlagsGate>
           </FeatureFlagsProvider>
         </SQLiteProvider>
         <PrivacyScreen />

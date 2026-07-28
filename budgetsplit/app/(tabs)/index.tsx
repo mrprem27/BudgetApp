@@ -16,7 +16,6 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup } from '../../src/db/queries/recurring';
 
 import { FadeIn } from '../../src/components/ui/FadeIn';
-import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
 
@@ -28,12 +27,11 @@ import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
 import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
-import { HealthBand } from '../../src/components/finance/home/HealthBand';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
-import { loadHomeData, PREV_LABEL, PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
+import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
 import { alpha } from '../../src/theme';
 
 // Month is the default and sits in the centre (Today · Month · Year).
@@ -77,8 +75,11 @@ export default function DashboardScreen() {
   const budget = data?.budget ?? { allocated: 0, spent: 0 };
   const catRows = data?.catRows ?? [];
   const catTotal = data?.catTotal ?? 0;
-  const health = data?.health ?? null;
-  const healthInputs = data?.healthInputs ?? null;
+  // Flag-gated here rather than at each use: nulling the result hides the ring in
+  // HeroCard and the sheet it opens, in one place.
+  const health = flags.healthScore ? (data?.health ?? null) : null;
+  const healthInputs = flags.healthScore ? (data?.healthInputs ?? null) : null;
+  const healthTxnCount = data?.healthTxnCount ?? 0;
   const upcoming = data?.upcoming ?? [];
   const forecast = data?.forecast ?? null;
   const topShift = data?.topShift ?? null;
@@ -226,22 +227,28 @@ export default function DashboardScreen() {
                     </View>
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.startTitle}>Create a group</Text>
-                      <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.startTitle}>Add people you split with</Text>
-                      <Text style={styles.startSub}>Name-only — no account needed</Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
+                  {/* Both first-run tiles are about splitting — pointless for someone
+                      who told us they only track their own money. */}
+                  {flags.splitting && (
+                    <>
+                      <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
+                        <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.startTitle}>Create a group</Text>
+                          <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
+                        </View>
+                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
+                        <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.startTitle}>Add people you split with</Text>
+                          <Text style={styles.startSub}>Name-only — no account needed</Text>
+                        </View>
+                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               </>
             ) : (
@@ -274,7 +281,7 @@ export default function DashboardScreen() {
             )}
 
             {/* Settle-up sits below the bars. */}
-            {(oweTotal > 0 || owedTotal > 0) && (
+            {flags.splitting && (oweTotal > 0 || owedTotal > 0) && (
               <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
             )}
 
@@ -311,7 +318,14 @@ export default function DashboardScreen() {
 
       {/* FAB now lives in the custom tab bar (centered, docked). */}
 
-      <HealthSheet visible={showHealth} onClose={() => setShowHealth(false)} result={health} inputs={healthInputs} />
+      <HealthSheet
+        visible={showHealth}
+        onClose={() => setShowHealth(false)}
+        result={health}
+        inputs={healthInputs}
+        txnCount={healthTxnCount}
+        periodLabel={TXN_COUNT_PERIOD_LABEL[tab]}
+      />
     </View>
   );
 }

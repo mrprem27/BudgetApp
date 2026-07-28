@@ -52,11 +52,12 @@ export const CATEGORY_COLOR_CHOICES: readonly string[] = [
 /** Quick group "types" — each preset picks an icon + colour so creating a group
  *  is one tap. Colours are drawn from GROUP_COLORS / the brand tokens. */
 export const GROUP_TYPES: { key: string; label: string; icon: FeatherName; color: string }[] = [
-  { key: 'home',   label: '🏠 Home',   icon: 'home',      color: GROUP_COLORS[0] },
-  { key: 'trip',   label: '✈️ Trip',   icon: 'map',       color: colors.accent },
-  { key: 'work',   label: '💼 Work',   icon: 'briefcase', color: '#7C6AF7' },
-  { key: 'dining', label: '🍽️ Dining', icon: 'coffee',    color: '#F0A500' },
-  { key: 'other',  label: 'Other',     icon: 'grid',      color: colors.textSecondary },
+  { key: 'home',      label: '🏠 Home',      icon: 'home',      color: GROUP_COLORS[0] },
+  { key: 'household', label: '🏡 Household', icon: 'heart',     color: GROUP_COLORS[6] },
+  { key: 'trip',      label: '✈️ Trip',      icon: 'map',       color: colors.accent },
+  { key: 'work',      label: '💼 Work',      icon: 'briefcase', color: '#7C6AF7' },
+  { key: 'dining',    label: '🍽️ Dining',    icon: 'coffee',    color: '#F0A500' },
+  { key: 'other',     label: 'Other',        icon: 'grid',      color: colors.textSecondary },
 ];
 
 /** Feather icons offered when creating a savings goal. */

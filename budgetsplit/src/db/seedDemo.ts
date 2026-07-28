@@ -67,9 +67,10 @@ async function createMeAndPersonal(
 ): Promise<string> {
   const now = Date.now();
   const personalId = uuid();
+  // email stays NULL — nothing reads person.email (see seed.ts).
   await db.runAsync(
-    'INSERT INTO person (id, name, avatar_color, is_me, email, image_uri) VALUES (?, ?, ?, 1, ?, ?)',
-    [meId, meName, meColor, 'hello123@vortiqal.com', meImage],
+    'INSERT INTO person (id, name, avatar_color, is_me, image_uri) VALUES (?, ?, ?, 1, ?)',
+    [meId, meName, meColor, meImage],
   );
   await db.runAsync(
     `INSERT INTO budget_group
@@ -344,17 +345,6 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: 'upi', raw: 'You paid ₹73 to Rapido via UPI' },
     { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', source: 'email', pay_method: 'autopay', raw: 'E-mandate debit of Rs 6000 towards Flat rent share' },
   ]);
-
-  // Mark everything this seeder created as demo data (loadDemoData wipes first, so
-  // all rows here are demo — except the preserved real "me" person and the real
-  // Personal group). A flag for future "exclude demo" needs; nothing excludes on it yet.
-  await db.execAsync(`
-    UPDATE txn SET is_demo = 1;
-    UPDATE savings_goal SET is_demo = 1;
-    UPDATE pending_txn SET is_demo = 1;
-    UPDATE budget_group SET is_demo = 1 WHERE is_personal = 0;
-    UPDATE person SET is_demo = 1 WHERE is_me = 0;
-  `);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.
   const counts = await db.getFirstAsync<{ txns: number; people: number; groups: number; goals: number }>(

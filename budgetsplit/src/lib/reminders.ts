@@ -7,16 +7,17 @@ import {
   ensureAndroidChannel, hasNotificationPermission,
 } from './notifications';
 import { formatRupees } from './money';
+import { settings } from './settings';
 import {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
-  DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME,
-  clampLead, clampTime, defaultReminderPrefs, limitReminders, atTimeOfDay,
+  DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME,
+  clampLead, clampTime, defaultReminderPrefs, limitReminders, atTimeOfDay, nextMonthlyAnchor,
 } from './reminderPlan';
 
 // Re-export the pure surface so callers import everything from one place.
 export {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
-  DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_LEAD_DAYS, MAX_LEAD_DAYS,
+  DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME, DEFAULT_LEAD_DAYS, MAX_LEAD_DAYS,
   REMINDER_CAP, formatReminderTime, limitReminders,
 } from './reminderPlan';
 
@@ -37,6 +38,7 @@ export async function getReminderPrefs(): Promise<ReminderPrefs> {
         renewalTime: clampTime(p.renewalTime, DEFAULT_RENEWAL_TIME),
         daily: !!p.daily,
         dailyTime: clampTime(p.dailyTime, DEFAULT_DAILY_TIME),
+        backup: !!p.backup,
       };
     }
     // Migrate the old on/off booleans, if present.
@@ -61,6 +63,7 @@ export async function setReminderPrefs(patch: Partial<ReminderPrefs>): Promise<R
     renewalTime: clampTime(patch.renewalTime ?? cur.renewalTime, DEFAULT_RENEWAL_TIME),
     daily: patch.daily ?? cur.daily,
     dailyTime: clampTime(patch.dailyTime ?? cur.dailyTime, DEFAULT_DAILY_TIME),
+    backup: patch.backup ?? cur.backup,
   };
   try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* best-effort */ }
   return next;
@@ -111,6 +114,18 @@ export async function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<vo
     await scheduleDailyReminder(
       'daily_log', prefs.dailyTime.hour, prefs.dailyTime.minute,
       'Keep your streak going', 'Log today’s spending — it only takes a few taps.',
+    );
+  }
+
+  if (prefs.backup) {
+    // Anchored to the last real export (reset in app/reports.tsx on success), or
+    // to when the reminder was turned on if nothing's been exported yet — never
+    // a fixed calendar day, so this can't nag right after a real backup.
+    const anchor = (await settings.backupAnchorAt()) ?? now;
+    const fireAt = atTimeOfDay(nextMonthlyAnchor(anchor, now), DEFAULT_BACKUP_TIME);
+    await scheduleReminderAt(
+      'backup_nudge', new Date(fireAt), 'Back up your data',
+      'There’s no cloud sync — export a CSV/PDF from Reports so nothing is lost if you lose this phone.',
     );
   }
 }

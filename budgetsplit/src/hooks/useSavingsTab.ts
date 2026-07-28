@@ -11,6 +11,7 @@ import {
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../db/queries/savings';
 import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
+import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import type { MoneyProfile } from '../lib/cash';
 import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
@@ -102,7 +103,7 @@ export function useSavingsTab() {
   const goals = data?.goals ?? [];
   const saved = data?.saved ?? {};
   const money = data?.money ?? null;
-  const profile = data?.profile ?? { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 };
+  const profile = data?.profile ?? { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
   const forecastMonthEnd = data?.forecastMonthEnd ?? null;
   const forecastBudget = data?.forecastBudget ?? 0;
   const upcoming = data?.upcoming ?? [];
@@ -110,10 +111,23 @@ export function useSavingsTab() {
   // Scheduled goal funding + overspend auto-raid — a MUTATION, so it runs on focus
   // only (never inside the loader, which refetches on every focus/data-change).
   // After a raid we reload() so the reads reflect the post-maintenance state.
+  //
+  // A raid can also happen OUTSIDE this screen (app boot / foreground, in
+  // app/_layout.tsx) — by the time the user reaches this tab, cash is already
+  // fixed up and this focus's own maintenance call finds nothing left to raid,
+  // so that earlier result would otherwise never be shown. Surface any pending
+  // notice first, then still run maintenance live for a raid that happens while
+  // the tab is actually open.
   useFocusEffect(useCallback(() => {
     (async () => {
+      const pending = await getPendingOverspendNotice();
+      if (pending) setOverspend(pending);
+
       const raid = await runSavingsMaintenance(db);
-      if (raid.total > 0) setOverspend(raid);
+      if (raid.total > 0) {
+        setOverspend(raid);
+        await setPendingOverspendNotice(raid);
+      }
       reload();
     })();
   }, [db, reload]));
@@ -144,8 +158,14 @@ export function useSavingsTab() {
     await undoOverspendRaid(db, overspend.withdrawals);
     haptic.success();
     setOverspend(null);
+    await setPendingOverspendNotice(null);
     await reload();
     refresh();
+  }
+
+  async function handleDismissOverspend() {
+    setOverspend(null);
+    await setPendingOverspendNotice(null);
   }
 
   function resetNew() {
@@ -178,7 +198,7 @@ export function useSavingsTab() {
     goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
     // overspend raid
-    overspend, setOverspend, handleUndoOverspend,
+    overspend, setOverspend, handleUndoOverspend, handleDismissOverspend,
     // money editor
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     // fund a goal

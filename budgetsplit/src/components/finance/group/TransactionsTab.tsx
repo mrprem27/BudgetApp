@@ -13,7 +13,6 @@ type Props = {
   txns: TxnWithSplits[];
   members: Person[];
   meId: string;
-  isPersonal: boolean;
   groupName: string;
   onDeleteTxn: (id: string) => void;
   onEditTxn: (txn: TxnWithSplits) => void;
@@ -23,7 +22,7 @@ type Props = {
 
 /** Group ledger: collapsible filter bar + date-sectioned transaction list. Owns its
  *  own search/kind filter (tab-local UI state). */
-export function TransactionsTab({ txns, members, meId, isPersonal, groupName, onDeleteTxn, onEditTxn, refreshing, onRefresh }: Props) {
+export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, refreshing, onRefresh }: Props) {
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -48,9 +47,9 @@ export function TransactionsTab({ txns, members, meId, isPersonal, groupName, on
       onDelete={() => delRef.current(item.id)}
       onPress={() => editRef.current(item)}
       members={members}
-      isPersonal={isPersonal}
+      isPersonal={false}
     />
-  ), [meId, members, isPersonal]);
+  ), [meId, members]);
 
   return (
     <SectionList

@@ -1,4 +1,4 @@
-import { computeShares, computePayments } from '../lib/splitMath';
+import { computeShares, computePayments, validateShares } from '../lib/splitMath';
 import type { Person } from '../db/queries/persons';
 
 const p = (id: string): Person => ({ id, name: id, avatar_color: '#20C4B8', is_me: 0, image_uri: null } as any);
@@ -31,6 +31,56 @@ describe('computeShares', () => {
 
   it('returns [] when nobody is included', () => {
     expect(computeShares({ members, splitMembers: [], splitType: 'equal', total: 10000, exactAmounts: {}, percentages: {}, ratios: {} })).toEqual([]);
+  });
+});
+
+describe('validateShares', () => {
+  const shares = (...amts: number[]) => amts.map((amount, i) => ({ personId: `p${i}`, amount }));
+
+  it('accepts a split that adds up exactly', () => {
+    expect(validateShares(10000, shares(5000, 5000))).toEqual({ ok: true, assigned: 10000, delta: 0 });
+  });
+
+  it('rejects a short split and reports what is unassigned', () => {
+    expect(validateShares(10000, shares(4000, 5000))).toEqual({ ok: false, assigned: 9000, delta: 1000 });
+  });
+
+  it('rejects an over-assigned split with a negative delta', () => {
+    expect(validateShares(10000, shares(6000, 5000))).toEqual({ ok: false, assigned: 11000, delta: -1000 });
+  });
+
+  it('rejects an empty split rather than treating it as balanced', () => {
+    expect(validateShares(10000, []).ok).toBe(false);
+  });
+
+  it('treats a zero-total expense with no shares as invalid', () => {
+    // Guards the degenerate case where both sides are 0 and the sums "match".
+    expect(validateShares(0, []).ok).toBe(false);
+  });
+
+  it('accepts a single-member split carrying the whole total', () => {
+    expect(validateShares(7500, shares(7500)).ok).toBe(true);
+  });
+
+  it('agrees with what computeShares produces for every mode', () => {
+    const base = { members, splitMembers: ['a', 'b', 'c'], total: 10000, exactAmounts: {}, percentages: {}, ratios: {} };
+    for (const splitType of ['equal', 'percent', 'shares'] as const) {
+      const s = computeShares({
+        ...base,
+        splitType,
+        percentages: { a: '33', b: '33', c: '34' },
+        ratios: { a: '1', b: '1', c: '1' },
+      });
+      expect(validateShares(10000, s).ok).toBe(true);
+    }
+  });
+
+  it('catches the unbalanced exact split that splitByMode deliberately allows', () => {
+    const s = computeShares({
+      members, splitMembers: ['a', 'b', 'c'], splitType: 'exact', total: 10000,
+      exactAmounts: { a: '30', b: '30', c: '30' }, percentages: {}, ratios: {},
+    });
+    expect(validateShares(10000, s)).toMatchObject({ ok: false, delta: 1000 });
   });
 });
 
