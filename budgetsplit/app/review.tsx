@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,14 +14,21 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SheetModal } from '../src/components/ui/SheetModal';
-import { DatePickerSheet } from '../src/components/ui/DatePickerSheet';
-import { TimePickerSheet, type TimeValue } from '../src/components/ui/TimePickerSheet';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { CategoryPicker } from '../src/components/finance/CategoryPicker';
+import { MemberAvatar } from '../src/components/finance/MemberAvatar';
+import type { ParsedDirection } from '../src/lib/importParse';
 import { SplitEditor } from '../src/components/finance/add/SplitEditor';
+import {
+  effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure,
+  type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
+} from '../src/lib/reviewCommit';
+import { FilterForm } from '../src/components/finance/review/FilterForm';
+import { SaveViewForm } from '../src/components/finance/review/SaveViewForm';
+import { DestOption } from '../src/components/finance/review/DestOption';
 import {
   getPending, deletePending, clearPending, updatePendingDraft, restorePending,
   type PendingTxn, type PendingDraft,
@@ -33,8 +40,8 @@ import { getCategories, type Category } from '../src/db/queries/categories';
 import { parseToPaise, formatRupees, splitByMode } from '../src/lib/money';
 import { recordCorrection } from '../src/lib/smartCategoryLearn';
 import {
-  type AmountMode, type ReviewFilters, DEFAULT_FILTERS,
-  filtersActive, parseFilterDate, rowMatches, isSimilarMerchant,
+  type ReviewFilters, DEFAULT_FILTERS,
+  filtersActive, rowMatches, isSimilarMerchant,
 } from '../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../src/lib/reviewViews';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -43,20 +50,21 @@ import { useUndo } from '../src/components/system/UndoToast';
 import { haptic } from '../src/lib/haptics';
 import {
   type TxnKind, type SplitMode, type PayMethod, type TxnSource,
-  PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
+  PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, TXN_KIND_LABEL,
+  TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
 } from '../src/constants/enums';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
 // pending_txn; only Confirm/Save commits a row into a real transaction.
 // payMethod: '' = none/unset (row need not have one).
-type RowEdit = { kind: TxnKind; category: string; amount: string; dest: string; payMethod: PayMethod | '' };
-type SplitState = { included: string[]; mode: SplitMode; values: Record<string, string> };
-
-// A committable row resolved to its insert shape, or the reason it isn't ready.
-type CommitPlan =
-  | { ok: true; groupId: string; kind: TxnKind; payer: string; shares: { personId: string; amount: number }[]; total: number; category: string; payMethod?: PayMethod; snap: PendingTxn; destName: string }
-  | { ok: false };
+/** Kind chips on each row. "Transfer" is the UI name for a `settlement` — money
+ *  moving between accounts or people, which is neither spend nor earnings. */
+const KIND_CHIPS: { kind: TxnKind; label: string }[] = [
+  { kind: 'expense', label: 'Exp' },
+  { kind: 'income', label: 'Inc' },
+  { kind: 'settlement', label: 'Txfr' },
+];
 
 const BATCH = '__batch__';
 
@@ -71,6 +79,8 @@ export default function ReviewScreen() {
   const [catPickerFor, setCatPickerFor] = useState<string | null>(null);
   const [destSheetFor, setDestSheetFor] = useState<string | null>(null);
   const [paySheetFor, setPaySheetFor] = useState<string | null>(null);
+  // "Who was this transfer with?" — the counterparty picker for a group transfer.
+  const [whoSheetFor, setWhoSheetFor] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   // Selection mode (bulk actions).
   const [selectMode, setSelectMode] = useState(false);
@@ -95,10 +105,11 @@ export default function ReviewScreen() {
     const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
     // A pending row can only be assigned to an active shared group.
     const shared = groups.filter(g => g.is_personal !== 1 && g.is_archived !== 1);
-    const [pending, expenseCats, incomeCats, ...memberLists] = await Promise.all([
+    const [pending, expenseCats, incomeCats, transferCats, ...memberLists] = await Promise.all([
       getPending(db),
       getCategories(db, 'expense'),
       getCategories(db, 'income'),
+      getCategories(db, 'transfer'),
       ...shared.map(g => getGroupMembers(db, g.id)),
     ]);
     const groupMembers: Record<string, Person[]> = {};
@@ -106,7 +117,7 @@ export default function ReviewScreen() {
     return {
       pending, meId: me?.id ?? '', personalId,
       sharedGroups: shared.map(g => ({ id: g.id, name: g.name })),
-      groupMembers, expenseCats, incomeCats,
+      groupMembers, expenseCats, incomeCats, transferCats,
     };
   }, []);
 
@@ -114,20 +125,19 @@ export default function ReviewScreen() {
   const hasGroups = (data?.sharedGroups.length ?? 0) > 0;
   const batchSaving = savingId === BATCH;
 
-  /** Effective values for a row = local edits over the persisted draft columns. */
-  function eff(row: PendingTxn): RowEdit {
-    const e = edits[row.id] ?? {};
-    const kind = e.kind ?? (row.kind === 'settlement' ? 'expense' : row.kind);
-    const persistedDest = row.dest_group_id ?? 'personal';
-    return {
-      kind,
-      category: e.category ?? row.category ?? '',
-      amount: e.amount ?? String(row.amount / 100),
-      // Income is always personal (matches Quick) — you don't split income into a group.
-      dest: kind === 'income' ? 'personal' : (e.dest ?? persistedDest),
-      payMethod: e.payMethod ?? row.pay_method ?? '',
-    };
-  }
+  // Thin bindings from screen state to the pure helpers in lib/reviewCommit.
+  const eff = (row: PendingTxn): RowEdit => effectiveRow(row, edits[row.id]);
+  const splitState = (row: PendingTxn): SplitState =>
+    effectiveSplit(row, splits[row.id], data?.groupMembers[eff(row).dest] ?? []);
+  const ctx = (): ReviewContext => ({
+    meId: data?.meId ?? '',
+    personalId: data?.personalId ?? '',
+    sharedGroups: data?.sharedGroups ?? [],
+    groupMembers: data?.groupMembers ?? {},
+    viewPaidBy: activeView?.paidBy,
+  });
+  const planCommit = (row: PendingTxn): CommitPlan =>
+    planCommitPure(ctx(), row, eff(row), splitState(row));
 
   /** Normalize a pending row to the filter engine's shape (uses effective edits). */
   function filterRow(row: PendingTxn) {
@@ -151,6 +161,8 @@ export default function ReviewScreen() {
     if (p.category !== undefined) draft.category = p.category;
     if (p.dest !== undefined) draft.dest_group_id = p.dest === 'personal' ? null : p.dest;
     if (p.payMethod !== undefined) draft.pay_method = p.payMethod === '' ? null : p.payMethod;
+    if (p.counterparty !== undefined) draft.counterparty_id = p.counterparty === '' ? null : p.counterparty;
+    if (p.direction !== undefined) draft.direction = p.direction;
     // amount is flushed on blur (below), not on every keystroke.
     if (Object.keys(draft).length) updatePendingDraft(db, id, draft).catch(() => {});
   }
@@ -162,31 +174,15 @@ export default function ReviewScreen() {
   const setDestMany = (ids: string[], dest: string) => {
     setEdits(prev => {
       const next = { ...prev };
-      for (const id of ids) next[id] = { ...next[id], dest };
+      // Drop any counterparty too — it belonged to the group being moved away from.
+      for (const id of ids) next[id] = { ...next[id], dest, counterparty: '' };
       return next;
     });
     const gid = dest === 'personal' ? null : dest;
-    for (const id of ids) updatePendingDraft(db, id, { dest_group_id: gid }).catch(() => {});
+    for (const id of ids) updatePendingDraft(db, id, { dest_group_id: gid, counterparty_id: null }).catch(() => {});
   };
   const setAllDest = (dest: string) => { haptic.selection(); setDestMany(visibleRows.map(r => r.id), dest); };
 
-  /** Effective split state = local edits over the persisted split_draft. */
-  function splitState(row: PendingTxn): SplitState {
-    const s = splits[row.id];
-    if (s) return s;
-    const members = data?.groupMembers[eff(row).dest] ?? [];
-    if (row.split_draft) {
-      try {
-        const d = JSON.parse(row.split_draft) as Partial<SplitState>;
-        return {
-          included: d.included ?? members.map(m => m.id),
-          mode: d.mode ?? 'equal',
-          values: d.values ?? {},
-        };
-      } catch { /* fall through to defaults */ }
-    }
-    return { included: members.map(m => m.id), mode: 'equal', values: {} };
-  }
   function patchSplit(row: PendingTxn, p: Partial<SplitState>) {
     const next = { ...splitState(row), ...p };
     setSplits(prev => ({ ...prev, [row.id]: next }));
@@ -220,64 +216,14 @@ export default function ReviewScreen() {
     );
   }
 
-  /** Snapshot the row's CURRENT effective state so Undo restores exactly that. */
-  function snapshot(row: PendingTxn): PendingTxn {
-    const v = eff(row);
-    const isGroup = v.dest !== 'personal';
-    return {
-      ...row,
-      kind: v.kind,
-      category: v.category || null,
-      amount: parseToPaise(v.amount),
-      dest_group_id: isGroup ? v.dest : null,
-      split_draft: isGroup ? JSON.stringify(splitState(row)) : null,
-      pay_method: v.payMethod || null,
-    };
-  }
-
   // ---- commit path (shared by per-row Confirm and batch Save) --------------
-
-  /** Who paid a group row: the active view's payer if they're a member of that
-   *  group, otherwise me. Personal rows are always me. */
-  function payerFor(groupId: string): string {
-    const p = activeView?.paidBy;
-    if (p && (data?.groupMembers[groupId] ?? []).some(m => m.id === p)) return p;
-    return data!.meId;
-  }
-
-  /** Resolve a row to its insert shape, or mark it not-ready. Pure (no writes). */
-  function planCommit(row: PendingTxn): CommitPlan {
-    if (!data?.personalId || !data?.meId) return { ok: false };
-    const v = eff(row);
-    const total = parseToPaise(v.amount);
-    if (total <= 0) return { ok: false };
-    const category = v.category || (v.kind === 'income' ? 'Other Income' : 'Other');
-    const payMethod = v.payMethod || undefined;
-    if (v.dest !== 'personal') {
-      const st = splitState(row);
-      const split = splitByMode(total, st.included, st.mode, st.values);
-      const assigned = st.included.reduce((s, id) => s + (split[id] ?? 0), 0);
-      if (st.included.length === 0 || assigned !== total) return { ok: false };
-      return {
-        ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(v.dest), total, category, payMethod, snap: snapshot(row),
-        shares: st.included.map(id => ({ personId: id, amount: split[id] ?? 0 })),
-        destName: data.sharedGroups.find(g => g.id === v.dest)?.name ?? 'group',
-      };
-    }
-    return {
-      ok: true, groupId: data.personalId, kind: v.kind, payer: data.meId, total, category, payMethod, snap: snapshot(row),
-      // Income has no shares (canonical shape, matches Quick); expense = my full share.
-      shares: v.kind === 'income' ? [] : [{ personId: data.meId, amount: total }],
-      destName: 'Personal',
-    };
-  }
 
   /** Insert a planned row and drop it from the inbox. Returns undo material. */
   async function insertCommit(row: PendingTxn, plan: Extract<CommitPlan, { ok: true }>): Promise<{ txnId: string; snap: PendingTxn }> {
     const txnId = await insertTxn(db, {
       groupId: plan.groupId, kind: plan.kind, entryMode: 'quick', date: row.date,
       category: plan.category, note: row.description, payMethod: plan.payMethod,
-      payments: [{ personId: plan.payer, amount: plan.total }],
+      payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
       shares: plan.shares,
     });
     await deletePending(db, row.id);
@@ -319,12 +265,12 @@ export default function ReviewScreen() {
     const ready = rows.map(r => ({ row: r, plan: planCommit(r) })).filter((x): x is { row: PendingTxn; plan: Extract<CommitPlan, { ok: true }> } => x.plan.ok);
     const skipped = rows.length - ready.length;
     if (ready.length === 0) {
-      Alert.alert('Nothing ready to save', 'These rows still need an amount — and a balanced split for group expenses.');
+      Alert.alert('Nothing ready to save', 'These rows still need an amount — a balanced split for group expenses, or who the transfer was with for group transfers.');
       return;
     }
     Alert.alert(
       label,
-      `${ready.length} transaction${ready.length === 1 ? '' : 's'} will be saved${skipped > 0 ? `. ${skipped} skipped — they need an amount or a balanced split.` : '.'}`,
+      `${ready.length} transaction${ready.length === 1 ? '' : 's'} will be saved${skipped > 0 ? `. ${skipped} skipped — they need an amount, a balanced split, or who the transfer was with.` : '.'}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -349,7 +295,7 @@ export default function ReviewScreen() {
 
   /** Remove a row from the inbox (not saved anywhere), with Undo. */
   async function deleteRow(row: PendingTxn) {
-    const snap = snapshot(row);
+    const snap = snapshotRow(row, eff(row), splitState(row));
     await deletePending(db, row.id);
     haptic.warning();
     refresh();
@@ -451,13 +397,20 @@ export default function ReviewScreen() {
     const v = eff(row);
     const vis = categoryVisual(v.category);
     const isGroup = v.dest !== 'personal';
+    const isTransfer = v.kind === 'settlement';
     const groupName = isGroup ? (data?.sharedGroups.find(g => g.id === v.dest)?.name ?? 'Group') : 'Personal';
     const gm = isGroup ? (data?.groupMembers[v.dest] ?? []) : [];
+    // A transfer into a group settles with one member instead of splitting.
+    const splitting = isGroup && !isTransfer;
     const total = parseToPaise(v.amount);
     const st = splitState(row);
-    const shares = isGroup ? splitByMode(total, st.included, st.mode, st.values) : {};
-    const assigned = isGroup ? st.included.reduce((s, id) => s + (shares[id] ?? 0), 0) : total;
-    const balanced = !isGroup || (st.included.length > 0 && assigned === total);
+    const shares = splitting ? splitByMode(total, st.included, st.mode, st.values) : {};
+    const assigned = splitting ? st.included.reduce((s, id) => s + (shares[id] ?? 0), 0) : total;
+    const balanced = !splitting || (st.included.length > 0 && assigned === total);
+    // A group transfer can't be saved until you say who it was with.
+    const other = gm.find(m => m.id === v.counterparty) ?? null;
+    const inbound = v.direction === 'credit';
+    const ready = balanced && (!isGroup || !isTransfer || other !== null);
     const saving = savingId === row.id;
     const checked = selected.has(row.id);
 
@@ -486,15 +439,18 @@ export default function ReviewScreen() {
             />
           </View>
           <View style={styles.kindToggle}>
-            {(['expense', 'income'] as TxnKind[]).map(k => (
+            {KIND_CHIPS.map(({ kind: k, label }) => (
               <TouchableOpacity
                 key={k}
-                style={[styles.kindBtn, v.kind === k && (k === 'income' ? styles.kindIncome : styles.kindExpense)]}
-                onPress={() => { haptic.selection(); patch(row.id, k === 'income' ? { kind: k, category: '', dest: 'personal' } : { kind: k, category: '' }); }}
+                style={[styles.kindBtn, v.kind === k && KIND_ON_STYLE[k]]}
+                // Switching kind clears the category — the picker's list changes
+                // with it, so keeping the old name would show a stale chip.
+                onPress={() => { haptic.selection(); patch(row.id, k === 'expense' ? { kind: k, category: '' } : { kind: k, category: '', dest: 'personal' }); }}
                 accessibilityRole="button"
+                accessibilityLabel={TXN_KIND_LABEL[k]}
                 accessibilityState={{ selected: v.kind === k }}
               >
-                <Text style={[styles.kindText, v.kind === k && styles.kindTextOn]}>{k === 'income' ? 'Inc' : 'Exp'}</Text>
+                <Text style={[styles.kindText, v.kind === k && styles.kindTextOn]}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -511,7 +467,7 @@ export default function ReviewScreen() {
             <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
             <Feather name="chevron-down" size={12} color={colors.textMuted} />
           </TouchableOpacity>
-          {hasGroups && v.kind === 'expense' && (
+          {hasGroups && v.kind !== 'income' && (
             <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} onPress={() => setDestSheetFor(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
               <Feather name={isGroup ? 'users' : 'user'} size={12} color={isGroup ? colors.settle : colors.textSecondary} />
               <Text style={[styles.pillText, isGroup && { color: colors.settle }]} numberOfLines={1}>{groupName}</Text>
@@ -519,6 +475,47 @@ export default function ReviewScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Transfer specifics: which way the money went, and (in a group) who
+            with. Direction is seeded from the statement, but not every export
+            signs its amounts — and money arriving can be a transfer TO you
+            rather than income — so it's a tap to flip. */}
+        {isTransfer && (
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={styles.pill}
+              onPress={() => { haptic.selection(); patch(row.id, { direction: inbound ? 'debit' : 'credit' }); }}
+              accessibilityRole="button"
+              accessibilityLabel={inbound ? 'Money in — tap to change to money out' : 'Money out — tap to change to money in'}
+            >
+              <Feather
+                name={inbound ? 'arrow-down-left' : 'arrow-up-right'}
+                size={12}
+                color={inbound ? colors.income : colors.expense}
+              />
+              <Text style={[styles.pillText, { color: inbound ? colors.income : colors.expense }]} numberOfLines={1}>
+                {inbound ? 'Money in' : 'Money out'}
+              </Text>
+              <Feather name="repeat" size={11} color={colors.textMuted} />
+            </TouchableOpacity>
+            {isGroup ? (
+              <TouchableOpacity
+                style={[styles.pill, other ? styles.pillGroup : styles.pillNeeded]}
+                onPress={() => setWhoSheetFor(row.id)}
+                accessibilityRole="button"
+                accessibilityLabel={inbound ? 'Who paid you' : 'Who you paid'}
+              >
+                <Feather name="user" size={12} color={other ? colors.settle : colors.expense} />
+                <Text style={[styles.pillText, { color: other ? colors.settle : colors.expense }]} numberOfLines={1}>
+                  {other ? `${inbound ? 'From' : 'To'} ${other.name}` : (inbound ? 'From whom?' : 'To whom?')}
+                </Text>
+                <Feather name="chevron-down" size={12} color={colors.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+          </View>
+        )}
 
         {/* Pay method — pre-filled from detection when the source carried a cue. */}
         <View style={styles.controls}>
@@ -537,8 +534,8 @@ export default function ReviewScreen() {
           <View style={{ flex: 1 }} />
         </View>
 
-        {/* Inline split — shown only when a group is selected. */}
-        {isGroup && (
+        {/* Inline split — group expenses only; a group transfer settles instead. */}
+        {splitting && (
           <View style={{ gap: space.sm }}>
             <SplitEditor
               members={gm}
@@ -564,9 +561,9 @@ export default function ReviewScreen() {
           <View style={styles.controls}>
             <View style={{ flex: 1 }} />
             <TouchableOpacity
-              style={[styles.confirmBtn, (!balanced || saving || batchSaving) && { opacity: 0.5 }]}
+              style={[styles.confirmBtn, (!ready || saving || batchSaving) && { opacity: 0.5 }]}
               onPress={() => confirmRow(row)}
-              disabled={!balanced || saving || batchSaving}
+              disabled={!ready || saving || batchSaving}
               accessibilityRole="button"
               accessibilityLabel="Save this transaction"
             >
@@ -581,7 +578,11 @@ export default function ReviewScreen() {
 
   const catPickerRow = catPickerFor ? pending.find(r => r.id === catPickerFor) ?? null : null;
   const catPickerKind = catPickerRow ? eff(catPickerRow).kind : 'expense';
-  const catList: Category[] = catPickerKind === 'income' ? (data?.incomeCats ?? []) : (data?.expenseCats ?? []);
+  const catList: Category[] = catPickerKind === 'income'
+    ? (data?.incomeCats ?? [])
+    : catPickerKind === 'settlement'
+    ? (data?.transferCats ?? [])
+    : (data?.expenseCats ?? []);
   const catValue = catPickerRow ? (catList.find(c => c.name === eff(catPickerRow).category) ?? null) : null;
 
   const headerRight = pending.length > 0 ? (
@@ -758,12 +759,40 @@ export default function ReviewScreen() {
       <SheetModal visible={destSheetFor !== null} onClose={() => setDestSheetFor(null)} title="Personal or group" scroll={false}>
         {destSheetFor && (
           <>
-            <DestOption label="Personal" icon="user" active={eff(pending.find(r => r.id === destSheetFor)!).dest === 'personal'} onPress={() => { patch(destSheetFor, { dest: 'personal' }); setDestSheetFor(null); }} />
+            <DestOption label="Personal" icon="user" active={eff(pending.find(r => r.id === destSheetFor)!).dest === 'personal'} onPress={() => { patch(destSheetFor, { dest: 'personal', counterparty: '' }); setDestSheetFor(null); }} />
             {data?.sharedGroups.map(g => (
-              <DestOption key={g.id} label={g.name} icon="users" active={eff(pending.find(r => r.id === destSheetFor)!).dest === g.id} onPress={() => { patch(destSheetFor, { dest: g.id }); setDestSheetFor(null); }} />
+              <DestOption key={g.id} label={g.name} icon="users" active={eff(pending.find(r => r.id === destSheetFor)!).dest === g.id} onPress={() => { patch(destSheetFor, { dest: g.id, counterparty: '' }); setDestSheetFor(null); }} />
             ))}
           </>
         )}
+      </SheetModal>
+
+      {/* Per-row transfer counterparty. Lists the chosen group's other members —
+          settling with yourself isn't a thing, so you're excluded. */}
+      <SheetModal
+        visible={whoSheetFor !== null}
+        onClose={() => setWhoSheetFor(null)}
+        title={whoSheetFor && pending.find(r => r.id === whoSheetFor)?.direction === 'credit' ? 'Who paid you?' : 'Who did you pay?'}
+        scroll={false}
+      >
+        {whoSheetFor && (() => {
+          const r = pending.find(x => x.id === whoSheetFor);
+          if (!r) return null;
+          const v = eff(r);
+          const members = (data?.groupMembers[v.dest] ?? []).filter(m => m.id !== data?.meId);
+          if (members.length === 0) {
+            return <Text style={styles.whoEmpty}>This group has no other members yet. Add someone to it first, or keep this transfer personal.</Text>;
+          }
+          return members.map(m => (
+            <DestOption
+              key={m.id}
+              label={m.name}
+              leading={<MemberAvatar name={m.name} color={m.avatar_color} size={28} imageUri={m.image_uri} />}
+              active={v.counterparty === m.id}
+              onPress={() => { patch(whoSheetFor, { counterparty: m.id }); setWhoSheetFor(null); }}
+            />
+          ));
+        })()}
       </SheetModal>
 
       {/* Per-row pay-method sheet. */}
@@ -867,228 +896,6 @@ export default function ReviewScreen() {
   );
 }
 
-function SaveViewForm({ groups, membersByGroup, onCancel, onSave }: {
-  groups: { id: string; name: string }[];
-  membersByGroup: Record<string, Person[]>;
-  onCancel: () => void;
-  onSave: (name: string, groupId: string | null, paidBy: string | null) => void;
-}) {
-  const [name, setName] = useState('');
-  const [groupId, setGroupId] = useState<string | null>(null);
-  const [paidBy, setPaidBy] = useState<string | null>(null);
-  const members = groupId ? (membersByGroup[groupId] ?? []) : [];
-  return (
-    <View style={{ gap: space.md }}>
-      <View>
-        <Text style={styles.fLabel}>NAME</Text>
-        <TextInput style={styles.fInput} value={name} onChangeText={setName} placeholder="e.g. Rohan’s UPI" placeholderTextColor={colors.textMuted} autoCorrect={false} />
-      </View>
-      {groups.length > 0 && (
-        <View>
-          <Text style={styles.fLabel}>ASSIGN TO GROUP (optional)</Text>
-          <View style={styles.fChipRow}>
-            <FChip label="None" on={groupId === null} onPress={() => { setGroupId(null); setPaidBy(null); }} />
-            {groups.map(g => (
-              <FChip key={g.id} label={g.name} on={groupId === g.id} onPress={() => { setGroupId(g.id); setPaidBy(null); }} />
-            ))}
-          </View>
-        </View>
-      )}
-      {groupId && members.length > 0 && (
-        <View>
-          <Text style={styles.fLabel}>PAID BY (a member of the group)</Text>
-          <View style={styles.fChipRow}>
-            {members.map(m => (
-              <FChip key={m.id} label={m.name} on={paidBy === m.id} onPress={() => setPaidBy(paidBy === m.id ? null : m.id)} />
-            ))}
-          </View>
-        </View>
-      )}
-      <View style={styles.fActions}>
-        <TouchableOpacity onPress={onCancel} style={styles.fClearBtn} accessibilityRole="button"><Text style={styles.fClearText}>Cancel</Text></TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <PrimaryButton label="Save view" onPress={() => onSave(name, groupId, paidBy)} disabled={!name.trim()} />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function DestOption({ label, icon, active, onPress }: { label: string; icon: 'user' | 'users'; active: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={[styles.destOption, active && styles.destOptionOn]} onPress={onPress} accessibilityRole="button">
-      <Feather name={icon} size={16} color={active ? colors.settle : colors.textSecondary} />
-      <Text style={[styles.destOptionText, active && { color: colors.settle, fontFamily: 'Inter_600SemiBold' }]}>{label}</Text>
-      {active && <Feather name="check" size={16} color={colors.settle} style={{ marginLeft: 'auto' }} />}
-    </TouchableOpacity>
-  );
-}
-
-const AMOUNT_MODES: { key: AmountMode; label: string }[] = [
-  { key: 'any', label: 'Any' },
-  { key: 'lt', label: '< less' },
-  { key: 'gt', label: '> more' },
-  { key: 'between', label: 'Between' },
-];
-
-function FilterForm({ filters, categories, onChange, onClear, onDone }: {
-  filters: ReviewFilters;
-  categories: string[];
-  onChange: (f: ReviewFilters) => void;
-  onClear: () => void;
-  onDone: () => void;
-}) {
-  const set = (p: Partial<ReviewFilters>) => onChange({ ...filters, ...p });
-  const [pick, setPick] = useState<'from' | 'to' | null>(null);
-  const [timePick, setTimePick] = useState<'from' | 'to' | null>(null);
-  const pickValue = pick === 'to'
-    ? (parseFilterDate(filters.dateTo, true) ?? Date.now())
-    : (parseFilterDate(filters.dateFrom, false) ?? Date.now());
-  // Seed the time picker from the bound's existing time, else a sensible default.
-  const timeStr = timePick === 'to' ? filters.dateTo : timePick === 'from' ? filters.dateFrom : '';
-  const tm = /\s(\d{2}):(\d{2})$/.exec(timeStr);
-  const timeValue: TimeValue = tm
-    ? { hour: Number(tm[1]), minute: Number(tm[2]) }
-    : (timePick === 'to' ? { hour: 23, minute: 59 } : { hour: 0, minute: 0 });
-  return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
-      <View>
-        <Text style={styles.fLabel}>NAME</Text>
-        <TextInput
-          style={styles.fInput}
-          value={filters.query}
-          onChangeText={(t) => set({ query: t })}
-          placeholder="Search description"
-          placeholderTextColor={colors.textMuted}
-          autoCorrect={false}
-        />
-      </View>
-
-      {categories.length > 0 && (
-        <View>
-          <Text style={styles.fLabel}>CATEGORY</Text>
-          <View style={styles.fChipRow}>
-            <FChip label="Any" on={filters.category === ''} onPress={() => set({ category: '' })} />
-            {categories.map(c => (
-              <FChip key={c} label={c} on={filters.category === c} onPress={() => set({ category: c })} />
-            ))}
-          </View>
-        </View>
-      )}
-
-      <View>
-        <Text style={styles.fLabel}>AMOUNT (₹)</Text>
-        <View style={styles.seg}>
-          {AMOUNT_MODES.map(m => (
-            <TouchableOpacity key={m.key} style={[styles.segBtn, filters.amountMode === m.key && styles.segBtnOn]} onPress={() => set({ amountMode: m.key })} accessibilityRole="button">
-              <Text style={[styles.segText, filters.amountMode === m.key && styles.segTextOn]}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {filters.amountMode !== 'any' && (
-          <View style={styles.fDateRow}>
-            <TextInput
-              style={styles.fDateInput}
-              value={filters.amtA}
-              onChangeText={(t) => set({ amtA: t.replace(/[^0-9.]/g, '') })}
-              placeholder={filters.amountMode === 'between' ? 'From' : 'Amount'}
-              placeholderTextColor={colors.textMuted}
-              keyboardType="decimal-pad"
-            />
-            {filters.amountMode === 'between' && (
-              <TextInput
-                style={styles.fDateInput}
-                value={filters.amtB}
-                onChangeText={(t) => set({ amtB: t.replace(/[^0-9.]/g, '') })}
-                placeholder="To"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
-              />
-            )}
-          </View>
-        )}
-      </View>
-
-      <View>
-        <Text style={styles.fLabel}>DATE &amp; TIME RANGE</Text>
-        <View style={styles.fDateRow}>
-          <TouchableOpacity style={styles.fDateBtn} onPress={() => setPick('from')} accessibilityRole="button" accessibilityLabel="From date and time">
-            <Feather name="calendar" size={14} color={colors.textMuted} />
-            <Text style={[styles.fDateText, !filters.dateFrom && styles.fDatePlaceholder]}>{filters.dateFrom || 'From'}</Text>
-            {!!filters.dateFrom && (
-              <TouchableOpacity onPress={() => set({ dateFrom: '' })} hitSlop={8} accessibilityLabel="Clear from date"><Feather name="x" size={13} color={colors.textMuted} /></TouchableOpacity>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.fDateBtn} onPress={() => setPick('to')} accessibilityRole="button" accessibilityLabel="To date and time">
-            <Feather name="calendar" size={14} color={colors.textMuted} />
-            <Text style={[styles.fDateText, !filters.dateTo && styles.fDatePlaceholder]}>{filters.dateTo || 'To'}</Text>
-            {!!filters.dateTo && (
-              <TouchableOpacity onPress={() => set({ dateTo: '' })} hitSlop={8} accessibilityLabel="Clear to date"><Feather name="x" size={13} color={colors.textMuted} /></TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <DatePickerSheet
-        visible={pick !== null}
-        value={pickValue}
-        onClose={() => setPick(null)}
-        onChange={(ms) => {
-          const d = format(new Date(ms), 'yyyy-MM-dd');
-          const which = pick;
-          set(which === 'to' ? { dateTo: d } : { dateFrom: d });
-          setPick(null);
-          setTimePick(which); // chain into the time picker for this bound
-        }}
-      />
-
-      <TimePickerSheet
-        visible={timePick !== null}
-        value={timeValue}
-        title="Pick a time (optional)"
-        onClose={() => setTimePick(null)}
-        onSave={(t) => {
-          const cur = timePick === 'to' ? filters.dateTo : filters.dateFrom;
-          const datePart = (cur || '').split(' ')[0];
-          if (datePart) {
-            const withTime = `${datePart} ${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
-            set(timePick === 'to' ? { dateTo: withTime } : { dateFrom: withTime });
-          }
-          setTimePick(null);
-        }}
-      />
-
-      <View>
-        <Text style={styles.fLabel}>MATCH</Text>
-        <View style={styles.seg}>
-          {(['and', 'or'] as const).map(c => (
-            <TouchableOpacity key={c} style={[styles.segBtn, filters.combine === c && styles.segBtnOn]} onPress={() => set({ combine: c })} accessibilityRole="button">
-              <Text style={[styles.segText, filters.combine === c && styles.segTextOn]}>{c === 'and' ? 'All (AND)' : 'Any (OR)'}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.fActions}>
-        <TouchableOpacity onPress={onClear} accessibilityRole="button" style={styles.fClearBtn}>
-          <Text style={styles.fClearText}>Clear filters</Text>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <PrimaryButton label="Done" onPress={onDone} />
-        </View>
-      </View>
-    </ScrollView>
-  );
-}
-
-function FChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={[styles.fChip, on && styles.fChipOn]} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }}>
-      <Text style={[styles.fChipText, on && styles.fChipTextOn]} numberOfLines={1}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
@@ -1120,6 +927,9 @@ const styles = StyleSheet.create({
   kindBtn: { paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.sm },
   kindExpense: { backgroundColor: colors.expense },
   kindIncome: { backgroundColor: colors.income },
+  kindSettle: { backgroundColor: colors.settle },
+  pillNeeded: { borderColor: colors.expense, backgroundColor: colors.expense + '18' },
+  whoEmpty: { ...type.body, color: colors.textSecondary, padding: space.md, lineHeight: 20 },
   kindText: { ...type.label, color: colors.textSecondary },
   kindTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
@@ -1156,28 +966,12 @@ const styles = StyleSheet.create({
   viewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   viewName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   viewSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  destOption: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.md },
-  destOptionOn: { backgroundColor: colors.bgMuted },
-  destOptionText: { ...type.body, color: colors.textPrimary },
   // Filter form
-  fLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: 'Inter_600SemiBold', marginBottom: 6 },
-  fInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 10 },
-  fChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  fChip: { paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border, maxWidth: 160 },
-  fChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  fChipText: { ...type.label, color: colors.textSecondary },
-  fChipTextOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  seg: { flexDirection: 'row', backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3, gap: 3 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: space.sm, borderRadius: radius.sm },
-  segBtnOn: { backgroundColor: colors.accent },
-  segText: { ...type.label, color: colors.textSecondary },
-  segTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  fDateRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  fDateInput: { flex: 1, ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 10 },
-  fDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 12 },
-  fDateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  fDatePlaceholder: { color: colors.textMuted },
-  fActions: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.sm },
-  fClearBtn: { paddingHorizontal: space.md, paddingVertical: 12 },
-  fClearText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 });
+
+/** Fill for the selected kind chip. Declared after `styles` so it can reference it. */
+const KIND_ON_STYLE: Record<TxnKind, object> = {
+  expense: styles.kindExpense,
+  income: styles.kindIncome,
+  settlement: styles.kindSettle,
+};

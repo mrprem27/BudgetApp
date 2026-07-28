@@ -1,6 +1,7 @@
 import type * as SQLite from 'expo-sqlite';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { getTransactionsInRange } from '../db/queries/transactions';
+import { csvQuote } from './importParse';
 import { formatRupees } from './money';
 import type { BudgetGroup } from '../db/queries/groups';
 
@@ -33,8 +34,9 @@ export async function buildReportCsv(
         ? t.payments.reduce((s, p) => s + p.amount, 0)
         : t.shares.reduce((s, sh) => s + sh.amount, 0);
       const amt = (paise / 100).toFixed(2);
-      const note = (t.note ?? '').replace(/"/g, '""');
-      lines.push(`${date},"${g.name}","${t.category}",${t.kind},${amt},"${note}"`);
+      // Every quoted field goes through csvQuote — group name and category can
+      // contain a quote just as easily as the note can.
+      lines.push(`${date},${csvQuote(g.name)},${csvQuote(t.category)},${t.kind},${amt},${csvQuote(t.note)}`);
     }
   }
   return lines.join('\n');

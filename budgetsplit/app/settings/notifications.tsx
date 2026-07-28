@@ -9,6 +9,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import {
   getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
   MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
@@ -27,7 +28,7 @@ export default function NotificationsScreen() {
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
 
   // Reminder prefs + OS permission load on focus / cross-screen write via useScreenData.
-  const { data, reload } = useScreenData(async () => {
+  const { data, error: loadError, reload } = useScreenData(async () => {
     const [prefs, perm] = await Promise.all([
       getReminderPrefs(),
       Notifications.getPermissionsAsync(),
@@ -87,6 +88,13 @@ export default function NotificationsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Notifications & Reminders" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState
+          title="Couldn't load reminder settings"
+          body="Your notification preferences couldn't be read. Try again."
+          onRetry={reload}
+        />
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {permStatus === 'denied' && (
           <View style={styles.deniedBanner}>
@@ -181,6 +189,7 @@ export default function NotificationsScreen() {
 
         <Text style={styles.footer}>All notifications are local — no server, no push, always offline.</Text>
       </ScrollView>
+      )}
 
       {prefs && (
         <TimePickerSheet

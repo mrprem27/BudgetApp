@@ -1,5 +1,9 @@
 # BudgetSplit — Brutal Analysis of the Current Codebase
 
+> 📦 **ARCHIVED 2026-07-28.** Still-open items have been verified against live code and merged
+> into **[DEBT_TRACKER.md](./DEBT_TRACKER.md)**, which is now the single source of truth.
+> Kept for the historical teardown reasoning. **Do not add new items here.**
+
 > An honest, evidence-backed critique of the code **as it actually exists** on branch
 > `redesign/phase-2`. No charity — strengths get one line, the rest is what's broken,
 > half-finished, duplicated, or confusing. Every claim cites a real `file:line`. The fix

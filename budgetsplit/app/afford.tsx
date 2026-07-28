@@ -9,6 +9,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { CategoryChip } from '../src/components/finance/CategoryChip';
 import { getAffordSnapshot, type AffordSnapshot } from '../src/db/queries/savings';
 import {
@@ -23,11 +24,13 @@ export default function AffordScreen() {
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
   // Refetch on focus (via useScreenData) so the snapshot reflects txns added elsewhere.
-  // The loader swallows errors into an empty snapshot, matching the prior behavior.
-  const { data: snap } = useScreenData(async (db): Promise<AffordSnapshot> => {
-    try { return await getAffordSnapshot(db); }
-    catch { return { available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }; }
-  }, []);
+  // Errors must NOT be swallowed here: a zeroed snapshot renders as "₹0 available",
+  // i.e. a confident wrong answer telling the user they can't afford anything.
+  // Let it throw so `loadError` surfaces a retry instead.
+  const { data: snap, error: loadError, reload } = useScreenData(
+    async (db): Promise<AffordSnapshot> => getAffordSnapshot(db),
+    [],
+  );
 
   const amount = parseToPaise(amountText);
   const available = snap?.available ?? 0;
@@ -79,6 +82,13 @@ export default function AffordScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Can I afford this?" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState
+          title="Couldn't check your balance"
+          body="We couldn't read your available money, so we can't answer this yet. Try again."
+          onRetry={reload}
+        />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>What does it cost?</Text>
@@ -192,6 +202,7 @@ export default function AffordScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }

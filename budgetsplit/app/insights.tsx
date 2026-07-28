@@ -4,27 +4,48 @@ import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LineChart } from 'react-native-gifted-charts';
 import { getDate, getDaysInMonth, format } from 'date-fns';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
+import { asFeather } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { Badge } from '../src/components/ui/Badge';
 import { EmptyState } from '../src/components/ui/EmptyState';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { InsightText } from '../src/components/finance/InsightText';
+import { recBg, recColor } from '../src/components/finance/group/helpers';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getBudgetAnalytics } from '../src/lib/analytics';
 import { getAllGroups } from '../src/db/queries/groups';
-import { formatCompact } from '../src/lib/money';
+import { buildSavingsInsights } from '../src/db/queries/savings';
+import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
+import type { Insight } from '../src/lib/savingsInsights';
+import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
 
 type Shift = { cat: string; thisAmt: number; pct: number };
+type Rec = { key: string; severity: 'warn' | 'info' | 'good'; icon: string; text: string; group: string };
+type Driver = { key: string; category: string; over: number; group: string };
+type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
+
+function insightTint(tone: Insight['tone']): string {
+  switch (tone) {
+    case 'achieve': return colors.income;
+    case 'warn': return colors.healthAmber;
+    case 'progress': return colors.income;
+    default: return colors.accent; // motivate, compare
+  }
+}
 
 export default function InsightsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [cutPct, setCutPct] = useState(20);
 
-  const { data, loading, refreshing, onRefresh } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const grps = await getAllGroups(db);
     const personalId = grps.find(g => g.is_personal === 1)?.id ?? '';
 
@@ -59,9 +80,59 @@ export default function InsightsScreen() {
     const daysInMonth = getDaysInMonth(today);
     const projected = dayOfMonth > 0 ? Math.round((monthSpend / dayOfMonth) * daysInMonth) : 0;
 
-    // Total budget across all groups.
-    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
-    const budget = analyticsAll.reduce((s, a) => s + a.totalAllocated, 0);
+    // Month-end forecast graph (moved here from Reports): a solid "spent so far"
+    // line and a dashed projection to month-end, using the credibility-weighted
+    // model (src/lib/forecast). Rupee values (÷100) so the chart axis reads in ₹.
+    let forecastActual: LinePoint[] = [];
+    let forecastProjected: LinePoint[] = [];
+    let projectedTotal = 0;
+    if (dayOfMonth >= FORECAST_MIN_DAYS) {
+      const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed
+      for (const t of monthTxns) {
+        if (t.kind !== 'expense') continue;
+        const d = getDate(new Date(t.date));
+        if (d >= 1 && d <= daysInMonth) spendByDay[d] += t.shares.reduce((x: number, sh: { amount: number }) => x + sh.amount, 0);
+      }
+      const dailyCumulative: number[] = [];
+      let running = 0;
+      for (let d = 1; d <= dayOfMonth; d++) { running += spendByDay[d]; dailyCumulative.push(Math.round(running / 100)); }
+      const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
+      const fc = forecastMonthEnd(running, dayOfMonth, daysInMonth, priorMonthTotal);
+      if (fc.ready) {
+        const labelForDay = (d: number) => (d % 2 === 1 ? `${d}` : '');
+        // Projected series owns the x-axis labels and spans the whole month.
+        forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
+          const d = i + 1;
+          const value = d <= dayOfMonth
+            ? dailyCumulative[d - 1]
+            : Math.round(projectedAtDay(running, dayOfMonth, daysInMonth, fc.projected, d) / 100);
+          return { value, label: labelForDay(d), hideDataPoint: true };
+        });
+        // Solid "actual" overlay up to today; marks the "today" point only.
+        forecastActual = dailyCumulative.map((value, i) => ({
+          value, label: '', hideDataPoint: i !== dayOfMonth - 1,
+          dataPointColor: colors.expense, dataPointRadius: 5,
+        }));
+        projectedTotal = Math.round(fc.projected / 100);
+      }
+    }
+
+    // Budget analytics per group — powers the total, plus the recommendations and
+    // "driving overspend" that used to live inside each group's Budget tab. They're
+    // aggregated across every group here and tagged with the group name.
+    const analyticsByGroup = await Promise.all(grps.map(async g => ({ group: g, a: await getBudgetAnalytics(db, g) })));
+    const budget = analyticsByGroup.reduce((s, x) => s + x.a.totalAllocated, 0);
+
+    const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
+      a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
+    );
+    const drivers: Driver[] = analyticsByGroup
+      .flatMap(({ group, a }) => a.overBudget.map(t => ({ key: `${group.id}:${t.category}`, category: t.category, over: t.spent - t.allocated, group: group.name })))
+      .sort((x, y) => y.over - x.over)
+      .slice(0, 6);
+
+    // Savings nudges — moved here from the Plan tab.
+    const savings = await buildSavingsInsights(db);
 
     // Biggest category shifts vs last month.
     const shifts: Shift[] = Object.entries(catMap)
@@ -73,15 +144,22 @@ export default function InsightsScreen() {
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 3);
 
-    return { personalId, monthSpend, budget, projected, shifts, whatIf };
+    return { personalId, monthSpend, budget, projected, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
   }, []);
 
   const personalId = data?.personalId ?? '';
   const monthSpend = data?.monthSpend ?? 0;
   const budget = data?.budget ?? 0;
   const projected = data?.projected ?? 0;
+  const forecastActual = data?.forecastActual ?? [];
+  const forecastProjected = data?.forecastProjected ?? [];
+  const projectedTotal = data?.projectedTotal ?? 0;
   const shifts = data?.shifts ?? [];
   const whatIf = data?.whatIf ?? null;
+  const recommendations = data?.recommendations ?? [];
+  const drivers = data?.drivers ?? [];
+  const savings = data?.savings ?? [];
+  const multiGroup = data?.multiGroup ?? false;
 
   const today = new Date();
   const dayOfMonth = getDate(today);
@@ -91,7 +169,9 @@ export default function InsightsScreen() {
   const pctUsed = budget > 0 ? Math.min(100, Math.round((monthSpend / budget) * 100)) : 0;
   const dailyAvg = dayOfMonth > 0 ? Math.round(monthSpend / dayOfMonth) : 0;
   const budgetPerDay = daysInMonth > 0 ? Math.round(budget / daysInMonth) : 0;
-  const nothingYet = !loading && !overspend && shifts.length === 0 && !whatIf;
+  const hasForecast = forecastActual.length >= 2 && forecastProjected.length >= 1;
+  const nothingYet = !loading && !overspend && shifts.length === 0 && !whatIf
+    && recommendations.length === 0 && drivers.length === 0 && savings.length === 0 && !hasForecast;
 
   return (
     <View style={styles.container}>
@@ -100,6 +180,9 @@ export default function InsightsScreen() {
         onBack={() => router.back()}
         right={<View style={styles.monthPill}><Text style={styles.monthPillText}>{format(today, 'MMMM')}</Text></View>}
       />
+      {loadError ? (
+        <ErrorState onRetry={reload} />
+      ) : (
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -135,6 +218,114 @@ export default function InsightsScreen() {
               <Feather name="chevron-right" size={12} color={colors.accent} />
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* MONTH-END FORECAST — projection graph (moved from Reports) */}
+        {hasForecast && (
+          <>
+            <Text style={styles.secLabel}>MONTH-END FORECAST</Text>
+            <View style={styles.chartCard}>
+              <View style={styles.forecastHeader}>
+                <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
+                <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
+              </View>
+              <LineChart
+                data={forecastProjected}
+                data2={forecastActual}
+                color1={colors.accent}
+                color2={colors.expense}
+                thickness1={2}
+                thickness2={2.5}
+                strokeDashArray1={[5, 5]}
+                noOfSections={4}
+                maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
+                spacing={Math.max(8, 300 / Math.max(forecastProjected.length, 1))}
+                initialSpacing={8}
+                endSpacing={8}
+                xAxisThickness={0}
+                yAxisThickness={0}
+                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                formatYLabel={formatAxisShort}
+                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
+                hideRules
+                isAnimated
+                disableScroll
+                pointerConfig={{
+                  pointerStripUptoDataPoint: true,
+                  pointerStripColor: colors.textMuted + '60',
+                  pointerStripWidth: 1,
+                  pointerColor: colors.accent,
+                  radius: 5,
+                  pointerLabelWidth: 76,
+                  pointerLabelHeight: 32,
+                  activatePointersOnLongPress: false,
+                  autoAdjustPointerLabelPosition: true,
+                  pointerLabelComponent: (items: Array<{ value: number }>) => {
+                    const val = items[0]?.value ?? 0;
+                    return (
+                      <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: space.sm, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
+                        <Text style={{ color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', fontSize: 11 }}>
+                          {formatAxisShort(val)}
+                        </Text>
+                      </View>
+                    );
+                  },
+                }}
+              />
+              <View style={styles.forecastLegend}>
+                <View style={styles.forecastLegendItem}>
+                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.expense }]} />
+                  <Text style={styles.forecastLegendText}>Actual</Text>
+                </View>
+                <View style={styles.forecastLegendItem}>
+                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.accent }]} />
+                  <Text style={styles.forecastLegendText}>Projected</Text>
+                </View>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* RECOMMENDATIONS — aggregated across every group's budget */}
+        {recommendations.length > 0 && (
+          <>
+            <Text style={styles.secLabel}>RECOMMENDATIONS</Text>
+            <View style={styles.recList}>
+              {recommendations.map(r => (
+                <View key={r.key} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
+                  <Feather name={asFeather(r.icon, 'info')} size={15} color={recColor(r.severity)} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
+                    {multiGroup && <Text style={styles.recGroup}>{r.group}</Text>}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* DRIVING OVERSPEND — biggest over-budget categories across groups */}
+        {drivers.length > 0 && (
+          <>
+            <Text style={styles.secLabel}>DRIVING OVERSPEND</Text>
+            <View style={styles.secCard}>
+              {drivers.map((d, i) => {
+                const vis = categoryVisual(d.category);
+                return (
+                  <View key={d.key} style={[styles.driverRow, i < drivers.length - 1 && styles.rowBorder]}>
+                    <View style={[styles.driverIcon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                      <Feather name={vis?.icon ?? 'tag'} size={14} color={vis?.color ?? colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.driverName} numberOfLines={1}>{d.category}</Text>
+                      {multiGroup && <Text style={styles.driverGroup}>{d.group}</Text>}
+                    </View>
+                    <Text style={styles.driverOver}>{formatCompact(d.over)} over</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </>
         )}
 
         {/* SHIFTS VS LAST MONTH */}
@@ -191,6 +382,25 @@ export default function InsightsScreen() {
           </>
         )}
 
+        {/* SAVINGS — opportunity-cost / habit nudges (moved from the Plan tab) */}
+        {savings.length > 0 && (
+          <>
+            <Text style={styles.secLabel}>SAVINGS</Text>
+            <View style={[styles.secCard, { paddingHorizontal: space.md }]}>
+              {savings.map((ins, i) => {
+                const tint = insightTint(ins.tone);
+                return (
+                  <View key={ins.text} style={[styles.savingsRow, i > 0 && styles.rowBorder]}>
+                    <View style={[styles.savingsIcon, { backgroundColor: tint + '22' }]}>
+                      <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
+                    </View>
+                    <InsightText text={ins.text} color={tint} style={styles.savingsText} />
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {nothingYet && (
           <EmptyState
@@ -201,6 +411,7 @@ export default function InsightsScreen() {
           />
         )}
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -238,6 +449,33 @@ const styles = StyleSheet.create({
   whatIfYear: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   secCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+
+  // Month-end forecast graph
+  chartCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
+  forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  forecastSub: { ...type.caption, color: colors.textMuted, flex: 1 },
+  forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
+  forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  forecastLegendLine: { width: 16, height: 3, borderRadius: 2 },
+  forecastLegendText: { ...type.caption, color: colors.textMuted },
+
+  // Recommendations (aggregated from every group's budget)
+  recList: { gap: space.sm, marginBottom: space.xs },
+  recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
+  recText: { ...type.label, lineHeight: 18 },
+  recGroup: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+
+  // Driving overspend
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: 11 },
+  driverIcon: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  driverName: { ...type.body, color: colors.textPrimary },
+  driverGroup: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  driverOver: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+
+  // Savings nudges
+  savingsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
+  savingsIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  savingsText: { ...type.body, color: colors.textSecondary, flex: 1, lineHeight: 20 },
   shiftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: space.md, paddingVertical: 11 },
   shiftEmoji: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   shiftCat: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },

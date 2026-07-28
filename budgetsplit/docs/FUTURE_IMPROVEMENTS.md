@@ -1,5 +1,9 @@
 # BudgetSplit — Future Improvements
 
+> 📦 **ARCHIVED 2026-07-28.** Still-open items have been verified against live code and merged
+> into **[DEBT_TRACKER.md](./DEBT_TRACKER.md)**, which is now the single source of truth.
+> Kept for the longer-range product ideas. **Do not add new items here.**
+
 > Ideas for where the product and codebase can go next. Organized by category, each item
 > tagged with rough **effort** (S/M/L/XL) and whether it respects the **offline promise**
 > (no network/accounts/cloud). Items that would break that promise are flagged ⚠️ and kept

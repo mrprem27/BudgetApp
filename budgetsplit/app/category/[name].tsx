@@ -14,6 +14,7 @@ import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { getCategoryBudgets, type CategoryBudget } from '../../src/db/queries/categoryBudgets';
@@ -67,7 +68,7 @@ export default function CategoryDetailScreen() {
   // Refetch on focus (via useScreenData) so returning after adding/editing a txn shows fresh data.
   // All of this year's expenses (every category) are fetched — period subsets are derived
   // client-side so switching tabs is instant and needs no re-query.
-  const { data, loading } = useScreenData(async (db): Promise<{
+  const { data, loading, error: loadError, reload } = useScreenData(async (db): Promise<{
     myId: string;
     personalGroupId: string | null;
     groupNames: Record<string, string>;
@@ -178,7 +179,7 @@ export default function CategoryDetailScreen() {
   // Everything above the transaction list — rendered as the FlatList header so the
   // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
   const listHeader = (
-    <>
+    <View style={styles.headerBlocks}>
       {/* Minimal back-link */}
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="chevron-left" size={18} color={colors.accent} />
@@ -338,7 +339,7 @@ export default function CategoryDetailScreen() {
             {view.txns.length > 0 && <Text style={styles.txnLabel}>Transactions</Text>}
           </>
         )}
-    </>
+    </View>
   );
 
   return (
@@ -347,7 +348,7 @@ export default function CategoryDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + space.xs }]}
         showsVerticalScrollIndicator={false}
-        data={loading ? [] : view.txns}
+        data={loading || loadError ? [] : view.txns}
         keyExtractor={(txn) => txn.id}
         renderItem={renderTxn}
         ItemSeparatorComponent={TxnDivider}
@@ -356,7 +357,11 @@ export default function CategoryDetailScreen() {
         windowSize={11}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
-          loading ? null : (
+          // Error goes here rather than replacing the whole list: `listHeader`
+          // holds this screen's only back link, so blanking it would trap the user.
+          loadError ? (
+            <ErrorState onRetry={reload} />
+          ) : loading ? null : (
             <EmptyState icon="inbox" title="No transactions" body={`No expenses in this category ${PERIOD_NOUN[period]}.`} />
           )
         }
@@ -373,6 +378,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: layout.screenPaddingH, gap: space.md, paddingBottom: space.xl },
+  // The FlatList content `gap` only separates the header block from the rows — it
+  // can't space the cards *inside* this fragment. Give the header its own gap so
+  // every summary card is evenly separated.
+  headerBlocks: { gap: space.md },
 
   back: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: space.xs, marginLeft: -4 },
   backText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

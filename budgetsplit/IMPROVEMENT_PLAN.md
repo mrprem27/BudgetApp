@@ -1,5 +1,10 @@
 # BudgetSplit — Audit & Improvement Plan (living tracker)
 
+> 📦 **ARCHIVED 2026-07-28 — no longer the living tracker.** Still-open items (including the
+> two `(BLOCKED — Q1)` decisions) have been verified against live code and merged into
+> **[docs/DEBT_TRACKER.md](./docs/DEBT_TRACKER.md)**, which is now the single source of truth.
+> Kept for the per-phase verification history. **Do not add new items here.**
+
 Grounded in three read-only audits (input fields; screens/flows/state; design-system/a11y) against `AGENTS.md`. Worked one item at a time; each `[x]` is verified (`tsc` + `jest` from `budgetsplit/`). Runtime/device verification is the user's. `(BLOCKED)` = waiting on a Questions & Clarifications answer.
 
 ## Phase 0 — Correctness & dead-ends  ✅ done (tsc clean)

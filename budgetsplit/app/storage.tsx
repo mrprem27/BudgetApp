@@ -8,6 +8,7 @@ import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { getAttachmentStorage, clearAllAttachmentFiles } from '../src/lib/attachment';
 import { clearAllAttachmentRefs } from '../src/db/queries/transactions';
@@ -32,7 +33,7 @@ export default function StorageScreen() {
 
   // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
   // imports/deletes made elsewhere. getAttachmentStorage is sync; db is unused here.
-  const { data, reload } = useScreenData(async () => getAttachmentStorage(), []);
+  const { data, error: loadError, reload } = useScreenData(async () => getAttachmentStorage(), []);
   const count = data?.count ?? 0;
   const bytes = data?.bytes ?? 0;
 
@@ -118,17 +119,30 @@ export default function StorageScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Storage" onBack={() => router.back()} />
       <View style={styles.content}>
-        <View style={styles.card}>
-          <View style={styles.iconCircle}><Feather name="paperclip" size={20} color={colors.accent} /></View>
-          <Text style={styles.amount}>{formatBytes(bytes)}</Text>
-          <Text style={styles.sub}>{count} receipt {count === 1 ? 'photo' : 'photos'} stored on this device</Text>
-        </View>
+        {/* Only the storage *stats* come from the loader. If that read fails we
+            surface it here rather than blanking the screen — the reset/erase
+            actions below are exactly what a user needs when storage misbehaves. */}
+        {loadError ? (
+          <ErrorState
+            title="Couldn't read storage"
+            body="The attachment size couldn't be calculated. The actions below still work."
+            onRetry={reload}
+          />
+        ) : (
+          <>
+            <View style={styles.card}>
+              <View style={styles.iconCircle}><Feather name="paperclip" size={20} color={colors.accent} /></View>
+              <Text style={styles.amount}>{formatBytes(bytes)}</Text>
+              <Text style={styles.sub}>{count} receipt {count === 1 ? 'photo' : 'photos'} stored on this device</Text>
+            </View>
 
-        <Text style={styles.note}>
-          Receipt photos are compressed on import and never leave your device. Delete them here to free up space — your transactions are kept.
-        </Text>
+            <Text style={styles.note}>
+              Receipt photos are compressed on import and never leave your device. Delete them here to free up space — your transactions are kept.
+            </Text>
 
-        <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={count === 0} />
+            <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={count === 0} />
+          </>
+        )}
 
         {/* Developer / QA — populate or wipe the whole app for testing. */}
         <View style={styles.devSection}>

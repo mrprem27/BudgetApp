@@ -1,5 +1,16 @@
 # BudgetSplit — Refactoring Plan
 
+> 📦 **ARCHIVED 2026-07-28.** Still-open items have been verified against live code and merged
+> into **[DEBT_TRACKER.md](./DEBT_TRACKER.md)**, which is now the single source of truth.
+> Kept for the historical sequencing rationale. **Do not add new items here.**
+>
+> ⚠️ **The unchecked `- [ ]` boxes below are STALE.** This plan was *executed* (see
+> "Completion status") but the boxes were never ticked, so it reads as far more broken than
+> the codebase is. Verified examples: the four DB indexes at lines 83–86 all exist today at
+> `src/db/schema.ts:371-383`; the `nextOccurrence` dedup at line 157 is done; the `quick.tsx`
+> and `group/[id].tsx` monoliths at lines 179/182 were both cut. **Trust DEBT_TRACKER.md,
+> not the checkboxes here.**
+
 > An implementation-ready plan to pay down the debt catalogued in
 > [BRUTAL_ANALYSIS.md](./BRUTAL_ANALYSIS.md), without breaking the working engines or the
 > design system. Sequenced lowest-risk-first so each phase is independently shippable and
