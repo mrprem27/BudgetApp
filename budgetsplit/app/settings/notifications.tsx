@@ -17,6 +17,7 @@ import {
 import { sendTestReminder } from '../../src/lib/notifications';
 import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
 import { haptic } from '../../src/lib/haptics';
+import { alpha } from '../../src/theme';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -207,11 +208,11 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: space.xxl },
-  deniedBanner: { backgroundColor: '#1F0E0E', borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
+  deniedBanner: { backgroundColor: colors.expenseTintDeep, borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
   deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   deniedSub: { ...type.caption, color: colors.textSecondary },
-  deniedCta: { backgroundColor: colors.expense + '22', borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
+  deniedCta: { backgroundColor: alpha(colors.expense, 13), borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
   deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
   typeLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   typeDesc: { ...type.caption, color: colors.textSecondary },
   // Sub-config rows under an enabled reminder.
-  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg + '55' },
+  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: alpha(colors.bg, 33) },
   configLabel: { ...type.body, color: colors.textSecondary, flex: 1 },
   configValue: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
   thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.textMuted },
   thumbOn: { backgroundColor: colors.bg, alignSelf: 'flex-end' },
   testRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
-  testBtn: { backgroundColor: colors.accent + '22', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
+  testBtn: { backgroundColor: alpha(colors.accent, 13), borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
   testBtnDisabled: { backgroundColor: colors.bgMuted, borderColor: colors.border },
   testBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.lg },

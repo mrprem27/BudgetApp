@@ -7,6 +7,7 @@ import { haptic } from '../../lib/haptics';
 import type { Category } from '../../db/queries/categories';
 import { IconCircle } from '../ui/IconCircle';
 import { SheetModal } from '../ui/SheetModal';
+import { alpha } from '../../theme';
 
 type Props = {
   categories: Category[];
@@ -81,7 +82,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
       >
         {value ? (
           <View style={styles.fieldInner}>
-            <View style={[styles.iconDot, { backgroundColor: (value.color ?? colors.accent) + '22' }]}>
+            <View style={[styles.iconDot, { backgroundColor: alpha(value.color ?? colors.accent, 13) }]}>
               <Feather name={asFeather(value.icon, 'tag')} size={15} color={value.color ?? colors.accent} />
             </View>
             <Text style={styles.fieldValue}>{value.name}</Text>
@@ -145,7 +146,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
                     accessibilityLabel={item.name}
                     accessibilityState={{ selected: active }}
                   >
-                    <View style={[styles.tileIcon, { backgroundColor: (item.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.tileIcon, { backgroundColor: alpha(item.color ?? colors.accent, 13) }]}>
                       <Feather name={asFeather(item.icon, 'tag')} size={20} color={item.color ?? colors.accent} />
                     </View>
                     <Text style={[styles.tileLabel, active && styles.tileLabelActive]} numberOfLines={1}>

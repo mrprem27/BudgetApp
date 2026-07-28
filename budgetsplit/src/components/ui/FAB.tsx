@@ -9,6 +9,7 @@ import { colors, type, space, radius, shadow, gradients } from '../tokens';
 import { layout } from '../../constants/layout';
 import type { FeatherName } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
+import { alpha } from '../../theme';
 
 export type Action = {
   label: string;
@@ -76,7 +77,7 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel={a.label}
                 >
-                  <View style={[styles.actionIcon, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: alpha(tint, 13), borderColor: alpha(tint, 27) }]}>
                     <Feather name={a.icon} size={18} color={tint} />
                   </View>
                   <View style={{ flex: 1 }}>

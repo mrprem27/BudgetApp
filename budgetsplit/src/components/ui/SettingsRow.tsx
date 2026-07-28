@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space } from '../tokens';
+import { alpha } from '../../theme';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;
@@ -32,7 +33,7 @@ export function SettingsRow({ icon, label, value, tint = colors.accent, onPress,
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={label}
     >
-      <View style={[styles.iconDot, { backgroundColor: (danger ? colors.expense : tint) + '22' }]}>
+      <View style={[styles.iconDot, { backgroundColor: alpha(danger ? colors.expense : tint, 13) }]}>
         <Feather name={icon} size={16} color={danger ? colors.expense : tint} />
       </View>
       <Text style={[styles.label, danger && { color: colors.expense }]} numberOfLines={1}>{label}</Text>

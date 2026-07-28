@@ -54,6 +54,7 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSavingsTab } from '../../src/hooks/useSavingsTab';
+import { alpha } from '../../src/theme';
 
 // Plan screen (design Screen 3) = Pool + Goals + Upcoming + Forecast only.
 // Everything else the app had is hidden behind this toggle for now — handle later.
@@ -241,14 +242,14 @@ export default function SavingsScreen() {
           <Text style={styles.fieldLabel}>Icon</Text>
           <View style={styles.iconGrid}>
             {GOAL_ICONS.map(ic => (
-              <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
+              <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} accessibilityState={{ selected: icon === ic }} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
                 <Feather name={asFeather(ic, 'tag')} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
           <View style={styles.colorRow}>
             {GOAL_COLORS.map(c => (
-              <TouchableOpacity key={c} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} onPress={() => setColor(c)} accessibilityRole="button" accessibilityLabel={c} />
+              <TouchableOpacity key={c} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} onPress={() => setColor(c)} accessibilityRole="button" accessibilityLabel={c} accessibilityState={{ selected: color === c }} />
             ))}
           </View>
 
@@ -256,7 +257,7 @@ export default function SavingsScreen() {
           <Input value={allocation} onChangeText={setAllocation} keyboardType="decimal-pad" placeholder="₹0 per period" style={styles.inputGap} />
           <View style={styles.segRow}>
             {FREQS.map(f => (
-              <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button">
+              <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button" accessibilityState={{ selected: frequency === f.key }}>
                 <Text style={[styles.segText, frequency === f.key && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{f.label}</Text>
               </TouchableOpacity>
             ))}
@@ -292,8 +293,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
-  overspendCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.expense + '14', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.expense + '40', padding: space.md },
-  overspendIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.expense + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  overspendCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: alpha(colors.expense, 8), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.expense, 25), padding: space.md },
+  overspendIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: alpha(colors.expense, 13), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   overspendTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   overspendBody: { ...type.caption, color: colors.textSecondary, marginTop: 1 },
   overspendActions: { flexDirection: 'row', alignItems: 'center', gap: space.md, flexShrink: 0 },

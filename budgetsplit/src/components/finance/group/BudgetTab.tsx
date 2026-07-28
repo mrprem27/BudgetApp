@@ -13,6 +13,7 @@ import { BudgetBar } from '../BudgetBar';
 import { MemberAvatar } from '../MemberAvatar';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { alpha } from '../../../theme';
 
 type Props = {
   analytics: BudgetAnalytics | null;
@@ -144,7 +145,7 @@ export function BudgetTab({ analytics, catStatus, contributions, isPersonal, onE
                   return (
                     <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
                       <View style={styles.catTop}>
-                        <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
+                        <View style={[styles.catIcon, { backgroundColor: alpha(vis.color, 13) }]}>
                           <Feather name={vis.icon} size={14} color={vis.color} />
                         </View>
                         <View style={{ flex: 1 }}>

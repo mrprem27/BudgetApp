@@ -17,6 +17,7 @@ import {
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
+import { alpha } from '../src/theme';
 
 export default function AffordScreen() {
   const router = useRouter();
@@ -169,7 +170,7 @@ export default function AffordScreen() {
             {showResult && (
               <>
                 <View style={styles.breakdownDivider} />
-                <View style={[styles.cashRow, styles.leftAfterRow, { backgroundColor: V.color + '14' }]}>
+                <View style={[styles.cashRow, styles.leftAfterRow, { backgroundColor: alpha(V.color, 8) }]}>
                   <Text style={[styles.cashLabel, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>Left after purchase</Text>
                   <Text style={[styles.cashVal, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>{formatRupees(remaining)}</Text>
                 </View>
@@ -178,7 +179,7 @@ export default function AffordScreen() {
           </View>
 
           {showResult && (
-            <View style={[styles.resultCard, { borderColor: V.color + '55' }]}>
+            <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
               <Text style={styles.resultEmoji}>{V.emoji}</Text>
               <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
               {lines.map((l, i) => (

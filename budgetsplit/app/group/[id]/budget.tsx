@@ -27,6 +27,8 @@ import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
+import { alpha } from '../../../src/theme';
+import { SectionCard } from '../../../src/components/ui/SectionCard';
 
 const CADENCES: { key: BudgetCadence; label: string }[] = [
   { key: 'once', label: 'One-time' },
@@ -245,26 +247,15 @@ export default function BudgetEditorScreen() {
             const secMonthly = sec.cats.reduce((s, c) => s + monthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0);
             const secCount = sec.cats.filter(c => parseToPaise(amounts[c.name] ?? '') > 0).length;
             return (
-              <View key={sec.title} style={styles.sectionCard}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection(sec.title)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${sec.title} section, ${isCollapsed ? 'collapsed' : 'expanded'}`}
-                >
-                  <View style={[styles.sectionIcon, { backgroundColor: colors.accentMuted }]}>
-                    <Feather name={sec.icon} size={16} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>{sec.title}</Text>
-                    <Text style={styles.sectionSub}>
-                      {secCount > 0 ? `${secCount} set · ${formatCompact(secMonthly)}/mo` : `${sec.cats.length} categories`}
-                    </Text>
-                  </View>
-                  <Feather name={isCollapsed ? 'chevron-down' : 'chevron-up'} size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-
-                {!isCollapsed && sec.cats.map((c, i) => {
+              <SectionCard
+                key={sec.title}
+                title={sec.title}
+                subtitle={secCount > 0 ? `${secCount} set · ${formatCompact(secMonthly)}/mo` : `${sec.cats.length} categories`}
+                icon={sec.icon}
+                expanded={!isCollapsed}
+                onToggle={() => toggleSection(sec.title)}
+              >
+                {sec.cats.map((c, i) => {
                   const vis = categoryVisual(c.name);
                   const amt = amounts[c.name] ?? '';
                   const hasAmt = parseToPaise(amt) > 0;
@@ -272,7 +263,7 @@ export default function BudgetEditorScreen() {
                     <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
                       <View style={styles.divider} />
                       <View style={styles.rowItem}>
-                        <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+                        <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
                           <Feather name={vis.icon} size={15} color={vis.color} />
                         </View>
                         <View style={styles.rowMid}>
@@ -307,7 +298,7 @@ export default function BudgetEditorScreen() {
                     </View>
                   );
                 })}
-              </View>
+              </SectionCard>
             );
           }) : (
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
@@ -352,11 +343,6 @@ const styles = StyleSheet.create({
   totalSub: { ...type.caption, color: colors.textMuted },
   explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
 
-  sectionCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md, minHeight: 56 },
-  sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  sectionSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
 
   divider: { height: 1, backgroundColor: colors.border, marginLeft: space.md + 34 + space.md },
   rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 52 },

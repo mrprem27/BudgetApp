@@ -9,6 +9,7 @@ import { formatRupees, formatCompact } from '../../lib/money';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { Person } from '../../db/queries/persons';
+import { alpha } from '../../theme';
 
 type Props = {
   txn: TxnWithSplits;
@@ -125,7 +126,7 @@ export const TransactionRow = React.memo(function TransactionRow({
           </View>
         </View>
       ) : (
-        <View style={[styles.iconCircle, { backgroundColor: visual.color + '22' }]}>
+        <View style={[styles.iconCircle, { backgroundColor: alpha(visual.color, 13) }]}>
           <Feather name={visual.icon} size={18} color={visual.color} />
         </View>
       )}

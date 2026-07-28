@@ -25,6 +25,8 @@ import type { Person } from '../src/db/queries/persons';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useStore } from '../src/store';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
+import { alpha } from '../src/theme';
+import { PersonNameSheet } from '../src/components/finance/PersonNameSheet';
 
 export default function FriendsScreen() {
   const db = useSQLiteContext();
@@ -169,7 +171,7 @@ export default function FriendsScreen() {
                             const ov = oweView(net);
                             const settled = ov.direction === 'settled';
                             return (
-                              <View style={[styles.balChip, { backgroundColor: settled ? colors.bgMuted : ov.color + '1A' }]}>
+                              <View style={[styles.balChip, { backgroundColor: settled ? colors.bgMuted : alpha(ov.color, 10) }]}>
                                 <Text style={[styles.balChipText, { color: settled ? colors.textSecondary : ov.color }]}>
                                   {settled ? ov.label : `${ov.label} ${formatCompact(ov.amount)}`}
                                 </Text>
@@ -202,35 +204,25 @@ export default function FriendsScreen() {
         </ScrollView>
       )}
 
-      <SheetModal visible={!!renamePerson} onClose={() => setRenamePerson(null)} title="Rename">
-        <Input
-          value={renameText}
-          onChangeText={setRenameText}
-          placeholder="Name"
-          autoFocus
-          autoCapitalize="words"
-          maxLength={30}
-          returnKeyType="done"
-          onSubmitEditing={handleRename}
-          style={styles.renameGap}
-        />
-        <PrimaryButton label="Save" onPress={handleRename} disabled={!renameText.trim()} />
-      </SheetModal>
+      <PersonNameSheet
+        visible={!!renamePerson}
+        onClose={() => setRenamePerson(null)}
+        title="Rename"
+        value={renameText}
+        onChangeText={setRenameText}
+        onSubmit={handleRename}
+      />
 
-      <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add a friend">
-        <Input
-          value={addName}
-          onChangeText={setAddName}
-          placeholder="Friend's name"
-          autoFocus
-          autoCapitalize="words"
-          maxLength={30}
-          returnKeyType="done"
-          onSubmitEditing={handleAddFriend}
-          style={styles.renameGap}
-        />
-        <PrimaryButton label="Add friend" onPress={handleAddFriend} disabled={!addName.trim()} />
-      </SheetModal>
+      <PersonNameSheet
+        visible={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add a friend"
+        value={addName}
+        onChangeText={setAddName}
+        onSubmit={handleAddFriend}
+        placeholder="Friend's name"
+        submitLabel="Add friend"
+      />
     </View>
   );
 }
@@ -262,5 +254,4 @@ const styles = StyleSheet.create({
   addTileCircle: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   addTileTitle: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addTileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  renameGap: { marginBottom: space.md },
 });

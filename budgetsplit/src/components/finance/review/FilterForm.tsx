@@ -70,7 +70,7 @@ export function FilterForm({ filters, categories, onChange, onClear, onDone }: {
         <Text style={f.fLabel}>AMOUNT (₹)</Text>
         <View style={styles.seg}>
           {AMOUNT_MODES.map(m => (
-            <TouchableOpacity key={m.key} style={[styles.segBtn, filters.amountMode === m.key && styles.segBtnOn]} onPress={() => set({ amountMode: m.key })} accessibilityRole="button">
+            <TouchableOpacity key={m.key} style={[styles.segBtn, filters.amountMode === m.key && styles.segBtnOn]} accessibilityState={{ selected: filters.amountMode === m.key }} onPress={() => set({ amountMode: m.key })} accessibilityRole="button">
               <Text style={[styles.segText, filters.amountMode === m.key && styles.segTextOn]}>{m.label}</Text>
             </TouchableOpacity>
           ))}
@@ -152,7 +152,7 @@ export function FilterForm({ filters, categories, onChange, onClear, onDone }: {
         <Text style={f.fLabel}>MATCH</Text>
         <View style={styles.seg}>
           {(['and', 'or'] as const).map(c => (
-            <TouchableOpacity key={c} style={[styles.segBtn, filters.combine === c && styles.segBtnOn]} onPress={() => set({ combine: c })} accessibilityRole="button">
+            <TouchableOpacity key={c} style={[styles.segBtn, filters.combine === c && styles.segBtnOn]} accessibilityState={{ selected: filters.combine === c }} onPress={() => set({ combine: c })} accessibilityRole="button">
               <Text style={[styles.segText, filters.combine === c && styles.segTextOn]}>{c === 'and' ? 'All (AND)' : 'Any (OR)'}</Text>
             </TouchableOpacity>
           ))}

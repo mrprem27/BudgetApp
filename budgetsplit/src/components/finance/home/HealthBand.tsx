@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import type { HealthResult } from '../../../lib/financialHealth';
 import { healthBandColor, healthBandLabel } from './helpers';
+import { alpha } from '../../../theme';
 
 type Props = {
   result: HealthResult;
@@ -21,7 +22,7 @@ export function HealthBand({ result, onPress }: Props) {
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: color + '14', borderColor: color + '33' }]}
+      style={[styles.card, { backgroundColor: alpha(color, 8), borderColor: alpha(color, 20) }]}
       activeOpacity={0.85}
       onPress={onPress}
       accessibilityRole="button"

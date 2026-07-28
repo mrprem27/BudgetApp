@@ -16,6 +16,7 @@ import { space, radius, layout, shadow } from './layout';
 export { colors, gradients } from './colors';
 export { type, line } from './typography';
 export { space, radius, layout, shadow } from './layout';
+export { alpha, OPACITY, type OpacityPct } from './alpha';
 
 /** Every token group in one object — pass the whole design system when needed. */
 export const theme = { colors, gradients, type, line, space, radius, layout, shadow } as const;

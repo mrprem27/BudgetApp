@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../tokens';
+import { alpha } from '../../theme';
 
 /**
  * A Feather icon in a tinted circular disc — the most-repeated visual primitive
@@ -10,7 +11,7 @@ import { colors } from '../tokens';
  * AGENTS.md §8 documents the shape as an inline snippet:
  *
  *   <View style={{ width: 36, height: 36, borderRadius: 18,
- *                  backgroundColor: color + '22', ... }}>
+ *                  backgroundColor: alpha(color, 13), ... }}>
  *     <Feather name={icon} size={18} color={color} />
  *   </View>
  *
@@ -33,7 +34,7 @@ export function IconCircle({
   size?: number;
   /** Icon colour; also drives the default background tint. */
   color?: string;
-  /** Background override. Defaults to `color + '22'` per AGENTS.md §8. */
+  /** Background override. Defaults to `alpha(color, 13)` per AGENTS.md §8. */
   bg?: string;
   /** Optional 1px ring. */
   borderColor?: string;
@@ -49,7 +50,7 @@ export function IconCircle({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: bg ?? color + '22',
+          backgroundColor: bg ?? alpha(color, 13),
           ...(borderColor ? { borderWidth: 1, borderColor } : null),
         },
         style,

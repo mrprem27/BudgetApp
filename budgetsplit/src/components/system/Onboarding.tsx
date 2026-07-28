@@ -22,6 +22,7 @@ import { FadeIn } from '../ui/FadeIn';
 import { haptic } from '../../lib/haptics';
 import { LogoAssembly } from './LogoAssembly';
 import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
+import { alpha } from '../../theme';
 
 
 type Slide = {
@@ -261,7 +262,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.intentScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.intentLogoWrap}>
-              <LinearGradient colors={['#20C4B8', '#15A89D']} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <LinearGradient colors={[colors.accent, colors.accentDeep]} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Text style={styles.intentRupee}>₹</Text>
               </LinearGradient>
             </View>
@@ -345,7 +346,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                       <View style={styles.pointsCard}>
                         {slide.points.map((p, j) => (
                           <View key={p.text} style={[styles.pointRow, j < slide.points.length - 1 && styles.pointBorder]}>
-                            <View style={[styles.pointIcon, { backgroundColor: slide.tint + '22' }]}>
+                            <View style={[styles.pointIcon, { backgroundColor: alpha(slide.tint, 13) }]}>
                               <Feather name={p.icon} size={15} color={slide.tint} />
                             </View>
                             <Text style={styles.pointText}>{p.text}</Text>
@@ -377,7 +378,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[bigDiscStyle, { backgroundColor: colors.accentMuted, borderColor: colors.accent + '44' }]}>
+            <View style={[bigDiscStyle, { backgroundColor: colors.accentMuted, borderColor: alpha(colors.accent, 27) }]}>
               <Feather name="user" size={34} color={colors.accent} />
             </View>
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>First, your name</Text>
@@ -428,7 +429,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </View>
             <View style={styles.budgetPresets}>
               {INCOME_PRESETS.map(p => (
-                <TouchableOpacity key={p.label} style={[styles.budgetPresetChip, incomeNum === p.value && styles.budgetPresetChipActive]} onPress={() => { haptic.selection(); setIncomeText(String(p.value)); }} accessibilityRole="button">
+                <TouchableOpacity key={p.label} style={[styles.budgetPresetChip, incomeNum === p.value && styles.budgetPresetChipActive]} accessibilityState={{ selected: incomeNum === p.value }} onPress={() => { haptic.selection(); setIncomeText(String(p.value)); }} accessibilityRole="button">
                   <Text style={[styles.budgetPresetText, incomeNum === p.value && styles.budgetPresetTextActive]}>{p.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -524,7 +525,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </View>
             <View style={styles.budgetPresets}>
               {BUDGET_PRESETS.map(v => (
-                <TouchableOpacity key={v} style={[styles.budgetPresetChip, budgetNum === v && styles.budgetPresetChipActive]} onPress={() => { haptic.selection(); setBudgetText(String(v)); }} accessibilityRole="button">
+                <TouchableOpacity key={v} style={[styles.budgetPresetChip, budgetNum === v && styles.budgetPresetChipActive]} accessibilityState={{ selected: budgetNum === v }} onPress={() => { haptic.selection(); setBudgetText(String(v)); }} accessibilityRole="button">
                   <Text style={[styles.budgetPresetText, budgetNum === v && styles.budgetPresetTextActive]}>₹{v >= 100000 ? '1L' : `${Math.round(v / 1000)}k`}</Text>
                 </TouchableOpacity>
               ))}
@@ -615,12 +616,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Text style={styles.slideBody}>Both are optional and fully on-device. You can change them in Settings any time.</Text>
 
             <TouchableOpacity
-              style={[styles.permCard, notifPerm && styles.permCardOn]}
+              style={[styles.permCard, notifPerm && styles.permCardOn]} accessibilityState={{ selected: notifPerm }}
               onPress={async () => { haptic.selection(); const ok = await requestNotificationPermission(); setNotifPerm(ok); if (ok) { try { await setReminderPrefs({ renewals: true }); } catch { /* best-effort */ } } }}
               disabled={notifPerm}
               accessibilityRole="button"
             >
-              <View style={[styles.permIcon, { backgroundColor: colors.accent + '22' }]}><Feather name="bell" size={18} color={colors.accent} /></View>
+              <View style={[styles.permIcon, { backgroundColor: alpha(colors.accent, 13) }]}><Feather name="bell" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.permTitle}>Bill & renewal reminders</Text>
                 <Text style={styles.permBody}>A heads-up before a recurring charge or a budget runs out.</Text>
@@ -629,7 +630,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.permCard, locPerm && styles.permCardOn]}
+              style={[styles.permCard, locPerm && styles.permCardOn]} accessibilityState={{ selected: locPerm }}
               onPress={async () => {
                 haptic.selection();
                 const { status } = await Location.requestForegroundPermissionsAsync();
@@ -640,7 +641,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               disabled={locPerm}
               accessibilityRole="button"
             >
-              <View style={[styles.permIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="map-pin" size={18} color={colors.settle} /></View>
+              <View style={[styles.permIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="map-pin" size={18} color={colors.settle} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.permTitle}>Tag where you spend</Text>
                 <Text style={styles.permBody}>Save each expense's location so you can see it on a map later.</Text>
@@ -727,7 +728,7 @@ const styles = StyleSheet.create({
   intentScroll: { flexGrow: 1, paddingVertical: space.xl, alignItems: 'stretch' },
   intentLogoWrap: { alignItems: 'center', marginBottom: space.lg },
   intentLogo: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  intentRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, fontWeight: '700', color: '#0A0F11', letterSpacing: -1 },
+  intentRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, fontWeight: '700', color: colors.bg, letterSpacing: -1 },
   intentCards: { gap: space.sm, marginBottom: space.md },
   intentCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
@@ -784,7 +785,7 @@ const styles = StyleSheet.create({
 
   // Permissions step
   permCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.sm },
-  permCardOn: { borderColor: colors.income, backgroundColor: colors.income + '11' },
+  permCardOn: { borderColor: colors.income, backgroundColor: alpha(colors.income, 7) },
   permIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   permTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   permBody: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },

@@ -27,6 +27,7 @@ import { formatRupees, formatCompact } from '../../src/lib/money';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { alpha } from '../../src/theme';
 
 type Period = 'day' | 'month' | 'year';
 const PERIODS: { key: Period; label: string }[] = [
@@ -394,8 +395,8 @@ const styles = StyleSheet.create({
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 30, letterSpacing: -0.6, color: colors.textPrimary, marginTop: space.xs },
   amountSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
-  setBudget: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.accentMuted, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.accent + '44' },
-  setBudgetIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.accent + '22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  setBudget: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.accentMuted, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
+  setBudgetIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: alpha(colors.accent, 13), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   setBudgetTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   setBudgetSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
 

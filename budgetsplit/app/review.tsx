@@ -53,6 +53,7 @@ import {
   PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, TXN_KIND_LABEL,
   TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
 } from '../src/constants/enums';
+import { alpha } from '../src/theme';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
@@ -461,14 +462,14 @@ export default function ReviewScreen() {
 
         <View style={styles.controls}>
           <TouchableOpacity style={styles.pill} onPress={() => setCatPickerFor(row.id)} accessibilityRole="button" accessibilityLabel="Category">
-            <View style={[styles.pillDot, { backgroundColor: (vis.color ?? colors.accent) + '22' }]}>
+            <View style={[styles.pillDot, { backgroundColor: alpha(vis.color ?? colors.accent, 13) }]}>
               <Feather name={asFeather(vis.icon, 'tag')} size={12} color={vis.color ?? colors.accent} />
             </View>
             <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
             <Feather name="chevron-down" size={12} color={colors.textMuted} />
           </TouchableOpacity>
           {hasGroups && v.kind !== 'income' && (
-            <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} onPress={() => setDestSheetFor(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
+            <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} accessibilityState={{ selected: isGroup }} onPress={() => setDestSheetFor(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
               <Feather name={isGroup ? 'users' : 'user'} size={12} color={isGroup ? colors.settle : colors.textSecondary} />
               <Text style={[styles.pillText, isGroup && { color: colors.settle }]} numberOfLines={1}>{groupName}</Text>
               <Feather name="chevron-down" size={12} color={colors.textMuted} />
@@ -905,7 +906,7 @@ const styles = StyleSheet.create({
   selectAll: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   stepLabel: { ...type.caption, color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
   intro: { ...type.label, color: colors.textMuted },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: layout.screenPaddingH, marginBottom: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent + '55' },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: layout.screenPaddingH, marginBottom: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: alpha(colors.accent, 33) },
   bannerText: { ...type.label, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
   bannerReset: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignAll: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: space.xs },
@@ -927,16 +928,16 @@ const styles = StyleSheet.create({
   kindExpense: { backgroundColor: colors.expense },
   kindIncome: { backgroundColor: colors.income },
   kindSettle: { backgroundColor: colors.settle },
-  pillNeeded: { borderColor: colors.expense, backgroundColor: colors.expense + '18' },
+  pillNeeded: { borderColor: colors.expense, backgroundColor: alpha(colors.expense, 9) },
   whoEmpty: { ...type.body, color: colors.textSecondary, padding: space.md, lineHeight: 20 },
   kindText: { ...type.label, color: colors.textSecondary },
   kindTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
-  pillGroup: { borderColor: colors.settle + '55' },
+  pillGroup: { borderColor: alpha(colors.settle, 33) },
   pillDot: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pillText: { ...type.label, color: colors.textSecondary, flex: 1 },
   payPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, alignSelf: 'flex-start', maxWidth: '60%' },
-  payPillSet: { borderColor: colors.accent + '55' },
+  payPillSet: { borderColor: alpha(colors.accent, 33) },
   payEmoji: { fontSize: 14 },
   payOption: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.md },
   payOptionOn: { backgroundColor: colors.bgMuted },

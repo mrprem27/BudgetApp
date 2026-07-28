@@ -22,6 +22,7 @@ import { recBg, recColor } from '../src/components/finance/group/helpers';
 import type { Insight } from '../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
 import { loadInsightsData } from '../src/lib/insightsData';
+import { alpha } from '../src/theme';
 
 function insightTint(tone: Insight['tone']): string {
   switch (tone) {
@@ -145,7 +146,7 @@ export default function InsightsScreen() {
                 disableScroll
                 pointerConfig={{
                   pointerStripUptoDataPoint: true,
-                  pointerStripColor: colors.textMuted + '60',
+                  pointerStripColor: alpha(colors.textMuted, 38),
                   pointerStripWidth: 1,
                   pointerColor: colors.accent,
                   radius: 5,
@@ -206,7 +207,7 @@ export default function InsightsScreen() {
                 const vis = categoryVisual(d.category);
                 return (
                   <View key={d.key} style={[styles.driverRow, i < drivers.length - 1 && styles.rowBorder]}>
-                    <View style={[styles.driverIcon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.driverIcon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'tag'} size={14} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -231,7 +232,7 @@ export default function InsightsScreen() {
                 const up = s.pct > 5, down = s.pct < -5;
                 return (
                   <View key={s.cat} style={[styles.shiftRow, i < shifts.length - 1 && styles.rowBorder]}>
-                    <View style={[styles.shiftEmoji, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.shiftEmoji, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'tag'} size={16} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -284,7 +285,7 @@ export default function InsightsScreen() {
                 const tint = insightTint(ins.tone);
                 return (
                   <View key={ins.text} style={[styles.savingsRow, i > 0 && styles.rowBorder]}>
-                    <View style={[styles.savingsIcon, { backgroundColor: tint + '22' }]}>
+                    <View style={[styles.savingsIcon, { backgroundColor: alpha(tint, 13) }]}>
                       <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
                     </View>
                     <InsightText text={ins.text} color={tint} style={styles.savingsText} />
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
   monthPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
   eyebrow: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
 
-  velocityCard: { backgroundColor: '#1A1014', borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: colors.expenseTintStrong },
+  velocityCard: { backgroundColor: colors.expenseTintDeep, borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: colors.expenseTintStrong },
   velocityHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 10 },
   velocityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.expense },
   velocityLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.expense, textTransform: 'uppercase', letterSpacing: 0.8 },

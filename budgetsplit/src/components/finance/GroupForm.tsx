@@ -2,18 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
+import { GROUP_TYPES } from '../../constants/palette';
 import { MemberAvatar } from './MemberAvatar';
 import type { Person } from '../../db/queries/persons';
 import type { SplitMode } from '../../db/queries/groups';
 
-// Quick group "types" — each preset picks an icon + colour so creation is one tap.
-export const GROUP_TYPES: { key: string; label: string; icon: string; color: string }[] = [
-  { key: 'home', label: '🏠 Home', icon: 'home', color: '#4F46E5' },
-  { key: 'trip', label: '✈️ Trip', icon: 'map', color: '#20C4B8' },
-  { key: 'work', label: '💼 Work', icon: 'briefcase', color: '#7C6AF7' },
-  { key: 'dining', label: '🍽️ Dining', icon: 'coffee', color: '#F0A500' },
-  { key: 'other', label: 'Other', icon: 'grid', color: '#8FA3A0' },
-];
+// GROUP_TYPES lives with the other catalogues in constants/palette.
+export { GROUP_TYPES };
 
 export const SPLIT_OPTIONS: { key: SplitMode; label: string }[] = [
   { key: 'equal', label: 'Equal' },

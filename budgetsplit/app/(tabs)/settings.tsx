@@ -272,7 +272,7 @@ export default function SettingsScreen() {
 
       <SheetModal visible={showCadence} onClose={() => setShowCadence(false)} title="Default budget cadence" scroll={false}>
         {CADENCE_KEYS.map(c => (
-          <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} onPress={() => pickCadence(c)} accessibilityRole="button">
+          <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} accessibilityState={{ selected: defaultCadence === c }} onPress={() => pickCadence(c)} accessibilityRole="button">
             <Text style={[styles.cadOptionText, defaultCadence === c && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{CADENCE_LABELS[c]}</Text>
             {defaultCadence === c && <Feather name="check" size={18} color={colors.accent} />}
           </TouchableOpacity>

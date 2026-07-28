@@ -22,6 +22,7 @@ import { insertPending } from '../src/db/queries/pending';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
 import { IconCircle } from '../src/components/ui/IconCircle';
+import { alpha } from '../src/theme';
 
 const SAMPLE = '2026-06-01, Swiggy order, -450\n2026-06-02, Salary, 85000\n2026-06-03, Uber, -220';
 
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   fileCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md,
     padding: space.md, borderRadius: radius.lg, backgroundColor: colors.bgCard,
-    borderWidth: 1, borderColor: colors.income + '55',
+    borderWidth: 1, borderColor: alpha(colors.income, 33),
   },
   fileCardTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   fileCardMeta: { ...type.caption, color: colors.income, marginTop: 1 },

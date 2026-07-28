@@ -91,7 +91,7 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
                 {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
               </View>
               {badge ? (
-                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : '#221A00' }]}>
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : colors.amberTint }]}>
                   <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : colors.healthAmber }]}>{badge}</Text>
                 </View>
               ) : item.amount != null ? (
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   entryBody: { flex: 1 },
   entryLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 2 },
   entrySummary: { fontSize: 11, color: colors.textMuted, marginBottom: 2, lineHeight: 15 },
-  entryTime: { fontSize: 10, color: '#2A3C39' },
+  entryTime: { fontSize: 10, color: colors.textMuted },
   entryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, flexShrink: 0 },
   actionBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
   actionBadgeText: { fontSize: 10, fontFamily: 'Inter_600SemiBold' },

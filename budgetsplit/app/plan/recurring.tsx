@@ -18,6 +18,7 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatCompact } from '../../src/lib/money';
+import { alpha } from '../../src/theme';
 
 type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
 
@@ -101,7 +102,7 @@ export default function RecurringScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`${s.name}, ${cadenceLabel(s.freq)}`}
                   >
-                    <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.icon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'refresh-cw'} size={18} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={styles.info}>

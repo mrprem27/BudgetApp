@@ -22,6 +22,7 @@ import type { Person } from '../../src/db/queries/persons';
 import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../src/hooks/useTxnDetail';
+import { alpha } from '../../src/theme';
 
 const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
   created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
@@ -111,12 +112,12 @@ export default function TxnDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+          <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
             <Feather name={vis.icon} size={24} color={vis.color} />
           </View>
           <Text style={styles.heroAmount}>{formatRupees(total)}</Text>
           <View style={styles.kindRow}>
-            <View style={[styles.kindBadge, { backgroundColor: kindColor + '22' }]}>
+            <View style={[styles.kindBadge, { backgroundColor: alpha(kindColor, 13) }]}>
               <Text style={[styles.kindText, { color: kindColor }]}>{kindLabel}</Text>
             </View>
             <Text style={styles.heroCat}>{txn.category}</Text>
@@ -312,7 +313,7 @@ export default function TxnDetailScreen() {
             return (
               <View key={h.id} style={styles.histRow}>
                 <View style={styles.histRail}>
-                  <View style={[styles.histIcon, { backgroundColor: meta.color + '22' }]}>
+                  <View style={[styles.histIcon, { backgroundColor: alpha(meta.color, 13) }]}>
                     <Feather name={meta.icon} size={11} color={meta.color} />
                   </View>
                   {!last && <View style={styles.histRailLine} />}

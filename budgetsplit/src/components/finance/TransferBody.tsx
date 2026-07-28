@@ -9,6 +9,7 @@ import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
 import type { PayMethod } from '../../constants/enums';
+import { alpha } from '../../theme';
 
 type Props = {
   me: Person | null;
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   dirTile: { flex: 1, alignItems: 'center', gap: space.xs },
   dirLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
   dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  swapBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.settle + '22', alignItems: 'center', justifyContent: 'center', marginHorizontal: space.sm },
+  swapBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: alpha(colors.settle, 13), alignItems: 'center', justifyContent: 'center', marginHorizontal: space.sm },
   errText: { ...type.caption, color: colors.expense, textAlign: 'center' },
   scopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   scopeChip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },

@@ -7,6 +7,7 @@ import { decor } from '../src/constants/palette';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { alpha } from '../src/theme';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
@@ -15,9 +16,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Getting Started',
     illustration: { icons: [
-      { name: 'plus-circle', bg: colors.accent + '22', color: colors.accent },
-      { name: 'dollar-sign', bg: colors.income + '22', color: colors.income },
-      { name: 'check-circle', bg: colors.settle + '22', color: colors.settle },
+      { name: 'plus-circle', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'dollar-sign', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'check-circle', bg: alpha(colors.settle, 13), color: colors.settle },
     ] },
     items: [
       { icon: 'edit-3', color: colors.accent, title: 'Adding your first expense', body: 'Tap the + button at the bottom \u2192 Quick Expense. Enter the amount (in rupees), pick a category like Food or Transport, optionally add a note, and save. It appears instantly on your dashboard and in the group.' },
@@ -29,9 +30,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Groups & Splitting',
     illustration: { icons: [
-      { name: 'users', bg: colors.coral + '22', color: colors.coral },
-      { name: 'scissors', bg: colors.accent + '22', color: colors.accent },
-      { name: 'check', bg: colors.income + '22', color: colors.income },
+      { name: 'users', bg: alpha(colors.coral, 13), color: colors.coral },
+      { name: 'scissors', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'check', bg: alpha(colors.income, 13), color: colors.income },
     ] },
     items: [
       { icon: 'users', color: colors.coral, title: 'Creating a group', body: 'Go to Groups tab \u2192 tap "New Group". Give it a name (e.g. "Me & GF", "Flatmates"), pick an icon and color, then add members. Your "Personal" group is always private \u2014 just you.' },
@@ -47,9 +48,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Budgets & Limits',
     illustration: { icons: [
-      { name: 'target', bg: colors.income + '22', color: colors.income },
-      { name: 'bar-chart-2', bg: colors.healthAmber + '22', color: colors.healthAmber },
-      { name: 'zap', bg: colors.healthRed + '22', color: colors.healthRed },
+      { name: 'target', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'bar-chart-2', bg: alpha(colors.healthAmber, 13), color: colors.healthAmber },
+      { name: 'zap', bg: alpha(colors.healthRed, 13), color: colors.healthRed },
     ] },
     items: [
       { icon: 'target', color: colors.income, title: 'Setting budgets', body: 'Open any group \u2192 Budget tab \u2192 add a budget for a category. Set a limit amount and cadence (Daily, Monthly, Yearly, or One-time). Monthly budgets reset each month automatically.' },
@@ -61,9 +62,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Savings & Goals',
     illustration: { icons: [
-      { name: 'target', bg: colors.accent + '22', color: colors.accent },
-      { name: 'dollar-sign', bg: colors.income + '22', color: colors.income },
-      { name: 'trending-up', bg: colors.settle + '22', color: colors.settle },
+      { name: 'target', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'dollar-sign', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'trending-up', bg: alpha(colors.settle, 13), color: colors.settle },
     ] },
     items: [
       { icon: 'dollar-sign', color: colors.income, title: 'Cash available', body: 'The Money tab shows what you can actually spend right now: income received, minus expenses you’ve paid, minus what you’ve set aside in savings. One honest number at the top.' },
@@ -77,9 +78,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Recurring Transactions',
     illustration: { icons: [
-      { name: 'repeat', bg: colors.accent + '22', color: colors.accent },
-      { name: 'calendar', bg: colors.settle + '22', color: colors.settle },
-      { name: 'pause-circle', bg: colors.healthAmber + '22', color: colors.healthAmber },
+      { name: 'repeat', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'calendar', bg: alpha(colors.settle, 13), color: colors.settle },
+      { name: 'pause-circle', bg: alpha(colors.healthAmber, 13), color: colors.healthAmber },
     ] },
     items: [
       { icon: 'repeat', color: colors.accent, title: 'Setting up', body: 'When adding an expense or income, flip the "Repeat this" switch. Choose a frequency (Daily, Weekly, Monthly or a custom interval) and an optional end date. It then repeats automatically \u2014 no need to re-enter each time.' },
@@ -92,9 +93,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Reports & Export',
     illustration: { icons: [
-      { name: 'pie-chart', bg: colors.coral + '22', color: colors.coral },
-      { name: 'download', bg: colors.accent + '22', color: colors.accent },
-      { name: 'file-text', bg: colors.settle + '22', color: colors.settle },
+      { name: 'pie-chart', bg: alpha(colors.coral, 13), color: colors.coral },
+      { name: 'download', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'file-text', bg: alpha(colors.settle, 13), color: colors.settle },
     ] },
     items: [
       { icon: 'bar-chart-2', color: colors.accent, title: 'Monthly reports', body: 'Reports tab shows income, expense, and net savings per group for any month. Navigate between months with arrows. Each group card shows top spending categories and budget utilization.' },
@@ -108,9 +109,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Categories',
     illustration: { icons: [
-      { name: 'tag', bg: colors.income + '22', color: colors.income },
-      { name: 'grid', bg: decor.orange + '22', color: decor.orange },
-      { name: 'plus', bg: colors.accent + '22', color: colors.accent },
+      { name: 'tag', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'grid', bg: alpha(decor.orange, 13), color: decor.orange },
+      { name: 'plus', bg: alpha(colors.accent, 13), color: colors.accent },
     ] },
     items: [
       { icon: 'grid', color: decor.orange, title: 'Expense categories', body: '33 categories across 8 sections: Home & Living, Food, Transport, Bills & Utilities, Lifestyle, Health, Money & Growth, and Other. Each has a unique icon and color.' },
@@ -122,9 +123,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Privacy & Security',
     illustration: { icons: [
-      { name: 'lock', bg: colors.accent + '22', color: colors.accent },
-      { name: 'eye-off', bg: colors.settle + '22', color: colors.settle },
-      { name: 'shield', bg: colors.income + '22', color: colors.income },
+      { name: 'lock', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'eye-off', bg: alpha(colors.settle, 13), color: colors.settle },
+      { name: 'shield', bg: alpha(colors.income, 13), color: colors.income },
     ] },
     items: [
       { icon: 'lock', color: colors.accent, title: 'Face ID / Touch ID', body: 'Enable biometric lock in Settings \u2192 Privacy. The app requires Face ID every time you open it, preventing others from seeing your finances.' },
@@ -136,9 +137,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Dashboard',
     illustration: { icons: [
-      { name: 'home', bg: colors.accent + '22', color: colors.accent },
-      { name: 'trending-up', bg: colors.income + '22', color: colors.income },
-      { name: 'layers', bg: colors.coral + '22', color: colors.coral },
+      { name: 'home', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'trending-up', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'layers', bg: alpha(colors.coral, 13), color: colors.coral },
     ] },
     items: [
       { icon: 'clock', color: colors.accent, title: 'Today / Month / Year', body: 'Three time views on the dashboard. "Today" shows daily spend, "Month" is the current month summary, "Year" gives the full picture. Charts and totals update per view.' },
@@ -151,9 +152,9 @@ const SECTIONS: Section[] = [
   {
     title: 'Tips & Tricks',
     illustration: { icons: [
-      { name: 'star', bg: colors.healthAmber + '22', color: colors.healthAmber },
-      { name: 'hash', bg: decor.orange + '22', color: decor.orange },
-      { name: 'clock', bg: colors.settle + '22', color: colors.settle },
+      { name: 'star', bg: alpha(colors.healthAmber, 13), color: colors.healthAmber },
+      { name: 'hash', bg: alpha(decor.orange, 13), color: decor.orange },
+      { name: 'clock', bg: alpha(colors.settle, 13), color: colors.settle },
     ] },
     items: [
       { icon: 'camera', color: decor.orange, title: 'Scan a total', body: 'On an itemized bill you can snap a photo and the app reads the bill’s total on-device to prefill the amount. Full line-by-line receipt scanning (with AI) is planned for a future update.' },
@@ -186,6 +187,8 @@ export default function HelpScreen() {
                 style={styles.sectionHeader}
                 onPress={() => setOpenSection(isExpanded ? null : section.title)}
                 accessibilityRole="button"
+                accessibilityLabel={section.title}
+                accessibilityState={{ expanded: isExpanded }}
               >
                 <View style={styles.illustrationRow}>
                   {section.illustration.icons.map((ic, i) => (
@@ -208,8 +211,10 @@ export default function HelpScreen() {
                           style={styles.row}
                           onPress={() => setOpenItem(isItemOpen ? null : item.title)}
                           accessibilityRole="button"
+                          accessibilityLabel={item.title}
+                          accessibilityState={{ expanded: isItemOpen }}
                         >
-                          <View style={[styles.iconDot, { backgroundColor: item.color + '22' }]}>
+                          <View style={[styles.iconDot, { backgroundColor: alpha(item.color, 13) }]}>
                             <Feather name={item.icon} size={15} color={item.color} />
                           </View>
                           <Text style={styles.rowTitle}>{item.title}</Text>

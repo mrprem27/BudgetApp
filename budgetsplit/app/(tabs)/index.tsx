@@ -34,6 +34,7 @@ import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, PREV_LABEL, PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
+import { alpha } from '../../src/theme';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -218,7 +219,7 @@ export default function DashboardScreen() {
                 <Text style={styles.getStartedLabel}>GET STARTED</Text>
                 <View style={{ gap: space.sm }}>
                   <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget`)} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.healthAmber + '22' }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Set a monthly budget</Text>
                       <Text style={styles.startSub}>Know your limits before you hit them</Text>
@@ -226,7 +227,7 @@ export default function DashboardScreen() {
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Create a group</Text>
                       <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
@@ -234,7 +235,7 @@ export default function DashboardScreen() {
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.income + '22' }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Add people you split with</Text>
                       <Text style={styles.startSub}>Name-only — no account needed</Text>
@@ -339,12 +340,12 @@ const styles = StyleSheet.create({
   notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: radius.sm, paddingHorizontal: space.xs, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: colors.onAccent },
   tabRow: { marginBottom: space.md },
-  catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
+  catchUpBanner: { backgroundColor: alpha(colors.healthAmber, 9), borderRadius: 14, borderWidth: 1, borderColor: alpha(colors.healthAmber, 33), padding: space.md, gap: space.sm, marginBottom: space.sm },
   catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   catchUpTitle: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   catchUpText: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
   catchUpActions: { flexDirection: 'row', gap: space.sm },
-  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '33', borderRadius: 20, borderWidth: 1, borderColor: colors.healthAmber + '66' },
+  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: alpha(colors.healthAmber, 20), borderRadius: 20, borderWidth: 1, borderColor: alpha(colors.healthAmber, 40) },
   catchUpBtnText: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
   catchUpDismiss: { paddingHorizontal: space.md, paddingVertical: space.xs },
   catchUpDismissText: { ...type.label, color: colors.textMuted },

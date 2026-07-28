@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { View, Animated, Easing, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, space } from '../../tokens';
+import { alpha } from '../../../theme';
 
 /**
  * The four onboarding feature-carousel illustrations, moved verbatim out of
@@ -19,7 +20,7 @@ const ART_SIZE = 156;
 /** A coin glyph in a tinted disc — the shared unit for the finance animations. */
 function Coin({ tint, size = 40, icon = 'dollar-sign' as keyof typeof Feather.glyphMap }: { tint: string; size?: number; icon?: keyof typeof Feather.glyphMap }) {
   return (
-    <View style={[styles.coin, { width: size, height: size, borderRadius: size / 2, backgroundColor: tint + '26', borderColor: tint + '55' }]}>
+    <View style={[styles.coin, { width: size, height: size, borderRadius: size / 2, backgroundColor: alpha(tint, 15), borderColor: alpha(tint, 33) }]}>
       <Feather name={icon} size={size * 0.5} color={tint} />
     </View>
   );
@@ -60,7 +61,7 @@ function SpendArt({ tint, active }: { tint: string; active: boolean }) {
         );
       })}
       <Animated.View style={{ transform: [{ scale }], marginTop: 36 }}>
-        <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
+        <View style={[styles.bigDisc, { backgroundColor: alpha(tint, 10), borderColor: alpha(tint, 27) }]}>
           <Feather name="pie-chart" size={48} color={tint} />
         </View>
       </Animated.View>
@@ -95,14 +96,14 @@ function SplitArt({ tint, active }: { tint: string; active: boolean }) {
   const toScale = arrive.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   return (
     <View style={[styles.artBox, styles.rowArt]}>
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
+      <View style={[styles.bigDisc, { backgroundColor: alpha(tint, 10), borderColor: alpha(tint, 27) }]}>
         <Feather name="credit-card" size={34} color={tint} />
       </View>
       <Animated.View style={[styles.travelCoin, { opacity: op, transform: [{ translateX }, { translateY: lift }] }]}>
         <Coin tint={colors.income} size={34} />
       </Animated.View>
       <Animated.View style={{ transform: [{ scale: toScale }] }}>
-        <View style={[styles.bigDisc, { backgroundColor: colors.income + '1A', borderColor: colors.income + '44' }]}>
+        <View style={[styles.bigDisc, { backgroundColor: alpha(colors.income, 10), borderColor: alpha(colors.income, 27) }]}>
           <Feather name="credit-card" size={34} color={colors.income} />
         </View>
       </Animated.View>
@@ -128,7 +129,7 @@ function BudgetArt({ tint, active }: { tint: string; active: boolean }) {
   const barColor = fill.interpolate({ inputRange: [0, 0.7, 1], outputRange: [colors.income, colors.income, colors.healthAmber] });
   return (
     <View style={styles.artBox}>
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44', marginBottom: space.lg }]}>
+      <View style={[styles.bigDisc, { backgroundColor: alpha(tint, 10), borderColor: alpha(tint, 27), marginBottom: space.lg }]}>
         <Feather name="target" size={44} color={tint} />
       </View>
       <View style={styles.budgetTrack}>
@@ -156,7 +157,7 @@ function PrivacyArt({ tint, active }: { tint: string; active: boolean }) {
   return (
     <View style={styles.artBox}>
       <Animated.View style={[styles.glowRing, { borderColor: tint, transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
+      <View style={[styles.bigDisc, { backgroundColor: alpha(tint, 10), borderColor: alpha(tint, 27) }]}>
         <Feather name="shield" size={46} color={tint} />
       </View>
     </View>

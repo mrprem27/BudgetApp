@@ -7,6 +7,7 @@ import { formatCompact } from '../../../lib/money';
 import { AvatarStack } from '../AvatarStack';
 import type { BudgetGroup } from '../../../db/queries/groups';
 import type { Person } from '../../../db/queries/persons';
+import { alpha } from '../../../theme';
 
 type Props = {
   group: BudgetGroup;
@@ -19,7 +20,7 @@ type Props = {
 export function GroupHero({ group, isPersonal, members, personalMonthSpend }: Props) {
   return (
     <View style={styles.hero}>
-      <View style={[styles.heroIcon, { backgroundColor: group.color + '33' }]}>
+      <View style={[styles.heroIcon, { backgroundColor: alpha(group.color, 20) }]}>
         <Feather name={asFeather(group.icon, 'credit-card')} size={22} color={group.color} />
       </View>
       <View style={{ flex: 1 }}>

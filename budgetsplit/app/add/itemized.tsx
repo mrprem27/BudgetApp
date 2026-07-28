@@ -22,6 +22,7 @@ import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS } from '../../src/hooks/useItemizedForm';
+import { alpha } from '../../src/theme';
 
 /**
  * Itemized-bill wizard (items → assign → payers → review). All state and
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
   splitRestText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignItem: { backgroundColor: colors.bgCard, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
-  unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: colors.expense + '22', paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: alpha(colors.expense, 13), paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
   splitBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   splitRemainder: { ...type.caption, color: colors.healthAmber, marginTop: 2 },
   sep: { height: space.sm },
@@ -580,14 +581,14 @@ const styles = StyleSheet.create({
   perPersonName: { ...type.body, color: colors.textPrimary, flex: 1 },
   perPersonAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
   shareLabel: { ...type.caption, color: colors.settle, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
-  shareCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.md, marginTop: space.sm },
-  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
+  shareCard: { backgroundColor: alpha(colors.settle, 10), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.settle, 27), paddingHorizontal: space.md, marginTop: space.sm },
+  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: alpha(colors.settle, 20) },
   shareNameMe: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   shareAmountMe: { color: colors.accent },
-  unassignedBanner: { backgroundColor: colors.expense + '18', borderRadius: radius.md, borderWidth: 1, borderColor: colors.expense + '55', padding: space.sm, gap: space.xs },
+  unassignedBanner: { backgroundColor: alpha(colors.expense, 9), borderRadius: radius.md, borderWidth: 1, borderColor: alpha(colors.expense, 33), padding: space.sm, gap: space.xs },
   unassignedBannerRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   unassignedBannerText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  assignCta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.healthAmber + '22', borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  assignCta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: alpha(colors.healthAmber, 13), borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: alpha(colors.healthAmber, 27) },
   assignCtaText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   navRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },

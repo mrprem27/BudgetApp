@@ -35,6 +35,7 @@ import type { BudgetGroup } from '../src/db/queries/groups';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../src/lib/reportsData';
+import { alpha } from '../src/theme';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
@@ -187,7 +188,7 @@ export default function ReportsScreen() {
           accessibilityState={{ disabled: !canGoNext }}
           style={styles.navBtn}
         >
-          <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : colors.textMuted + '55'} />
+          <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : alpha(colors.textMuted, 33)} />
         </TouchableOpacity>
       </View>
 

@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
+import { alpha } from '../../../theme';
 
 export type CategoryRow = { name: string; paise: number };
 
@@ -104,7 +105,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
               accessibilityState={{ selected: isSel }}
               accessibilityLabel={`${row.name}, ${formatCompact(row.paise)}`}
             >
-              <View style={[styles.icon, { backgroundColor: vis.color + '22' }]}>
+              <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
                 <Feather name={vis.icon} size={14} color={vis.color} />
               </View>
               <Text style={[styles.name, isSel && styles.nameSelected]} numberOfLines={1}>{row.name}</Text>

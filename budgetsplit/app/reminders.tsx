@@ -23,6 +23,7 @@ import { buildUpcoming, type UpcomingItem } from '../src/lib/upcoming';
 import { formatRupees, formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { IconCircle } from '../src/components/ui/IconCircle';
+import { alpha } from '../src/theme';
 
 type SettleReminder = { from: string; to: string; amount: number; counterpart: Person; iOwe: boolean };
 
@@ -83,7 +84,7 @@ export default function RemindersScreen() {
                 const vis = categoryVisual(b.category);
                 return (
                   <View key={`bill-${b.id}`} style={[styles.row, i < bills.length - 1 ? styles.rowBorder : null]}>
-                    <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.icon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'calendar'} size={18} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginBottom: 2 },
   rowTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   rowSub: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
-  dueChip: { backgroundColor: colors.healthAmber + '22', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
+  dueChip: { backgroundColor: alpha(colors.healthAmber, 13), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
   dueChipText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', fontSize: 11 },
   actionBtn: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: radius.sm, paddingVertical: 7, paddingHorizontal: 14 },
   actionBtnSettle: { backgroundColor: colors.settle },

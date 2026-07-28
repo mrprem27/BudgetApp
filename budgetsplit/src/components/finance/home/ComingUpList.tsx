@@ -6,6 +6,7 @@ import { formatCompact } from '../../../lib/money';
 import { categoryVisual } from '../../../constants/categories';
 import { asFeather } from '../../../constants/palette';
 import type { UpcomingItem } from '../../../lib/upcoming';
+import { alpha } from '../../../theme';
 
 type Props = {
   items: UpcomingItem[];
@@ -32,7 +33,7 @@ export function ComingUpList({ items, title = 'COMING UP', showIcon = false }: P
           return (
             <View key={it.id} style={[styles.row, i < items.length - 1 && styles.rowBorder]}>
               {vis && (
-                <View style={[styles.icon, { backgroundColor: vis.color + '22' }]}>
+                <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
                   <Feather name={asFeather(vis.icon, 'calendar')} size={16} color={vis.color} />
                 </View>
               )}

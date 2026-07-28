@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { colors, type, space, radius } from '../../tokens';
 import { nthOccurrenceMs } from '../../../lib/recurrence';
 import type { RecurFreq } from '../../../constants/enums';
+import { alpha } from '../../../theme';
 
 type EndMode = 'never' | 'date' | 'count';
 
@@ -162,23 +163,23 @@ export function RecurringControls({
 const styles = StyleSheet.create({
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  recurCard: { backgroundColor: colors.settle + '14', borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.settle, overflow: 'hidden' },
-  recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
+  recurCard: { backgroundColor: alpha(colors.settle, 8), borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.settle, overflow: 'hidden' },
+  recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: alpha(colors.settle, 20) },
   recurDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.settle },
   recurTitle: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
-  recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderTopWidth: 1, borderTopColor: colors.settle + '33' },
+  recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurRowLabel: { ...type.body, color: colors.textSecondary },
   recurSection: { paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
   recurSectionLabel: { ...type.caption, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   recurPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.settle + '44' },
+  recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: alpha(colors.settle, 27) },
   recurPillActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   recurPillText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   recurPillTextActive: { color: colors.onAccent },
-  recurDateChip: { backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.sm + 2, paddingVertical: 6 },
+  recurDateChip: { backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: alpha(colors.settle, 27), paddingHorizontal: space.sm + 2, paddingVertical: 6 },
   recurDateChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   recurCountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },
-  recurChip: { paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.settle + '44' },
+  recurChip: { paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.bg, borderWidth: 1, borderColor: alpha(colors.settle, 27) },
   recurChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   recurEndPills: { flexDirection: 'row', gap: 6 },
   recurEndDate: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },

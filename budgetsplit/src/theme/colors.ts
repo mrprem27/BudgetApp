@@ -18,6 +18,9 @@ export const colors = {
 
   coral: '#FF6F61',
   coralMuted: '#3A1714',
+  /** The streak flame — a warmer coral than `coral`, kept exact so the Home
+   *  streak card is unchanged. */
+  streakFlame: '#FF7A6D',
 
   // Semantic
   income: '#2BD49B',
@@ -38,10 +41,17 @@ export const colors = {
    *  Each has a soft (card bg) and strong (border/hover) variant. */
   expenseTint: '#2A1714',
   expenseTintStrong: '#3A1F1C',
+  /** Deeper danger surface, below `expenseTint`. Collapses three near-identical
+   *  raw hexes that were re-invented per screen (#1A1014 insights velocity card,
+   *  #1F0E0E notifications denied banner, #1A0A0A LockGate) — all within
+   *  0.002 relative luminance of each other. */
+  expenseTintDeep: '#1A1014',
   incomeTint: '#081F16',
   incomeTintStrong: '#0C3D22',
   settleTint: '#1A1A3A',
   settleTintStrong: '#2A2A5A',
+  /** Amber-tinted surface, e.g. the history "edited" badge. */
+  amberTint: '#221A00',
 
   /** Modal / sheet scrim behind bottom sheets and dialogs. */
   overlay: 'rgba(0,0,0,0.6)',

@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
 
   notEnrolledCard: {
     width: 300,
-    backgroundColor: '#1A0A0A',
+    backgroundColor: colors.expenseTintDeep,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: colors.expense,

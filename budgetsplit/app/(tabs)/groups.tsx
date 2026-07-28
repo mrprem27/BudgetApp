@@ -37,6 +37,7 @@ import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palett
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { alpha } from '../../src/theme';
 
 type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number };
 
@@ -172,7 +173,7 @@ export default function GroupsScreen() {
             accessibilityLabel={item.name}
           >
             <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
-            <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
+            <View style={[styles.groupIcon, { backgroundColor: alpha(item.color, 13) }]}>
               <Feather name={asFeather(item.icon, 'credit-card')} size={20} color={item.color} />
             </View>
             <View style={styles.groupInfo}>
@@ -367,6 +368,6 @@ const styles = StyleSheet.create({
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
   overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   stackRow: { marginTop: space.xs },
-  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: colors.accent + '44' },
+  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
   settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

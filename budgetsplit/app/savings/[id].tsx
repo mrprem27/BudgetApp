@@ -21,6 +21,7 @@ import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, ne
 import type { SavingsTxn, SavingsFrequency } from '../../src/db/queries/savings';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useSavingsGoalScreen } from '../../src/hooks/useSavingsGoalScreen';
+import { alpha } from '../../src/theme';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -129,7 +130,7 @@ export default function GoalDetailScreen() {
             </View>
           </View>
 
-          <View style={[styles.heroIcon, { backgroundColor: (goal.color ?? colors.accent) + '22' }]}>
+          <View style={[styles.heroIcon, { backgroundColor: alpha(goal.color ?? colors.accent, 13) }]}>
             <Feather name={asFeather(goal.icon, 'target')} size={20} color={goal.color ?? colors.accent} />
           </View>
           <Text style={styles.heroName}>{goal.name}</Text>
@@ -173,7 +174,7 @@ export default function GoalDetailScreen() {
                 <Text style={styles.nudgeText}>Increase by {formatCompact(shortfall)}/mo to stay on track</Text>
               </View>
             ) : (
-              <View style={[styles.monthlyNudge, { borderColor: colors.income + '44' }]}>
+              <View style={[styles.monthlyNudge, { borderColor: alpha(colors.income, 27) }]}>
                 <View style={[styles.nudgeDot, { backgroundColor: colors.income }]} />
                 <Text style={[styles.nudgeText, { color: colors.income }]}>On track to finish by {format(goal.target_date!, 'MMM yyyy')}</Text>
               </View>
@@ -209,7 +210,7 @@ export default function GoalDetailScreen() {
               const m = KIND_META[h.kind];
               return (
                 <View key={h.id} style={[styles.histRow, i < history.length - 1 && styles.histBorder]}>
-                  <View style={[styles.histIcon, { backgroundColor: m.color + '22' }]}>
+                  <View style={[styles.histIcon, { backgroundColor: alpha(m.color, 13) }]}>
                     <Feather name={m.icon} size={15} color={m.color} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -382,7 +383,7 @@ const styles = StyleSheet.create({
   monthlySub: { ...type.caption, color: colors.textMuted, marginBottom: space.xs },
   monthlyAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
   monthlyDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: space.sm, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: space.sm, paddingHorizontal: 10, borderWidth: 1, borderColor: alpha(colors.healthAmber, 27) },
   nudgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.healthAmber },
   nudgeText: { ...type.caption, color: colors.healthAmber, flex: 1 },
   monthlyHint: { ...type.caption, color: colors.textMuted, marginTop: space.sm, lineHeight: 16 },
@@ -411,9 +412,9 @@ const styles = StyleSheet.create({
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
 
   surplusBanner: {
-    backgroundColor: colors.healthAmber + '18',
+    backgroundColor: alpha(colors.healthAmber, 9),
     borderWidth: 1,
-    borderColor: colors.healthAmber + '55',
+    borderColor: alpha(colors.healthAmber, 33),
     borderRadius: radius.lg,
     padding: space.md,
     gap: space.sm,
@@ -423,7 +424,7 @@ const styles = StyleSheet.create({
   },
   surplusText: { ...type.body, color: colors.healthAmber, flex: 1, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   surplusActions: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
-  surplusBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.healthAmber + '66', backgroundColor: colors.healthAmber + '22' },
+  surplusBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: alpha(colors.healthAmber, 40), backgroundColor: alpha(colors.healthAmber, 13) },
   surplusBtnText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   adjLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.sm },

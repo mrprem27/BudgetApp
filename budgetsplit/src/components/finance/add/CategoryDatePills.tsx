@@ -7,6 +7,7 @@ import { asFeather } from '../../../constants/palette';
 import { categoryVisual } from '../../../constants/categories';
 import type { Category } from '../../../db/queries/categories';
 import type { AddKind } from './KindToggle';
+import { alpha } from '../../../theme';
 
 type Props = {
   kind: AddKind;
@@ -29,7 +30,7 @@ export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate,
       >
         {selectedCategory ? (
           <>
-            <View style={[styles.catPillDot, { backgroundColor: (selectedCategory.color ?? colors.accent) + '22' }]}>
+            <View style={[styles.catPillDot, { backgroundColor: alpha(selectedCategory.color ?? colors.accent, 13) }]}>
               <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={selectedCategory.color ?? colors.accent} />
             </View>
             <Text style={styles.catPillText}>{selectedCategory.name}</Text>

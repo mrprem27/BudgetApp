@@ -14,13 +14,16 @@
 | Untested lib modules | 17 | **9** (all native I/O adapters) |
 | `any` / `@ts-ignore` | 42 | **5** (all documented library gaps) |
 | Dead style keys | 154 | **0** |
+| Raw hex in UI code | 19 | **0** |
+| Hex-suffix colour concatenations | 153 | **0** (via `alpha()`) |
 | Screen-reader-silent controls | 6 | **0** |
 | Colour palettes | 3 sources | **1 file** |
 | Largest screen | 1354 LOC | **976** |
 | Hand-rolled data loaders | 1 | **0** |
 
-**All 🔴 and all 🟡 items are closed.** Only 🟢 cosmetics and two ⛔ external
-blockers remain open — see the tables below and [§ Resolved](#-resolved).
+**Every 🔴, 🟡 and 🟢 item is closed.** The only rows still open are the two ⛔
+external blockers (GPay export format, Google CASA assessment), which are not
+code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
 
 ---
 
@@ -47,13 +50,13 @@ blockers remain open — see the tables below and [§ Resolved](#-resolved).
 | ~~**U2**~~ | ✅ | see commit log | ~~6 data screens flash an empty state before load~~ **Fixed** — gated on `loading`. `afford.tsx` also had two DEAD guards testing `snap === null` when `useScreenData` yields `undefined`, so it rendered "₹0 available" and a full verdict from unloaded data | done |
 | ~~**U3**~~ | ✅ | see commit log | ~~Pull-to-refresh on 11 of 31 screens, no rule~~ **Fixed** — rule codified in AGENTS.md §12 (data + own scroll container ⇒ yes) with an explicit exempt table; applied to the 6 qualifying screens. Zero violations | done |
 | ~~**U4**~~ | ✅ | see commit log | ~~85 pressables missing `accessibilityLabel`~~ **Fixed — and the number was wrong.** 124 of the 130 have a `<Text>` child that RN derives a name from. Only **6** were genuinely silent; all labelled, and the notifications `Toggle` gained a required `label` prop | done |
-| **U5** | 🟢 | 19 raw hex values outside the token system — **direct AGENTS.md §10 violation** ("Never raw hex. Always use tokens.") | [insights.tsx:421](../app/insights.tsx#L421), [savings.tsx:468](../app/%28tabs%29/savings.tsx#L468), [history.tsx:190](../app/history.tsx#L190), [notifications.tsx:201](../app/settings/notifications.tsx#L201), [StreakCard.tsx:82](../src/components/finance/home/StreakCard.tsx#L82) | open |
+| ~~**U5**~~ | ✅ | ~~19 raw hex outside tokens~~ **Fixed** — `app/` and `src/components/` now contain **zero** raw hex. Three near-identical dark reds collapsed into one `expenseTintDeep`; added `amberTint` + `streakFlame`. Remaining hex is legitimate: the palette/category catalogues, the light-themed print document, and demo fixtures | — | done |
 | ~~**U6**~~ | ✅ | see commit log | ~~Three colour palettes~~ **Fixed** — the second `CHART_COLORS` had zero consumers (deleted, no visual change); `GOAL_COLORS` and `GOAL_ICONS` moved out of the screen. All palettes now in `constants/palette.ts` | done |
 | ~~**U7**~~ | ✅ | see commit log | ~~5 screens hand-roll a header~~ **Fixed per owner decision** — `(tabs)/groups` and `category/[name]` → `ScreenHeader`. Home, `(tabs)/settings` and `add/itemized` stay bespoke by design | done |
 | ~~**U8**~~ | ✅ | see commit log | ~~Two modal metaphors~~ **Fixed** — `SplitSheet` and `CategoryPicker` were hand-rolling backdrop + handle + title + keyboard avoidance around a raw `<Modal>`; both now use `SheetModal`. The 3 remaining raw `<Modal>`s are correct (SheetModal itself, the photo lightbox, the FAB overlay) | done |
 | ~~**U9**~~ | ✅ | see commit log | ~~Home first-run empty state~~ **Resolved as won't-fix** — owner confirmed the bespoke hero is intentional. No longer blocked | done |
 | ~~**U10**~~ | ✅ | see commit log | ~~`add/itemized` → ModalHeader~~ **Resolved as won't-fix** — wizard header is intentional. No longer blocked | done |
-| **U11** | 🟢 | `accessibilityState` missing on review/itemized toggles | [review.tsx](../app/review.tsx), [add/itemized.tsx](../app/add/itemized.tsx) | open |
+| ~~**U11**~~ | ✅ | ~~`accessibilityState` on review/itemized toggles~~ **Fixed, wider than scoped** — swept every selection control: **14** toggles across savings, settings, categories, review, FilterForm, Onboarding and TransferSlotSheet now report `{ selected }`, and both of `help.tsx`'s disclosure levels report `{ expanded }` | — | done |
 
 ---
 
@@ -78,9 +81,9 @@ blockers remain open — see the tables below and [§ Resolved](#-resolved).
 | ~~**K3**~~ | ✅ | see commit log | ~~Byte-identical copy-paste between savings and insights~~ **Fixed — it wasn't shared UI.** The styles were left behind when the velocity card moved to /insights. See K9 | done |
 | ~~**K4**~~ | ✅ | see commit log | ~~No `IconCircle` primitive~~ **Fixed** — created in `components/ui/`, adopted at 9 pixel-identical sites, and **AGENTS.md §8 now prescribes the component instead of the inline snippet** (the doc was teaching the copy-paste). 43 sites with extra positioning left for opportunistic migration | done |
 | ~~**K5**~~ | ✅ | see commit log | ~~29 screens import `db/queries` directly~~ **Fixed — and the premise was wrong.** AGENTS.md's rule is no inlined SQL + load via `useScreenData`; its own reference screens import query functions inside the loader. Measured properly: 0 screens inline SQL, and exactly **one** hand-rolled a loader (`(tabs)/settings`), now migrated | done |
-| **K6** | 🟢 | No `alpha(color, n)` helper — the `+ '22'` hex-suffix idiom appears ~47×. *Not a rule violation:* AGENTS.md §8 mandates `color + '22'`. Debt is the missing helper, and that `'22'` is the only opacity the codebase can express. | [help.tsx](../app/help.tsx) alone has 31 | open |
-| **K7** | 🟢 | No `SectionCard collapsible` — collapsible-section state hand-rolled twice | [group/[id]/budget.tsx](../app/group/[id]/budget.tsx), [categories.tsx](../app/categories.tsx) | open |
-| **K8** | 🟢 | `PersonEditSheet` — add/rename-person UI duplicated | [friends.tsx](../app/friends.tsx), [group/[id]/members.tsx](../app/group/[id]/members.tsx) | open |
+| ~~**K6**~~ | ✅ | ~~No `alpha()` helper; `+ '22'` ~47×~~ **Fixed** — it was **153** sites across **15** different opacities, not one. New `theme/alpha.ts`: `alpha(c, 13)` returns the identical string, asserted per-opacity in `alpha.test.ts`, so the migration is provably visual-noop. Zero concatenations remain | — | done |
+| ~~**K7**~~ | ✅ | ~~No `SectionCard collapsible`~~ **Fixed** — new `components/ui/SectionCard.tsx` adopted in `group/[id]/budget` and `categories`. It also closes an a11y gap both copies shared: a disclosure needs `accessibilityState={{ expanded }}`, which neither set | — | done |
+| ~~**K8**~~ | ✅ | ~~`PersonEditSheet` duplicated~~ **Fixed** — it was **three** copies (two in `friends`, one in `members`), not two. New `PersonNameSheet` owns the field constraints so name rules can't drift between screens | — | done |
 | ~~**K11**~~ | ✅ | see commit log | ~~9 lib modules untested~~ **Assessed, not code.** 7 are thin native I/O adapters where a unit test would only exercise the mock; 2 (`analytics`, `onboarding`) need a SQLite fake. Recorded so "9 untested" is never mistaken for "9 forgotten" | done |
 | ~~**K9**~~ | ✅ | see commit log | ~~Dead styles in savings.tsx~~ **Fixed** — swept repo-wide: **154 unused style keys** removed across 17 files, 73 in `(tabs)/savings.tsx` alone (71% of its stylesheet). Verified no dynamic `styles[key]` access first | done |
 
@@ -107,6 +110,17 @@ Every row below is over it; C1–C3 are 3–4.5× over.
 | ~~**C9**~~ | ✅ | [app/(tabs)/index.tsx](../app/%28tabs%29/index.tsx) | ~~539~~ → **351** | 7 | Loader + period-range helpers → [lib/homeData.ts](../src/lib/homeData.ts). |
 | ~~**C10**~~ | ✅ | [app/insights.tsx](../app/insights.tsx) | ~~499~~ → **377** | — | Loader → [lib/insightsData.ts](../src/lib/insightsData.ts); `insightTint` stayed in the screen (tone → colour is render, not data). |
 | ~~**C11**~~ | ✅ | Unvirtualized lists | — | — | **Triaged — "20 screens" was a naive grep.** `search`, `review` and `history` (the three called risky) already use SectionList/FlatList. One real unbounded list existed: `getGoalHistory` had no LIMIT, so a goal's whole ledger mounted in a ScrollView. Now paged at 50 with a visible "showing N of M" — and the delete-undo path passes `limit: null` deliberately, since capping there would silently drop rows on restore. |
+
+---
+
+## 📌 Found during the 🟢 pass — recorded, not actioned
+
+Two things surfaced that are outside what a cosmetic pass should decide alone.
+
+| # | Item | Why it wasn't done here |
+|---|---|---|
+| **N1** | `colors.textMuted` is **2.98:1** on `bgCard` — below WCAG AA's 4.5:1 for small text. It's the app-wide caption token, used everywhere. | Fixing it means darkening or lightening a core palette entry, which changes the look of every screen. That's a design decision, not a cleanup. (The specific bug behind U5 — `history.tsx` at **1.44:1** — *was* fixed.) |
+| **N2** | `help.tsx` is a third collapsible, structurally unlike the other two (bare header + card body, plus a nested item-level accordion). | Converting it to `SectionCard` would add card chrome to its header — a real visual change I can't device-verify. Its missing `accessibilityState` **was** fixed; only the structural convergence is deferred. |
 
 ---
 
