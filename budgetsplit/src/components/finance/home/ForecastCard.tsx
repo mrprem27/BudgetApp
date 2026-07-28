@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
 import { categoryVisual } from '../../../constants/categories';
+import { alpha } from '../../../theme';
 
 export type ForecastShift = { cat: string; thisAmt: number; pct: number };
 
@@ -87,7 +88,7 @@ export function ForecastCard({
             <View style={styles.divider} />
             <Text style={styles.shiftLabel}>BIGGEST SHIFT VS LAST MONTH</Text>
             <View style={styles.shiftRow}>
-              <View style={[styles.shiftIcon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+              <View style={[styles.shiftIcon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                 <Feather name={vis?.icon ?? 'tag'} size={15} color={vis?.color ?? colors.accent} />
               </View>
               <View style={{ flex: 1 }}>

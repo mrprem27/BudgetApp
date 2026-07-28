@@ -10,6 +10,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { haptic } from '../src/lib/haptics';
+import { alpha } from '../src/theme';
 
 // The three pillars are always on — the app's reason to exist. They show a "Core"
 // badge instead of a toggle so users understand they can't switch off the basics.
@@ -92,14 +93,14 @@ export default function FeaturesScreen() {
             <View key={c.label}>
               {i > 0 && <View style={styles.divider} />}
               <View style={styles.row}>
-                <View style={[styles.iconDot, { backgroundColor: c.tint + '22' }]}>
+                <View style={[styles.iconDot, { backgroundColor: alpha(c.tint, 13) }]}>
                   <Feather name={c.icon} size={16} color={c.tint} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>{c.label}</Text>
                   <Text style={styles.caption}>{c.caption}</Text>
                 </View>
-                <View style={[styles.coreBadge, { backgroundColor: c.tint + '1A', borderColor: c.tint }]}>
+                <View style={[styles.coreBadge, { backgroundColor: alpha(c.tint, 10), borderColor: c.tint }]}>
                   <Text style={[styles.coreBadgeText, { color: c.tint }]}>Core</Text>
                 </View>
               </View>

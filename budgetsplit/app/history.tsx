@@ -91,7 +91,7 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
                 {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
               </View>
               {badge ? (
-                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : '#221A00' }]}>
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : colors.amberTint }]}>
                   <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : colors.healthAmber }]}>{badge}</Text>
                 </View>
               ) : item.amount != null ? (
@@ -112,7 +112,7 @@ export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
-  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(
     (db) => getAuditLog(db, { groupId: groupId || undefined }),
     [groupId],
   );
@@ -156,7 +156,9 @@ export default function HistoryScreen() {
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
           ListEmptyComponent={
-            <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+            loading ? null : (
+              <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+            )
           }
           ListFooterComponent={
             hasMore ? (
@@ -173,11 +175,7 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  backText: { fontSize: 13, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   scroll: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
-  title: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.5, paddingBottom: 6 },
   subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: space.md, lineHeight: 18 },
   sectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
   card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10, overflow: 'hidden', ...shadow.sm },
@@ -187,7 +185,7 @@ const styles = StyleSheet.create({
   entryBody: { flex: 1 },
   entryLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 2 },
   entrySummary: { fontSize: 11, color: colors.textMuted, marginBottom: 2, lineHeight: 15 },
-  entryTime: { fontSize: 10, color: '#2A3C39' },
+  entryTime: { fontSize: 10, color: colors.textMuted },
   entryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, flexShrink: 0 },
   actionBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
   actionBadgeText: { fontSize: 10, fontFamily: 'Inter_600SemiBold' },

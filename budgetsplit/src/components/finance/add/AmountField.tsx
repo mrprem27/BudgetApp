@@ -3,6 +3,7 @@ import { View, TextInput, StyleSheet } from 'react-native';
 import { colors, space } from '../../tokens';
 import { formatAmountInput, sanitizeAmountInput, formatRupees } from '../../../lib/money';
 import type { AddKind } from './KindToggle';
+import { alpha } from '../../../theme';
 
 type Props = {
   amountText: string;
@@ -25,7 +26,7 @@ export function AmountField({ amountText, onChangeText, kind, autoFocus, transfe
         onChangeText={(t) => onChangeText(sanitizeAmountInput(t))}
         keyboardType="decimal-pad"
         placeholder={kind === 'transfer' && transferScopeBal > 0 ? formatRupees(transferScopeBal) : '₹0'}
-        placeholderTextColor={kind === 'income' ? colors.income + '55' : colors.textMuted}
+        placeholderTextColor={kind === 'income' ? alpha(colors.income, 33) : colors.textMuted}
         accessibilityLabel="Amount"
         autoFocus={autoFocus}
       />
@@ -35,7 +36,7 @@ export function AmountField({ amountText, onChangeText, kind, autoFocus, transfe
 }
 
 const styles = StyleSheet.create({
-  amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: colors.border + '55' },
+  amountBlock: { alignItems: 'center', paddingBottom: space.md, borderBottomWidth: 1, borderColor: alpha(colors.border, 33) },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, textAlign: 'center', letterSpacing: -1.5, paddingVertical: space.xs, alignSelf: 'stretch', width: '100%' },
   amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: space.xs },
 });

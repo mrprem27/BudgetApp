@@ -45,24 +45,21 @@ export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
 /** `pending_txn.source` — where an imported/pending row came from. Drives the
  *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
  *  are reserved for future ingestion paths (currently de-scoped). */
-export const TXN_SOURCE = ['email', 'gpay', 'bank_csv', 'sms', 'notification', 'manual'] as const;
+export const TXN_SOURCE = ['email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'manual'] as const;
 export type TxnSource = typeof TXN_SOURCE[number];
 export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
-  email: 'Email alert', gpay: 'Google Pay', bank_csv: 'Bank / CSV',
+  email: 'Email alert', gpay: 'Google Pay', paytm: 'Paytm', bank_csv: 'Bank / CSV',
   sms: 'SMS', notification: 'Notifications', manual: 'Imported',
 };
 /** Feather icon per source — used by the Review section headers. */
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
-  email: 'mail', gpay: 'smartphone', bank_csv: 'file-text',
+  email: 'mail', gpay: 'smartphone', paytm: 'credit-card', bank_csv: 'file-text',
   sms: 'message-square', notification: 'bell', manual: 'inbox',
 };
 
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */
 export const RECUR_FREQ = ['daily', 'weekly', 'monthly', 'yearly', 'custom'] as const;
 export type RecurFreq = typeof RECUR_FREQ[number];
-export const RECUR_FREQ_LABEL: Record<RecurFreq, string> = {
-  daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', custom: 'Custom',
-};
 
 /** `txn.recur_state CHECK(recur_state IN ('active','paused','ended'))`. */
 export const RECUR_STATE = ['active', 'paused', 'ended'] as const;
@@ -96,9 +93,6 @@ export type BudgetPeriod = typeof BUDGET_PERIOD[number];
 /** `savings_goal.priority CHECK(priority IN ('high','medium','low'))`. */
 export const PRIORITY = ['high', 'medium', 'low'] as const;
 export type Priority = typeof PRIORITY[number];
-export const PRIORITY_LABEL: Record<Priority, string> = {
-  high: 'High', medium: 'Medium', low: 'Low',
-};
 
 /** `savings_goal.frequency CHECK(... IN ('daily','weekly','monthly','yearly','none'))`. */
 export const SAVINGS_FREQUENCY = ['daily', 'weekly', 'monthly', 'yearly', 'none'] as const;

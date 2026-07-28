@@ -2,7 +2,7 @@ import type * as SQLite from 'expo-sqlite';
 import { format } from 'date-fns';
 import { getTransactionsForGroup, type TxnWithSplits } from '../db/queries/transactions';
 import type { BudgetGroup } from '../db/queries/groups';
-import { GROUP_EXPORT_HEADER } from './importParse';
+import { GROUP_EXPORT_HEADER, csvQuote } from './importParse';
 
 /**
  * CSV export of logged transactions — a human-readable, re-importable dump that
@@ -18,9 +18,6 @@ export type GroupExportResult = {
   rowCount: number;
 };
 
-/** Wrap a field in double quotes, escaping embedded quotes. */
-const quote = (s: string | null | undefined) => `"${(s ?? '').replace(/"/g, '""')}"`;
-
 /** Row total in paise: income sits on the payment side, else on shares (fall back
  *  to payments when a row has no shares). */
 function rowTotalPaise(t: TxnWithSplits): number {
@@ -33,7 +30,7 @@ function rowTotalPaise(t: TxnWithSplits): number {
 function rowLine(groupName: string, t: TxnWithSplits): string {
   const date = format(new Date(t.date), 'yyyy-MM-dd HH:mm');
   const amount = (rowTotalPaise(t) / 100).toFixed(2);
-  return `${date},${quote(groupName)},${quote(t.category)},${t.kind},${amount},${quote(t.note)}`;
+  return `${date},${csvQuote(groupName)},${csvQuote(t.category)},${t.kind},${amount},${csvQuote(t.note)}`;
 }
 
 /** Export one group's logged transactions. */

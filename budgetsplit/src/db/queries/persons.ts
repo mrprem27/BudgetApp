@@ -28,10 +28,6 @@ export async function getMe(db: SQLite.SQLiteDatabase): Promise<Person | null> {
   return db.getFirstAsync<Person>('SELECT * FROM person WHERE is_me = 1');
 }
 
-export async function getPersonById(db: SQLite.SQLiteDatabase, id: string): Promise<Person | null> {
-  return db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [id]);
-}
-
 export async function getGroupMembers(db: SQLite.SQLiteDatabase, groupId: string): Promise<Person[]> {
   return db.getAllAsync<Person>(
     `SELECT p.*, gm.joined_at FROM person p
@@ -66,21 +62,6 @@ export async function updatePersonName(
     await logAudit(db, {
       entityType: 'member', entityId: personId, action: 'updated',
       summary: `Renamed ${prev?.name ?? 'person'} to ${name}`,
-    });
-  });
-}
-
-export async function updatePerson(
-  db: SQLite.SQLiteDatabase,
-  personId: string,
-  name: string,
-  avatarColor: string,
-): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('UPDATE person SET name = ?, avatar_color = ? WHERE id = ?', [name, avatarColor, personId]);
-    await logAudit(db, {
-      entityType: 'member', entityId: personId, action: 'updated',
-      summary: `Updated ${name}`,
     });
   });
 }

@@ -6,7 +6,6 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
@@ -37,6 +36,8 @@ import { haptic } from '../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { alpha } from '../../src/theme';
 
 type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number };
 
@@ -44,7 +45,6 @@ type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'no
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   // Groups come from the global store — hydrated at the root by StoreHydrator and
   // refreshed on the data-change signal, so this screen neither queries nor sets them.
   const groups = useStore(s => s.groups);
@@ -169,11 +169,11 @@ export default function GroupsScreen() {
         >
           <PressableScale
             style={[styles.groupCard, isArchivedView && styles.groupCardArchived]}
-            onPress={() => isArchivedView ? handleRestore(item) : router.push((item.is_personal === 1 ? '/personal' : `/group/${item.id}`) as any)}
+            onPress={() => isArchivedView ? handleRestore(item) : router.push(item.is_personal === 1 ? '/personal' : `/group/${item.id}`)}
             accessibilityLabel={item.name}
           >
             <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
-            <View style={[styles.groupIcon, { backgroundColor: item.color + '22' }]}>
+            <View style={[styles.groupIcon, { backgroundColor: alpha(item.color, 13) }]}>
               <Feather name={asFeather(item.icon, 'credit-card')} size={20} color={item.color} />
             </View>
             <View style={styles.groupInfo}>
@@ -260,26 +260,29 @@ export default function GroupsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={styles.title}>{viewMode === 'archived' ? 'Archived' : 'Groups'}</Text>
-        <View style={styles.headerActions}>
-          {(archived.length > 0 || viewMode === 'archived') && (
-            <TouchableOpacity
-              style={styles.headerAdd}
-              onPress={() => setViewMode(v => (v === 'active' ? 'archived' : 'active'))}
-              accessibilityRole="button"
-              accessibilityLabel={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
-            >
-              <Feather name={viewMode === 'archived' ? 'arrow-left' : 'archive'} size={18} color={viewMode === 'archived' ? colors.accent : colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-          {viewMode === 'active' && (
-            <TouchableOpacity style={styles.headerAdd} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
-              <Feather name="plus" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      <ScreenHeader
+        large
+        title={viewMode === 'archived' ? 'Archived' : 'Groups'}
+        right={
+          <>
+            {(archived.length > 0 || viewMode === 'archived') && (
+              <TouchableOpacity
+                style={styles.headerAdd}
+                onPress={() => setViewMode(v => (v === 'active' ? 'archived' : 'active'))}
+                accessibilityRole="button"
+                accessibilityLabel={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
+              >
+                <Feather name={viewMode === 'archived' ? 'arrow-left' : 'archive'} size={18} color={viewMode === 'archived' ? colors.accent : colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+            {viewMode === 'active' && (
+              <TouchableOpacity style={styles.headerAdd} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
+                <Feather name="plus" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </>
+        }
+      />
 
       {error ? (
         <ErrorState onRetry={() => reload()} />
@@ -342,28 +345,19 @@ export default function GroupsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  title: { ...type.title, color: colors.textPrimary },
-  friendsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
   balancesWrap: { marginBottom: space.sm },
-  balHero: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
-  balCaption: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
-  balSplit: { flexDirection: 'row', marginTop: space.md, paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
-  balDivider: { width: 1, backgroundColor: colors.border, marginHorizontal: space.md },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
   balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
   balRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   balName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   balSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  balAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
-  allSettled: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   swipeAction: { backgroundColor: colors.expense, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', width: 80, marginLeft: space.sm, gap: space.xs },
   swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
   groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + 4, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  // RN types borderStyle as a union that excludes 'dashed' on some platforms.
   groupCardArchived: { opacity: 0.65, borderStyle: 'dashed' as any },
   cardStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -372,28 +366,8 @@ const styles = StyleSheet.create({
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted },
-  headerIconBtnActive: { backgroundColor: colors.accentMuted },
   overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
-  fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
-  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  typeChip: { paddingHorizontal: space.md, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
-  typeChipText: { ...type.label, color: colors.textSecondary },
-  memberRow: { gap: space.md, paddingVertical: space.xs, paddingRight: space.md },
-  memberPick: { alignItems: 'center', gap: space.xs, width: 52 },
-  memberAvatarWrap: { borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
-  memberAvatarOn: { borderColor: colors.accent },
-  memberCheck: { position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
-  memberPickName: { ...type.caption, color: colors.textSecondary, fontSize: 10 },
-  iconRow: { marginBottom: space.xs },
-  iconOption: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center', marginRight: space.xs },
-  iconSelected: { backgroundColor: colors.accent },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  colorSwatch: { width: 32, height: 32, borderRadius: radius.lg },
-  colorSelected: { borderWidth: 3, borderColor: colors.textPrimary },
   stackRow: { marginTop: space.xs },
-  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: colors.accent + '44' },
+  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
   settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

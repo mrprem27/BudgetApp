@@ -35,6 +35,7 @@ export function TransferSlotSheet({
             style={[styles.groupPickerRow, active && styles.groupPickerRowActive]}
             onPress={() => onPick(p.id)}
             accessibilityRole="button"
+            accessibilityState={{ selected: active }}
           >
             <MemberAvatar name={p.name} color={p.avatar_color} size={36} imageUri={p.image_uri} />
             <Text style={styles.groupPickerName}>{p.id === me?.id ? `${p.name} (you)` : p.name}</Text>

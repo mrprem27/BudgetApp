@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
+import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { ensurePdfJsSource, PDFJS_CDN } from '../../lib/pdfjsCache';
 
 /**
@@ -96,8 +97,8 @@ export function PdfTextExtractor({ base64, onText, onError }: Props) {
             onError('Could not parse the PDF reader response.');
           }
         }}
-        onError={(e: any) => onError('WebView error: ' + (e?.nativeEvent?.description ?? 'unknown') + (e?.nativeEvent?.code != null ? ' (code ' + e.nativeEvent.code + ')' : ''))}
-        onHttpError={(e: any) => onError('WebView HTTP ' + (e?.nativeEvent?.statusCode ?? '?') + ' loading ' + (e?.nativeEvent?.url ?? 'pdf.js'))}
+        onError={(e: WebViewErrorEvent) => onError('WebView error: ' + (e?.nativeEvent?.description ?? 'unknown') + (e?.nativeEvent?.code != null ? ' (code ' + e.nativeEvent.code + ')' : ''))}
+        onHttpError={(e: WebViewHttpErrorEvent) => onError('WebView HTTP ' + (e?.nativeEvent?.statusCode ?? '?') + ' loading ' + (e?.nativeEvent?.url ?? 'pdf.js'))}
       />
     </View>
   );

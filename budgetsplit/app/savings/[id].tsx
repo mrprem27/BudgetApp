@@ -1,8 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
-} from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, addMonths } from 'date-fns';
@@ -20,15 +17,11 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
-import { haptic } from '../../src/lib/haptics';
-import {
-  getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory,
-  fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
-  type SavingsTxn, type SavingsFrequency,
-} from '../../src/db/queries/savings';
-import { useUndo } from '../../src/components/system/UndoToast';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { useScreenData } from '../../src/hooks/useScreenData';
+
+import type { SavingsTxn, SavingsFrequency } from '../../src/db/queries/savings';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { useSavingsGoalScreen } from '../../src/hooks/useSavingsGoalScreen';
+import { alpha } from '../../src/theme';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -54,42 +47,20 @@ const KIND_META: Record<SavingsTxn['kind'], { icon: keyof typeof Feather.glyphMa
 
 export default function GoalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
-  const { showUndo } = useUndo();
-  const { refresh } = useDataRefresh();
 
-  const [showAdd, setShowAdd] = useState(false);
-  const [celebrate, setCelebrate] = useState(false);
-  const [showWithdraw, setShowWithdraw] = useState(false);
-  const [showAdjust, setShowAdjust] = useState(false);
-  const [adjustName, setAdjustName] = useState('');
-  const [adjustTarget, setAdjustTarget] = useState('');
-  const [adjustAlloc, setAdjustAlloc] = useState('');
-  const [adjustFreq, setAdjustFreq] = useState<SavingsFrequency>('monthly');
-  const [adjustDate, setAdjustDate] = useState<number | null>(null);
-  const [adjustSaving, setAdjustSaving] = useState(false);
-  const [amt, setAmt] = useState('');
-
-  const { data, loading, error, reload } = useScreenData(async (loadDb) => {
-    const [g, savedMap, money, hist] = await Promise.all([
-      getGoalById(loadDb, id), getGoalSavedMap(loadDb), getTotalMoney(loadDb), getGoalHistory(loadDb, id),
-    ]);
-    return {
-      goal: g,
-      saved: savedMap[id] ?? 0,
-      cashAvailable: money.cashAvailable,
-      history: hist,
-    };
-  }, [id]);
-
-  const goal = data?.goal ?? null;
-  const saved = data?.saved ?? 0;
-  const cashAvailable = data?.cashAvailable ?? 0;
-  const history: SavingsTxn[] = data?.history ?? [];
-
-  // Guard: bail back out if we somehow landed here without an id.
-  useEffect(() => { if (!id) router.back(); }, [id]);
+  // All state, data and write-handlers live in the hook; this screen renders.
+  const {
+    goal, saved, cashAvailable, history, historyTotal,
+    loading, error, refreshing, onRefresh, reload,
+    showAdd, setShowAdd, showWithdraw, setShowWithdraw, amt, setAmt,
+    handleAdd, handleWithdraw,
+    showAdjust, setShowAdjust, adjustName, setAdjustName,
+    adjustTarget, setAdjustTarget, adjustAlloc, setAdjustAlloc,
+    adjustFreq, setAdjustFreq, adjustDate, setAdjustDate, adjustSaving,
+    openAdjust, handleAdjust,
+    celebrate, setCelebrate, toggleLock, confirmDelete,
+  } = useSavingsGoalScreen(id);
 
   if (!id) return null;
 
@@ -136,107 +107,10 @@ export default function GoalDetailScreen() {
   const shortfall = Math.max(0, needed - monthly);
   const RING_CIRC = 2 * Math.PI * 50;
 
-  async function handleAdd() {
-    const a = parseToPaise(amt);
-    if (a <= 0) return;
-    try {
-      // Fund the goal directly from Cash available.
-      const justCompleted = goal !== null && saved < goal.target && saved + a >= goal.target;
-      await fundGoal(db, id, a);
-      haptic.success();
-      setAmt(''); setShowAdd(false);
-      await reload();
-      if (justCompleted) setCelebrate(true);
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-    }
-  }
-
-  async function handleWithdraw() {
-    const a = parseToPaise(amt);
-    if (a <= 0) return;
-    try {
-      await withdrawFromGoal(db, id, Math.min(a, saved));
-      haptic.warning();
-      setAmt(''); setShowWithdraw(false);
-      await reload();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-    }
-  }
-
-  function openAdjust() {
-    if (!goal) return;
-    setAdjustName(goal.name);
-    setAdjustTarget((goal.target / 100).toString());
-    setAdjustAlloc(goal.allocation > 0 ? (goal.allocation / 100).toString() : '');
-    setAdjustFreq(goal.frequency ?? 'monthly');
-    setAdjustDate(goal.target_date ?? null);
-    setShowAdjust(true);
-  }
-
-  async function handleAdjust() {
-    if (!goal || adjustSaving) return;
-    const newTarget = parseToPaise(adjustTarget);
-    if (!adjustName.trim() || newTarget <= 0) return;
-    setAdjustSaving(true);
-    try {
-      await updateGoal(db, id, {
-        name: adjustName.trim(),
-        target: newTarget,
-        priority: goal.priority,
-        category: goal.category,
-        icon: goal.icon,
-        color: goal.color,
-        allocation: adjustAlloc.trim() ? parseToPaise(adjustAlloc) : 0,
-        frequency: adjustFreq,
-        locked: goal.locked === 1,
-        target_date: adjustDate,
-      });
-      haptic.success();
-      setShowAdjust(false);
-      await reload();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Could not save changes.');
-    } finally {
-      setAdjustSaving(false);
-    }
-  }
-
-  async function toggleLock() {
-    await setGoalLocked(db, id, goal!.locked !== 1);
-    haptic.selection();
-    await reload();
-  }
-
-  function confirmDelete() {
-    Alert.alert('Delete goal?', `“${goal!.name}” will be removed and its ${formatRupees(saved)} returns to your Cash available.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          // Capture the goal + its ledger so the delete can be undone.
-          const snapshot = goal!;
-          const ledger = await getGoalHistory(db, id);
-          await deleteGoal(db, id);
-          haptic.warning();
-          router.back();
-          showUndo({
-            message: `Deleted “${snapshot.name}”`,
-            onUndo: async () => { try { await restoreGoal(db, snapshot, ledger); refresh(); } catch { /* ignore */ } },
-          });
-        },
-      },
-    ]);
-  }
-
   return (
     <View style={styles.container}>
       <ScreenHeader title={goal.name} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Hero — progress ring + amounts */}
         <View style={styles.heroCard}>
           <View style={styles.ringWrap}>
@@ -256,7 +130,7 @@ export default function GoalDetailScreen() {
             </View>
           </View>
 
-          <View style={[styles.heroIcon, { backgroundColor: (goal.color ?? colors.accent) + '22' }]}>
+          <View style={[styles.heroIcon, { backgroundColor: alpha(goal.color ?? colors.accent, 13) }]}>
             <Feather name={asFeather(goal.icon, 'target')} size={20} color={goal.color ?? colors.accent} />
           </View>
           <Text style={styles.heroName}>{goal.name}</Text>
@@ -300,7 +174,7 @@ export default function GoalDetailScreen() {
                 <Text style={styles.nudgeText}>Increase by {formatCompact(shortfall)}/mo to stay on track</Text>
               </View>
             ) : (
-              <View style={[styles.monthlyNudge, { borderColor: colors.income + '44' }]}>
+              <View style={[styles.monthlyNudge, { borderColor: alpha(colors.income, 27) }]}>
                 <View style={[styles.nudgeDot, { backgroundColor: colors.income }]} />
                 <Text style={[styles.nudgeText, { color: colors.income }]}>On track to finish by {format(goal.target_date!, 'MMM yyyy')}</Text>
               </View>
@@ -318,7 +192,7 @@ export default function GoalDetailScreen() {
               {formatCompact(surplus)} over target — well done!
             </Text>
             <View style={styles.surplusActions}>
-              <TouchableOpacity style={styles.surplusBtn} onPress={() => router.push('/savings' as any)} accessibilityRole="button">
+              <TouchableOpacity style={styles.surplusBtn} onPress={() => router.push('/savings')} accessibilityRole="button">
                 <Text style={styles.surplusBtnText}>New goal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.surplusBtn} onPress={() => { setAmt((surplus / 100).toString()); setShowWithdraw(true); }} accessibilityRole="button">
@@ -336,7 +210,7 @@ export default function GoalDetailScreen() {
               const m = KIND_META[h.kind];
               return (
                 <View key={h.id} style={[styles.histRow, i < history.length - 1 && styles.histBorder]}>
-                  <View style={[styles.histIcon, { backgroundColor: m.color + '22' }]}>
+                  <View style={[styles.histIcon, { backgroundColor: alpha(m.color, 13) }]}>
                     <Feather name={m.icon} size={15} color={m.color} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -352,6 +226,11 @@ export default function GoalDetailScreen() {
           </View>
         ) : (
           <EmptyState icon="inbox" title="No contributions yet" body="Add funds to start filling this goal." tint={colors.textSecondary} />
+        )}
+        {/* The ledger is paged (GOAL_HISTORY_PAGE) because it renders in a
+            ScrollView — say so rather than silently truncating. */}
+        {historyTotal > history.length && (
+          <Text style={styles.histMore}>Showing the latest {history.length} of {historyTotal} entries.</Text>
         )}
 
         {/* Actions — Add to goal (primary) + Adjust, with secondary withdraw/lock */}
@@ -480,6 +359,7 @@ function AmountTile({ label, value, tint }: { label: string; value: string; tint
 }
 
 const styles = StyleSheet.create({
+  histMore: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm },
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
 
@@ -503,7 +383,7 @@ const styles = StyleSheet.create({
   monthlySub: { ...type.caption, color: colors.textMuted, marginBottom: space.xs },
   monthlyAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, letterSpacing: -0.5 },
   monthlyDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: space.sm, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  monthlyNudge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: space.sm, paddingHorizontal: 10, borderWidth: 1, borderColor: alpha(colors.healthAmber, 27) },
   nudgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.healthAmber },
   nudgeText: { ...type.caption, color: colors.healthAmber, flex: 1 },
   monthlyHint: { ...type.caption, color: colors.textMuted, marginTop: space.sm, lineHeight: 16 },
@@ -515,10 +395,6 @@ const styles = StyleSheet.create({
   secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
   secondaryText: { ...type.label, color: colors.textSecondary },
   deadlineHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
-  dateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderWidth: 1, borderColor: colors.border },
-  dateBtnText: { ...type.body, color: colors.textMuted },
-  dateClear: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
 
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   histCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
@@ -536,9 +412,9 @@ const styles = StyleSheet.create({
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
 
   surplusBanner: {
-    backgroundColor: colors.healthAmber + '18',
+    backgroundColor: alpha(colors.healthAmber, 9),
     borderWidth: 1,
-    borderColor: colors.healthAmber + '55',
+    borderColor: alpha(colors.healthAmber, 33),
     borderRadius: radius.lg,
     padding: space.md,
     gap: space.sm,
@@ -548,7 +424,7 @@ const styles = StyleSheet.create({
   },
   surplusText: { ...type.body, color: colors.healthAmber, flex: 1, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   surplusActions: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
-  surplusBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.healthAmber + '66', backgroundColor: colors.healthAmber + '22' },
+  surplusBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: alpha(colors.healthAmber, 40), backgroundColor: alpha(colors.healthAmber, 13) },
   surplusBtnText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   adjLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.sm },

@@ -9,6 +9,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
+import { ErrorState } from '../src/components/ui/ErrorState';
 import { CategoryChip } from '../src/components/finance/CategoryChip';
 import { getAffordSnapshot, type AffordSnapshot } from '../src/db/queries/savings';
 import {
@@ -16,6 +17,7 @@ import {
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
+import { alpha } from '../src/theme';
 
 export default function AffordScreen() {
   const router = useRouter();
@@ -23,11 +25,13 @@ export default function AffordScreen() {
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
   // Refetch on focus (via useScreenData) so the snapshot reflects txns added elsewhere.
-  // The loader swallows errors into an empty snapshot, matching the prior behavior.
-  const { data: snap } = useScreenData(async (db): Promise<AffordSnapshot> => {
-    try { return await getAffordSnapshot(db); }
-    catch { return { available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} }; }
-  }, []);
+  // Errors must NOT be swallowed here: a zeroed snapshot renders as "₹0 available",
+  // i.e. a confident wrong answer telling the user they can't afford anything.
+  // Let it throw so `loadError` surfaces a retry instead.
+  const { data: snap, error: loadError, reload } = useScreenData(
+    async (db): Promise<AffordSnapshot> => getAffordSnapshot(db),
+    [],
+  );
 
   const amount = parseToPaise(amountText);
   const available = snap?.available ?? 0;
@@ -46,7 +50,10 @@ export default function AffordScreen() {
     return evaluateAfford(ctx);
   }, [amount, available, upcoming, monthlyIncome, categoryName, catStat]);
 
-  const showResult = amount > 0 && snap !== null;
+  // `snap` is undefined until the first load resolves (never null), so both
+  // guards must test truthiness — otherwise the verdict is computed from zeros
+  // and the screen confidently answers "no" before it knows anything.
+  const showResult = amount > 0 && !!snap;
   const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare } = result;
 
   const V = {
@@ -79,6 +86,13 @@ export default function AffordScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Can I afford this?" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState
+          title="Couldn't check your balance"
+          body="We couldn't read your available money, so we can't answer this yet. Try again."
+          onRetry={reload}
+        />
+      ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>What does it cost?</Text>
@@ -116,7 +130,7 @@ export default function AffordScreen() {
           <View style={styles.breakdownCard}>
             <View style={styles.cashRow}>
               <Text style={styles.cashLabel}>Spendable cash now</Text>
-              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{snap === null ? '—' : formatRupees(available)}</Text>
+              <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{!snap ? '—' : formatRupees(available)}</Text>
             </View>
             {upcoming > 0 && (
               <>
@@ -156,7 +170,7 @@ export default function AffordScreen() {
             {showResult && (
               <>
                 <View style={styles.breakdownDivider} />
-                <View style={[styles.cashRow, styles.leftAfterRow, { backgroundColor: V.color + '14' }]}>
+                <View style={[styles.cashRow, styles.leftAfterRow, { backgroundColor: alpha(V.color, 8) }]}>
                   <Text style={[styles.cashLabel, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>Left after purchase</Text>
                   <Text style={[styles.cashVal, { color: V.color, fontFamily: 'Inter_600SemiBold' }]}>{formatRupees(remaining)}</Text>
                 </View>
@@ -165,7 +179,7 @@ export default function AffordScreen() {
           </View>
 
           {showResult && (
-            <View style={[styles.resultCard, { borderColor: V.color + '55' }]}>
+            <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
               <Text style={styles.resultEmoji}>{V.emoji}</Text>
               <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
               {lines.map((l, i) => (
@@ -192,6 +206,7 @@ export default function AffordScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }

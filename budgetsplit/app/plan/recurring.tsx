@@ -15,9 +15,10 @@ import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getRecurringForGroup } from '../../src/db/queries/transactions';
+import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatCompact } from '../../src/lib/money';
+import { alpha } from '../../src/theme';
 
 type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
 
@@ -72,7 +73,7 @@ export default function RecurringScreen() {
             title="No recurring items yet"
             body="Mark an expense as Recurring (monthly Netflix, rent, gym…) when you add it, and it'll show here with its monthly cost and next charge."
             actionLabel="Add a recurring expense"
-            onAction={() => router.push('/add/quick?kind=expense' as any)}
+            onAction={() => router.push('/add/quick?kind=expense')}
           />
         ) : (
           <>
@@ -97,11 +98,11 @@ export default function RecurringScreen() {
                   <TouchableOpacity
                     key={s.id}
                     style={[styles.row, i < subs.length - 1 && styles.rowBorder]}
-                    onPress={() => router.push(`/group/${s.groupId}/recurring` as any)}
+                    onPress={() => router.push(`/group/${s.groupId}/recurring`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${s.name}, ${cadenceLabel(s.freq)}`}
                   >
-                    <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.icon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'refresh-cw'} size={18} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={styles.info}>
@@ -146,6 +147,5 @@ const styles = StyleSheet.create({
   detail: { ...type.caption, color: colors.textMuted },
   right: { alignItems: 'flex-end' },
   nextDate: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 2 },
-  trackHint: { ...type.caption, color: colors.accent, fontSize: 10, marginTop: 2, fontFamily: 'Inter_600SemiBold' },
   footHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

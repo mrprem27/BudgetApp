@@ -9,6 +9,7 @@ import { nextOccurrenceOnOrAfter } from '../../../lib/recurrence';
 import { categoryVisual } from '../../../constants/categories';
 import { EmptyState } from '../../ui/EmptyState';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
+import { alpha } from '../../../theme';
 
 type Props = {
   rules: TxnWithSplits[];
@@ -64,7 +65,7 @@ export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabe
               accessibilityRole="button"
               accessibilityLabel={label}
             >
-              <View style={[styles.recurItemIcon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+              <View style={[styles.recurItemIcon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                 <Feather name={vis?.icon ?? 'repeat'} size={18} color={vis?.color ?? colors.accent} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>

@@ -15,13 +15,15 @@ import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { getAllGroups } from '../src/db/queries/groups';
-import { getRecurringForGroup } from '../src/db/queries/transactions';
+import { getRecurringForGroup } from '../src/db/queries/recurring';
 import { getGlobalNet } from '../src/db/queries/balances';
 import { getMe, getAllPersons, type Person } from '../src/db/queries/persons';
 import { simplify } from '../src/lib/settle';
 import { buildUpcoming, type UpcomingItem } from '../src/lib/upcoming';
 import { formatRupees, formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
+import { IconCircle } from '../src/components/ui/IconCircle';
+import { alpha } from '../src/theme';
 
 type SettleReminder = { from: string; to: string; amount: number; counterpart: Person; iOwe: boolean };
 
@@ -82,7 +84,7 @@ export default function RemindersScreen() {
                 const vis = categoryVisual(b.category);
                 return (
                   <View key={`bill-${b.id}`} style={[styles.row, i < bills.length - 1 ? styles.rowBorder : null]}>
-                    <View style={[styles.icon, { backgroundColor: (vis?.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.icon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
                       <Feather name={vis?.icon ?? 'calendar'} size={18} color={vis?.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -91,7 +93,7 @@ export default function RemindersScreen() {
                         <View style={styles.dueChip}><Text style={styles.dueChipText}>{dueLabel(b.daysUntil)}</Text></View>
                       </View>
                       <Text style={styles.rowSub}>{formatRupees(b.amount)} · {format(b.dateMs, 'd MMM')}</Text>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense' as any)} accessibilityRole="button">
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button">
                         <Text style={styles.actionBtnText}>Log payment</Text>
                       </TouchableOpacity>
                     </View>
@@ -120,7 +122,7 @@ export default function RemindersScreen() {
                         </Text>
                       );
                     })()}
-                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}` as any)} accessibilityRole="button">
+                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}`)} accessibilityRole="button">
                       <Text style={[styles.actionBtnText, { color: colors.onAccent }]}>Settle now</Text>
                     </TouchableOpacity>
                   </View>
@@ -140,8 +142,8 @@ export default function RemindersScreen() {
         )}
 
         {/* Manage reminder timing/notifications */}
-        <TouchableOpacity style={styles.manageRow} onPress={() => router.push('/settings/notifications' as any)} accessibilityRole="button">
-          <View style={styles.manageIcon}><Feather name="settings" size={16} color={colors.accent} /></View>
+        <TouchableOpacity style={styles.manageRow} onPress={() => router.push('/settings/notifications')} accessibilityRole="button">
+          <IconCircle icon="settings" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
           <View style={{ flex: 1 }}>
             <Text style={styles.manageTitle}>Reminder settings</Text>
             <Text style={styles.manageSub}>When and how you're nudged</Text>
@@ -167,13 +169,12 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginBottom: 2 },
   rowTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   rowSub: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
-  dueChip: { backgroundColor: colors.healthAmber + '22', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
+  dueChip: { backgroundColor: alpha(colors.healthAmber, 13), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
   dueChipText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', fontSize: 11 },
   actionBtn: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: radius.sm, paddingVertical: 7, paddingHorizontal: 14 },
   actionBtnSettle: { backgroundColor: colors.settle },
   actionBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   manageRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginTop: space.sm, ...shadow.sm },
-  manageIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   manageTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   manageSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 });

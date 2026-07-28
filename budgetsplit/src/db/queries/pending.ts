@@ -19,16 +19,20 @@ export type PendingTxn = {
   dest_group_id: string | null;
   /** Review draft: JSON {included, mode, values} for a group split, or null. */
   split_draft: string | null;
+  /** Review draft: the other person on a group transfer (null = none picked).
+   *  Set only for a settlement destined for a shared group. */
+  counterparty_id: string | null;
   /** Where this row was ingested from — drives the sectioned Review inbox. */
   source: TxnSource;
   /** Detected/edited payment method carried through ingest → Review → txn. */
   pay_method: PayMethod | null;
 };
 
-export type NewPending = Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft'>;
+// Ingest never knows about app people or groups — those are Review-only drafts.
+export type NewPending = Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id'>;
 
 /** The subset of a pending row the Review screen auto-saves as you edit it. */
-export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method'>>;
+export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method' | 'counterparty_id' | 'direction'>>;
 
 export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[]): Promise<void> {
   if (rows.length === 0) return;
@@ -62,6 +66,11 @@ export async function updatePendingDraft(
   if (d.dest_group_id !== undefined) { sets.push('dest_group_id=?'); args.push(d.dest_group_id); }
   if (d.split_draft !== undefined) { sets.push('split_draft=?'); args.push(d.split_draft); }
   if (d.pay_method !== undefined) { sets.push('pay_method=?'); args.push(d.pay_method); }
+  if (d.counterparty_id !== undefined) { sets.push('counterparty_id=?'); args.push(d.counterparty_id); }
+  // Editable in Review. Most statements sign their amounts, but not all: Paytm
+  // prints a self-transfer unsigned, and the generic CSV parser has to guess
+  // when there's no debit/credit marker at all.
+  if (d.direction !== undefined) { sets.push('direction=?'); args.push(d.direction); }
   if (sets.length === 0) return;
   args.push(id);
   await db.runAsync(`UPDATE pending_txn SET ${sets.join(', ')} WHERE id=?`, args);
@@ -72,12 +81,12 @@ export async function updatePendingDraft(
 export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO pending_txn
-       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft, source, pay_method)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft, source, pay_method, counterparty_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
       row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
-      row.source ?? 'manual', row.pay_method ?? null,
+      row.source ?? 'manual', row.pay_method ?? null, row.counterparty_id ?? null,
     ],
   );
 }

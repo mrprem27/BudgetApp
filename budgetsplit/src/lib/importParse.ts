@@ -152,8 +152,17 @@ export function parseStatement(text: string): ParseResult {
 /** The header row every group export starts with. Also its detection signature. */
 export const GROUP_EXPORT_HEADER = 'Date,Group,Category,Kind,Amount,Note';
 
+/**
+ * Wrap a field in double quotes, escaping embedded quotes — the exact inverse of
+ * {@link splitCsvLine}. Every quoted field an exporter writes must go through this:
+ * an unescaped `"` terminates the field early and shifts every later column.
+ */
+export function csvQuote(s: string | null | undefined): string {
+  return `"${(s ?? '').replace(/"/g, '""')}"`;
+}
+
 /** Split one CSV line, honouring double-quoted fields and "" escapes. */
-function splitCsvLine(line: string): string[] {
+export function splitCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = '';
   let inQuotes = false;

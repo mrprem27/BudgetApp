@@ -13,7 +13,8 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-import { getMyActivity, getRecurringForGroup, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getMyActivity, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getRecurringForGroup } from '../src/db/queries/recurring';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
@@ -29,6 +30,7 @@ import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
 import { buildGroupExportCsv } from '../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
+import { alpha } from '../src/theme';
 
 type TabKey = 'activity' | 'budget' | 'recurring';
 const TABS: { key: TabKey; label: string }[] = [
@@ -101,7 +103,7 @@ export default function PersonalScreen() {
 
   function openBudgetEditor() {
     const pg = groups.find(g => g.is_personal === 1);
-    if (pg) router.push(`/group/${pg.id}/budget` as any);
+    if (pg) router.push(`/group/${pg.id}/budget`);
   }
 
   async function handleExport() {
@@ -260,7 +262,7 @@ export default function PersonalScreen() {
                       return (
                         <View key={`${b.category}-${b.cadence}`} style={[styles.budgetRow, i < budget.length - 1 && styles.budgetRowBorder]}>
                           <View style={styles.budgetRowTop}>
-                            <View style={[styles.budgetIcon, { backgroundColor: vis.color + '22' }]}>
+                            <View style={[styles.budgetIcon, { backgroundColor: alpha(vis.color, 13) }]}>
                               <Feather name={vis.icon} size={14} color={vis.color} />
                             </View>
                             <View style={{ flex: 1, minWidth: 0 }}>
@@ -310,7 +312,7 @@ export default function PersonalScreen() {
                               onPress={() => router.push(`/group/${rg.groupId}/recurring?focus=${r.id}`)}
                               accessibilityRole="button"
                             >
-                              <View style={[styles.recurIcon, { backgroundColor: vis.color + '22' }]}>
+                              <View style={[styles.recurIcon, { backgroundColor: alpha(vis.color, 13) }]}>
                                 <Feather name={vis.icon} size={14} color={vis.color} />
                               </View>
                               <View style={{ flex: 1, minWidth: 0 }}>
@@ -354,8 +356,6 @@ const styles = StyleSheet.create({
   budgetCard: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
   budgetTitle: { ...type.subheading, color: colors.textPrimary },
   budgetBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  budgetBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.lg, paddingVertical: 12, marginTop: space.xs },
-  budgetBtnText: { ...type.button, color: colors.bg },
   budgetHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.accentMuted },

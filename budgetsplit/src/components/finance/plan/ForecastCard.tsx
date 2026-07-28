@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
+import { alpha } from '../../../theme';
 
 /** Month-end spend forecast card on the Plan tab. Presentational.
  *  Extracted from app/(tabs)/savings.tsx. */
@@ -33,7 +34,7 @@ export function ForecastCard({
 }
 
 const styles = StyleSheet.create({
-  forecastCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', padding: space.md, flexDirection: 'row', alignItems: 'center', ...shadow.sm },
+  forecastCard: { backgroundColor: alpha(colors.settle, 10), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.settle, 27), padding: space.md, flexDirection: 'row', alignItems: 'center', ...shadow.sm },
   forecastLabel: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   forecastSub: { ...type.caption, color: colors.textMuted },
   forecastAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, color: colors.textPrimary, letterSpacing: -0.5 },

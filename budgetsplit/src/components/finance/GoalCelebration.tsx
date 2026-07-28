@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing, Dimensions, Pressable } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../tokens';
+import { IconCircle } from '../ui/IconCircle';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const PIECES = 22;
@@ -47,7 +47,7 @@ export function GoalCelebration({ visible, goalName, onDone }: { visible: boolea
   if (!visible) return null;
 
   return (
-    <Pressable style={styles.overlay} onPress={onDone}>
+    <Pressable style={styles.overlay} onPress={onDone} accessibilityRole="button" accessibilityLabel="Dismiss">
       {pieces.map((p, i) => (
         <Animated.View
           key={i}
@@ -69,9 +69,7 @@ export function GoalCelebration({ visible, goalName, onDone }: { visible: boolea
         />
       ))}
       <Animated.View style={[styles.card, { opacity: cardOpacity, transform: [{ scale: cardScale }] }]}>
-        <View style={styles.iconCircle}>
-          <Feather name="award" size={30} color={colors.income} />
-        </View>
+        <IconCircle icon="award" size={64} iconSize={30} color={colors.income} style={styles.iconCircle} />
         <Text style={styles.title}>Goal reached!</Text>
         <Text style={styles.sub} numberOfLines={2}>You fully funded “{goalName}”. Time for the next one.</Text>
       </Animated.View>
@@ -82,7 +80,7 @@ export function GoalCelebration({ visible, goalName, onDone }: { visible: boolea
 const styles = StyleSheet.create({
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay },
   card: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.xl, paddingHorizontal: space.lg, marginHorizontal: space.xl, ...shadow.lg },
-  iconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.income + '22', alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  iconCircle: { marginBottom: space.xs  },
   title: { ...type.title, color: colors.textPrimary },
   sub: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
 });

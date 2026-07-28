@@ -5,6 +5,7 @@ import { SheetModal } from '../ui/SheetModal';
 import { colors, type, space, radius } from '../tokens';
 import { asFeather } from '../../constants/palette';
 import type { BudgetGroup } from '../../db/queries/groups';
+import { alpha } from '../../theme';
 
 type Props = {
   groups: BudgetGroup[];
@@ -47,13 +48,13 @@ export function GroupSelector({ groups, selectedId, onSelect, maxQuick = 3, labe
           return (
             <TouchableOpacity
               key={g.id}
-              style={[styles.pill, active && { backgroundColor: g.color + '22', borderColor: g.color }]}
+              style={[styles.pill, active && { backgroundColor: alpha(g.color, 13), borderColor: g.color }]}
               onPress={() => onSelect(g.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               accessibilityLabel={g.name}
             >
-              <View style={[styles.pillIcon, { backgroundColor: g.color + '22' }]}>
+              <View style={[styles.pillIcon, { backgroundColor: alpha(g.color, 13) }]}>
                 <Feather name={asFeather(g.icon, 'layers')} size={13} color={g.color} />
               </View>
               <Text
@@ -93,7 +94,7 @@ export function GroupSelector({ groups, selectedId, onSelect, maxQuick = 3, labe
                 accessibilityState={{ selected: active }}
                 accessibilityLabel={g.name}
               >
-                <View style={[styles.listIcon, { backgroundColor: g.color + '22' }]}>
+                <View style={[styles.listIcon, { backgroundColor: alpha(g.color, 13) }]}>
                   <Feather name={asFeather(g.icon, 'layers')} size={16} color={g.color} />
                 </View>
                 <Text style={[styles.listName, active && styles.listNameActive]} numberOfLines={1}>{g.name}</Text>

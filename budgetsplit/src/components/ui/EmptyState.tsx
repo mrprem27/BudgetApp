@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { PrimaryButton } from './PrimaryButton';
+import { alpha } from '../../theme';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;
@@ -22,7 +23,7 @@ type Props = {
 export function EmptyState({ icon, title, body, actionLabel, onAction, tint = colors.accent }: Props) {
   return (
     <View style={styles.wrap}>
-      <View style={[styles.icon, { backgroundColor: tint + '22' }]}>
+      <View style={[styles.icon, { backgroundColor: alpha(tint, 13) }]}>
         <Feather name={icon} size={26} color={tint} />
       </View>
       <Text style={styles.title}>{title}</Text>

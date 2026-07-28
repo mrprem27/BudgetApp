@@ -12,14 +12,12 @@ import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import {
-  getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring,
-  skipNextOccurrence, undoNextSkip, getSkipsMap,
-} from '../../../src/db/queries/transactions';
+import { getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring, skipNextOccurrence, undoNextSkip, getSkipsMap } from '../../../src/db/queries/recurring';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 import { haptic } from '../../../src/lib/haptics';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
+import { alpha } from '../../../src/theme';
 
 type Rule = TxnWithSplits;
 
@@ -61,7 +59,7 @@ export default function RecurringScreen() {
   const router = useRouter();
   const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
 
-  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const rs = await getRecurringForGroup(db, id);
     return { rules: rs, skips: await getSkipsMap(db, rs.map(r => r.id)) };
   }, [id]);
@@ -133,7 +131,7 @@ export default function RecurringScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {rules.length === 0 ? (
+        {rules.length === 0 ? (loading ? null : (
           <EmptyState
             icon="repeat"
             title="No recurring transactions"
@@ -141,7 +139,7 @@ export default function RecurringScreen() {
             actionLabel="Add recurring expense"
             onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           />
-        ) : (
+        )) : (
           rules.map(r => {
             const vis = categoryVisual(r.category);
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;
@@ -154,7 +152,7 @@ export default function RecurringScreen() {
             return (
               <View key={r.id} style={[styles.card, highlightId === r.id && styles.cardHighlight]}>
                 <View style={styles.cardTop}>
-                  <View style={[styles.iconDot, { backgroundColor: vis.color + '22' }]}>
+                  <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
                     <Feather name={vis.icon} size={18} color={vis.color} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -163,7 +161,7 @@ export default function RecurringScreen() {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.amount}>{formatRupees(amountOf(r))}</Text>
-                    <View style={[styles.statePill, { backgroundColor: meta.color + '22' }]}>
+                    <View style={[styles.statePill, { backgroundColor: alpha(meta.color, 13) }]}>
                       <Text style={[styles.stateText, { color: meta.color }]}>{meta.label}</Text>
                     </View>
                   </View>
@@ -257,7 +255,7 @@ const styles = StyleSheet.create({
   metaItem: { flex: 1 },
   metaLabel: { ...type.caption, color: colors.textMuted },
   metaVal: { ...type.label, color: colors.textPrimary, marginTop: 2 },
-  skipBanner: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '18', borderRadius: radius.sm },
+  skipBanner: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, backgroundColor: alpha(colors.healthAmber, 9), borderRadius: radius.sm },
   skipBannerText: { ...type.caption, color: colors.healthAmber },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },

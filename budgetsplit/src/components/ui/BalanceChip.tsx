@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { space } from '../tokens';
 import { formatCompact } from '../../lib/money';
 import { oweView } from '../../lib/owe';
+import { alpha } from '../../theme';
 
 type Props = {
   /** Net balance in paise: > 0 = owed to you (green), < 0 = you owe (coral). */
@@ -14,7 +15,7 @@ export function BalanceChip({ net }: Props) {
   if (net === 0) return null;
   const { color, sign, amount } = oweView(net);
   return (
-    <View style={[styles.chip, { backgroundColor: color + '1A' }]}>
+    <View style={[styles.chip, { backgroundColor: alpha(color, 10) }]}>
       <Text style={[styles.text, { color }]}>
         {sign}{formatCompact(amount)}
       </Text>

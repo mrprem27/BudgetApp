@@ -1,14 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
-  FlatList, Pressable, KeyboardAvoidingView, Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../tokens';
 import { asFeather } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
 import type { Category } from '../../db/queries/categories';
+import { IconCircle } from '../ui/IconCircle';
+import { SheetModal } from '../ui/SheetModal';
+import { alpha } from '../../theme';
 
 type Props = {
   categories: Category[];
@@ -30,7 +29,6 @@ type Props = {
  * no existing category, an inline "Create" action appears.
  */
 export function CategoryPicker({ categories, value, onChange, onCreate, forceOpen, onClose, hideTrigger }: Props) {
-  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const isOpen = open || !!forceOpen;
@@ -84,7 +82,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
       >
         {value ? (
           <View style={styles.fieldInner}>
-            <View style={[styles.iconDot, { backgroundColor: (value.color ?? colors.accent) + '22' }]}>
+            <View style={[styles.iconDot, { backgroundColor: alpha(value.color ?? colors.accent, 13) }]}>
               <Feather name={asFeather(value.icon, 'tag')} size={15} color={value.color ?? colors.accent} />
             </View>
             <Text style={styles.fieldValue}>{value.name}</Text>
@@ -96,16 +94,11 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
       </TouchableOpacity>
       )}
 
-      <Modal visible={isOpen} transparent animationType="slide" onRequestClose={close}>
-        <Pressable style={styles.backdrop} onPress={close} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheetWrap}
-          pointerEvents="box-none"
-        >
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + space.md }]}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Category</Text>
+      {/* SheetModal (via DraggableSheet) owns the backdrop, drag handle, title,
+          safe-area padding AND keyboard avoidance — all of which this sheet
+          previously hand-rolled around a raw <Modal>. */}
+      <SheetModal visible={isOpen} onClose={close} title="Category" scroll={false}>
+        <>
 
             <View style={styles.searchRow}>
               <Feather name="search" size={16} color={colors.textMuted} />
@@ -119,7 +112,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
                 returnKeyType="done"
               />
               {query.length > 0 && (
-                <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+                <TouchableOpacity onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
                   <Feather name="x" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
@@ -135,9 +128,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
               ListHeaderComponent={
                 canCreate ? (
                   <TouchableOpacity style={styles.createRow} onPress={create} accessibilityRole="button">
-                    <View style={styles.createIcon}>
-                      <Feather name="plus" size={16} color={colors.accent} />
-                    </View>
+                    <IconCircle icon="plus" size={28} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
                     <Text style={styles.createText}>Create “{query.trim()}”</Text>
                   </TouchableOpacity>
                 ) : null
@@ -155,7 +146,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
                     accessibilityLabel={item.name}
                     accessibilityState={{ selected: active }}
                   >
-                    <View style={[styles.tileIcon, { backgroundColor: (item.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.tileIcon, { backgroundColor: alpha(item.color ?? colors.accent, 13) }]}>
                       <Feather name={asFeather(item.icon, 'tag')} size={20} color={item.color ?? colors.accent} />
                     </View>
                     <Text style={[styles.tileLabel, active && styles.tileLabelActive]} numberOfLines={1}>
@@ -165,9 +156,8 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
                 );
               }}
             />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </>
+      </SheetModal>
     </>
   );
 }
@@ -189,24 +179,6 @@ const styles = StyleSheet.create({
   fieldValue: { ...type.body, color: colors.textPrimary },
   fieldPlaceholder: { ...type.body, color: colors.textMuted },
 
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
-  sheetWrap: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bgCard,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    maxHeight: '78%',
-    ...shadow.lg,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 38, height: 4, borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: space.sm,
-  },
-  sheetTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.sm },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -247,7 +219,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     marginBottom: space.md,
   },
-  createIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   createText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   empty: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.xl },
 });

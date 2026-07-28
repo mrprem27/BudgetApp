@@ -14,5 +14,8 @@ module.exports = {
     '^react-native-get-random-values$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo-image-picker$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    // Real in-memory implementation (not an empty stub) so the AsyncStorage-backed
+    // settings stores can be tested for their get/set/default behaviour.
+    '^@react-native-async-storage/async-storage$': '<rootDir>/src/__tests__/__mocks__/asyncStorage.js',
   },
 };

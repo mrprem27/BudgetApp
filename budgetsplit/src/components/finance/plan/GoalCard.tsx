@@ -9,6 +9,7 @@ import { goalProgress, monthlyContribution, neededPerMonth, monthsUntil } from '
 import { PressableScale } from '../../ui/PressableScale';
 import { BudgetBar } from '../BudgetBar';
 import type { SavingsGoal } from '../../../db/queries/savings';
+import { alpha } from '../../../theme';
 
 /**
  * One savings goal row on the Plan tab. Presentational — derives its own
@@ -45,7 +46,7 @@ export function GoalCard({
       accessibilityLabel={completed ? `${g.name}, completed` : g.name}
     >
       <View style={styles.goalRow}>
-        <View style={[styles.goalIcon, { backgroundColor: (completed ? colors.income : g.color ?? colors.accent) + '22' }]}>
+        <View style={[styles.goalIcon, { backgroundColor: alpha(completed ? colors.income : g.color ?? colors.accent, 13) }]}>
           <Feather name={completed ? 'check' : asFeather(g.icon, 'target')} size={20} color={completed ? colors.income : g.color ?? colors.accent} />
         </View>
         <View style={{ flex: 1 }}>
@@ -98,9 +99,9 @@ export function GoalCard({
 const styles = StyleSheet.create({
   goalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   goalCardActive: { borderColor: colors.accent },
-  goalCardDone: { borderColor: colors.income + '55', backgroundColor: colors.income + '0D' },
+  goalCardDone: { borderColor: alpha(colors.income, 33), backgroundColor: alpha(colors.income, 5) },
   goalNameDone: { color: colors.textSecondary },
-  doneBadge: { backgroundColor: colors.income + '22', borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 3, marginLeft: space.xs },
+  doneBadge: { backgroundColor: alpha(colors.income, 13), borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 3, marginLeft: space.xs },
   doneBadgeText: { ...type.caption, color: colors.income, fontFamily: 'Inter_600SemiBold' },
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   goalIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

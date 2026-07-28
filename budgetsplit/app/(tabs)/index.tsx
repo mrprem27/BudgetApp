@@ -5,70 +5,36 @@ import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  startOfDay, endOfDay, startOfMonth, endOfMonth,
-  startOfYear, endOfYear,
-  subDays, subMonths, subYears,
-  getDate, getDaysInMonth,
-} from 'date-fns';
+import { getDate, getDaysInMonth } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius } from '../../src/constants/layout';
 import { useStore } from '../../src/store';
-import { getAllPersons } from '../../src/db/queries/persons';
+
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getMyExposure } from '../../src/db/queries/balances';
-import { getPendingCount } from '../../src/db/queries/pending';
-import { getCategories } from '../../src/db/queries/categories';
-import { getTransactionsInRange, getRecurringForGroup } from '../../src/db/queries/transactions';
-import { foldUncategorized } from '../../src/lib/categoryFold';
+
+import { getRecurringForGroup } from '../../src/db/queries/recurring';
+
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
-import { getBudgetAnalytics } from '../../src/lib/analytics';
+
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useScreenData } from '../../src/hooks/useScreenData';
-import { computeHealthScore, type HealthResult, type HealthInputs } from '../../src/lib/financialHealth';
-import { forecastMonthEnd, type Forecast } from '../../src/lib/forecast';
-import { buildUpcoming, type UpcomingItem } from '../../src/lib/upcoming';
+
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
-import { CategoryRankList, type CategoryRow } from '../../src/components/finance/home/CategoryRankList';
-import { ForecastCard, type ForecastShift } from '../../src/components/finance/home/ForecastCard';
+import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
+import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
 import { HealthBand } from '../../src/components/finance/home/HealthBand';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
-
-type TabKey = 'today' | 'month' | 'year';
-
-function getRange(tab: TabKey): { from: number; to: number } {
-  const now = new Date();
-  switch (tab) {
-    case 'today': return { from: startOfDay(now).getTime(), to: endOfDay(now).getTime() };
-    case 'month': return { from: startOfMonth(now).getTime(), to: endOfMonth(now).getTime() };
-    case 'year':  return { from: startOfYear(now).getTime(), to: endOfYear(now).getTime() };
-  }
-}
-
-// "Till now" comparison: the prior period only up to the SAME elapsed point we're
-// at in the current one (e.g. month-to-date vs same-day-last-month-to-date), so the
-// delta isn't unfairly low early in a period. Capped at the prior period's real end.
-function getPrevRange(tab: TabKey): { from: number; to: number } {
-  const now = new Date();
-  const elapsed = now.getTime() - getRange(tab).from;
-  switch (tab) {
-    case 'today': { const d = subDays(now, 1);   const from = startOfDay(d).getTime();   return { from, to: Math.min(from + elapsed, endOfDay(d).getTime()) }; }
-    case 'month': { const d = subMonths(now, 1); const from = startOfMonth(d).getTime(); return { from, to: Math.min(from + elapsed, endOfMonth(d).getTime()) }; }
-    case 'year':  { const d = subYears(now, 1);  const from = startOfYear(d).getTime();  return { from, to: Math.min(from + elapsed, endOfYear(d).getTime()) }; }
-  }
-}
-
-const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
-const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', month: 'SPENT THIS MONTH', year: 'SPENT THIS YEAR' };
+import { loadHomeData, PREV_LABEL, PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
+import { alpha } from '../../src/theme';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -95,160 +61,10 @@ export default function DashboardScreen() {
   // Data load. Groups come from the store (StoreHydrator hydrates them at the root
   // and re-hydrates on every cross-screen write), so Home no longer queries/sets
   // them here. useScreenData owns loading/error/refreshing + focus/cross-screen refetch.
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const persons = await getAllPersons(db);
-    const personalGroupId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
-
-    const me = persons.find(p => p.is_me === 1);
-    if (!me) {
-      return {
-        personalGroupId,
-        meInfo: null as { name: string; color: string; image: string | null } | null,
-        spending: 0, income: 0, prevSpending: 0,
-        oweTotal: 0, owedTotal: 0, reviewCount: 0,
-        budget: { allocated: 0, spent: 0 },
-        catRows: [] as CategoryRow[], catTotal: 0,
-        health: null as HealthResult | null, healthInputs: null as HealthInputs | null,
-        upcoming: [] as UpcomingItem[],
-        forecast: null as Forecast | null, topShift: null as ForecastShift | null,
-        streak: 0, streakLoggedDays: new Set<string>(),
-      };
-    }
-    const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
-
-    const { from, to } = getRange(tab);
-    // Single source of truth: materialization-aware query feeds the hero number
-    // and the category breakdown so they always agree (incl. recurring).
-    const txns = await getTransactionsInRange(db, null, from, to);
-    let sp = 0;
-    let inc = 0;
-    const catMap: Record<string, number> = {};
-    for (const txn of txns) {
-      if (txn.is_deleted) continue;
-      if (txn.kind === 'expense') {
-        const myShare = txn.shares.find(s => s.personId === me.id)?.amount ?? 0;
-        sp += myShare;
-        if (myShare > 0) catMap[txn.category] = (catMap[txn.category] ?? 0) + myShare;
-      } else if (txn.kind === 'income') {
-        inc += txn.payments.find(p => p.personId === me.id)?.amount ?? 0;
-      }
-    }
-
-    // Compute daily streak from month transactions
-    const loggedDays = new Set<string>();
-    for (const t of txns) {
-      if (t.is_deleted) continue;
-      const d = new Date(t.date);
-      if (!isFinite(d.getTime())) continue;
-      loggedDays.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-    }
-    // Count consecutive days backwards from today
-    const today3 = new Date();
-    let s = 0;
-    for (let i = 0; i < 31; i++) {
-      const check = new Date(today3.getFullYear(), today3.getMonth(), today3.getDate() - i);
-      const key = `${check.getFullYear()}-${String(check.getMonth() + 1).padStart(2, '0')}-${String(check.getDate()).padStart(2, '0')}`;
-      if (loggedDays.has(key)) s++;
-      else break;
-    }
-
-    // Prior-period spend (my share) for the hero delta.
-    const prev = getPrevRange(tab);
-    const prevTxns = await getTransactionsInRange(db, null, prev.from, prev.to);
-    let prevSp = 0;
-    for (const t of prevTxns) {
-      if (t.is_deleted || t.kind !== 'expense') continue;
-      prevSp += t.shares.find(s => s.personId === me.id)?.amount ?? 0;
-    }
-
-    // Who owes whom — single source of truth (per-person, after all settlements),
-    // so owe AND owed can both show (matches Insights / Personal / Groups).
-    const exp = await getMyExposure(db, me.id);
-    const reviewCount = await getPendingCount(db);
-
-    // Budget rollup (monthly) for the hero pace bar + the health engine.
-    const analyticsAll = await Promise.all(groups.map(g => getBudgetAnalytics(db, g)));
-    let bAlloc = 0, bSpent = 0, over = 0, near = 0, totalBudgeted = 0;
-    for (const a of analyticsAll) {
-      bAlloc += a.totalAllocated;
-      bSpent += a.totalSpent;
-      over += a.overBudget.length;
-      near += a.nearLimit.length;
-      totalBudgeted += a.overBudget.length + a.nearLimit.length + a.underBudget.length;
-    }
-    const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
-    allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
-    const worstCat = allBudgetedCats[0] ?? null;
-
-    const now2 = new Date();
-    const healthInputsNow: HealthInputs = {
-      spendPaise: sp,
-      incomePaise: inc,
-      prevSpendPaise: prevSp,
-      budgetAllocated: bAlloc,
-      budgetSpent: bSpent,
-      categoriesOver: over,
-      categoriesNear: near,
-      totalBudgeted,
-      worstCategoryPct: worstCat?.pct ?? null,
-      worstCategoryName: worstCat?.category ?? null,
-      netOwedPaise: exp.owe - exp.owed,
-      dayOfMonth: getDate(now2),
-      daysInMonth: getDaysInMonth(now2),
-    };
-    const health = computeHealthScore(healthInputsNow);
-    const healthInputs = healthInputsNow;
-
-    // Category breakdown for "Where it went" (largest first). Names not in the
-    // global catalog fold into one "Others" row (catMap itself is left intact so
-    // budget attribution above stays per-name).
-    const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
-    const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
-    const catRows: CategoryRow[] = sorted.map(([name, paise]) => ({ name, paise }));
-    const catTotal = sorted.reduce((acc, [, v]) => acc + v, 0);
-
-    // Coming up: next recurring bills across all groups.
-    const recurringByGroup = await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)));
-    // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
-    // Drives the bell badge only (the list moved to the Reminders screen). Count
-    // all bills due within the next 14 days — same window the Reminders screen uses.
-    const upcoming = buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14);
-
-    // Month-end forecast + biggest category shift vs last month (Month view only).
-    let forecast: Forecast | null = null;
-    let topShift: ForecastShift | null = null;
-    if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
-      const now = new Date();
-      const lmStart = startOfMonth(subMonths(now, 1)).getTime();
-      const lmEnd = endOfMonth(subMonths(now, 1)).getTime();
-      const lmTxns = await getTransactionsInRange(db, null, lmStart, lmEnd);
-      let lmSpend = 0;
-      const lmCat: Record<string, number> = {};
-      for (const t of lmTxns) {
-        if (t.is_deleted || t.kind !== 'expense') continue;
-        const share = t.shares.find(s => s.personId === me.id)?.amount ?? 0;
-        if (share <= 0) continue;
-        lmSpend += share;
-        lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
-      }
-      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend);
-      // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
-      topShift = Object.entries(catMap)
-        .filter(([cat]) => lmCat[cat])
-        .map(([cat, thisAmt]) => ({ cat, thisAmt, pct: lmCat[cat] > 0 ? Math.round(((thisAmt - lmCat[cat]) / lmCat[cat]) * 100) : 0 }))
-        .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0] ?? null;
-    }
-
-    return {
-      personalGroupId, meInfo,
-      spending: sp, income: inc, prevSpending: prevSp,
-      oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
-      budget: { allocated: bAlloc, spent: bSpent },
-      catRows, catTotal, health, healthInputs,
-      upcoming, forecast, topShift,
-      streak: s, streakLoggedDays: loggedDays,
-    };
-  }, [groups, tab, flags.forecast, flags.dashboardInsights]);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
+    (db) => loadHomeData(db, groups, tab, { forecast: flags.forecast, dashboardInsights: flags.dashboardInsights }),
+    [groups, tab, flags.forecast, flags.dashboardInsights],
+  );
 
   const personalGroupId = data?.personalGroupId ?? null;
   const meInfo = data?.meInfo ?? null;
@@ -327,7 +143,7 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.headerRight}>
             {reviewCount > 0 && (
-              <TouchableOpacity onPress={() => router.push('/review' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
+              <TouchableOpacity onPress={() => router.push('/review')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
                 <Feather name="inbox" size={18} color={colors.textSecondary} />
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>{reviewCount > 9 ? '9+' : reviewCount}</Text>
@@ -337,7 +153,7 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
               <Feather name="search" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/reminders' as any)} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Reminders${upcoming.length > 0 ? `, ${upcoming.length} upcoming` : ''}`}>
+            <TouchableOpacity onPress={() => router.push('/reminders')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Reminders${upcoming.length > 0 ? `, ${upcoming.length} upcoming` : ''}`}>
               <Feather name="bell" size={18} color={colors.textSecondary} />
               {upcoming.length > 0 && (
                 <View style={styles.notifBadge}>
@@ -378,7 +194,7 @@ export default function DashboardScreen() {
                   </View>
                 </View>
                 <View style={styles.catchUpActions}>
-                  <TouchableOpacity onPress={() => router.push('/history' as any)} accessibilityRole="button" style={styles.catchUpBtn}>
+                  <TouchableOpacity onPress={() => router.push('/history')} accessibilityRole="button" style={styles.catchUpBtn}>
                     <Text style={styles.catchUpBtnText}>Review entries</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setCatchUpBanner(null)} accessibilityRole="button" style={styles.catchUpDismiss}>
@@ -402,8 +218,8 @@ export default function DashboardScreen() {
 
                 <Text style={styles.getStartedLabel}>GET STARTED</Text>
                 <View style={{ gap: space.sm }}>
-                  <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget` as any)} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.healthAmber + '22' }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                  <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget`)} accessibilityRole="button">
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Set a monthly budget</Text>
                       <Text style={styles.startSub}>Know your limits before you hit them</Text>
@@ -411,7 +227,7 @@ export default function DashboardScreen() {
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Create a group</Text>
                       <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
@@ -419,7 +235,7 @@ export default function DashboardScreen() {
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: colors.income + '22' }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Add people you split with</Text>
                       <Text style={styles.startSub}>Name-only — no account needed</Text>
@@ -452,7 +268,7 @@ export default function DashboardScreen() {
                 total={catTotal}
                 topN={3}
                 expanded={catExpanded}
-                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}` as any)}
+                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}`)}
                 onMore={() => setCatExpanded(e => !e)}
               />
             )}
@@ -504,9 +320,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
-  emptyHints: { gap: space.xs, marginTop: space.sm },
-  emptyHintRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  emptyHintText: { ...type.label, color: colors.textSecondary },
   // Dedicated first-run empty home (design Screen 6)
   emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: space.xl, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
@@ -527,12 +340,12 @@ const styles = StyleSheet.create({
   notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: radius.sm, paddingHorizontal: space.xs, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: colors.onAccent },
   tabRow: { marginBottom: space.md },
-  catchUpBanner: { backgroundColor: colors.healthAmber + '18', borderRadius: 14, borderWidth: 1, borderColor: colors.healthAmber + '55', padding: space.md, gap: space.sm, marginBottom: space.sm },
+  catchUpBanner: { backgroundColor: alpha(colors.healthAmber, 9), borderRadius: 14, borderWidth: 1, borderColor: alpha(colors.healthAmber, 33), padding: space.md, gap: space.sm, marginBottom: space.sm },
   catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   catchUpTitle: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   catchUpText: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
   catchUpActions: { flexDirection: 'row', gap: space.sm },
-  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.healthAmber + '33', borderRadius: 20, borderWidth: 1, borderColor: colors.healthAmber + '66' },
+  catchUpBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: alpha(colors.healthAmber, 20), borderRadius: 20, borderWidth: 1, borderColor: alpha(colors.healthAmber, 40) },
   catchUpBtnText: { ...type.label, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
   catchUpDismiss: { paddingHorizontal: space.md, paddingVertical: space.xs },
   catchUpDismissText: { ...type.label, color: colors.textMuted },

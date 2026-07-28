@@ -29,6 +29,9 @@ import {
   asFeather,
 } from '../src/constants/palette';
 import type { Category } from '../src/db/queries/categories';
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { alpha } from '../src/theme';
+import { SectionCard } from '../src/components/ui/SectionCard';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -48,7 +51,7 @@ export default function CategoriesScreen() {
   const [renameText, setRenameText] = useState('');
 
   // Categories are a single global catalog now — no group scoping.
-  const { data, error: loadError, reload } = useScreenData(async (db) => {
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     let cats = await getCategories(db, kindTab);
     // Self-heal: the base catalog is app structure and should never be empty.
     // If it is (e.g. an older DB that once wiped categories), reseed defaults.
@@ -193,7 +196,7 @@ export default function CategoriesScreen() {
         <ErrorState onRetry={() => reload()} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
           {CATEGORY_KIND.map(k => (
@@ -218,31 +221,23 @@ export default function CategoriesScreen() {
           const isAddingHere = addingToSection === section.title;
 
           return (
-            <View key={section.title} style={styles.sectionCard}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection(section.title)}
-                accessibilityRole="button"
-                accessibilityLabel={`${section.title} section, ${catsInSection.length} categories`}
-              >
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <View style={styles.sectionRight}>
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{catsInSection.length}</Text>
-                  </View>
-                  <Feather
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={colors.textMuted}
-                  />
+            <SectionCard
+              key={section.title}
+              title={section.title}
+              subtitle={`${catsInSection.length} categories`}
+              expanded={isExpanded}
+              onToggle={() => toggleSection(section.title)}
+              right={
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{catsInSection.length}</Text>
                 </View>
-              </TouchableOpacity>
-
-              {isExpanded && (
+              }
+            >
+              {(
                 <View style={styles.sectionContent}>
                   {catsInSection.map((c, i) => (
                     <View key={c.id} style={[styles.row, i < catsInSection.length - 1 && styles.rowBorder]}>
-                      <View style={[styles.iconDot, { backgroundColor: (c.color ?? colors.accent) + '22' }]}>
+                      <View style={[styles.iconDot, { backgroundColor: alpha(c.color ?? colors.accent, 13) }]}>
                         <Feather name={asFeather(c.icon, 'tag')} size={16} color={c.color ?? colors.accent} />
                       </View>
                       {renamingId === c.id ? (
@@ -277,7 +272,7 @@ export default function CategoriesScreen() {
                     </View>
                   ))}
 
-                  {catsInSection.length === 0 && (
+                  {catsInSection.length === 0 && !loading && (
                     <Text style={styles.empty}>No categories in this section</Text>
                   )}
 
@@ -301,6 +296,7 @@ export default function CategoriesScreen() {
                             onPress={() => setIcon(ic)}
                             accessibilityRole="button"
                             accessibilityLabel={ic}
+                            accessibilityState={{ selected: icon === ic }}
                           >
                             <Feather name={ic} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
                           </TouchableOpacity>
@@ -315,6 +311,7 @@ export default function CategoriesScreen() {
                             onPress={() => setColor(c)}
                             accessibilityRole="button"
                             accessibilityLabel={c}
+                            accessibilityState={{ selected: color === c }}
                           />
                         ))}
                       </View>
@@ -349,7 +346,7 @@ export default function CategoriesScreen() {
                   )}
                 </View>
               )}
-            </View>
+            </SectionCard>
           );
         })}
 
@@ -372,7 +369,7 @@ export default function CategoriesScreen() {
                 const vis = categoryVisual(u.name);
                 return (
                   <View key={u.name} style={[styles.row, i < uncategorized.length - 1 && styles.rowBorder]}>
-                    <View style={[styles.iconDot, { backgroundColor: (vis.color ?? colors.accent) + '22' }]}>
+                    <View style={[styles.iconDot, { backgroundColor: alpha(vis.color ?? colors.accent, 13) }]}>
                       <Feather name={asFeather(vis.icon, 'tag')} size={16} color={vis.color ?? colors.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -407,7 +404,6 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, flex: 1 },
-  sectionRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   countBadge: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, minWidth: 24, alignItems: 'center' },
   countText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   sectionContent: { paddingHorizontal: space.md, paddingBottom: space.md },

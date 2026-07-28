@@ -9,6 +9,7 @@ import { colors, type, space, radius, shadow, gradients } from '../tokens';
 import { layout } from '../../constants/layout';
 import type { FeatherName } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
+import { alpha } from '../../theme';
 
 export type Action = {
   label: string;
@@ -56,7 +57,7 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
         onRequestClose={() => setOpen(false)}
         onDismiss={() => { const fn = pendingAction.current; pendingAction.current = null; fn?.(); }}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close menu">
           <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
             <View style={styles.handle} />
             {(actions ?? []).map((a) => {
@@ -76,7 +77,7 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel={a.label}
                 >
-                  <View style={[styles.actionIcon, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: alpha(tint, 13), borderColor: alpha(tint, 27) }]}>
                     <Feather name={a.icon} size={18} color={tint} />
                   </View>
                   <View style={{ flex: 1 }}>

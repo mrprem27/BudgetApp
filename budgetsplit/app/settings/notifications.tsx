@@ -9,6 +9,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { ErrorState } from '../../src/components/ui/ErrorState';
 import {
   getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
   MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
@@ -16,6 +17,7 @@ import {
 import { sendTestReminder } from '../../src/lib/notifications';
 import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
 import { haptic } from '../../src/lib/haptics';
+import { alpha } from '../../src/theme';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -27,7 +29,7 @@ export default function NotificationsScreen() {
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
 
   // Reminder prefs + OS permission load on focus / cross-screen write via useScreenData.
-  const { data, reload } = useScreenData(async () => {
+  const { data, error: loadError, reload } = useScreenData(async () => {
     const [prefs, perm] = await Promise.all([
       getReminderPrefs(),
       Notifications.getPermissionsAsync(),
@@ -78,8 +80,8 @@ export default function NotificationsScreen() {
     }
   }
 
-  const Toggle = ({ on, onPress }: { on: boolean; onPress: () => void }) => (
-    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }}>
+  const Toggle = ({ on, onPress, label }: { on: boolean; onPress: () => void; label: string }) => (
+    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label}>
       <View style={[styles.thumb, on && styles.thumbOn]} />
     </TouchableOpacity>
   );
@@ -87,6 +89,13 @@ export default function NotificationsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Notifications & Reminders" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState
+          title="Couldn't load reminder settings"
+          body="Your notification preferences couldn't be read. Try again."
+          onRetry={reload}
+        />
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         {permStatus === 'denied' && (
           <View style={styles.deniedBanner}>
@@ -113,7 +122,7 @@ export default function NotificationsScreen() {
               <Text style={styles.typeLabel}>Bill reminders</Text>
               <Text style={styles.typeDesc}>Alert before recurring bills and memberships renew</Text>
             </View>
-            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} />
+            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} label="Bill reminders" />
           </View>
           {prefs?.renewals && (
             <>
@@ -146,7 +155,7 @@ export default function NotificationsScreen() {
               <Text style={styles.typeLabel}>Daily log reminder</Text>
               <Text style={styles.typeDesc}>Nudge to log your expenses at the end of the day</Text>
             </View>
-            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} />
+            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} label="Daily log reminder" />
           </View>
           {prefs?.daily && (
             <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('daily')} accessibilityRole="button">
@@ -181,6 +190,7 @@ export default function NotificationsScreen() {
 
         <Text style={styles.footer}>All notifications are local — no server, no push, always offline.</Text>
       </ScrollView>
+      )}
 
       {prefs && (
         <TimePickerSheet
@@ -198,11 +208,11 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: space.xxl },
-  deniedBanner: { backgroundColor: '#1F0E0E', borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
+  deniedBanner: { backgroundColor: colors.expenseTintDeep, borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
   deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   deniedSub: { ...type.caption, color: colors.textSecondary },
-  deniedCta: { backgroundColor: colors.expense + '22', borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
+  deniedCta: { backgroundColor: alpha(colors.expense, 13), borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
   deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
@@ -213,7 +223,7 @@ const styles = StyleSheet.create({
   typeLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   typeDesc: { ...type.caption, color: colors.textSecondary },
   // Sub-config rows under an enabled reminder.
-  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg + '55' },
+  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: alpha(colors.bg, 33) },
   configLabel: { ...type.body, color: colors.textSecondary, flex: 1 },
   configValue: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
@@ -224,7 +234,7 @@ const styles = StyleSheet.create({
   thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.textMuted },
   thumbOn: { backgroundColor: colors.bg, alignSelf: 'flex-end' },
   testRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
-  testBtn: { backgroundColor: colors.accent + '22', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
+  testBtn: { backgroundColor: alpha(colors.accent, 13), borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
   testBtnDisabled: { backgroundColor: colors.bgMuted, borderColor: colors.border },
   testBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.lg },

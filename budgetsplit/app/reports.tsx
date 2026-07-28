@@ -10,79 +10,37 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import {
-  startOfMonth, endOfMonth, addMonths, subMonths, format,
-  startOfYear, endOfYear, getDate, getDaysInMonth,
-} from 'date-fns';
+import { addMonths, subMonths, format } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { LineChart, BarChart } from 'react-native-gifted-charts';
-import { CategoryDonut, type DonutSeg } from '../src/components/finance/CategoryDonut';
+import { CategoryDonut } from '../src/components/finance/CategoryDonut';
 import { CategoryRankList } from '../src/components/finance/home/CategoryRankList';
+import { TrendBars } from '../src/components/finance/TrendBars';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout } from '../src/constants/layout';
-import { getAllGroups } from '../src/db/queries/groups';
-import { getCategories } from '../src/db/queries/categories';
-import { getTransactionsInRange } from '../src/db/queries/transactions';
-import { foldUncategorized } from '../src/lib/categoryFold';
-import { getBudgetAnalytics } from '../src/lib/analytics';
+
 import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
-import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from '../src/lib/forecast';
-import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
+import { formatCompact } from '../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../src/lib/reportExport';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { Badge } from '../src/components/ui/Badge';
-import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { AmountText } from '../src/components/ui/AmountText';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { categoryVisual } from '../src/constants/categories';
-import { CHART_COLORS } from '../src/constants/palette';
+
 import type { BudgetGroup } from '../src/db/queries/groups';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
-
-type GroupSummary = {
-  group: BudgetGroup;
-  income: number;
-  expense: number;
-  topCats: Array<{ name: string; amount: number }>;
-};
-
-type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
-
-type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
-
-function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
-  let income = 0;
-  let expense = 0;
-  const catMap: Record<string, number> = {};
-
-  for (const t of txns) {
-    if (t.kind === 'income') {
-      income += t.payments.reduce((s, p) => s + p.amount, 0);
-    } else if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s, sh) => s + sh.amount, 0);
-      expense += amt;
-      catMap[t.category] = (catMap[t.category] ?? 0) + amt;
-    }
-  }
-
-  const topCats = Object.entries(catMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([name, amount]) => ({ name, amount }));
-
-  return { group, income, expense, topCats };
-}
+import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { loadReportsData } from '../src/lib/reportsData';
+import { alpha } from '../src/theme';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { flags } = useFeatureFlags();
   const [month, setMonth] = useState(() => new Date());
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [catExpanded, setCatExpanded] = useState(false);
@@ -91,205 +49,13 @@ export default function ReportsScreen() {
 
   // Re-run on focus (and when the month changes) via useScreenData so returning
   // after adding a transaction shows fresh analytics — keyed on [month].
-  const { data, loading, error, reload } = useScreenData(async (db) => {
+  // Data assembly lives in lib/reportsData; the 450ms floor keeps the skeleton
+  // from flashing on a fast local query.
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const startedAt = Date.now();
     try {
-      const grps = await getAllGroups(db);
-
-      const fromMs = startOfMonth(month).getTime();
-      const toMs = endOfMonth(month).getTime();
-      const yFrom = startOfYear(month).getTime();
-      const yTo = endOfYear(month).getTime();
-      const pStart = startOfMonth(subMonths(month, 1)).getTime();
-      const pEnd = endOfMonth(subMonths(month, 1)).getTime();
-      // 6-month trend window (oldest → newest) ending at the selected month.
-      const trendMonths = Array.from({ length: 6 }, (_, i) => subMonths(month, 5 - i));
-
-      // Fire every independent read concurrently instead of awaiting each in series
-      // (this loader used to do ~12 sequential round-trips). Ranges that were queried
-      // more than once (current month, prior month) are fetched here and reused below.
-      const [perGroup, yearTxns, allMonthTxns, knownExpenseCats, pTxns, trendTxnsByMonth] =
-        await Promise.all([
-          Promise.all(grps.map(async (g) => {
-            const [gTxns, an] = await Promise.all([
-              getTransactionsInRange(db, g.id, fromMs, toMs),
-              getBudgetAnalytics(db, g, month),
-            ]);
-            return { summary: buildSummary(g, gTxns), analytics: an };
-          })),
-          getTransactionsInRange(db, null, yFrom, yTo),
-          getTransactionsInRange(db, null, fromMs, toMs),
-          getCategories(db, 'expense'),
-          getTransactionsInRange(db, null, pStart, pEnd),
-          Promise.all(trendMonths.map((m) =>
-            getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime()))),
-        ]);
-
-      const sums: GroupSummary[] = perGroup.map((r) => r.summary);
-      const anMap: Record<string, BudgetAnalytics> = {};
-      grps.forEach((g, i) => { anMap[g.id] = perGroup[i].analytics; });
-
-      let yIncome = 0;
-      let yExpense = 0;
-      let biggest = 0;
-      const yCatMap: Record<string, number> = {};
-
-      for (const t of yearTxns) {
-        if (t.kind === 'income') {
-          yIncome += t.payments.reduce((s, p) => s + p.amount, 0);
-        } else if (t.kind === 'expense') {
-          const amt = t.shares.reduce((s, sh) => s + sh.amount, 0);
-          yExpense += amt;
-          yCatMap[t.category] = (yCatMap[t.category] ?? 0) + amt;
-          if (amt > biggest) biggest = amt;
-        }
-      }
-
-      const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
-
-      // Build spending-by-category pie chart data for the selected month
-      const monthCatMap: Record<string, number> = {};
-      for (const s of sums) {
-        for (const c of s.topCats) {
-          monthCatMap[c.name] = (monthCatMap[c.name] ?? 0) + c.amount;
-        }
-      }
-      // Add all categories from all groups (not just top 3). `allMonthTxns` and the
-      // adopted expense category names were already fetched above.
-      const knownExpense = new Set(knownExpenseCats.map(c => c.name));
-      const fullCatMapRaw: Record<string, number> = {};
-      for (const t of allMonthTxns) {
-        if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
-          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-          fullCatMapRaw[t.category] = (fullCatMapRaw[t.category] ?? 0) + amt;
-        }
-      }
-      const fullCatMap = foldUncategorized(fullCatMapRaw, knownExpense);
-      // Month totals (Spent/Earned) + prior month, for the summary cards.
-      let mSpent = 0, mEarned = 0;
-      for (const t of allMonthTxns) {
-        if (t.kind === 'expense') mSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-        else if (t.kind === 'income') mEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
-      }
-      // prior month (`pTxns`) was already fetched above.
-      let pSpent = 0, pEarned = 0;
-      for (const t of pTxns) {
-        if (t.kind === 'expense') pSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-        else if (t.kind === 'income') pEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
-      }
-
-      const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
-      const pieData: DonutSeg[] = sortedCats.slice(0, 8).map(([name, val], i) => ({
-        name,
-        paise: val,
-        color: categoryVisual(name).color || CHART_COLORS[i % CHART_COLORS.length],
-      }));
-      const pieTotal = sortedCats.reduce((s, [, v]) => s + v, 0);
-
-      // 6-month spending trend ending at the selected month — overall + per-category,
-      // so picking a category in the donut/labels redraws this chart for that category.
-      const monthly: MonthPoint[] = trendMonths.map((m, idx) => {
-        let mTotal = 0;
-        const byCatRaw: Record<string, number> = {};
-        for (const t of trendTxnsByMonth[idx]) {
-          if (t.kind !== 'expense') continue;
-          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-          mTotal += amt;
-          byCatRaw[t.category] = (byCatRaw[t.category] ?? 0) + amt;
-        }
-        // Fold unknown names into "Others" so the trend matches the donut/labels
-        // (selecting the Others slice shows its 6-month total too).
-        return { label: format(m, 'MMM'), total: mTotal, byCat: foldUncategorized(byCatRaw, knownExpense) };
-      });
-
-      // Build daily cumulative spending forecast (current month only)
-      const now = new Date();
-      const daysInMonth = getDaysInMonth(month);
-      const dayOfMonth = getDate(now);
-      const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM');
-
-      let forecastActual: LinePoint[] = [];
-      let forecastProjected: LinePoint[] = [];
-      let projectedTotal = 0;
-
-      // Forecast needs a few days of signal — see forecast.ts (FORECAST_MIN_DAYS).
-      if (isCurrentMonth && dayOfMonth >= FORECAST_MIN_DAYS) {
-        // Daily cumulative spending up to today (the "actual" line). Reuse the
-        // already-fetched current-month txns and bucket by calendar day once instead
-        // of re-filtering the whole list for every day.
-        const dailyCumulative: Array<{ value: number; label?: string }> = [];
-        const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed by day-of-month
-        for (const t of allMonthTxns) {
-          if (t.kind !== 'expense') continue; // soft-deleted already excluded by the query
-          const d = getDate(new Date(t.date));
-          if (d >= 1 && d <= daysInMonth) {
-            spendByDay[d] += t.shares.reduce((x, sh) => x + sh.amount, 0);
-          }
-        }
-        let runningTotal = 0;
-        for (let d = 1; d <= dayOfMonth; d++) {
-          runningTotal += spendByDay[d];
-          dailyCumulative.push({ value: Math.round(runningTotal / 100), label: d % 2 === 1 ? `${d}` : '' });
-        }
-
-        // Prior-month actual total anchors the projection so an early spike doesn't
-        // explode the forecast (blended model — see forecast.ts). Reuse `pTxns`.
-        const priorMonthTotal = pTxns
-          .filter(t => t.kind === 'expense')
-          .reduce((s, t) => s + t.shares.reduce((x, sh) => x + sh.amount, 0), 0);
-
-        const fc = forecastMonthEnd(runningTotal, dayOfMonth, daysInMonth, priorMonthTotal);
-        if (fc.ready) {
-          // X-axis: every odd day (1, 3, 5, … 31) so all alternate days are visible.
-          const labelForDay = (d: number) => (d % 2 === 1) ? `${d}` : '';
-
-          // The PROJECTED line spans the full month (days 1..month-end) and is the
-          // chart's primary series, so it owns the x-axis labels — that's what
-          // makes the axis run the complete month. Days 1..today trace the real
-          // cumulative spend; today..month-end is the forecast.
-          forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
-            const d = i + 1;
-            const value = d <= dayOfMonth
-              ? dailyCumulative[d - 1].value
-              : Math.round(projectedAtDay(runningTotal, dayOfMonth, daysInMonth, fc.projected, d) / 100);
-            return { value, label: labelForDay(d), hideDataPoint: true };
-          });
-
-          // The ACTUAL line (days 1..today) is overlaid solid on top, marking
-          // "today". Labels live on the projected series, so this carries none.
-          forecastActual = dailyCumulative.map((p, i) => ({
-            value: p.value,
-            label: '',
-            hideDataPoint: i !== dayOfMonth - 1, // only mark "today"
-            dataPointColor: colors.expense,
-            dataPointRadius: 5,
-          }));
-
-          projectedTotal = Math.round(fc.projected / 100);
-        }
-      }
-
-      return {
-        groups: grps,
-        summaries: sums,
-        analyticsByGroup: anMap,
-        yearIncome: yIncome,
-        yearExpense: yExpense,
-        yearTopCat: topCat,
-        biggestTxn: biggest,
-        monthSpent: mSpent,
-        monthEarned: mEarned,
-        prevSpent: pSpent,
-        prevEarned: pEarned,
-        pieData,
-        pieTotal,
-        monthly,
-        forecastActual,
-        forecastProjected,
-        projectedTotal,
-      };
+      return await loadReportsData(db, month);
     } finally {
-      // Keep the skeleton visible for a minimum of 450ms so it doesn't flash.
       const elapsed = Date.now() - startedAt;
       if (elapsed < 450) await new Promise(r => setTimeout(r, 450 - elapsed));
     }
@@ -309,9 +75,10 @@ export default function ReportsScreen() {
   const pieData = data?.pieData ?? [];
   const pieTotal = data?.pieTotal ?? 0;
   const monthly = data?.monthly ?? [];
-  const forecastActual = data?.forecastActual ?? [];
-  const forecastProjected = data?.forecastProjected ?? [];
-  const projectedTotal = data?.projectedTotal ?? 0;
+
+  // Reports only ever runs up to "now" — the month selector can go back through
+  // history but never into a future month.
+  const canGoNext = format(month, 'yyyy-MM') !== format(new Date(), 'yyyy-MM');
 
   async function exportCSV() {
     setExporting(true);
@@ -388,22 +155,20 @@ export default function ReportsScreen() {
     </View>
   );
 
-  // 6-month bars, keyed to the selected category (or total when none selected).
-  // Memoized on [monthly, selectedCat] so `trendBars` keeps a stable identity —
-  // otherwise the BarChart gets a new data array every render and replays its full
-  // grow-in animation on every unrelated state change (e.g. exporting).
+  // 6-month bars: values for the selected category (or total). Memoized on
+  // [monthly, selectedCat] so TrendBars only re-animates when the data actually
+  // changes — the bar heights tween while the axes stay put (see TrendBars).
   const trendColor = selectedCat ? (categoryVisual(selectedCat).color || colors.accent) : colors.accent;
-  const trendBars = useMemo(() => monthly.map(m => ({
-    value: Math.round((selectedCat ? (m.byCat[selectedCat] ?? 0) : m.total) / 100),
-    label: m.label,
-    frontColor: trendColor,
-  })), [monthly, selectedCat, trendColor]);
-  const trendMax = useMemo(() => Math.max(1, ...trendBars.map(b => b.value)), [trendBars]);
+  const trendValues = useMemo(
+    () => monthly.map(m => Math.round((selectedCat ? (m.byCat[selectedCat] ?? 0) : m.total) / 100)),
+    [monthly, selectedCat],
+  );
+  const trendLabels = useMemo(() => monthly.map(m => m.label), [monthly]);
 
   return (
     <View style={styles.container}>
       <ScreenHeader title="Reports" onBack={() => router.back()} right={exportButtons} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
 
       <View style={styles.monthNav}>
         <TouchableOpacity
@@ -416,12 +181,14 @@ export default function ReportsScreen() {
         </TouchableOpacity>
         <Text style={styles.monthLabel}>{format(month, 'MMMM yyyy')}</Text>
         <TouchableOpacity
-          onPress={() => setMonth(m => addMonths(m, 1))}
+          onPress={() => canGoNext && setMonth(m => addMonths(m, 1))}
+          disabled={!canGoNext}
           accessibilityRole="button"
           accessibilityLabel="Next month"
+          accessibilityState={{ disabled: !canGoNext }}
           style={styles.navBtn}
         >
-          <Feather name="chevron-right" size={22} color={colors.textPrimary} />
+          <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : alpha(colors.textMuted, 33)} />
         </TouchableOpacity>
       </View>
 
@@ -492,12 +259,14 @@ export default function ReportsScreen() {
                 <CategoryDonut
                   data={pieData}
                   total={pieTotal}
-                  onOpen={() => {}}
+                  // Center "View →" opens the month-scoped transaction drill-down
+                  // for the selected category.
+                  onOpen={(seg) => router.push(`/report-transactions?month=${format(month, 'yyyy-MM')}&category=${encodeURIComponent(seg.name)}`)}
                   selectedName={selectedCat}
                   onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
                 />
 
-                {trendBars.length > 0 && (
+                {trendValues.length > 0 && (
                   <View style={styles.trendBlock}>
                     <View style={styles.trendHeader}>
                       <Text style={styles.chartTitle}>
@@ -509,94 +278,15 @@ export default function ReportsScreen() {
                         </TouchableOpacity>
                       )}
                     </View>
-                    <BarChart
-                      data={trendBars}
-                      height={140}
-                      barWidth={22}
-                      spacing={18}
-                      initialSpacing={12}
-                      endSpacing={8}
-                      roundedTop
-                      noOfSections={3}
-                      maxValue={Math.ceil(trendMax * 1.15)}
-                      xAxisThickness={0}
-                      yAxisThickness={0}
-                      yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                      formatYLabel={formatAxisShort}
-                      xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
-                      hideRules
-                      isAnimated
-                      disableScroll
-                    />
+                    <TrendBars values={trendValues} labels={trendLabels} color={trendColor} />
                   </View>
                 )}
               </View>
             </>
           )}
 
-          {/* Spending Forecast (current month only) */}
-          {flags.forecast && forecastActual.length >= 2 && forecastProjected.length >= 1 && (
-            <View style={styles.card}>
-              <View style={styles.forecastHeader}>
-                <Text style={styles.chartTitle}>Month-end forecast</Text>
-                <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
-              </View>
-              <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
-              <LineChart
-                data={forecastProjected}
-                data2={forecastActual}
-                color1={colors.accent}
-                color2={colors.expense}
-                thickness1={2}
-                thickness2={2.5}
-                strokeDashArray1={[5, 5]}
-                noOfSections={4}
-                maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                spacing={Math.max(8, 300 / Math.max(forecastProjected.length, 1))}
-                initialSpacing={8}
-                endSpacing={8}
-                xAxisThickness={0}
-                yAxisThickness={0}
-                yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                formatYLabel={formatAxisShort}
-                xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
-                hideRules
-                isAnimated
-                disableScroll
-                pointerConfig={{
-                  pointerStripUptoDataPoint: true,
-                  pointerStripColor: colors.textMuted + '60',
-                  pointerStripWidth: 1,
-                  pointerColor: colors.accent,
-                  radius: 5,
-                  pointerLabelWidth: 76,
-                  pointerLabelHeight: 32,
-                  activatePointersOnLongPress: false,
-                  autoAdjustPointerLabelPosition: true,
-                  pointerLabelComponent: (items: Array<{ value: number }>) => {
-                    const val = items[0]?.value ?? 0;
-                    return (
-                      <View style={{ backgroundColor: colors.bgCard, borderRadius: 6, paddingHorizontal: space.sm, paddingVertical: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
-                        <Text style={{ color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', fontSize: 11 }}>
-                          {formatAxisShort(val)}
-                        </Text>
-                      </View>
-                    );
-                  },
-                }}
-              />
-              <View style={styles.forecastLegend}>
-                <View style={styles.forecastLegendItem}>
-                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.expense }]} />
-                  <Text style={styles.forecastLegendText}>Actual</Text>
-                </View>
-                <View style={styles.forecastLegendItem}>
-                  <View style={[styles.forecastLegendLine, { backgroundColor: colors.accent, borderStyle: 'dashed' as any }]} />
-                  <Text style={styles.forecastLegendText}>Projected</Text>
-                </View>
-              </View>
-            </View>
-          )}
+          {/* Month-end forecast (a projection into the future) lives on the Insights
+              screen now — Reports shows only actual, historical data. */}
 
           {summaries.length === 0 && (
             <EmptyState
@@ -657,16 +347,6 @@ export default function ReportsScreen() {
                       health={budgetHealth(an.utilizationPct)}
                       height={6}
                     />
-                    {an.recommendations.slice(0, 3).map(r => (
-                      <View key={r.id} style={styles.recRow}>
-                        <Feather
-                          name={r.icon}
-                          size={13}
-                          color={r.severity === 'warn' ? colors.expense : r.severity === 'good' ? colors.income : colors.textSecondary}
-                        />
-                        <Text style={styles.recRowText}>{r.text}</Text>
-                      </View>
-                    ))}
                   </>
                 );
               })()}
@@ -752,15 +432,7 @@ const styles = StyleSheet.create({
   emptyGroup: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingVertical: space.sm },
   utilRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs },
   utilPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
-  recRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs, marginTop: space.sm },
-  recRowText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 16 },
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  forecastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forecastSub: { ...type.caption, color: colors.textMuted },
-  forecastLegend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
-  forecastLegendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  forecastLegendLine: { width: 16, height: 3, borderRadius: 2 },
-  forecastLegendText: { ...type.caption, color: colors.textMuted },
 });

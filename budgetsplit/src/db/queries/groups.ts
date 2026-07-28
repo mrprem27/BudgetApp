@@ -88,23 +88,6 @@ export async function setSimplifyDebt(
   await db.runAsync('UPDATE budget_group SET simplify_debt=? WHERE id=?', [on ? 1 : 0, groupId]);
 }
 
-/** A non-archived group both people belong to (for attributing a global settlement). */
-export async function getCommonGroupId(
-  db: SQLite.SQLiteDatabase,
-  a: string,
-  b: string,
-): Promise<string | null> {
-  const row = await db.getFirstAsync<{ group_id: string }>(
-    `SELECT gm1.group_id FROM group_member gm1
-       JOIN group_member gm2 ON gm1.group_id = gm2.group_id
-       JOIN budget_group g ON g.id = gm1.group_id
-     WHERE gm1.person_id = ? AND gm2.person_id = ? AND g.is_archived = 0
-     ORDER BY g.created_at ASC LIMIT 1`,
-    [a, b],
-  );
-  return row?.group_id ?? null;
-}
-
 export async function updateGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
@@ -177,20 +160,3 @@ export async function archiveGroupSafe(db: SQLite.SQLiteDatabase, groupId: strin
   return true;
 }
 
-export async function updateGroupLimits(
-  db: SQLite.SQLiteDatabase,
-  groupId: string,
-  limitDaily: number | null,
-  limitMonthly: number | null,
-  limitYearly: number | null,
-  carryOver: boolean,
-): Promise<void> {
-  await db.runAsync(
-    'UPDATE budget_group SET limit_daily=?, limit_monthly=?, limit_yearly=?, carry_over=? WHERE id=?',
-    [limitDaily, limitMonthly, limitYearly, carryOver ? 1 : 0, groupId],
-  );
-}
-
-export async function archiveGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<void> {
-  await db.runAsync('UPDATE budget_group SET is_archived=1 WHERE id=?', [groupId]);
-}

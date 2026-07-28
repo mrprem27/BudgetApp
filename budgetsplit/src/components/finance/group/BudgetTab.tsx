@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, layout } from '../../tokens';
-import { healthColor, recBg, recColor } from './helpers';
+import { healthColor } from './helpers';
 import { budgetHealth, utilLabel } from '../../../lib/budget';
 import type { CategoryBudgetStatus } from '../../../lib/budget';
 import type { BudgetAnalytics } from '../../../lib/analytics';
@@ -13,6 +13,7 @@ import { BudgetBar } from '../BudgetBar';
 import { MemberAvatar } from '../MemberAvatar';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { alpha } from '../../../theme';
 
 type Props = {
   analytics: BudgetAnalytics | null;
@@ -91,42 +92,8 @@ export function BudgetTab({ analytics, catStatus, contributions, isPersonal, onE
         </View>
       )}
 
-      {analytics && analytics.recommendations.length > 0 && (
-        <View style={styles.recList}>
-          {analytics.recommendations.map(r => (
-            <View key={r.id} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
-              <Feather name={r.icon} size={15} color={recColor(r.severity)} />
-              <Text style={[styles.recText, { color: recColor(r.severity) }]}>{r.text}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {analytics && analytics.totalAllocated > 0 && (
-        analytics.overBudget.length > 0 ? (
-          <View style={styles.drivingCard}>
-            <Text style={styles.drivingTitle}>Driving overspend</Text>
-            {analytics.overBudget.slice(0, 4).map(t => {
-              const vis = categoryVisual(t.category);
-              const over = t.spent - t.allocated;
-              return (
-                <View key={t.category} style={styles.drivingRow}>
-                  <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
-                    <Feather name={vis.icon} size={14} color={vis.color} />
-                  </View>
-                  <Text style={styles.drivingName} numberOfLines={1}>{t.category}</Text>
-                  <Text style={styles.drivingOver}>{formatCompact(over)} over</Text>
-                </View>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={styles.allClearCard}>
-            <Feather name="check-circle" size={16} color={colors.income} />
-            <Text style={styles.allClearText}>Every category within budget</Text>
-          </View>
-        )
-      )}
+      {/* Budget recommendations and the "driving overspend" breakdown are Insights —
+          they live on the global Insights screen (aggregated across groups), not here. */}
 
       {!isPersonal && contributions.total > 0 && (
         <View style={styles.contribCard}>
@@ -178,7 +145,7 @@ export function BudgetTab({ analytics, catStatus, contributions, isPersonal, onE
                   return (
                     <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
                       <View style={styles.catTop}>
-                        <View style={[styles.catIcon, { backgroundColor: vis.color + '22' }]}>
+                        <View style={[styles.catIcon, { backgroundColor: alpha(vis.color, 13) }]}>
                           <Feather name={vis.icon} size={14} color={vis.color} />
                         </View>
                         <View style={{ flex: 1 }}>
@@ -217,16 +184,6 @@ const styles = StyleSheet.create({
   ovStatDivider: { width: 1, height: 28, backgroundColor: colors.border },
   ovStatVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
   ovStatLabel: { ...type.caption, color: colors.textMuted },
-  recList: { gap: space.sm, marginBottom: space.md },
-  recPill: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md, borderRadius: radius.md },
-  recText: { ...type.label, flex: 1, lineHeight: 18 },
-  drivingCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, gap: space.sm, ...shadow.sm },
-  drivingTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 2 },
-  drivingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  drivingName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  drivingOver: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
-  allClearCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
-  allClearText: { ...type.body, color: colors.income, fontFamily: 'Inter_600SemiBold' },
   contribCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
   contribTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.md },
   contribRow: { gap: space.xs },

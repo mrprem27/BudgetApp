@@ -21,8 +21,9 @@ import { PrimaryButton } from '../ui/PrimaryButton';
 import { FadeIn } from '../ui/FadeIn';
 import { haptic } from '../../lib/haptics';
 import { LogoAssembly } from './LogoAssembly';
+import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
+import { alpha } from '../../theme';
 
-type AnimKind = 'spend' | 'split' | 'budget' | 'privacy';
 
 type Slide = {
   anim: AnimKind;
@@ -74,162 +75,6 @@ const SLIDES: Slide[] = [
     ],
   },
 ];
-
-const ART_SIZE = 156;
-
-/** A coin glyph in a tinted disc — the shared unit for the finance animations. */
-function Coin({ tint, size = 40, icon = 'dollar-sign' as keyof typeof Feather.glyphMap }: { tint: string; size?: number; icon?: keyof typeof Feather.glyphMap }) {
-  return (
-    <View style={[styles.coin, { width: size, height: size, borderRadius: size / 2, backgroundColor: tint + '26', borderColor: tint + '55' }]}>
-      <Feather name={icon} size={size * 0.5} color={tint} />
-    </View>
-  );
-}
-
-/** ① Coins dropping into a pie — "where it goes". */
-function SpendArt({ tint, active }: { tint: string; active: boolean }) {
-  const drops = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!active) return;
-    const loops = drops.map((v, i) =>
-      Animated.loop(Animated.sequence([
-        Animated.delay(i * 360),
-        Animated.timing(v, { toValue: 1, duration: 900, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: true }),
-        Animated.delay(900),
-      ])),
-    );
-    const p = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]));
-    loops.forEach(l => l.start()); p.start();
-    return () => { loops.forEach(l => l.stop()); p.stop(); };
-  }, [active]);
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
-  return (
-    <View style={styles.artBox}>
-      {drops.map((v, i) => {
-        const x = (i - 1) * 34;
-        const ty = v.interpolate({ inputRange: [0, 1], outputRange: [-58, 6] });
-        const op = v.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, 1, 1, 0] });
-        return (
-          <Animated.View key={i} style={[styles.artFloat, { transform: [{ translateX: x }, { translateY: ty }], opacity: op }]}>
-            <Coin tint={tint} size={30} />
-          </Animated.View>
-        );
-      })}
-      <Animated.View style={{ transform: [{ scale }], marginTop: 36 }}>
-        <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
-          <Feather name="pie-chart" size={48} color={tint} />
-        </View>
-      </Animated.View>
-    </View>
-  );
-}
-
-/** ② A coin travels wallet → wallet — "split". */
-function SplitArt({ tint, active }: { tint: string; active: boolean }) {
-  const tx = useRef(new Animated.Value(0)).current;
-  const op = useRef(new Animated.Value(0)).current;
-  const arrive = useRef(new Animated.Value(0)).current;
-  const TRAVEL = 96;
-  useEffect(() => {
-    if (!active) return;
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(op, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(tx, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(arrive, { toValue: 1, duration: 260, easing: Easing.out(Easing.back(2)), useNativeDriver: true }),
-      Animated.timing(op, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.parallel([
-        Animated.timing(tx, { toValue: 0, duration: 0, useNativeDriver: true }),
-        Animated.timing(arrive, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ]),
-      Animated.delay(360),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [active]);
-  const translateX = tx.interpolate({ inputRange: [0, 1], outputRange: [-TRAVEL / 2, TRAVEL / 2] });
-  const lift = tx.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -22, 0] });
-  const toScale = arrive.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
-  return (
-    <View style={[styles.artBox, styles.rowArt]}>
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
-        <Feather name="credit-card" size={34} color={tint} />
-      </View>
-      <Animated.View style={[styles.travelCoin, { opacity: op, transform: [{ translateX }, { translateY: lift }] }]}>
-        <Coin tint={colors.income} size={34} />
-      </Animated.View>
-      <Animated.View style={{ transform: [{ scale: toScale }] }}>
-        <View style={[styles.bigDisc, { backgroundColor: colors.income + '1A', borderColor: colors.income + '44' }]}>
-          <Feather name="credit-card" size={34} color={colors.income} />
-        </View>
-      </Animated.View>
-    </View>
-  );
-}
-
-/** ③ A budget bar fills green → amber — "budgets". */
-function BudgetArt({ tint, active }: { tint: string; active: boolean }) {
-  const fill = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!active) return;
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(fill, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }),
-      Animated.delay(600),
-      Animated.timing(fill, { toValue: 0, duration: 500, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
-      Animated.delay(300),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [active]);
-  const width = fill.interpolate({ inputRange: [0, 1], outputRange: ['4%', '88%'] });
-  const barColor = fill.interpolate({ inputRange: [0, 0.7, 1], outputRange: [colors.income, colors.income, colors.healthAmber] });
-  return (
-    <View style={styles.artBox}>
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44', marginBottom: space.lg }]}>
-        <Feather name="target" size={44} color={tint} />
-      </View>
-      <View style={styles.budgetTrack}>
-        <Animated.View style={[styles.budgetFill, { width, backgroundColor: barColor }]} />
-      </View>
-    </View>
-  );
-}
-
-/** ④ A shield pulses with a glow ring — "privacy". */
-function PrivacyArt({ tint, active }: { tint: string; active: boolean }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!active) return;
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
-      Animated.delay(200),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [active]);
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.6] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.4, 0] });
-  return (
-    <View style={styles.artBox}>
-      <Animated.View style={[styles.glowRing, { borderColor: tint, transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
-      <View style={[styles.bigDisc, { backgroundColor: tint + '1A', borderColor: tint + '44' }]}>
-        <Feather name="shield" size={46} color={tint} />
-      </View>
-    </View>
-  );
-}
-
-function SlideArt({ kind, tint, active }: { kind: AnimKind; tint: string; active: boolean }) {
-  if (kind === 'spend') return <SpendArt tint={tint} active={active} />;
-  if (kind === 'split') return <SplitArt tint={tint} active={active} />;
-  if (kind === 'budget') return <BudgetArt tint={tint} active={active} />;
-  return <PrivacyArt tint={tint} active={active} />;
-}
 
 type Stage = 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget' | 'people' | 'permissions';
 type IntentKey = 'personal' | 'split' | 'both';
@@ -417,7 +262,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </TouchableOpacity>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.intentScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.intentLogoWrap}>
-              <LinearGradient colors={['#20C4B8', '#15A89D']} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <LinearGradient colors={[colors.accent, colors.accentDeep]} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Text style={styles.intentRupee}>₹</Text>
               </LinearGradient>
             </View>
@@ -471,6 +316,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
 
           <Animated.ScrollView
+            // Animated.ScrollView's ref type doesn't unify with ScrollView's.
+            // Third-party typing gap; the runtime ref is a real ScrollView.
             ref={scrollRef as any}
             horizontal
             pagingEnabled
@@ -499,7 +346,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                       <View style={styles.pointsCard}>
                         {slide.points.map((p, j) => (
                           <View key={p.text} style={[styles.pointRow, j < slide.points.length - 1 && styles.pointBorder]}>
-                            <View style={[styles.pointIcon, { backgroundColor: slide.tint + '22' }]}>
+                            <View style={[styles.pointIcon, { backgroundColor: alpha(slide.tint, 13) }]}>
                               <Feather name={p.icon} size={15} color={slide.tint} />
                             </View>
                             <Text style={styles.pointText}>{p.text}</Text>
@@ -531,7 +378,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.bigDisc, { backgroundColor: colors.accentMuted, borderColor: colors.accent + '44' }]}>
+            <View style={[bigDiscStyle, { backgroundColor: colors.accentMuted, borderColor: alpha(colors.accent, 27) }]}>
               <Feather name="user" size={34} color={colors.accent} />
             </View>
             <Text style={[styles.slideTitle, { marginTop: space.lg }]}>First, your name</Text>
@@ -582,7 +429,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </View>
             <View style={styles.budgetPresets}>
               {INCOME_PRESETS.map(p => (
-                <TouchableOpacity key={p.label} style={[styles.budgetPresetChip, incomeNum === p.value && styles.budgetPresetChipActive]} onPress={() => { haptic.selection(); setIncomeText(String(p.value)); }} accessibilityRole="button">
+                <TouchableOpacity key={p.label} style={[styles.budgetPresetChip, incomeNum === p.value && styles.budgetPresetChipActive]} accessibilityState={{ selected: incomeNum === p.value }} onPress={() => { haptic.selection(); setIncomeText(String(p.value)); }} accessibilityRole="button">
                   <Text style={[styles.budgetPresetText, incomeNum === p.value && styles.budgetPresetTextActive]}>{p.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -678,7 +525,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </View>
             <View style={styles.budgetPresets}>
               {BUDGET_PRESETS.map(v => (
-                <TouchableOpacity key={v} style={[styles.budgetPresetChip, budgetNum === v && styles.budgetPresetChipActive]} onPress={() => { haptic.selection(); setBudgetText(String(v)); }} accessibilityRole="button">
+                <TouchableOpacity key={v} style={[styles.budgetPresetChip, budgetNum === v && styles.budgetPresetChipActive]} accessibilityState={{ selected: budgetNum === v }} onPress={() => { haptic.selection(); setBudgetText(String(v)); }} accessibilityRole="button">
                   <Text style={[styles.budgetPresetText, budgetNum === v && styles.budgetPresetTextActive]}>₹{v >= 100000 ? '1L' : `${Math.round(v / 1000)}k`}</Text>
                 </TouchableOpacity>
               ))}
@@ -769,12 +616,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Text style={styles.slideBody}>Both are optional and fully on-device. You can change them in Settings any time.</Text>
 
             <TouchableOpacity
-              style={[styles.permCard, notifPerm && styles.permCardOn]}
+              style={[styles.permCard, notifPerm && styles.permCardOn]} accessibilityState={{ selected: notifPerm }}
               onPress={async () => { haptic.selection(); const ok = await requestNotificationPermission(); setNotifPerm(ok); if (ok) { try { await setReminderPrefs({ renewals: true }); } catch { /* best-effort */ } } }}
               disabled={notifPerm}
               accessibilityRole="button"
             >
-              <View style={[styles.permIcon, { backgroundColor: colors.accent + '22' }]}><Feather name="bell" size={18} color={colors.accent} /></View>
+              <View style={[styles.permIcon, { backgroundColor: alpha(colors.accent, 13) }]}><Feather name="bell" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.permTitle}>Bill & renewal reminders</Text>
                 <Text style={styles.permBody}>A heads-up before a recurring charge or a budget runs out.</Text>
@@ -783,7 +630,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.permCard, locPerm && styles.permCardOn]}
+              style={[styles.permCard, locPerm && styles.permCardOn]} accessibilityState={{ selected: locPerm }}
               onPress={async () => {
                 haptic.selection();
                 const { status } = await Location.requestForegroundPermissionsAsync();
@@ -794,7 +641,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               disabled={locPerm}
               accessibilityRole="button"
             >
-              <View style={[styles.permIcon, { backgroundColor: colors.settle + '22' }]}><Feather name="map-pin" size={18} color={colors.settle} /></View>
+              <View style={[styles.permIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="map-pin" size={18} color={colors.settle} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.permTitle}>Tag where you spend</Text>
                 <Text style={styles.permBody}>Save each expense's location so you can see it on a map later.</Text>
@@ -841,18 +688,6 @@ const styles = StyleSheet.create({
   slideBody: { ...type.body, fontSize: 16, color: colors.textSecondary, marginTop: space.xs, marginBottom: space.xl, lineHeight: 23, textAlign: 'center', paddingHorizontal: space.md },
 
   // Animated illustration
-  artBox: { height: ART_SIZE, alignItems: 'center', justifyContent: 'center', marginBottom: space.xl },
-  rowArt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xl },
-  artFloat: { position: 'absolute', top: 0 },
-  bigDisc: {
-    width: 92, height: 92, borderRadius: 28,
-    borderWidth: 1, alignItems: 'center', justifyContent: 'center',
-  },
-  coin: { alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  travelCoin: { position: 'absolute', zIndex: 2 },
-  budgetTrack: { width: 200, height: 12, borderRadius: 6, backgroundColor: colors.bgMuted, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
-  budgetFill: { height: '100%', borderRadius: 6 },
-  glowRing: { position: 'absolute', width: 92, height: 92, borderRadius: 28, borderWidth: 2 },
 
   pointsCard: {
     alignSelf: 'stretch',
@@ -893,7 +728,7 @@ const styles = StyleSheet.create({
   intentScroll: { flexGrow: 1, paddingVertical: space.xl, alignItems: 'stretch' },
   intentLogoWrap: { alignItems: 'center', marginBottom: space.lg },
   intentLogo: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  intentRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, fontWeight: '700', color: '#0A0F11', letterSpacing: -1 },
+  intentRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, fontWeight: '700', color: colors.bg, letterSpacing: -1 },
   intentCards: { gap: space.sm, marginBottom: space.md },
   intentCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
@@ -912,9 +747,6 @@ const styles = StyleSheet.create({
   // Budget stage
   budgetDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 28 },
   budgetDot: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted },
-  budgetAmtCard: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: space.lg, paddingHorizontal: 20, marginBottom: space.md, borderWidth: 1.5, borderColor: colors.accent, alignItems: 'center', alignSelf: 'stretch' },
-  budgetAmtText: { fontFamily: 'SpaceMono_400Regular', fontSize: 44, color: colors.textPrimary, letterSpacing: -2, lineHeight: 48 },
-  budgetAmtSub: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
   budgetPresets: { flexDirection: 'row', gap: space.sm, marginBottom: 20, justifyContent: 'center', flexWrap: 'wrap' },
   budgetPresetChip: { paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.bgCard, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
   budgetPresetChipActive: { backgroundColor: colors.accent },
@@ -953,7 +785,7 @@ const styles = StyleSheet.create({
 
   // Permissions step
   permCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.sm },
-  permCardOn: { borderColor: colors.income, backgroundColor: colors.income + '11' },
+  permCardOn: { borderColor: colors.income, backgroundColor: alpha(colors.income, 7) },
   permIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   permTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   permBody: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },

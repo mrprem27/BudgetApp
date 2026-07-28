@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { colors, type, space, radius } from '../tokens';
 import { haptic } from '../../lib/haptics';
 import { PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, type PayMethod } from '../../constants/enums';
+import { alpha } from '../../theme';
 
 type Props = {
   value: PayMethod;
@@ -29,7 +30,7 @@ export function PayMethodSelector({ value, onChange, accent = colors.accent }: P
         return (
           <TouchableOpacity
             key={m}
-            style={[styles.tile, on && { borderColor: accent, backgroundColor: accent + '22' }]}
+            style={[styles.tile, on && { borderColor: accent, backgroundColor: alpha(accent, 13) }]}
             onPress={() => { haptic.selection(); onChange(m); }}
             accessibilityRole="button"
             accessibilityLabel={PAY_METHOD_LABEL[m]}

@@ -152,7 +152,7 @@ export default function QuickAddScreen() {
                 {!isEditing && kind !== 'income' && (
                   <TouchableOpacity
                     style={styles.byItemsRow}
-                    onPress={() => router.push(`/add/itemized${f.selectedGroupId ? `?groupId=${f.selectedGroupId}` : ''}` as any)}
+                    onPress={() => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })}
                     accessibilityRole="button"
                     accessibilityLabel="Split by items"
                   >
@@ -162,7 +162,7 @@ export default function QuickAddScreen() {
                   </TouchableOpacity>
                 )}
 
-                <AttachmentRow attachmentUri={f.attachmentUri} onChange={f.setAttachmentUri} onOpenStorageSettings={() => router.push('/storage' as any)} />
+                <AttachmentRow attachmentUri={f.attachmentUri} onChange={f.setAttachmentUri} onOpenStorageSettings={() => router.push('/storage')} />
 
                 {f.locEnabled && !isEditing && (
                   <LocationRow place={f.place} capturing={f.capturingLoc} onRecapture={f.captureLocation} onClear={() => f.setPlace(null)} />

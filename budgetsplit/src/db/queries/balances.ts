@@ -54,40 +54,6 @@ export async function getGlobalNet(
   return net;
 }
 
-export async function getMySpending(
-  db: SQLite.SQLiteDatabase,
-  meId: string,
-  fromMs: number,
-  toMs: number,
-): Promise<number> {
-  const row = await db.getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(ts.amount), 0) as total
-     FROM txn_share ts
-     JOIN txn t ON t.id = ts.txn_id
-     WHERE ts.person_id = ? AND t.kind = 'expense'
-       AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?`,
-    [meId, fromMs, toMs],
-  );
-  return row?.total ?? 0;
-}
-
-export async function getMyIncome(
-  db: SQLite.SQLiteDatabase,
-  meId: string,
-  fromMs: number,
-  toMs: number,
-): Promise<number> {
-  const row = await db.getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(tp.amount), 0) as total
-     FROM txn_payment tp
-     JOIN txn t ON t.id = tp.txn_id
-     WHERE tp.person_id = ? AND t.kind = 'income'
-       AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?`,
-    [meId, fromMs, toMs],
-  );
-  return row?.total ?? 0;
-}
-
 export type FriendBalance = {
   personId: string;
   name: string;

@@ -40,8 +40,3 @@ export function sevColor(sev: 'good' | 'warn' | 'bad' | 'neutral'): string {
   }
 }
 
-/** Donut/category-bar palette (kept stable across the app). */
-export const CHART_COLORS = [
-  '#F0A500', '#3ECF8E', '#7C6AF7', '#F06060', '#60A5FA',
-  '#FB923C', '#F472B6', '#34D399', '#A78BFA', '#8B8A99',
-];

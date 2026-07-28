@@ -1,27 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  FlatList, ScrollView, Alert, KeyboardAvoidingView, Platform,
+  FlatList, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { settings } from '../../src/lib/settings';
-import { getCurrentPlace, type CapturedPlace } from '../../src/lib/location';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { getCategoriesByFrequency, insertCategory } from '../../src/db/queries/categories';
-import { insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, type ItemizedAdjustment } from '../../src/db/queries/transactions';
-import { parseToPaise, formatRupees } from '../../src/lib/money';
-import {
-  computeAdjustedTotal, computeItemSubtotal, computePerPersonShares, splitItemBase,
-  type LineItemDraft, type Adjustment,
-} from '../../src/lib/itemized';
-import { type SplitMode } from '../../src/constants/enums';
+import { insertCategory } from '../../src/db/queries/categories';
+import { formatRupees, parseToPaise } from '../../src/lib/money';
+import { computeItemSubtotal, splitItemBase, type Adjustment } from '../../src/lib/itemized';
 import { SplitEditor } from '../../src/components/finance/add/SplitEditor';
 import { asFeather } from '../../src/constants/palette';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
@@ -30,243 +21,20 @@ import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import type { Person } from '../../src/db/queries/persons';
-import type { Category } from '../../src/db/queries/categories';
-import type { BudgetGroup } from '../../src/db/queries/groups';
+import { useItemizedForm, ITEMIZED_STEPS } from '../../src/hooks/useItemizedForm';
+import { alpha } from '../../src/theme';
 
-type Step = 'items' | 'assign' | 'payers' | 'review';
-
-const STEPS: Step[] = ['items', 'assign', 'payers', 'review'];
-
+/**
+ * Itemized-bill wizard (items → assign → payers → review). All state and
+ * behaviour live in `useItemizedForm`; this file is the render layer.
+ */
 export default function ItemizedScreen() {
   const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
-  const isEditing = !!editId;
   const db = useSQLiteContext();
   const router = useRouter();
-  const { refresh } = useDataRefresh();
   const insets = useSafeAreaInsets();
 
-  const [step, setStep] = useState<Step>('items');
-  const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
-  const [members, setMembers] = useState<Person[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [note, setNote] = useState('');
-  const [items, setItems] = useState<LineItemDraft[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [newName, setNewName] = useState('');
-  const [newQty, setNewQty] = useState('1');
-  const [newPrice, setNewPrice] = useState('');
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
-  const [showAdjModal, setShowAdjModal] = useState(false);
-  const [adjType, setAdjType] = useState<'tax' | 'tip' | 'discount'>('tax');
-  const [adjMode, setAdjMode] = useState<'flat' | 'percent'>('percent');
-  const [adjValue, setAdjValue] = useState('');
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
-  const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [place, setPlace] = useState<CapturedPlace | null>(null);
-  const [locEnabled, setLocEnabled] = useState(false);
-  const [capturingLoc, setCapturingLoc] = useState(false);
-
-  async function captureLocation() {
-    setCapturingLoc(true);
-    try { setPlace(await getCurrentPlace()); } finally { setCapturingLoc(false); }
-  }
-  useEffect(() => {
-    if (isEditing) return;
-    (async () => {
-      const on = await settings.saveLocation();
-      setLocEnabled(on);
-      if (on) await captureLocation();
-    })();
-  }, [isEditing]);
-
-  useEffect(() => {
-    (async () => {
-      const meRow = await getMe(db);
-
-      if (editId) {
-        // Editing an existing itemized bill — load it and prefill every step.
-        const t = await getTxnById(db, editId);
-        if (t) {
-          const gid = t.group_id;
-          setSelectedGroupId(gid);
-          const [cats, mems, lineItems] = await Promise.all([
-            getCategoriesByFrequency(db, gid),
-            getGroupMembers(db, gid),
-            getLineItems(db, editId),
-          ]);
-          setCategories(cats);
-          setMembers(mems);
-          setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
-          setNote(t.note ?? '');
-          setItems(lineItems.map(li => ({
-            id: li.id,
-            name: li.name,
-            qty: String(li.qty),
-            unitPrice: (li.unit_price / 100).toString(),
-            assignedTo: (() => { try { return JSON.parse(li.assigned_to) as string[]; } catch { return []; } })(),
-            splitMode: (li.split_mode ?? undefined) as SplitMode | undefined,
-            splitValues: (() => { try { return li.split_values ? JSON.parse(li.split_values) as Record<string, string> : undefined; } catch { return undefined; } })(),
-          })));
-          if (t.adjustments) {
-            try { setAdjustments(JSON.parse(t.adjustments) as Adjustment[]); } catch { /* ignore */ }
-          }
-          const payerMap: Record<string, string> = {};
-          for (const p of t.payments) payerMap[p.personId] = (p.amount / 100).toString();
-          setPayerAmounts(payerMap);
-        }
-        return;
-      }
-
-      const grps = await getAllGroups(db);
-      const gid = paramGroupId ?? grps[0]?.id ?? '';
-      setSelectedGroupId(gid);
-      if (gid) await loadGroup(gid, meRow);
-    })();
-  }, []);
-
-  async function loadGroup(gid: string, meRow: Person | null) {
-    const [cats, mems] = await Promise.all([
-      getCategoriesByFrequency(db, gid),
-      getGroupMembers(db, gid),
-    ]);
-    setCategories(cats);
-    setSelectedCategory(cats[0] ?? null);
-    setMembers(mems);
-    if (meRow) setPayerAmounts({ [meRow.id]: '' });
-  }
-
-  const subtotal = items.reduce((s, i) => s + computeItemSubtotal(i), 0);
-  const total = computeAdjustedTotal(subtotal, adjustments);
-  const perPerson = computePerPersonShares(items, adjustments, members);
-  const sharesTotal = Object.values(perPerson).reduce((a, b) => a + b, 0);
-  const unassignedTotal = total - sharesTotal;
-
-  const payments = Object.entries(payerAmounts)
-    .map(([pid, val]) => ({ personId: pid, amount: parseToPaise(val) }))
-    .filter(p => p.amount > 0);
-  const paymentsTotal = payments.reduce((s, p) => s + p.amount, 0);
-  const paymentRemainder = total - paymentsTotal;
-
-  const peopleFor = (ids: string[]) =>
-    ids.map(pid => members.find(m => m.id === pid)).filter((m): m is Person => !!m);
-
-  function addItem() {
-    if (!newName.trim() || !newPrice.trim()) return;
-    setItems(prev => [...prev, {
-      id: Math.random().toString(),
-      name: newName.trim(),
-      qty: newQty || '1',
-      unitPrice: newPrice,
-      assignedTo: [],
-    }]);
-    setNewName('');
-    setNewQty('1');
-    setNewPrice('');
-  }
-
-
-  function removeItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); setEditingId(c => c === id ? null : c); }
-
-  /** Inline edit of an existing item's name / qty / unit price. */
-  function updateItem(id: string, patch: Partial<Pick<LineItemDraft, 'name' | 'qty' | 'unitPrice'>>) {
-    setItems(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
-  }
-
-  function toggleAssign(itemId: string, personId: string) {
-    setItems(prev => prev.map(i => {
-      if (i.id !== itemId) return i;
-      const already = i.assignedTo.includes(personId);
-      return { ...i, assignedTo: already ? i.assignedTo.filter(id => id !== personId) : [...i.assignedTo, personId] };
-    }));
-  }
-
-  function splitRestEqually() {
-    setItems(prev => prev.map(i => i.assignedTo.length === 0 ? { ...i, assignedTo: members.map(m => m.id) } : i));
-  }
-
-  /** Set an item's split mode (Equal / Specific / Percent / Shares). */
-  function setItemSplitMode(itemId: string, mode: SplitMode) {
-    setItems(prev => prev.map(i => (i.id === itemId ? { ...i, splitMode: mode } : i)));
-  }
-  /** Set a per-member value for an item's non-equal split. */
-  function setItemSplitValue(itemId: string, personId: string, value: string) {
-    setItems(prev => prev.map(i => (i.id === itemId
-      ? { ...i, splitValues: { ...(i.splitValues ?? {}), [personId]: value.replace(/[^0-9.]/g, '') } }
-      : i)));
-  }
-
-  function openAdj(t: 'tax' | 'tip' | 'discount') {
-    setAdjType(t);
-    setAdjMode(t === 'discount' ? 'flat' : 'percent');
-    setAdjValue('');
-    setShowAdjModal(true);
-  }
-
-  function addAdjustment() {
-    if (!adjValue.trim()) return;
-    setAdjustments(prev => [...prev, {
-      label: adjType.charAt(0).toUpperCase() + adjType.slice(1),
-      type: adjType, mode: adjMode, value: adjValue,
-    }]);
-    setShowAdjModal(false);
-    setAdjValue('');
-  }
-
-  function removeAdjustment(idx: number) {
-    setAdjustments(prev => prev.filter((_, i) => i !== idx));
-  }
-
-  async function handleSave() {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const shares = Object.entries(perPerson)
-        .map(([personId, amount]) => ({ personId, amount }))
-        .filter(s => s.amount > 0);
-
-      const payload = {
-        groupId: selectedGroupId,
-        kind: 'expense' as const,
-        entryMode: 'itemized' as const,
-        date: Date.now(),
-        category: selectedCategory?.name ?? 'Other',
-        note: note.trim() || undefined,
-        payments,
-        shares,
-        items: items.map(i => ({
-          name: i.name,
-          qty: parseInt(i.qty, 10) || 1,
-          unitPrice: parseToPaise(i.unitPrice),
-          assignedTo: i.assignedTo,
-          splitMode: i.splitMode,
-          splitValues: i.splitValues,
-        })),
-        adjustments: adjustments as ItemizedAdjustment[],
-        lat: place?.lat,
-        lng: place?.lng,
-        placeLabel: place?.label ?? undefined,
-      };
-      if (isEditing) await updateItemizedTxn(db, editId!, payload);
-      else await insertItemizedTxn(db, payload);
-      haptic.success();
-      refresh();
-      router.back();
-    } catch {
-      Alert.alert('Error', 'Could not save. Try again.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const canProceedItems = items.length > 0 && total > 0;
-  const canProceedAssign = unassignedTotal === 0;
-  const canSave = canProceedAssign && paymentRemainder === 0 && payments.length > 0;
-
-  const stepTitle = { items: 'Add items', assign: 'Assign items', payers: 'Who paid?', review: 'Review & save' }[step];
+  const f = useItemizedForm(paramGroupId, editId);
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -279,18 +47,18 @@ export default function ItemizedScreen() {
         </View>
         {/* Receipt scan hidden until true AI line-item extraction exists (the
             old on-device OCR only read a single total). See PLAN.md. */}
-        <Text style={styles.stepIndicator}>{STEPS.indexOf(step) + 1}/4</Text>
-        {step === 'review' && (
-          <TouchableOpacity onPress={handleSave} disabled={!canSave || saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
-            <Text style={[styles.headerSave, (!canSave || saving) && { opacity: 0.35 }]}>Save</Text>
+        <Text style={styles.stepIndicator}>{ITEMIZED_STEPS.indexOf(f.step) + 1}/4</Text>
+        {f.step === 'review' && (
+          <TouchableOpacity onPress={f.handleSave} disabled={!f.canSave || f.saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
+            <Text style={[styles.headerSave, (!f.canSave || f.saving) && { opacity: 0.35 }]}>Save</Text>
           </TouchableOpacity>
         )}
       </View>
 
       {/* Step progress dots */}
       <View style={styles.dots}>
-        {STEPS.map((s, i) => (
-          <View key={s} style={[styles.dot, STEPS.indexOf(step) >= i && styles.dotActive]} />
+        {ITEMIZED_STEPS.map((s, i) => (
+          <View key={s} style={[styles.dot, ITEMIZED_STEPS.indexOf(f.step) >= i && styles.dotActive]} />
         ))}
       </View>
 
@@ -298,21 +66,21 @@ export default function ItemizedScreen() {
       <View style={styles.totalCard}>
         <View style={styles.totalCardLeft}>
           <Text style={styles.totalCardLabel}>TOTAL</Text>
-          <Text style={styles.totalCardAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatRupees(total)}</Text>
+          <Text style={styles.totalCardAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatRupees(f.total)}</Text>
         </View>
         <View style={styles.totalCardRight}>
-          <Text style={styles.totalCardMeta} numberOfLines={1}>{stepTitle}</Text>
-          {selectedCategory && (
+          <Text style={styles.totalCardMeta} numberOfLines={1}>{f.stepTitle}</Text>
+          {f.selectedCategory && (
             <View style={styles.categoryChip}>
-              <Feather name={asFeather(selectedCategory.icon, 'tag')} size={12} color={colors.accent} />
-              <Text style={styles.categoryChipText} numberOfLines={1}>{selectedCategory.name}</Text>
+              <Feather name={asFeather(f.selectedCategory.icon, 'tag')} size={12} color={colors.accent} />
+              <Text style={styles.categoryChipText} numberOfLines={1}>{f.selectedCategory.name}</Text>
             </View>
           )}
         </View>
       </View>
 
       {/* STEP 1: ITEMS */}
-      {step === 'items' && (
+      {f.step === 'items' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.addCardHeader}>
             <Feather name="plus" size={15} color={colors.accent} />
@@ -323,8 +91,8 @@ export default function ItemizedScreen() {
               style={styles.addNameInput}
               placeholder="Item name"
               placeholderTextColor={colors.textMuted}
-              value={newName}
-              onChangeText={setNewName}
+              value={f.newName}
+              onChangeText={f.setNewName}
               returnKeyType="next"
             />
             <View style={styles.addRow2}>
@@ -332,8 +100,8 @@ export default function ItemizedScreen() {
                 <Text style={styles.miniLabel}>Qty</Text>
                 <TextInput
                   style={styles.qtyInput}
-                  value={newQty}
-                  onChangeText={setNewQty}
+                  value={f.newQty}
+                  onChangeText={f.setNewQty}
                   keyboardType="number-pad"
                   placeholder="1"
                   placeholderTextColor={colors.textMuted}
@@ -343,18 +111,18 @@ export default function ItemizedScreen() {
                 <Text style={styles.miniLabel}>Unit price</Text>
                 <TextInput
                   style={styles.priceInput}
-                  value={newPrice}
-                  onChangeText={setNewPrice}
+                  value={f.newPrice}
+                  onChangeText={f.setNewPrice}
                   keyboardType="decimal-pad"
                   placeholder="₹0"
                   placeholderTextColor={colors.textMuted}
-                  onSubmitEditing={addItem}
+                  onSubmitEditing={f.addItem}
                 />
               </View>
               <TouchableOpacity
-                style={[styles.addBtn, (!newName.trim() || !newPrice.trim()) && styles.addBtnDisabled]}
-                onPress={addItem}
-                disabled={!newName.trim() || !newPrice.trim()}
+                style={[styles.addBtn, (!f.newName.trim() || !f.newPrice.trim()) && styles.addBtnDisabled]}
+                onPress={f.addItem}
+                disabled={!f.newName.trim() || !f.newPrice.trim()}
                 accessibilityRole="button"
                 accessibilityLabel="Add item"
               >
@@ -363,20 +131,20 @@ export default function ItemizedScreen() {
             </View>
           </View>
 
-          {items.length > 0 && (
+          {f.items.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>LINE ITEMS</Text>
               <View style={styles.card}>
-                {items.map((item, idx) => {
-                  const editing = editingId === item.id;
+                {f.items.map((item, idx) => {
+                  const editing = f.editingId === item.id;
                   return (
-                  <View key={item.id} style={[styles.itemRow, idx < items.length - 1 && styles.rowBorder]}>
+                  <View key={item.id} style={[styles.itemRow, idx < f.items.length - 1 && styles.rowBorder]}>
                     {editing ? (
                       <View style={{ flex: 1, gap: space.xs }}>
                         <TextInput
                           style={styles.itemEditName}
                           value={item.name}
-                          onChangeText={(t) => updateItem(item.id, { name: t })}
+                          onChangeText={(t) => f.updateItem(item.id, { name: t })}
                           placeholder="Item name"
                           placeholderTextColor={colors.textMuted}
                           accessibilityLabel="Item name"
@@ -385,7 +153,7 @@ export default function ItemizedScreen() {
                           <TextInput
                             style={styles.itemEditQty}
                             value={item.qty}
-                            onChangeText={(t) => updateItem(item.id, { qty: t.replace(/[^0-9]/g, '') })}
+                            onChangeText={(t) => f.updateItem(item.id, { qty: t.replace(/[^0-9]/g, '') })}
                             keyboardType="number-pad"
                             placeholder="1"
                             placeholderTextColor={colors.textMuted}
@@ -397,24 +165,24 @@ export default function ItemizedScreen() {
                             <TextInput
                               style={styles.itemEditPrice}
                               value={item.unitPrice}
-                              onChangeText={(t) => updateItem(item.id, { unitPrice: t.replace(/[^0-9.]/g, '') })}
+                              onChangeText={(t) => f.updateItem(item.id, { unitPrice: t.replace(/[^0-9.]/g, '') })}
                               keyboardType="decimal-pad"
                               placeholder="0"
                               placeholderTextColor={colors.textMuted}
                               accessibilityLabel="Unit price"
                             />
                           </View>
-                          <TouchableOpacity style={styles.itemDoneBtn} onPress={() => setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
+                          <TouchableOpacity style={styles.itemDoneBtn} onPress={() => f.setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
                             <Feather name="check" size={16} color={colors.accent} />
                           </TouchableOpacity>
                         </View>
                       </View>
                     ) : (
-                      <TouchableOpacity style={{ flex: 1 }} onPress={() => setEditingId(item.id)} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
+                      <TouchableOpacity style={{ flex: 1 }} onPress={() => f.setEditingId(item.id)} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
                         <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                         {item.assignedTo.length > 0 ? (
                           <View style={styles.itemAvatars}>
-                            <AvatarStack people={peopleFor(item.assignedTo)} size={20} max={4} />
+                            <AvatarStack people={f.peopleFor(item.assignedTo)} size={20} max={4} />
                           </View>
                         ) : (
                           <Text style={styles.itemSub} numberOfLines={1}>
@@ -424,7 +192,7 @@ export default function ItemizedScreen() {
                       </TouchableOpacity>
                     )}
                     {!editing && <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>}
-                    <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
+                    <TouchableOpacity onPress={() => f.removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
                       <Feather name="trash-2" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
@@ -434,19 +202,19 @@ export default function ItemizedScreen() {
             </>
           )}
 
-          {items.length > 0 && (
+          {f.items.length > 0 && (
             <View style={styles.card}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryVal}>{formatRupees(subtotal)}</Text>
+                <Text style={styles.summaryVal}>{formatRupees(f.subtotal)}</Text>
               </View>
-              {adjustments.map((adj, i) => {
+              {f.adjustments.map((adj, i) => {
                 const amt = adj.mode === 'percent'
-                  ? Math.round((subtotal * parseToPaise(adj.value)) / 10000)
+                  ? Math.round((f.subtotal * parseToPaise(adj.value)) / 10000)
                   : parseToPaise(adj.value);
                 return (
                   <View key={i} style={styles.summaryRow}>
-                    <TouchableOpacity onPress={() => removeAdjustment(i)} hitSlop={6} style={styles.adjChipRemove}>
+                    <TouchableOpacity onPress={() => f.removeAdjustment(i)} hitSlop={6} style={styles.adjChipRemove}>
                       <Feather name="x-circle" size={13} color={colors.textMuted} />
                       <Text style={styles.summaryLabel} numberOfLines={1}>
                         {adj.label} {adj.mode === 'percent' ? `${adj.value}%` : ''}
@@ -461,17 +229,17 @@ export default function ItemizedScreen() {
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryTotalLabel}>Total</Text>
-                <Text style={styles.summaryTotalVal}>{formatRupees(total)}</Text>
+                <Text style={styles.summaryTotalVal}>{formatRupees(f.total)}</Text>
               </View>
             </View>
           )}
 
-          {items.length > 0 && (
+          {f.items.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>ADJUSTMENTS</Text>
               <View style={styles.adjButtons}>
                 {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
-                  <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => openAdj(t)} accessibilityRole="button">
+                  <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => f.openAdj(t)} accessibilityRole="button">
                     <Feather name={ic} size={13} color={colors.accent} />
                     <Text style={styles.adjBtnText}>{label}</Text>
                   </TouchableOpacity>
@@ -480,41 +248,41 @@ export default function ItemizedScreen() {
             </>
           )}
 
-          {items.length === 0 && (
+          {f.items.length === 0 && (
             <Text style={styles.hintText}>Add each line on the bill — name, quantity and unit price.</Text>
           )}
 
-          <PrimaryButton label="Next: Assign items" onPress={() => setStep('assign')} disabled={!canProceedItems} style={styles.nextBtn} />
+          <PrimaryButton label="Next: Assign items" onPress={() => f.setStep('assign')} disabled={!f.canProceedItems} style={styles.nextBtn} />
         </ScrollView>
       )}
 
       {/* STEP 2: ASSIGN */}
-      {step === 'assign' && (
+      {f.step === 'assign' && (
         <FlatList
-          data={items}
+          data={f.items}
           keyExtractor={i => i.id}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
-            <TouchableOpacity style={styles.splitRestBtn} onPress={splitRestEqually} accessibilityRole="button">
+            <TouchableOpacity style={styles.splitRestBtn} onPress={f.splitRestEqually} accessibilityRole="button">
               <Feather name="users" size={15} color={colors.accent} />
               <Text style={styles.splitRestText}>Split unassigned equally</Text>
             </TouchableOpacity>
           }
           renderItem={({ item }) => (
             <View style={styles.assignItem}>
-              <TouchableOpacity style={styles.assignItemHeader} onPress={() => setExpandedItem(expandedItem === item.id ? null : item.id)}>
+              <TouchableOpacity style={styles.assignItemHeader} onPress={() => f.setExpandedItem(f.expandedItem === item.id ? null : item.id)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                   <Text style={styles.itemSub}>{formatRupees(computeItemSubtotal(item))}</Text>
                 </View>
                 {item.assignedTo.length === 0
                   ? <Text style={styles.unassignedTag}>Unassigned</Text>
-                  : <AvatarStack people={peopleFor(item.assignedTo)} size={24} max={3} />
+                  : <AvatarStack people={f.peopleFor(item.assignedTo)} size={24} max={3} />
                 }
-                <Feather name={expandedItem === item.id ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
+                <Feather name={f.expandedItem === item.id ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: space.sm }} />
               </TouchableOpacity>
-              {expandedItem === item.id && (() => {
+              {f.expandedItem === item.id && (() => {
                 const base = computeItemSubtotal(item);
                 const itemSplit = splitItemBase(item, base);
                 const exactRemainder = base - item.assignedTo.reduce((s, id) => s + (itemSplit[id] ?? 0), 0);
@@ -522,13 +290,13 @@ export default function ItemizedScreen() {
                   <View style={styles.splitBody}>
                     {/* Shared split allocator — same UI as Quick / import group-split. */}
                     <SplitEditor
-                      members={members}
+                      members={f.members}
                       included={item.assignedTo}
-                      onToggle={(id) => toggleAssign(item.id, id)}
+                      onToggle={(id) => f.toggleAssign(item.id, id)}
                       mode={item.splitMode ?? 'equal'}
-                      onMode={(m) => { haptic.selection(); setItemSplitMode(item.id, m); }}
+                      onMode={(m) => { haptic.selection(); f.setItemSplitMode(item.id, m); }}
                       rawValue={(id) => item.splitValues?.[id] ?? ''}
-                      onValue={(id, v) => setItemSplitValue(item.id, id, v)}
+                      onValue={(id, v) => f.setItemSplitValue(item.id, id, v)}
                       result={(id) => itemSplit[id] ?? 0}
                       avatarSize={40}
                     />
@@ -546,35 +314,35 @@ export default function ItemizedScreen() {
           ListFooterComponent={
             <>
               <View style={styles.card}>
-                {members.map((m, i) => (
-                  <View key={m.id} style={[styles.perPersonRow, i < members.length - 1 && styles.rowBorder]}>
+                {f.members.map((m, i) => (
+                  <View key={m.id} style={[styles.perPersonRow, i < f.members.length - 1 && styles.rowBorder]}>
                     <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                     <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
-                    <Text style={styles.perPersonAmount}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
+                    <Text style={styles.perPersonAmount}>{formatRupees(f.perPerson[m.id] ?? 0)}</Text>
                   </View>
                 ))}
               </View>
-              {unassignedTotal !== 0 && (
+              {f.unassignedTotal !== 0 && (
                 <View style={styles.unassignedBanner}>
                   <View style={styles.unassignedBannerRow}>
                     <Feather name="alert-circle" size={16} color={colors.expense} />
                     <Text style={styles.unassignedBannerText}>
-                      {formatRupees(Math.abs(unassignedTotal))} {unassignedTotal > 0 ? 'not assigned to anyone' : 'over-assigned'}
+                      {formatRupees(Math.abs(f.unassignedTotal))} {f.unassignedTotal > 0 ? 'not assigned to anyone' : 'over-assigned'}
                     </Text>
                   </View>
-                  {unassignedTotal > 0 && (
-                    <TouchableOpacity style={styles.assignCta} onPress={splitRestEqually} accessibilityRole="button">
+                  {f.unassignedTotal > 0 && (
+                    <TouchableOpacity style={styles.assignCta} onPress={f.splitRestEqually} accessibilityRole="button">
                       <Feather name="users" size={13} color={colors.healthAmber} />
-                      <Text style={styles.assignCtaText}>Split {formatRupees(unassignedTotal)} equally →</Text>
+                      <Text style={styles.assignCtaText}>Split {formatRupees(f.unassignedTotal)} equally →</Text>
                     </TouchableOpacity>
                   )}
                 </View>
               )}
               <View style={styles.navRow}>
-                <TouchableOpacity onPress={() => setStep('items')} style={styles.backBtn} accessibilityRole="button">
+                <TouchableOpacity onPress={() => f.setStep('items')} style={styles.backBtn} accessibilityRole="button">
                   <Text style={styles.backBtnText}>Back</Text>
                 </TouchableOpacity>
-                <PrimaryButton label="Next: Payers" onPress={() => setStep('payers')} disabled={!canProceedAssign} style={{ flex: 1 }} />
+                <PrimaryButton label="Next: Payers" onPress={() => f.setStep('payers')} disabled={!f.canProceedAssign} style={{ flex: 1 }} />
               </View>
             </>
           }
@@ -582,20 +350,20 @@ export default function ItemizedScreen() {
       )}
 
       {/* STEP 3: PAYERS */}
-      {step === 'payers' && (
+      {f.step === 'payers' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.fieldLabel}>Who paid? Must total {formatRupees(total)}</Text>
+          <Text style={styles.fieldLabel}>Who paid? Must f.total {formatRupees(f.total)}</Text>
           <View style={styles.card}>
-            {members.map((m, i) => (
-              <View key={m.id} style={[styles.payerRow, i < members.length - 1 && styles.rowBorder]}>
+            {f.members.map((m, i) => (
+              <View key={m.id} style={[styles.payerRow, i < f.members.length - 1 && styles.rowBorder]}>
                 <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
                 <Text style={styles.payerName} numberOfLines={1}>{m.name}</Text>
                 <View style={styles.payerInputWrap}>
                   <Text style={styles.rupee}>₹</Text>
                   <TextInput
                     style={styles.payerInput}
-                    value={payerAmounts[m.id] ?? ''}
-                    onChangeText={v => setPayerAmounts(prev => ({ ...prev, [m.id]: v }))}
+                    value={f.payerAmounts[m.id] ?? ''}
+                    onChangeText={v => f.setPayerAmounts(prev => ({ ...prev, [m.id]: v }))}
                     keyboardType="decimal-pad"
                     placeholder="0"
                     placeholderTextColor={colors.textMuted}
@@ -604,30 +372,30 @@ export default function ItemizedScreen() {
               </View>
             ))}
           </View>
-          <Text style={[styles.remainderText, { color: paymentRemainder === 0 ? colors.income : colors.expense }]}>
-            {paymentRemainder === 0 ? 'Balanced' : paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} remaining` : `${formatRupees(-paymentRemainder)} over`}
+          <Text style={[styles.remainderText, { color: f.paymentRemainder === 0 ? colors.income : colors.expense }]}>
+            {f.paymentRemainder === 0 ? 'Balanced' : f.paymentRemainder > 0 ? `${formatRupees(f.paymentRemainder)} remaining` : `${formatRupees(-f.paymentRemainder)} over`}
           </Text>
 
           <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => setStep('assign')} style={styles.backBtn} accessibilityRole="button">
+            <TouchableOpacity onPress={() => f.setStep('assign')} style={styles.backBtn} accessibilityRole="button">
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
-            <PrimaryButton label="Review" onPress={() => setStep('review')} disabled={paymentRemainder !== 0 || payments.length === 0} style={{ flex: 1 }} />
+            <PrimaryButton label="Review" onPress={() => f.setStep('review')} disabled={f.paymentRemainder !== 0 || f.payments.length === 0} style={{ flex: 1 }} />
           </View>
         </ScrollView>
       )}
 
       {/* STEP 4: REVIEW */}
-      {step === 'review' && (
+      {f.step === 'review' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.fieldLabel}>Category</Text>
           <CategoryPicker
-            categories={categories}
-            value={selectedCategory}
-            onChange={setSelectedCategory}
+            categories={f.categories}
+            value={f.selectedCategory}
+            onChange={f.setSelectedCategory}
             onCreate={async (name) => {
               const created = await insertCategory(db, name, 'tag', colors.accent);
-              setCategories(prev => [...prev, created]);
+              f.setCategories(prev => [...prev, created]);
               return created;
             }}
           />
@@ -637,22 +405,22 @@ export default function ItemizedScreen() {
             style={styles.noteInput}
             placeholder="e.g. Dinner at Bikanervala (optional)"
             placeholderTextColor={colors.textMuted}
-            value={note}
-            onChangeText={setNote}
+            value={f.note}
+            onChangeText={f.setNote}
           />
 
-          {locEnabled && !isEditing && (
+          {f.locEnabled && !f.isEditing && (
             <View style={styles.locRow}>
-              <Feather name="map-pin" size={15} color={place ? colors.accent : colors.textMuted} />
+              <Feather name="map-pin" size={15} color={f.place ? colors.accent : colors.textMuted} />
               <Text style={styles.locText} numberOfLines={1}>
-                {capturingLoc ? 'Locating…' : place?.label || (place ? 'Location tagged' : 'No location yet')}
+                {f.capturingLoc ? 'Locating…' : f.place?.label || (f.place ? 'Location tagged' : 'No location yet')}
               </Text>
-              {place ? (
-                <TouchableOpacity onPress={() => setPlace(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
+              {f.place ? (
+                <TouchableOpacity onPress={() => f.setPlace(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
                   <Feather name="x" size={15} color={colors.textMuted} />
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={captureLocation} hitSlop={10} disabled={capturingLoc} accessibilityRole="button" accessibilityLabel="Capture location">
+                <TouchableOpacity onPress={f.captureLocation} hitSlop={10} disabled={f.capturingLoc} accessibilityRole="button" accessibilityLabel="Capture location">
                   <Feather name="refresh-cw" size={14} color={colors.accent} />
                 </TouchableOpacity>
               )}
@@ -661,7 +429,7 @@ export default function ItemizedScreen() {
 
           <Text style={[styles.shareLabel, { marginTop: space.md }]}>YOUR SHARE</Text>
           <View style={styles.shareCard}>
-            {members.filter(m => (perPerson[m.id] ?? 0) > 0).map((m, i, arr) => {
+            {f.members.filter(m => (f.perPerson[m.id] ?? 0) > 0).map((m, i, arr) => {
               const isMe = m.is_me === 1;
               return (
                 <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.shareRowBorder]}>
@@ -669,7 +437,7 @@ export default function ItemizedScreen() {
                   <Text style={[styles.perPersonName, isMe && styles.shareNameMe]} numberOfLines={1}>
                     {m.name}{isMe ? ' (you)' : ''}
                   </Text>
-                  <Text style={[styles.perPersonAmount, isMe && styles.shareAmountMe]}>{formatRupees(perPerson[m.id] ?? 0)}</Text>
+                  <Text style={[styles.perPersonAmount, isMe && styles.shareAmountMe]}>{formatRupees(f.perPerson[m.id] ?? 0)}</Text>
                 </View>
               );
             })}
@@ -677,10 +445,10 @@ export default function ItemizedScreen() {
 
           <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Paid by</Text>
           <View style={styles.card}>
-            {payments.map((p, i) => {
-              const m = members.find(m => m.id === p.personId);
+            {f.payments.map((p, i) => {
+              const m = f.members.find(m => m.id === p.personId);
               return m ? (
-                <View key={p.personId} style={[styles.perPersonRow, i < payments.length - 1 && styles.rowBorder]}>
+                <View key={p.personId} style={[styles.perPersonRow, i < f.payments.length - 1 && styles.rowBorder]}>
                   <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
                   <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
                   <Text style={styles.perPersonAmount}>{formatRupees(p.amount)}</Text>
@@ -690,14 +458,14 @@ export default function ItemizedScreen() {
           </View>
 
           <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => setStep('payers')} style={styles.backBtn} accessibilityRole="button">
+            <TouchableOpacity onPress={() => f.setStep('payers')} style={styles.backBtn} accessibilityRole="button">
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
             <PrimaryButton
               label="Log itemized expense"
-              onPress={handleSave}
-              loading={saving}
-              disabled={!canSave || saving}
+              onPress={f.handleSave}
+              loading={f.saving}
+              disabled={!f.canSave || f.saving}
               style={{ flex: 1 }}
             />
           </View>
@@ -705,17 +473,17 @@ export default function ItemizedScreen() {
       )}
 
       {/* Adjustment sheet — keyboard-safe */}
-      <SheetModal visible={showAdjModal} onClose={() => setShowAdjModal(false)} title={`Add ${adjType}`}>
+      <SheetModal visible={f.showAdjModal} onClose={() => f.setShowAdjModal(false)} title={`Add ${f.adjType}`}>
         <View style={styles.modeRow}>
           {(['percent', 'flat'] as const).map(m => (
             <TouchableOpacity
               key={m}
-              style={[styles.modeBtn, adjMode === m && styles.modeBtnActive]}
-              onPress={() => setAdjMode(m)}
+              style={[styles.modeBtn, f.adjMode === m && styles.modeBtnActive]}
+              onPress={() => f.setAdjMode(m)}
               accessibilityRole="button"
-              accessibilityState={{ selected: adjMode === m }}
+              accessibilityState={{ selected: f.adjMode === m }}
             >
-              <Text style={[styles.modeBtnText, adjMode === m && { color: colors.bg }]}>
+              <Text style={[styles.modeBtnText, f.adjMode === m && { color: colors.bg }]}>
                 {m === 'percent' ? 'Percentage %' : 'Flat ₹'}
               </Text>
             </TouchableOpacity>
@@ -723,15 +491,15 @@ export default function ItemizedScreen() {
         </View>
         <TextInput
           style={styles.adjInput}
-          value={adjValue}
-          onChangeText={setAdjValue}
+          value={f.adjValue}
+          onChangeText={f.setAdjValue}
           keyboardType="decimal-pad"
-          placeholder={adjMode === 'percent' ? 'e.g. 5 (for 5%)' : 'Amount in ₹'}
+          placeholder={f.adjMode === 'percent' ? 'e.g. 5 (for 5%)' : 'Amount in ₹'}
           placeholderTextColor={colors.textMuted}
           autoFocus
-          onSubmitEditing={addAdjustment}
+          onSubmitEditing={f.addAdjustment}
         />
-        <PrimaryButton label="Add" onPress={addAdjustment} disabled={!adjValue.trim()} />
+        <PrimaryButton label="Add" onPress={f.addAdjustment} disabled={!f.adjValue.trim()} />
       </SheetModal>
     </KeyboardAvoidingView>
   );
@@ -804,7 +572,7 @@ const styles = StyleSheet.create({
   splitRestText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignItem: { backgroundColor: colors.bgCard, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
-  unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: colors.expense + '22', paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
+  unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: alpha(colors.expense, 13), paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
   splitBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   splitRemainder: { ...type.caption, color: colors.healthAmber, marginTop: 2 },
   sep: { height: space.sm },
@@ -813,15 +581,14 @@ const styles = StyleSheet.create({
   perPersonName: { ...type.body, color: colors.textPrimary, flex: 1 },
   perPersonAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
   shareLabel: { ...type.caption, color: colors.settle, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
-  shareCard: { backgroundColor: colors.settle + '1A', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle + '44', paddingHorizontal: space.md, marginTop: space.sm },
-  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.settle + '33' },
+  shareCard: { backgroundColor: alpha(colors.settle, 10), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.settle, 27), paddingHorizontal: space.md, marginTop: space.sm },
+  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: alpha(colors.settle, 20) },
   shareNameMe: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   shareAmountMe: { color: colors.accent },
-  unassignedWarn: { ...type.label, color: colors.expense, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
-  unassignedBanner: { backgroundColor: colors.expense + '18', borderRadius: radius.md, borderWidth: 1, borderColor: colors.expense + '55', padding: space.sm, gap: space.xs },
+  unassignedBanner: { backgroundColor: alpha(colors.expense, 9), borderRadius: radius.md, borderWidth: 1, borderColor: alpha(colors.expense, 33), padding: space.sm, gap: space.xs },
   unassignedBannerRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   unassignedBannerText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  assignCta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.healthAmber + '22', borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.healthAmber + '44' },
+  assignCta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: alpha(colors.healthAmber, 13), borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: alpha(colors.healthAmber, 27) },
   assignCtaText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   navRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
