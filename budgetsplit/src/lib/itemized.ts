@@ -25,15 +25,15 @@ export function splitItemBase(item: LineItemDraft, base: number): Record<string,
   return splitByMode(base, item.assignedTo, item.splitMode ?? 'equal', item.splitValues ?? {});
 }
 
-/** A tax / tip / discount adjustment on an itemized bill. */
+/** A tax / tip / discount / service-charge adjustment on an itemized bill. */
 export type Adjustment = {
   label: string;
-  type: 'tax' | 'tip' | 'discount';
+  type: 'tax' | 'tip' | 'discount' | 'service';
   mode: 'flat' | 'percent';
   value: string;
 };
 
-/** Bill total (paise) after applying tax/tip/discount adjustments to a subtotal. */
+/** Bill total (paise) after applying tax/tip/service/discount adjustments to a subtotal. */
 export function computeAdjustedTotal(subtotal: number, adjustments: Adjustment[]): number {
   let total = subtotal;
   for (const adj of adjustments) {

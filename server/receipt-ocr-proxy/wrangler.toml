@@ -1,0 +1,6 @@
+name = "receipt-ocr-proxy"
+main = "index.ts"
+compatibility_date = "2026-07-01"
+
+# GEMINI_API_KEY is a secret, not set here — see README.md
+# (`wrangler secret put GEMINI_API_KEY`).

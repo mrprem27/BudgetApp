@@ -147,7 +147,6 @@ Recorded so they stop being re-raised as bugs.
 | Dead schema columns + unused `settings` table | Column drops require a risky table rebuild. Zero runtime cost. **Named set, as of 2026-07-28:** `person.remote_uid`, `budget_group.limit_daily/monthly/yearly`, `budget_group.carry_over`. These are now dead *config* with **no reader at all** — `getBudgetUsage`, the last consumer, was deleted (see Resolved). The `settings` table is not unused either: it holds the `category_global_v1` flag and the one-time-fix completion keys. The five `is_demo` columns that used to be listed here are **gone** — they were written but never read, so the writes and migrations were removed; pre-existing databases keep an inert column. |
 | Files over the ~300-line rule | `AGENTS.md` prescribes extracting **opportunistically** — "whenever you're already editing one for a feature; no big-bang migration". That makes it standing policy, not a scheduled task, so it should not sit on a backlog as if it were. The genuine outliers (`review.tsx` 977, `Onboarding.tsx` 793, `itemized.tsx` 614) are tracked individually instead. |
 | Two token import paths (`src/constants/*` → `src/theme`) | `constants/{colors,typography,layout}` are documented back-compat re-export shims; `src/theme` is canonical. 45 files still import the old path. A sweep is safe but is a large diff that changes no behaviour, and `AGENTS.md` already says to prefer `src/theme` in new code — so it converges without a migration. |
-| [lib/ocr.ts](../src/lib/ocr.ts) unused | Parked `@deprecated`, kept not deleted. On-device OCR reads only a single total, not line items. |
 | Subscription auto-detection dormant | Subscriptions are sourced from **recurring rules** — there is no bank feed to detect from. `lib/subscriptions.ts` stays dormant intentionally. |
 | Raw `TextInput`s not converted to `Input` | Audited 2026-07-13: the remainder are search bars with a clear (×) button, deliberately border-less inline card rows (AGENTS.md rule 4), and hero amount fields. Converting them would *degrade* the design. |
 | Categories stored as strings, not IDs | Safe `renameCategory` shipped instead of a full normalisation migration. |
@@ -155,6 +154,14 @@ Recorded so they stop being re-raised as bugs.
 ---
 
 ## ✅ Resolved
+
+### Shipped 2026-07-29 — receipt OCR revival + encrypted backup/restore
+
+| Item | Detail |
+|---|---|
+| [lib/ocr.ts](../src/lib/ocr.ts) revived, no longer unused | Was parked `@deprecated` (on-device OCR read only a single total, not line items) — removed from Won't-fix, it's not "won't fix" anymore. Gained a tuned regex line-item heuristic, then a swappable provider factory (`src/lib/ocrProviders/`): `device` (Apple Vision + the heuristic, free/offline) and `gemini` (opt-in cloud — sends the photo directly to a free-tier vision model, avoiding the on-device path's column-scrambling failures on two-line item layouts). `gemini` is the app's **first-ever network call**, routed through a small serverless proxy (`server/receipt-ocr-proxy/`) that holds the API key server-side — never shipped in the app bundle. A raw-text debug panel and a full-screen scanning overlay ship alongside it. |
+| Encrypted backup/restore | New `src/lib/backup.ts` + `app/settings/backup.tsx`: passphrase-encrypted whole-DB export/import via the OS share sheet. Whole-replace restore (wipe + reinsert), not a merge. Passphrase is user-typed and never stored on-device — forgetting it makes that backup permanently unrecoverable, the deliberate tradeoff for surviving a lost phone. |
+| New "Service Charge" adjustment type | Itemized bills' Tax/Tip/Discount adjustments gained a 4th type, added in the same pass as the OCR work (receipts commonly print a separate mandatory service charge alongside tip). |
 
 ### Pass 4 — the two decision-blocked audit clusters (2026-07-28)
 

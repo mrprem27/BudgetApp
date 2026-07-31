@@ -236,6 +236,8 @@ export default function SettingsScreen() {
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
         />
         <View style={settingsRowDivider} />
+        <SettingsRow icon="shield" label="Backup & restore" value="Encrypted file" onPress={() => { router.push('/settings/backup'); }} />
+        <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />

@@ -20,6 +20,7 @@ type Props = {
   onSubmitEditing?: () => void;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   accessibilityLabel?: string;
+  secureTextEntry?: boolean;
   style?: ViewStyle;
 };
 
@@ -43,6 +44,7 @@ export function Input({
   onSubmitEditing,
   autoCapitalize,
   accessibilityLabel,
+  secureTextEntry,
   style,
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -73,6 +75,7 @@ export function Input({
           onSubmitEditing={onSubmitEditing}
           autoCapitalize={autoCapitalize}
           accessibilityLabel={accessibilityLabel}
+          secureTextEntry={secureTextEntry}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />

@@ -27,6 +27,7 @@ const K = {
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
   backupAnchorAt: 'backup_anchor_at',
+  ocrProvider: 'ocr_provider',
 } as const;
 
 export const SETTINGS_KEYS = K;
@@ -95,4 +96,10 @@ export const settings = {
   // was first turned on if the user hasn't exported yet.
   backupAnchorAt: () => getNumber(K.backupAnchorAt),
   setBackupAnchorAt: (v: number) => setNumber(K.backupAnchorAt, v),
+
+  // Receipt-scan provider: 'device' (free/offline, Apple Vision + regex) or
+  // 'gemini' (cloud, free tier, better accuracy) — see lib/ocrProviders/index.ts
+  // for the full comparison. Defaults to 'gemini' when unset.
+  ocrProvider: () => getString(K.ocrProvider),
+  setOcrProvider: (v: 'device' | 'gemini') => setString(K.ocrProvider, v),
 };

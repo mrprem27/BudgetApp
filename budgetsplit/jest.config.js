@@ -13,6 +13,7 @@ module.exports = {
     '^expo-sqlite$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^react-native-get-random-values$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    '^expo/virtual/env$': '<rootDir>/src/__tests__/__mocks__/expoVirtualEnv.js',
     '^expo-image-picker$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     // Ships untransformed ESM; needs a real (empty) glyphMap, see the mock.
     '^@expo/vector-icons$': '<rootDir>/src/__tests__/__mocks__/vectorIcons.js',

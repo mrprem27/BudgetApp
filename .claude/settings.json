@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx jest *)",
+      "Bash(git fetch *)",
+      "Bash(xcrun simctl *)",
+      "Bash(cliclick *)",
+      "Bash(osascript -e *)",
+      "Bash(source /private/tmp/claude-501/*)",
+      "Bash(python3 - <<*)"
+    ]
+  }
+}

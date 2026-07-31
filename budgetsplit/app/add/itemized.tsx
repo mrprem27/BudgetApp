@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   FlatList, ScrollView, KeyboardAvoidingView, Platform,
+  ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +15,8 @@ import { insertCategory } from '../../src/db/queries/categories';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
 import { computeItemSubtotal, splitItemBase, type Adjustment } from '../../src/lib/itemized';
 import { SplitEditor } from '../../src/components/finance/add/SplitEditor';
+import { ReceiptScanSheet } from '../../src/components/finance/add/ReceiptScanSheet';
+import { ScanningOverlay } from '../../src/components/finance/add/ScanningOverlay';
 import { asFeather } from '../../src/constants/palette';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -21,7 +24,7 @@ import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
-import { useItemizedForm, ITEMIZED_STEPS } from '../../src/hooks/useItemizedForm';
+import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { alpha } from '../../src/theme';
 
 /**
@@ -45,8 +48,6 @@ export default function ItemizedScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>Split by items</Text>
         </View>
-        {/* Receipt scan hidden until true AI line-item extraction exists (the
-            old on-device OCR only read a single total). See PLAN.md. */}
         <Text style={styles.stepIndicator}>{ITEMIZED_STEPS.indexOf(f.step) + 1}/4</Text>
         {f.step === 'review' && (
           <TouchableOpacity onPress={f.handleSave} disabled={!f.canSave || f.saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
@@ -82,6 +83,30 @@ export default function ItemizedScreen() {
       {/* STEP 1: ITEMS */}
       {f.step === 'items' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.splitRestBtn}
+              onPress={() => {
+                if (f.scanning) return;
+                ActionSheetIOS.showActionSheetWithOptions(
+                  { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+                  (i) => {
+                    if (i === 1) f.handleScanReceipt('camera');
+                    if (i === 2) f.handleScanReceipt('gallery');
+                  },
+                );
+              }}
+              disabled={f.scanning}
+              accessibilityRole="button"
+              accessibilityLabel="Scan receipt"
+            >
+              {f.scanning
+                ? <ActivityIndicator size="small" color={colors.accent} />
+                : <Feather name="camera" size={16} color={colors.accent} />}
+              <Text style={styles.splitRestText}>{f.scanning ? 'Reading receipt…' : 'Scan receipt'}</Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.addCardHeader}>
             <Feather name="plus" size={15} color={colors.accent} />
             <Text style={styles.addCardHeaderText}>Add item</Text>
@@ -238,7 +263,7 @@ export default function ItemizedScreen() {
             <>
               <Text style={styles.sectionLabel}>ADJUSTMENTS</Text>
               <View style={styles.adjButtons}>
-                {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
+                {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['service', 'percent', 'Service'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
                   <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => f.openAdj(t)} accessibilityRole="button">
                     <Feather name={ic} size={13} color={colors.accent} />
                     <Text style={styles.adjBtnText}>{label}</Text>
@@ -473,7 +498,7 @@ export default function ItemizedScreen() {
       )}
 
       {/* Adjustment sheet — keyboard-safe */}
-      <SheetModal visible={f.showAdjModal} onClose={() => f.setShowAdjModal(false)} title={`Add ${f.adjType}`}>
+      <SheetModal visible={f.showAdjModal} onClose={() => f.setShowAdjModal(false)} title={`Add ${ADJUSTMENT_LABELS[f.adjType]}`}>
         <View style={styles.modeRow}>
           {(['percent', 'flat'] as const).map(m => (
             <TouchableOpacity
@@ -501,6 +526,18 @@ export default function ItemizedScreen() {
         />
         <PrimaryButton label="Add" onPress={f.addAdjustment} disabled={!f.adjValue.trim()} />
       </SheetModal>
+
+      {/* Receipt scan result — raw OCR text always visible + best-effort item guesses */}
+      <ReceiptScanSheet
+        visible={f.showScanSheet}
+        onClose={() => f.setShowScanSheet(false)}
+        rawText={f.scanResult?.rawText ?? null}
+        candidates={f.scanResult?.candidates ?? []}
+        onAddItems={(drafts) => { f.addItems(drafts); f.setShowScanSheet(false); }}
+      />
+
+      {/* Blocks all interaction (incl. manual "Add item") for the duration of a scan */}
+      <ScanningOverlay visible={f.scanning} />
     </KeyboardAvoidingView>
   );
 }

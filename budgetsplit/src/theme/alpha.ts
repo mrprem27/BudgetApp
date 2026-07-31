@@ -33,6 +33,7 @@ export const OPACITY = {
   33: '55',  // 85/255
   38: '60',  // 96/255
   40: '66',  // 102/255
+  95: 'F2',  // 242/255 — near-opaque full-screen overlay backdrops
 } as const;
 
 export type OpacityPct = keyof typeof OPACITY;
