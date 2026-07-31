@@ -69,9 +69,9 @@ export function useUndo() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', left: layout.screenPaddingH, right: layout.screenPaddingH, borderRadius: radius.md, overflow: 'hidden', ...shadow.lg },
-  toast: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgMuted, paddingHorizontal: space.md, paddingVertical: space.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
+  wrap: { position: 'absolute', left: layout.screenPaddingH, right: layout.screenPaddingH, borderRadius: radius.lg, overflow: 'hidden', ...shadow.lg },
+  toast: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgElevated, paddingHorizontal: space.md, paddingVertical: space.md - 2, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg },
   message: { ...type.body, color: colors.textPrimary, flex: 1 },
-  undo: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  undo: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.2 },
   progress: { position: 'absolute', bottom: 0, left: 0, height: 2, backgroundColor: colors.accent },
 });

@@ -294,7 +294,7 @@ export default function DashboardScreen() {
               </FadeIn>
             )}
 
-            {/* Month-end forecast — Month view only */}
+            {/* "This month" tile — forecast + top shift + optional streak */}
             {tab === 'month' && flags.forecast && forecast?.ready && (
               <FadeIn delay={280}>
                 <ForecastCard
@@ -304,14 +304,19 @@ export default function DashboardScreen() {
                   dayOfMonth={getDate(new Date())}
                   daysInMonth={getDaysInMonth(new Date())}
                   topShift={flags.dashboardInsights ? topShift : null}
+                  streakDays={flags.streak ? streak : undefined}
+                  streakLoggedDays={flags.streak ? streakLoggedDays : undefined}
                   obfuscate={hideAmounts}
                   onPressInsights={() => router.push('/insights')}
                 />
               </FadeIn>
             )}
 
-            {/* Tracking streak — opt-in; StreakCard self-hides under 3 days. */}
-            {flags.streak && (
+            {/* Fallback: when the forecast tile isn't shown (e.g. Today / Year tabs
+                or forecast flag off), streak still gets its own compact card so
+                the signal doesn't disappear from the dashboard. StreakCard
+                self-hides under 3 days. */}
+            {flags.streak && !(tab === 'month' && flags.forecast && forecast?.ready) && (
               <FadeIn delay={340}>
                 <StreakCard
                   streak={streak}

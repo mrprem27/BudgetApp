@@ -57,7 +57,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   // Spring in on mount.
   useEffect(() => {
     translateY.value = SCREEN_H;
-    translateY.value = withSpring(0, { damping: 16, stiffness: 170, mass: 0.7 });
+    translateY.value = withSpring(0, { damping: 20, stiffness: 220, mass: 0.6 });
   }, [translateY]);
 
   const finishClose = () => { if (mountedRef.current) onClose(); };
@@ -156,17 +156,21 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bgCard,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    maxHeight: '88%',
+    paddingTop: space.xs,
+    maxHeight: '92%',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.border,
     ...shadow.lg,
   },
   bodyWrap: { flexShrink: 1 },
-  grabber: { paddingBottom: space.xs },
-  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border, marginBottom: space.sm },
+  grabber: { paddingBottom: space.xs, paddingTop: space.sm },
+  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: colors.textMuted, opacity: 0.5, marginBottom: space.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
-  title: { ...type.subheading, color: colors.textPrimary },
+  title: { ...type.heading, color: colors.textPrimary },
   content: { gap: space.md, paddingTop: space.xs },
 });

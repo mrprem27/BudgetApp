@@ -23,9 +23,12 @@ import { getAllGroups } from '../../src/db/queries/groups';
 import { getGoals, type SavingsGoal } from '../../src/db/queries/savings';
 import { categoryVisual } from '../../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
-import { formatRupees, formatCompact } from '../../src/lib/money';
+import { formatCompact } from '../../src/lib/money';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { SectionLabel } from '../../src/components/ui/SectionLabel';
+import { TabPills } from '../../src/components/ui/TabPills';
+import { AmountText } from '../../src/components/ui/AmountText';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { alpha } from '../../src/theme';
 
@@ -184,28 +187,8 @@ export default function CategoryDetailScreen() {
   // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
   const listHeader = (
     <View style={styles.headerBlocks}>
-        {/* Name + back live in the shared ScreenHeader above the list; this line
-            keeps the count, and the budget card below is the screen's hero. */}
-        <Text style={styles.headerSub}>
-          {view.count} {view.count === 1 ? 'transaction' : 'transactions'} {PERIOD_NOUN[period]}
-        </Text>
-
         {/* Period selector — Today / Month / Year, mirroring the Dashboard */}
-        <View style={styles.periodRow}>
-          <View style={styles.segment}>
-            {PERIODS.map(p => (
-              <TouchableOpacity
-                key={p.key}
-                style={[styles.segmentBtn, period === p.key && styles.segmentBtnActive]}
-                onPress={() => setPeriod(p.key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: period === p.key }}
-              >
-                <Text style={[styles.segmentText, period === p.key && styles.segmentTextActive]}>{p.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        <TabPills tabs={PERIODS} active={period} onChange={(k) => setPeriod(k as Period)} />
 
         {loading ? (
           <>
@@ -218,7 +201,7 @@ export default function CategoryDetailScreen() {
             {showBudgetCard ? (
               <View style={styles.card}>
                 <View style={styles.budgetTop}>
-                  <Text style={styles.cardLabel}>BUDGET</Text>
+                  <SectionLabel first>Budget</SectionLabel>
                   <Text style={[styles.budgetPct, { color: view.spent > view.budget ? colors.expense : colors.healthAmber }]}>
                     {Math.round((view.spent / view.budget) * 100)}% used
                   </Text>
@@ -226,19 +209,19 @@ export default function CategoryDetailScreen() {
                 <BudgetBar allocated={view.budget} spent={view.spent} />
                 <View style={styles.budgetFooter}>
                   <View>
-                    <Text style={styles.budgetAmt}>{formatRupees(view.spent)}</Text>
+                    <AmountText paise={view.spent} size="lg" forceColor={colors.textPrimary} />
                     <Text style={styles.budgetCaption}>spent</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.budgetAmt, { color: colors.textSecondary }]}>{formatRupees(view.budget)}</Text>
+                    <AmountText paise={view.budget} size="lg" forceColor={colors.textSecondary} />
                     <Text style={styles.budgetCaption}>budget</Text>
                   </View>
                 </View>
               </View>
             ) : (
               <View style={styles.card}>
-                <Text style={styles.cardLabel}>SPENT {PERIOD_NOUN[period].toUpperCase()}</Text>
-                <Text style={styles.amount}>{formatRupees(view.spent)}</Text>
+                <SectionLabel first>Spent {PERIOD_NOUN[period]}</SectionLabel>
+                <AmountText paise={view.spent} size="xl" forceColor={colors.textPrimary} style={{ marginTop: space.xs }} />
                 <Text style={styles.amountSub}>
                   {view.totalAll > 0 ? `${Math.round((view.spent / view.totalAll) * 100)}% of all spending` : 'No spending yet'}
                   {view.count > 0 ? ` · avg ${formatCompact(Math.round(view.spent / view.count))}` : ''}
@@ -263,7 +246,7 @@ export default function CategoryDetailScreen() {
             {/* Where it goes — my spend split across personal + groups */}
             {view.perGroup.length > 1 && (
               <View style={styles.card}>
-                <Text style={styles.sectionLabel}>WHERE IT GOES</Text>
+                <SectionLabel first>Where it goes</SectionLabel>
                 {view.perGroup.map(g => {
                   const pct = view.spent > 0 ? Math.round((g.amt / view.spent) * 100) : 0;
                   return (
@@ -280,7 +263,7 @@ export default function CategoryDetailScreen() {
             {/* Top places */}
             {view.places.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.sectionLabel}>TOP PLACES</Text>
+                <SectionLabel first>Top places</SectionLabel>
                 {view.places.map(p => (
                   <View key={p.label} style={styles.insRow}>
                     <Feather name="map-pin" size={13} color={colors.textMuted} />
@@ -295,7 +278,7 @@ export default function CategoryDetailScreen() {
             {/* Recurring in this category */}
             {recurRules.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.sectionLabel}>RECURRING</Text>
+                <SectionLabel first>Recurring</SectionLabel>
                 {recurRules.map(r => {
                   const mine = myShareOf(r, myId) || r.shares.reduce((s, x) => s + x.amount, 0);
                   const name = (r.note && r.note.trim()) || r.category;
@@ -314,7 +297,7 @@ export default function CategoryDetailScreen() {
             {/* Savings goals tagged to this category */}
             {goals.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.sectionLabel}>GOALS</Text>
+                <SectionLabel first>Goals</SectionLabel>
                 {goals.map(g => (
                   <TouchableOpacity key={g.id} style={styles.insRow} onPress={() => router.push(`/savings/${g.id}`)} accessibilityRole="button">
                     <Feather name="target" size={13} color={g.color ?? colors.accent} />
@@ -327,7 +310,7 @@ export default function CategoryDetailScreen() {
             )}
 
             {/* Transactions header — the rows themselves are the FlatList data below */}
-            {view.txns.length > 0 && <Text style={styles.txnLabel}>Transactions</Text>}
+            {view.txns.length > 0 && <SectionLabel>Transactions</SectionLabel>}
           </>
         )}
     </View>
@@ -337,6 +320,7 @@ export default function CategoryDetailScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title={categoryName}
+        subtitle={loading ? undefined : `${view.count} ${view.count === 1 ? 'transaction' : 'transactions'} ${PERIOD_NOUN[period]}`}
         onBack={() => router.back()}
         right={<IconCircle icon={visual.icon} size={32} iconSize={17} color={visual.color} />}
       />

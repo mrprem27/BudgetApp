@@ -11,6 +11,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { SectionLabel } from '../src/components/ui/SectionLabel';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
@@ -81,7 +82,7 @@ type Section = { title: string; data: AuditLog[] };
 const SectionCard = React.memo(function SectionCard({ section }: { section: Section }) {
   return (
     <View>
-      <Text style={styles.sectionLabel}>{section.title}</Text>
+      <SectionLabel count={section.data.length}>{section.title}</SectionLabel>
       <View style={styles.card}>
         {section.data.map((item, i) => {
           const dotColor = DOT_COLOR[item.action] ?? colors.accent;
@@ -156,7 +157,11 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Audit log" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Audit log"
+        subtitle={loading ? undefined : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
+        onBack={() => router.back()}
+      />
 
       {loadError ? (
         <ErrorState onRetry={reload} />
@@ -170,7 +175,7 @@ export default function HistoryScreen() {
           maxToRenderPerBatch={8}
           windowSize={9}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
+          ListHeaderComponent={null}
           ListEmptyComponent={
             loading ? null : (
               <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />

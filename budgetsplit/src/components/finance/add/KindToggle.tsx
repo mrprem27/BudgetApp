@@ -1,62 +1,68 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, space } from '../../tokens';
+import { colors, type, space, radius } from '../../tokens';
+import { haptic } from '../../../lib/haptics';
 
 export type AddKind = 'income' | 'expense' | 'transfer';
 
 type Props = { kind: AddKind; onSelect: (k: AddKind) => void; showTransfer?: boolean };
 
-/** Expense / Transfer / Income segmented toggle at the top of Add. Presentational —
- *  the side effects of switching kind (reloading the category catalog, picking the
- *  right group) live in the form hook via `onSelect`.
+const TINT: Record<AddKind, string> = {
+  expense: colors.accent,
+  transfer: colors.settle,
+  income: colors.income,
+};
+
+/**
+ * Expense / Transfer / Income segmented toggle at the top of Add.
  *
- *  `showTransfer` is false when the user has splitting switched off — a settlement
- *  needs someone to settle with. Callers must still pass true while *editing* an
- *  existing transfer, or the pill would vanish from a row that already is one. */
+ * Refined: 13pt labels (was 11pt — near-illegible), 40pt tall pill with
+ * bigger inner active tab, selection haptic on switch, subtle border on
+ * the track for definition on the dark background.
+ */
 export function KindToggle({ kind, onSelect, showTransfer = true }: Props) {
+  const kinds: AddKind[] = showTransfer ? ['expense', 'transfer', 'income'] : ['expense', 'income'];
   return (
-    <View style={styles.kindToggleRow}>
-      <View style={styles.kindRow}>
-        <TouchableOpacity
-          style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExpenseActive]}
-          onPress={() => onSelect('expense')}
-          accessibilityRole="button"
-          accessibilityState={{ selected: kind === 'expense' }}
-        >
-          <Text style={[styles.kindLabel, kind === 'expense' && styles.kindLabelActive]}>Expense</Text>
-        </TouchableOpacity>
-        {showTransfer && (
-          <TouchableOpacity
-            style={[styles.kindBtn, kind === 'transfer' && styles.kindBtnTransferActive]}
-            onPress={() => onSelect('transfer')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: kind === 'transfer' }}
-          >
-            <Text style={[styles.kindLabel, kind === 'transfer' && styles.kindLabelTransferActive]}>Transfer</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.kindBtn, kind === 'income' && styles.kindBtnIncomeActive]}
-          onPress={() => onSelect('income')}
-          accessibilityRole="button"
-          accessibilityState={{ selected: kind === 'income' }}
-        >
-          <Text style={[styles.kindLabel, kind === 'income' && styles.kindLabelIncomeActive]}>Income</Text>
-        </TouchableOpacity>
+    <View style={styles.wrap}>
+      <View style={styles.track}>
+        {kinds.map(k => {
+          const active = kind === k;
+          const label = k === 'expense' ? 'Expense' : k === 'transfer' ? 'Transfer' : 'Income';
+          return (
+            <TouchableOpacity
+              key={k}
+              style={[styles.btn, active && { backgroundColor: TINT[k] }]}
+              onPress={() => { if (!active) haptic.selection(); onSelect(k); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              hitSlop={{ top: 6, bottom: 6 }}
+            >
+              <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  kindToggleRow: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
-  kindRow: { flexDirection: 'row', backgroundColor: colors.bg, borderRadius: 100, padding: 3, borderWidth: 1, borderColor: colors.border },
-  kindBtn: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
-  kindBtnExpenseActive: { backgroundColor: colors.accent },
-  kindBtnIncomeActive: { backgroundColor: colors.income },
-  kindBtnTransferActive: { backgroundColor: colors.settle },
-  kindLabel: { fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_600SemiBold' },
-  kindLabelActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  kindLabelIncomeActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  kindLabelTransferActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  wrap: { alignItems: 'center', paddingBottom: space.md },
+  track: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgMuted,
+    borderRadius: radius.pill,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  btn: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: radius.pill,
+    minWidth: 88,
+    alignItems: 'center',
+  },
+  label: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.2 },
+  labelActive: { color: colors.bg },
 });

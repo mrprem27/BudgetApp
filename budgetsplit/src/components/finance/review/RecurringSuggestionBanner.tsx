@@ -27,11 +27,11 @@ export function RecurringSuggestionBanner({ count, onPress, onDismiss }: { count
 const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,
-    marginHorizontal: space.md, marginBottom: space.xs,
-    paddingHorizontal: space.md, paddingVertical: space.sm,
-    borderRadius: radius.md, backgroundColor: colors.accentMuted,
+    marginHorizontal: space.md, marginBottom: space.sm,
+    paddingHorizontal: space.md, paddingVertical: space.sm + 2,
+    borderRadius: radius.lg, backgroundColor: colors.accentMuted,
     borderWidth: 1, borderColor: alpha(colors.accent, 33),
   },
-  iconDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  iconDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: alpha(colors.accent, 14), alignItems: 'center', justifyContent: 'center' },
   text: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
 });
