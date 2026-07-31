@@ -125,7 +125,7 @@ export function HeroCard({
       <View style={styles.numberRow}>
         {obfuscate
           ? <Text style={styles.obfuscated}>₹ ••••</Text>
-          : <AmountText paise={spent} size="xxl" forceColor={colors.textPrimary} compact zeroDash />
+          : <AmountText paise={spent} size="xl" forceColor={colors.textPrimary} compact zeroDash />
         }
       </View>
       {/* Delta line — always rendered (empty when N/A) so the hero never changes

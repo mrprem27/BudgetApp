@@ -238,7 +238,7 @@ export default function BudgetEditorScreen() {
         <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>Monthly commitment</Text>
-            <AmountText paise={monthlyApprox} size="xxl" forceColor={colors.accent} compact />
+            <AmountText paise={monthlyApprox} size="xl" forceColor={colors.accent} compact />
             <Text style={styles.totalSub}>
               Daily & yearly limits are normalised · one-time isn't counted
             </Text>

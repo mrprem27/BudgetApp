@@ -13,6 +13,7 @@ import { BudgetBar } from '../BudgetBar';
 import { MemberAvatar } from '../MemberAvatar';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionLabel } from '../../ui/SectionLabel';
 import { alpha } from '../../../theme';
 
 type Props = {
@@ -96,7 +97,7 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
 
       {contributions.total > 0 && (
         <View style={styles.contribCard}>
-          <Text style={styles.contribTitle}>Who paid what</Text>
+          <SectionLabel first>Who paid what</SectionLabel>
           {contributions.rows.map((r, i) => (
             <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
               <View style={styles.contribHead}>
@@ -137,7 +138,7 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
           if (lines.length === 0) return null;
           return (
             <View key={section} style={{ marginBottom: space.md }}>
-              <Text style={styles.cadenceLabel}>{section}</Text>
+              <SectionLabel>{section}</SectionLabel>
               <View style={styles.catCard}>
                 {lines.map((c, i) => {
                   const vis = categoryVisual(c.category);

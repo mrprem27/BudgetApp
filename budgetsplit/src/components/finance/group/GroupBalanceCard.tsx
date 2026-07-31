@@ -57,9 +57,9 @@ export function GroupBalanceCard({ net, meId, simplifiedSettles, personMap, onSe
 }
 
 const styles = StyleSheet.create({
-  balCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm + 2, marginBottom: space.sm, borderWidth: 1 },
-  balCardLabel: { ...type.caption, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 },
-  balCardAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, letterSpacing: -0.5, lineHeight: 26 },
+  balCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm + 2, marginBottom: space.md, borderWidth: 1 },
+  balCardLabel: { ...type.overline, marginBottom: 2 },
+  balCardAmt: { ...type.amountLG, letterSpacing: -0.5 },
   balCardBtn: { paddingHorizontal: space.md + 2, paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent },
   balCardBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

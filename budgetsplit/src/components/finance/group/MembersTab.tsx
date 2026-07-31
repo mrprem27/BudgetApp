@@ -9,6 +9,7 @@ import { MemberAvatar } from '../MemberAvatar';
 import { AvatarStack } from '../AvatarStack';
 import { BalanceRow } from '../BalanceRow';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionLabel } from '../../ui/SectionLabel';
 import type { Person } from '../../../db/queries/persons';
 
 type Settle = { from: string; to: string; amount: number };
@@ -111,7 +112,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
 
       {settlements.length > 0 ? (
         <>
-          <Text style={styles.balSectionLabel}>{settlements.length} payment{settlements.length > 1 ? 's' : ''} to settle</Text>
+          <SectionLabel count={settlements.length}>Payments to settle</SectionLabel>
           <View style={styles.card}>
             {settlements.map((s, i) => {
               const fromPerson = personMap.get(s.from);

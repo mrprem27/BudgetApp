@@ -43,6 +43,6 @@ export function AmountField({ amountText, onChangeText, kind, autoFocus, transfe
 
 const styles = StyleSheet.create({
   block: { alignItems: 'center', paddingBottom: space.md, paddingTop: space.sm, borderBottomWidth: 1, borderColor: alpha(colors.border, 33) },
-  input: { ...type.amountXXL, textAlign: 'center', paddingVertical: space.xs, alignSelf: 'stretch', width: '100%' },
-  cursor: { width: 56, height: 3, borderRadius: 2, marginTop: space.sm },
+  input: { ...type.amountXL, textAlign: 'center', paddingVertical: space.xs, alignSelf: 'stretch', width: '100%' },
+  cursor: { width: 48, height: 2, borderRadius: 1, marginTop: space.sm },
 });

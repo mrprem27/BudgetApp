@@ -3,107 +3,94 @@
 ## Original problem statement
 Continuously improve the app's UI/UX until it reaches production quality
 comparable to Apple, Linear, Notion, Stripe, Airbnb, Arc, and Raycast.
-Challenge every design decision. Full overhaul, dark-only, main screens
-first (Home / Groups / Group Budget / Plan / Insights / Add expense /
-transfer / income / Review), plus later rounds on Category detail,
-History, overlays, notifications, and Add-flow sub-components.
+Challenge every design decision. Dark-only. Priority: Home, Groups, Group
+Budget, Plan, Insights, Add expense/transfer/income, Review, Category
+detail, History, overlays / notifications / Add-flow sub-components, and
+**Groups end-to-end (each sub-section) grounded in FEATURES_AND_FLOWS.md**.
+
+## Guiding constraints (as per user)
+- **Don't inflate font sizes unnecessarily.**
+- **Don't remove features.**
+- **Keep the app fast, calibrated, not clunky.**
 
 ## Tech stack (existing)
 - Expo Router (React Native 0.85, React 19, TypeScript)
 - SQLite (expo-sqlite) — local-first, no backend
 - Zustand store, gifted-charts, expo-blur, expo-haptics
-- Custom `src/theme/` design system (colors / typography / layout / alpha)
+- Custom `src/theme/` design system
 
 ---
 
 ## What's been implemented
 
 ### Round 1 — Design tokens & primitives
-Typography (`display`, `overline`, `amountXXL`), softer `bgCard`, new
-`divider` token, `radius.xl`/`xxl`, `layout.minTap` (44).
-Rewrote `PrimaryButton` (solid + inner highlight), `ScreenHeader`
-(subtitle slot, 44pt tap), `TabPills` (animated sliding indicator),
-`SectionCard` (rotating chevron), `EmptyState`, `Badge`,
-`SecondaryButton`, `AmountText` (added `xxl`).
-Added `SectionLabel` — the single source of truth for uppercase
-eyebrows across the app.
+`display`, `overline`, `amountXXL` type tokens; softer `bgCard`; new
+`divider` token; `radius.xl`/`xxl`; `layout.minTap` (44). Rewrote
+`PrimaryButton`, `ScreenHeader` (+ subtitle slot), `TabPills`
+(animated), `SectionCard`, `EmptyState`, `Badge`, `SecondaryButton`,
+`AmountText` (added `xxl`). Added `SectionLabel`.
 
 ### Round 2 — Screen polish
-- **Group Budget**: live subtitle, 48pt hero total, softer dividers.
-- **Motion Pass**: staggered FadeIn on Home (hero/tabs/cats/balance/
-  forecast/streak at 0/80/160/220/280/340ms) + per-row cascade in
-  `CategoryRankList`.
-- **Review**: live header subtitle, swipe-to-delete on every pending
-  row, section headers use SectionLabel, cleaner assign-all chips
-  with leading icons.
-- **Add screens**: "How was it paid?" and "Frequency" swapped to
-  SectionLabel; itemized total uses proper typography tokens.
+Group Budget hero + subtitle; motion pass on Home; Review swipe-to-
+delete + live subtitle; Add screens uppercase-label sweep.
 
-### Round 3 — Overlays, notifications & Add sub-components
-- **`DraggableSheet`** (bottom sheet): radius.xl top corners, bigger
-  40×4 grabber handle (was 40×5 bordered), 92% max height (was 88%),
-  snappier spring (damping 20 / stiffness 220), softer border.
-- **`ModalHeader`**: optional `subtitle` slot; smaller close icon
-  (22 vs 24) for less visual weight; symmetric 44×44 sides so title
-  stays optically centered.
-- **`MoreOptions`**: pill-shaped disclosure with animated (rotating)
-  chevron and selection haptic, on `bgMuted` — reads as a control now,
-  not a lost link.
-- **`UndoToast`**: radius.lg (was md), softer `bgElevated` background
-  (was flat `bgMuted`), tighter padding, letterSpacing on the Undo
-  action.
-- **`RecurringSuggestionBanner`**: radius.lg, larger tinted icon dot,
-  softer bottom margin.
-- **`KindToggle`** (Expense/Transfer/Income): 13pt labels (was 11pt —
-  near-illegible), 40pt tall pill, 88pt min width per button,
-  selection haptic on switch, border definition on the track.
-- **`AmountField`** (Add hero amount): now uses `type.amountXXL` (48pt)
-  — was hand-set 36pt. Thicker (3pt) cursor bar, dimmer placeholder.
-- **`CategoryDatePills`**: bigger 44pt tap targets, tinted border when a
-  category is picked (filled-state affordance), calendar icon on the
-  date pill for scanability.
+### Round 3 — Overlays & Add sub-components
+`DraggableSheet` (radius.xl, softer handle, snappier spring),
+`ModalHeader` (subtitle slot), `MoreOptions` (pill + animated
+chevron), `UndoToast` (softer, radius.lg), `RecurringSuggestionBanner`,
+`KindToggle` (13pt labels, tactile), `CategoryDatePills` (44pt taps).
+**Note (Round 5 correction)**: `AmountField` briefly used
+`amountXXL` (48pt) — reverted to `amountXL` (36pt) per user request.
 
 ### Round 4 — Category / History / Home consolidation
-- **Category detail** (`app/category/[name].tsx`):
-  - Live header subtitle: "27 transactions this month".
-  - Hand-rolled segmented pills swapped for shared `TabPills`.
-  - Hero amount uses `AmountText` xl (was hand-set 30pt SpaceMono).
-  - Every uppercase section (Budget / Spent / Where it goes / Top
-    places / Recurring / Goals / Transactions) → `SectionLabel`.
-- **History** (`app/history.tsx`):
-  - Live header subtitle: "42 entries".
-  - Date-group headers (Today / Yesterday / dd MMM) → `SectionLabel`
-    with entry-count badge.
-  - Dropped the intro paragraph (context is in the subtitle now).
-- **Home Consolidation**: The `StreakCard` was folded into `ForecastCard`
-  — the single "This month" tile now shows Forecast → Biggest shift →
-  Streak with dividers between each. Each block hides when empty. The
-  separate `StreakCard` is still rendered as a fallback on Today/Year
-  tabs where the forecast tile isn't shown. Card uses `radius.xl`
-  and the internal eyebrow labels reuse the `overline` token.
+Category detail: header subtitle, TabPills, SectionLabel sweep.
+History: header subtitle + SectionLabel sweep.
+Home consolidation: Streak folded into a single "This month" tile
+inside ForecastCard (was two separate cards → one).
+
+### Round 5 — Groups sweep (grounded in FEATURES_AND_FLOWS.md §4 / §5)
+- **Group hub** (`app/group/[id].tsx`): removed the hand-rolled
+  breadcrumb header ("‹ Groups › {name}") and its duplicate-title
+  `GroupHero(name)`. Now a single `ScreenHeader` with the group name
+  as title, subtitle `"N members · ₹X this month"`, and the ⋯ menu
+  as a themed round header button — matches the pattern used on
+  every other screen. Hand-rolled tab strip replaced with the shared
+  animated `TabPills` component (Expenses · Recurring · Budget ·
+  Members). No feature removed; no font inflation.
+- **`GroupHero`**: slimmed to a compact identity strip — coloured
+  icon tile + AvatarStack. Name and count now live in the header
+  subtitle, so the previous duplicates are gone. Kept the identity
+  cues (colour, member faces) that text can't carry.
+- **`GroupBalanceCard`**: uppercase label → `type.overline`;
+  amount uses `type.amountLG` token (was hand-set 22pt); no size
+  change to the visible amount. Consistent tokens throughout.
+- **BudgetTab**: "Who paid what" and each section heading
+  (Home & Living, Food, …) now use `SectionLabel`. Overview card
+  unchanged (already tokenised). No sizes inflated.
+- **MembersTab**: "N payments to settle" now uses
+  `<SectionLabel count={N}>Payments to settle</SectionLabel>`.
+- **Reverts (per user font guidance)**: Home hero back to `xl`
+  (36pt) from `xxl` (48pt); Group budget commitment back to `xl`;
+  AmountField input back to `xl` (36pt).
 
 ---
 
 ## Verification status
-**No visual verification performed** — this is React Native / Expo;
-Emergent's browser preview tool can't render it. All 33+ touched files
-pass bracket-balance checks (`{`, `(`, `[` all `+0`). **User must run
-`cd /app/budgetsplit && npx expo start`** on their device to visually
-QA. If anything looks off, share a screenshot and I'll iterate.
+**No visual verification performed** — React Native / Expo, no
+browser preview possible. Every touched file passes bracket-balance
+checks. Run `cd /app/budgetsplit && npx expo start` on the device
+to see the changes.
 
 ## Backlog / next priorities
-- **P1**: Reports (`app/reports.tsx`) — remaining screen with drifted
-  inline uppercase labels.
-- **P1**: Settings / Storage — likely more shouty labels.
-- **P2**: Skeleton loaders on cold load.
-- **P2**: TxnDetail screen — check for typography drift.
-- **P3**: Consider a global `AppToast` for non-undo notifications
-  (currently only `UndoToast` exists for destructive-with-undo).
-- **P3**: `HeroCard`'s hand-rolled ring vs a shared `RingProgress`
-  primitive so it's reusable.
+- **P1**: Reports (`app/reports.tsx`) — sweep remaining inline
+  uppercase labels.
+- **P1**: Settings — long list of ad-hoc rows; align to `SettingsRow`
+  patterns already used elsewhere.
+- **P2**: Skeleton loaders on cold-open.
+- **P2**: `TxnDetail` screen — check for typography drift.
+- **P3**: A global non-destructive `AppToast` alongside `UndoToast`.
 
 ## User personas
-- **Solo spender**: tracks own money (`flags.splitting = false`). Groups
-  tab becomes "Personal".
+- **Solo spender**: tracks own money.
 - **Group spender**: flat-mates, trips, families — splits shared costs.
 - **Optimizer**: uses Insights / Recurring / Forecast to plan ahead.

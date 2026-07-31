@@ -23,9 +23,11 @@ import {
   computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
 } from '../../src/lib/groupDetail';
 import { haptic } from '../../src/lib/haptics';
+import { formatCompact } from '../../src/lib/money';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { TabPills } from '../../src/components/ui/TabPills';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { FAB } from '../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
@@ -162,18 +164,22 @@ export default function GroupDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Breadcrumb header */}
-      <View style={[styles.header, { paddingTop: insets.top + space.xs }]}>
-        <TouchableOpacity style={styles.breadcrumb} onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back to Groups">
-          <Feather name="chevron-left" size={18} color={colors.accent} />
-          <Text style={styles.breadcrumbBack}>Groups</Text>
-          <Text style={styles.breadcrumbSep}>›</Text>
-          <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{group.name}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title={group.name}
+        subtitle={`${members.length} member${members.length !== 1 ? 's' : ''} · ${formatCompact(totalSpent)} this month`}
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity
+            onPress={() => setShowMenu(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Group options"
+            style={styles.headerBtn}
+          >
+            <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        }
+      />
 
       <GroupHero group={group} members={members} />
 
@@ -185,19 +191,9 @@ export default function GroupDetailScreen() {
         onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
       />
 
-      {/* Segmented tabs */}
-      <View style={styles.tabStrip}>
-        {TABS.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tab, activeTab === t.key && styles.tabActive]}
-            onPress={() => { setActiveTab(t.key); haptic.selection(); }}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === t.key }}
-          >
-            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Segmented tabs — shared TabPills primitive */}
+      <View style={styles.tabWrap}>
+        <TabPills tabs={TABS} active={activeTab} onChange={(k) => setActiveTab(k as TabKey)} />
       </View>
 
       {activeTab === 'transactions' && (
@@ -284,16 +280,8 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
-  breadcrumbBack: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  breadcrumbSep: { ...type.body, color: colors.border, marginHorizontal: 1 },
-  breadcrumbCurrent: { ...type.label, color: colors.textSecondary, flex: 1 },
-  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
-  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: radius.sm },
-  tabActive: { backgroundColor: colors.accent },
-  tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
-  tabLabelActive: { color: colors.bg },
+  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  tabWrap: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
