@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Switch, Keyboard }
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors, type, space, radius } from '../../tokens';
+import { SectionLabel } from '../../ui/SectionLabel';
 import { nthOccurrenceMs } from '../../../lib/recurrence';
 import type { RecurFreq } from '../../../constants/enums';
 import { alpha } from '../../../theme';
@@ -62,7 +63,7 @@ export function RecurringControls({
 
       {/* Frequency */}
       <View style={styles.recurSection}>
-        <Text style={styles.recurSectionLabel}>FREQUENCY</Text>
+        <SectionLabel first tint={colors.settle}>Frequency</SectionLabel>
         <View style={styles.recurPills}>
           {(['monthly', 'weekly', 'yearly', 'custom'] as const).map(f => (
             <TouchableOpacity
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
   recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurRowLabel: { ...type.body, color: colors.textSecondary },
   recurSection: { paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  recurSectionLabel: { ...type.caption, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
+  recurSectionLabel: { ...type.caption, color: colors.settle, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   recurPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: alpha(colors.settle, 27) },
   recurPillActive: { backgroundColor: colors.settle, borderColor: colors.settle },

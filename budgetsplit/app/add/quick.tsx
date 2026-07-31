@@ -12,6 +12,7 @@ import { insertCategory } from '../../src/db/queries/categories';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
 import { MoreOptions } from '../../src/components/ui/MoreOptions';
+import { SectionLabel } from '../../src/components/ui/SectionLabel';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
 import { GroupSelector } from '../../src/components/finance/GroupSelector';
@@ -172,7 +173,7 @@ export default function QuickAddScreen() {
 
                 {/* How was it paid? — expense & income (transfer has its own selector). */}
                 <View style={styles.payBlock}>
-                  <Text style={styles.payBlockLabel}>HOW WAS IT PAID?</Text>
+                  <SectionLabel first>How was it paid?</SectionLabel>
                   <PayMethodSelector value={f.payMethod} onChange={f.setPayMethod} accent={kind === 'income' ? colors.income : colors.accent} />
                 </View>
 
@@ -281,6 +282,5 @@ const styles = StyleSheet.create({
   byItemsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
   byItemsText: { ...type.body, color: colors.textPrimary },
   payBlock: { gap: space.xs },
-  payBlockLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold' },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
 });

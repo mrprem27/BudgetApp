@@ -5,6 +5,8 @@ import { colors, type, space, radius, shadow } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
 import { alpha } from '../../../theme';
+import { FadeIn } from '../../ui/FadeIn';
+import { SectionLabel } from '../../ui/SectionLabel';
 
 export type CategoryRow = { name: string; paise: number };
 
@@ -64,7 +66,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
 
   return (
     <View>
-      <Text style={styles.sectionLabel}>WHERE IT WENT</Text>
+      <SectionLabel>Where it went</SectionLabel>
       <View style={styles.card}>
         {displayRows.map((row, i) => {
           if (loading) {
@@ -96,22 +98,23 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
           // Selected → category color; single dominant category → red; else accent.
           const barColor = isSel ? vis.color : pctOfTotal >= 0.5 ? colors.expense : colors.accent;
           return (
-            <TouchableOpacity
-              key={row.name}
-              style={[styles.row, isSel && styles.rowSelected]}
-              activeOpacity={0.7}
-              onPress={() => onPressCategory(row.name)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSel }}
-              accessibilityLabel={`${row.name}, ${formatCompact(row.paise)}`}
-            >
-              <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
-                <Feather name={vis.icon} size={14} color={vis.color} />
-              </View>
-              <Text style={[styles.name, isSel && styles.nameSelected]} numberOfLines={1}>{row.name}</Text>
-              <AnimatedBar pct={barPct} color={barColor} />
-              <Text style={styles.amount}>{formatCompact(row.paise)}</Text>
-            </TouchableOpacity>
+            <FadeIn key={row.name} delay={i * 50} offset={6}>
+              <TouchableOpacity
+                style={[styles.row, isSel && styles.rowSelected]}
+                activeOpacity={0.7}
+                onPress={() => onPressCategory(row.name)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSel }}
+                accessibilityLabel={`${row.name}, ${formatCompact(row.paise)}`}
+              >
+                <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
+                  <Feather name={vis.icon} size={14} color={vis.color} />
+                </View>
+                <Text style={[styles.name, isSel && styles.nameSelected]} numberOfLines={1}>{row.name}</Text>
+                <AnimatedBar pct={barPct} color={barColor} />
+                <Text style={styles.amount}>{formatCompact(row.paise)}</Text>
+              </TouchableOpacity>
+            </FadeIn>
           );
         })}
         {/* Footer is a FIXED-HEIGHT slot (link or empty) so the card height never
@@ -129,7 +132,6 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
 }
 
 const styles = StyleSheet.create({
-  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
   // Fixed height — must match placeholderRow so the card never resizes between a
   // filled period and an empty/partial one (the icon is 28, comfortably inside 32).

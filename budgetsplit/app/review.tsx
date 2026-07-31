@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
 import { asFeather } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { SectionLabel } from '../src/components/ui/SectionLabel';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SheetModal } from '../src/components/ui/SheetModal';
@@ -451,12 +453,28 @@ export default function ReviewScreen() {
     const checked = selected.has(row.id);
 
     return (
-      <View style={[styles.card, selectMode && checked && styles.cardChecked]}>
-        <View style={styles.rowTop}>
-          {selectMode && (
-            <TouchableOpacity onPress={() => toggleSelect(row.id)} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`Select ${row.description}`} style={styles.checkbox}>
-              <Feather name={checked ? 'check-circle' : 'circle'} size={20} color={checked ? colors.accent : colors.textMuted} />
-            </TouchableOpacity>
+      <Swipeable
+        renderRightActions={() => (
+          <TouchableOpacity
+            style={styles.swipeDelete}
+            onPress={() => deleteRow(row)}
+            accessibilityRole="button"
+            accessibilityLabel="Remove from review"
+          >
+            <Feather name="trash-2" size={18} color={colors.onAccent} />
+            <Text style={styles.swipeDeleteText}>Remove</Text>
+          </TouchableOpacity>
+        )}
+        overshootRight={false}
+        friction={2}
+        rightThreshold={40}
+      >
+        <View style={[styles.card, selectMode && checked && styles.cardChecked]}>
+          <View style={styles.rowTop}>
+            {selectMode && (
+              <TouchableOpacity onPress={() => toggleSelect(row.id)} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`Select ${row.description}`} style={styles.checkbox}>
+                <Feather name={checked ? 'check-circle' : 'circle'} size={20} color={checked ? colors.accent : colors.textMuted} />
+              </TouchableOpacity>
           )}
           <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
           <Text style={styles.date}>{format(row.date, 'd MMM · h:mm a')}</Text>
@@ -609,6 +627,7 @@ export default function ReviewScreen() {
           </View>
         )}
       </View>
+      </Swipeable>
     );
   }
 
@@ -647,7 +666,20 @@ export default function ReviewScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Review" onBack={() => router.back()} right={headerRight} />
+      <ScreenHeader
+        title="Review"
+        subtitle={
+          loading || pending.length === 0
+            ? undefined
+            : selectMode
+            ? `${selected.size} selected of ${visibleRows.length}`
+            : narrowed || activeView
+            ? `${visibleRows.length} of ${pending.length}`
+            : `${pending.length} to review`
+        }
+        onBack={() => router.back()}
+        right={headerRight}
+      />
 
       {/* Recurring suggestion — surfaces after a batch Save, never auto-created. */}
       {!loading && recurCandidates.length > 0 && (
@@ -701,13 +733,9 @@ export default function ReviewScreen() {
           keyExtractor={r => r.id}
           renderItem={({ item }) => renderRow(item)}
           renderSectionHeader={({ section }) => multiSource ? (
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Feather name={asFeather(TXN_SOURCE_ICON[(section as { source: TxnSource }).source], 'inbox')} size={12} color={colors.accent} />
-              </View>
-              <Text style={styles.sectionHeaderText}>{TXN_SOURCE_LABEL[(section as { source: TxnSource }).source]}</Text>
-              <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
-            </View>
+            <SectionLabel count={section.data.length}>
+              {TXN_SOURCE_LABEL[(section as { source: TxnSource }).source]}
+            </SectionLabel>
           ) : null}
           stickySectionHeadersEnabled={false}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -719,25 +747,27 @@ export default function ReviewScreen() {
             <View style={styles.headerBlock}>
               {selectMode ? (
                 <View style={styles.selectHeader}>
-                  <Text style={styles.stepLabel}>{selected.size} selected</Text>
-                  <TouchableOpacity onPress={toggleSelectAll} hitSlop={6} accessibilityRole="button">
+                  <TouchableOpacity onPress={toggleSelectAll} hitSlop={6} accessibilityRole="button" style={styles.selectAllBtn}>
+                    <Feather name={allVisibleSelected ? 'square' : 'check-square'} size={14} color={colors.accent} />
                     <Text style={styles.selectAll}>{allVisibleSelected ? 'Clear' : 'Select all'}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <>
-                  <Text style={styles.stepLabel}>To review</Text>
-                  <Text style={styles.intro}>{visibleRows.length} transaction{visibleRows.length === 1 ? '' : 's'}. Set each one, then Confirm to save. Changes are kept as you go.</Text>
-                  {hasGroups && (
-                    <View style={styles.assignAll}>
-                      <Text style={styles.assignAllLabel}>All to:</Text>
-                      <TouchableOpacity style={styles.assignChip} onPress={() => setAllDest('personal')}><Text style={styles.assignChipText}>Personal</Text></TouchableOpacity>
-                      {data!.sharedGroups.slice(0, 3).map(g => (
-                        <TouchableOpacity key={g.id} style={styles.assignChip} onPress={() => setAllDest(g.id)}><Text style={styles.assignChipText} numberOfLines={1}>{g.name}</Text></TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </>
+                hasGroups && (
+                  <View style={styles.assignAll}>
+                    <Text style={styles.assignAllLabel}>Assign all to</Text>
+                    <TouchableOpacity style={styles.assignChip} onPress={() => setAllDest('personal')} accessibilityRole="button" accessibilityLabel="Assign all to Personal">
+                      <Feather name="user" size={12} color={colors.textSecondary} />
+                      <Text style={styles.assignChipText}>Personal</Text>
+                    </TouchableOpacity>
+                    {data!.sharedGroups.slice(0, 3).map(g => (
+                      <TouchableOpacity key={g.id} style={styles.assignChip} onPress={() => setAllDest(g.id)} accessibilityRole="button" accessibilityLabel={`Assign all to ${g.name}`}>
+                        <Feather name="users" size={12} color={colors.textSecondary} />
+                        <Text style={styles.assignChipText} numberOfLines={1}>{g.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )
               )}
             </View>
           }
@@ -956,6 +986,7 @@ const styles = StyleSheet.create({
   headerAction: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   selectHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectAll: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  selectAllBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.xs },
   stepLabel: { ...type.caption, color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
   intro: { ...type.label, color: colors.textMuted },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: layout.screenPaddingH, marginBottom: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: alpha(colors.accent, 33) },
@@ -963,8 +994,8 @@ const styles = StyleSheet.create({
   bannerReset: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignAll: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: space.xs },
   assignAllLabel: { ...type.caption, color: colors.textMuted },
-  assignChip: { paddingHorizontal: space.sm + 2, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border, maxWidth: 120 },
-  assignChipText: { ...type.caption, color: colors.textSecondary },
+  assignChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border, maxWidth: 140 },
+  assignChipText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
   cardChecked: { borderColor: colors.accent },
   checkbox: { marginRight: space.xs },
@@ -1002,6 +1033,8 @@ const styles = StyleSheet.create({
   sectionHeaderText: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold', flex: 1 },
   sectionHeaderCount: { ...type.caption, color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
   discardBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgMuted },
+  swipeDelete: { width: 96, marginBottom: space.sm, backgroundColor: colors.expense, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  swipeDeleteText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
   splitMeta: { ...type.label, color: colors.textSecondary, flexShrink: 1 },
   confirmBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.accent },
   confirmBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },

@@ -254,59 +254,71 @@ export default function DashboardScreen() {
               </>
             ) : (
             <>
-            <HeroCard
-              spent={spending}
-              periodLabel={PERIOD_LABEL[tab]}
-              budgetAllocated={paceAllocated}
-              prevSpending={prevSpending}
-              prevLabel={PREV_LABEL[tab]}
-              obfuscate={hideAmounts}
-              healthScore={health ? health.score : null}
-              healthColor={health ? healthBandColor(health.band) : colors.accent}
-              onPressHealth={() => setShowHealth(true)}
-            />
+            <FadeIn delay={0} offset={16}>
+              <HeroCard
+                spent={spending}
+                periodLabel={PERIOD_LABEL[tab]}
+                budgetAllocated={paceAllocated}
+                prevSpending={prevSpending}
+                prevLabel={PREV_LABEL[tab]}
+                obfuscate={hideAmounts}
+                healthScore={health ? health.score : null}
+                healthColor={health ? healthBandColor(health.band) : colors.accent}
+                onPressHealth={() => setShowHealth(true)}
+              />
+            </FadeIn>
 
-            <View style={styles.tabRow}>
-              <TabPills tabs={TABS} active={tab} onChange={(key) => { setTab(key as TabKey); setCatExpanded(false); }} />
-            </View>
+            <FadeIn delay={80}>
+              <View style={styles.tabRow}>
+                <TabPills tabs={TABS} active={tab} onChange={(key) => { setTab(key as TabKey); setCatExpanded(false); }} />
+              </View>
+            </FadeIn>
 
             {everHadCats && (
-              <CategoryRankList
-                rows={catRows}
-                total={catTotal}
-                topN={3}
-                expanded={catExpanded}
-                onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}`)}
-                onMore={() => setCatExpanded(e => !e)}
-              />
+              <FadeIn delay={160}>
+                <CategoryRankList
+                  rows={catRows}
+                  total={catTotal}
+                  topN={3}
+                  expanded={catExpanded}
+                  onPressCategory={(name) => router.push(`/category/${encodeURIComponent(name)}?period=${tab}`)}
+                  onMore={() => setCatExpanded(e => !e)}
+                />
+              </FadeIn>
             )}
 
             {/* Settle-up sits below the bars. */}
             {flags.splitting && (oweTotal > 0 || owedTotal > 0) && (
-              <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
+              <FadeIn delay={220}>
+                <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
+              </FadeIn>
             )}
 
-            {/* Month-end forecast (+ insight teaser) — below the owe/owed strip, Month view only */}
+            {/* Month-end forecast — Month view only */}
             {tab === 'month' && flags.forecast && forecast?.ready && (
-              <ForecastCard
-                projected={forecast.projected}
-                budget={budget.allocated}
-                spentSoFar={spending}
-                dayOfMonth={getDate(new Date())}
-                daysInMonth={getDaysInMonth(new Date())}
-                topShift={flags.dashboardInsights ? topShift : null}
-                obfuscate={hideAmounts}
-                onPressInsights={() => router.push('/insights')}
-              />
+              <FadeIn delay={280}>
+                <ForecastCard
+                  projected={forecast.projected}
+                  budget={budget.allocated}
+                  spentSoFar={spending}
+                  dayOfMonth={getDate(new Date())}
+                  daysInMonth={getDaysInMonth(new Date())}
+                  topShift={flags.dashboardInsights ? topShift : null}
+                  obfuscate={hideAmounts}
+                  onPressInsights={() => router.push('/insights')}
+                />
+              </FadeIn>
             )}
 
-            {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
+            {/* Tracking streak — opt-in; StreakCard self-hides under 3 days. */}
             {flags.streak && (
-              <StreakCard
-                streak={streak}
-                daysInMonth={getDaysInMonth(new Date())}
-                loggedDays={streakLoggedDays}
-              />
+              <FadeIn delay={340}>
+                <StreakCard
+                  streak={streak}
+                  daysInMonth={getDaysInMonth(new Date())}
+                  loggedDays={streakLoggedDays}
+                />
+              </FadeIn>
             )}
 
             </>

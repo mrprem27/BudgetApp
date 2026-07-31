@@ -16,13 +16,15 @@ import { useDataRefresh } from '../../../src/components/system/DataRefreshProvid
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
+import { SectionLabel } from '../../../src/components/ui/SectionLabel';
+import { AmountText } from '../../../src/components/ui/AmountText';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
 import { seedGlobalCategories } from '../../../src/db/seedCategories';
 import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
-import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/money';
+import { parseToPaise, formatCompact } from '../../../src/lib/money';
 import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
@@ -224,23 +226,25 @@ export default function BudgetEditorScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Set Budget" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Set budget"
+        subtitle={budgetedCount > 0 ? `${budgetedCount} ${budgetedCount === 1 ? 'category' : 'categories'} · ${formatCompact(monthlyApprox)}/mo` : 'Type a limit on any category'}
+        onBack={() => router.back()}
+      />
       {error ? (
         <ErrorState onRetry={() => { void reload(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
-            <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
+            <Text style={styles.totalLabel}>Monthly commitment</Text>
+            <AmountText paise={monthlyApprox} size="xxl" forceColor={colors.accent} compact />
             <Text style={styles.totalSub}>
-              {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted · one-time not counted
+              Daily & yearly limits are normalised · one-time isn't counted
             </Text>
           </View>
 
-          <Text style={styles.explain}>
-            Open a group and type a limit on any category. Daily, monthly and yearly budgets repeat each period — the limit resets and unused amount doesn't carry over; one-time doesn't repeat.
-          </Text>
+          {sections.length > 0 && <SectionLabel first>Categories</SectionLabel>}
 
           {sections.length > 0 ? sections.map(sec => {
             const isCollapsed = collapsed.has(sec.title);
@@ -261,7 +265,7 @@ export default function BudgetEditorScreen() {
                   const hasAmt = parseToPaise(amt) > 0;
                   return (
                     <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
-                      <View style={styles.divider} />
+                      {i > 0 && <View style={styles.divider} />}
                       <View style={styles.rowItem}>
                         <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
                           <Feather name={vis.icon} size={15} color={vis.color} />
@@ -337,14 +341,12 @@ export default function BudgetEditorScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
-  totalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md },
-  totalLabel: { ...type.label, color: colors.textSecondary },
-  totalAmount: { ...type.amountXL, color: colors.accent },
-  totalSub: { ...type.caption, color: colors.textMuted },
-  explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  totalCard: { backgroundColor: colors.bgCard, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md },
+  totalLabel: { ...type.overline, color: colors.textMuted },
+  totalSub: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
 
 
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: space.md + 34 + space.md },
+  divider: { height: 1, backgroundColor: colors.divider, marginLeft: space.md + 34 + space.md },
   rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 52 },
   iconDot: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   rowMid: { flex: 1, gap: space.xs },
