@@ -12,6 +12,7 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { GroupForm } from '../../../src/components/finance/GroupForm';
 import { getGroupById, updateGroup, archiveGroupSafe, deleteGroup, type SplitMode } from '../../../src/db/queries/groups';
+import { deleteAttachment } from '../../../src/lib/attachment';
 import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, type Person } from '../../../src/db/queries/persons';
 import { GROUP_COLORS } from '../../../src/constants/palette';
 import { haptic } from '../../../src/lib/haptics';
@@ -95,8 +96,14 @@ export default function EditGroupScreen() {
     Alert.alert('Delete this group?', 'This permanently deletes the group and all its expenses, splits and budgets. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const ok = await deleteGroup(db, id);
-        if (ok) { haptic.warning(); router.replace('/groups'); }
+        const res = await deleteGroup(db, id);
+        if (res.ok) {
+          // Unlink the receipts the deleted transactions owned; best-effort, and
+          // never allowed to block navigation out of a group that is already gone.
+          for (const uri of res.orphanedAttachments) await deleteAttachment(uri);
+          haptic.warning();
+          router.replace('/groups');
+        }
         else Alert.alert('Can’t delete', 'The Personal group can’t be deleted.');
       } },
     ]);

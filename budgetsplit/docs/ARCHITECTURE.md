@@ -258,115 +258,30 @@ standardize how screens read it (see AGENTS.md → "State & Data Access"):
 
 ---
 
-## 7. Settings live in THREE places (one of them dead)
+## 7–10. Superseded by AUDIT.md
 
-| Mechanism | Status | Holds |
-|---|---|---|
-| SQLite `settings` table | **DEAD** (never read/written) | — |
-| Zustand `isLocked`/`biometricEnabled` | **DEAD** (0 reads) | — (biometric truth is AsyncStorage `biometric_enabled` in `LockGate`) |
-| **AsyncStorage** | **The real store** | everything below |
+Sections 7–10 used to cover preferences, the design system, the `src/lib` engine map and the
+feature-flag table. They were **removed rather than corrected**: an audit written from source
+(`AUDIT.md`, 2026-07-28) found them substantially drifted, and the drift was catalogued in
+[AUDIT_DOC_DRIFT.md](./AUDIT_DOC_DRIFT.md) as DRIFT-01 … DRIFT-12.
 
-AsyncStorage keys (raw strings, no schema): `feature_*` (20 flag keys), `biometric_enabled`,
-`hide_amounts`, `privacy_screen`, `save_location`, `default_cadence`, `default_currency`,
-`payday`, `monthly_income`, `auto_sweep_enabled`, `savings_last_sweep`, `onboarding_done`,
-`onboarding_intent`, `pending_first_add`, `app_last_open`, plus legacy/migration keys.
+The §10 flag table was the worst of it — it named a flag that does not exist, credited three
+flags with gating surfaces they did not gate, and omitted nine others. Anyone reading it would
+have concluded the flag system worked as described. It did not.
 
-**Feature-flag defaults are duplicated**: `DEFAULTS` in `lib/featureFlags.ts` and a second
-hardcoded `defaultFlags` in `FeatureFlagsProvider.tsx` — kept in sync by hand.
+Read these instead — each is generated from the code, not from another doc:
 
----
+| Was | Now |
+|---|---|
+| §7 Settings live in THREE places | [AUDIT.md](./AUDIT.md) §4.1 — there are **four** preference stores |
+| §8 Design system | [AGENTS.md](../AGENTS.md) §10, which is the enforced source. `src/theme/` is canonical; `src/constants/*` are back-compat shims |
+| §9 Business-logic engines | [AUDIT.md](./AUDIT.md) §7 (BL-01 … BL-33) |
+| §10 Feature flags | [AUDIT.md](./AUDIT.md) §4.3, and `src/lib/featureFlags.ts` itself |
 
-## 8. Design system
+**Sections 1–6 above were re-verified against the code and are accurate.** They are the reason
+this file still exists.
 
-Tokens live in `src/constants/` (colors · typography · layout · palette · categories).
-`src/components/tokens.ts` re-exports them for components.
-
-> **Convention reality:** screens import directly from `constants/*`; components import
-> from `../tokens`. AGENTS.md's "screens import via tokens.ts" is aspirational — treat
-> `constants/*` as the de-facto source for screens.
-
-### Colors (`constants/colors.ts`)
-```
-Surfaces  bg #0A0F11 · bgCard #13201F · bgInput #162825 · bgMuted #1B302D · bgElevated #1E3633
-Text      textPrimary #ECF3F1 · textSecondary #8FA3A0 · textMuted #5A6B69
-Brand     accent #20C4B8 · accentDeep #15A89D · accentMuted #0E2C29 · coral #FF6F61 · coralMuted #3A1714
-Semantic  income #2BD49B · expense #FF6F61 · settle #8B7CF8
-Health    healthGreen #2BD49B · healthAmber #F5B301 · healthRed #FF5C5C
-Lines     border #21302E · borderFocus #20C4B8
-Gradients accent[#22D3C4,#15A89D] · brand[#20C4B8,#FF6F61]
-```
-Color = meaning: green = income/owed, coral = expense/owe, purple = settlement, muted = settled.
-
-### Typography (`constants/typography.ts`)
-SpaceMono for money (`amountXL 36`/`amountLG 24`/`amountMD 18`/`amountSM 14`); Inter for
-text (`title 28`/`heading 20`/`subheading 16`/`body 15`/`label 13`/`caption 11`/`button 15`).
-Max 3 sizes per screen.
-
-### Spacing / radius / shadow (`constants/layout.ts`)
-`space` xs4 sm8 md16 lg24 xl32 xxl48 · `radius` sm8 md12 lg16 pill999 ·
-`layout` screenPaddingH16 tabBarHeight64 headerHeight56 · shadows sm/md/lg + a coral-glow `fab`.
-
-### Icons & categories (`constants/palette.ts`, `constants/categories.ts`)
-- **Feather icons only.** `asFeather(name, fallback)` is the single coercion point
-  (unknown → fallback, never "?").
-- `categoryVisual(name) → {icon, color}` resolves any category name (default → extra →
-  fallback). No emoji property.
-- 33 default expense categories + 11 income categories, India-tuned (Rent, Household Help,
-  Chai & Snacks, Cab & Auto, SIP, EMI).
-- Icon-in-dot convention: `color + '22'` background, icon in `color`.
-
----
-
-## 9. Business-logic engines (`src/lib/`) & single-source map
-
-27 pure-ish modules. Canonical owners of each computation:
-
-| Computation | Canonical owner | Notes |
-|---|---|---|
-| Money format & splits | `money.ts` | `formatRupees`/`formatCompact`/`parseToPaise`; `splitEqual`/`splitByPercent`/`splitByShares` (remainder-exact). `formatChangeMagnitude` is the single %/× rule. |
-| Net balances | **SQL** `balances.ts` (`getGroupNet`/`getGlobalNet`) | `settle.computeNet` is dead duplicate |
-| Settlement plan | `settle.simplify` | `rawDebts` = un-simplified alternative when group "Simplify debts" is off |
-| Cross-group settle | `settleScope.ts` | builds on `simplify` + balances SQL |
-| Spend-in-range / category spend | `budget.ts` (`getSpentInRange`, `getCategorySpending`) | `analytics.ts` reuses these |
-| Budget status / utilization | `budget.getCategoryBudgetStatus` + `analytics.getBudgetAnalytics` | **threshold logic duplicated** across the two |
-| Month-end projection | **two competing**: `analytics.projectedMonthEnd` (linear) + `forecast.forecastMonthEnd` (Bühlmann, preferred) | unify later |
-| Health score | `financialHealth.computeHealthScore` (+ `suggestImprovement`) | single engine |
-| Recurrence dates | `recurrence.ts` | reused by reminders/upcoming/subscriptions screen |
-| Cash position | `cash.computeCash` | real out-of-pocket money (≠ budget "spending") |
-| Savings funding | `savingsEngine.planAutoAllocations` (+ sweep/reduce) | drag-rank order; `priority` fallback |
-| Per-goal math | `savings.ts` | progress/projection/pacing |
-| Upcoming bills | `upcoming.buildUpcoming` | Home/Plan/Reminders |
-| Afford decision | `afford.evaluateAfford` | only screen consumer is `afford.tsx` |
-| Smart category | `smartCategory.matchCategory` + `smartCategoryLearn` | rules + learned overrides (complementary, not duplicate) |
-
-**Orphan / dead modules:** `subscriptions.ts` (`detectSubscriptions` — never called; the
-subscriptions screen uses recurring *rules* instead) and `ocr.ts` (`scanReceipt` — parked
-`@deprecated` on purpose; `expo-ocr` stays a dependency). `settle.computeNet` and
-`analytics.getDashboardInsights` were **deleted**. See [DEBT_TRACKER.md](./DEBT_TRACKER.md).
-
-**Test coverage:** strong for pure engines (afford, cash, donut, financialHealth, forecast,
-money, recurrence, savings*, settle, smartCategory*, upcoming, subscriptions, ocr). Gaps:
-**`budget.ts` has no tests** (canonical engine); `subscriptions.test.ts`/`ocr.test.ts`
-keep *orphan* code green.
-
----
-
-## 10. Feature flags (the "Sections" system)
-
-Defined in `lib/featureFlags.ts`, surfaced via `FeatureFlagsProvider`/`useFeatureFlags()`,
-toggled by the user in **Settings → Sections** (`app/features.tsx`).
-
-| Flag | Default | Gates |
-|---|---|---|
-| `reportsDonut` / `reportsTrend` | on | Reports charts (toggled together by the Sections UI) |
-| `forecast` | on | Reports forecast line, Plan velocity |
-| `subscriptions` | on | Subscriptions chip/screen, insights nudge |
-| `reminders` | on | Reminders config + Plan chip |
-| `healthScore` | on | Home health ring + sheet |
-| `savingsGoals` | on | Plan pool + goals + goal detail |
-| `affordCheck` | **off** | Afford screen (also gated by a dead `SHOW_EXTRAS`, so effectively unreachable) |
-| `smartCategory` | **off** | Quick-add note auto-categorization |
-| `streak` | **off** | (Home streak card is commented out) |
-| `itemizedOcr` | on | *No live code path — OCR is orphaned* |
-
-"Location tagging" is toggled here too but writes AsyncStorage `save_location`, not a flag.
+> Note on §10 specifically: the dead flags it documented are gone. `FeatureKey` now holds 12
+> keys, every one of which gates a real surface and appears in the Feature Management screen —
+> an invariant asserted by `src/__tests__/featureFlags.test.ts`, so this section cannot silently
+> drift again.

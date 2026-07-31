@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadFlags, setFlag, DEFAULTS, type FeatureKey } from '../lib/featureFlags';
 
@@ -5,22 +7,71 @@ const store = AsyncStorage as unknown as { __reset: () => void };
 
 beforeEach(() => store.__reset());
 
+// --- Source scan, for the "no dead flags" invariant below -------------------
+const ROOT = path.resolve(__dirname, '../..');
+const FLAG_DEF = path.join(ROOT, 'src/lib/featureFlags.ts');
+const FEATURES_SCREEN = path.join(ROOT, 'app/features.tsx');
+
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
+      out.push(...sourceFiles(full));
+    } else if (/\.tsx?$/.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/** Every .ts/.tsx under app/ and src/, minus the flag definition itself. */
+const CONSUMER_SOURCE = sourceFiles(path.join(ROOT, 'app'))
+  .concat(sourceFiles(path.join(ROOT, 'src')))
+  .filter(f => f !== FLAG_DEF && f !== FEATURES_SCREEN)
+  .map(f => fs.readFileSync(f, 'utf8'))
+  .join('\n');
+
 describe('DEFAULTS', () => {
   it('keeps the four opt-in features off', () => {
     expect(DEFAULTS.smartCategory).toBe(false);
     expect(DEFAULTS.affordCheck).toBe(false);
     expect(DEFAULTS.streak).toBe(false);
+    expect(DEFAULTS.recurringSuggest).toBe(false);
   });
 
   it('has every other flag on', () => {
     const off = Object.entries(DEFAULTS).filter(([, v]) => !v).map(([k]) => k).sort();
-    expect(off).toEqual(['affordCheck', 'smartCategory', 'streak']);
+    expect(off).toEqual(['affordCheck', 'recurringSuggest', 'smartCategory', 'streak']);
   });
 
   it('is a flat boolean record with no duplicate keys', () => {
     const keys = Object.keys(DEFAULTS);
     expect(new Set(keys).size).toBe(keys.length);
     expect(Object.values(DEFAULTS).every(v => typeof v === 'boolean')).toBe(true);
+  });
+});
+
+/**
+ * The reason 8 keys were deleted: a flag that gates nothing renders as a working
+ * switch that does nothing. These two tests are the guard against that coming
+ * back — they read the actual source, so a new key must be wired before it can
+ * be added, and a surface can't quietly stop honouring its flag.
+ */
+describe('no dead flags', () => {
+  it('every key is read by some screen or lib', () => {
+    const unused = (Object.keys(DEFAULTS) as FeatureKey[]).filter(key => {
+      const patterns = [`flags.${key}`, `flags['${key}']`, `'${key}'`];
+      return !patterns.some(p => CONSUMER_SOURCE.includes(p));
+    });
+    expect(unused).toEqual([]);
+  });
+
+  it('every key is exposed in the Feature Management screen', () => {
+    const screen = fs.readFileSync(FEATURES_SCREEN, 'utf8');
+    const hidden = (Object.keys(DEFAULTS) as FeatureKey[]).filter(key => !screen.includes(`'${key}'`));
+    expect(hidden).toEqual([]);
   });
 });
 

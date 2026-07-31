@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
-  startOfYear, endOfYear, subDays, subMonths, subYears,
+  startOfYear, endOfYear,
 } from 'date-fns';
 import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
@@ -10,19 +10,12 @@ import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudget
 
 export type Period = 'daily' | 'monthly' | 'yearly';
 
-export type BudgetUsage = {
-  spent: number;
-  limit: number | null;
-  pct: number | null;
-  health: 'green' | 'amber' | 'red' | 'none';
-};
-
 export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
 
 /**
  * Canonical budget-utilisation band from a percentage (null pct → 'none').
  * The single source for the 80% / 100% thresholds — was duplicated inline in
- * getBudgetUsage, group detail, reports, and analytics.
+ * group detail, reports, and analytics.
  */
 export function budgetHealth(pct: number | null): BudgetHealth {
   if (pct === null) return 'none';
@@ -50,60 +43,20 @@ export function getPeriodRange(period: Period, date: Date): { from: number; to: 
   }
 }
 
-export function getPriorPeriodRange(period: Period, date: Date): { from: number; to: number } {
-  switch (period) {
-    case 'daily':   return getPeriodRange(period, subDays(date, 1));
-    case 'monthly': return getPeriodRange(period, subMonths(date, 1));
-    case 'yearly':  return getPeriodRange(period, subYears(date, 1));
-  }
-}
-
-export async function getSpentInRange(
-  db: SQLite.SQLiteDatabase,
-  groupId: string,
-  fromMs: number,
-  toMs: number,
-): Promise<number> {
-  // Routed through the materialization-aware query so recurring occurrences
-  // within the period count toward the budget (spec §17.1).
-  const txns = await getTransactionsInRange(db, groupId, fromMs, toMs);
-  let total = 0;
-  for (const t of txns) {
-    if (t.kind === 'expense') {
-      total += t.shares.reduce((s, sh) => s + sh.amount, 0);
-    }
-  }
-  return total;
-}
-
-export async function getBudgetUsage(
-  db: SQLite.SQLiteDatabase,
-  group: BudgetGroup,
-  period: Period,
-  now = new Date(),
-): Promise<BudgetUsage> {
-  const limit = period === 'daily'
-    ? group.limit_daily
-    : period === 'monthly'
-    ? group.limit_monthly
-    : group.limit_yearly;
-
-  const { from, to } = getPeriodRange(period, now);
-  let spent = await getSpentInRange(db, group.id, from, to);
-
-  let effectiveLimit = limit;
-  if (limit && group.carry_over) {
-    const prior = getPriorPeriodRange(period, now);
-    const priorSpent = await getSpentInRange(db, group.id, prior.from, prior.to);
-    const unused = Math.max(0, limit - priorSpent);
-    effectiveLimit = limit + unused;
-  }
-
-  if (!effectiveLimit) return { spent, limit: null, pct: null, health: 'none' };
-
-  const pct = Math.round((spent / effectiveLimit) * 100);
-  return { spent, limit: effectiveLimit, pct, health: budgetHealth(pct) };
-}
+/*
+ * REMOVED: `getBudgetUsage`, `getSpentInRange`, `getPriorPeriodRange`, `BudgetUsage`.
+ *
+ * They implemented group-level budgets with carry-over on
+ * `budget_group.limit_daily/monthly/yearly` — a second, contradictory answer to
+ * "does unused budget roll over?" alongside category budgets, which explicitly
+ * have none (see getCategoryBudgetStatus below).
+ *
+ * The path was already unreachable: nothing in the app ever writes those three
+ * columns, so `limit` was always null and the carry-over branch could not run.
+ * Its one caller (`app/group/[id].tsx`) then dropped the result without
+ * rendering it — a wasted query on every group open. Category budgets are the
+ * only budgeting mechanism now.
+ */
 
 /**
  * Expense per category within a period. Pass `groupId = null` to span all groups

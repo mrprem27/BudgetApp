@@ -14,13 +14,13 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
 import { getGroupNet } from '../../src/db/queries/balances';
-import { getBudgetUsage, getCategoryBudgetStatus } from '../../src/lib/budget';
-import type { CategoryBudgetStatus, BudgetUsage } from '../../src/lib/budget';
+import { getCategoryBudgetStatus } from '../../src/lib/budget';
+import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import {
-  computeContributions, computePersonalMonthSpend, computeRecurringMonthlyTotal, computeRecurNextLabel,
+  computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
 } from '../../src/lib/groupDetail';
 import { haptic } from '../../src/lib/haptics';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -61,25 +61,20 @@ export default function GroupDetailScreen() {
     ]);
     const netMap = await getGroupNet(db, id);
 
-    let budgetUsage: BudgetUsage | null = null;
     let catStatus: CategoryBudgetStatus[] = [];
     let analytics: BudgetAnalytics | null = null;
     let recurringRules: TxnWithSplits[] = [];
     if (grp) {
-      const [usage, cs, an] = await Promise.all([
-        getBudgetUsage(db, grp, 'monthly'),
+      const [cs, an] = await Promise.all([
         getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
         getBudgetAnalytics(db, grp, new Date(), meRow?.id),
       ]);
-      budgetUsage = usage;
       catStatus = cs;
       analytics = an;
-      if (grp.is_personal !== 1) {
-        const rules = await getRecurringForGroup(db, id);
-        recurringRules = rules.filter(r => r.recur_state === 'active');
-      }
+      const rules = await getRecurringForGroup(db, id);
+      recurringRules = rules.filter(r => r.recur_state === 'active');
     }
-    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, budgetUsage, catStatus, analytics, recurringRules };
+    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules };
   }, [id]);
 
   const group = data?.group ?? null;
@@ -97,6 +92,14 @@ export default function GroupDetailScreen() {
 
   // Seed the simplify toggle from the group's saved preference on each fresh row.
   useEffect(() => { if (data?.group) setSimplifyOn(data.group.simplify_debt === 1); }, [data?.group]);
+
+  /**
+   * `/personal` is the canonical personal screen (AUDIT S-14 / DEBT-03). This route
+   * used to render a second, thinner personal variant — two screens for one group,
+   * free to drift. Older deep links still land here, so they are forwarded rather
+   * than broken. Replace (not push) so Back doesn't bounce between the two.
+   */
+  useEffect(() => { if (isPersonal) router.replace('/personal'); }, [isPersonal, router]);
 
   async function handleExport() {
     if (!group) return;
@@ -123,7 +126,6 @@ export default function GroupDetailScreen() {
   const settlements = useMemo(() => (simplifyOn ? simplifiedSettles : rawDebts(txns)), [simplifyOn, simplifiedSettles, txns]);
   const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
   const contributions = useMemo(() => computeContributions(txns, members, net), [txns, members, net]);
-  const personalMonthSpend = useMemo(() => (isPersonal ? computePersonalMonthSpend(txns, meId) : 0), [txns, meId, isPersonal]);
   const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
   const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules), [recurringRules]);
   const totalSpent = useMemo(
@@ -131,14 +133,12 @@ export default function GroupDetailScreen() {
     [txns],
   );
 
-  const TABS: { key: TabKey; label: string }[] = isPersonal
-    ? [{ key: 'transactions', label: 'Expenses' }, { key: 'budget', label: 'Budget' }]
-    : [
-        { key: 'transactions', label: 'Expenses' },
-        { key: 'recurring', label: 'Recurring' },
-        { key: 'budget', label: 'Budget' },
-        { key: 'members', label: 'Members' },
-      ];
+  const TABS: { key: TabKey; label: string }[] = [
+    { key: 'transactions', label: 'Expenses' },
+    { key: 'recurring', label: 'Recurring' },
+    { key: 'budget', label: 'Budget' },
+    { key: 'members', label: 'Members' },
+  ];
 
   // Recoverable states — never a blank dead-end.
   if (error) {
@@ -158,6 +158,7 @@ export default function GroupDetailScreen() {
     );
   }
   if (!group) return null; // first load in flight — resolves quickly
+  if (isPersonal) return null; // forwarding to /personal; don't flash this screen
 
   return (
     <View style={styles.container}>
@@ -174,17 +175,15 @@ export default function GroupDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <GroupHero group={group} isPersonal={isPersonal} members={members} personalMonthSpend={personalMonthSpend} />
+      <GroupHero group={group} members={members} />
 
-      {!isPersonal && (
-        <GroupBalanceCard
-          net={net}
-          meId={meId}
-          simplifiedSettles={simplifiedSettles}
-          personMap={personMap}
-          onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
-        />
-      )}
+      <GroupBalanceCard
+        net={net}
+        meId={meId}
+        simplifiedSettles={simplifiedSettles}
+        personMap={personMap}
+        onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
+      />
 
       {/* Segmented tabs */}
       <View style={styles.tabStrip}>
@@ -206,7 +205,6 @@ export default function GroupDetailScreen() {
           txns={txns}
           members={members}
           meId={meId}
-          isPersonal={isPersonal}
           groupName={group.name}
           onDeleteTxn={handleDelete}
           onEditTxn={handleEditTxn}
@@ -220,13 +218,12 @@ export default function GroupDetailScreen() {
           analytics={analytics}
           catStatus={catStatus}
           contributions={contributions}
-          isPersonal={isPersonal}
           onEditBudget={() => router.push(`/group/${id}/budget`)}
           onCreateBudget={() => router.push(`/group/${id}/budget`)}
         />
       )}
 
-      {activeTab === 'members' && !isPersonal && (
+      {activeTab === 'members' && (
         <MembersTab
           members={members}
           net={net}
@@ -242,7 +239,7 @@ export default function GroupDetailScreen() {
         />
       )}
 
-      {activeTab === 'recurring' && !isPersonal && (
+      {activeTab === 'recurring' && (
         <RecurringTab
           rules={recurringRules}
           meId={meId}
@@ -263,30 +260,23 @@ export default function GroupDetailScreen() {
           <SettingsRow icon="clock" label="Audit log" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
           <View style={settingsRowDivider} />
           <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
-          {!isPersonal && <View style={settingsRowDivider} />}
-          {!isPersonal && (
-            <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
-          )}
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
         </View>
-        {!isPersonal && (
-          <TouchableOpacity
-            style={styles.archiveBtn}
-            onPress={() => {
-              setShowMenu(false);
-              Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroupSafe(db, id); if (ok) { haptic.warning(); router.back(); } } },
-              ]);
-            }}
-            accessibilityRole="button"
-          >
-            <Feather name="archive" size={16} color={colors.expense} />
-            <Text style={styles.archiveText}>Archive group</Text>
-          </TouchableOpacity>
-        )}
-        {isPersonal && (
-          <Text style={styles.personalNote}>This is your private personal space — it can't be shared, archived, or have other members.</Text>
-        )}
+        <TouchableOpacity
+          style={styles.archiveBtn}
+          onPress={() => {
+            setShowMenu(false);
+            Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroupSafe(db, id); if (ok) { haptic.warning(); router.back(); } } },
+            ]);
+          }}
+          accessibilityRole="button"
+        >
+          <Feather name="archive" size={16} color={colors.expense} />
+          <Text style={styles.archiveText}>Archive group</Text>
+        </TouchableOpacity>
       </SheetModal>
     </View>
   );
@@ -307,5 +297,4 @@ const styles = StyleSheet.create({
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
-  personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },
 });

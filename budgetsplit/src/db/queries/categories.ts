@@ -49,6 +49,7 @@ export async function getUncategorizedNames(
     `SELECT t.category AS name, COUNT(*) AS count
        FROM txn t
       WHERE t.is_deleted = 0
+        AND t.recur_freq IS NULL
         AND t.kind IN (${placeholders})
         AND t.category NOT IN (SELECT name FROM category WHERE kind = ?)
       GROUP BY t.category
@@ -73,7 +74,7 @@ export async function getCategoriesByFrequency(
        LEFT JOIN (
          SELECT category, COUNT(*) AS cnt
          FROM txn
-         WHERE group_id = ? AND is_deleted = 0
+         WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NULL
          GROUP BY category
        ) u ON u.category = c.name
      WHERE c.kind = ?

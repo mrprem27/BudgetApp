@@ -83,6 +83,34 @@ export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Pr
   });
 }
 
+/**
+ * Turn an already-committed transaction into a recurring rule's anchor row —
+ * an UPDATE, not a new insert, so the most recent occurrence isn't
+ * double-counted. Used by the Review "looks recurring?" suggestion flow;
+ * `materializeDueOccurrences` picks up future instances from it going forward.
+ */
+export async function convertToRecurring(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  freq: RecurFreq,
+  interval: number,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    await db.runAsync(
+      'UPDATE txn SET recur_freq=?, recur_interval=?, recur_state=?, recur_end=NULL, updated_at=? WHERE id=?',
+      [freq, interval, 'active', now, txnId],
+    );
+    if (row) {
+      await logAudit(db, {
+        entityType: 'recurring', entityId: txnId, groupId: row.group_id,
+        action: 'created', summary: `Made recurring from a suggestion · ${row.category}`,
+      });
+    }
+  });
+}
+
 // --- Recurring exceptions (skip-one) & series-split ----------------------
 
 /** Batch-load skipped occurrence dates for the given series, as series_id → Set<ms>. */

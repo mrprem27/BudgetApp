@@ -55,6 +55,10 @@ export function getPrevRange(tab: TabKey): { from: number; to: number } {
 
 export const PREV_LABEL: Record<TabKey, string> = { today: 'yesterday', month: 'last month', year: 'last year' };
 export const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', month: 'SPENT THIS MONTH', year: 'SPENT THIS YEAR' };
+// Lowercase, sentence-context period names for the health-score confidence note
+// ("Based on N transactions logged {this}") — distinct from the shouting-caps
+// PERIOD_LABEL above, which is a section heading, not inline prose.
+export const TXN_COUNT_PERIOD_LABEL: Record<TabKey, string> = { today: 'today', month: 'this month', year: 'this year' };
 
 export async function loadHomeData(
   db: SQLite.SQLiteDatabase,
@@ -75,7 +79,7 @@ export async function loadHomeData(
         oweTotal: 0, owedTotal: 0, reviewCount: 0,
         budget: { allocated: 0, spent: 0 },
         catRows: [] as CategoryRow[], catTotal: 0,
-        health: null as HealthResult | null, healthInputs: null as HealthInputs | null,
+        health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
         forecast: null as Forecast | null, topShift: null as ForecastShift | null,
         streak: 0, streakLoggedDays: new Set<string>(),
@@ -212,6 +216,7 @@ export async function loadHomeData(
       oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
       budget: { allocated: bAlloc, spent: bSpent },
       catRows, catTotal, health, healthInputs,
+      healthTxnCount: txns.filter(t => !t.is_deleted).length,
       upcoming, forecast, topShift,
       streak: s, streakLoggedDays: loggedDays,
     };

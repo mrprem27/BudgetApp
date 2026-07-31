@@ -34,11 +34,16 @@ import {
   type PendingTxn, type PendingDraft,
 } from '../src/db/queries/pending';
 import { insertTxn, softDeleteTxn } from '../src/db/queries/transactions';
+import { convertToRecurring } from '../src/db/queries/recurring';
 import { getMe, getGroupMembers, type Person } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories, type Category } from '../src/db/queries/categories';
 import { parseToPaise, formatRupees, splitByMode } from '../src/lib/money';
 import { recordCorrection } from '../src/lib/smartCategoryLearn';
+import { detectRecurringCandidates, type RecurRow, type RecurringCandidate } from '../src/lib/recurringSuggest';
+import { RecurringSuggestionBanner } from '../src/components/finance/review/RecurringSuggestionBanner';
+import { RecurringSuggestionsSheet } from '../src/components/finance/review/RecurringSuggestionsSheet';
+import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import {
   type ReviewFilters, DEFAULT_FILTERS,
   filtersActive, rowMatches, isSimilarMerchant,
@@ -75,6 +80,9 @@ export default function ReviewScreen() {
   const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
   const { showUndo } = useUndo();
+  const { flags } = useFeatureFlags();
+  const [recurCandidates, setRecurCandidates] = useState<RecurringCandidate[]>([]);
+  const [showRecurSheet, setShowRecurSheet] = useState(false);
   const [edits, setEdits] = useState<Record<string, Partial<RowEdit>>>({});
   const [splits, setSplits] = useState<Record<string, SplitState>>({});
   const [catPickerFor, setCatPickerFor] = useState<string | null>(null);
@@ -217,6 +225,32 @@ export default function ReviewScreen() {
     );
   }
 
+  /**
+   * Scoped to the batch just committed (no lifetime history scan) — flags
+   * transactions that look recurring so the user can turn them into a rule.
+   * Never fires for manually-typed rows (nothing to detect a pattern from
+   * beyond what the user already knows they're entering).
+   */
+  function checkRecurringSuggestions(done: { txnId: string; snap: PendingTxn }[]) {
+    if (!flags.recurringSuggest) return;
+    const rows: RecurRow[] = done
+      .filter(d => d.snap.kind === 'expense' && (d.snap.source ?? 'manual') !== 'manual' && d.snap.category)
+      .map(d => ({ id: d.txnId, description: d.snap.description, amountPaise: d.snap.amount, date: d.snap.date, category: d.snap.category! }));
+    const candidates = detectRecurringCandidates(rows);
+    if (candidates.length > 0) setRecurCandidates(candidates);
+  }
+
+  async function confirmRecurringSuggestions(chosen: RecurringCandidate[]) {
+    for (const c of chosen) {
+      await convertToRecurring(db, c.mostRecentTxnId, 'monthly', 1).catch(() => {});
+    }
+    haptic.success();
+    setShowRecurSheet(false);
+    setRecurCandidates([]);
+    refresh();
+    reload();
+  }
+
   // ---- commit path (shared by per-row Confirm and batch Save) --------------
 
   /** Insert a planned row and drop it from the inbox. Returns undo material. */
@@ -284,6 +318,7 @@ export default function ReviewScreen() {
             exitSelect();
             refresh();
             reload();
+            checkRecurringSuggestions(done);
             showUndo({
               message: `Saved ${done.length} transaction${done.length === 1 ? '' : 's'}`,
               onUndo: async () => { for (const d of done) { await softDeleteTxn(db, d.txnId); await restorePending(db, d.snap); } refresh(); reload(); },
@@ -614,6 +649,15 @@ export default function ReviewScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Review" onBack={() => router.back()} right={headerRight} />
 
+      {/* Recurring suggestion — surfaces after a batch Save, never auto-created. */}
+      {!loading && recurCandidates.length > 0 && (
+        <RecurringSuggestionBanner
+          count={recurCandidates.length}
+          onPress={() => setShowRecurSheet(true)}
+          onDismiss={() => setRecurCandidates([])}
+        />
+      )}
+
       {/* Focus / filter / view banner — the working set. */}
       {!loading && (narrowed || activeView) && pending.length > 0 && (
         <View style={styles.banner}>
@@ -893,6 +937,14 @@ export default function ReviewScreen() {
           onSave={saveView}
         />
       </SheetModal>
+
+      {/* Recurring suggestions — confirm which candidates become tracked rules. */}
+      <RecurringSuggestionsSheet
+        visible={showRecurSheet}
+        onClose={() => setShowRecurSheet(false)}
+        candidates={recurCandidates}
+        onConfirm={confirmRecurringSuggestions}
+      />
     </View>
   );
 }

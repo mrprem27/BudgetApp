@@ -11,6 +11,11 @@ type Props = {
   onClose: () => void;
   result: HealthResult | null;
   inputs?: HealthInputs | null;
+  /** Transactions the active period's score was computed from — surfaced so a
+   *  score built from very little data doesn't read as more certain than it is. */
+  txnCount?: number;
+  /** e.g. "today" / "this month" / "this year" — matches the active Home tab. */
+  periodLabel?: string;
 };
 
 const R = 50;
@@ -20,8 +25,11 @@ const CIRC = 2 * Math.PI * R;
  * Money-health detail sheet: score ring + per-dimension bars + factor list.
  * Built entirely from the HealthResult already computed on Home.
  */
-export function HealthSheet({ visible, onClose, result, inputs }: Props) {
+export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, periodLabel = 'this month' }: Props) {
   const improvement = result && inputs ? suggestImprovement(inputs, result) : null;
+  // Below ~5 transactions the score is mostly noise — say so instead of implying
+  // the same confidence a fuller month's data would earn.
+  const lowSample = txnCount < 5;
   return (
     <SheetModal visible={visible} onClose={onClose} title="Money Health">
       {result && (
@@ -45,6 +53,10 @@ export function HealthSheet({ visible, onClose, result, inputs }: Props) {
               <Text style={[styles.ringBand, { color: healthBandColor(result.band) }]}>{healthBandLabel(result.band)}</Text>
             </View>
           </View>
+
+          <Text style={[styles.sampleNote, lowSample && styles.sampleNoteLow]}>
+            Based on {txnCount} transaction{txnCount === 1 ? '' : 's'} logged {periodLabel}.
+          </Text>
 
           {/* Dimension bars */}
           <View style={styles.dimRow}>
@@ -108,6 +120,8 @@ const styles = StyleSheet.create({
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
   ringScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, color: colors.textPrimary, letterSpacing: -1 },
   ringBand: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
+  sampleNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: -space.sm, marginBottom: space.lg },
+  sampleNoteLow: { color: colors.healthAmber },
   dimRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
   dim: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, padding: space.sm + 2, alignItems: 'center', borderWidth: 1, borderColor: colors.border, gap: space.sm },
   dimLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: 'Inter_600SemiBold' },

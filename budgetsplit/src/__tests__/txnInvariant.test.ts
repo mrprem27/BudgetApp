@@ -1,0 +1,114 @@
+import fs from 'fs';
+import path from 'path';
+
+/**
+ * Guards the most dangerous implicit invariant in the codebase.
+ *
+ * `txn` holds three things: real transactions, materialized recurring
+ * occurrences, and recurring *rule templates*. A rule row is not a spend — it is
+ * the instruction to create one — and it is distinguished only by
+ * `recur_freq IS NOT NULL`. Every query that treats `txn` rows as spend must
+ * therefore filter `recur_freq IS NULL`, or it double-counts money.
+ *
+ * Nothing enforced this. It was held by convention and index design, and it had
+ * already been broken twice in `categories.ts` (uncategorized-name counts and
+ * category-frequency ordering both counted rule templates) — found by writing
+ * this test.
+ *
+ * A schema CHECK would be stronger, but adding one to `txn` means rebuilding the
+ * app's central table, which is the riskiest migration available here. This
+ * reads the real SQL instead and fails when a new query forgets, at zero runtime
+ * cost. Same approach as the feature-flag invariant in featureFlags.test.ts.
+ */
+
+const QUERY_DIR = path.resolve(__dirname, '../db/queries');
+
+/**
+ * Statements that legitimately see rule rows. Each needs a reason — if you add
+ * one, say why the query WANTS templates, not merely that it currently fails.
+ */
+const ALLOWLIST: { file: string; contains: string; why: string }[] = [
+  {
+    file: 'groups.ts',
+    contains: 'attachment_uri',
+    why: 'Collecting receipt files before deleting a group — a rule row can own an attachment too, and the file must still be unlinked.',
+  },
+];
+
+/** SQL string literals (template or single-quoted) that select FROM txn. */
+function sqlLiteralsWithTxn(source: string): string[] {
+  const literals = [
+    ...(source.match(/`(?:[^`\\]|\\[\s\S])*`/g) ?? []),
+    ...(source.match(/'(?:[^'\\\n]|\\.)*'/g) ?? []),
+  ];
+  // \b stops `txn_payment` / `txn_share` / `txn_id` matching.
+  return literals.filter(l => /\bFROM\s+txn\b/i.test(l));
+}
+
+type Verdict = { ok: true } | { ok: false; sql: string };
+
+function classify(file: string, sql: string): Verdict {
+  const flat = sql.replace(/\s+/g, ' ');
+
+  // Reads spend: correctly excludes rule templates.
+  if (/recur_freq\s+IS\s+NULL/i.test(flat)) return { ok: true };
+  // Reads rules on purpose (the recurring screens and the materializer).
+  if (/recur_freq\s+IS\s+NOT\s+NULL/i.test(flat)) return { ok: true };
+  // Walks materialized occurrences back to their series.
+  if (/parent_recur_id/i.test(flat)) return { ok: true };
+  // Fetches one known row by id — the caller already knows what it asked for.
+  if (/WHERE\s+(?:\w+\.)?id\s*=\s*\?/i.test(flat)) return { ok: true };
+  // Cascading deletes must remove rules along with everything else.
+  if (/DELETE\s+FROM/i.test(flat)) return { ok: true };
+  // Dynamic WHERE built in code — the filter lives in the fragment, and the
+  // fragment itself is checked separately below.
+  if (/\$\{where\}/.test(flat)) return { ok: true };
+
+  if (ALLOWLIST.some(a => a.file === file && flat.includes(a.contains))) return { ok: true };
+
+  return { ok: false, sql: flat.trim() };
+}
+
+describe('txn `recur_freq IS NULL` invariant', () => {
+  const files = fs.readdirSync(QUERY_DIR).filter(f => f.endsWith('.ts'));
+
+  it('finds query modules to check', () => {
+    expect(files.length).toBeGreaterThan(0);
+    const withTxn = files.filter(f => /\bFROM\s+txn\b/i.test(fs.readFileSync(path.join(QUERY_DIR, f), 'utf8')));
+    expect(withTxn.length).toBeGreaterThan(0);
+  });
+
+  it('every statement selecting FROM txn either excludes rule rows or says why not', () => {
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const source = fs.readFileSync(path.join(QUERY_DIR, file), 'utf8');
+      for (const sql of sqlLiteralsWithTxn(source)) {
+        const verdict = classify(file, sql);
+        if (!verdict.ok) offenders.push(`${file}: ${verdict.sql.slice(0, 140)}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('dynamic WHERE fragments over txn carry the filter too', () => {
+    // getTransactionsInRange builds its WHERE in code, so the literal above
+    // can't be inspected — check the fragment itself.
+    const source = fs.readFileSync(path.join(QUERY_DIR, 'transactions.ts'), 'utf8');
+    const fragments = source.match(/let where = '[^']*'/g) ?? [];
+    expect(fragments.length).toBeGreaterThan(0);
+    for (const f of fragments) {
+      expect(f).toMatch(/recur_freq IS NULL/);
+    }
+  });
+
+  it('every allowlist entry still matches something, and explains itself', () => {
+    for (const entry of ALLOWLIST) {
+      expect(entry.why.length).toBeGreaterThan(30);
+      const source = fs.readFileSync(path.join(QUERY_DIR, entry.file), 'utf8');
+      const hit = sqlLiteralsWithTxn(source).some(l => l.replace(/\s+/g, ' ').includes(entry.contains));
+      expect(hit).toBe(true); // stale exemption → delete it
+    }
+  });
+});

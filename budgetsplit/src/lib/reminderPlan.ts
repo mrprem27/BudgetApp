@@ -18,12 +18,18 @@ export type ReminderPrefs = {
   daily: boolean;
   /** Time of day for the daily nudge. */
   dailyTime: ReminderTime;
+  /** Monthly "back up your data" nudge — there's no cloud backup, so this is
+   *  the only mitigation for losing the phone. */
+  backup: boolean;
 };
 
 export type PlannedReminder = { id: string; fireAt: number; title: string; body: string };
 
 export const DEFAULT_RENEWAL_TIME: ReminderTime = { hour: 9, minute: 0 };
 export const DEFAULT_DAILY_TIME: ReminderTime = { hour: 20, minute: 0 };
+/** Fixed, not user-configurable — keeps the backup reminder a small addition
+ *  rather than a second full time-picker flow. */
+export const DEFAULT_BACKUP_TIME: ReminderTime = { hour: 9, minute: 0 };
 export const DEFAULT_LEAD_DAYS = 1;
 export const MAX_LEAD_DAYS = 7;
 
@@ -47,6 +53,7 @@ export function defaultReminderPrefs(): ReminderPrefs {
   return {
     renewals: false, renewalLeadDays: DEFAULT_LEAD_DAYS, renewalTime: DEFAULT_RENEWAL_TIME,
     daily: false, dailyTime: DEFAULT_DAILY_TIME,
+    backup: false,
   };
 }
 
@@ -72,5 +79,17 @@ export function limitReminders(items: PlannedReminder[], cap = REMINDER_CAP): Pl
 export function atTimeOfDay(base: number, time: ReminderTime): number {
   const d = new Date(base);
   d.setHours(time.hour, time.minute, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * The next monthly anniversary of `anchorMs` that's strictly after `now` —
+ * adds a month at a time rather than a fixed day offset, so it lands on the
+ * same date each cycle (mirrors the recurrence engine's month-stepping, kept
+ * dependency-free here since this file has no date-fns import).
+ */
+export function nextMonthlyAnchor(anchorMs: number, now: number): number {
+  const d = new Date(anchorMs);
+  while (d.getTime() <= now) d.setMonth(d.getMonth() + 1);
   return d.getTime();
 }

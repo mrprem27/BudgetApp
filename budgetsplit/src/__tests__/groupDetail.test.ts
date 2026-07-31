@@ -1,6 +1,6 @@
 import {
   isRecurInstance, splitLabel, freqWord,
-  computeContributions, computePersonalMonthSpend, computeRecurringMonthlyTotal, computeRecurNextLabel,
+  computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
 } from '../lib/groupDetail';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -66,19 +66,6 @@ describe('computeContributions', () => {
     const c = computeContributions(txns, members, {});
     expect(c.total).toBe(0);
     expect(c.fairShare).toBe(0);
-  });
-});
-
-describe('computePersonalMonthSpend', () => {
-  it('sums only my share of this-month expenses', () => {
-    const now = new Date(2026, 5, 15).getTime();
-    const thisMonth = new Date(2026, 5, 3).getTime();
-    const lastMonth = new Date(2026, 4, 20).getTime();
-    const txns = [
-      expense('t1', thisMonth, [{ personId: 'me', amount: 1000 }], [{ personId: 'me', amount: 1000 }]),
-      expense('t2', lastMonth, [{ personId: 'me', amount: 9999 }], [{ personId: 'me', amount: 9999 }]),
-    ];
-    expect(computePersonalMonthSpend(txns, 'me', now)).toBe(1000);
   });
 });
 

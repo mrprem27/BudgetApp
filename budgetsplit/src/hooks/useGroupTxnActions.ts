@@ -8,10 +8,15 @@ import { haptic } from '../lib/haptics';
 import type { TxnWithSplits } from '../db/queries/transactions';
 
 /**
- * Group-detail transaction actions: delete (with recurring rule/occurrence
- * handling + Undo) and open-for-edit. `reload` re-fetches the screen after a write.
+ * Transaction actions for any ledger screen: delete (with recurring
+ * rule/occurrence handling + Undo) and open-for-edit. `reload` re-fetches the
+ * screen after a write.
+ *
+ * `groupId` is only a fallback for the recurring-rule route — the target group is
+ * read off the transaction itself, so this serves the cross-group Personal ledger
+ * (where every row can belong to a different group) as well as a single group.
  */
-export function useGroupTxnActions(groupId: string, reload: () => Promise<void> | void) {
+export function useGroupTxnActions(groupId: string | null, reload: () => Promise<void> | void) {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useUndo();
@@ -49,7 +54,10 @@ export function useGroupTxnActions(groupId: string, reload: () => Promise<void> 
 
   function handleEditTxn(txn: TxnWithSplits) {
     if (isRecurInstance(txn.id)) {
-      router.push(`/group/${groupId}/recurring`);
+      // A materialized occurrence has no detail page of its own — open the rule
+      // in whichever group owns it.
+      const owner = txn.group_id || groupId;
+      if (owner) router.push(`/group/${owner}/recurring`);
       return;
     }
     router.push(`/txn/${txn.id}`);

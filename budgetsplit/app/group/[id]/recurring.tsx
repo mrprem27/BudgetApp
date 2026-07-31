@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { format, addDays, addWeeks, addMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../../src/constants/layout';
@@ -15,6 +15,7 @@ import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl'
 import { getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring, skipNextOccurrence, undoNextSkip, getSkipsMap } from '../../../src/db/queries/recurring';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
+import { nextOccurrenceOnOrAfter } from '../../../src/lib/recurrence';
 import { haptic } from '../../../src/lib/haptics';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 import { alpha } from '../../../src/theme';
@@ -32,25 +33,29 @@ function freqLabel(freq: string | null, interval: number | null): string {
   }
 }
 
+/**
+ * The next occurrence strictly after now, stepping past any the user skipped.
+ *
+ * The date walk itself is `nextOccurrenceOnOrAfter` (lib/recurrence) — the same
+ * one the materializer, reminders and txn detail use. This screen used to carry
+ * its own copy of the walker, so a recurrence fix in the library silently missed
+ * it. Only the two things the library doesn't model live here: the paused/ended
+ * check, and skip-stepping.
+ */
 function nextOccurrence(rule: Rule, skips?: Set<number>): Date | null {
   if (rule.recur_state !== 'active') return null;
-  const interval = rule.recur_interval ?? 1;
-  let cursor = new Date(rule.date);
-  if (!isFinite(cursor.getTime())) return null;
-  const now = Date.now();
-  let guard = 0;
-  const adv = (d: Date) => {
-    switch (rule.recur_freq) {
-      case 'daily': case 'custom': return addDays(d, interval);
-      case 'weekly': return addWeeks(d, interval);
-      default: return addMonths(d, interval);
-    }
-  };
-  while (cursor.getTime() <= now && guard < 2000) { cursor = adv(cursor); guard++; }
-  // Step past any user-skipped occurrences.
-  while (skips?.has(cursor.getTime()) && guard < 2000) { cursor = adv(cursor); guard++; }
-  if (rule.recur_end && cursor.getTime() > rule.recur_end) return null;
-  return cursor;
+  if (!isFinite(new Date(rule.date).getTime())) return null;
+
+  // +1ms so "on or after" becomes "strictly after" — an occurrence due exactly
+  // now has already happened.
+  let from = Date.now() + 1;
+  for (let guard = 0; guard < 2000; guard++) {
+    const next = nextOccurrenceOnOrAfter(rule, from);
+    if (next === null) return null;
+    if (!skips?.has(next)) return new Date(next);
+    from = next + 1;
+  }
+  return null;
 }
 
 export default function RecurringScreen() {

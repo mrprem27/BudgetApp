@@ -4,6 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { parseToPaise, formatRupees } from '../lib/money';
 import { haptic } from '../lib/haptics';
+import { settings } from '../lib/settings';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory, getGoalHistoryCount,
   fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
@@ -35,6 +36,7 @@ export function useSavingsGoalScreen(id: string) {
   const [adjustDate, setAdjustDate] = useState<number | null>(null);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [amt, setAmt] = useState('');
+  const [showLockExplainer, setShowLockExplainer] = useState(false);
 
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (loadDb) => {
     const [g, savedMap, money, hist, histTotal] = await Promise.all([
@@ -129,10 +131,25 @@ export function useSavingsGoalScreen(id: string) {
     }
   }
 
-  async function toggleLock() {
+  async function commitToggleLock() {
     await setGoalLocked(db, id, goal!.locked !== 1);
     haptic.selection();
     await reload();
+  }
+
+  async function toggleLock() {
+    // Only gate the transition INTO protected — unprotecting needs no explainer.
+    if (goal!.locked !== 1 && !(await settings.lockExplainerSeen())) {
+      setShowLockExplainer(true);
+      return;
+    }
+    await commitToggleLock();
+  }
+
+  async function confirmLockExplainer() {
+    await settings.setLockExplainerSeen(true);
+    setShowLockExplainer(false);
+    await commitToggleLock();
   }
 
   function confirmDelete() {
@@ -171,5 +188,6 @@ export function useSavingsGoalScreen(id: string) {
     openAdjust, handleAdjust,
     // misc
     celebrate, setCelebrate, toggleLock, confirmDelete,
+    showLockExplainer, setShowLockExplainer, confirmLockExplainer,
   };
 }

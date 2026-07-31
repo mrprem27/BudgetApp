@@ -75,7 +75,7 @@ export default function SavingsScreen() {
   const {
     goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
-    overspend, setOverspend, handleUndoOverspend,
+    overspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
@@ -109,7 +109,7 @@ export default function SavingsScreen() {
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Total Money — cash + investments + available credit, with breakdown */}
-        {money && <TotalMoneyCard money={money} onEdit={() => setShowMoneyEditor(true)} />}
+        {money && <TotalMoneyCard money={money} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} />}
 
         {/* Overspend notice — money auto-pulled from lowest-priority goals to cover a deficit */}
         {overspend && overspend.total > 0 && (
@@ -127,7 +127,7 @@ export default function SavingsScreen() {
               <TouchableOpacity onPress={handleUndoOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo">
                 <Text style={styles.overspendUndo}>Undo</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setOverspend(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+              <TouchableOpacity onPress={handleDismissOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
                 <Feather name="x" size={16} color={colors.textMuted} />
               </TouchableOpacity>
             </View>

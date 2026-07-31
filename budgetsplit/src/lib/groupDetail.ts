@@ -1,4 +1,4 @@
-import { startOfMonth, format } from 'date-fns';
+import { format } from 'date-fns';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from './recurrence';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -66,21 +66,6 @@ export function computeContributions(
       .map(m => ({ member: m, paid: paid[m.id] ?? 0, net: net[m.id] ?? 0, frac: (paid[m.id] ?? 0) / maxPaid }))
       .sort((a, b) => b.paid - a.paid),
   };
-}
-
-/** My spend this month in a personal group (hero subtitle). */
-export function computePersonalMonthSpend(
-  txns: TxnWithSplits[],
-  meId: string | undefined,
-  now: number = Date.now(),
-): number {
-  const monthStart = startOfMonth(new Date(now)).getTime();
-  return txns.reduce(
-    (s, t) => (t.kind === 'expense' && t.date >= monthStart
-      ? s + (t.shares.find(x => x.personId === meId)?.amount ?? 0)
-      : s),
-    0,
-  );
 }
 
 /** Monthly-equivalent total across active recurring rules (summary pill). */

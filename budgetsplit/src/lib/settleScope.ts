@@ -59,8 +59,13 @@ export type SettlementPlan = { groupId: string; from: string; to: string; amount
 /**
  * Distribute `amount` across shared groups, largest balance first, all in the
  * caller-chosen `fromId → toId` direction. Used when transferring "All groups":
- * each group gets its own row so per-group balances stay correct. Any remainder
- * beyond the known balances lands on the largest group.
+ * each group gets its own row so per-group balances stay correct.
+ *
+ * No group is allocated more than it is owed, EXCEPT the last (smallest) one,
+ * which absorbs any excess when the user pays more than the total outstanding.
+ * Overpaying has to land somewhere and leave that group in credit; putting it on
+ * the smallest balance keeps the larger, more meaningful balances exact. Pinned
+ * by "puts an overpayment remainder on the last ranked group" in the tests.
  */
 export function planAllGroupsSettlement(
   scopes: TransferScopes,

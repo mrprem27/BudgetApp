@@ -5,26 +5,37 @@
 > archived once their items were merged here and deleted once all of them were closed.
 > Their reasoning is in git history. Add new items **here**.
 
-**Current — 2026-07-28, after the 🔴 and 🟡 paydown passes** (branch `refactor/phase-1-perf-safety`):
+**Current — 2026-07-28, after the 🔴/🟡/🟢 paydown passes and Pass 4** (branch
+`refactor/phase-1-perf-safety`):
 
 | | at audit | now |
 |---|---|---|
 | `npx tsc --noEmit` | ✅ clean | ✅ clean |
-| `npx jest` | 290/290, 31 suites | ✅ **469/469, 40 suites** |
+| `npx jest` | 290/290, 31 suites | ✅ **541/541, 46 suites** |
+| Screens rendering the personal group | 2 | **1** — `/personal`; `/group/{personalId}` forwards |
+| Onboarding `useState` in the screen | ~15 | **0** — all in `useOnboardingForm` |
+| Feature flags with no effect on the persona | 12 of 12 | **0** — `lib/personaDefaults.ts` |
 | Screens discarding load errors | 6 | **0** |
-| Untested lib modules | 17 | **9** (all native I/O adapters) |
+| Untested lib modules | 17 | **13** — *not* 9, and not "all native I/O adapters": the count missed `homeData` (218 L), `reportsData` (178 L), `insightsData` (125 L) and `txnDetail`, which were extracted from screens during the C5/C9/C10 paydown without tests. See AUDIT DEBT-07 |
 | `any` / `@ts-ignore` | 42 | **5** (all documented library gaps) |
 | Dead style keys | 154 | **0** |
 | Raw hex in UI code | 19 | **0** |
 | Hex-suffix colour concatenations | 153 | **0** (via `alpha()`) |
 | Screen-reader-silent controls | 6 | **0** |
 | Colour palettes | 3 sources | **1 file** |
-| Largest screen | 1354 LOC | **976** |
+| Largest screen | 1354 LOC | **977** (`app/review.tsx`) |
 | Hand-rolled data loaders | 1 | **0** |
 
 **Every 🔴, 🟡 and 🟢 item is closed.** The only rows still open are the two ⛔
 external blockers (GPay export format, Google CASA assessment), which are not
 code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
+
+**Pass 4 (2026-07-28)** additionally closed 7 items that `AUDIT.md` had tagged `DEFER`
+because they needed an owner decision rather than more analysis — the personal-screen
+merge (S-04 · S-14 · DEBT-03) and the onboarding persona (FLOW-01 · F-27 · ISS-04 ·
+DEBT-12). Detail in [AUDIT.md § Pass 4](./AUDIT.md). **Nothing in Pass 4 has been
+device-tested** — `tsc` and `jest` cannot see a broken layout, and the new `splitting`
+flag changes the tab bar.
 
 ---
 
@@ -133,7 +144,9 @@ Recorded so they stop being re-raised as bugs.
 | Item | Reason |
 |---|---|
 | `PRAGMA foreign_keys` OFF on the live connection | ON only during migrations ([schema.ts:294-438](../src/db/schema.ts#L294)). Cascades are hand-rolled deliberately; flipping it needs every delete path audited first. |
-| Dead schema columns + unused `settings` table | Column drops require a risky table rebuild. Zero runtime cost. |
+| Dead schema columns + unused `settings` table | Column drops require a risky table rebuild. Zero runtime cost. **Named set, as of 2026-07-28:** `person.remote_uid`, `budget_group.limit_daily/monthly/yearly`, `budget_group.carry_over`. These are now dead *config* with **no reader at all** — `getBudgetUsage`, the last consumer, was deleted (see Resolved). The `settings` table is not unused either: it holds the `category_global_v1` flag and the one-time-fix completion keys. The five `is_demo` columns that used to be listed here are **gone** — they were written but never read, so the writes and migrations were removed; pre-existing databases keep an inert column. |
+| Files over the ~300-line rule | `AGENTS.md` prescribes extracting **opportunistically** — "whenever you're already editing one for a feature; no big-bang migration". That makes it standing policy, not a scheduled task, so it should not sit on a backlog as if it were. The genuine outliers (`review.tsx` 977, `Onboarding.tsx` 793, `itemized.tsx` 614) are tracked individually instead. |
+| Two token import paths (`src/constants/*` → `src/theme`) | `constants/{colors,typography,layout}` are documented back-compat re-export shims; `src/theme` is canonical. 45 files still import the old path. A sweep is safe but is a large diff that changes no behaviour, and `AGENTS.md` already says to prefer `src/theme` in new code — so it converges without a migration. |
 | [lib/ocr.ts](../src/lib/ocr.ts) unused | Parked `@deprecated`, kept not deleted. On-device OCR reads only a single total, not line items. |
 | Subscription auto-detection dormant | Subscriptions are sourced from **recurring rules** — there is no bank feed to detect from. `lib/subscriptions.ts` stays dormant intentionally. |
 | Raw `TextInput`s not converted to `Input` | Audited 2026-07-13: the remainder are search bars with a clear (×) button, deliberately border-less inline card rows (AGENTS.md rule 4), and hero amount fields. Converting them would *degrade* the design. |
@@ -143,6 +156,15 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Pass 4 — the two decision-blocked audit clusters (2026-07-28)
+
+| Item | Detail |
+|---|---|
+| **DEBT-03 / S-04 / S-14** — two personal screens | `/personal` is canonical. `group/[id].tsx` forwards `is_personal` via `router.replace`, so old deep links resolve instead of breaking. `/personal` gained the capabilities only the group variant had (swipe edit/delete via a generalized `useGroupTxnActions`, FAB, audit log, overflow menu). `GroupHero`, `BudgetTab` and `TransactionsTab` — all single-caller — lost their `isPersonal` branches; `computePersonalMonthSpend` lost its last caller and was deleted with its test. **The audit's nav claim was wrong**: it said "every other deep link" pointed at the group variant; there was exactly one (`insights.tsx`). |
+| **F-27 / ISS-04 / FLOW-01 / §4.6** — persona stored, never read | New pure `lib/personaDefaults.ts`: intent → a **sparse** flag patch, with only deviating keys persisted (writing all of them would freeze every flag at day-one values and make future `DEFAULTS` changes unreachable). 15 tests. `FeatureFlagsProvider` gained `reload()` — it mounts above the onboarding gate, so without it the answer wouldn't apply until the next cold start. The `people` step is skipped for the personal-only persona in both directions. |
+| **New: `splitting` flag** — the persona had nothing real to switch | Found while wiring the mapping: none of the 12 keys touched groups/owe-owed/splitting and the tab bar had no gating, so two different personas produced near-identical apps. A 13th key now gates the Groups tab (slot 2 becomes Personal), the Home owe/owed strip, the split-only first-run tiles and the Transfer kind. **"Group Splitting" is no longer a Core pillar** in Feature Management. Turning it off while holding unsettled balances names the group count and the amount first — otherwise money you're owed would silently vanish from every screen. |
+| **DEBT-12** — `Onboarding.tsx` 793 L, split commit | Both halves. `setMoneyProfile` folded into `finalizeOnboarding` (one commit point). State/stage-machine/commit → `src/hooks/useOnboardingForm.ts`; the screen is **0 `useState` / 0 `useRef`**, 691 L of JSX + `StyleSheet`. ⚠️ `LogoAssembly.tsx` and the `stage === 'hero'` block **verified untouched** — no hero lines in the diff. |
+
 ### Caught stale on 2026-07-28 — listed as open in the archived docs, already done in code
 
 These were carried as open work and are verified fixed. This is why rule 4 exists.
@@ -150,7 +172,7 @@ These were carried as open work and are verified fixed. This is why rule 4 exist
 | Was listed as | Actually |
 |---|---|
 | 4 missing DB indexes | All present — [schema.ts:371-383](../src/db/schema.ts#L371) |
-| `nextOccurrence` duplicated in `recurring.tsx` | One source at [recurrence.ts:44](../src/lib/recurrence.ts#L44); every caller imports it |
+| `nextOccurrence` duplicated in `recurring.tsx` | ⚠️ **This row was wrong when written** — every *other* caller imported the library, but `app/group/[id]/recurring.tsx` still carried its own copy of the walker, which is the one file the row named. Caught by AUDIT DEBT-05 / DRIFT-13 and fixed for real on 2026-07-28: the screen now composes [recurrence.ts:44](../src/lib/recurrence.ts#L44) and only keeps the paused/ended check and skip-stepping the library doesn't model. A reminder that rule 4 applies to this table too. |
 | `quick.tsx` monolith (1250 LOC) | Extracted — 7 `useState`, out of the top 25 |
 | `group/[id].tsx` monolith (1125 LOC) | Now 310 LOC |
 | `edit.tsx handleSave` silent failure | Has `try/catch` + `Alert` + `finally` — [edit.tsx:63-82](../app/group/[id]/edit.tsx#L63) |

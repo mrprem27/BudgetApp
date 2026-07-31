@@ -2,6 +2,7 @@ import type { PendingTxn } from '../db/queries/pending';
 import type { Person } from '../db/queries/persons';
 import type { ParsedDirection } from './importParse';
 import { parseToPaise, splitByMode } from './money';
+import { validateShares } from './splitMath';
 import type { TxnKind, SplitMode, PayMethod } from '../constants/enums';
 
 /**
@@ -168,11 +169,12 @@ export function planCommit(
 
   if (v.dest !== 'personal') {
     const byPerson = splitByMode(total, split.included, split.mode, split.values);
-    const assigned = split.included.reduce((s, id) => s + (byPerson[id] ?? 0), 0);
-    if (split.included.length === 0 || assigned !== total) return { ok: false };
+    const shares = split.included.map(id => ({ personId: id, amount: byPerson[id] ?? 0 }));
+    // Same allocation rule the Quick-Add save path uses.
+    if (!validateShares(total, shares).ok) return { ok: false };
     return {
       ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(ctx, v.dest), total, category, payMethod, snap,
-      shares: split.included.map(id => ({ personId: id, amount: byPerson[id] ?? 0 })),
+      shares,
       destName: groupName(v.dest),
     };
   }

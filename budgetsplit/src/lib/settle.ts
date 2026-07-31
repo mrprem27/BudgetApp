@@ -40,6 +40,12 @@ export function simplify(net: Record<string, number>): Settlement[] {
  * of their share proportional to how much that payer fronted. Settlements use
  * the same formula (payer + / receiver −), so a settlement naturally cancels
  * the matching debt. Reverse pairs (A→B and B→A) are netted at the end.
+ *
+ * Slices are allocated so that each share is fully spent AND each payer is
+ * credited exactly what they fronted (see the carry below). Rounding each slice
+ * independently used to leave a person's net a paise away from the ledger's,
+ * which showed as the same group reporting different figures either side of the
+ * "Simplify debts" toggle.
  */
 export function rawDebts(
   txns: Array<{
@@ -53,14 +59,39 @@ export function rawDebts(
     if (t.kind === 'income') continue;
     const totalPaid = t.payments.reduce((a, p) => a + p.amount, 0);
     if (totalPaid <= 0) continue;
+    // Allocate every share across the payers with a carried remainder, so BOTH
+    // margins come out exact: each share is fully allocated, AND each payer is
+    // credited exactly what they fronted. Rounding each slice on its own gets
+    // the first right and the second wrong — the leftover paise always landed on
+    // the same (first) payer, so their net drifted away from the ledger.
+    const carry = t.payments.map(() => 0);
     for (const s of t.shares) {
-      for (const p of t.payments) {
-        if (p.personId === s.personId) continue;
-        const owe = Math.round(s.amount * (p.amount / totalPaid));
-        if (owe <= 0) continue;
+      if (s.amount <= 0) continue;
+
+      const slices = t.payments.map((p, idx) => {
+        const want = (s.amount * p.amount) / totalPaid + carry[idx];
+        const base = Math.floor(want);
+        carry[idx] = want - base; // fraction owed forward to the next share
+        return base;
+      });
+
+      // Hand the rounding remainder to whoever is furthest along fractionally.
+      let remainder = s.amount - slices.reduce((a, b) => a + b, 0);
+      while (remainder > 0) {
+        let best = 0;
+        for (let i = 1; i < carry.length; i++) if (carry[i] > carry[best]) best = i;
+        slices[best]++;
+        carry[best] -= 1;
+        remainder--;
+      }
+
+      t.payments.forEach((p, idx) => {
+        if (p.personId === s.personId) return; // you don't owe yourself
+        const owe = slices[idx];
+        if (owe <= 0) return;
         const key = `${s.personId}->${p.personId}`;
         pair[key] = (pair[key] ?? 0) + owe;
-      }
+      });
     }
   }
 

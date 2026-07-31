@@ -21,10 +21,12 @@ type Rec = { key: string; severity: 'warn' | 'info' | 'good'; icon: string; text
 type Driver = { key: string; category: string; over: number; group: string };
 type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
 
-export async function loadInsightsData(db: SQLite.SQLiteDatabase) {
+export async function loadInsightsData(
+  db: SQLite.SQLiteDatabase,
+  opts: { savingsInsights?: boolean } = {},
+) {
 
     const grps = await getAllGroups(db);
-    const personalId = grps.find(g => g.is_personal === 1)?.id ?? '';
 
     // This month vs last month spend by category (for shifts + velocity).
     const monthStart = new Date();
@@ -109,7 +111,9 @@ export async function loadInsightsData(db: SQLite.SQLiteDatabase) {
       .slice(0, 6);
 
     // Savings nudges — moved here from the Plan tab.
-    const savings = await buildSavingsInsights(db);
+    // Flag-gated: skip the query entirely when the surface is off, rather than
+    // building nudges the screen will throw away.
+    const savings = opts.savingsInsights === false ? [] : await buildSavingsInsights(db);
 
     // Biggest category shifts vs last month.
     const shifts: Shift[] = Object.entries(catMap)
@@ -121,5 +125,5 @@ export async function loadInsightsData(db: SQLite.SQLiteDatabase) {
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 3);
 
-    return { personalId, monthSpend, budget, projected, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
+    return { monthSpend, budget, projected, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
 }

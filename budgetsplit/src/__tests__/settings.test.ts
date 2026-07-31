@@ -23,8 +23,6 @@ describe('defaults on a fresh install', () => {
     await expect(settings.defaultCadence()).resolves.toBeNull();
     await expect(settings.defaultCurrency()).resolves.toBeNull();
     await expect(settings.onboardingIntent()).resolves.toBeNull();
-    await expect(settings.monthlyIncome()).resolves.toBeNull();
-    await expect(settings.payday()).resolves.toBeNull();
     await expect(settings.appLastOpen()).resolves.toBeNull();
   });
 });
@@ -60,25 +58,28 @@ describe('booleans round-trip', () => {
   });
 });
 
+// These exercise the getNumber/setNumber helpers. They used to run through
+// `monthlyIncome`, which was removed as a write-only setting; `appLastOpen` is
+// now the only numeric one, so the helper coverage moved onto it.
 describe('numbers round-trip', () => {
   it('stores and reads back a number', async () => {
-    await settings.setMonthlyIncome(5_000_00);
-    await expect(settings.monthlyIncome()).resolves.toBe(500000);
+    await settings.setAppLastOpen(5_000_00);
+    await expect(settings.appLastOpen()).resolves.toBe(500000);
   });
 
   it('handles zero (not treated as unset)', async () => {
-    await settings.setMonthlyIncome(0);
-    await expect(settings.monthlyIncome()).resolves.toBe(0);
+    await settings.setAppLastOpen(0);
+    await expect(settings.appLastOpen()).resolves.toBe(0);
   });
 
   it('handles negative values', async () => {
-    await settings.setMonthlyIncome(-100);
-    await expect(settings.monthlyIncome()).resolves.toBe(-100);
+    await settings.setAppLastOpen(-100);
+    await expect(settings.appLastOpen()).resolves.toBe(-100);
   });
 
   it('returns null for a corrupt non-numeric value rather than NaN', async () => {
-    await AsyncStorage.setItem(SETTINGS_KEYS.payday, 'not-a-number');
-    await expect(settings.payday()).resolves.toBeNull();
+    await AsyncStorage.setItem(SETTINGS_KEYS.appLastOpen, 'not-a-number');
+    await expect(settings.appLastOpen()).resolves.toBeNull();
   });
 
   it('round-trips a large epoch timestamp without precision loss', async () => {

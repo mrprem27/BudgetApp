@@ -115,14 +115,33 @@ export async function updateGroup(
   });
 }
 
+export type DeleteGroupResult = {
+  ok: boolean;
+  /**
+   * Receipt files belonging to the deleted transactions. The caller must unlink
+   * these (`deleteAttachment`) — this layer deliberately doesn't touch the file
+   * system, so `db/queries` stays free of native modules and testable.
+   */
+  orphanedAttachments: string[];
+};
+
 /**
  * Hard-delete a group and everything tied to it (transactions, splits, line
- * items, members, budgets). Never deletes the Personal group. Irreversible —
- * the caller must confirm first.
+ * items, members, budgets, its audit history). Never deletes the Personal group.
+ * Irreversible — the caller must confirm first, and must unlink the returned
+ * attachment files.
  */
-export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<boolean> {
+export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<DeleteGroupResult> {
   const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
-  if (!g || g.is_personal === 1) return false;
+  if (!g || g.is_personal === 1) return { ok: false, orphanedAttachments: [] };
+
+  // Read the receipt paths BEFORE the rows go: once the txns are deleted there is
+  // no way left to find them, and they'd sit on disk counting toward the storage
+  // total forever.
+  const attachments = await db.getAllAsync<{ attachment_uri: string }>(
+    'SELECT attachment_uri FROM txn WHERE group_id=? AND attachment_uri IS NOT NULL', [groupId],
+  );
+
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `DELETE FROM txn_payment WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
@@ -138,12 +157,17 @@ export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): P
     // group's budget lines go.
     await db.runAsync('DELETE FROM category_budget WHERE group_id=?', [groupId]);
     await db.runAsync('DELETE FROM budget_group WHERE id=?', [groupId]);
+    // The group's own history goes with it. Must precede the logAudit below —
+    // that row is written with group_id NULL precisely so it survives as the
+    // record that the group was deleted.
+    await db.runAsync('DELETE FROM audit_log WHERE group_id=?', [groupId]);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId: null,
       action: 'deleted', summary: `Deleted group · ${g.name}`,
     });
   });
-  return true;
+
+  return { ok: true, orphanedAttachments: attachments.map(a => a.attachment_uri) };
 }
 
 /** Soft-delete (archive). Personal group can never be archived. */
@@ -154,7 +178,7 @@ export async function archiveGroupSafe(db: SQLite.SQLiteDatabase, groupId: strin
     await db.runAsync('UPDATE budget_group SET is_archived=1 WHERE id=?', [groupId]);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
-      action: 'deleted', summary: `Archived group · ${g.name}`,
+      action: 'archived', summary: `Archived group · ${g.name}`,
     });
   });
   return true;

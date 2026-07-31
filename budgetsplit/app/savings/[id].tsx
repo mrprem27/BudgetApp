@@ -15,6 +15,7 @@ import { GoalCelebration } from '../../src/components/finance/GoalCelebration';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { LockExplainerSheet } from '../../src/components/finance/plan/LockExplainerSheet';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
 
@@ -60,6 +61,7 @@ export default function GoalDetailScreen() {
     adjustFreq, setAdjustFreq, adjustDate, setAdjustDate, adjustSaving,
     openAdjust, handleAdjust,
     celebrate, setCelebrate, toggleLock, confirmDelete,
+    showLockExplainer, setShowLockExplainer, confirmLockExplainer,
   } = useSavingsGoalScreen(id);
 
   if (!id) return null;
@@ -245,9 +247,9 @@ export default function GoalDetailScreen() {
             <Feather name="arrow-up-circle" size={16} color={colors.textSecondary} />
             <Text style={styles.secondaryText}>Withdraw</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={toggleLock} accessibilityRole="button" accessibilityLabel={goal.locked ? 'Unlock goal' : 'Lock goal'}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={toggleLock} accessibilityRole="button" accessibilityLabel={goal.locked ? 'Remove overspend protection' : 'Protect this goal from overspend cover'}>
             <Feather name={goal.locked ? 'lock' : 'unlock'} size={16} color={goal.locked ? colors.accent : colors.textSecondary} />
-            <Text style={[styles.secondaryText, !!goal.locked && { color: colors.accent }]}>{goal.locked ? 'Locked' : 'Lock'}</Text>
+            <Text style={[styles.secondaryText, !!goal.locked && { color: colors.accent }]}>{goal.locked ? 'Protected' : 'Protect'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -345,6 +347,12 @@ export default function GoalDetailScreen() {
       </SheetModal>
 
       <GoalCelebration visible={celebrate} goalName={goal.name} onDone={() => setCelebrate(false)} />
+
+      <LockExplainerSheet
+        visible={showLockExplainer}
+        onClose={() => setShowLockExplainer(false)}
+        onConfirm={confirmLockExplainer}
+      />
     </View>
   );
 }

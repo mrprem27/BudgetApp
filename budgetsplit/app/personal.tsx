@@ -13,6 +13,10 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+import { SheetModal } from '../src/components/ui/SheetModal';
+import { FAB } from '../src/components/ui/FAB';
+import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
+import { useGroupTxnActions } from '../src/hooks/useGroupTxnActions';
 import { getMyActivity, type TxnWithSplits } from '../src/db/queries/transactions';
 import { getRecurringForGroup } from '../src/db/queries/recurring';
 import { getAllGroups } from '../src/db/queries/groups';
@@ -50,6 +54,7 @@ export default function PersonalScreen() {
   const [tab, setTab] = useState<TabKey>('activity');
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showMenu, setShowMenu] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     if (!me) throw new Error('No current user');
@@ -85,6 +90,10 @@ export default function PersonalScreen() {
   const summary = data?.summary ?? { owe: 0, lent: 0 };
 
   const sharedGroups = groups.filter(g => g.is_personal !== 1);
+  const personalGroup = groups.find(g => g.is_personal === 1) ?? null;
+
+  // Rows span every group, so the actions read the owning group off each txn.
+  const { handleDelete, handleEditTxn } = useGroupTxnActions(null, reload);
 
   const filtered = activity.filter(a =>
     filter === 'all' ? true
@@ -102,12 +111,12 @@ export default function PersonalScreen() {
   }
 
   function openBudgetEditor() {
-    const pg = groups.find(g => g.is_personal === 1);
-    if (pg) router.push(`/group/${pg.id}/budget`);
+    if (personalGroup) router.push(`/group/${personalGroup.id}/budget`);
   }
 
   async function handleExport() {
-    const pg = groups.find(g => g.is_personal === 1);
+    const pg = personalGroup;
+    setShowMenu(false);
     if (!pg) return;
     try {
       const { csv, rowCount } = await buildGroupExportCsv(db, pg);
@@ -131,12 +140,12 @@ export default function PersonalScreen() {
         onBack={() => router.back()}
         right={
           <TouchableOpacity
-            onPress={handleExport}
+            onPress={() => setShowMenu(true)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Export Personal as CSV"
+            accessibilityLabel="Personal options"
           >
-            <Feather name="download" size={20} color={colors.accent} />
+            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         }
       />
@@ -219,7 +228,8 @@ export default function PersonalScreen() {
                   members={persons}
                   isPersonal={item.isPersonal}
                   groupName={item.isPersonal ? undefined : item.groupName}
-                  onPress={() => router.push(`/txn/${item.id}`)}
+                  onPress={() => handleEditTxn(item)}
+                  onDelete={() => handleDelete(item.id)}
                 />
               )}
               ListEmptyComponent={
@@ -330,8 +340,32 @@ export default function PersonalScreen() {
               })}
             </ScrollView>
           )}
+
+          {/* Single-tap FAB — pre-fills the personal group. */}
+          {personalGroup && (
+            <FAB onPress={() => router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense`)} aboveTabBar={false} />
+          )}
         </>
       )}
+
+      {/* Options menu — mirrors the group screen's overflow. */}
+      <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title="Personal" scroll={false}>
+        <View style={styles.menuCard}>
+          <SettingsRow
+            icon="clock"
+            label="Audit log"
+            onPress={() => {
+              setShowMenu(false);
+              if (personalGroup) router.push(`/history?groupId=${personalGroup.id}`);
+            }}
+          />
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
+        </View>
+        <Text style={styles.personalNote}>
+          This is your private personal space — it can't be shared, archived, or have other members.
+        </Text>
+      </SheetModal>
     </View>
   );
 }
@@ -381,4 +415,7 @@ const styles = StyleSheet.create({
   recurName: { ...type.body, color: colors.textPrimary },
   recurCadence: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
   recurAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
+
+  menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },
 });

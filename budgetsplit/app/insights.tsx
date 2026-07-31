@@ -22,6 +22,7 @@ import { recBg, recColor } from '../src/components/finance/group/helpers';
 import type { Insight } from '../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
 import { loadInsightsData } from '../src/lib/insightsData';
+import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { alpha } from '../src/theme';
 
 function insightTint(tone: Insight['tone']): string {
@@ -38,10 +39,11 @@ export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
   const [cutPct, setCutPct] = useState(20);
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } =
-    useScreenData((db) => loadInsightsData(db), []);
+  const { flags } = useFeatureFlags();
 
-  const personalId = data?.personalId ?? '';
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } =
+    useScreenData((db) => loadInsightsData(db, { savingsInsights: flags.savingsInsights }), [flags.savingsInsights]);
+
   const monthSpend = data?.monthSpend ?? 0;
   const budget = data?.budget ?? 0;
   const projected = data?.projected ?? 0;
@@ -107,7 +109,7 @@ export default function InsightsScreen() {
               </View>
               <Text style={styles.velocityLegendMuted}>{pctUsed}% budget used · {daysLeft} days left</Text>
             </View>
-            <TouchableOpacity style={styles.velocityCta} onPress={() => personalId && router.push(`/group/${personalId}`)} accessibilityRole="button">
+            <TouchableOpacity style={styles.velocityCta} onPress={() => router.push('/personal')} accessibilityRole="button">
               <Text style={styles.velocityCtaText}>See what to cut</Text>
               <Feather name="chevron-right" size={12} color={colors.accent} />
             </TouchableOpacity>
