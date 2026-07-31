@@ -13,6 +13,10 @@ export const radius = {
   sm:  8,
   md:  12,
   lg:  16,
+  /** Hero cards, primary surfaces (spending card, monthly total). */
+  xl:  20,
+  /** Reserved for extra-prominent hero tiles / onboarding. */
+  xxl: 28,
   pill: 999,
 };
 
@@ -21,6 +25,11 @@ export const layout = {
   cardPadding:    16,
   tabBarHeight:   64,
   headerHeight:   56,
+  /** Minimum tap target (iOS HIG 44pt / Material 48dp — use 44 as compromise). */
+  minTap:         44,
+  /** Hairline width (StyleSheet.hairlineWidth on iOS is ~0.33 which reads too
+   *  faint on this dark theme; use 1 for consistency, but softer colour). */
+  hairline:       1,
 };
 
 /**
@@ -50,7 +59,7 @@ export const shadow = {
     shadowRadius: 22,
     elevation: 12,
   },
-  // The FAB glows in its own coral light (design token --shadow-fab).
+  // The FAB glows in its own coral light.
   fab: {
     shadowColor: colors.coral,
     shadowOpacity: 0.45,

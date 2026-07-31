@@ -3,9 +3,10 @@ import { Text, TextStyle } from 'react-native';
 import { formatRupees, formatRupeesShort, formatCompact } from '../../lib/money';
 import { type, colors } from '../tokens';
 
-type Size = 'xl' | 'lg' | 'md' | 'sm';
+type Size = 'xxl' | 'xl' | 'lg' | 'md' | 'sm';
 
 const styleMap: Record<Size, TextStyle> = {
+  xxl: type.amountXXL,
   xl: type.amountXL,
   lg: type.amountLG,
   md: type.amountMD,

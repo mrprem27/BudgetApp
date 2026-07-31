@@ -31,6 +31,7 @@ import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
+import { SectionLabel } from '../../src/components/ui/SectionLabel';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { haptic } from '../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
@@ -224,7 +225,7 @@ export default function GroupsScreen() {
     if (activeFriends.length === 0) return null;
     return (
       <View style={styles.balancesWrap}>
-        <Text style={styles.balListLabel}>People</Text>
+        <SectionLabel>People</SectionLabel>
         <View style={styles.balList}>
           {activeFriends.map((f, i) => (
             <View
@@ -297,7 +298,7 @@ export default function GroupsScreen() {
           maxToRenderPerBatch={8}
           windowSize={9}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={viewMode === 'active' ? <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text> : null}
+          ListHeaderComponent={viewMode === 'active' ? <SectionLabel first>My groups</SectionLabel> : null}
           ListFooterComponent={viewMode === 'active' ? renderBalances() : null}
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={
@@ -348,7 +349,6 @@ const styles = StyleSheet.create({
   headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   list: { padding: layout.screenPaddingH, paddingBottom: 120 },
   balancesWrap: { marginBottom: space.sm },
-  balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
   balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
   balRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

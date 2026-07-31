@@ -30,6 +30,7 @@ import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { SectionLabel } from '../../src/components/ui/SectionLabel';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
 import { alpha } from '../../src/theme';
@@ -217,7 +218,7 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.getStartedLabel}>GET STARTED</Text>
+                <SectionLabel>Get started</SectionLabel>
                 <View style={{ gap: space.sm }}>
                   <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget`)} accessibilityRole="button">
                     <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
@@ -342,7 +343,6 @@ const styles = StyleSheet.create({
   emptyHeroBody: { ...type.label, color: colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 240, marginBottom: space.lg },
   emptyHeroCta: { alignSelf: 'stretch', backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
   emptyHeroCtaText: { ...type.button, color: colors.bg },
-  getStartedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: 14, padding: space.md, borderWidth: 1, borderColor: colors.border },
   startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   startTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

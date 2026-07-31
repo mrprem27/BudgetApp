@@ -9,6 +9,7 @@ import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { categoryVisual } from '../../src/constants/categories';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { SectionLabel } from '../../src/components/ui/SectionLabel';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -57,7 +58,11 @@ export default function RecurringScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Recurring" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Recurring"
+        subtitle={subs.length > 0 ? `${subs.length} active · ${formatCompact(monthlyTotal)}/mo` : 'Your repeating bills & charges'}
+        onBack={() => router.back()}
+      />
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (
@@ -65,8 +70,6 @@ export default function RecurringScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.intro}>Your repeating bills & charges — from your recurring expenses.</Text>
-
         {loaded && subs.length === 0 ? (
           <EmptyState
             icon="refresh-cw"
@@ -90,7 +93,7 @@ export default function RecurringScreen() {
               </View>
             </View>
 
-            <Text style={styles.sectionLabel}>ACTIVE · {subs.length}</Text>
+            <SectionLabel count={subs.length}>Active</SectionLabel>
             <View style={styles.listCard}>
               {subs.map((s, i) => {
                 const vis = categoryVisual(s.category);
@@ -131,7 +134,6 @@ export default function RecurringScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
-  intro: { ...type.label, color: colors.textMuted, marginBottom: space.xs, lineHeight: 19 },
   summaryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.settleTint, borderRadius: 16, padding: space.md, borderWidth: 1.5, borderColor: colors.settle },
   summaryLabel: { fontSize: 11, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
   summaryRight: { alignItems: 'flex-end' },

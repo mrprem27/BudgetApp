@@ -1,7 +1,10 @@
 export const colors = {
-  // Surfaces — near-black with a subtle teal tint, layered for elevation
+  // Surfaces — near-black with a subtle teal tint, layered for elevation.
+  // bgCard was raised a touch (13201F → 141F1D) to reduce the strong stripe
+  // that appeared between bg and card. Difference is imperceptible in
+  // isolation but reads as "one surface breathing" instead of "two panels".
   bg: '#0A0F11',
-  bgCard: '#13201F',
+  bgCard: '#141F1D',
   bgInput: '#162825',
   bgMuted: '#1B302D',
   bgElevated: '#1E3633',
@@ -32,33 +35,33 @@ export const colors = {
   healthRed: '#FF5C5C',
 
   border: '#21302E',
+  /** Softer border for hairline dividers inside cards (rowBorder). Was
+   *  re-declared as `colors.border` in ~15 places with a light opacity trick
+   *  applied per-screen. One token, one look. */
+  divider: '#1A2725',
   borderFocus: '#20C4B8',
 
-  /** Text/icon color on accent/gradient/coloured fills (was raw '#fff' ~15 places). */
+  /** Text/icon color on accent/gradient/coloured fills. */
   onAccent: '#FFFFFF',
 
-  /** Tinted surfaces for semantic cards (was re-invented as raw hex across ~20 files).
-   *  Each has a soft (card bg) and strong (border/hover) variant. */
+  /** Tinted surfaces for semantic cards. */
   expenseTint: '#2A1714',
   expenseTintStrong: '#3A1F1C',
-  /** Deeper danger surface, below `expenseTint`. Collapses three near-identical
-   *  raw hexes that were re-invented per screen (#1A1014 insights velocity card,
-   *  #1F0E0E notifications denied banner, #1A0A0A LockGate) — all within
-   *  0.002 relative luminance of each other. */
   expenseTintDeep: '#1A1014',
   incomeTint: '#081F16',
   incomeTintStrong: '#0C3D22',
   settleTint: '#1A1A3A',
   settleTintStrong: '#2A2A5A',
-  /** Amber-tinted surface, e.g. the history "edited" badge. */
   amberTint: '#221A00',
 
   /** Modal / sheet scrim behind bottom sheets and dialogs. */
   overlay: 'rgba(0,0,0,0.6)',
 };
 
-/** Gradient stops for striking surfaces (FAB, hero accents). */
+/** Gradient stops for striking surfaces (FAB, hero accents). Tighter delta
+ *  than before so buttons feel like a lit-from-behind surface rather than a
+ *  two-tone stripe. Kept `brand` (teal→coral) for the FAB only. */
 export const gradients = {
-  accent: ['#22D3C4', '#15A89D'] as const,   // teal sheen
-  brand: ['#20C4B8', '#FF6F61'] as const,     // teal → coral
+  accent: ['#22D0C3', '#1AB7AC'] as const,   // teal sheen, closer stops
+  brand:  ['#20C4B8', '#FF6F61'] as const,   // teal → coral (FAB only)
 };

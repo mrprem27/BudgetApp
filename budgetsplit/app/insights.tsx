@@ -12,6 +12,7 @@ import { space, radius, layout, shadow } from '../src/constants/layout';
 import { categoryVisual } from '../src/constants/categories';
 import { asFeather } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { SectionLabel } from '../src/components/ui/SectionLabel';
 import { Badge } from '../src/components/ui/Badge';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -73,8 +74,8 @@ export default function InsightsScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title="Insights"
+        subtitle={`${format(today, 'MMMM yyyy')} · day ${dayOfMonth} of ${daysInMonth}`}
         onBack={() => router.back()}
-        right={<View style={styles.monthPill}><Text style={styles.monthPillText}>{format(today, 'MMMM')}</Text></View>}
       />
       {loadError ? (
         <ErrorState onRetry={reload} />
@@ -83,8 +84,6 @@ export default function InsightsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.eyebrow}>{format(today, 'MMMM yyyy')} · {dayOfMonth} days in</Text>
-
         {/* HERO — spending velocity (only when projected to overspend) */}
         {overspend && (
           <View style={styles.velocityCard}>
@@ -119,7 +118,7 @@ export default function InsightsScreen() {
         {/* MONTH-END FORECAST — projection graph (moved from Reports) */}
         {hasForecast && (
           <>
-            <Text style={styles.secLabel}>MONTH-END FORECAST</Text>
+            <SectionLabel first>Month-end forecast</SectionLabel>
             <View style={styles.chartCard}>
               <View style={styles.forecastHeader}>
                 <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
@@ -185,7 +184,7 @@ export default function InsightsScreen() {
         {/* RECOMMENDATIONS — aggregated across every group's budget */}
         {recommendations.length > 0 && (
           <>
-            <Text style={styles.secLabel}>RECOMMENDATIONS</Text>
+            <SectionLabel count={recommendations.length}>Recommendations</SectionLabel>
             <View style={styles.recList}>
               {recommendations.map(r => (
                 <View key={r.key} style={[styles.recPill, { backgroundColor: recBg(r.severity) }]}>
@@ -203,7 +202,7 @@ export default function InsightsScreen() {
         {/* DRIVING OVERSPEND — biggest over-budget categories across groups */}
         {drivers.length > 0 && (
           <>
-            <Text style={styles.secLabel}>DRIVING OVERSPEND</Text>
+            <SectionLabel>Driving overspend</SectionLabel>
             <View style={styles.secCard}>
               {drivers.map((d, i) => {
                 const vis = categoryVisual(d.category);
@@ -227,7 +226,7 @@ export default function InsightsScreen() {
         {/* SHIFTS VS LAST MONTH */}
         {shifts.length > 0 && (
           <>
-            <Text style={styles.secLabel}>SHIFTS VS LAST MONTH</Text>
+            <SectionLabel>Shifts vs last month</SectionLabel>
             <View style={styles.secCard}>
               {shifts.map((s, i) => {
                 const vis = categoryVisual(s.cat);
@@ -258,7 +257,7 @@ export default function InsightsScreen() {
         {/* WHAT IF — cut the top category and see the saving */}
         {whatIf && whatIf.monthly > 0 && (
           <>
-            <Text style={styles.secLabel}>WHAT IF…</Text>
+            <SectionLabel>What if…</SectionLabel>
             <View style={[styles.secCard, { padding: space.md }]}>
               <Text style={styles.whatIfLead}>
                 Cut <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold' }}>{whatIf.name}</Text> by
@@ -281,7 +280,7 @@ export default function InsightsScreen() {
         {/* SAVINGS — opportunity-cost / habit nudges (moved from the Plan tab) */}
         {savings.length > 0 && (
           <>
-            <Text style={styles.secLabel}>SAVINGS</Text>
+            <SectionLabel>Savings</SectionLabel>
             <View style={[styles.secCard, { paddingHorizontal: space.md }]}>
               {savings.map((ins, i) => {
                 const tint = insightTint(ins.tone);
@@ -315,9 +314,6 @@ export default function InsightsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
-  monthPill: { backgroundColor: colors.bgMuted, borderRadius: 100, paddingVertical: 7, paddingHorizontal: 14 },
-  monthPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
-  eyebrow: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
 
   velocityCard: { backgroundColor: colors.expenseTintDeep, borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: colors.expenseTintStrong },
   velocityHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 10 },
@@ -333,7 +329,7 @@ const styles = StyleSheet.create({
   velocityCta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border },
   velocityCtaText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
 
-  secLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
+  secCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   whatIfLead: { ...type.body, color: colors.textSecondary, marginBottom: space.sm },
   whatIfChips: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   whatIfChip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
@@ -341,7 +337,6 @@ const styles = StyleSheet.create({
   whatIfChipText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   whatIfSave: { ...type.body, color: colors.textPrimary },
   whatIfYear: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  secCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
 
   // Month-end forecast graph
