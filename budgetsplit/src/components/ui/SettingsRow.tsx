@@ -55,6 +55,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52 },
   iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary, flex: 1 },
-  right: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1, maxWidth: '45%' },
   value: { ...type.body, color: colors.textSecondary, flexShrink: 1 },
 });

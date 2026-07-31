@@ -78,7 +78,10 @@ export async function loadInsightsData(
       const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
       const fc = forecastMonthEnd(running, dayOfMonth, daysInMonth, priorMonthTotal);
       if (fc.ready) {
-        const labelForDay = (d: number) => (d % 2 === 1 ? `${d}` : '');
+        // Every-other-day labels ("1..", "2..") overlapped and got clipped by the
+        // chart at typical screen widths — 5-day steps leave each label room to
+        // render its full 1-2 digit day number.
+        const labelForDay = (d: number) => (d === 1 || d % 5 === 0 ? `${d}` : '');
         // Projected series owns the x-axis labels and spans the whole month.
         forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
           const d = i + 1;

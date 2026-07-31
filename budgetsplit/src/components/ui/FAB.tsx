@@ -137,16 +137,16 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: layout.fabHeight,
+    height: layout.fabHeight,
+    borderRadius: layout.fabHeight / 2,
     ...shadow.fab,
     zIndex: 100,
   },
   fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: layout.fabHeight,
+    height: layout.fabHeight,
+    borderRadius: layout.fabHeight / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

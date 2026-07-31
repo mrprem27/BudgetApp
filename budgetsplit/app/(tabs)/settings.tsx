@@ -125,6 +125,9 @@ export default function SettingsScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    {/* Persistent status-bar cover — outside the ScrollView so scrolled content
+        never paints under the clock/notch once the large title scrolls away. */}
+    <View style={[styles.statusBarCover, { height: insets.top, backgroundColor: colors.bg }]} pointerEvents="none" />
     <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} keyboardShouldPersistTaps="handled">
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Text style={styles.title}>Settings</Text>
@@ -299,6 +302,7 @@ function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof F
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  statusBarCover: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { format, startOfMonth } from 'date-fns';
@@ -140,31 +141,41 @@ export default function SearchScreen() {
           {/* Filters: source · kind (centralized enums). `flexGrow:0` is critical —
               a horizontal ScrollView in a flex column otherwise stretches to fill the
               whole screen and shoves the results off. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-            {SEARCH_SOURCE.map(s => (
-              <TouchableOpacity
-                key={s}
-                style={[styles.chip, source === s && styles.chipActive]}
-                onPress={() => setSource(s)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: source === s }}
-              >
-                <Text style={[styles.chipText, source === s && styles.chipTextActive]}>{SEARCH_SOURCE_LABEL[s]}</Text>
-              </TouchableOpacity>
-            ))}
-            <View style={styles.chipDivider} />
-            {TXN_KIND.map(k => (
-              <TouchableOpacity
-                key={k}
-                style={[styles.chip, kind === k && styles.chipActive]}
-                onPress={() => setKind(kind === k ? 'all' : k)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: kind === k }}
-              >
-                <Text style={[styles.chipText, kind === k && styles.chipTextActive]}>{TXN_KIND_LABEL_PLURAL[k]}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={styles.chipsWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+              {SEARCH_SOURCE.map(s => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.chip, source === s && styles.chipActive]}
+                  onPress={() => setSource(s)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: source === s }}
+                >
+                  <Text style={[styles.chipText, source === s && styles.chipTextActive]}>{SEARCH_SOURCE_LABEL[s]}</Text>
+                </TouchableOpacity>
+              ))}
+              <View style={styles.chipDivider} />
+              {TXN_KIND.map(k => (
+                <TouchableOpacity
+                  key={k}
+                  style={[styles.chip, kind === k && styles.chipActive]}
+                  onPress={() => setKind(kind === k ? 'all' : k)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: kind === k }}
+                >
+                  <Text style={[styles.chipText, kind === k && styles.chipTextActive]}>{TXN_KIND_LABEL_PLURAL[k]}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {/* Fade hints the row keeps scrolling past the last visible chip. */}
+            <LinearGradient
+              colors={[colors.bg + '00', colors.bg]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.chipsFade}
+              pointerEvents="none"
+            />
+          </View>
 
           {/* Results fill the remaining space so the list scrolls and the empty
               state sits in a stable region below the filters. */}
@@ -251,8 +262,10 @@ const styles = StyleSheet.create({
     height: 48, paddingHorizontal: 14,
   },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingVertical: 0 },
+  chipsWrap: { position: 'relative' },
   chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { flexDirection: 'row', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, alignItems: 'center' },
+  chipsFade: { position: 'absolute', right: 0, top: 0, bottom: space.sm, width: 28 },
   chipDivider: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: space.xs, alignSelf: 'center' },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
   chipActive: { backgroundColor: colors.accent },

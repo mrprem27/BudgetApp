@@ -134,10 +134,10 @@ const styles = StyleSheet.create({
   // Center slot is a touch wider so the FAB gets breathing room.
   fabSlot: { flex: 1.2, alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
-    width: 56, height: 56, borderRadius: 28,
+    width: layout.fabHeight, height: layout.fabHeight, borderRadius: layout.fabHeight / 2,
     alignItems: 'center', justifyContent: 'center',
-    // Raise so the FAB's center sits on the nav's top line (8px row offset + 28 half-height).
-    marginTop: -36,
+    // Raise so the FAB's center sits on the nav's top line (8px row offset + half-height).
+    marginTop: -(8 + layout.fabHeight / 2),
     ...shadow.fab,
   },
 });

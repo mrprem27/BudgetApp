@@ -122,7 +122,7 @@ export function CategoryDonut({ data, total, onOpen, selectedName, onSelect }: P
             <TouchableOpacity style={styles.centerContent} onPress={() => onOpen(selected)} accessibilityRole="button" accessibilityLabel={`View ${selected.name} details`}>
               <View style={styles.dotRow}>
                 <View style={[styles.dot, { backgroundColor: selected.color }]} />
-                <Text style={styles.catName} numberOfLines={1}>{selected.name}</Text>
+                <Text style={styles.catName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{selected.name}</Text>
               </View>
               <Text style={styles.centerAmt}>{formatCompact(selected.paise)}</Text>
               <Text style={styles.viewLink}>{selected.pct}% · View →</Text>

@@ -377,7 +377,7 @@ export default function ItemizedScreen() {
       {/* STEP 3: PAYERS */}
       {f.step === 'payers' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.fieldLabel}>Who paid? Must f.total {formatRupees(f.total)}</Text>
+          <Text style={styles.fieldLabel}>Who paid? Must equal total {formatRupees(f.total)}</Text>
           <View style={styles.card}>
             {f.members.map((m, i) => (
               <View key={m.id} style={[styles.payerRow, i < f.members.length - 1 && styles.rowBorder]}>

@@ -134,7 +134,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>

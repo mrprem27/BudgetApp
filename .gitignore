@@ -1,0 +1,5 @@
+# wrangler local cache/state (contains account ID, never commit)
+.wrangler/
+
+# OS
+.DS_Store

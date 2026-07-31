@@ -4,6 +4,7 @@ import {
   TextInput, ScrollView, Animated, Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -45,6 +46,7 @@ type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'no
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   // Groups come from the global store — hydrated at the root by StoreHydrator and
   // refreshed on the data-change signal, so this screen neither queries nor sets them.
   const groups = useStore(s => s.groups);
@@ -196,7 +198,7 @@ export default function GroupsScreen() {
                   <View style={{ flex: 1 }}>
                     <BudgetBar pct={h.pct} health={h.health} height={5} />
                   </View>
-                  <Text style={[styles.budgetPct, (h.pct ?? 0) > 100 && { color: colors.expense }]}>{utilLabel(h.pct)}</Text>
+                  <Text style={[styles.budgetPct, (h.pct ?? 0) > 100 && { color: colors.healthRed }]}>{utilLabel(h.pct)}</Text>
                   {h.over > 0 && <Text style={styles.overBadge}>{h.over} over</Text>}
                 </View>
               )}
@@ -204,7 +206,10 @@ export default function GroupsScreen() {
             {isArchivedView ? (
               <Feather name="rotate-ccw" size={16} color={colors.accent} />
             ) : (h?.net ?? 0) !== 0 ? (
-              <BalanceChip net={h?.net ?? 0} />
+              <View style={styles.trailingCol}>
+                <BalanceChip net={h?.net ?? 0} />
+                <Feather name="chevron-right" size={14} color={colors.textMuted} />
+              </View>
             ) : (
               <Feather name="chevron-right" size={18} color={colors.textMuted} />
             )}
@@ -292,7 +297,7 @@ export default function GroupsScreen() {
           data={viewMode === 'active' ? activeGroups : archived}
           keyExtractor={g => g.id}
           renderItem={renderGroup}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={9}
@@ -346,7 +351,7 @@ export default function GroupsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: layout.screenPaddingH, paddingBottom: 120 },
+  list: { padding: layout.screenPaddingH },
   balancesWrap: { marginBottom: space.sm },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
   balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
@@ -361,12 +366,13 @@ const styles = StyleSheet.create({
   groupCardArchived: { opacity: 0.65, borderStyle: 'dashed' as any },
   cardStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  trailingCol: { alignItems: 'flex-end', gap: space.xs },
   groupInfo: { flex: 1, gap: space.xs },
   groupName: { ...type.subheading, color: colors.textPrimary },
   groupSub: { ...type.caption, color: colors.textSecondary },
   budgetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
-  overBadge: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
+  overBadge: { ...type.caption, color: colors.healthRed, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   stackRow: { marginTop: space.xs },
   settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
   settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

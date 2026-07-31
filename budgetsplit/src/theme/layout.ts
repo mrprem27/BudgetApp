@@ -21,6 +21,7 @@ export const layout = {
   cardPadding:    16,
   tabBarHeight:   64,
   headerHeight:   56,
+  fabHeight:      56,
 };
 
 /**

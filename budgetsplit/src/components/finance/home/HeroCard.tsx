@@ -53,7 +53,9 @@ export function HeroCard({
   const hasBudget = budgetAllocated > 0;
   const util = hasBudget ? Math.round((spent / budgetAllocated) * 100) : 0;
   const over = util >= 100;
-  const paceColor = over ? colors.expense : util >= 80 ? colors.healthAmber : colors.income;
+  // healthRed (not colors.expense) — "over budget" and "you owe money" are
+  // different meanings and shouldn't share a color.
+  const paceColor = over ? colors.healthRed : util >= 80 ? colors.healthAmber : colors.income;
   const barPct = Math.min(100, Math.max(0, util));
   // Over budget reads better as a multiple ("1.2× budget") than as ">100%".
   const overMultiple = hasBudget ? (spent / budgetAllocated).toFixed(1).replace(/\.0$/, '') : '0';

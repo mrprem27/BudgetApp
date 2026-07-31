@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
@@ -47,6 +48,7 @@ type RecurGroup = { groupId: string; name: string; isPersonal: boolean; rules: T
 
 export default function PersonalScreen() {
   const db = useSQLiteContext();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const me = useStore((s) => s.me);
   const myId = me?.id ?? '';
@@ -199,7 +201,7 @@ export default function PersonalScreen() {
             <SectionList
               sections={sections}
               keyExtractor={t => t.id}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]}
               refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               ListHeaderComponent={
                 activity.length > 0 ? (
@@ -247,7 +249,7 @@ export default function PersonalScreen() {
 
           {/* BUDGET — global: my total share-spend (personal + groups) vs my limits */}
           {tab === 'budget' && (
-            <ScrollView contentContainerStyle={styles.listContent} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
               {budget.length === 0 ? (
                 <View style={styles.budgetCard}>
                   <Feather name="target" size={22} color={colors.accent} />
@@ -293,7 +295,7 @@ export default function PersonalScreen() {
 
           {/* RECURRING — collapsible, grouped by group (personal first) */}
           {tab === 'recurring' && (
-            <ScrollView contentContainerStyle={styles.listContent} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
               {recurGroups.length === 0 ? (
                 <EmptyState icon="repeat" title="No recurring items" body="Mark an expense as Recurring when you add it and it'll show here, grouped by where it lives." tint={colors.textSecondary} />
               ) : recurGroups.map(rg => {
@@ -384,7 +386,7 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
   tabLabelActive: { color: colors.bg },
 
-  listContent: { paddingHorizontal: layout.screenPaddingH, paddingBottom: 120, gap: space.sm },
+  listContent: { paddingHorizontal: layout.screenPaddingH, gap: space.sm },
   sectionHeader: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm, marginBottom: 2 },
 
   budgetCard: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },

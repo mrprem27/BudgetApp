@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SectionList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, layout } from '../../tokens';
 import { groupByDate } from '../../../lib/txnGrouping';
 import { TransactionRow } from '../TransactionRow';
@@ -23,6 +24,7 @@ type Props = {
 /** Group ledger: collapsible filter bar + date-sectioned transaction list. Owns its
  *  own search/kind filter (tab-local UI state). */
 export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, refreshing, onRefresh }: Props) {
+  const insets = useSafeAreaInsets();
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -55,7 +57,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
     <SectionList
       sections={sections}
       keyExtractor={t => t.id}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]}
       initialNumToRender={12}
       maxToRenderPerBatch={10}
       windowSize={11}
@@ -100,7 +102,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
+  listContent: { padding: layout.screenPaddingH, gap: space.sm },
   sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   sep: { height: 1, backgroundColor: colors.border },
 });
