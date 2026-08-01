@@ -476,8 +476,10 @@ export default function ReviewScreen() {
                 <Feather name={checked ? 'check-circle' : 'circle'} size={20} color={checked ? colors.accent : colors.textMuted} />
               </TouchableOpacity>
           )}
-          <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
-          <Text style={styles.date}>{format(row.date, 'd MMM · h:mm a')}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
+            <Text style={styles.date}>{format(row.date, 'd MMM · h:mm a')}</Text>
+          </View>
         </View>
 
         <View style={styles.controls}>
