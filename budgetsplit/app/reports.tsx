@@ -269,22 +269,18 @@ export default function ReportsScreen() {
                 onPressCategory={(name) => setSelectedCat(c => (c === name ? null : name))}
               />
 
-              {/* Both charts off → no empty card shell. */}
-              {(flags.reportsDonut || flags.reportsTrend) && (
               <View style={styles.card}>
-                {flags.reportsDonut && (
-                  <CategoryDonut
+                <CategoryDonut
                     data={pieData}
                     total={pieTotal}
                     // Center "View →" opens the month-scoped transaction drill-down
                     // for the selected category.
                     onOpen={(seg) => router.push(`/report-transactions?month=${format(month, 'yyyy-MM')}&category=${encodeURIComponent(seg.name)}`)}
                     selectedName={selectedCat}
-                    onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
-                  />
-                )}
+                  onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
+                />
 
-                {flags.reportsTrend && trendValues.length > 0 && (
+                {trendValues.length > 0 && (
                   <View style={styles.trendBlock}>
                     <View style={styles.trendHeader}>
                       <Text style={styles.chartTitle}>
@@ -300,7 +296,6 @@ export default function ReportsScreen() {
                   </View>
                 )}
               </View>
-              )}
             </>
           )}
 

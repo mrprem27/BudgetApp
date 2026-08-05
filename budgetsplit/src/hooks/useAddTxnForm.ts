@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,7 @@ import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseToPaise, formatRupees } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
+import { evaluateAfford } from '../lib/afford';
 import { haptic } from '../lib/haptics';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
@@ -221,6 +222,29 @@ export function useAddTxnForm(params: AddTxnParams) {
   const nudgeStat = selectedCategory ? snapshot?.byCategory[selectedCategory.name] : null;
   const nudgeRemaining = nudgeStat?.budget != null ? nudgeStat.budget - nudgeStat.spentThisMonth : null;
   const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
+
+  // Same engine as /afford, so the answer reaches everyone at the moment of
+  // spending rather than only those who find the Plan header icon. Only the
+  // verdict is surfaced here; the screen is where the reasoning lives.
+  const affordResult = useMemo(() => {
+    if (kind !== 'expense' || !snapshot || total <= 0) return null;
+    return evaluateAfford({
+      amount: total,
+      available: snapshot.available,
+      upcomingBills: snapshot.upcomingBills,
+      monthlyIncome: snapshot.incomeSource !== 'none' && snapshot.monthlyIncome > 0 ? snapshot.monthlyIncome : undefined,
+      category: selectedCategory && nudgeStat
+        ? {
+            name: selectedCategory.name, spentThisMonth: nudgeStat.spentThisMonth,
+            norm: nudgeStat.norm, budget: nudgeStat.budget, typicalBasket: nudgeStat.typicalBasket,
+          }
+        : undefined,
+      projection: snapshot.projection ?? undefined,
+      goalImpact: snapshot.goalPacing
+        ? { name: snapshot.goalPacing.name, monthsDelayed: total / snapshot.goalPacing.monthlyRate }
+        : undefined,
+    });
+  }, [kind, snapshot, total, selectedCategory, nudgeStat]);
 
   const canSave = kind === 'transfer'
     ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId && selectedCategory !== null)
@@ -430,7 +454,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     // attachment / location
     attachmentUri, setAttachmentUri, place, setPlace, locEnabled, capturingLoc, captureLocation,
     // currency / nudge / derived
-    currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, composedNote, canSave,
+    currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
     // actions
     handleSave,
   };

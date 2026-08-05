@@ -4,10 +4,9 @@ import {
 } from '../lib/personaDefaults';
 
 describe('asIntent', () => {
-  it('accepts the three known personas', () => {
-    expect(asIntent('personal')).toBe('personal');
-    expect(asIntent('split')).toBe('split');
-    expect(asIntent('both')).toBe('both');
+  it('accepts every known persona', () => {
+    for (const intent of INTENTS) expect(asIntent(intent)).toBe(intent);
+    expect(INTENTS).toHaveLength(4);
   });
 
   it('rejects anything else, including a stale or corrupt stored value', () => {
@@ -45,20 +44,23 @@ describe('personaFlagPatch', () => {
     expect(personaFlags('both').splitting).toBe(true);
   });
 
-  it('gives the personal persona the solo-money modules that are opt-in by default', () => {
-    // The point of the mapping: these are off in DEFAULTS, and this persona is
-    // exactly who they were built for.
-    for (const key of ['affordCheck', 'streak'] as FeatureKey[]) {
-      expect(DEFAULTS[key]).toBe(false);
-      expect(personaFlags('personal')[key]).toBe(true);
+  it('gives the personal persona the opt-in module built for exactly them', () => {
+    expect(DEFAULTS.streak).toBe(false);
+    expect(personaFlags('personal').streak).toBe(true);
+  });
+
+  it('strips every peer-to-peer surface for a solo user', () => {
+    const solo = personaFlags('personal');
+    for (const key of ['splitting', 'itemized', 'upiSettle'] as FeatureKey[]) {
+      expect(solo[key]).toBe(false);
     }
   });
 
   it('keeps solo-money surfaces out of a splitter\'s way', () => {
     const split = personaFlags('split');
-    expect(split.healthScore).toBe(false);
-    expect(split.forecast).toBe(false);
-    expect(split.savingsInsights).toBe(false);
+    for (const key of ['healthScore', 'savingsGoals', 'affordCheck', 'insights', 'reports'] as FeatureKey[]) {
+      expect(split[key]).toBe(false);
+    }
   });
 
   it('produces a genuinely different app per persona — the bug this closes', () => {
@@ -108,6 +110,52 @@ describe('personaChangedKeys', () => {
       for (const key of personaChangedKeys(intent)) rebuilt[key] = personaFlags(intent)[key];
       expect(rebuilt).toEqual(personaFlags(intent));
     }
+  });
+});
+
+/**
+ * The complaint this closes: personas that differed on a flag or two produced four
+ * near-identical apps. Each pair must now differ on a MEANINGFUL number of keys,
+ * and each persona must be reachable as its own answer.
+ */
+describe('personas are genuinely distinct combos', () => {
+  const REAL = INTENTS.filter(i => i !== 'both');
+
+  it('no two personas produce the same app', () => {
+    const seen = new Map<string, string>();
+    for (const intent of INTENTS) {
+      const sig = JSON.stringify(personaFlags(intent));
+      expect(seen.has(sig)).toBe(false);
+      seen.set(sig, intent);
+    }
+  });
+
+  it('every pair of real personas differs on at least three flags', () => {
+    for (let i = 0; i < REAL.length; i++) {
+      for (let j = i + 1; j < REAL.length; j++) {
+        const a = personaFlags(REAL[i]);
+        const b = personaFlags(REAL[j]);
+        const diff = (Object.keys(DEFAULTS) as FeatureKey[]).filter(k => a[k] !== b[k]);
+        expect(diff.length).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it('leaves no persona with an empty app', () => {
+    for (const intent of INTENTS) {
+      const on = Object.values(personaFlags(intent)).filter(Boolean).length;
+      expect(on).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('separates household from split on the habitual-bill machinery', () => {
+    const house = personaFlags('household');
+    const split = personaFlags('split');
+    expect(house.recurring && house.recurringSuggest && house.reminders).toBe(true);
+    // A trip ends; a household does not. Itemising a restaurant bill is the
+    // splitter's job, not the flatmate's — rent is one line.
+    expect(house.itemized).toBe(false);
+    expect(split.itemized).toBe(true);
   });
 });
 

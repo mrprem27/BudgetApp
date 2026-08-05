@@ -144,7 +144,7 @@ export default function QuickAddScreen() {
               />
 
               {kind === 'expense' && nudgeColor != null && f.nudgeRemaining != null && f.selectedCategory && (
-                <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} />
+                <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} afford={f.affordResult} />
               )}
 
               <MoreOptions hint="Split · Attach" forceOpen={isEditing}>
@@ -152,7 +152,7 @@ export default function QuickAddScreen() {
                   <NoteField value={f.note} onChangeText={f.setNote} placeholder="Note (optional)" maxLength={120} accessibilityLabel="Note" />
                 )}
 
-                {!isEditing && kind !== 'income' && (
+                {!isEditing && kind !== 'income' && flags.itemized && (
                   <TouchableOpacity
                     style={styles.byItemsRow}
                     onPress={() => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })}

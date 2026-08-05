@@ -11,6 +11,7 @@ import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
 import type { PayMethod } from '../../constants/enums';
 import { alpha } from '../../theme';
+import { useFeatureFlags } from '../system/FeatureFlagsProvider';
 
 type Props = {
   me: Person | null;
@@ -34,6 +35,7 @@ type Props = {
  *  The transfer reason is a real 'transfer' category picked via the shared
  *  category pill in Quick Add (same UI as Expense/Income). */
 export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, note, onNote, amountPaise = 0 }: Props) {
+  const { flags } = useFeatureFlags();
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
@@ -60,7 +62,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 
   // Only when we know who is being paid, have their handle, and have an amount.
   // No VPA → no button, and settling behaves exactly as it did before.
-  const upiUri = to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
+  const upiUri = flags.upiSettle && to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
     ? buildUpiUri({ vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up' })
     : null;
 

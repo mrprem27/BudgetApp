@@ -13,15 +13,30 @@ import { ErrorState } from '../src/components/ui/ErrorState';
 import { CategoryChip } from '../src/components/finance/CategoryChip';
 import { getAffordSnapshot, type AffordSnapshot } from '../src/db/queries/savings';
 import {
-  evaluateAfford, AffordVerdict, AffordReason, incomeSharePct,
+  evaluateAfford, AffordVerdict, AffordReason, AffordNecessity, incomeSharePct,
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
 import { alpha } from '../src/theme';
 
+const NECESSITY_OPTS: { key: AffordNecessity; label: string; color: string }[] = [
+  { key: AffordNecessity.Need,  label: 'Need it',  color: colors.income },
+  { key: AffordNecessity.Want,  label: 'Want it',  color: colors.accent },
+  { key: AffordNecessity.Later, label: 'Can wait', color: colors.healthAmber },
+];
+
+/** Months → the coarsest unit that still reads as a real delay. */
+function delayLabel(months: number): string {
+  if (months >= 12) { const y = months / 12; return `${y.toFixed(y >= 10 ? 0 : 1)} years`; }
+  if (months >= 1.5) return `${Math.round(months)} months`;
+  const weeks = Math.round(months * 4.345);
+  return weeks <= 1 ? 'about a week' : `${weeks} weeks`;
+}
+
 export default function AffordScreen() {
   const router = useRouter();
   const [amountText, setAmountText] = useState('');
+  const [necessity, setNecessity] = useState<AffordNecessity | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
   // Refetch on focus (via useScreenData) so the snapshot reflects txns added elsewhere.
@@ -46,17 +61,26 @@ export default function AffordScreen() {
       amount, available, upcomingBills: upcoming,
       monthlyIncome: incomeSource !== 'none' && monthlyIncome > 0 ? monthlyIncome : undefined,
       category: categoryName && catStat
-        ? { name: categoryName, spentThisMonth: catStat.spentThisMonth, norm: catStat.norm, budget: catStat.budget }
+        ? {
+            name: categoryName, spentThisMonth: catStat.spentThisMonth, norm: catStat.norm,
+            budget: catStat.budget, typicalBasket: catStat.typicalBasket,
+          }
+        : undefined,
+      necessity: necessity ?? undefined,
+      projection: snap?.projection ?? undefined,
+      // Turn "₹X spent" into "the goal you're funding slips by N months".
+      goalImpact: snap?.goalPacing && amount > 0
+        ? { name: snap.goalPacing.name, monthsDelayed: amount / snap.goalPacing.monthlyRate }
         : undefined,
     };
     return evaluateAfford(ctx);
-  }, [amount, available, upcoming, monthlyIncome, categoryName, catStat]);
+  }, [amount, available, upcoming, monthlyIncome, incomeSource, categoryName, catStat, necessity, snap]);
 
   // `snap` is undefined until the first load resolves (never null), so both
   // guards must test truthiness — otherwise the verdict is computed from zeros
   // and the screen confidently answers "no" before it knows anything.
   const showResult = amount > 0 && !!snap;
-  const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare } = result;
+  const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare, projectedAfter, goalImpact } = result;
 
   const V = {
     [AffordVerdict.Comfortable]: { color: colors.income, emoji: '🎉', title: 'Yes — you can afford it' },
@@ -73,6 +97,12 @@ export default function AffordScreen() {
         return `This pushes ${categoryName} to ${formatCompact(categoryAfter ?? 0)} — over your ${formatCompact(categoryCap ?? 0)} monthly budget.`;
       case AffordReason.AboveCategoryNorm:
         return `That's more than you usually spend on ${categoryName} (about ${formatCompact(categoryCap ?? 0)}/month).`;
+      case AffordReason.MonthAlreadyOver:
+        return `This month is already tracking to ${formatCompact(projectedAfter ?? 0)} against a ${formatCompact(snap?.projection?.budget ?? 0)} budget.`;
+      case AffordReason.DelaysGoal:
+        return `Saving this instead would reach ${goalImpact?.name} about ${delayLabel(goalImpact?.monthsDelayed ?? 0)} sooner.`;
+      case AffordReason.UnusualForCategory:
+        return `Bigger than usual for ${categoryName} — you normally spend around ${formatCompact(catStat?.typicalBasket ?? 0)} at a time.`;
       case AffordReason.LargeIncomeShare:
         return `It's ${incomeSharePct(incomeShare)} of ${incomeSource === 'rule' ? 'a month\'s income' : 'what you logged in the last 30 days'} in one go.`;
       case AffordReason.ThinBuffer:
@@ -129,6 +159,28 @@ export default function AffordScreen() {
             </View>
           )}
 
+          {/* Optional: unset means the engine simply ignores this axis, like the
+              category and income axes. Nothing is preselected, so the fast path
+              stays one field. */}
+          <Text style={styles.label}>How much do you need it? <Text style={styles.labelHint}>(optional)</Text></Text>
+          <View style={styles.chipRow}>
+            {NECESSITY_OPTS.map(o => {
+              const on = necessity === o.key;
+              return (
+                <TouchableOpacity
+                  key={o.key}
+                  style={[styles.necChip, on && { borderColor: o.color, backgroundColor: alpha(o.color, 10) }]}
+                  onPress={() => setNecessity(on ? null : o.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={o.label}
+                >
+                  <Text style={[styles.necChipText, on && { color: o.color }]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View style={styles.breakdownCard}>
             <View style={styles.cashRow}>
               <Text style={styles.cashLabel}>Spendable cash now</Text>
@@ -183,6 +235,33 @@ export default function AffordScreen() {
             )}
           </View>
 
+          {/* The trade-off, shown even when no axis trips a warning: the honest
+              answer to "what does this cost me" is often not a yes/no. Phrased as
+              a delay, never as a transfer — the raid that would actually move the
+              money is still silent for unlocked goals (V2-10). */}
+          {showResult && (goalImpact || snap?.projection) && (
+            <View style={styles.costsCard}>
+              <Text style={styles.costsLabel}>WHAT THIS COSTS YOU</Text>
+              {goalImpact && (
+                <View style={styles.cashRow}>
+                  <Text style={styles.cashLabel} numberOfLines={2}>Delays {goalImpact.name}</Text>
+                  <Text style={styles.cashVal}>{delayLabel(goalImpact.monthsDelayed)}</Text>
+                </View>
+              )}
+              {snap?.projection && projectedAfter !== undefined && (
+                <>
+                  {goalImpact && <View style={styles.breakdownDivider} />}
+                  <View style={styles.cashRow}>
+                    <Text style={styles.cashLabel}>Month-end, with this</Text>
+                    <Text style={[styles.cashVal, { color: projectedAfter > snap.projection.budget ? colors.expense : colors.textPrimary }]}>
+                      {formatCompact(projectedAfter)} / {formatCompact(snap.projection.budget)}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+
           {showResult && (
             <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
               <Text style={styles.resultEmoji}>{V.emoji}</Text>
@@ -225,6 +304,10 @@ const styles = StyleSheet.create({
   rupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, minWidth: 120, textAlign: 'center' },
   chipRow: { flexDirection: 'row', gap: space.sm, paddingTop: space.sm, paddingRight: space.md },
+  costsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
+  costsLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.9, fontFamily: 'Inter_600SemiBold' },
+  necChip: { paddingHorizontal: space.md, height: 40, justifyContent: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  necChipText: { ...type.body, color: colors.textSecondary },
   breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   breakdownDivider: { height: 1, backgroundColor: colors.border },
   cashRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md },

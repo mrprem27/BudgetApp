@@ -14,7 +14,6 @@ import type * as SQLite from 'expo-sqlite';
  */
 
 const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
-const FLAGS_ON = { forecast: true, dashboardInsights: true };
 
 /** Midday today, so day/month/year windows all contain it. */
 const today = () => { const d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime(); };
@@ -29,9 +28,9 @@ function setup() {
 }
 
 /** loadHomeData takes the groups list from the store, mirroring the screen. */
-async function load(db: TestDb, tab: 'today' | 'month' | 'year', flags = FLAGS_ON) {
+async function load(db: TestDb, tab: 'today' | 'month' | 'year') {
   const groups = await getAllGroups(asDb(db));
-  return loadHomeData(asDb(db), groups, tab, flags);
+  return loadHomeData(asDb(db), groups, tab);
 }
 
 describe('loadHomeData — empty state', () => {
@@ -190,21 +189,16 @@ describe('loadHomeData — budget rollup', () => {
   });
 });
 
-describe('loadHomeData — flag gating', () => {
-  it('skips the forecast work only when BOTH forecast and insights are off', async () => {
-    // The forecast and the category-shift teaser share one last-month query, so
-    // the block runs if EITHER flag wants it; the screen decides what to render.
-    // Turning both off is what actually avoids the work.
+describe('loadHomeData — forecast scope', () => {
+  // The `forecast` and `dashboardInsights` flags used to gate this. Both are gone:
+  // they hid a fragment of a card, and the card already self-hides when the
+  // forecast isn't credible. What's left is the one real rule — the month tab.
+  it('computes a forecast on the month tab', async () => {
     const { db, me, personal } = setup();
     for (let i = 0; i < 8; i++) {
       addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: daysAgo(i) });
     }
-    const bothOff = await load(db, 'month', { forecast: false, dashboardInsights: false });
-    expect(bothOff.forecast).toBeNull();
-    expect(bothOff.topShift).toBeNull();
-
-    const insightsOnly = await load(db, 'month', { forecast: false, dashboardInsights: true });
-    expect(insightsOnly.forecast).not.toBeNull();
+    expect((await load(db, 'month')).forecast).not.toBeNull();
   });
 
   it('never computes a forecast outside the month tab', async () => {
@@ -214,12 +208,5 @@ describe('loadHomeData — flag gating', () => {
     }
     expect((await load(db, 'today')).forecast).toBeNull();
     expect((await load(db, 'year')).forecast).toBeNull();
-  });
-
-  it('skips the insight shift when dashboardInsights is off', async () => {
-    const { db, me, personal } = setup();
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: today() });
-    const off = await load(db, 'month', { forecast: true, dashboardInsights: false });
-    expect(off.topShift).toBeNull();
   });
 });

@@ -43,7 +43,7 @@ export default function InsightsScreen() {
   const { flags } = useFeatureFlags();
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } =
-    useScreenData((db) => loadInsightsData(db, { savingsInsights: flags.savingsInsights }), [flags.savingsInsights]);
+    useScreenData((db) => loadInsightsData(db), []);
 
   const monthSpend = data?.monthSpend ?? 0;
   const txnCount = data?.txnCount ?? 0;

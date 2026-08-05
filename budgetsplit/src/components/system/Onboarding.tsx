@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
 import { space, radius, layout, shadow } from '../../constants/layout';
-import type { OnboardingIntent } from '../../lib/personaDefaults';
+import { PERSONA_OPTIONS, type OnboardingIntent } from '../../lib/personaDefaults';
 import {
   useOnboardingForm, setupSteps, type OnboardingStage,
 } from '../../hooks/useOnboardingForm';
@@ -78,12 +78,7 @@ type Stage = OnboardingStage;
 // The persona type is owned by lib/personaDefaults, which maps it to feature flags.
 type IntentKey = OnboardingIntent;
 
-const INTENT_OPTIONS: { key: IntentKey; emoji: string; label: string; desc: string }[] = [
-  { key: 'personal', emoji: '💰', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
-  { key: 'split',    emoji: '👥', label: 'Split with people',      desc: 'Trips and one-off group tabs — settle up when it ends' },
-  { key: 'household', emoji: '🏡', label: 'Share a household',     desc: 'Rent, bills and groceries with a partner or flatmates' },
-  { key: 'both',     emoji: '✨', label: 'Both',                   desc: 'Full experience — most popular' },
-];
+const INTENT_OPTIONS = PERSONA_OPTIONS;
 
 const INCOME_PRESETS = [
   { label: '₹30k', value: 30000 },

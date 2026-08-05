@@ -232,10 +232,15 @@ export default function SettingsScreen() {
       {/* DATA & HELP */}
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
-        <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
-        <View style={settingsRowDivider} />
+        {/* Each row carries its own trailing divider so a hidden row leaves no seam. */}
+        {flags.importReview && (<>
+          <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import'); }} />
+          <View style={settingsRowDivider} />
+        </>)}
+        {flags.reports && (<>
+          <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
+          <View style={settingsRowDivider} />
+        </>)}
         <SettingsRow
           icon="database"
           label="Export all data"

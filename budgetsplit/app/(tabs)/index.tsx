@@ -60,8 +60,8 @@ export default function DashboardScreen() {
   // and re-hydrates on every cross-screen write), so Home no longer queries/sets
   // them here. useScreenData owns loading/error/refreshing + focus/cross-screen refetch.
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
-    (db) => loadHomeData(db, groups, tab, { forecast: flags.forecast, dashboardInsights: flags.dashboardInsights }),
-    [groups, tab, flags.forecast, flags.dashboardInsights],
+    (db) => loadHomeData(db, groups, tab),
+    [groups, tab],
   );
 
   const personalGroupId = data?.personalGroupId ?? null;
@@ -286,14 +286,14 @@ export default function DashboardScreen() {
             )}
 
             {/* Month-end forecast (+ insight teaser) — below the owe/owed strip, Month view only */}
-            {tab === 'month' && flags.forecast && forecast?.ready && (
+            {tab === 'month' && forecast?.ready && (
               <ForecastCard
                 projected={forecast.projected}
                 budget={budget.allocated}
                 spentSoFar={spending}
                 dayOfMonth={getDate(new Date())}
                 daysInMonth={getDaysInMonth(new Date())}
-                topShift={flags.dashboardInsights ? topShift : null}
+                topShift={topShift}
                 obfuscate={hideAmounts}
                 onPressInsights={() => router.push('/insights')}
               />

@@ -1,4 +1,6 @@
-import { evaluateAfford, AffordVerdict, AffordReason, incomeSharePct } from '../lib/afford';
+import {
+  evaluateAfford, AffordVerdict, AffordReason, AffordNecessity, incomeSharePct,
+} from '../lib/afford';
 
 describe('evaluateAfford — cash axis', () => {
   it('is comfortable when plenty remains above the safety buffer', () => {
@@ -118,5 +120,108 @@ describe('incomeSharePct', () => {
 
   it('keeps a share just under the cap exact', () => {
     expect(incomeSharePct(9.99)).toBe('999%');
+  });
+});
+
+// A comfortable baseline: lots of cash, no bills, so only the axis under test bites.
+const easy = { amount: 10000, available: 10_000_00, upcomingBills: 0 };
+
+describe('evaluateAfford — month projection axis', () => {
+  it('flags a month already forecast over budget', () => {
+    const r = evaluateAfford({ ...easy, projection: { projectedMonthEnd: 95000, budget: 100000 } });
+    // 95k projected + 10k purchase = 105k against a 100k budget.
+    expect(r.reasons).toContain(AffordReason.MonthAlreadyOver);
+    expect(r.projectedAfter).toBe(105000);
+    expect(r.verdict).toBe(AffordVerdict.Tight);
+  });
+
+  it('stays quiet when the purchase still lands inside the budget', () => {
+    const r = evaluateAfford({ ...easy, projection: { projectedMonthEnd: 50000, budget: 100000 } });
+    expect(r.reasons).not.toContain(AffordReason.MonthAlreadyOver);
+    expect(r.verdict).toBe(AffordVerdict.Comfortable);
+  });
+
+  it('ignores the axis when no budget is set', () => {
+    const r = evaluateAfford({ ...easy, projection: { projectedMonthEnd: 999999, budget: 0 } });
+    expect(r.reasons).not.toContain(AffordReason.MonthAlreadyOver);
+    expect(r.projectedAfter).toBeUndefined();
+  });
+});
+
+describe('evaluateAfford — goal impact axis', () => {
+  it('flags a meaningful delay and echoes the goal through', () => {
+    const r = evaluateAfford({ ...easy, goalImpact: { name: 'Europe Vacation', monthsDelayed: 1.5 } });
+    expect(r.reasons).toContain(AffordReason.DelaysGoal);
+    expect(r.goalImpact?.name).toBe('Europe Vacation');
+  });
+
+  it('ignores a delay too small to be a real trade-off', () => {
+    const r = evaluateAfford({ ...easy, goalImpact: { name: 'Laptop', monthsDelayed: 0.1 } });
+    expect(r.reasons).not.toContain(AffordReason.DelaysGoal);
+    expect(r.verdict).toBe(AffordVerdict.Comfortable);
+  });
+});
+
+describe('evaluateAfford — unusual-for-category axis', () => {
+  it('flags a purchase far above a typical single basket', () => {
+    // ₹100 typical basket, ₹100 purchase would be fine; 4x it is not.
+    const r = evaluateAfford({
+      ...easy, amount: 40000,
+      category: { name: 'Food', spentThisMonth: 0, norm: 500000, typicalBasket: 10000 },
+    });
+    expect(r.reasons).toContain(AffordReason.UnusualForCategory);
+  });
+
+  it('is independent of the monthly norm', () => {
+    // Sits well inside a generous monthly norm, yet is 4x a typical basket —
+    // the case a norm-only check misses.
+    const r = evaluateAfford({
+      ...easy, amount: 40000,
+      category: { name: 'Food', spentThisMonth: 0, norm: 900000, typicalBasket: 10000 },
+    });
+    expect(r.reasons).toContain(AffordReason.UnusualForCategory);
+    expect(r.reasons).not.toContain(AffordReason.AboveCategoryNorm);
+  });
+
+  it('stays quiet for an ordinary-sized purchase', () => {
+    const r = evaluateAfford({
+      ...easy, amount: 12000,
+      category: { name: 'Food', spentThisMonth: 0, norm: 500000, typicalBasket: 10000 },
+    });
+    expect(r.reasons).not.toContain(AffordReason.UnusualForCategory);
+  });
+});
+
+describe('evaluateAfford — necessity modulation', () => {
+  // available 10000 → buffer target 1500; spending 9000 leaves 1000, under it.
+  const thin = { amount: 9000, available: 10000, upcomingBills: 0 };
+
+  it('keeps a Need comfortable when only the buffer is strained', () => {
+    const r = evaluateAfford({ ...thin, necessity: AffordNecessity.Need });
+    expect(r.reasons).toContain(AffordReason.ThinBuffer);
+    expect(r.verdict).toBe(AffordVerdict.Comfortable);
+  });
+
+  it('leaves the same purchase tight when unmarked', () => {
+    expect(evaluateAfford(thin).verdict).toBe(AffordVerdict.Tight);
+  });
+
+  it('does not soften a Need past the buffer axis', () => {
+    const r = evaluateAfford({
+      ...thin, necessity: AffordNecessity.Need,
+      category: { name: 'Gadgets', spentThisMonth: 0, norm: 1000, budget: 2000 },
+    });
+    expect(r.reasons).toContain(AffordReason.OverCategoryBudget);
+    expect(r.verdict).toBe(AffordVerdict.Tight);
+  });
+
+  it('never lets a Need override the hard cash gate', () => {
+    const r = evaluateAfford({ amount: 500000, available: 1000, upcomingBills: 0, necessity: AffordNecessity.Need });
+    expect(r.verdict).toBe(AffordVerdict.No);
+    expect(r.reasons).toContain(AffordReason.CashShort);
+  });
+
+  it('holds a Later to the strict reading', () => {
+    expect(evaluateAfford({ ...thin, necessity: AffordNecessity.Later }).verdict).toBe(AffordVerdict.Tight);
   });
 });

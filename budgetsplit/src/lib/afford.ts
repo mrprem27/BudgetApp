@@ -31,14 +31,31 @@ export enum AffordReason {
   CashShort = 'cash_short',
   /** Pushes this category past the explicit budget you set for it. */
   OverCategoryBudget = 'over_category_budget',
+  /** The month is already forecast to end over budget, before this purchase. */
+  MonthAlreadyOver = 'month_already_over',
   /** Well above what you normally spend on this category. */
   AboveCategoryNorm = 'above_category_norm',
+  /** Pushes a savings goal's finish date out. */
+  DelaysGoal = 'delays_goal',
   /** A large slice of a single month's income in one purchase. */
   LargeIncomeShare = 'large_income_share',
+  /** Much bigger than a typical purchase in this category. */
+  UnusualForCategory = 'unusual_for_category',
   /** Affordable, but leaves less than the safety cushion. */
   ThinBuffer = 'thin_buffer',
   /** Fits comfortably on every axis. */
   Healthy = 'healthy',
+}
+
+/**
+ * How badly it's needed. Optional: unset means the axis is simply not used, the
+ * same way the category and income axes already work. Never overrides the cash
+ * test — calling something a `Need` cannot conjure money that isn't there.
+ */
+export enum AffordNecessity {
+  Need = 'need',
+  Want = 'want',
+  Later = 'later',
 }
 
 /** Optional category context — drives the "way you spend" reasoning. */
@@ -50,6 +67,25 @@ export type AffordCategoryContext = {
   norm: number;
   /** Explicit monthly budget for this category, if one is set (paise, > 0). */
   budget?: number;
+  /** Median single purchase here over the history window (paise, > 0 to engage). */
+  typicalBasket?: number;
+  /** Fraction of recent months this category ran over its budget (0..1). */
+  overshootRate?: number;
+};
+
+/** Where the month is heading before this purchase, from `lib/forecast`. */
+export type AffordProjection = {
+  /** Projected month-end spend (paise). */
+  projectedMonthEnd: number;
+  /** Budget the projection is measured against (paise, > 0 to engage). */
+  budget: number;
+};
+
+/** The goal a purchase would set back, and by how much. */
+export type AffordGoalImpact = {
+  name: string;
+  /** Months added to the goal's finish date by spending this instead of saving it. */
+  monthsDelayed: number;
 };
 
 export type AffordContext = {
@@ -62,6 +98,9 @@ export type AffordContext = {
   /** Typical monthly income (paise, > 0 to engage the income-share axis). */
   monthlyIncome?: number;
   category?: AffordCategoryContext;
+  necessity?: AffordNecessity;
+  projection?: AffordProjection;
+  goalImpact?: AffordGoalImpact;
 };
 
 export type AffordResult = {
@@ -80,6 +119,10 @@ export type AffordResult = {
   categoryCap?: number;
   /** Fraction of monthly income this purchase represents (0..1), iff income given. */
   incomeShare?: number;
+  /** Projected month-end spend *including* this purchase (paise), iff projection given. */
+  projectedAfter?: number;
+  /** Echoed through so the UI can name the goal without re-deriving it. */
+  goalImpact?: AffordGoalImpact;
 };
 
 /** Keep this fraction of current cash as an untouched cushion. */
@@ -88,6 +131,12 @@ export const SAFETY_BUFFER_RATIO = 0.15;
 export const NORM_TOLERANCE = 1.15;
 /** A single purchase above this fraction of monthly income is worth flagging. */
 export const INCOME_SHARE_WARN = 0.1;
+/** Delaying a goal by less than this is rounding error, not a trade-off. */
+export const GOAL_DELAY_WARN_MONTHS = 0.5;
+/** A purchase this many times a typical basket is out of character for the category. */
+export const UNUSUAL_BASKET_MULTIPLE = 3;
+/** History window for basket size / overshoot rate. */
+export const HISTORY_DAYS = 90;
 
 /**
  * Income share for display, capped at ">999%" — past that the denominator can't be
@@ -136,19 +185,56 @@ export function evaluateAfford(ctx: AffordContext): AffordResult {
     if (incomeShare > INCOME_SHARE_WARN) reasons.push(AffordReason.LargeIncomeShare);
   }
 
-  // 4) Thin buffer (only meaningful when the purchase is otherwise affordable).
-  if (!cashShort && remaining < bufferTarget) reasons.push(AffordReason.ThinBuffer);
-
-  // Verdict: cash is the only hard "no"; any soft strain makes it "tight".
-  let verdict: AffordVerdict;
-  if (cashShort) {
-    verdict = AffordVerdict.No;
-  } else if (reasons.length > 0) {
-    verdict = AffordVerdict.Tight;
-  } else {
-    verdict = AffordVerdict.Comfortable;
-    reasons.push(AffordReason.Healthy);
+  // 4) Where the month is already heading, before this purchase is added.
+  let projectedAfter: number | undefined;
+  if (ctx.projection && ctx.projection.budget > 0) {
+    projectedAfter = ctx.projection.projectedMonthEnd + amount;
+    if (projectedAfter > ctx.projection.budget) reasons.push(AffordReason.MonthAlreadyOver);
   }
 
-  return { verdict, freeToSpend, remaining, reasons, bufferTarget, categoryAfter, categoryCap, incomeShare };
+  // 5) Cost to a savings goal. Phrased as a delay, never as a transfer: the
+  //    overspend raid that would actually move the money is still silent for
+  //    unlocked goals (V2-10), so promising it here would be dishonest.
+  if (ctx.goalImpact && ctx.goalImpact.monthsDelayed >= GOAL_DELAY_WARN_MONTHS) {
+    reasons.push(AffordReason.DelaysGoal);
+  }
+
+  // 6) Unusual for this category, judged against a typical *single* purchase
+  //    rather than the monthly norm — a ₹8k restaurant bill can sit inside a
+  //    ₹10k monthly norm and still be nothing like how you normally spend.
+  if (ctx.category?.typicalBasket && ctx.category.typicalBasket > 0
+      && amount > ctx.category.typicalBasket * UNUSUAL_BASKET_MULTIPLE) {
+    reasons.push(AffordReason.UnusualForCategory);
+  }
+
+  // 7) Thin buffer (only meaningful when the purchase is otherwise affordable).
+  if (!cashShort && remaining < bufferTarget) reasons.push(AffordReason.ThinBuffer);
+
+  // Verdict: cash is still the only hard "no".
+  //
+  // Necessity modulates the soft axes only. A `Need` that is merely
+  // buffer-strained stays comfortable — telling someone their rent is "tight"
+  // because it dents a cushion is noise they can't act on. Anything a user
+  // themselves marked `Later` is held to the strictest reading, since they have
+  // already said it can wait.
+  let verdict: AffordVerdict;
+  const softReasons = reasons.filter(r => r !== AffordReason.CashShort);
+  const onlyThinBuffer = softReasons.length === 1 && softReasons[0] === AffordReason.ThinBuffer;
+
+  if (cashShort) {
+    verdict = AffordVerdict.No;
+  } else if (softReasons.length === 0) {
+    verdict = AffordVerdict.Comfortable;
+    reasons.push(AffordReason.Healthy);
+  } else if (ctx.necessity === AffordNecessity.Need && onlyThinBuffer) {
+    verdict = AffordVerdict.Comfortable;
+  } else {
+    verdict = AffordVerdict.Tight;
+  }
+
+  return {
+    verdict, freeToSpend, remaining, reasons, bufferTarget,
+    categoryAfter, categoryCap, incomeShare, projectedAfter,
+    goalImpact: ctx.goalImpact,
+  };
 }

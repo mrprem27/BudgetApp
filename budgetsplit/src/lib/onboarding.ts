@@ -6,8 +6,7 @@ import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
 import { settings } from './settings';
-import { setFlag } from './featureFlags';
-import { personaChangedKeys, personaFlags, type OnboardingIntent } from './personaDefaults';
+import { applyPersona, type OnboardingIntent } from './personaDefaults';
 import { GROUP_COLORS } from '../constants/palette';
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
@@ -60,12 +59,7 @@ export async function finalizeOnboarding(
   // The persona, and the feature flags it implies. First, because it decides which
   // app the user lands in and it must survive a failure further down.
   try {
-    await settings.setOnboardingIntent(data.intent);
-    const flags = personaFlags(data.intent);
-    // Only the keys that deviate — see personaChangedKeys for why not all of them.
-    for (const key of personaChangedKeys(data.intent)) {
-      try { await setFlag(key, flags[key]); } catch { /* best-effort, per key */ }
-    }
+    await applyPersona(data.intent);
   } catch { /* the app still works on DEFAULTS */ }
 
   try {

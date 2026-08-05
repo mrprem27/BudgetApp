@@ -2,6 +2,8 @@
 // Deliberately avoids the jest-expo RN preset (these tests touch no native code).
 module.exports = {
   testEnvironment: 'node',
+  // Only active when FAKE_TODAY is set — see jest.calendar.js and `npm run test:calendar`.
+  setupFiles: ['<rootDir>/jest.calendar.js'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   transform: {
     '^.+\\.[jt]sx?$': ['babel-jest', { presets: ['babel-preset-expo'] }],

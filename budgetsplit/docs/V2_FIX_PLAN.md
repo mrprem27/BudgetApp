@@ -36,13 +36,26 @@
 | 9 | ~~`V2-05`~~ | ~~Household / couples persona~~ | L | ✅ done |
 | 10 | ~~`V2-19`~~ | ~~Flip `smartCategory` + `recurringSuggest` defaults~~ | L | ✅ done |
 | — | ~~`V2-33`~~ | ~~**Found on device:** Home paired my-share spend with all-groups budget~~ | L | ✅ done |
-| **Next up** ||||
-| 11 | `V2-32` | **Richer afford engine** — history stats, necessity input, projections, goal impact | L | open |
-| — | `V2-31` | Make the calendar check a repo script (`npm run test:calendar`) | L | open |
+| **Wave 3 — scope reduction + the afford engine** — ✅ **complete 2026-08-05** ||||
+| 11 | ~~`V2-32`~~ | ~~**Richer afford engine** — history stats, necessity input, projections, goal impact~~ | L | ✅ done |
+| 12 | ~~`V2-14`~~ | ~~Flag-count drift guard + fix the two stale counts~~ | L | ✅ done |
+| 13 | ~~`V2-21`~~ | ~~`review.tsx` LOC ceiling (stop the growth, don't re-pay the debt)~~ | L | ✅ done |
+| 14 | ~~`V2-08`~~ | ~~Reports reachable from Plan, not only from a Settings export row~~ | L | ✅ done |
+| — | ~~`V2-31`~~ | ~~Make the calendar check a repo script (`npm run test:calendar`)~~ | L | ✅ done |
+| — | ~~`F7`~~ | ~~**Closed as a side effect:** receipt scanning had no flag, so Scan couldn't be hidden~~ | L | ✅ done |
 
-**Result after both waves:** `npx tsc --noEmit` clean · **656/656 jest, 52 suites** (was 633 with 2
-failing) · green at every pinned calendar date tried, including month starts/ends, a leap day and a
-new-year rollover.
+**The flag cut went the other way from the plan.** Wave 3 was scoped as "14 → 7 flags". What
+shipped is **14 → 15**, and that is the better answer to the same complaint. The problem was never
+the *count*; it was that five keys gated chart *fragments* (`reportsDonut`, `reportsTrend`,
+`dashboardInsights`, `forecast`, `savingsInsights`) while six real surfaces — itemized splitting,
+UPI settle, Insights, Reports, receipt scanning, import/review — had no switch at all. Cutting to 7
+would have deleted the fragments and left the real gap. So the fragments went, the six real
+surfaces got keys, and the personas now compose them into four genuinely different apps, which is
+what the flags were for.
+
+**Result after three waves:** `npx tsc --noEmit` clean · **678/678 jest, 53 suites** (was 633 with
+2 failing) · `npm run test:calendar` green at all seven pinned dates — month starts and ends, a
+leap day, and a new-year rollover.
 
 ---
 
@@ -350,12 +363,10 @@ it for every existing user — a product call, not a bug fix. Worth deciding sep
 
 ---
 
-## Next up
+## What actually happened — `V2-32`, the afford engine
 
-### `V2-32` — richer afford engine
-
-Owner request, 2026-08-05: the verdict should use far more than cash-vs-bills. Scope to settle
-before building:
+Owner request, 2026-08-05: the verdict should use far more than cash-vs-bills. Every bullet below
+was the pre-build scope; the **→** lines are what shipped.
 
 - **History stats.** Beyond the existing 30-day category norm: volatility, how often this category
   overshoots, seasonality, typical basket size. `getAffordSnapshot` already loads a 30-day window —
@@ -373,6 +384,21 @@ before building:
   `BudgetNudge`? The review's §9 argued for folding it in because the standalone screen is
   flag-gated off and nobody finds it. A richer engine is a reason to reconsider that.
 
+**→ What shipped.**
+
+| Scoped | Shipped |
+|---|---|
+| History stats | 90-day window added to `getAffordSnapshot`, yielding a per-category **typical basket** (median, min 3 samples). Volatility and seasonality were **not** built — with 3 samples a variance estimate is noise, and it would have produced confident-sounding nonsense. Measured cost at 1500 txns: **18.2 ms**, so the window stayed. |
+| Necessity input | Optional `Need · Want · Can wait` chips, **nothing preselected**. Unset drops the axis entirely, exactly as the category and income axes already behaved — zero added friction. |
+| Current projected | Reuses `forecastMonthEnd`. No second model, per `V2-28`. |
+| Future goals | `goalPacing` = first unfinished goal by `sort_order` with a real monthly rate → "sets *X* back ~N weeks". Copy says **delays**, never "we'll take it from" — `V2-10` is still open and the raid is still silent, so claiming otherwise would be dishonest. |
+| Screen or nudge? | **Both.** One engine, two depths: the screen keeps the full breakdown, and `BudgetNudge` shows the single worst reason inline in Add, silent when the verdict is comfortable. The merge argument was really about discoverability, and the inline verdict solves that without discarding the depth. |
+
+**Axes went 4 → 7** (`MonthAlreadyOver`, `DelaysGoal`, `UnusualForCategory` joined cash, buffer,
+category budget/norm, income share). The invariant held throughout: **only cash can produce a hard
+`No`.** Necessity softens exactly one axis — a `Need` that strains only the buffer stays
+comfortable — and cannot override the cash gate. 42 new tests.
+
 ---
 
 ## Out of scope
@@ -381,7 +407,6 @@ Deliberately excluded, with their review IDs — do not scope-creep into these:
 
 | Area | IDs |
 |---|---|
-| Wave 3 (scope reduction) | 6-flag cut + `afford` merge (review §9), `V2-14`, `V2-21`, `V2-08` |
 | Wave 4 (product depth) | `V2-07`, `V2-09`, `V2-10`, `V2-12`, `V2-13`, `V2-15`, `V2-16`, `V2-20` |
 | V3 | `V2-17`, `V2-18`, `V2-22`, `V2-23`, `V2-24`, `V2-25`, `V2-26` |
 | Externally blocked | `F4` GPay format · `F5` Gmail OAuth CASA · Account Aggregator partner |

@@ -1,56 +1,66 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Each surface owns its own flag so it can be toggled independently — letting a
-// user make the app as minimal or as rich as they want.
+// Flags name whole FEATURES, not fragments of them. That distinction is the point:
+// five keys used to gate a single chart or a card's sub-section (`reportsDonut`,
+// `reportsTrend`, `dashboardInsights`, `forecast`, `savingsInsights`), which is
+// configuration nobody asked for — a user who doesn't want the donut doesn't open
+// Reports. Those are gone; the charts are simply always there, and decorative
+// surfaces self-hide when they have nothing to say, which was always the right
+// mechanism. In their place are the real surfaces that were silently always-on
+// (receipt scanning, itemized splitting, import/review, reports, insights, UPI).
+//
+// Flags exist so a PERSONA can compose the app (see lib/personaDefaults.ts) and so
+// a power user can override that. They are not monetisation gates.
 //
 // INVARIANT: every key here gates a real surface AND appears in app/features.tsx.
 // A key that gates nothing is worse than no key — it renders as a working switch
-// that silently does nothing. Eight keys used to be pure dead configuration
-// (five dashboard sections, budgetInsights, itemizedOcr); they were removed
-// rather than given aspirational gates. `featureFlags.test.ts` asserts this.
+// that silently does nothing. `featureFlags.test.ts` asserts both halves.
 // Old `feature_*` values for removed keys simply stop being read.
 export type FeatureKey =
-  // Dashboard sections
-  | 'dashboardInsights'
-  // Reports sections
-  | 'reportsDonut'
-  | 'reportsTrend'
-  | 'forecast'
-  // Other insight surfaces
-  | 'savingsInsights'
-  // Modules
+  // Splitting & people
   | 'splitting'
-  | 'recurring'
-  | 'smartCategory'
-  | 'affordCheck'
-  | 'streak'
-  | 'healthScore'
+  | 'itemized'
+  | 'upiSettle'
+  // Money & planning
   | 'savingsGoals'
+  | 'healthScore'
+  | 'affordCheck'
+  | 'insights'
+  | 'reports'
+  // Automation
+  | 'recurring'
+  | 'recurringSuggest'
+  | 'smartCategory'
   | 'reminders'
-  | 'recurringSuggest';
+  | 'receiptScan'
+  | 'importReview'
+  // Fun
+  | 'streak';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
 export const DEFAULTS: FeatureFlags = {
-  dashboardInsights: true,
-  reportsDonut: true,
-  reportsTrend: true,
-  forecast: true,
-  savingsInsights: true,
-  // The one structural flag: OFF hides the Groups tab, the owe/owed strip on Home
-  // and the Transfer kind in Add. Everything else here tunes a section's presence;
-  // this one changes the app's shape, which is why the onboarding persona sets it
-  // (see lib/personaDefaults.ts). Default ON — a fresh install shows the full app.
+  // The structural flag: OFF hides the Groups tab, the owe/owed strip on Home and
+  // the Transfer kind in Add. It changes the app's *shape*, not a section's
+  // presence, which is why the onboarding persona sets it.
   splitting: true,
+  itemized: true,
+  upiSettle: true,       // no VPA on a person ⇒ no button anyway
+  savingsGoals: true,
+  healthScore: true,
+  affordCheck: true,     // a real feature since the engine grew; off is why nobody found it
+  insights: true,
+  reports: true,
   recurring: true,
-  smartCategory: true,  // built, tested and wired — off conceded all category automation
-  affordCheck: false,   // opt-in
-  streak: false,        // opt-in
-  healthScore: true,    // shown on home by default (matches Settings design)
-  savingsGoals: true,   // Plan tab savings pool + goals
-  reminders: true,      // bill / settle-up nudges (Settings › Reminders)
-  recurringSuggest: true,  // suggestion-only: never auto-creates a rule, so a false positive costs one tap
+  recurringSuggest: true, // suggestion-only: never auto-creates, so a miss costs one tap
+  smartCategory: true,    // a guess you can overwrite
+  reminders: true,
+  receiptScan: true,      // closes DEBT_TRACKER F7 — there was no way to hide Scan
+  importReview: true,
+  streak: false,          // opt-in, and self-hides under 3 days
 };
+
+export const FEATURE_KEYS = Object.keys(DEFAULTS) as FeatureKey[];
 
 const PREFIX = 'feature_';
 

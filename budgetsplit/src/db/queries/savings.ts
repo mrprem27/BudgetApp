@@ -13,7 +13,10 @@ import { getRecurringForGroup } from './recurring';
 import { recurringMonthlyEquivalent } from '../../lib/recurrence';
 import { getCategoriesByFrequency, type Category } from './categories';
 import { getCategoryBudgets, type BudgetCadence } from './categoryBudgets';
-import { startOfMonth, endOfMonth, getDaysInMonth } from 'date-fns';
+import { startOfMonth, endOfMonth, getDaysInMonth, getDate, subMonths } from 'date-fns';
+import { forecastMonthEnd } from '../../lib/forecast';
+import { monthlyContribution } from '../../lib/savings';
+import { HISTORY_DAYS } from '../../lib/afford';
 
 // Domain value sets are defined once in constants/enums.ts; re-exported here for
 // existing importers.
@@ -356,7 +359,13 @@ export async function getTotalMoney(db: SQLite.SQLiteDatabase): Promise<TotalMon
 // --- "Can I afford this?" snapshot ---------------------------------------
 
 /** Per-category context feeding the afford engine (all paise). */
-export type AffordCategoryStat = { spentThisMonth: number; norm: number; budget?: number };
+export type AffordCategoryStat = {
+  spentThisMonth: number;
+  norm: number;
+  budget?: number;
+  /** Median single purchase over the history window (paise). */
+  typicalBasket?: number;
+};
 
 export type AffordSnapshot = {
   /** Spendable cash right now. */
@@ -375,6 +384,14 @@ export type AffordSnapshot = {
   categories: Category[];
   /** Per-category spend-this-month, 30-day norm, and monthly budget (if set). */
   byCategory: Record<string, AffordCategoryStat>;
+  /** Where this month is heading before any new purchase. Null when un-forecastable. */
+  projection: { projectedMonthEnd: number; budget: number } | null;
+  /**
+   * The goal a purchase would set back: the first unfinished one in funding rank
+   * order (`sort_order`), with the monthly rate needed to turn an amount into a
+   * delay. Null when there is no fundable goal.
+   */
+  goalPacing: { name: string; monthlyRate: number } | null;
 };
 
 const AFFORD_DAY_MS = 86_400_000;
@@ -398,7 +415,7 @@ function monthlyBudgetEquivalent(cadence: BudgetCadence, amount: number, daysInM
  * and the inputs reproducible.
  */
 export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
-  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {} };
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
   const me = await getMe(db);
   if (!me) return empty;
 
@@ -411,7 +428,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const groups = await getAllGroups(db);
   const personal = groups.find(g => g.is_personal === 1) ?? groups[0] ?? null;
 
-  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules] = await Promise.all([
+  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved] = await Promise.all([
     getCashPosition(db),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
     personal ? getCategoryBudgets(db, personal.id) : Promise.resolve([]),
@@ -419,6 +436,13 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
     getTransactionsInRange(db, null, now, monthEnd),
     personal ? getRecurringForGroup(db, personal.id) : Promise.resolve([] as TxnWithSplits[]),
+    // 90 days for typical-basket size: a monthly norm can hide a wildly atypical
+    // single purchase (a ₹8k dinner inside a ₹10k/mo norm).
+    getTransactionsInRange(db, null, now - HISTORY_DAYS * AFFORD_DAY_MS, now),
+    // Prior month feeds the forecast's credibility weighting — same model as Home.
+    getTransactionsInRange(db, null, startOfMonth(subMonths(today, 1)).getTime(), endOfMonth(subMonths(today, 1)).getTime()),
+    getGoals(db),
+    getGoalSavedMap(db),
   ]);
 
   const myShare = (t: { shares: Array<{ personId: string; amount: number }> }) =>
@@ -476,6 +500,20 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     if (m && m > 0) budgetByCat[b.category] = m;
   }
 
+  // Median single purchase per category over the history window. Median, not mean:
+  // one ₹40k outlier shouldn't redefine "typical".
+  const basketsByCat: Record<string, number[]> = {};
+  for (const t of historyTxns) {
+    if (t.is_deleted || t.kind !== 'expense') continue;
+    const mine = myShare(t);
+    if (mine > 0) (basketsByCat[t.category] ??= []).push(mine);
+  }
+  const medianOf = (xs: number[]): number => {
+    const a = [...xs].sort((p, q) => p - q);
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2);
+  };
+
   const byCategory: Record<string, AffordCategoryStat> = {};
   const names = new Set<string>([
     ...categories.map(c => c.name),
@@ -484,14 +522,36 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     ...Object.keys(budgetByCat),
   ]);
   for (const name of names) {
+    const baskets = basketsByCat[name];
     byCategory[name] = {
       spentThisMonth: spentThisMonth[name] ?? 0,
       norm: norm[name] ?? 0,
       budget: budgetByCat[name],
+      // Needs a few samples before a median means anything.
+      typicalBasket: baskets && baskets.length >= 3 ? medianOf(baskets) : undefined,
     };
   }
 
-  return { available: pos.available, upcomingBills, monthlyIncome, incomeSource, categories, byCategory };
+  // Same forecast model as Home and Insights — deliberately not a second one.
+  const monthSpentSoFar = Object.values(spentThisMonth).reduce((a, b) => a + b, 0);
+  const priorMonthTotal = lastMonthTxns
+    .filter(t => !t.is_deleted && t.kind === 'expense')
+    .reduce((a, t) => a + myShare(t), 0);
+  const fc = forecastMonthEnd(monthSpentSoFar, getDate(today), daysInMonth, priorMonthTotal);
+  const budgetTotal = Object.values(budgetByCat).reduce((a, b) => a + b, 0);
+  const projection = fc.ready && budgetTotal > 0
+    ? { projectedMonthEnd: fc.projected, budget: budgetTotal }
+    : null;
+
+  // The goal money would otherwise fund: first unfinished one in funding-rank
+  // order (`getGoals` is already ordered by sort_order).
+  const nextGoal = goals.find(g => (goalSaved[g.id] ?? 0) < g.target
+    && monthlyContribution(g.allocation, g.frequency) > 0) ?? null;
+  const goalPacing = nextGoal
+    ? { name: nextGoal.name, monthlyRate: monthlyContribution(nextGoal.allocation, nextGoal.frequency) }
+    : null;
+
+  return { available: pos.available, upcomingBills, monthlyIncome, incomeSource, categories, byCategory, projection, goalPacing };
 }
 
 /** Build psychological savings insights from real goals + spending. */

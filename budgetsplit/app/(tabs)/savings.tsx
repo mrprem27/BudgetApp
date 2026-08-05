@@ -92,7 +92,10 @@ export default function SavingsScreen() {
         right={
           <View style={styles.headerRight}>
             {[
-              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: true, to: '/insights' as Href },
+              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: flags.insights, to: '/insights' as Href },
+              // V2-08: Reports was reachable only from Settings › Data & Help, which is
+              // where you look for an export, not for last month's numbers.
+              { key: 'reports', icon: 'pie-chart' as const, label: 'Reports', show: flags.reports, to: '/reports' as Href },
               { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/recurring' as Href },
               // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
               { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },

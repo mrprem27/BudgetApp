@@ -65,7 +65,6 @@ export async function loadHomeData(
   db: SQLite.SQLiteDatabase,
   groups: BudgetGroup[],
   tab: TabKey,
-  flags: { forecast: boolean; dashboardInsights: boolean },
 ) {
 
     const persons = await getAllPersons(db);
@@ -196,7 +195,7 @@ export async function loadHomeData(
     // Month-end forecast + biggest category shift vs last month (Month view only).
     let forecast: Forecast | null = null;
     let topShift: ForecastShift | null = null;
-    if (tab === 'month' && (flags.forecast || flags.dashboardInsights)) {
+    if (tab === 'month') {
       const now = new Date();
       const lmStart = startOfMonth(subMonths(now, 1)).getTime();
       const lmEnd = endOfMonth(subMonths(now, 1)).getTime();

@@ -208,13 +208,13 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
 | S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
 | S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. Per-row **Skip next · Pause · Stop** (shared `useRecurringActions`); row tap → `/group/{id}/recurring?focus={ruleId}`. |
-| S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category → Comfortable / Tight / No verdict with plain-English reasons. |
+| S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
 | S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet; restore **replaces all data**. See §13.3. |
 
 ### 3.9 Reachability
 
 Every route is reachable. Conditionally: S-32 and S-33 only appear when their flags are on
-(`recurring: true`, `affordCheck: false` by default), and S-27 requires the 7-tap easter egg.
+(`recurring: true`, `streak: false` by default), and S-27 requires the 7-tap easter egg.
 
 ---
 
@@ -237,13 +237,13 @@ Every route is reachable. Conditionally: S-32 and S-33 only appear when their fl
 4. 🔘 **TabPills** — `Month · Today · Year` (re-runs the data load for that period).
 5. **CategoryRankList** ("WHERE IT WENT") — top 3 category bars; row tap → `/category/{name}?period={tab}`; **+N more** expands. `everHadCats` keeps the card mounted across period switches so it never collapses.
 6. **BalanceStrip** — shown if you owe / are owed > 0: "You owe / Owed to you" + **Settle** → `/add/quick?kind=transfer`. Hidden entirely when `flags.splitting` is off.
-7. **ForecastCard** *(flag `forecast`, Month view only, when `forecast.ready`)* — **below the Owe/Owed strip**: month-end projection vs budget + pace bar; biggest-shift teaser *(flag `dashboardInsights`)*; **See all insights** → `/insights`.
+7. **ForecastCard** *(Month view only, when `forecast.ready`)* — **below the Owe/Owed strip**: month-end projection vs budget + pace bar; biggest-shift teaser; **See all insights** → `/insights`.
 8. **ComingUpList** — next recurring bills (`buildUpcoming`); hidden when empty.
 9. **StreakCard** *(flag `streak`)* — self-hides under 3 consecutive logged days.
 
-**Data loaded** via `loadHomeData(db, groups, tab, {forecast, dashboardInsights})`
+**Data loaded** via `loadHomeData(db, groups, tab)`
 (`src/lib/homeData.ts`), with `groups` read from the zustand store rather than re-queried.
-Deps `[groups, tab, flags.forecast, flags.dashboardInsights]`. Budget is stored monthly and
+Deps `[groups, tab]`. Budget is stored monthly and
 **scaled to the active period** for the pace line: ÷ days for Today, × 12 for Year. On focus,
 outside the loader: reads AsyncStorage `hide_amounts` (obfuscates the hero), `app_last_open`
 (catch-up check), and the one-shot `pending_first_add` push into Quick Add.
@@ -410,10 +410,10 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 - **Full:** money card + insights + goals + upcoming + forecast. Pull-to-refresh throughout.
 
 1. **ScreenHeader** "Plan" (large) + month pill.
-2. **Header icons** (top-right, **not pills**): `Insights` (always, `/insights`) · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Can I afford?` *(flag `affordCheck`, `/afford`)*. Reminders lives in Settings; **Reports is not reached from here** — it's Settings → Export & reports.
+2. **Header icons** (top-right, **not pills**): `Insights` *(flag `insights`, `/insights`)* · `Reports` *(flag `reports`, `/reports`)* · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Can I afford?` *(flag `affordCheck`, `/afford`)*. Reminders lives in Settings. Reports is **also** still in Settings → Reports & export; it was reachable *only* from there, which is where you look for an export, not for last month's numbers (`V2-08`).
 3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — net "Total Money": Your money / Cash available / Investments / Credit available / Credit used. Tap **edit** → **MoneyEditorSheet** to set the cash / investment / credit figures. (Replaced the old savings-Pool + "Cash available" cards — funding is direct to goals, there is **no pool**.)
 4. **Overspend-raid notice** — when `runOverspendRaid` pulled from goals to cover negative cash, a notice names the raided goals with **Undo** → `undoOverspendRaid` re-funds the exact amounts.
-5. **Savings insights** card *(flag `savingsInsights`)*: opportunity-cost / habit nudges.
+5. **Savings insights** card: opportunity-cost / habit nudges.
 6. **Goals** *(flag `savingsGoals`)*: `DraggableList` (drag = funding priority → `reorderGoals` writes `sort_order`); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → goal sheet (name, target, icon, colour, allocation + frequency, target-date) → `insertGoal`. Completed goals sink below the active list with a distinct card.
 7. **ComingUpList** "Upcoming this month".
 8. **plan/ForecastCard** — month-end projection (a distinct component from the Home `home/ForecastCard`).
@@ -618,7 +618,7 @@ projections rest on. `loadInsightsData` takes an injected `now` so it is determi
 `ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
 overspend) → "See what to cut" (`/group/{personal}`); month-end **forecast line chart** (x-axis
 labels sized so they don't truncate); **shifts vs last month**; 🔘 **what-if** `10% · 20% · 30%`;
-recommendations; drivers; savings insights *(flag `savingsInsights`)*. Donut / trend /
+recommendations; drivers; savings insights. Donut / trend /
 owe-owed / recurring analytics live in **Reports**, not here — insights has one home.
 
 ---
@@ -695,21 +695,37 @@ being listed in the screen, so this table can't drift back.
 | Module | Flag | Surface(s) | Status |
 |---|---|---|---|
 | Group splitting | `splitting` | Groups tab (→ Personal when off), Home owe/owed strip, Add **Transfer** kind | ✅ wired |
+| Itemized bills | `itemized` | Quick-add **Split by items** → `add/itemized.tsx` | ✅ wired |
+| Pay via UPI | `upiSettle` | Transfer sheet **Pay via UPI** button (needs the payee's `upi_vpa`) | ✅ wired |
 | Savings goals | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
-| Spending forecast | `forecast` | Home `ForecastCard` (Month view) | ✅ wired |
-| Spending insights | `dashboardInsights` | Home ForecastCard shift teaser + Insights | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` (`index.tsx:80` nulls the score when off) | ✅ wired |
-| Savings insights | `savingsInsights` | Plan + Insights nudges | ✅ wired |
-| Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
+| Afford check | `affordCheck` | Plan header icon → `afford.tsx`, plus the inline verdict in Add | ✅ wired — **on** by default since the engine grew past a cash check |
+| Insights | `insights` | Plan header icon → `insights.tsx` | ✅ wired |
+| Reports | `reports` | Plan header icon **and** Settings → Reports & export → `reports.tsx` | ✅ wired |
 | Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked rules only; the log-scanning detector was removed in P5 |
 | Recurring suggestions | `recurringSuggest` | Review post-save banner → `RecurringSuggestionsSheet` | ✅ wired — **on** by default (never auto-creates) |
 | Smart category | `smartCategory` | Quick-add title → category guess | ✅ wired — **on** by default (suggestion only) |
-| Reports donut | `reportsDonut` | `reports.tsx` category donut | ✅ wired |
-| Reports trend | `reportsTrend` | `reports.tsx` 6-month bars | ✅ wired |
-| Afford check | `affordCheck` (off) | Plan header icon → `afford.tsx` | ✅ wired |
-| Tracking streak | `streak` (off) | Home `StreakCard` | ✅ wired (self-hides < 3 days) |
+| Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
+| Receipt scanning | `receiptScan` | Itemized **Scan receipt** button (iOS) | ✅ wired — closes DEBT `F7`, which was "no way to hide Scan" |
+| Import & review | `importReview` | Settings → Import transactions → `import.tsx` / `review.tsx` | ✅ wired |
+| Tracking streak | `streak` (off) | Home `StreakCard` | ✅ wired (self-hides < 3 days) — **the only flag off by default** |
 | Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired — a `settings` pref, **not** a feature flag, despite sitting in the same list (§17) |
 | Cloud receipt scanning | `ocr_provider` pref | Which provider `getReceiptExtractor()` returns (§7.4) | ✅ wired — also a `settings` pref, not a flag: it selects an implementation, not a surface |
+
+**15 flags, and the count is now guarded.** `sourceCounts.test.ts` fails if any live doc states a
+different number — it had drifted three times (12 → 14 → 15) before anything read it (`V2-14`).
+
+**Five chart-fragment flags were deleted** (`reportsDonut`, `reportsTrend`, `dashboardInsights`,
+`forecast`, `savingsInsights`). Each gated a single chart or a sub-section of one card, which is
+configuration nobody asked for: someone who doesn't want the donut doesn't open Reports. Those
+surfaces are now unconditional, and the decorative ones self-hide when they have nothing to say —
+which was always the right mechanism. What replaced them are the six real surfaces that had been
+silently always-on: `itemized`, `upiSettle`, `insights`, `reports`, `receiptScan`, `importReview`.
+
+**Personas compose these.** Each of the four onboarding intents applies a distinct combo
+(`lib/personaDefaults.ts`), and **Feature Management → Your setup** re-applies one at any time —
+that path writes *every* key, so it also undoes hand-toggles; onboarding writes only the
+deviations, so untouched flags keep tracking `DEFAULTS`.
 
 **Receipt OCR has no flag.** It is live and unflagged — see §7.4. The old `itemizedOcr` flag was
 deleted in the 2026-07-28 purge, before scanning shipped, and was never re-added.
@@ -796,7 +812,7 @@ Editing takes the same path via `updateTxn`; a recurring-rule edit goes through
 ### FLOW-07 — View the dashboard
 See §4 — the layout list there is this flow's step 6, in order. The load path:
 `useScreenData` → `loadHomeData(db, groups, tab, flags)`; deps
-`[groups, tab, flags.forecast, flags.dashboardInsights]`; focus-time extras (`hide_amounts`,
+`[groups, tab]`; focus-time extras (`hide_amounts`,
 30-day catch-up, one-shot first-add push) sit outside the loader.
 
 ### FLOW-08 — Import a statement → Review → committed transactions

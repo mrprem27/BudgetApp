@@ -83,7 +83,7 @@ flag changes the tab bar.
 | **F4** | ⛔ | GPay import blocked — source export format unknown | Phase GP | ⛔ external |
 | **F5** | ⛔ | Live email ingestion blocked — Google OAuth needs CASA assessment | Paste path shipped as the workaround | ⛔ external |
 | ~~**F6**~~ | ✅ | ~~Receipt-OCR provider has no Settings row~~ | **Fixed 2026-08-04** — **Cloud Receipt Scanning** added to Feature management → Smart capture (`app/features.tsx`, `toggleCloudOcr` → `settings.setOcrProvider`). On = `gemini`, off = `device`. A `settings` pref rather than a `FeatureKey` for the same reason `save_location` is: it isn't a show/hide-a-surface boolean. Neither direction warns (off needs no defence; on is the default) — the caption carries the consequence and flips with the state. Not dimmed when off, since off means "read locally", not "scanning disabled". | done |
-| **F7** | 🟡 | **Receipt scanning ships unflagged.** `itemizedOcr` was deleted in the 2026-07-28 flag purge (correctly — it gated nothing then) and was never re-added when the feature shipped, so there is no way to hide the Scan button. | `app/add/itemized.tsx`; AUDIT F-31 | open |
+| ~~**F7**~~ | ✅ | ~~**Receipt scanning ships unflagged.**~~ Closed 2026-08-05 in the Wave-3 flag rework: `receiptScan` now gates the Scan button, and `featureFlags.test.ts` asserts it gates something. | `app/add/itemized.tsx`; AUDIT F-31 | **done** |
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Location from 'expo-location';
@@ -14,6 +14,9 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
+import { SheetModal } from '../src/components/ui/SheetModal';
+import { FEATURE_KEYS } from '../src/lib/featureFlags';
+import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../src/lib/personaDefaults';
 import { haptic } from '../src/lib/haptics';
 import { alpha } from '../src/theme';
 
@@ -35,6 +38,8 @@ export default function FeaturesScreen() {
   const db = useSQLiteContext();
   const { flags, setFlag } = useFeatureFlags();
   const [saveLocation, setSaveLocation] = useState(false);
+  const [intent, setIntent] = useState<OnboardingIntent | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   // Receipt-scan provider, as a boolean: on = 'gemini' (cloud), off = 'device'.
   // Unset means 'gemini' (see settings.ocrProvider), so default the switch to on.
   const [cloudOcr, setCloudOcr] = useState(true);
@@ -43,8 +48,37 @@ export default function FeaturesScreen() {
     (async () => {
       setSaveLocation(await settings.saveLocation());
       setCloudOcr((await settings.ocrProvider()) !== 'device');
+      setIntent(asIntent(await settings.onboardingIntent()));
     })();
   }, []);
+
+  /**
+   * Re-pick the onboarding persona without re-running onboarding.
+   *
+   * This writes EVERY flag, not just the persona's deviations (see `applyPersona`),
+   * so it undoes hand-toggles too — which is why it confirms first. Nothing else is
+   * touched: no data, no groups, and `onboarding_done` stays set.
+   */
+  function changeSetup(next: OnboardingIntent) {
+    const opt = PERSONA_OPTIONS.find(o => o.key === next);
+    setPickerOpen(false);
+    if (next === intent) return;
+    Alert.alert(
+      `Set up for “${opt?.label}”?`,
+      'This resets every switch below to that setup. Your transactions, groups and goals are untouched, and you can change any switch back.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply',
+          onPress: async () => {
+            haptic.success();
+            await applyPersona(next, FEATURE_KEYS);
+            setIntent(next);
+          },
+        },
+      ],
+    );
+  }
 
   /**
    * Location tagging is deliberately NOT a feature flag, even though it sits in
@@ -131,10 +165,9 @@ export default function FeaturesScreen() {
   }
 
   // Optional modules, grouped into clear sections. Each maps to the flag (or
-  // store) that actually gates it. "Reports & Charts" gates donut + trend
-  // together. Two rows aren't flags at all and live in `settings` instead:
-  // "Location Tagging" (needs an OS grant) and "Cloud Receipt Scanning"
-  // (picks an implementation, not a surface).
+  // store) that actually gates it. Two rows aren't flags at all and live in
+  // `settings` instead: "Location Tagging" (needs an OS grant) and "Cloud Receipt
+  // Scanning" (picks an implementation, not a surface).
   // `dimWhenOff: false` for a row where "off" isn't "this feature is disabled" but
   // "the other mode is selected" — dimming it would imply scanning had been switched
   // off, which it hasn't.
@@ -147,16 +180,16 @@ export default function FeaturesScreen() {
       title: 'Splitting & people',
       items: [
         { icon: 'users', label: 'Group Splitting', caption: 'Groups tab, shared bills, settle up, the owe/owed strip on Home', value: flags.splitting, onChange: toggleSplitting },
+        { icon: 'list', label: 'Itemized Bills', caption: 'Split a bill line by line, with tax, tip and discounts', value: flags.itemized, onChange: v => setFlag('itemized', v) },
+        { icon: 'smartphone', label: 'Pay via UPI', caption: 'Hand a settle-up to your UPI app, pre-filled', value: flags.upiSettle, onChange: v => setFlag('upiSettle', v) },
       ],
     },
     {
       title: 'Insights & reports',
       items: [
         { icon: 'activity', label: 'Financial Health Score', caption: 'A wellness score for your money habits', value: flags.healthScore, onChange: v => setFlag('healthScore', v) },
-        { icon: 'trending-up', label: 'Spending Forecast', caption: 'See where your spending lands at month-end', value: flags.forecast, onChange: v => setFlag('forecast', v) },
-        { icon: 'zap', label: 'Savings Insights', caption: 'Opportunity-cost & habit nudges on the Insights screen', value: flags.savingsInsights, onChange: v => setFlag('savingsInsights', v) },
-        { icon: 'bar-chart-2', label: 'Spending Insights', caption: 'Category-shift nudges on Home and Insights', value: flags.dashboardInsights, onChange: v => setFlag('dashboardInsights', v) },
-        { icon: 'pie-chart', label: 'Reports & Charts', caption: 'Donut and 6-month trend charts in Reports', value: flags.reportsDonut, onChange: v => { setFlag('reportsDonut', v); setFlag('reportsTrend', v); } },
+        { icon: 'bar-chart-2', label: 'Insights', caption: 'Spending velocity, month-end forecast, what-if and nudges', value: flags.insights, onChange: v => setFlag('insights', v) },
+        { icon: 'pie-chart', label: 'Reports', caption: 'Monthly history, charts and CSV/PDF export', value: flags.reports, onChange: v => setFlag('reports', v) },
       ],
     },
     {
@@ -164,7 +197,7 @@ export default function FeaturesScreen() {
       items: [
         { icon: 'target', label: 'Savings Goals', caption: 'Track goals and fund them directly from cash', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
         { icon: 'refresh-cw', label: 'Recurring', caption: 'Track repeating bills & charges', value: flags.recurring, onChange: v => setFlag('recurring', v) },
-        { icon: 'help-circle', label: 'Afford Check', caption: 'Quick "can I afford this?" before a big buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
+        { icon: 'help-circle', label: 'Afford Check', caption: 'Weighs cash, your habits, the month ahead and your goals before a buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
         { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => setFlag('reminders', v) },
         { icon: 'award', label: 'Tracking Streak', caption: 'A daily-logging streak on Home (shows at 3+ days)', value: flags.streak, onChange: v => setFlag('streak', v) },
       ],
@@ -175,8 +208,9 @@ export default function FeaturesScreen() {
         { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
         { icon: 'repeat', label: 'Recurring Suggestions', caption: 'Flag imported transactions that look like a recurring bill', value: flags.recurringSuggest, onChange: v => setFlag('recurringSuggest', v) },
         { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
-        // There is still no on/off switch for receipt scanning itself — it ships
-        // unflagged (DEBT_TRACKER F7). This row picks the provider, not availability.
+        { icon: 'camera', label: 'Receipt Scanning', caption: 'Read line items straight off a photographed receipt', value: flags.receiptScan, onChange: v => setFlag('receiptScan', v) },
+        { icon: 'upload', label: 'Import & Review', caption: 'Bring in statements, then confirm each row before it counts', value: flags.importReview, onChange: v => setFlag('importReview', v) },
+        // Availability is `receiptScan` above; this row only picks the provider.
         {
           icon: 'camera', label: 'Cloud Receipt Scanning',
           caption: cloudOcr
@@ -193,6 +227,26 @@ export default function FeaturesScreen() {
       <ScreenHeader title="Feature Management" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>Turn on what you need. Off by default keeps the app clean.</Text>
+
+        {/* YOUR SETUP — the persona that chose the switches below */}
+        {intent && (() => {
+          const opt = PERSONA_OPTIONS.find(o => o.key === intent);
+          return (
+            <>
+              <Text style={styles.sectionTitle}>Your setup</Text>
+              <View style={styles.card}>
+                <TouchableOpacity style={styles.row} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Change my setup">
+                  <View style={styles.iconDot}><Text style={styles.emoji}>{opt?.emoji}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>{opt?.label}</Text>
+                    <Text style={styles.caption}>Sets the switches below. Change any one after.</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            </>
+          );
+        })()}
 
         {/* ALWAYS ON — the three pillars, no toggle */}
         <Text style={styles.sectionTitle}>Always on</Text>
@@ -240,6 +294,24 @@ export default function FeaturesScreen() {
 
         <Text style={styles.footer}>Enabled sections appear in their natural home.{'\n'}Nothing is deleted when a section is off.</Text>
       </ScrollView>
+
+      <SheetModal visible={pickerOpen} onClose={() => setPickerOpen(false)} title="What are you using BudgetSplit for?">
+        <View style={styles.card}>
+          {PERSONA_OPTIONS.map((o, i) => (
+            <View key={o.key}>
+              {i > 0 && <View style={styles.divider} />}
+              <TouchableOpacity style={styles.row} onPress={() => changeSetup(o.key)} accessibilityRole="button" accessibilityLabel={o.label}>
+                <View style={styles.iconDot}><Text style={styles.emoji}>{o.emoji}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>{o.label}</Text>
+                  <Text style={styles.caption}>{o.desc}</Text>
+                </View>
+                {o.key === intent && <Feather name="check" size={18} color={colors.accent} />}
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      </SheetModal>
     </View>
   );
 }
@@ -256,6 +328,7 @@ const styles = StyleSheet.create({
   iconDot: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
+  emoji: { fontSize: 16 },
   coreBadge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: space.xs, borderWidth: 1 },
   coreBadgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.md, lineHeight: 18 },

@@ -26,6 +26,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { alpha } from '../../src/theme';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 /**
  * Itemized-bill wizard (items → assign → payers → review). All state and
@@ -38,6 +39,7 @@ export default function ItemizedScreen() {
   const insets = useSafeAreaInsets();
 
   const f = useItemizedForm(paramGroupId, editId);
+  const { flags } = useFeatureFlags();
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -83,7 +85,7 @@ export default function ItemizedScreen() {
       {/* STEP 1: ITEMS */}
       {f.step === 'items' && (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {Platform.OS === 'ios' && (
+          {Platform.OS === 'ios' && flags.receiptScan && (
             <TouchableOpacity
               style={styles.splitRestBtn}
               onPress={() => {

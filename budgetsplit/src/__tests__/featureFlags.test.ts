@@ -34,17 +34,13 @@ const CONSUMER_SOURCE = sourceFiles(path.join(ROOT, 'app'))
   .join('\n');
 
 describe('DEFAULTS', () => {
-  // smartCategory and recurringSuggest were flipped on: both only ever *suggest*
-  // (a guess you can overwrite; a rule you must confirm), so a false positive
-  // costs a tap, while defaulting off conceded all automation to a hidden switch.
-  it('keeps only the two genuinely opt-in features off', () => {
-    expect(DEFAULTS.affordCheck).toBe(false);
-    expect(DEFAULTS.streak).toBe(false);
-  });
-
-  it('has every other flag on', () => {
-    const off = Object.entries(DEFAULTS).filter(([, v]) => !v).map(([k]) => k).sort();
-    expect(off).toEqual(['affordCheck', 'streak']);
+  // affordCheck was flipped ON: once the engine grew past a cash check it stopped
+  // being a novelty, and defaulting it off is why nobody ever found it. Streak is
+  // the only flag left off — it is decoration, and it self-hides under 3 days
+  // anyway, so on-by-default would be a promise the feature rarely keeps.
+  it('leaves exactly one flag off by default', () => {
+    const off = Object.entries(DEFAULTS).filter(([, v]) => !v).map(([k]) => k);
+    expect(off).toEqual(['streak']);
   });
 
   it('is a flat boolean record with no duplicate keys', () => {
@@ -55,8 +51,8 @@ describe('DEFAULTS', () => {
 });
 
 /**
- * The reason 8 keys were deleted: a flag that gates nothing renders as a working
- * switch that does nothing. These two tests are the guard against that coming
+ * The reason the five chart-fragment keys were deleted: a flag that gates nothing
+ * renders as a working switch that does nothing. These two tests are the guard against that coming
  * back — they read the actual source, so a new key must be wired before it can
  * be added, and a surface can't quietly stop honouring its flag.
  */
@@ -100,7 +96,7 @@ describe('loadFlags', () => {
     await setFlag('streak', true);
     const flags = await loadFlags();
     expect(flags.recurring).toBe(DEFAULTS.recurring);
-    expect(flags.affordCheck).toBe(DEFAULTS.affordCheck);
+    expect(flags.insights).toBe(DEFAULTS.insights);
   });
 
   it('treats a corrupt stored value as false rather than throwing', async () => {
@@ -125,9 +121,9 @@ describe('loadFlags', () => {
 
 describe('setFlag', () => {
   it('namespaces every key with the feature_ prefix', async () => {
-    await setFlag('forecast', false);
-    await expect(AsyncStorage.getItem('feature_forecast')).resolves.toBe('false');
-    await expect(AsyncStorage.getItem('forecast')).resolves.toBeNull();
+    await setFlag('reports', false);
+    await expect(AsyncStorage.getItem('feature_reports')).resolves.toBe('false');
+    await expect(AsyncStorage.getItem('reports')).resolves.toBeNull();
   });
 
   it('round-trips a toggle', async () => {

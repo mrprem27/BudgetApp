@@ -288,3 +288,43 @@ describe('getAffordSnapshot — monthly income basis', () => {
     expect(snap.incomeSource).toBe('none');
   });
 });
+
+describe('getAffordSnapshot — history stats', () => {
+  const DAY = 86400000;
+
+  it('reports the median single purchase, not the mean', async () => {
+    const { db, me, personal } = setup();
+    addCategory(db, 'Food');
+    // 1k, 2k, 3k, 4k, 90k → median 3000; a mean would be skewed to ~20k by the outlier.
+    for (const amt of [1000, 2000, 3000, 4000, 90000]) {
+      addSimpleExpense(db, { groupId: personal, personId: me, amount: amt, date: Date.now() - DAY, category: 'Food' });
+    }
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.byCategory.Food?.typicalBasket).toBe(3000);
+  });
+
+  it('withholds a basket size until there are enough samples', async () => {
+    const { db, me, personal } = setup();
+    addCategory(db, 'Food');
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 5000, date: Date.now() - DAY, category: 'Food' });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 7000, date: Date.now() - DAY, category: 'Food' });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.byCategory.Food?.typicalBasket).toBeUndefined();
+  });
+
+  it('ignores purchases older than the history window', async () => {
+    const { db, me, personal } = setup();
+    addCategory(db, 'Food');
+    for (let i = 0; i < 4; i++) {
+      addSimpleExpense(db, { groupId: personal, personId: me, amount: 5000, date: Date.now() - 200 * DAY, category: 'Food' });
+    }
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.byCategory.Food?.typicalBasket).toBeUndefined();
+  });
+
+  it('has no goal pacing when no goal is fundable', async () => {
+    const { db } = setup();
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.goalPacing).toBeNull();
+  });
+});
