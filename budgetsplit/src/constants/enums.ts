@@ -45,16 +45,19 @@ export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
 /** `pending_txn.source` — where an imported/pending row came from. Drives the
  *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
  *  are reserved for future ingestion paths (currently de-scoped). */
-export const TXN_SOURCE = ['email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'manual'] as const;
+export const TXN_SOURCE = ['email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'upi_qr', 'manual'] as const;
 export type TxnSource = typeof TXN_SOURCE[number];
 export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
   email: 'Email alert', gpay: 'Google Pay', paytm: 'Paytm', bank_csv: 'Bank / CSV',
-  sms: 'SMS', notification: 'Notifications', manual: 'Imported',
+  sms: 'SMS', notification: 'Notifications',
+  // Paid through the app: scanned a QR, handed off to a UPI app, confirmed on return.
+  upi_qr: 'Scanned & paid',
+  manual: 'Imported',
 };
 /** Feather icon per source — used by the Review section headers. */
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
   email: 'mail', gpay: 'smartphone', paytm: 'credit-card', bank_csv: 'file-text',
-  sms: 'message-square', notification: 'bell', manual: 'inbox',
+  sms: 'message-square', notification: 'bell', upi_qr: 'maximize', manual: 'inbox',
 };
 
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */

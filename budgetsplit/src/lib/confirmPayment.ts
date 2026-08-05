@@ -1,0 +1,75 @@
+import type * as SQLite from 'expo-sqlite';
+import { insertPending } from '../db/queries/pending';
+import { getCategories } from '../db/queries/categories';
+import { matchCategory } from './smartCategory';
+import { getPendingPayment, setPendingPayment, shouldAskAbout, type PendingPayment } from './pendingPayment';
+import { confirmAsync } from './confirm';
+import { formatRupees } from './money';
+
+/**
+ * Ask about a handed-off UPI payment, and file it if it happened.
+ *
+ * This is the payoff of the whole Scan & Pay flow: the transaction you just made is
+ * already known — payee, amount, time, method — so the alternative to one yes/no is
+ * typing all of it from memory later, which is the friction the feature exists to
+ * remove.
+ *
+ * It lands in `pending_txn`, not `txn`. The app never sees the payment succeed, so a
+ * confirmed row still goes through Review like every other imported row, where the
+ * category, group and split can be corrected before it counts.
+ */
+export async function askAboutPendingPayment(
+  db: SQLite.SQLiteDatabase,
+  nowMs: number = Date.now(),
+): Promise<boolean> {
+  const p = await getPendingPayment();
+  if (!p) return false;
+
+  // Too fast to have paid, or too long ago to remember — see pendingPayment.ts.
+  if (!shouldAskAbout(p, nowMs)) {
+    await setPendingPayment(null);
+    return false;
+  }
+
+  // Cleared before asking: whatever the answer, this handoff has been dealt with, and
+  // a crash mid-dialog must not leave it to be asked again forever.
+  await setPendingPayment(null);
+
+  const who = p.name ?? p.vpa;
+  const paid = await confirmAsync(
+    'Did that payment go through?',
+    `${formatRupees(p.amountPaise)} to ${who}. If it did, we'll add it to your review inbox — no typing.`,
+    'Yes, add it',
+  );
+  if (!paid) return false;
+
+  await filePayment(db, p, nowMs);
+  return true;
+}
+
+/** Write the confirmed payment as a pending row, category guessed from the payee. */
+async function filePayment(db: SQLite.SQLiteDatabase, p: PendingPayment, nowMs: number): Promise<void> {
+  const description = p.name ?? p.vpa;
+  let category = p.category ?? null;
+  if (!category) {
+    // Reuse the same guesser Quick Add uses on a typed title — a merchant name is
+    // exactly the kind of string it was built for ("Chai Stop" → Eating Out).
+    try {
+      category = matchCategory(description, await getCategories(db, 'expense'));
+    } catch {
+      category = null;
+    }
+  }
+
+  await insertPending(db, [{
+    date: nowMs,
+    amount: p.amountPaise,
+    description,
+    kind: 'expense',
+    category,
+    direction: 'debit',
+    source: 'upi_qr',
+    pay_method: 'upi',
+    raw: `Scanned & paid ${p.vpa}`,
+  }]);
+}

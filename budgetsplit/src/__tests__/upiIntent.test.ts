@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa, parseUpiQr, UpiApp, UPI_APPS } from '../lib/upiIntent';
+import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, UpiApp, UPI_APPS } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -133,5 +133,39 @@ describe('parseUpiQr — reading a friend’s UPI QR', () => {
   it('round-trips with buildUpiUri', () => {
     const uri = buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', amountPaise: 12345 })!;
     expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao' });
+  });
+});
+
+describe('parseAnyUpiQr — routing person vs merchant', () => {
+  const tlv = (t: string, v: string) => `${t}${String(v.length).padStart(2, '0')}${v}`;
+  const shopQr = (vpa = 'chaistop@okhdfcbank', name = 'Chai Stop', amount?: string) =>
+    tlv('00', '01') +
+    tlv('26', tlv('00', 'in.gov.upi') + tlv('01', vpa)) +
+    tlv('53', '356') + (amount ? tlv('54', amount) : '') + tlv('59', name);
+
+  it('reads a person code as a person', () => {
+    expect(parseAnyUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha'))
+      .toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha', kind: 'person' });
+  });
+
+  it('reads a shop code as a merchant, with its fixed amount', () => {
+    expect(parseAnyUpiQr(shopQr('chaistop@okhdfcbank', 'Chai Stop', '45.50')))
+      .toEqual({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', amountPaise: 4550, kind: 'merchant' });
+  });
+
+  it('leaves the amount open when the shop code fixes none', () => {
+    expect(parseAnyUpiQr(shopQr())?.amountPaise).toBeUndefined();
+  });
+
+  it('still returns null for a code that is neither', () => {
+    expect(parseAnyUpiQr('https://example.com')).toBeNull();
+  });
+
+  it('does NOT change what parseUpiQr accepts', () => {
+    // Adding a friend must keep rejecting shop codes — you cannot settle up with a
+    // shop, and storing its VPA on a contact would be wrong.
+    const shop = shopQr();
+    expect(parseUpiQr(shop)).toBeNull();
+    expect(parseAnyUpiQr(shop)).not.toBeNull();
   });
 });

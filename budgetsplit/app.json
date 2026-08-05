@@ -74,7 +74,8 @@
       ],
       "./plugins/withoutPushEntitlement",
       "expo-notifications",
-      "./plugins/withSwiftUICoreLinkFix"
+      "./plugins/withSwiftUICoreLinkFix",
+      "./plugins/withDevelopmentTeam"
     ],
     "experiments": {
       "typedRoutes": true

@@ -145,3 +145,41 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   return `${PREFIX[app]}?${qs}`;
 }
+
+export type ScanTarget = ScannedUpi & {
+  /** Amount the code fixes, in paise. Absent on open-amount and personal codes. */
+  amountPaise?: number;
+  kind: 'person' | 'merchant';
+};
+
+/**
+ * Any payable UPI QR — a person's `upi://` code or a shop's EMV/BharatQR.
+ *
+ * Deliberately separate from `parseUpiQr`, which stays strict. The two callers want
+ * genuinely different answers: **adding a friend** must reject a merchant code (you
+ * cannot settle up with a shop, and storing its VPA on a contact would be wrong),
+ * while **Scan & Pay** accepts both. One permissive parser used by both would quietly
+ * let a shop QR become a person.
+ *
+ * `parseMerchantQr` is imported lazily-shaped — i.e. this module stays free of it at
+ * the top — only because `emvQr` imports `isValidVpa` from here; the cycle is broken
+ * by keeping that import inside this file's tail rather than its head.
+ */
+export function parseAnyUpiQr(raw: string): ScanTarget | null {
+  const person = parseUpiQr(raw);
+  if (person) return { ...person, kind: 'person' };
+
+  // Required here rather than at the top: emvQr imports isValidVpa from this module.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { parseMerchantQr } = require('./emvQr') as typeof import('./emvQr');
+  const merchant = parseMerchantQr(raw);
+  if (!merchant) return null;
+
+  return {
+    vpa: merchant.vpa,
+    // City is dropped: it is useful for a receipt, not for naming a transaction.
+    name: merchant.name,
+    amountPaise: merchant.amountPaise,
+    kind: 'merchant',
+  };
+}

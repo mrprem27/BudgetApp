@@ -26,6 +26,7 @@ const K = {
   onboardingIntent: 'onboarding_intent',
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
+  scanPayHintSeen: 'scan_pay_hint_seen',
   backupAnchorAt: 'backup_anchor_at',
   ocrProvider: 'ocr_provider',
 } as const;
@@ -91,6 +92,8 @@ export const settings = {
   // Goal "protect" (overspend-raid shield) one-time explainer
   lockExplainerSeen: () => getBool(K.lockExplainerSeen, false),
   setLockExplainerSeen: (v: boolean) => setBool(K.lockExplainerSeen, v),
+  scanPayHintSeen: () => getBool(K.scanPayHintSeen, false),
+  setScanPayHintSeen: (v: boolean) => setBool(K.scanPayHintSeen, v),
 
   // Backup reminder cadence anchor — last real export, or when the reminder
   // was first turned on if the user hasn't exported yet.

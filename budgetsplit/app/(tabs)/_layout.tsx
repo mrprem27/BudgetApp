@@ -1,12 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, AppState } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSQLiteContext } from 'expo-sqlite';
+import { ScanPaySheet } from '../../src/components/finance/ScanPaySheet';
+import { setPendingPayment } from '../../src/lib/pendingPayment';
+import { askAboutPendingPayment } from '../../src/lib/confirmPayment';
+import { settings } from '../../src/lib/settings';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients } from '../../src/constants/colors';
-import { layout, shadow } from '../../src/constants/layout';
+import { layout, shadow, space, radius } from '../../src/constants/layout';
+import { type } from '../../src/constants/typography';
 import { haptic } from '../../src/lib/haptics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
@@ -35,7 +42,30 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { flags } = useFeatureFlags();
+  const { refresh } = useDataRefresh();
+  const db = useSQLiteContext();
+  const [scanPay, setScanPay] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const activeName = state.routes[state.index]?.name;
+
+  // Back from a UPI app after a Scan & Pay hand-off: ask once, then file it.
+  // Lives here rather than in the root layout because that sits ABOVE
+  // DataRefreshProvider and so cannot signal the screens to reload.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      askAboutPendingPayment(db).then(filed => { if (filed) refresh(); }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [db, refresh]);
+
+  // Teach the long-press once. Dismissed by using it, or by tapping the FAB at all.
+  useEffect(() => { settings.scanPayHintSeen().then(seen => setShowHint(!seen)).catch(() => {}); }, []);
+  function setHintSeen() {
+    if (!showHint) return;
+    setShowHint(false);
+    settings.setScanPayHintSeen(true).catch(() => {});
+  }
 
   const tab = (name: string) => {
     const focused = activeName === name;
@@ -96,9 +126,14 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
         <View style={styles.fabSlot}>
           <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => { haptic.light(); router.push('/add/quick?kind=expense'); }}
+            onPress={() => { haptic.light(); setHintSeen(); router.push('/add/quick?kind=expense'); }}
+            // Long-press pays by QR (`Scan & Pay`). A hidden gesture needs teaching,
+            // hence the one-time coach mark below — the mistake V2-08 and the afford
+            // screen both made was shipping a good surface nobody could find.
+            onLongPress={() => { haptic.light(); setHintSeen(); setScanPay(true); }}
+            delayLongPress={350}
             accessibilityRole="button"
-            accessibilityLabel="Add expense"
+            accessibilityLabel="Add expense. Long press to scan and pay a UPI QR."
           >
             <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fab}>
               <Feather name="plus" size={28} color={colors.onAccent} />
@@ -107,6 +142,19 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
         </View>
         {RIGHT.map(tab)}
       </View>
+
+      {showHint && (
+        <View style={styles.hintBubble} pointerEvents="none">
+          <Feather name="maximize" size={12} color={colors.accent} />
+          <Text style={styles.hintText}>Hold to scan &amp; pay a UPI QR — it records the expense for you</Text>
+        </View>
+      )}
+
+      <ScanPaySheet
+        visible={scanPay}
+        onClose={() => setScanPay(false)}
+        onHandoff={p => { setPendingPayment({ ...p, startedAt: Date.now() }).catch(() => {}); }}
+      />
     </View>
   );
 }
@@ -133,6 +181,17 @@ const styles = StyleSheet.create({
   label: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
   // Center slot is a touch wider so the FAB gets breathing room.
   fabSlot: { flex: 1.2, alignItems: 'center', justifyContent: 'flex-start' },
+  hintBubble: {
+    position: 'absolute', left: space.lg, right: space.lg, bottom: '100%',
+    // Clear the FAB, which protrudes above the bar by half its height (+8px row
+    // offset). Without this the bubble sits on top of the FAB and the tab labels —
+    // FAB overlap is a bug this app has already fixed once (commit 04fa6ad).
+    marginBottom: layout.fabHeight / 2 + space.xl,
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    backgroundColor: colors.bgElevated, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: space.md, paddingVertical: space.sm,
+  },
+  hintText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 15 },
   fab: {
     width: layout.fabHeight, height: layout.fabHeight, borderRadius: layout.fabHeight / 2,
     alignItems: 'center', justifyContent: 'center',

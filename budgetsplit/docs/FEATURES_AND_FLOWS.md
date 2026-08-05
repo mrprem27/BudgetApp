@@ -464,6 +464,41 @@ half-parsing one risks extracting a wrong payee, which is the one error that mus
 the next step is sending money. An amount baked into the QR is ignored: this captures a *person*,
 not their payment request.
 
+### Scan & Pay — paying through the app so it records itself
+
+**The problem this solves.** The largest friction in the app is typing in transactions you *already
+made*. Both automated routes are blocked by third parties (`F4` GPay export format, `F5` Gmail OAuth
+CASA) and an Account Aggregator needs a partner. Paying **through** BudgetSplit is the one moment it
+can know a payment happened without any of them.
+
+| Step | What happens |
+|---|---|
+| 1 | **Long-press the FAB** → `ScanPaySheet`. A one-time coach mark teaches the gesture (`scanPayHintSeen`, following the `lockExplainerSeen` precedent) — a hidden gesture with no teaching is the mistake `V2-08` and the afford screen both made. |
+| 2 | Scan any UPI QR. `parseAnyUpiQr` reads a **person's** `upi://` code *or* a **shop's** EMV/BharatQR (`lib/emvQr.ts`). |
+| 3 | Amount: typed, or fixed by the code (EMV tag `54`) — a fixed amount is **not editable**, since changing it would send a figure the merchant did not ask for. |
+| 4 | Hand off via the **same** `useUpiApps` + `buildUpiUri` path as settle-up. No second implementation of the platform split. |
+| 5 | The attempt is persisted (`lib/pendingPayment.ts`) across the app switch — same reasoning as `overspendNotice.ts`. |
+| 6 | On return, the app **asks once**: *"Did that payment go through?"* Yes → a `pending_txn` row with `source: 'upi_qr'`, `pay_method: 'upi'`, and a category guessed from the merchant name via the existing `matchCategory`. No → discarded. |
+
+**Nothing is written at hand-off.** The app never learns the outcome — it only opens someone else's
+app — so recording optimistically would leave a phantom expense behind every cancelled payment. The
+confirmed row still lands in **Review**, not the ledger, so category, group and split can be
+corrected before it counts.
+
+**When it declines to ask:** under 5 s away (they bounced straight back and cannot have paid —
+asking would train people to dismiss the prompt) or over 6 h (they will not remember, and a
+wrongly-confirmed expense is worse than a missed one, since a missed one can still be typed in).
+
+**Merchant QR parsing fails closed.** `emvQr.ts` reads EMV `TT LL VALUE` triplets and returns `null`
+on a length that overruns, a non-numeric tag, a missing `in.gov.upi` template, a VPA that isn't one,
+or a non-INR code. A duplicated tag takes the **first** occurrence, so a trailing forgery cannot
+override the real payee. ⚠️ Written from the spec, **not** validated against a broad sample of real
+Indian QRs — a wrong VPA is the failure that matters, so test against real codes early.
+
+**`parseUpiQr` stays strict on purpose.** Adding a friend (`PersonNameSheet`) must keep rejecting
+merchant codes — you cannot settle up with a shop, and storing its VPA on a contact would be wrong.
+Only Scan & Pay uses the permissive `parseAnyUpiQr`. Two callers, two different right answers.
+
 **Choosing between several UPI apps works differently per platform, and that is not a style choice.**
 
 | | Behaviour |
@@ -1310,6 +1345,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |
 | `plan/GoalCard` | Savings goal card — progress bar, deadline, contribution/needed per month. |
 | `UpiQrScanner` | Live camera sheet that reads a friend's UPI QR into their contact. |
+| `ScanPaySheet` | Scan → amount → UPI-app hand-off, for Scan & Pay. |
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money. |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
