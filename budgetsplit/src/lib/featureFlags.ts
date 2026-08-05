@@ -43,13 +43,13 @@ export const DEFAULTS: FeatureFlags = {
   // (see lib/personaDefaults.ts). Default ON — a fresh install shows the full app.
   splitting: true,
   recurring: true,
-  smartCategory: false, // opt-in
+  smartCategory: true,  // built, tested and wired — off conceded all category automation
   affordCheck: false,   // opt-in
   streak: false,        // opt-in
   healthScore: true,    // shown on home by default (matches Settings design)
   savingsGoals: true,   // Plan tab savings pool + goals
   reminders: true,      // bill / settle-up nudges (Settings › Reminders)
-  recurringSuggest: false, // opt-in — heuristic, false-positive-prone like smartCategory
+  recurringSuggest: true,  // suggestion-only: never auto-creates a rule, so a false positive costs one tap
 };
 
 const PREFIX = 'feature_';

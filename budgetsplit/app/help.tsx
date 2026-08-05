@@ -131,7 +131,7 @@ const SECTIONS: Section[] = [
       { icon: 'lock', color: colors.accent, title: 'Face ID / Touch ID', body: 'Enable biometric lock in Settings \u2192 Privacy. The app requires Face ID every time you open it, preventing others from seeing your finances.' },
       { icon: 'eye-off', color: colors.settle, title: 'Privacy screen', body: 'When you switch apps, your financial data is hidden with a blur overlay. On by default \u2014 toggle in Settings \u2192 Privacy & Security.' },
       { icon: 'map-pin', color: colors.healthAmber, title: 'Location tagging', body: 'Optionally tag transactions with where you made them. OFF by default, explicitly enable in Settings. Location data never leaves your device.' },
-      { icon: 'wifi-off', color: colors.income, title: 'Fully offline', body: 'BudgetSplit makes zero network calls. All data lives only on your device. No accounts, no cloud, no tracking. Your money data is truly private.' },
+      { icon: 'wifi-off', color: colors.income, title: 'Offline by default', body: 'Your data lives only on this device. No accounts, no cloud sync, no tracking, no analytics — nothing is uploaded as you use the app. The one exception is receipt scanning: by default it sends that photo (and nothing else) to a cloud OCR service to read the line items. See "Scan a receipt" under Tips & Tricks.' },
     ],
   },
   {
@@ -157,7 +157,7 @@ const SECTIONS: Section[] = [
       { name: 'clock', bg: alpha(colors.settle, 13), color: colors.settle },
     ] },
     items: [
-      { icon: 'camera', color: decor.orange, title: 'Scan a total', body: 'On an itemized bill you can snap a photo and the app reads the bill’s total on-device to prefill the amount. Full line-by-line receipt scanning (with AI) is planned for a future update.' },
+      { icon: 'camera', color: decor.orange, title: 'Scan a receipt', body: 'On an itemized bill, tap “Scan receipt” to snap or pick a photo and have the line items read out of it. You always review the result and untick anything wrong before it’s added — nothing is saved from a scan you don’t confirm. Reading is done by a cloud OCR service, so the photo leaves your device for that one request; it isn’t stored there.' },
       { icon: 'dollar-sign', color: colors.accent, title: 'Currency', body: 'Amounts are in Indian Rupees (₹). Multi-currency support is coming in a future update.' },
       { icon: 'map-pin', color: colors.coral, title: 'Map link', body: 'If location tagging is on, transactions show their location. Tap the location row in transaction detail to open Apple Maps at that exact spot.' },
       { icon: 'hash', color: colors.settle, title: 'Tags', body: 'Add #tags to any transaction (e.g. #trip, #wedding). Tags work across groups \u2014 filter by tag in Reports to see all related spending regardless of group.' },

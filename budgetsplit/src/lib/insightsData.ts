@@ -4,7 +4,10 @@ import { colors } from '../constants/colors';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { getAllGroups } from '../db/queries/groups';
+import { getMe } from '../db/queries/persons';
 import { buildSavingsInsights } from '../db/queries/savings';
+import { myShareOf } from './splitMath';
+import { getMyGlobalBudgetStatus } from './budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 
 /**
@@ -24,39 +27,45 @@ type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataP
 export async function loadInsightsData(
   db: SQLite.SQLiteDatabase,
   opts: { savingsInsights?: boolean } = {},
+  /** Injected for determinism, same contract as `getBudgetAnalytics`/`lib/upcoming`. */
+  now: Date = new Date(),
 ) {
 
-    const grps = await getAllGroups(db);
+    const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
+    const meId = me?.id ?? '';
 
     // This month vs last month spend by category (for shifts + velocity).
-    const monthStart = new Date();
+    // Copy before mutating — `now` belongs to the caller.
+    const monthStart = new Date(now.getTime());
     monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
     const lastMonthEnd = new Date(monthStart.getTime() - 1);
     const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
     const [monthTxns, lastMonthTxns] = await Promise.all([
-      getTransactionsInRange(db, null, monthStart.getTime(), Date.now()),
+      getTransactionsInRange(db, null, monthStart.getTime(), now.getTime()),
       getTransactionsInRange(db, null, lastMonthStart.getTime(), lastMonthEnd.getTime()),
     ]);
+    // My share, not the group total — same basis as Home, budgets and afford.
     const catMap: Record<string, number> = {};
     const lastCatMap: Record<string, number> = {};
     for (const t of monthTxns) if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
-      catMap[t.category] = (catMap[t.category] ?? 0) + amt;
+      const amt = myShareOf(t, meId);
+      if (amt > 0) catMap[t.category] = (catMap[t.category] ?? 0) + amt;
     }
     for (const t of lastMonthTxns) if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s: number, sh: { amount: number }) => s + sh.amount, 0);
-      lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + amt;
+      const amt = myShareOf(t, meId);
+      if (amt > 0) lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + amt;
     }
     const monthSpend = Object.values(catMap).reduce((s, v) => s + v, 0);
+    // Sample size behind every projection on this screen (see SampleNote).
+    const txnCount = monthTxns.filter(t => t.kind === 'expense' && myShareOf(t, meId) > 0).length;
 
     // Top spending category powers the "What if I cut…" simulator.
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
     const whatIf = topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null;
 
     // Month-end projection from daily pace.
-    const today = new Date();
-    const dayOfMonth = getDate(today);
-    const daysInMonth = getDaysInMonth(today);
+    const dayOfMonth = getDate(now);
+    const daysInMonth = getDaysInMonth(now);
     const projected = dayOfMonth > 0 ? Math.round((monthSpend / dayOfMonth) * daysInMonth) : 0;
 
     // Month-end forecast graph (moved here from Reports): a solid "spent so far"
@@ -70,7 +79,7 @@ export async function loadInsightsData(
       for (const t of monthTxns) {
         if (t.kind !== 'expense') continue;
         const d = getDate(new Date(t.date));
-        if (d >= 1 && d <= daysInMonth) spendByDay[d] += t.shares.reduce((x: number, sh: { amount: number }) => x + sh.amount, 0);
+        if (d >= 1 && d <= daysInMonth) spendByDay[d] += myShareOf(t, meId);
       }
       const dailyCumulative: number[] = [];
       let running = 0;
@@ -102,8 +111,14 @@ export async function loadInsightsData(
     // Budget analytics per group — powers the total, plus the recommendations and
     // "driving overspend" that used to live inside each group's Budget tab. They're
     // aggregated across every group here and tagged with the group name.
-    const analyticsByGroup = await Promise.all(grps.map(async g => ({ group: g, a: await getBudgetAnalytics(db, g) })));
-    const budget = analyticsByGroup.reduce((s, x) => s + x.a.totalAllocated, 0);
+    const analyticsByGroup = await Promise.all(grps.map(async g => ({ group: g, a: await getBudgetAnalytics(db, g, now) })));
+
+    // Must share monthSpend's basis: the my-share budget (FLOW-09 step 6), not
+    // every group's allocation. `analyticsByGroup` stays group-scoped on purpose —
+    // drivers/recommendations are findings about a group's own budget line, and
+    // passing `meId` there would compare my share against the group's allocation.
+    const myBudgetRows = meId ? await getMyGlobalBudgetStatus(db, meId, now) : [];
+    const budget = myBudgetRows.reduce((s, r) => s + r.allocated, 0);
 
     const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
       a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
@@ -128,5 +143,5 @@ export async function loadInsightsData(
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 3);
 
-    return { monthSpend, budget, projected, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
+    return { monthSpend, budget, projected, txnCount, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
 }

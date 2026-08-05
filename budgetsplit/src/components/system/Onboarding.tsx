@@ -80,7 +80,8 @@ type IntentKey = OnboardingIntent;
 
 const INTENT_OPTIONS: { key: IntentKey; emoji: string; label: string; desc: string }[] = [
   { key: 'personal', emoji: '💰', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
-  { key: 'split',    emoji: '👥', label: 'Split with people',      desc: 'Groups, roommates, couples — shared tabs, settle up' },
+  { key: 'split',    emoji: '👥', label: 'Split with people',      desc: 'Trips and one-off group tabs — settle up when it ends' },
+  { key: 'household', emoji: '🏡', label: 'Share a household',     desc: 'Rent, bills and groceries with a partner or flatmates' },
   { key: 'both',     emoji: '✨', label: 'Both',                   desc: 'Full experience — most popular' },
 ];
 
@@ -434,12 +435,13 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 </TouchableOpacity>
               ))}
             </View>
-            {incomeNum > 0 && (
+            {/* Both operands: with budget 0 this rendered "that's — of your take-home". */}
+            {incomeNum > 0 && budgetNum > 0 && (
               <View style={styles.budgetSuggest}>
                 <View style={styles.budgetSuggestDot} />
                 <Text style={styles.budgetSuggestText}>
                   Heads-up: that's{' '}
-                  <Text style={styles.budgetSuggestAmt}>{budgetNum > 0 ? `${Math.round((budgetNum / incomeNum) * 100)}%` : '—'}</Text>
+                  <Text style={styles.budgetSuggestAmt}>{Math.round((budgetNum / incomeNum) * 100)}%</Text>
                   {' '}of your take-home.
                 </Text>
               </View>

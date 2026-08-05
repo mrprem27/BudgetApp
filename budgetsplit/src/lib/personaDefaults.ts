@@ -6,13 +6,13 @@ import { DEFAULTS, type FeatureFlags, type FeatureKey } from './featureFlags';
  * This used to be stored and never read: two users who answered differently got a
  * byte-identical app (AUDIT §4.6 / ISS-04). This module is the missing mapping.
  */
-export type OnboardingIntent = 'personal' | 'split' | 'both';
+export type OnboardingIntent = 'personal' | 'split' | 'household' | 'both';
 
-export const INTENTS: OnboardingIntent[] = ['personal', 'split', 'both'];
+export const INTENTS: OnboardingIntent[] = ['personal', 'split', 'household', 'both'];
 
 /** Narrow an unknown stored string back to an intent. */
 export function asIntent(v: string | null | undefined): OnboardingIntent | null {
-  return v === 'personal' || v === 'split' || v === 'both' ? v : null;
+  return v === 'personal' || v === 'split' || v === 'household' || v === 'both' ? v : null;
 }
 
 /**
@@ -50,6 +50,19 @@ export function personaFlagPatch(intent: OnboardingIntent): Partial<FeatureFlags
         streak: false,
         savingsInsights: false,
         forecast: false,
+      };
+
+    // Living together and splitting the same bills every month — the recurring,
+    // habitual case, unlike 'split' which is shaped like a trip. Wants both halves
+    // on, plus the recurring/reminder surfaces those shared bills depend on.
+    case 'household':
+      return {
+        splitting: true,
+        recurring: true,
+        reminders: true,
+        recurringSuggest: true,
+        healthScore: true,
+        savingsGoals: true,
       };
 
     case 'both':

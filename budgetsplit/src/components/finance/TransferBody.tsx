@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
 import { PayMethodSelector } from './PayMethodSelector';
 import { formatRupees } from '../../lib/money';
+import { buildUpiUri } from '../../lib/upiIntent';
 import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
@@ -25,12 +26,14 @@ type Props = {
   onPayMethod: (m: PayMethod) => void;
   note: string;
   onNote: (t: string) => void;
+  /** Amount being settled, in paise — drives the UPI handoff. */
+  amountPaise?: number;
 };
 
 /** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient.
  *  The transfer reason is a real 'transfer' category picked via the shared
  *  category pill in Quick Add (same UI as Expense/Income). */
-export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, note, onNote }: Props) {
+export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, onScope, payMethod, onPayMethod, note, onNote, amountPaise = 0 }: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
@@ -54,6 +57,12 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
       plainHint = 'No balance between them — enter any amount';
     }
   }
+
+  // Only when we know who is being paid, have their handle, and have an amount.
+  // No VPA → no button, and settling behaves exactly as it did before.
+  const upiUri = to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
+    ? buildUpiUri({ vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up' })
+    : null;
 
   return (
     <View style={styles.wrap}>
@@ -105,6 +114,26 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
       <Text style={styles.label}>HOW WAS IT PAID?</Text>
       <PayMethodSelector value={payMethod} onChange={onPayMethod} accent={colors.settle} />
 
+      {upiUri && (
+        <>
+          <Text style={styles.label}>PAY NOW</Text>
+          <TouchableOpacity
+            style={styles.upiBtn}
+            onPress={() => Linking.openURL(upiUri).catch(() => Alert.alert('No UPI app found', 'Install a UPI app, or record this settlement manually.'))}
+            accessibilityRole="button"
+            accessibilityLabel={`Pay ${formatRupees(amountPaise)} to ${nameOf(to, 'them')} via UPI`}
+          >
+            <Feather name="smartphone" size={16} color={colors.settle} />
+            <Text style={styles.upiBtnText}>Pay {formatRupees(amountPaise)} via UPI</Text>
+          </TouchableOpacity>
+          {/* Opens their UPI app pre-filled; the money moves between their own
+              accounts. Saving stays a separate, explicit step — this app never
+              sees whether the payment actually went through, so it must not
+              record a settlement it did not observe. */}
+          <Text style={styles.upiHint}>Opens your UPI app. Come back and save to record it.</Text>
+        </>
+      )}
+
       <Text style={styles.label}>NOTES</Text>
       <TextInput
         style={styles.noteInput}
@@ -148,5 +177,8 @@ const styles = StyleSheet.create({
   scopeChipActive: { backgroundColor: colors.settle, borderColor: colors.settle },
   scopeChipText: { ...type.label, color: colors.textSecondary },
   scopeChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  upiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.settle, backgroundColor: alpha(colors.settle, 8) },
+  upiBtnText: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
+  upiHint: { ...type.caption, color: colors.textMuted, marginTop: space.sm },
   noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.xs },
 });

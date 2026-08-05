@@ -34,16 +34,17 @@ const CONSUMER_SOURCE = sourceFiles(path.join(ROOT, 'app'))
   .join('\n');
 
 describe('DEFAULTS', () => {
-  it('keeps the four opt-in features off', () => {
-    expect(DEFAULTS.smartCategory).toBe(false);
+  // smartCategory and recurringSuggest were flipped on: both only ever *suggest*
+  // (a guess you can overwrite; a rule you must confirm), so a false positive
+  // costs a tap, while defaulting off conceded all automation to a hidden switch.
+  it('keeps only the two genuinely opt-in features off', () => {
     expect(DEFAULTS.affordCheck).toBe(false);
     expect(DEFAULTS.streak).toBe(false);
-    expect(DEFAULTS.recurringSuggest).toBe(false);
   });
 
   it('has every other flag on', () => {
     const off = Object.entries(DEFAULTS).filter(([, v]) => !v).map(([k]) => k).sort();
-    expect(off).toEqual(['affordCheck', 'recurringSuggest', 'smartCategory', 'streak']);
+    expect(off).toEqual(['affordCheck', 'streak']);
   });
 
   it('is a flat boolean record with no duplicate keys', () => {

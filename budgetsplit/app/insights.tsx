@@ -17,6 +17,7 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { InsightText } from '../src/components/finance/InsightText';
+import { SampleNote } from '../src/components/finance/SampleNote';
 import { recBg, recColor } from '../src/components/finance/group/helpers';
 
 import type { Insight } from '../src/lib/savingsInsights';
@@ -45,6 +46,7 @@ export default function InsightsScreen() {
     useScreenData((db) => loadInsightsData(db, { savingsInsights: flags.savingsInsights }), [flags.savingsInsights]);
 
   const monthSpend = data?.monthSpend ?? 0;
+  const txnCount = data?.txnCount ?? 0;
   const budget = data?.budget ?? 0;
   const projected = data?.projected ?? 0;
   const forecastActual = data?.forecastActual ?? [];
@@ -84,6 +86,14 @@ export default function InsightsScreen() {
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={styles.eyebrow}>{format(today, 'MMMM yyyy')} · {dayOfMonth} days in</Text>
+
+        {/* One note for the whole screen — velocity, forecast and what-if share the sample. */}
+        {!loading && !nothingYet && (
+          <SampleNote
+            txnCount={txnCount}
+            lowSampleHint="Projections below will sharpen as you log more."
+          />
+        )}
 
         {/* HERO — spending velocity (only when projected to overspend) */}
         {overspend && (

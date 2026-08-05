@@ -110,3 +110,23 @@ describe('personaChangedKeys', () => {
     }
   });
 });
+
+describe('household persona', () => {
+  it('turns on splitting plus the recurring-bill surfaces it depends on', () => {
+    const f = personaFlags('household');
+    expect(f.splitting).toBe(true);
+    expect(f.recurring).toBe(true);
+    expect(f.reminders).toBe(true);
+    expect(f.recurringSuggest).toBe(true);
+  });
+
+  it('keeps the personal-money surfaces that "split" turns off', () => {
+    expect(personaFlags('household').healthScore).toBe(true);
+    expect(personaFlags('split').healthScore).toBe(false);
+  });
+
+  it('round-trips through asIntent', () => {
+    expect(asIntent('household')).toBe('household');
+    expect(INTENTS).toContain('household');
+  });
+});

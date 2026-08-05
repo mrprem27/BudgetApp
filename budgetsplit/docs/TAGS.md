@@ -180,3 +180,8 @@ DRIFT-18: KEEP — ✓ row now names the set; is_demo removed
 DRIFT-19: DEFER — accurate; both blockers are external and still open
 DRIFT-20: KEEP — ✓ table rewritten against the code
 DRIFT-21: KEEP — ✓ replaced with a pointer to AUDIT §1
+DRIFT-22: KEEP — ✓ OCR "parked" claim corrected in both docs (it shipped 2026-08-01)
+DRIFT-23: KEEP — ✓ egress documented; 3 in-app privacy strings corrected
+DRIFT-24: KEEP — ✓ /review, /import, /settings/backup, /report-transactions documented
+DRIFT-25: KEEP — ✓ all six self-contradictions resolved from source
+DRIFT-26: KEEP — ✓ docCoverage.test.ts added; verified to fail before being trusted

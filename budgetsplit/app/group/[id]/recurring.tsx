@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
@@ -12,11 +12,11 @@ import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import { getRecurringForGroup, pauseRecurring, resumeRecurring, endRecurring, skipNextOccurrence, undoNextSkip, getSkipsMap } from '../../../src/db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../../../src/db/queries/recurring';
+import { useRecurringActions } from '../../../src/hooks/useRecurringActions';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 import { nextOccurrenceOnOrAfter } from '../../../src/lib/recurrence';
-import { haptic } from '../../../src/lib/haptics';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 import { alpha } from '../../../src/theme';
 
@@ -70,6 +70,7 @@ export default function RecurringScreen() {
   }, [id]);
   const rules = data?.rules ?? [];
   const skips = data?.skips ?? new Map<string, Set<number>>();
+  const { skipNext, undoSkip, pause, resume, end } = useRecurringActions(reload);
 
   useEffect(() => {
     if (!focus) return;
@@ -80,44 +81,8 @@ export default function RecurringScreen() {
 
   if (!id) { router.back(); return null; }
 
-  async function onSkipNext(r: Rule) {
-    try {
-      const skipped = await skipNextOccurrence(db, r.id);
-      if (skipped === null) { Alert.alert('Nothing to skip', 'This series has no upcoming occurrence.'); return; }
-      haptic.warning();
-      await reload();
-    } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
-  }
-
-  async function onUndoSkip(r: Rule) {
-    try {
-      const restored = await undoNextSkip(db, r.id);
-      if (restored === null) { Alert.alert('No skips to undo', 'There are no upcoming skipped occurrences.'); return; }
-      haptic.success();
-      await reload();
-    } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
-  }
-
   function amountOf(r: Rule): number {
     return r.payments.reduce((a, p) => a + p.amount, 0);
-  }
-
-  async function onPause(r: Rule) {
-    try { await pauseRecurring(db, r.id); haptic.warning(); await reload(); }
-    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
-  }
-  async function onResume(r: Rule) {
-    try { await resumeRecurring(db, r.id); haptic.success(); await reload(); }
-    catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
-  }
-  function onEnd(r: Rule) {
-    Alert.alert('Stop this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Stop', style: 'destructive', onPress: async () => {
-        try { await endRecurring(db, r.id); haptic.warning(); await reload(); }
-        catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }
-      } },
-    ]);
   }
 
   const stateMeta: Record<string, { label: string; color: string }> = {
@@ -202,7 +167,7 @@ export default function RecurringScreen() {
                   <View style={styles.actions}>
                     {/* Skip: only available when there's a real future occurrence within the series end date */}
                     {r.recur_state === 'active' && hasFutureOccurrence && (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => onSkipNext(r)} accessibilityRole="button">
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => skipNext(r.id)} accessibilityRole="button">
                         <Feather name="skip-forward" size={14} color={colors.textSecondary} />
                         <Text style={[styles.actionText, { color: colors.textSecondary }]}>Skip</Text>
                       </TouchableOpacity>
@@ -210,25 +175,25 @@ export default function RecurringScreen() {
 
                     {/* Undo Skip: only available when there are upcoming skipped occurrences */}
                     {hasUpcomingSkips && (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => onUndoSkip(r)} accessibilityRole="button">
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => undoSkip(r.id)} accessibilityRole="button">
                         <Feather name="rotate-ccw" size={14} color={colors.accent} />
                         <Text style={[styles.actionText, { color: colors.accent }]}>Undo Skip</Text>
                       </TouchableOpacity>
                     )}
 
                     {r.recur_state === 'active' && hasFutureOccurrence ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => onPause(r)} accessibilityRole="button">
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => pause(r.id)} accessibilityRole="button">
                         <Feather name="pause" size={14} color={colors.healthAmber} />
                         <Text style={[styles.actionText, { color: colors.healthAmber }]}>Pause</Text>
                       </TouchableOpacity>
                     ) : r.recur_state === 'paused' ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => onResume(r)} accessibilityRole="button">
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => resume(r.id)} accessibilityRole="button">
                         <Feather name="play" size={14} color={colors.income} />
                         <Text style={[styles.actionText, { color: colors.income }]}>Resume</Text>
                       </TouchableOpacity>
                     ) : null}
 
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => onEnd(r)} accessibilityRole="button">
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => end(r.id)} accessibilityRole="button">
                       <Feather name="x-circle" size={14} color={colors.expense} />
                       <Text style={[styles.actionText, { color: colors.expense }]}>Stop</Text>
                     </TouchableOpacity>

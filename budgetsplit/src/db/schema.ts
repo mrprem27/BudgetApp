@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS person (
   email         TEXT,
   mobile        TEXT,
   remote_uid    TEXT,
-  image_uri     TEXT
+  image_uri     TEXT,
+  upi_vpa       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS budget_group (
@@ -233,6 +234,9 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE savings_goal ADD COLUMN last_auto_at INTEGER",
   // Avatar photos for the user & friends (local file path; null = use initials).
   "ALTER TABLE person ADD COLUMN image_uri TEXT",
+  // UPI handle, so a settle-up can hand off to the payer's own UPI app.
+  // Its own column, not `mobile`: a VPA is not a phone number.
+  "ALTER TABLE person ADD COLUMN upi_vpa TEXT",
   // Itemized bills persist their tax/tip/discount adjustments so they round-trip on edit.
   "ALTER TABLE txn ADD COLUMN adjustments TEXT",
   // Recurring occurrences materialize into real rows linked back to their rule.

@@ -9,6 +9,16 @@ import type { Person } from '../db/queries/persons';
 
 export type Share = { personId: string; amount: number };
 
+/**
+ * My paise share of a transaction — the basis Home, budgets and afford all use.
+ * Not in the split → 0 (I didn't spend it). `lib/upcoming` keeps its own
+ * fallback-to-total for unsplit projections, so it is not a caller.
+ * First shared version of a calc still inlined at ~30 sites; see V2-18.
+ */
+export function myShareOf(txn: { shares: readonly Share[] }, meId: string): number {
+  return txn.shares.find(s => s.personId === meId)?.amount ?? 0;
+}
+
 export type ShareInputs = {
   members: Person[];
   splitMembers: string[];

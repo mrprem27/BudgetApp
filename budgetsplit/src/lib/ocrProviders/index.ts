@@ -6,8 +6,11 @@ import type { ReceiptExtractor } from './types';
 export type { ReceiptExtractor, ReceiptScanResult, ParsedLineItem } from './types';
 
 /**
- * Receipt-OCR provider comparison (ranked). Toggle via settings.setOcrProvider
- * (src/lib/settings.ts) — no settings-screen row yet, call it directly.
+ * Receipt-OCR provider comparison (ranked). The user picks between 1 and 3 via
+ * Feature management → Smart capture → "Cloud Receipt Scanning", which writes
+ * settings.setOcrProvider (src/lib/settings.ts). This is the only setting in the
+ * app that decides whether user content leaves the device, so the switch's caption
+ * says so outright rather than leaving it to this comment.
  *
  * 1. gemini (default) — sends the photo directly to Gemini Flash's free tier
  *    via server/receipt-ocr-proxy. Best free accuracy: the model sees the

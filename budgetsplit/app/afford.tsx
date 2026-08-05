@@ -13,7 +13,7 @@ import { ErrorState } from '../src/components/ui/ErrorState';
 import { CategoryChip } from '../src/components/finance/CategoryChip';
 import { getAffordSnapshot, type AffordSnapshot } from '../src/db/queries/savings';
 import {
-  evaluateAfford, AffordVerdict, AffordReason,
+  evaluateAfford, AffordVerdict, AffordReason, incomeSharePct,
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
@@ -37,12 +37,14 @@ export default function AffordScreen() {
   const available = snap?.available ?? 0;
   const upcoming = snap?.upcomingBills ?? 0;
   const monthlyIncome = snap?.monthlyIncome ?? 0;
+  // 'none' → no credible denominator, so the income axis is dropped entirely.
+  const incomeSource = snap?.incomeSource ?? 'none';
   const catStat = categoryName ? snap?.byCategory[categoryName] : undefined;
 
   const result: AffordResult = useMemo(() => {
     const ctx: AffordContext = {
       amount, available, upcomingBills: upcoming,
-      monthlyIncome: monthlyIncome > 0 ? monthlyIncome : undefined,
+      monthlyIncome: incomeSource !== 'none' && monthlyIncome > 0 ? monthlyIncome : undefined,
       category: categoryName && catStat
         ? { name: categoryName, spentThisMonth: catStat.spentThisMonth, norm: catStat.norm, budget: catStat.budget }
         : undefined,
@@ -72,7 +74,7 @@ export default function AffordScreen() {
       case AffordReason.AboveCategoryNorm:
         return `That's more than you usually spend on ${categoryName} (about ${formatCompact(categoryCap ?? 0)}/month).`;
       case AffordReason.LargeIncomeShare:
-        return `It's ${Math.round((incomeShare ?? 0) * 100)}% of a month's income in one go.`;
+        return `It's ${incomeSharePct(incomeShare)} of ${incomeSource === 'rule' ? 'a month\'s income' : 'what you logged in the last 30 days'} in one go.`;
       case AffordReason.ThinBuffer:
         return `It leaves only ${formatCompact(remaining)} — less than a comfortable cushion.`;
       case AffordReason.Healthy:
@@ -162,8 +164,11 @@ export default function AffordScreen() {
               <>
                 <View style={styles.breakdownDivider} />
                 <View style={styles.cashRow}>
-                  <Text style={styles.cashLabel}>Share of monthly income</Text>
-                  <Text style={[styles.cashVal, { color: incomeShare > 0.1 ? colors.healthAmber : colors.textPrimary }]}>{Math.round(incomeShare * 100)}%</Text>
+                  {/* Label names the actual denominator. */}
+                  <Text style={styles.cashLabel}>
+                    {incomeSource === 'rule' ? 'Share of monthly income' : 'Share of last 30 days’ income'}
+                  </Text>
+                  <Text style={[styles.cashVal, { color: incomeShare > 0.1 ? colors.healthAmber : colors.textPrimary }]}>{incomeSharePct(incomeShare)}</Text>
                 </View>
               </>
             )}

@@ -12,6 +12,7 @@ import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
+import { formatAgoCompact } from '../../src/lib/time';
 import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
@@ -65,6 +66,9 @@ export default function SettingsScreen() {
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
+  // `null` = never. Shown on the row because the only other prompt is a local
+  // notification, which needs flags.reminders + an OS grant + a dev build.
+  const [backupAt, setBackupAt] = useState<number | null>(null);
   const [exportingAll, setExportingAll] = useState(false);
 
   async function handleExportAll() {
@@ -97,6 +101,7 @@ export default function SettingsScreen() {
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
+      setBackupAt(await settings.backupAnchorAt());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();
@@ -239,7 +244,14 @@ export default function SettingsScreen() {
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
         />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="shield" label="Backup & restore" value="Encrypted file" onPress={() => { router.push('/settings/backup'); }} />
+        <SettingsRow
+          icon="shield"
+          label="Backup & restore"
+          // Amber, not red: no backup is a risk to act on, not a user error.
+          value={backupAt ? `Backed up ${formatAgoCompact(backupAt)}` : 'Never backed up'}
+          tint={backupAt ? colors.accent : colors.healthAmber}
+          onPress={() => { router.push('/settings/backup'); }}
+        />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
@@ -266,6 +278,7 @@ export default function SettingsScreen() {
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
           <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+          <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
           <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>
         </TouchableOpacity>
       </View>

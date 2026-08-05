@@ -1,3 +1,5 @@
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ReviewFilters } from './reviewFilter';
 
@@ -17,8 +19,12 @@ export type SavedView = {
   paidBy: string | null;    // payer applied on commit (member of groupId)
 };
 
+/**
+ * `uuid` v4 per AGENTS.md. The old `Date.now()+random(1e6)` collided for same-ms
+ * calls (~2% over 200), and views are keyed by this id — a collision overwrote one.
+ */
 export function makeViewId(): string {
-  return `v_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
+  return `v_${uuid()}`;
 }
 
 export async function loadViews(): Promise<SavedView[]> {

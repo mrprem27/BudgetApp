@@ -1,7 +1,8 @@
 # BudgetSplit — Architecture
 
 > **Single source of truth for how the app is built.** Companion docs:
-> [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) (what every screen does) and
+> [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) (what every screen does, every state, and the
+> cross-cutting validation / permission / notification / network rules) and
 > [DEBT_TRACKER.md](./DEBT_TRACKER.md) (known debt). Build/design rules live in
 > [../AGENTS.md](../AGENTS.md).
 
@@ -13,6 +14,11 @@
 > **deleted**. Screen logic now lives in `src/hooks/use*Screen|Form|Tab` and `src/lib/*Data`
 > rather than inline (see §Layering). The dead `settings` table + columns in §5 remain on
 > purpose. Anything still inaccurate belongs in [DEBT_TRACKER.md](./DEBT_TRACKER.md).
+>
+> **2026-08-04 — the repo is no longer client-only.** `server/receipt-ocr-proxy/` (a Cloudflare
+> Worker) was added with receipt scanning, and the app now makes an outbound request that carries
+> user content. §2 and §3 record it; the full egress picture is
+> [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §19.
 
 ---
 
@@ -47,48 +53,62 @@ afford check, savings goals) ships as optional feature-flagged modules.
 | Charts | **react-native-svg** (donut, health ring) + **gifted-charts** (reports trend) |
 | Gestures/animation | **react-native-gesture-handler**, **react-native-reanimated**, RN `Animated` |
 | Fonts | **SpaceMono** (money), **Inter** (everything else) |
+| Crypto | **crypto-js** — passphrase-encrypted backups only (`src/lib/backup.ts`) |
+| Server | **One Cloudflare Worker**, `server/receipt-ocr-proxy/` — stateless, ~113 L, exists only to hold `GEMINI_API_KEY` for receipt OCR. Not required for anything else; the app is otherwise fully local. Deployed with **wrangler** |
+| Network | Two outbound calls total: pdf.js from a CDN (library only) and the receipt-OCR proxy (**sends the receipt photo**). No accounts, no sync, no analytics |
 
 ---
 
 ## 3. Folder structure
 
 ```
-budgetsplit/
-├── app/                         # Expo Router routes (screens)
-│   ├── _layout.tsx              # Boot: DB init, providers, gates, Stack
-│   ├── (tabs)/                  # Tab bar + 4 tabs
-│   │   ├── _layout.tsx          # Custom tab bar w/ docked center FAB
-│   │   ├── index.tsx            # Home / Dashboard
-│   │   ├── groups.tsx           # Groups + People balances
-│   │   ├── savings.tsx          # Plan tab (route name stays "savings")
-│   │   └── settings.tsx         # Settings
-│   ├── add/                     # quick.tsx · income.tsx · itemized.tsx (fullScreenModal)
-│   ├── group/[id].tsx           # Group detail (tabbed) + [id]/{budget,edit,insights,members,recurring}
-│   ├── savings/[id].tsx         # Goal detail
-│   ├── txn/[id].tsx             # Transaction detail
-│   ├── category/[name].tsx      # Category detail
-│   ├── plan/subscriptions.tsx   # Subscriptions list
-│   ├── settings/notifications.tsx
-│   ├── settle.tsx · search.tsx · friends.tsx · categories.tsx · features.tsx
-│   ├── help.tsx · history.tsx · storage.tsx · afford.tsx · insights.tsx · reminders.tsx
-│   └── reports.tsx              # Reachable only via Plan chip
-├── src/
-│   ├── components/
-│   │   ├── ui/                  # Generic primitives (domain-free)
-│   │   ├── finance/             # Domain widgets
-│   │   │   └── home/            # Home-dashboard widgets + helpers.ts
-│   │   ├── system/              # Onboarding, gates, providers, loader
-│   │   └── tokens.ts            # Re-export barrel (used by components, not screens — see §8)
-│   ├── constants/              # colors · typography · layout · palette · categories
-│   ├── db/
-│   │   ├── schema.ts           # DDL + migrations + openDB
-│   │   ├── seed.ts             # First-run seed
-│   │   └── queries/            # transactions · groups · persons · savings · categories
-│   │                           # · categoryBudgets · balances · audit
-│   ├── lib/                    # Pure business logic / engines (27 modules)
-│   ├── store/index.ts          # Zustand store
-│   └── __tests__/              # Jest tests for pure lib logic
-└── docs/                       # This documentation set
+BudgetApp/
+├── budgetsplit/                 # the app
+│   ├── app/                     # Expo Router routes (34 screens)
+│   │   ├── _layout.tsx          # Boot: DB init, providers, gates, Stack
+│   │   ├── (tabs)/              # Tab bar + 4 tabs
+│   │   │   ├── _layout.tsx      # Custom tab bar w/ docked center FAB
+│   │   │   ├── index.tsx        # Home / Dashboard
+│   │   │   ├── groups.tsx       # Groups + People balances (→ Personal when `splitting` off)
+│   │   │   ├── savings.tsx      # Plan tab (route name stays "savings")
+│   │   │   └── settings.tsx     # Settings
+│   │   ├── add/                 # quick.tsx · itemized.tsx (both fullScreenModal)
+│   │   ├── group/[id].tsx       # Group hub (tabbed) + [id]/{budget,edit,members,recurring}
+│   │   ├── personal.tsx         # The unified Personal screen
+│   │   ├── savings/[id].tsx     # Goal detail
+│   │   ├── txn/[id].tsx         # Transaction detail
+│   │   ├── category/[name].tsx  # Category detail
+│   │   ├── plan/recurring.tsx   # Global recurring rules
+│   │   ├── import.tsx           # Ingestion: file/paste → pending_txn
+│   │   ├── review.tsx           # The staging inbox (largest screen)
+│   │   ├── reports.tsx          # Analytics home (Settings → Export & reports)
+│   │   ├── report-transactions.tsx  # Month drill-down from Reports
+│   │   ├── settings/            # notifications.tsx · backup.tsx
+│   │   ├── search.tsx · friends.tsx · categories.tsx · features.tsx
+│   │   └── help.tsx · history.tsx · storage.tsx · afford.tsx · insights.tsx · reminders.tsx
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ui/              # Generic primitives (domain-free)
+│   │   │   ├── finance/         # Domain widgets
+│   │   │   │   └── add/ · backup/ · group/ · home/ · plan/ · review/
+│   │   │   ├── system/          # Onboarding, gates, providers, loader, PdfTextExtractor
+│   │   │   └── tokens.ts        # Re-export barrel (used by components, not screens — see §8)
+│   │   ├── theme/               # Canonical design tokens (constants/* are back-compat shims)
+│   │   ├── constants/           # colors · typography · layout · palette · categories · enums
+│   │   ├── db/
+│   │   │   ├── schema.ts        # DDL + migrations + openDB + ONE_TIME_FIXES
+│   │   │   ├── seed.ts          # First-run seed · seedCategories.ts · seedDemo.ts
+│   │   │   └── queries/         # 13 modules: transactions · groups · persons · savings
+│   │   │                        # · categories · categoryBudgets · balances · audit
+│   │   │                        # · pending · recurring · moneyProfile · cashQuery · backup
+│   │   ├── hooks/               # useScreenData + 8 feature hooks (use*Form / use*Tab / use*Screen)
+│   │   ├── lib/                 # Pure business logic / engines (57 modules + ocrProviders/)
+│   │   ├── store/index.ts       # Zustand store (me, groups)
+│   │   └── __tests__/           # Jest tests for pure lib logic + doc/flag invariants
+│   ├── modules/expo-ocr/        # First-party native module (Apple Vision, iOS only)
+│   └── docs/                    # This documentation set
+└── server/
+    └── receipt-ocr-proxy/       # Cloudflare Worker: the whole "backend" (see §2)
 ```
 
 **Component layering rule (enforced, AGENTS.md §):** `ui/` must not import from

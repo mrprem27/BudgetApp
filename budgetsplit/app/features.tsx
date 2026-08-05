@@ -35,10 +35,14 @@ export default function FeaturesScreen() {
   const db = useSQLiteContext();
   const { flags, setFlag } = useFeatureFlags();
   const [saveLocation, setSaveLocation] = useState(false);
+  // Receipt-scan provider, as a boolean: on = 'gemini' (cloud), off = 'device'.
+  // Unset means 'gemini' (see settings.ocrProvider), so default the switch to on.
+  const [cloudOcr, setCloudOcr] = useState(true);
 
   useEffect(() => {
     (async () => {
       setSaveLocation(await settings.saveLocation());
+      setCloudOcr((await settings.ocrProvider()) !== 'device');
     })();
   }, []);
 
@@ -66,6 +70,26 @@ export default function FeaturesScreen() {
     }
     setSaveLocation(v);
     await settings.setSaveLocation(v);
+  }
+
+  /**
+   * Receipt scanning always works; this picks *where* the reading happens, which is
+   * the only setting in the app that changes whether user content leaves the device.
+   * On = `gemini` (photo goes to a vision model via our proxy, much better on
+   * two-line item layouts). Off = `device` (Apple Vision + regex, fully offline).
+   *
+   * Neither direction warns. Off is the private choice and needs no defence, and On
+   * is already the default — an "are you sure?" on returning to the default would be
+   * theatre. The caption carries the fact instead, because that's what a user
+   * deciding this actually needs to read.
+   *
+   * Like Location Tagging above, this is a `settings` pref rather than a `FeatureKey`:
+   * it isn't a boolean "show this surface", it's a choice between two implementations.
+   */
+  async function toggleCloudOcr(v: boolean) {
+    haptic.selection();
+    setCloudOcr(v);
+    await settings.setOcrProvider(v ? 'gemini' : 'device');
   }
 
   /**
@@ -108,8 +132,16 @@ export default function FeaturesScreen() {
 
   // Optional modules, grouped into clear sections. Each maps to the flag (or
   // store) that actually gates it. "Reports & Charts" gates donut + trend
-  // together; "Location Tagging" lives in AsyncStorage, not the flag set.
-  type Module = { icon: keyof typeof Feather.glyphMap; label: string; caption: string; value: boolean; onChange: (v: boolean) => void };
+  // together. Two rows aren't flags at all and live in `settings` instead:
+  // "Location Tagging" (needs an OS grant) and "Cloud Receipt Scanning"
+  // (picks an implementation, not a surface).
+  // `dimWhenOff: false` for a row where "off" isn't "this feature is disabled" but
+  // "the other mode is selected" — dimming it would imply scanning had been switched
+  // off, which it hasn't.
+  type Module = {
+    icon: keyof typeof Feather.glyphMap; label: string; caption: string;
+    value: boolean; onChange: (v: boolean) => void; dimWhenOff?: boolean;
+  };
   const MODULE_SECTIONS: { title: string; items: Module[] }[] = [
     {
       title: 'Splitting & people',
@@ -143,9 +175,15 @@ export default function FeaturesScreen() {
         { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
         { icon: 'repeat', label: 'Recurring Suggestions', caption: 'Flag imported transactions that look like a recurring bill', value: flags.recurringSuggest, onChange: v => setFlag('recurringSuggest', v) },
         { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
-        // No "Scan Receipts" row: the OCR entry point was removed (it could read a
-        // bill's total but not its line items), so the switch promised a feature
-        // that no longer exists. Restore it with the feature, not before.
+        // There is still no on/off switch for receipt scanning itself — it ships
+        // unflagged (DEBT_TRACKER F7). This row picks the provider, not availability.
+        {
+          icon: 'camera', label: 'Cloud Receipt Scanning',
+          caption: cloudOcr
+            ? 'Reads receipts far more accurately. The photo is sent to a cloud OCR service for that one request — turn this off to scan on-device instead.'
+            : 'Receipts are read entirely on this device. Nothing is uploaded, but line items on cramped receipts are missed more often.',
+          value: cloudOcr, onChange: toggleCloudOcr, dimWhenOff: false,
+        },
       ],
     },
   ];
@@ -186,7 +224,7 @@ export default function FeaturesScreen() {
               {section.items.map((m, i) => (
                 <View key={m.label}>
                   {i > 0 && <View style={styles.divider} />}
-                  <View style={[styles.row, !m.value && styles.rowOff]}>
+                  <View style={[styles.row, !m.value && m.dimWhenOff !== false && styles.rowOff]}>
                     <View style={styles.iconDot}><Feather name={m.icon} size={16} color={colors.accent} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.label}>{m.label}</Text>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
+import { SampleNote } from './SampleNote';
 import { suggestImprovement, type HealthResult, type HealthInputs } from '../../lib/financialHealth';
 import { healthBandColor, healthBandLabel, sevColor } from './home/helpers';
 
@@ -27,9 +28,6 @@ const CIRC = 2 * Math.PI * R;
  */
 export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, periodLabel = 'this month' }: Props) {
   const improvement = result && inputs ? suggestImprovement(inputs, result) : null;
-  // Below ~5 transactions the score is mostly noise — say so instead of implying
-  // the same confidence a fuller month's data would earn.
-  const lowSample = txnCount < 5;
   return (
     <SheetModal visible={visible} onClose={onClose} title="Money Health">
       {result && (
@@ -54,9 +52,7 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
             </View>
           </View>
 
-          <Text style={[styles.sampleNote, lowSample && styles.sampleNoteLow]}>
-            Based on {txnCount} transaction{txnCount === 1 ? '' : 's'} logged {periodLabel}.
-          </Text>
+          <SampleNote txnCount={txnCount} periodLabel={periodLabel} style={styles.sampleNote} />
 
           {/* Dimension bars */}
           <View style={styles.dimRow}>
@@ -120,8 +116,8 @@ const styles = StyleSheet.create({
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
   ringScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, color: colors.textPrimary, letterSpacing: -1 },
   ringBand: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
-  sampleNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: -space.sm, marginBottom: space.lg },
-  sampleNoteLow: { color: colors.healthAmber },
+  // Position only — SampleNote owns the type, colour and low-sample tone.
+  sampleNote: { marginTop: -space.sm, marginBottom: space.lg },
   dimRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
   dim: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, padding: space.sm + 2, alignItems: 'center', borderWidth: 1, borderColor: colors.border, gap: space.sm },
   dimLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: 'Inter_600SemiBold' },

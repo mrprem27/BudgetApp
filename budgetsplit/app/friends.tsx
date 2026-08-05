@@ -14,7 +14,7 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { Input } from '../src/components/ui/Input';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
-import { getAllPersons, updatePersonName, setPersonImage, insertPerson } from '../src/db/queries/persons';
+import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa } from '../src/db/queries/persons';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
 import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
@@ -35,6 +35,7 @@ export default function FriendsScreen() {
   const { refresh } = useDataRefresh();
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
+  const [renameVpa, setRenameVpa] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [query, setQuery] = useState('');
@@ -77,13 +78,18 @@ export default function FriendsScreen() {
   function openRename(p: Person) {
     setRenamePerson(p);
     setRenameText(p.name);
+    setRenameVpa(p.upi_vpa ?? '');
   }
 
   async function handleRename() {
     const trimmed = renameText.trim();
-    if (!renamePerson || !trimmed || trimmed === renamePerson.name) { setRenamePerson(null); return; }
+    const vpa = renameVpa.trim() || null;
+    const vpaChanged = vpa !== (renamePerson?.upi_vpa ?? null);
+    if (!renamePerson || !trimmed) { setRenamePerson(null); return; }
+    if (trimmed === renamePerson.name && !vpaChanged) { setRenamePerson(null); return; }
     try {
-      await updatePersonName(db, renamePerson.id, trimmed);
+      if (trimmed !== renamePerson.name) await updatePersonName(db, renamePerson.id, trimmed);
+      if (vpaChanged) await setPersonUpiVpa(db, renamePerson.id, vpa);
       haptic.success();
       setRenamePerson(null);
       refresh();
@@ -211,6 +217,8 @@ export default function FriendsScreen() {
         value={renameText}
         onChangeText={setRenameText}
         onSubmit={handleRename}
+        vpa={renameVpa}
+        onChangeVpa={setRenameVpa}
       />
 
       <PersonNameSheet

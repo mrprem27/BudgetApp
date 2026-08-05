@@ -7,6 +7,11 @@
 >
 > This file is meant to be **groomed by hand**. Every item carries a stable ID so it can be
 > referenced individually in later work.
+>
+> **2026-08-04:** §2 (screen inventory) and §3 (user flows) moved to
+> [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) — one behaviour doc instead of two. The
+> `S-XX` / `FLOW-XX` IDs are unchanged and still resolve; only their home changed. Everything
+> else here is as taken on 2026-07-28.
 
 ### Changes since the audit was taken
 
@@ -97,8 +102,8 @@ other; 541/46 is measured, not carried forward.)
 | Prefix | Means | Section |
 |---|---|---|
 | `F-XX` | Feature / module | §1 |
-| `S-XX` | Screen / route | §2 |
-| `FLOW-XX` | User flow | §3 |
+| `S-XX` | Screen / route | **[FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §3** (moved) |
+| `FLOW-XX` | User flow | **[FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §15** (moved) |
 | `INT-XX` | Third-party / platform integration | §5 |
 | `BL-XX` | Business-logic note | §7 |
 | `ISS-XX` | Known issue | §8 |
@@ -167,9 +172,9 @@ monetization boundary. The `Gate` column reads `always` when nothing hides it.
 | F-28 | **Afford check** | "Can I afford this?" verdict from cash, upcoming bills, category norm and income share. | working | `app/afford.tsx`, `src/lib/afford.ts`, `getAffordSnapshot` | `affordCheck` (**off by default**) |
 | F-29 | **Receipt attachments** | Attach a photo to a transaction, view full-screen, manage storage. | working | `src/lib/attachment.ts`, `components/finance/add/AttachmentRow.tsx`, `app/storage.tsx` | always |
 | F-30 | **Location tagging** | Tag a transaction with a reverse-geocoded place label. | working | `src/lib/location.ts`, `src/hooks/useLocationCapture.ts`, `components/finance/add/LocationRow.tsx` | `save_location` (AsyncStorage, **off by default**) |
-| F-31 | **Receipt OCR** | On-device text recognition to prefill a bill total. | **dormant** | `src/lib/ocr.ts`, `modules/expo-ocr/` | `itemizedOcr` — **UI removed** |
+| F-31 | **Receipt OCR** | Scan a receipt into itemized line items. Two providers: Gemini Flash via a Cloudflare Worker proxy (default) and on-device Apple Vision. | working | `src/lib/ocrProviders/`, `src/lib/ocr.ts`, `modules/expo-ocr/`, `components/finance/add/{ReceiptScanSheet,ScanningOverlay}.tsx`, `server/receipt-ocr-proxy/` | always (unflagged) |
 | F-32 | **Demo / reset data** | Load a full test dataset or erase everything. | working | `src/db/seedDemo.ts` (370 L), `app/storage.tsx` | hidden (7-tap) |
-| F-33 | **Feature flags** | Per-surface toggles persisted to AsyncStorage. **✓ RESOLVED** — was 19 keys of which 11 gated nothing; now 12, all live. | working | `src/lib/featureFlags.ts`, `components/system/FeatureFlagsProvider.tsx`, `app/features.tsx` | always |
+| F-33 | **Feature flags** | Per-surface toggles persisted to AsyncStorage. **✓ RESOLVED** — was 19 keys of which 11 gated nothing. `DEFAULTS` is now **14** keys, all live: the 12 from Pass 3, plus `splitting` (Pass 4) and `recurringSuggest` (shipped with Review's suggestion banner). | working | `src/lib/featureFlags.ts`, `components/system/FeatureFlagsProvider.tsx`, `app/features.tsx` | always |
 | F-34 | **Category catalog** | A single global category catalog per kind, with adopt-uncategorized. | working | `app/categories.tsx`, `src/db/queries/categories.ts`, `src/db/seedCategories.ts`, `src/constants/categories.ts` | always |
 
 ### Status notes
@@ -180,13 +185,21 @@ monetization boundary. The `Gate` column reads `always` when nothing hides it.
   reads it**: the only callers of `settings.onboardingIntent()` are in `settings.test.ts`.
   The code says so itself (`Onboarding.tsx:169-170`: "Not wired to feature flags yet").
   The persona question therefore has zero effect on the app. See §4 and ISS-04.
-- **F-31 is `dormant`**, not broken. The engine and the native module work; the only entry
-  point was deliberately deleted (`app/add/itemized.tsx:48-50`) because the OCR could read a
-  bill's total but not its line items.
-  **✓ RESOLVED (ISS-03)** — the `itemizedOcr` flag and its "Snap a receipt to prefill the
-  total automatically" switch have been removed from S-24, so the UI no longer promises a
-  feature that isn't there. The engine stays parked; restore the switch with the feature, not
-  before. The module's bogus `android` platform declaration is also gone (ISS-07).
+- **F-31 shipped on 2026-08-01** (`be5f795`) and is no longer `dormant`. The blocker recorded
+  in this audit — OCR could read a bill's total but not itemize it — was solved by adding a
+  vision-model provider rather than by improving the regex: `gemini` sends the photo to Gemini
+  Flash through `server/receipt-ocr-proxy` and gets structured line items back, while `device`
+  keeps the offline Apple Vision path. The entry point is the itemized wizard's **Scan receipt**
+  button. Behaviour is documented in
+  [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §7.4; the egress this introduces is §19.
+  **✓ Provider is now user-selectable** (2026-08-04): Feature management → Smart capture →
+  **Cloud Receipt Scanning** writes `settings.setOcrProvider`, so the offline `device` path is
+  reachable without code. Like `save_location` it is a `settings` pref rather than a `FeatureKey`
+  — here because it picks between two implementations, not because of async validation.
+  **One gap remains:** scanning ships **unflagged** (the `itemizedOcr` key was deleted in the
+  2026-07-28 purge and never re-added), so the Scan button itself can't be hidden —
+  DEBT_TRACKER F7.
+  The module's bogus `android` platform declaration is gone (ISS-07).
 - **F-23, F-24, F-28, F-30 are off by default** and only discoverable through S-24.
 
 ### Utility modules with no user-facing feature
@@ -198,252 +211,28 @@ monetization boundary. The `Gate` column reads `always` when nothing hides it.
 
 ---
 
-## 2. Screen Inventory (S-XX)
+## 2. Screen Inventory (S-XX) — moved
 
-33 route files under `app/`. expo-router file-based routing; every route is registered
-implicitly by its filename. Only three routes get explicit `Stack.Screen` options
-(`app/_layout.tsx:108-111`): `(tabs)` fades, `add/quick` and `add/itemized` present as
-`fullScreenModal` sliding from the bottom.
+**See [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §3.** The full `S-01 … S-34` inventory
+was absorbed there on 2026-08-04, so the screen catalogue and the screen *behaviour* it belongs
+next to live in one file. The IDs are unchanged, so every `S-XX` reference in this repo still
+resolves.
 
-### 2.1 Shell / layout (not user-visible screens)
+Two catalogues of one app guarantee they drift apart, and these two already had: this section
+still described receipt scanning as "deliberately hidden" months after it shipped, and never
+gained `app/settings/backup.tsx`. `AUDIT_DOC_DRIFT.md` had recorded the overlap as the open
+decision (DRIFT-20 / DRIFT-21's sibling); this is the resolution.
 
-| ID | File | Role |
-|---|---|---|
-| S-01 | `app/_layout.tsx` (123 L) | Root. Loads fonts → `openDB()` → `seedIfNeeded` → `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders`. Re-runs the last three on `AppState → active`. DB-open failure renders a retryable `ErrorState` instead of hanging on the splash. Provider stack: `SafeAreaProvider → GestureHandlerRootView → SQLiteProvider → FeatureFlagsProvider → DataRefreshProvider → StoreHydrator → UndoProvider → LockGate → OnboardingGate → Stack`, with `PrivacyScreen` mounted as a sibling overlay. |
-| S-02 | `app/(tabs)/_layout.tsx` (123 L) | Custom 5-slot tab bar: Home · Groups · **[FAB]** · Plan · Settings. The FAB is *inside* the bar (so it always paints above content) and pushes `/add/quick?kind=expense`. iOS gets a live `BlurView`; Android uses a near-opaque fill deliberately (BlurView recomposites every frame → scroll jank). Route name `savings` renders the label **"Plan"**. |
-
-### 2.2 Tab screens
-
-| ID | Screen | File | Purpose | Entry | Exits | Features on it |
-|---|---|---|---|---|---|---|
-| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` (352 L) | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Has a dedicated first-run empty state with three "Get started" tiles. | Tab 1; app launch | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` | F-01 F-05 F-09 F-13 F-14 F-15 F-16 F-24 |
-| S-04 | **Groups** | `app/(tabs)/groups.tsx` (373 L) | List of groups (personal pinned first) with per-group budget health + my net; swipe-left to archive/restore; inline "People" balance list with Settle chips. | Tab 2 | `/group/{id}` (or `/personal` for the personal group) · `/add/quick?kind=transfer&to=` | F-04 F-06 F-08 |
-| S-05 | **Plan** | `app/(tabs)/savings.tsx` (328 L) | Total-money card, overspend-raid notice with Undo, drag-rankable savings goals, upcoming bills, month-end forecast. Route is `savings`, label is "Plan". | Tab 3 | `/insights` `/plan/recurring` `/afford` (header icons, flag-gated) · `/savings/{id}` | F-10 F-11 F-12 F-14 F-16 |
-| S-06 | **Settings** | `app/(tabs)/settings.tsx` (321 L) | Profile (name + avatar), Manage / Preferences / Security / Notifications / Data & Help / About. "Export all data" builds a combined CSV. Tapping the version 7× unlocks S-27. | Tab 4; Home avatar | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/import` `/reports` `/help` `/history` `/storage` | F-17 F-18 F-19 F-21 F-25 F-26 |
-
-### 2.3 Add / edit flows (full-screen modals)
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-07 | **Quick Add** | `app/add/quick.tsx` (284 L) | One form for all three kinds — expense / income / transfer(settlement) — plus edit mode and recurring-rule edit mode. Everything behind `useAddTxnForm`; the file is render-only. Advanced fields collapse into `MoreOptions`. | Tab-bar FAB, Home CTAs, group screens, Reminders, Plan-recurring, friend/person Settle chips, txn detail Edit | `router.back()`; `/add/itemized`; `/storage` |
-| S-08 | **Itemized bill** | `app/add/itemized.tsx` (614 L) | 4-step wizard (items → assign → payers → review) for per-item splitting with tax/tip adjustments. State in `useItemizedForm`. | Quick Add › "Split by items"; txn detail Edit when `entry_mode='itemized'` | `router.back()` |
-
-`app/add/itemized.tsx:48-50` — receipt scanning is **deliberately hidden** in the header: the
-on-device OCR only ever read a single total, so the button was removed pending real
-line-item extraction. The `itemizedOcr` flag still exists and is still toggleable in S-24.
-
-### 2.4 Group screens
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-09 | **Group detail** | `app/group/[id].tsx` (311 L) | Group hub. Tabs differ by kind: personal → Expenses · Budget; shared → Expenses · Recurring · Budget · Members. Balance card with a simplify-debt toggle persisted to the group row. Overflow menu: export CSV, audit log, edit. | Groups list; Insights "See what to cut" | `/add/quick` `/group/{id}/budget` `/group/{id}/members` `/group/{id}/edit` `/group/{id}/recurring` `/history?groupId=` |
-| S-10 | **Budget editor** | `app/group/[id]/budget.tsx` (362 L) | Per-category budget amounts + per-line cadence (once/daily/monthly/yearly), grouped into collapsible sections. Accepts `?category=` to deep-link and auto-scroll to one field. Self-heals an empty category catalog by reseeding. | Group detail, Home get-started tile, Settings › Budget, Category detail "Set budget" | `router.back()` |
-| S-11 | **Members** | `app/group/[id]/members.tsx` (275 L) | Add/remove members, rename, change avatar, per-member net. Swipe to remove, with Undo. | Group detail | `router.back()` |
-| S-12 | **Group recurring** | `app/group/[id]/recurring.tsx` (263 L) | The group's recurring rules — pause / resume / end / skip-next (with undo-skip). `?focus=<id>` highlights a rule for 2.6 s. | Group detail; Personal tab; Category detail; txn detail (for a materialized occurrence) | `/add/quick?groupId=&kind=expense` |
-| S-13 | **Edit group** | `app/group/[id]/edit.tsx` (154 L) | Rename / re-icon / re-colour / default split + membership diff. Also archive and hard-delete. Shares `GroupForm` with the create sheet on S-04. | Group detail overflow | `/groups` |
-| S-14 | **Personal** | `app/personal.tsx` (384 L) | The personal group's own screen: Activity / Budget / Recurring tabs, filterable across personal-vs-group activity, owe/lent summary, CSV export. | Groups list (tapping the `is_personal` row routes here, **not** to `/group/{id}`) | `/group/{personal}/budget` `/txn/{id}` `/group/{g}/recurring?focus=` |
-
-**✓ RESOLVED (Pass 4) — S-14 is now the only personal screen.** As audited, S-14 and S-09's
-`is_personal` branch both rendered the personal group. S-14 won (it is the unified Personal of
-`PERSONAL_REDESIGN.md`) and gained what only S-09 had: swipe edit/delete, the FAB, the audit log and
-an overflow menu. `/group/{personalId}` now `router.replace`s to `/personal`, so old deep links
-still resolve. `/group/{personalId}/budget` is unchanged — the budget editor was never duplicated.
-The audit's claim that "every other deep link" pointed at S-09 was overstated: there was exactly
-one such navigation site. See DEBT-03.
-
-### 2.5 Detail screens
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-15 | **Transaction detail** | `app/txn/[id].tsx` (436 L) | Full read view: hero amount, kind badge, per-person split, itemized line items (read-only), receipt attachment (full-screen viewer), audit history. Delete + Edit. | Personal, Search, Category detail, Report-transactions, group transaction rows | `/add/quick?editId=` or `/add/itemized?editId=` · `/group/{g}/recurring?focus=` |
-| S-16 | **Category detail** | `app/category/[name].tsx` (418 L) | One category across day/month/year: my-share totals, budget bar, its transactions, related recurring rules and savings goals. | Home category rank list (`?period=` carries the active tab) | `/txn/{id}` `/group/{personal}/budget?category=` `/group/{g}/recurring?focus=` `/savings/{id}` |
-| S-17 | **Goal detail** | `app/savings/[id].tsx` (437 L) | One savings goal: ring progress, add/withdraw money, adjust target/allocation/frequency/deadline, lock, delete, contribution history, completion celebration. | Plan goal cards; Category detail | `/savings` |
-
-`S-16` fetches **the entire year's expenses across all categories** and filters client-side
-(`app/category/[name].tsx:90-105`) so period tabs switch without a re-query. Correct, but
-it is the heaviest single read in the app. See DEBT-06.
-
-### 2.6 Import / review
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-18 | **Import** | `app/import.tsx` (313 L) | Pick a PDF / xlsx / CSV / text file *or* paste text; format auto-detected; rows land in `pending_txn`. PDFs go through pdf.js in an off-screen WebView. Failure messages distinguish "0 characters extracted" (scanned PDF) from "text but no rows matched". | Settings › Import; Review "Import more" | `router.replace('/review')` |
-| S-19 | **Review** | `app/review.tsx` (**977 L — largest file in the repo**) | The staging inbox. Every pending row is editable in place: kind chip, category, destination (personal or a group), inline split, pay method, counterparty. Draft edits auto-save to `pending_txn`; only Confirm/Save commits. Adds bulk select, a "focus" workspace, filters, and saved views with a per-view default payer. | Home inbox badge (when `reviewCount > 0`); after S-18 | `/import` |
-
-### 2.7 Analytics
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-20 | **Reports** | `app/reports.tsx` (438 L) | Factual monthly history: donut, trend bars, per-group budget summaries, year stats. CSV and PDF export. Month selector cannot advance past the current month (`reports.tsx:81`). Artificial 450 ms floor on the loader so the skeleton doesn't flash. | Settings › Reports & export | `/report-transactions?month=` |
-| S-21 | **Report transactions** | `app/report-transactions.tsx` (209 L) | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. | Reports | `/txn/{id}` |
-| S-22 | **Insights** | `app/insights.tsx` (378 L) | The single narrative-insight home: spending-velocity hero (only when projected to overspend), month-end forecast line chart, category shifts, what-if cut slider, recommendations, drivers, savings insights. | Home forecast card "See all insights"; Plan header | `/group/{personal}` |
-| S-23 | **Search** | `app/search.tsx` (278 L) | Free-text search over 3 years of transactions, month-sectioned, capped at 6 rows/section with a "more" expander. 150 ms debounce; filters by kind and personal/groups. Deliberately has **no** pull-to-refresh. | Home header | `/txn/{id}` |
-
-### 2.8 Settings sub-screens & utilities
-
-| ID | Screen | File | Purpose | Entry | Exits |
-|---|---|---|---|---|---|
-| S-24 | **Feature management** | `app/features.tsx` | The toggle UI. Three "Core" pillars shown with a badge and no switch, then the switchable modules in three sections. **✓ RESOLVED** — every switch here now changes something (the five no-op ones are gone, and `dashboardInsights`, which did gate, is now exposed). Location tagging remains in this list while living in `settings` rather than the flag set: it needs to await an OS permission and refuse if denied, which optimistic flags can't express. That split is intentional and commented at the call site. | Settings › Feature management | `router.back()` |
-| S-25 | **Categories** | `app/categories.tsx` (436 L) | Global category catalog (expense / income / transfer tabs), sectioned. Create, rename, delete, and **adopt** an uncategorized name into the catalog. Self-heals an empty catalog. | Settings › Categories | `router.back()` |
-| S-26 | **People / Friends** | `app/friends.tsx` (257 L) | Name-only contacts, no accounts. Add, rename, avatar, per-person net balance, search. | Settings › People; Home get-started tile | `/add/quick?kind=transfer&to=` |
-| S-27 | **Storage (dev)** | `app/storage.tsx` (184 L) | Hidden developer screen: attachment storage stats, clear attachments, **load demo data** (which also force-enables every feature flag), **erase all data**. | Settings › tap version 7× | `router.back()` |
-| S-28 | **Audit log** | `app/history.tsx` (194 L) | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended actions. `?groupId=` scopes it to one group. | Settings › Audit log; group overflow; Home catch-up banner | `router.back()` |
-| S-29 | **Help** | `app/help.tsx` (250 L) | Static accordion of help copy. No data access. | Settings › Help & Feedback | `router.back()` |
-| S-30 | **Reminders** | `app/reminders.tsx` (180 L) | Read-only "what's coming": bills due in the next 14 days (from recurring rules) + pending settle-ups involving me. | Home bell icon | `/add/quick` · `/settings/notifications` |
-| S-31 | **Notifications** | `app/settings/notifications.tsx` (241 L) | Reminder prefs: renewal reminders with lead days + time, daily-log reminder with time, OS permission handling, send-a-test-notification. | Settings; Reminders screen | `router.back()` |
-| S-32 | **Recurring (global)** | `app/plan/recurring.tsx` (151 L) | All active recurring expense rules across all groups, sorted by next occurrence, with a monthly-equivalent total. | Plan header (flag `recurring`) | `/add/quick` · `/group/{g}/recurring` |
-| S-33 | **Afford check** | `app/afford.tsx` (238 L) | "Can I afford this?" — enter an amount + optional category, get a Comfortable / Tight / No verdict with plain-English reasons. | Plan header (flag `affordCheck`) | `/savings` · `/add/quick` |
-
-`app/afford.tsx:27-34` carries an explicit comment that load errors must **not** be
-swallowed here, because a zeroed snapshot would render as "₹0 available" — a confident
-wrong answer. This is the clearest example of the codebase's error-handling intent.
-
-### 2.9 Routes with no inbound navigation
-
-None. Every one of the 33 route files is reachable. The three that are *conditionally*
-reachable: S-32 and S-33 only appear when their flags are on (both `recurring: true`,
-`affordCheck: false` by default), and S-27 requires the 7-tap easter egg.
+What stays here: everything the behaviour doc deliberately doesn't carry — the per-feature status
+inventory (§1), integrations (§5), business-logic notes (§7), known issues (§8) and debt (§9).
 
 ---
 
-## 3. Key User Flows (FLOW-XX)
+## 3. Key User Flows (FLOW-XX) — moved
 
-### FLOW-01 — First run / onboarding
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Fonts load, `openDB()` runs the schema + 40 migrations + 2 rebuilds + data fixes | `app/_layout.tsx:43`, `src/db/schema.ts` |
-| 2 | `seedIfNeeded` creates the local `person` (`is_me=1`) and the `Personal` group | `src/db/seed.ts` |
-| 3 | `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders` | `app/_layout.tsx:48-50` |
-| 4 | `BrandedLoader` until fonts + DB ready; DB failure → retryable `ErrorState` | `app/_layout.tsx:71-88` |
-| 5 | `LockGate` (biometric, default off) then `OnboardingGate` reads `onboarding_done` | `components/system/{LockGate,OnboardingGate}.tsx` |
-| 6 | 9-stage questionnaire: hero → intent → features carousel → name → income → money → budget → people → permissions | `components/system/Onboarding.tsx` |
-| 7 | Intent → `onboarding_intent` **and the feature flags it implies** (✓ Pass 4; as audited it was persisted here and never read again) | `lib/personaDefaults.ts`, `lib/onboarding.ts` |
-| 8 | `finalizeOnboarding` writes name, a monthly `Salary` recurring rule anchored by `paydayAnchor`, a `Total` budget line, and contacts — each step individually try/caught | `src/lib/onboarding.ts:42-88` |
-| 9 | `setMoneyProfile` writes cash / investments / credit, best-effort | `Onboarding.tsx:213-218` |
-| 10 | `onDone()` → `settings.setOnboardingDone(true)` in a `try/finally`, gate opens regardless | `OnboardingGate.tsx:19-25` |
-| 11 | If the user chose "add my first expense", Home fires a one-shot push to Quick Add and clears the flag | `app/(tabs)/index.tsx:101-108` |
-
-### FLOW-02 — Feature selection / toggle
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Settings → "Feature management" | `app/(tabs)/settings.tsx:203` |
-| 2 | S-24 renders **2** non-toggleable "Core" pillars + **13** switches in **4** sections (✓ Pass 4: was 3 pillars / 12 switches — "Group Splitting" moved from Core into the new `splitting` toggle) | `app/features.tsx` |
-| 3 | Flipping a switch calls `setFlag(key, value)` from context | `components/system/FeatureFlagsProvider.tsx:25-28` |
-| 4 | Local state updates optimistically; `AsyncStorage.setItem('feature_' + key, …)` is best-effort | `src/lib/featureFlags.ts:67-69` |
-| 5 | Consuming screens re-render and gate with `{flags.x && …}` | e.g. `app/(tabs)/index.tsx:296` |
-| 6 | On next launch `loadFlags()` multi-gets all 19 keys, `DEFAULTS` for unset | `src/lib/featureFlags.ts:56-65` |
-
-**5 of the 12 switches change nothing** (healthScore, savingsInsights, reportsDonut,
-reportsTrend, itemizedOcr) — step 5 has no consumer for them. See §4.3.
-
-Location tagging is in the same list but takes a different path: it requests OS permission
-inline and writes to `settings`, not the flag namespace (`app/features.tsx:35-47`).
-
-### FLOW-03 — Premium upgrade
-
-**Does not exist.** There is no premium tier, paywall, purchase SDK, entitlement check, or
-restore-purchases path anywhere in the codebase. Every feature is available to every user.
-Recorded here so the absence is explicit rather than an oversight in this audit.
-
-### FLOW-04 — Add an expense (the core flow)
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Tab-bar FAB → `/add/quick?kind=expense` (full-screen modal from bottom) | `app/(tabs)/_layout.tsx:79`, `app/_layout.tsx:110` |
-| 2 | `useAddTxnForm(params)` loads me, groups, members, categories, flags | `src/hooks/useAddTxnForm.ts` |
-| 3 | Amount typed → `sanitizeAmountInput` caps it live → `parseToPaise` to integer paise | `components/finance/add/AmountField.tsx`, `src/lib/money.ts` |
-| 4 | Category: manual pick, or auto-guessed from the title when `smartCategory` is on | `src/lib/smartCategory.ts`, `useAddTxnForm.ts:134` |
-| 5 | Optional: group, note, attachment, location, pay method, recurrence — all inside `MoreOptions` | `app/add/quick.tsx:147-189` |
-| 6 | Group with >1 member and total > 0 → `SplitSummary` opens `SplitSheet` / `PayersSheet` | `app/add/quick.tsx:191-200` |
-| 7 | Shares via `computeShares` (BL-02), payments via `computePayments` (default: I paid it all) | `src/lib/splitMath.ts` |
-| 8 | Budget nudge shows remaining in the category as you type | `components/finance/add/BudgetNudge.tsx` |
-| 9 | Save → **duplicate check** for non-recurring expenses; a match prompts "Add anyway?" | `useAddTxnForm.ts:361-373`, `findRecentDuplicate` |
-| 10 | `insertTxn` writes `txn` + payments + shares + audit inside one `withTransactionAsync` | `src/db/queries/transactions.ts:199-278` |
-| 11 | `haptic.success()` → `refresh()` → `router.back()` | `useAddTxnForm.ts:355-357` |
-| 12 | `refresh()` coalesces 32 ms, bumps a version; the focused screen reloads, background tabs mark dirty | `components/system/DataRefreshProvider.tsx` |
-
-Editing takes the same path via `updateTxn`; a recurring-rule edit goes through
-`splitRecurringSeries` so the old rule is capped and a new one starts, atomically.
-
-### FLOW-05 — Split a bill by items
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Quick Add → MoreOptions → "Split by items" → `/add/itemized` | `app/add/quick.tsx:155` |
-| 2 | Step 1 **items**: name, qty, unit price → `computeItemSubtotal` = qty × unitPrice | `src/lib/itemized.ts:49-53` |
-| 3 | Step 2 **assign**: pick who shares each item; per-item split mode via `splitItemBase` | `src/lib/itemized.ts:24-26` |
-| 4 | Adjustments (tax / tip / discount, flat or %) → `computeAdjustedTotal`, floored at 0 | `src/lib/itemized.ts:37-46` |
-| 5 | Step 3 **payers**, step 4 **review**: `computePerPersonShares` scales every share by the adjustment ratio and nudges the rounding remainder so shares sum exactly | `src/lib/itemized.ts:60-93` |
-| 6 | Save → `insertItemizedTxn` writes the txn, splits, `line_item` rows (with `split_mode`/`split_values`) and `adjustments` JSON so it round-trips on edit | `src/db/queries/transactions.ts:321` |
-
-### FLOW-06 — Settle up
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Entry: Home balance strip, Groups "People" list, Group balance card, Friends, Reminders — all push `/add/quick?kind=transfer&to=…` | various |
-| 2 | `computeTransferScopes` builds the per-group and global pair balance between the two people, using the same `simplify` as everywhere else | `src/lib/settleScope.ts:30-54` |
-| 3 | User picks a scope (one group, or "All groups") and an amount | `components/finance/TransferBody.tsx` |
-| 4 | "All groups" → `planAllGroupsSettlement` distributes largest-balance-first, remainder onto the last group | `src/lib/settleScope.ts:65-88` |
-| 5 | One `recordSettlement` per plan row → `insertTxn` with `kind='settlement'`, payment from payer, share to receiver | `transactions.ts:296-303` |
-| 6 | No shared group between the two people → explicit Alert, not a silent failure | `useAddTxnForm.ts:277` |
-| 7 | Balances recompute from `getGroupNet`/`getGlobalNet`; the settlement naturally cancels the debt because it uses the same payment/share shape | `src/db/queries/balances.ts` |
-
-### FLOW-07 — View the dashboard
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Home mounts; `groups` come from the zustand store (no query) | `app/(tabs)/index.tsx:50` |
-| 2 | `useScreenData` runs `loadHomeData(db, groups, tab, {forecast, dashboardInsights})` | `src/lib/homeData.ts` |
-| 3 | Deps `[groups, tab, flags.forecast, flags.dashboardInsights]` — switching period re-queries | `index.tsx:64-67` |
-| 4 | On focus (outside the loader): read `hide_amounts`, run the 30-day catch-up check | `index.tsx:94-97` |
-| 5 | No spend at all → dedicated first-run empty hero + 3 "Get started" tiles | `index.tsx:207-246` |
-| 6 | Otherwise: `HeroCard` (spend + health ring) → period pills → `CategoryRankList` → `BalanceStrip` → `ForecastCard` (month tab + flag) → `StreakCard` (flag) | `index.tsx:249-302` |
-| 7 | Budget is stored monthly and **scaled to the active period** for the pace line: ÷ days for Today, × 12 for Year | `index.tsx:128-131` |
-| 8 | `everHadCats` keeps the category card mounted across period switches so it never collapses | `index.tsx:90` |
-| 9 | Pull-to-refresh via `AppRefreshControl`; error → retryable `ErrorState` | `index.tsx:137,176-181` |
-
-### FLOW-08 — Import a statement → Review → committed transactions
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Settings → Import. Pick a file or paste text | `app/import.tsx` |
-| 2 | PDF → base64 → `PdfTextExtractor` WebView runs pdf.js → text back; xlsx → `readXlsx`; else read as text | `import.tsx:100-113` |
-| 3 | `parseAnyText` / `parseAnyWorkbook` pick a parser most-specific-first (BL-22) | `src/lib/importDetect.ts` |
-| 4 | 0 rows → a *specific* Alert distinguishing "0 characters extracted" (scanned PDF) from "text but no rows matched", including the first 200 chars | `import.tsx:120-146` |
-| 5 | Each row gets a category guess (`matchCategory` against the catalog for its kind) and a pay method (`r.payMethod ?? detectPayMethod(r.raw) ?? null`) | `import.tsx:153-168` |
-| 6 | `insertPending` → `pending_txn`. **Nothing touches balances or budgets yet** | `src/db/queries/pending.ts:37` |
-| 7 | `refresh()` → `router.replace('/review')`; Home shows an inbox badge | `import.tsx:170-171` |
-| 8 | In S-19 each row is editable in place: kind, category, destination, split, pay method, counterparty. Edits auto-save to the row's draft columns | `app/review.tsx`, `updatePendingDraft` |
-| 9 | `planCommit` resolves a row to its insert shape or refuses it (BL-27) | `src/lib/reviewCommit.ts:122` |
-| 10 | Confirm → `insertTxn` → `deletePending`, plus `recordCorrection` to teach the category learner | `review.tsx:201,224,230` |
-| 11 | Undo toast: `softDeleteTxn(txnId)` + `restorePending(snap)` — a true inverse using the pre-commit snapshot | `review.tsx:254-256` |
-| 12 | Bulk confirm and clear-all have the same snapshot-and-undo treatment | `review.tsx:287-289,320-326` |
-
-### FLOW-09 — Set and track a budget
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Entry: Settings → Budget, Home get-started tile, group Budget tab, or a category's "Set budget" CTA (which deep-links `?category=` and auto-scrolls to that field) | `app/group/[id]/budget.tsx:69-71` |
-| 2 | Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories` | `budget.tsx:98-102` |
-| 3 | Per line: amount + cadence (once / daily / monthly / yearly). `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts | `budget.tsx:104` |
-| 4 | Save → `setCategoryBudgets` upserts `category_budget` rows | `src/db/queries/categoryBudgets.ts:47` |
-| 5 | Tracking: `getCategoryBudgetStatus` compares each line against spend in the window of **its own** cadence, one query per distinct cadence, no rollover (BL-16) | `src/lib/budget.ts:160-179` |
-| 6 | Personal budgets measure **my share across all groups** via `getMyGlobalBudgetStatus` (BL-17) | `src/lib/budget.ts:198` |
-| 7 | Health band from the single `budgetHealth` threshold source: ≥100 red, ≥80 amber (BL-19) | `src/lib/budget.ts:27` |
-
-### FLOW-10 — Fund a savings goal
-
-| # | Step | Code |
-|---|---|---|
-| 1 | Plan tab → New goal (name, target, icon, colour, allocation, frequency, deadline) → `insertGoal` | `src/hooks/useSavingsTab.ts`, `savings.ts:79` |
-| 2 | Drag to reorder → `reorderGoals` writes `sort_order` = funding priority (BL-13) | `components/ui/DraggableList.tsx`, `savings.ts:101` |
-| 3 | Manual: "+" on a goal card → `fundGoal` writes an `allocate` ledger row | `savings.ts:156` |
-| 4 | Scheduled: on app open / foreground, `runAutoFunding` → `planAutoAllocations` funds elapsed periods from available cash in rank order, advancing the anchor only for periods actually funded (BL-14) | `savingsEngine.ts:58` |
-| 5 | If cash went negative, `runOverspendRaid` → `planOverspendRaid` pulls from the lowest-ranked **unlocked** goals (BL-15) | `savingsEngine.ts:101` |
-| 6 | Plan shows a notice naming the raided goals, with Undo → `undoOverspendRaid` re-funds the exact amounts | `app/(tabs)/savings.tsx:115-135` |
-| 7 | Reaching the target triggers `GoalCelebration`; completed goals sink below the active list | `app/(tabs)/savings.tsx:171-180` |
+**See [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) §15.** `FLOW-01 … FLOW-10` were absorbed
+there on 2026-08-04 with their IDs intact, plus a new `FLOW-11` for backup/restore. They sit
+beside the screens they run through, which is the point.
 
 ---
 
@@ -616,8 +405,9 @@ first-party native module.
 | INT-05 | **Camera / photo library** | `expo-image-picker` | camera + media-library permission | `src/lib/attachment.ts:20-52`, `src/lib/ocr.ts:24-45` | working | Returns `null` on denial; a failed file copy throws the typed `AttachmentStorageError` so the caller can still save the expense without the photo |
 | INT-06 | **File system** | `expo-file-system` (new `File`/`Directory` API) | none | `src/lib/attachment.ts`, `src/lib/pdfjsCache.ts`, `app/reports.tsx` | working | `getAttachmentStorage` / `clearAllAttachmentFiles` are individually try/caught and degrade to zero rather than throwing |
 | INT-07 | **Document picker** | `expo-document-picker` | none | `app/import.tsx:82-118` | working | Unreadable file → haptic + Alert naming the accepted formats |
-| INT-08 | **pdf.js (CDN)** | `react-native-webview` + `cdnjs.cloudflare.com` | network (once) | `components/system/PdfTextExtractor.tsx`, `src/lib/pdfjsCache.ts` | working | **The only network call in the app.** See below. |
-| INT-09 | **On-device OCR** | `modules/expo-ocr` (first-party) | camera/library via INT-05 | `modules/expo-ocr/ios/*.swift`, `src/lib/ocr.ts` | **dormant** | See below |
+| INT-08 | **pdf.js (CDN)** | `react-native-webview` + `cdnjs.cloudflare.com` | network (once) | `components/system/PdfTextExtractor.tsx`, `src/lib/pdfjsCache.ts` | working | Fetches the library; the PDF is parsed locally, so no user content leaves. See below. |
+| INT-09 | **On-device OCR** | `modules/expo-ocr` (first-party) | camera/library via INT-05 | `modules/expo-ocr/ios/*.swift`, `src/lib/ocr.ts` | working | The `device` receipt-scan provider. See below |
+| INT-13 | **Gemini Flash (via own proxy)** | `server/receipt-ocr-proxy` (Cloudflare Worker) → Google Generative AI | camera/library via INT-05 | `src/lib/ocrProviders/gemini.ts`, `server/receipt-ocr-proxy/index.ts` | working | **The only call that sends user content off-device** — the receipt photo. Default provider. See below |
 | INT-10 | **Share sheet** | `expo-sharing` | none | `src/lib/shareCsv.ts`, `app/reports.tsx`, `app/(tabs)/settings.tsx` | working | `isAvailableAsync()` checked first; when unavailable, the file path is shown in an Alert instead of silently failing |
 | INT-11 | **PDF generation** | `expo-print` | none | `app/reports.tsx:104-112` | working | Same fallback as INT-10 |
 | INT-12 | **Haptics** | `expo-haptics` | none | `src/lib/haptics.ts` (14 L) | working | Fire-and-forget |
@@ -664,16 +454,34 @@ A complete first-party Expo module lives at `modules/expo-ocr/`:
   **✓ RESOLVED (ISS-07)** — the `android` block was removed; the config now declares only what
   exists.
 
-`src/lib/ocr.ts` is marked `@deprecated PARKED` in its own header and explains why: on-device
-OCR could reliably read a bill's *total* but not itemize it, so it was never surfaced. The
-add flow's scan button was removed (`app/add/itemized.tsx:48-50`). Nothing imports
-`scanReceipt`.
+**No longer without an entry point.** As audited, `src/lib/ocr.ts` was marked
+`@deprecated PARKED` and nothing imported `scanReceipt`: on-device OCR could read a bill's
+*total* but not itemize it. `be5f795` (2026-08-01) rewrote `ocr.ts` and wrapped it as the
+`device` provider behind `src/lib/ocrProviders/`, alongside a new `gemini` provider (INT-13).
+The itemized wizard's **Scan receipt** button calls whichever `settings.ocrProvider()` names.
 
-**✓ RESOLVED (ISS-03)** — the `itemizedOcr` flag and the S-24 switch labelled "Snap a receipt
-to prefill the total automatically" are gone, so the UI no longer advertises a removed feature.
+The `device` path is still the weaker of the two on two-line item layouts — which is exactly why
+`ReceiptScanSheet` shows the raw recognized text alongside the parsed candidates. Making that
+failure visible and hand-fixable was the deliberate alternative to hiding it. On the `gemini`
+path there is no raw text to show (`rawText` is null), because the model returns structure.
 
-So: working iOS code, no Android code *declared*, no caller, and no longer a switch that lies.
-The engine stays parked pending real line-item extraction (F-31).
+### INT-13 — the receipt-OCR proxy, and the app's first data egress
+
+`server/receipt-ocr-proxy/` is a stateless Cloudflare Worker (~113 L): it POSTs
+`{imageBase64, mimeType}` to Gemini with a `responseSchema` and returns
+`{items: [{name, qty, unitPrice}]}`. `GEMINI_MODEL = 'gemini-flash-latest'` is hardcoded. It
+exists only to keep `GEMINI_API_KEY` out of the app bundle, and stores nothing.
+
+Consequences worth stating plainly, because they change the app's privacy posture:
+- **A receipt photo leaves the device** on the default path. INT-08 fetches a library; this
+  sends user content.
+- The free tier is **shared app-wide, not per-user**, and was cut 50–80% in late 2025. Fine at
+  personal scale; watch quota before growth. A Mistral fallback is documented in
+  `ocrProviders/index.ts` but **not implemented**.
+- Users can opt out: the **Cloud Receipt Scanning** switch in Feature management selects
+  `device` instead, and scanning keeps working offline.
+- Deploy config lives only in the Worker's README (`wrangler secret put GEMINI_API_KEY`,
+  `wrangler deploy`, then `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL`).
 
 ### Permissions actually declared
 

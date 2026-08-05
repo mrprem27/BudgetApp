@@ -10,6 +10,7 @@ export type Person = {
   is_me: number;
   email: string | null;
   mobile: string | null;
+  upi_vpa: string | null;
   remote_uid: string | null;
   image_uri: string | null;
   /** Only populated by getGroupMembers (from group_member.joined_at). */
@@ -48,7 +49,15 @@ export async function insertPerson(
     'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, 0)',
     [id, name, avatarColor],
   );
-  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null };
+  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null, upi_vpa: null };
+}
+
+export async function setPersonUpiVpa(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  vpa: string | null,
+): Promise<void> {
+  await db.runAsync('UPDATE person SET upi_vpa = ? WHERE id = ?', [vpa, personId]);
 }
 
 export async function updatePersonName(

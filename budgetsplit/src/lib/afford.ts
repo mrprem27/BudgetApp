@@ -89,6 +89,17 @@ export const NORM_TOLERANCE = 1.15;
 /** A single purchase above this fraction of monthly income is worth flagging. */
 export const INCOME_SHARE_WARN = 0.1;
 
+/**
+ * Income share for display, capped at ">999%" — past that the denominator can't be
+ * an income, so the digits are noise. Callers should hide the row entirely when
+ * `AffordSnapshot.incomeSource` is `'none'`.
+ */
+export function incomeSharePct(share: number | undefined): string {
+  if (share === undefined || !Number.isFinite(share) || share <= 0) return '—';
+  const pct = Math.round(share * 100);
+  return pct > 999 ? '>999%' : `${pct}%`;
+}
+
 export function evaluateAfford(ctx: AffordContext): AffordResult {
   const amount = Math.max(0, ctx.amount);
   const available = ctx.available;

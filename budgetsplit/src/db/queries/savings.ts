@@ -8,7 +8,9 @@ import { CASH_TOTALS_SQL } from './cashQuery';
 import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups } from './groups';
 import { getMe } from './persons';
-import { getTransactionsInRange } from './transactions';
+import { getTransactionsInRange, type TxnWithSplits } from './transactions';
+import { getRecurringForGroup } from './recurring';
+import { recurringMonthlyEquivalent } from '../../lib/recurrence';
 import { getCategoriesByFrequency, type Category } from './categories';
 import { getCategoryBudgets, type BudgetCadence } from './categoryBudgets';
 import { startOfMonth, endOfMonth, getDaysInMonth } from 'date-fns';
@@ -361,8 +363,14 @@ export type AffordSnapshot = {
   available: number;
   /** My share of expenses dated from now to month-end (committed bills). */
   upcomingBills: number;
-  /** Last-30-day income, used as a typical-monthly-income proxy. */
+  /** Typical monthly income in paise. See `incomeSource` for what it measures. */
   monthlyIncome: number;
+  /**
+   * Lets the UI label the figure truthfully: `rule` = monthly equivalent of active
+   * recurring income (a real rate); `recent` = 30-day logged sum (a sample, which
+   * is how ₹5,000 once read as "417% of monthly income"); `none` = show no share.
+   */
+  incomeSource: 'rule' | 'recent' | 'none';
   /** Personal-ledger expense categories, for the picker. */
   categories: Category[];
   /** Per-category spend-this-month, 30-day norm, and monthly budget (if set). */
@@ -390,7 +398,7 @@ function monthlyBudgetEquivalent(cadence: BudgetCadence, amount: number, daysInM
  * and the inputs reproducible.
  */
 export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
-  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, categories: [], byCategory: {} };
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {} };
   const me = await getMe(db);
   if (!me) return empty;
 
@@ -403,13 +411,14 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const groups = await getAllGroups(db);
   const personal = groups.find(g => g.is_personal === 1) ?? groups[0] ?? null;
 
-  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns] = await Promise.all([
+  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules] = await Promise.all([
     getCashPosition(db),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
     personal ? getCategoryBudgets(db, personal.id) : Promise.resolve([]),
     getTransactionsInRange(db, null, monthStart, now),
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
     getTransactionsInRange(db, null, now, monthEnd),
+    personal ? getRecurringForGroup(db, personal.id) : Promise.resolve([] as TxnWithSplits[]),
   ]);
 
   const myShare = (t: { shares: Array<{ personId: string; amount: number }> }) =>
@@ -423,9 +432,9 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     if (mine > 0) spentThisMonth[t.category] = (spentThisMonth[t.category] ?? 0) + mine;
   }
 
-  // 30-day norm per category (my share) + 30-day income (monthly-income proxy).
+  // 30-day norm per category (my share) + 30-day income as a *fallback* rate.
   const norm: Record<string, number> = {};
-  let monthlyIncome = 0;
+  let recentIncome = 0;
   for (const t of recentTxns) {
     if (t.is_deleted) continue;
     if (t.kind === 'expense') {
@@ -434,9 +443,24 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     } else if (t.kind === 'income') {
       // Only MY income — `recentTxns` spans all groups, so a co-member's income
       // in a shared group must not inflate my monthly-income proxy.
-      monthlyIncome += t.payments.filter(p => p.personId === me.id).reduce((s, p) => s + p.amount, 0);
+      recentIncome += t.payments.filter(p => p.personId === me.id).reduce((s, p) => s + p.amount, 0);
     }
   }
+
+  // Prefer the recurring salary rule (a monthly rate) over the 30-day sum (a
+  // sample that reads ₹0 if payday fell outside the window). Income is
+  // deliberately not stored as a pref — the rule is the record (see lib/onboarding).
+  let ruleIncome = 0;
+  for (const r of recurRules) {
+    if (r.kind !== 'income' || r.is_deleted) continue;
+    if (r.recur_state && r.recur_state !== 'active') continue;   // paused/ended earns nothing
+    const mine = r.payments.filter(p => p.personId === me.id).reduce((s, p) => s + p.amount, 0);
+    if (mine > 0) ruleIncome += recurringMonthlyEquivalent(mine, r.recur_freq);
+  }
+
+  const monthlyIncome = ruleIncome > 0 ? ruleIncome : recentIncome;
+  const incomeSource: AffordSnapshot['incomeSource'] =
+    ruleIncome > 0 ? 'rule' : recentIncome > 0 ? 'recent' : 'none';
 
   // Committed bills: my share of future-dated expenses through month-end.
   let upcomingBills = 0;
@@ -467,7 +491,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     };
   }
 
-  return { available: pos.available, upcomingBills, monthlyIncome, categories, byCategory };
+  return { available: pos.available, upcomingBills, monthlyIncome, incomeSource, categories, byCategory };
 }
 
 /** Build psychological savings insights from real goals + spending. */

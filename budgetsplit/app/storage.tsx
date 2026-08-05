@@ -138,7 +138,9 @@ export default function StorageScreen() {
             </View>
 
             <Text style={styles.note}>
-              Receipt photos are compressed on import and never leave your device. Delete them here to free up space — your transactions are kept.
+              Receipt photos are compressed on import and stored only on this device. (Scanning a
+              receipt sends that one photo to a cloud OCR service to read it; the stored copy stays
+              here.) Delete them here to free up space — your transactions are kept.
             </Text>
 
             <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={count === 0} />

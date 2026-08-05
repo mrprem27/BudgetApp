@@ -1,9 +1,10 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { space } from '../tokens';
+import { Text, StyleSheet } from 'react-native';
+import { colors, type, space } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { Input } from '../ui/Input';
 import { PrimaryButton } from '../ui/PrimaryButton';
+import { isValidVpa } from '../../lib/upiIntent';
 
 /**
  * A one-field sheet for naming a person — used to add a friend and to rename
@@ -25,6 +26,8 @@ export function PersonNameSheet({
   onSubmit,
   placeholder = 'Name',
   submitLabel = 'Save',
+  vpa,
+  onChangeVpa,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -34,8 +37,14 @@ export function PersonNameSheet({
   onSubmit: () => void;
   placeholder?: string;
   submitLabel?: string;
+  /** Optional UPI handle. Omit both props to hide the field entirely. */
+  vpa?: string;
+  onChangeVpa?: (v: string) => void;
 }) {
   const disabled = !value.trim();
+  const vpaText = vpa ?? '';
+  // Shown but never required: a person with no VPA just doesn't get the pay button.
+  const vpaBad = vpaText.trim().length > 0 && !isValidVpa(vpaText);
   return (
     <SheetModal visible={visible} onClose={onClose} title={title}>
       <Input
@@ -49,6 +58,25 @@ export function PersonNameSheet({
         onSubmitEditing={() => { if (!disabled) onSubmit(); }}
         style={styles.gap}
       />
+      {onChangeVpa && (
+        <>
+          <Input
+            label="UPI ID (optional)"
+            value={vpaText}
+            onChangeText={onChangeVpa}
+            placeholder="name@bank"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            maxLength={256}
+            style={styles.gap}
+          />
+          <Text style={[styles.hint, vpaBad && styles.hintBad]}>
+            {vpaBad
+              ? "That doesn't look like a UPI ID — expected something like name@bank."
+              : 'Lets you settle up straight into their UPI app. Stays on this device.'}
+          </Text>
+        </>
+      )}
       <PrimaryButton label={submitLabel} onPress={onSubmit} disabled={disabled} />
     </SheetModal>
   );
@@ -56,4 +84,6 @@ export function PersonNameSheet({
 
 const styles = StyleSheet.create({
   gap: { marginBottom: space.md },
+  hint: { ...type.caption, color: colors.textMuted, marginTop: -space.sm, marginBottom: space.md },
+  hintBad: { color: colors.expense },
 });

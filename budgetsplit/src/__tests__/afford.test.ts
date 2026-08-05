@@ -1,4 +1,4 @@
-import { evaluateAfford, AffordVerdict, AffordReason } from '../lib/afford';
+import { evaluateAfford, AffordVerdict, AffordReason, incomeSharePct } from '../lib/afford';
 
 describe('evaluateAfford — cash axis', () => {
   it('is comfortable when plenty remains above the safety buffer', () => {
@@ -89,5 +89,34 @@ describe('evaluateAfford — combined', () => {
     });
     expect(r.verdict).toBe(AffordVerdict.No);
     expect(r.reasons[0]).toBe(AffordReason.CashShort);
+  });
+});
+
+describe('incomeSharePct', () => {
+  it('renders a normal share as a rounded percentage', () => {
+    // ₹5,000 against ₹85,000/month — the case UX_AUDIT reported as 417%.
+    expect(incomeSharePct(500000 / 8500000)).toBe('6%');
+  });
+
+  it('still prints a merely-large share, because that can be real', () => {
+    // 417% was the figure UX_AUDIT reported. The cap is deliberately NOT what
+    // fixes it — a purchase really can exceed a month's income, so suppressing
+    // this would hide a true answer. What fixes it is the denominator
+    // (`incomeSource: 'rule'` over a 30-day sample) and the honest label.
+    expect(incomeSharePct(4.17)).toBe('417%');
+  });
+
+  it('caps a share so absurd the denominator cannot be an income', () => {
+    expect(incomeSharePct(50)).toBe('>999%');
+  });
+
+  it('renders nothing meaningful for absent or zero input', () => {
+    expect(incomeSharePct(undefined)).toBe('—');
+    expect(incomeSharePct(0)).toBe('—');
+    expect(incomeSharePct(Number.POSITIVE_INFINITY)).toBe('—');
+  });
+
+  it('keeps a share just under the cap exact', () => {
+    expect(incomeSharePct(9.99)).toBe('999%');
   });
 });

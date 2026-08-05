@@ -22,13 +22,20 @@
 > were accurate and needed no change. The findings below are kept as the record of what drifted
 > and why — not as open work.
 
+> **Resolution pass 2 — 2026-08-04.** The one open *decision* in this file is now made.
+> `FEATURES_AND_FLOWS.md` **is** the behaviour doc: `AUDIT.md` §2 (screen inventory) and §3
+> (user flows) were absorbed into it — IDs intact, now §3 and §15 there — and reduced to
+> pointers, closing the "Decide against AUDIT §2/§3" recommendation below. See DRIFT-22 …
+> DRIFT-25 for what the belated line-audit found, and DRIFT-26 for the mechanism added so it
+> can't recur.
+
 ## Summary
 
 | Doc | Lines | Rows checked | Stale | Under-reported | Verdict |
 |---|---|---|---|---|---|
 | `ARCHITECTURE.md` | 372 | 14 | 11 | 2 | §9 and §10 need a rewrite; §1–§6 are accurate |
 | `DEBT_TRACKER.md` | 176 | 9 | 4 | 3 | Scoreboard is close; two "resolved" rows are wrong |
-| `FEATURES_AND_FLOWS.md` | 577 | — | — | — | Structurally sound; not line-audited (see note) |
+| `FEATURES_AND_FLOWS.md` | 577 → **line-audited 2026-08-04** | all | 6 | 4 | ✓ Rewritten from source; now the single behaviour doc |
 
 ---
 
@@ -187,8 +194,9 @@ parser path exists in the code beyond `gpayParse.ts`, which operates on pasted/P
 
 ## FEATURES_AND_FLOWS.md
 
-Not line-by-line audited — at 577 lines it is largely a screen-by-screen narrative that
-AUDIT §2 and §3 now cover from source. Two structural observations:
+**Line-audited on 2026-08-04** — the audit this file had deferred twice. It was the only doc
+here never checked row-by-row, and that is exactly where the worst drift had accumulated. The
+recorded length (577) was itself stale: the file was 571 lines when the audit finally ran.
 
 ### DRIFT-20 — §11 "Optional modules" inherits ARCHITECTURE's flag model
 
@@ -201,6 +209,54 @@ toggleable.
 Two feature inventories now exist with different granularity and no shared IDs. Whichever is
 kept should be the only one; the other should become a pointer.
 
+### DRIFT-22 — **STALE** — the doc said receipt OCR was parked, four days after it shipped
+
+§11 read: *"the engine … is parked because it could read a bill's total but not its line items,
+and its entry point was removed. It is dormant, not broken."* Receipt scanning shipped in
+`be5f795` on **2026-08-01** with a live iOS **Scan receipt** button, `ReceiptScanSheet`,
+`ScanningOverlay` and two providers. The test matrix row also still said "OCR auto-fill is
+parked". `AUDIT.md` §1 (F-31) and §5 (INT-09) carried the same claim and were corrected in the
+same pass. ✓ Fixed — now §7.4.
+
+### DRIFT-23 — **UNDER-REPORTED** — the privacy claims outlived the network call
+
+The doc quoted the Settings subtitle *"Offline-first · no accounts"* without noticing that the
+default receipt-OCR provider sends the receipt photo to Gemini via a Cloudflare Worker. No doc
+in the folder mentioned that `server/receipt-ocr-proxy/` exists or that the repo now has a
+server component. The **in-app** copy was worse than the docs: `app/help.tsx` told users
+*"BudgetSplit makes zero network calls"*, and `app/storage.tsx` said receipt photos *"never
+leave your device"*. ✓ Fixed — behaviour doc §19, `ARCHITECTURE.md` §2/§3, and the three
+user-facing strings. The audit also surfaced that the offline provider was unreachable from the
+UI at all; a **Cloud Receipt Scanning** switch was added on 2026-08-04 so the privacy claim and
+the app agree (DEBT_TRACKER F6).
+
+### DRIFT-24 — **STALE** — four shipped screens had no section
+
+`/review` (the largest screen in the repo), `/import`, `/settings/backup` and
+`/report-transactions` appeared nowhere in the screen catalogue, despite the doc's own header
+claiming it was "current with the Import → Review ingestion feature". Review's only trace was
+one row in the manual-test table. Also missing: Paytm xlsx/csv import, `TrendBars`, the
+"All settled up" card, and 32 of 59 `src/lib` modules. ✓ Fixed — §10, §13.3, §12.
+
+### DRIFT-25 — **UNDER-REPORTED** — the doc contradicted itself in six places
+
+§1 and §16 said onboarding was 8 stages while §14 said outright *"it is 9"* (it is 9 — the
+**money** stage was the missing one). §13 listed Plan's modules as pills; §7 correctly called
+them header icons. §7 said goal funding "tops the **pool** up" **and** "no pool" — and named
+`depositAndAllocate`, a function that does not exist (it is `fundGoal`). Pay methods were 3 in
+§6/§13 and 7 in §16 (`PAY_METHOD` has 7). §11 promised "All 12 keys" over a 13-row table and
+said "Eight further keys" while naming seven (`DEFAULTS` has **14** flags). §16 called
+`HealthBand` "imported on Home but not currently rendered" — it is imported by nothing at all,
+i.e. dead code. ✓ All resolved from source.
+
+### DRIFT-26 — the mechanism, not another careful pass
+
+The root cause of DRIFT-22 … DRIFT-25 is that **nothing failed** when a screen shipped
+undocumented. `src/__tests__/docCoverage.test.ts` now walks every route file under `app/` and
+fails if one isn't mentioned in the behaviour doc — the same source-scanning trick
+`featureFlags.test.ts` uses to keep the flag table honest. It checks mention, not quality;
+the point is to make an omission impossible to miss. Verified to fail before it was trusted.
+
 ---
 
 ## Recommended disposition
@@ -212,7 +268,7 @@ Not actions to take now — just the shape of the cleanup, for whoever grooms th
 | `ARCHITECTURE.md` §1–§6 | **Keep.** Boot sequence, provider stack, data model and query/state layers all verified accurate. |
 | `ARCHITECTURE.md` §7–§10 | **Rewrite or delete.** §9's engine map and §10's flag table are the two most drifted artefacts in the folder. AUDIT §4.3, §6 and §7 supersede them. |
 | `DEBT_TRACKER.md` | **Keep as the open-debt tracker.** Reopen DRIFT-13, correct DRIFT-14 and DRIFT-16. Its process rules are good and should not change. |
-| `FEATURES_AND_FLOWS.md` | **Decide against AUDIT §2/§3.** Substantial overlap; keeping both guarantees they drift apart again. |
+| `FEATURES_AND_FLOWS.md` | ✓ **Decided (2026-08-04): it wins.** AUDIT §2/§3 were absorbed into it and are now pointers. It is the single behaviour doc, guarded by `docCoverage.test.ts`. |
 | `PERSONAL_REDESIGN.md` (96 L) | Not reviewed. Check whether it is still live work or a shipped spec. |
 
 The pattern behind almost every row above is the same one `DEBT_TRACKER.md` rule 4 already

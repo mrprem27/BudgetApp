@@ -14,6 +14,7 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../../src/hooks/useScreenData';
+import { useRecurringActions } from '../../src/hooks/useRecurringActions';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
@@ -51,6 +52,7 @@ export default function RecurringScreen() {
   }, []);
 
   const subs = data ?? [];
+  const { skipNext, pause, end } = useRecurringActions(reload);
   const loaded = !loading;
   const monthlyTotal = subs.reduce((s, x) => s + toMonthly(x.amount, x.freq), 0);
   const nextUp = subs.find(s => s.nextMs != null);
@@ -95,10 +97,10 @@ export default function RecurringScreen() {
               {subs.map((s, i) => {
                 const vis = categoryVisual(s.category);
                 return (
+                  <View key={s.id} style={i < subs.length - 1 ? styles.rowBorder : undefined}>
                   <TouchableOpacity
-                    key={s.id}
-                    style={[styles.row, i < subs.length - 1 && styles.rowBorder]}
-                    onPress={() => router.push(`/group/${s.groupId}/recurring`)}
+                    style={styles.row}
+                    onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${s.name}, ${cadenceLabel(s.freq)}`}
                   >
@@ -114,6 +116,18 @@ export default function RecurringScreen() {
                       {s.nextMs != null && <Text style={styles.nextDate}>next {format(s.nextMs, 'MMM d')}</Text>}
                     </View>
                   </TouchableOpacity>
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity onPress={() => skipNext(s.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Skip next ${s.name}`}>
+                      <Text style={styles.action}>Skip next</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => pause(s.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Pause ${s.name}`}>
+                      <Text style={styles.action}>Pause</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => end(s.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Stop ${s.name}`}>
+                      <Text style={[styles.action, styles.actionDanger]}>Stop</Text>
+                    </TouchableOpacity>
+                  </View>
+                  </View>
                 );
               })}
             </View>
@@ -147,5 +161,8 @@ const styles = StyleSheet.create({
   detail: { ...type.caption, color: colors.textMuted },
   right: { alignItems: 'flex-end' },
   nextDate: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 2 },
+  actionRow: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.md, paddingBottom: space.sm },
+  action: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  actionDanger: { color: colors.expense },
   footHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

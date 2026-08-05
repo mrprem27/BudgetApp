@@ -117,6 +117,7 @@ export default function QuickAddScreen() {
               onPayMethod={f.setPayMethod}
               note={f.transferNote}
               onNote={f.setTransferNote}
+              amountPaise={f.total}
             />
           )}
 

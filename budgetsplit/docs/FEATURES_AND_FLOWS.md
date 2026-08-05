@@ -1,86 +1,97 @@
 # BudgetSplit — Features & User Flows
 
-> **The single source of truth for behaviour.** Every feature, every screen, every state,
-> every component (top → bottom), and every user action with its exact destination and
-> every pill/segment — grounded in the actual code. For how it's built, see
-> [ARCHITECTURE.md](./ARCHITECTURE.md).
+> **The single source of truth for behaviour.** Every screen, every state, every component
+> (top → bottom), every user action with its exact destination, every pill — plus the
+> cross-cutting rules (validation, permissions, notifications, network) that don't belong to
+> one screen. For how it's built, see [ARCHITECTURE.md](./ARCHITECTURE.md); for per-feature
+> status IDs, [AUDIT.md](./AUDIT.md) §1.
 >
 > **Notation:** `→` = navigates to · *(sheet)* = bottom-sheet modal · *(toggle)* = switch,
 > no nav · 🔘 = pill/segmented control. Pushed screens have a `‹` back chevron
-> (`ScreenHeader`); tab screens have no back button; Add flows are modal sheets
-> (`ModalHeader`). Money is paise internally, shown via `formatRupees`/`formatCompact`.
-> "Flag" = a `useFeatureFlags()` gate.
+> (`ScreenHeader`); tab screens have no back button; the two Add flows are `fullScreenModal`
+> presentations (`ModalHeader`). Money is integer paise internally, shown via
+> `formatRupees`/`formatCompact`. "Flag" = a `useFeatureFlags()` gate.
 >
-> **Status (reconciled 2026-07-13, branch `refactor/phase-1-perf-safety`):** current with the
-> phase-2 redesign, the **Import → Review** ingestion feature, the **Total Money** plan-card
-> redesign, and **P4.1** (pay-method on every txn kind + sectioned Review). The monolith
-> screens `add/quick.tsx` and `group/[id].tsx` were split into `finance/add/` + `finance/group/`
-> components with `useAddTxnForm`/`useGroupTxnActions` hooks (behavior unchanged). Key shifts from
-> the old baseline: **Settle** is now the Quick-Add
-> **Transfer pill** everywhere — the standalone `/settle` screen is **deleted**; all entry
-> points open `/add/quick?kind=transfer&to=…`. **Home** shows a **Month-end ForecastCard**
-> (below the Owe/Owed strip) and the **StreakCard** is live. **Group detail** tab order is
-> **Expenses · Recurring · Budget · Members**, Balances merged into Members, Insights is a
-> header-icon view, and the ⋯ menu is trimmed to History · Edit · Archive. **Plan** shows the
-> Cash card + Savings insights + a Forecast card, has an error state, and dropped the
-> Reminders chip. **Settings** Manage→**Budget** opens the personal budget directly; module
-> toggles live only in **Feature management**; reminder config lives on its own
-> Notifications screen. **GroupSelector** is frequent-pills + a **More** picker sheet.
->
-> **Personal/Budget/Insights redesign (Phases 1–4, see [PERSONAL_REDESIGN.md](./PERSONAL_REDESIGN.md)):**
-> "Subscriptions" renamed to **Recurring** (labels only). **Goals**: completed sort to bottom with a
-> distinct card. **Transfers**: picker shows your balance with each person. **Undo** on every delete
-> (txn/member/goal). New unified **Personal** view at `/personal` (pinned in Groups). Budgets are
-> **my-share**: a global personal budget + optional per-group budgets. The Dashboard category tap
-> opens a **comprehensive category-insights page** (spend split · places · recurring · goals).
+> **Status (reconciled 2026-08-04 against `main` @ `1d7f256`).** This pass made the doc the
+> single behaviour reference: `AUDIT.md` §2 (screen inventory) and §3 (user flows) were
+> absorbed here and reduced to pointers, so the `S-XX` / `FLOW-XX` IDs other docs cite now
+> resolve to §3 and §15 below. Corrected against source: **receipt scanning is live**, not
+> parked (§7.4) and ships with a **cloud OCR provider** that makes a network call (§19);
+> **`/settings/backup`**, **`/review`**, **`/import`** and **`/report-transactions`** now have
+> sections; onboarding is **9 stages**, not 8; there are **7 pay methods**, not 3; goal funding
+> is `fundGoal` with **no pool**. Every route now carries a documented state set (§20).
 
 ---
 
 ## Contents
+
+**Screens, in navigation order**
 1. [First run & onboarding](#1-first-run--onboarding)
 2. [The navigation shell + graph](#2-the-navigation-shell--graph)
-3. [Home / Dashboard](#3-home--dashboard)
-4. [Groups](#4-groups)
-5. [Group detail & sub-screens](#5-group-detail--sub-screens)
-6. [Add flows (expense / income / itemized / transfer)](#6-add-flows)
-7. [Plan tab & savings](#7-plan-tab--savings)
-8. [Settle up](#8-settle-up)
-9. [Transaction & category detail](#9-transaction--category-detail)
-10. [Settings & sub-screens](#10-settings--sub-screens)
-11. [Optional modules](#11-optional-modules)
-12. [System components & global behaviors](#12-system-components--global-behaviors)
-13. [Every pill, in one table](#13-every-pill-in-one-table)
-14. [Feature catalog (quick reference)](#14-feature-catalog)
-15. [Developer / QA tooling](#15-developer--qa-tooling)
-16. [Component inventory (every component)](#16-component-inventory)
-17. [Manual test flows (data pre-staged)](#17-manual-test-flows)
+3. [Screen index (S-XX)](#3-screen-index-s-xx)
+4. [Home / Dashboard](#4-home--dashboard)
+5. [Groups](#5-groups)
+6. [Group detail & sub-screens](#6-group-detail--sub-screens)
+7. [Add flows](#7-add-flows)
+8. [Plan tab & savings](#8-plan-tab--savings)
+9. [Settle up](#9-settle-up)
+10. [Import → Review](#10-import--review)
+11. [Transaction & category detail](#11-transaction--category-detail)
+12. [Analytics — Reports, drill-down, Insights](#12-analytics--reports-drill-down-insights)
+13. [Settings & sub-screens](#13-settings--sub-screens)
+14. [Optional modules](#14-optional-modules)
+
+**Cross-cutting**
+15. [Key user flows (FLOW-XX)](#15-key-user-flows-flow-xx)
+16. [Validation rules](#16-validation-rules)
+17. [Permissions](#17-permissions)
+18. [Notifications](#18-notifications)
+19. [Network & data egress](#19-network--data-egress)
+20. [Every screen's states](#20-every-screens-states)
+21. [System components & global behaviors](#21-system-components--global-behaviors)
+22. [Every pill, in one table](#22-every-pill-in-one-table)
+23. [Sheets & overlays, in one table](#23-sheets--overlays-in-one-table)
+24. [Developer / QA tooling](#24-developer--qa-tooling)
+25. [Component inventory](#25-component-inventory)
+26. [Manual test flows](#26-manual-test-flows)
 
 ---
 
 ## 1. First run & onboarding
 
-`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the
-8-stage `Onboarding` flow. A single DB commit (`finalize`) happens at the very end —
-nothing is written mid-flow except two AsyncStorage preferences.
+`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **9-stage**
+`Onboarding` flow (`src/hooks/useOnboardingForm.ts` owns the stage machine; `OnboardingStage`
+is the authoritative list). A single DB commit (`finalizeOnboarding`) happens at the very end —
+nothing is written mid-flow except two AsyncStorage preferences and the persona flag defaults.
 
 | # | Stage | What the user does | Persisted |
 |---|---|---|---|
 | 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline fade in. Tap **Get Started**. | nothing |
-| 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *both* (default both). | `onboarding_intent` (AsyncStorage; soft preference, **not yet wired to flags**) |
-| 2 | **Feature carousel** | 4 swipeable slides (Spend / Split / Budget / Privacy) + progress bar. **Skip** → Name. | nothing |
-| 3 | **Name** | Type your name (≤30). **Continue** (sets "add first expense" intent) or **Skip — just explore**. | committed in `finalize` |
+| 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
+| 2 | **Feature carousel** | 4 swipeable slides (Spend / Split / Budget / Privacy) + progress bar, art from `system/onboarding/SlideArt`. **Skip** → Name. | nothing |
+| 3 | **Name** | Type your name (≤30). Always reached, even from Skip. **Continue** (sets "add first expense" intent) or **Skip — just explore**. | committed in `finalize` |
 | 4 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L) + pay-day chips. **Skip**. | committed in `finalize` |
-| 5 | **Budget** | Monthly cap field + presets; shows "X% of take-home" if income set. **Skip**. | committed in `finalize` |
-| 6 | **People** | Add split-contacts inline (dedup by name). **Skip**. | committed in `finalize` |
-| 7 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`, read by add flows). | `save_location` on grant |
+| 5 | **Money** | Opening position: cash on hand, investments, credit limit, credit used. **Skip**. | `setMoneyProfile`, best-effort |
+| 6 | **Budget** | Monthly cap field + presets; shows "X% of take-home" if income set. **Skip**. | committed in `finalize` |
+| 7 | **People** | Add split-contacts inline (dedup by name). **Skipped entirely when intent is *personal*** (`setupSteps()`). | committed in `finalize` |
+| 8 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`, read by add flows). | `save_location` on grant |
 
-**`finalize()`** (best-effort, each step isolated so one failure never blocks finishing):
+**Stage order** comes from `SETUP_STEPS = ['income','money','budget','people','permissions']`,
+filtered by intent. Back navigation uses `afterBudget` / `beforePermissions`, which skip
+`people` for the personal persona in both directions.
+
+**`finalizeOnboarding()`** (`src/lib/onboarding.ts:42-88`, best-effort, each step isolated so
+one failure never blocks finishing):
 - `updatePersonName(me)` if a name was entered.
-- If income>0: inserts a **recurring monthly Salary income** in the Personal group anchored to pay-day; persists `monthly_income` + `payday`.
-- If budget>0: writes a `Total` monthly `category_budget` on the Personal group.
+- If income > 0: inserts a **recurring monthly Salary income** in the Personal group anchored
+  by `paydayAnchor(day)` — the next occurrence of that day-of-month at 09:00, clamped to month
+  length, so it never immediately back-fills.
+- If budget > 0: writes a `Total` monthly `category_budget` on the Personal group.
 - Each contact → `insertPerson`.
-- If "add first" intent: persists `pending_first_add='true'` (Home auto-opens Add once).
-- Calls `onDone()` → gate writes `onboarding_done='true'`.
+- If "add first" intent: persists `pending_first_add='true'` (Home auto-opens Add once, then
+  clears the flag).
+- Calls `onDone()` → gate writes `onboarding_done='true'` in a `try/finally`, so the gate opens
+  even if that write fails.
 
 **Replay:** Settings → "Replay welcome tour" removes `onboarding_done` and restarts this flow.
 
@@ -89,24 +100,125 @@ nothing is written mid-flow except two AsyncStorage preferences.
 ## 2. The navigation shell + graph
 
 Custom bottom tab bar: **Home · Groups · [FAB] · Plan · Settings**.
-- **FAB** (coral→teal gradient `+`): one tap → `/add/quick?kind=expense` (light haptic — the one sanctioned nav haptic).
-- Active tab tint = teal; inactive = muted. `BlurView` backdrop above the home indicator.
+- **FAB** (coral→teal gradient `+`) sits *inside* the bar so it always paints above content:
+  one tap → `/add/quick?kind=expense` (light haptic — the one sanctioned nav haptic).
+- Active tab tint = teal; inactive = muted. iOS gets a live `BlurView`; Android uses a
+  near-opaque fill deliberately (BlurView recomposites every frame → scroll jank).
+- **Slot 2 is conditional:** with `flags.splitting` off, "Groups" is replaced by **Personal**
+  (`user` icon) pushing `/personal`, and the owe/owed strip and Transfer kind disappear too.
+- Every list screen reserves `layout.fabHeight` of bottom padding so the FAB never covers the
+  last row.
 
 ```
 Tab bar:  Home · Groups · (＋FAB) · Plan · Settings
 
-Home ──► Search, History, Settings, Insights, Category, Group budget, Add(expense/transfer)
+Home ──► Search, History, Review, Reminders, Settings, Insights, Category,
+         Group budget, Groups, Friends, Add(expense/transfer)
 Groups ──► Personal (pinned), Group detail, Add(transfer)
 Personal ──► Txn (source), Budget editor, group Recurring
-Plan ──► Goal detail, Insights, Reports, Recurring, Afford, Add
-Settings ──► People, Categories, Budget, Features, Notifications, Reports, Help, History, Storage
+Plan ──► Goal detail, Insights, Recurring, Afford
+Settings ──► People, Categories, Budget, Features, Notifications, Backup,
+             Import, Reports, Help, History, Storage
 Group detail ──► Txn, Budget, Members, Recurring, Edit, History, Add(expense/transfer)
 Add(quick) ──► Itemized, Storage(attach)
+Import ──► Review ──► Import
+Reports ──► Report transactions ──► Txn
 ```
+
+Only three routes get explicit `Stack.Screen` options (`app/_layout.tsx:108-111`): `(tabs)`
+fades; `add/quick` and `add/itemized` present as `fullScreenModal` sliding from the bottom.
+No route uses `presentation: 'modal'` or `'transparentModal'` — everything else is a plain
+right-slide push.
 
 ---
 
-## 3. Home / Dashboard
+## 3. Screen index (S-XX)
+
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route files under
+`app/`; expo-router registers each implicitly by filename.
+
+### 3.1 Shell / layout (not user-visible screens)
+
+| ID | File | Role |
+|---|---|---|
+| S-01 | `app/_layout.tsx` | Root. Fonts → `openDB()` → `seedIfNeeded` → `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders`; re-runs the last three on `AppState → active`. Provider stack: `SafeAreaProvider → GestureHandlerRootView → SQLiteProvider → FeatureFlagsProvider → FlagsGate → DataRefreshProvider → StoreHydrator → UndoProvider → LockGate → OnboardingGate → Stack`, with `PrivacyScreen` as a sibling overlay. DB-open failure renders a retryable `ErrorState`. |
+| S-02 | `app/(tabs)/_layout.tsx` | Custom 5-slot tab bar (see §2). Route name `savings` renders the label **"Plan"**. |
+
+### 3.2 Tab screens
+
+| ID | Screen | File | Purpose | Exits |
+|---|---|---|---|---|
+| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
+| S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
+| S-05 | **Plan** | `app/(tabs)/savings.tsx` | Total Money card, overspend-raid notice with Undo, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
+| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
+
+### 3.3 Add / edit flows (full-screen modals)
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-07 | **Quick Add** | `app/add/quick.tsx` | One form for expense / income / transfer, plus edit mode and recurring-rule edit mode. All state in `useAddTxnForm`; the file is render-only. |
+| S-08 | **Itemized bill** | `app/add/itemized.tsx` | 4-step wizard (items → assign → payers → review) with per-item splitting, four adjustment types, and **receipt scanning** (§7.4). State in `useItemizedForm`. |
+
+### 3.4 Group screens
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-09 | **Group detail** | `app/group/[id].tsx` | Group hub; tabs differ by kind. `/group/{personalId}` `router.replace`s to `/personal`, so old deep links still resolve. |
+| S-10 | **Budget editor** | `app/group/[id]/budget.tsx` | Per-category amount + cadence, collapsible sections, `?category=` deep-link autofocus. Self-heals an empty catalog. |
+| S-11 | **Members** | `app/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
+| S-12 | **Group recurring** | `app/group/[id]/recurring.tsx` | Pause / resume / end / skip-next (with undo-skip). `?focus=<id>` highlights a rule for 2.6 s. |
+| S-13 | **Edit group** | `app/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
+| S-14 | **Personal** | `app/personal.tsx` | The unified personal screen: Activity / Budget / Recurring, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. |
+
+### 3.5 Detail screens
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-15 | **Transaction detail** | `app/txn/[id].tsx` | Hero amount, kind badge, per-person split, read-only line items, receipt attachment + full-screen viewer, audit history, Delete + Edit. |
+| S-16 | **Category detail** | `app/category/[name].tsx` | One category across day/month/year: my-share totals, budget bar, transactions, related recurring rules and goals. Fetches **the whole year across all categories** and filters client-side so period tabs switch without a re-query — correct, but the heaviest single read in the app (DEBT-06). |
+| S-17 | **Goal detail** | `app/savings/[id].tsx` | Ring progress, add/withdraw, adjust target/allocation/frequency/deadline, lock, delete, contribution history, completion celebration. |
+
+### 3.6 Import / review
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-18 | **Import** | `app/import.tsx` | Pick a PDF / xlsx / CSV / text file *or* paste text; format auto-detected; rows land in `pending_txn`. See §10.1. |
+| S-19 | **Review** | `app/review.tsx` (**largest screen in the repo**) | The staging inbox — every pending row editable in place, draft auto-save, bulk actions, focus workspace, filters, saved views. See §10.2. |
+
+### 3.7 Analytics
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-20 | **Reports** | `app/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
+| S-21 | **Report transactions** | `app/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
+| S-22 | **Insights** | `app/insights.tsx` | The single narrative-insight home: velocity hero, month-end forecast chart, category shifts, what-if slider, recommendations, savings insights. |
+| S-23 | **Search** | `app/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
+
+### 3.8 Settings sub-screens & utilities
+
+| ID | Screen | File | Purpose |
+|---|---|---|---|
+| S-24 | **Feature management** | `app/features.tsx` | Non-toggleable "Core" pillars + the switchable modules in sections. Every switch here changes something. Location tagging sits in this list but writes to `settings`, not the flag namespace — deliberately, because it must await an OS grant and refuse if denied (§17). |
+| S-25 | **Categories** | `app/categories.tsx` | Global category catalog (expense / income / transfer), sectioned. Create, rename, delete, and **adopt** an uncategorized name. Self-heals an empty catalog. |
+| S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
+| S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden: attachment stats, clear attachments, load demo data, erase all data. Settings → version ×7. |
+| S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
+| S-29 | **Help** | `app/help.tsx` | Static accordion of help copy. No data access. |
+| S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
+| S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
+| S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. Per-row **Skip next · Pause · Stop** (shared `useRecurringActions`); row tap → `/group/{id}/recurring?focus={ruleId}`. |
+| S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category → Comfortable / Tight / No verdict with plain-English reasons. |
+| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet; restore **replaces all data**. See §13.3. |
+
+### 3.9 Reachability
+
+Every route is reachable. Conditionally: S-32 and S-33 only appear when their flags are on
+(`recurring: true`, `affordCheck: false` by default), and S-27 requires the 7-tap easter egg.
+
+---
+
+## 4. Home / Dashboard
 
 **Route:** `app/(tabs)/index.tsx` · **Question:** "How am I doing financially right now?"
 
@@ -119,148 +231,213 @@ Add(quick) ──► Itemized, Storage(attach)
 - **Full:** hero + period pills + breakdown + balances + forecast + coming-up + streak.
 
 ### Layout (top → bottom) & actions
-1. **Header** — greeting + first name; 🔍 → `/search`; 🔔 (unread dot) → `/history`; avatar → `/settings`.
-2. **Catch-up banner** (conditional) — amber, when app was closed 30+ days with active recurring rules. **Review entries** → `/history`; **Dismiss**.
-3. **HeroCard** — XL period spend (SpaceMono); pace bar + "X% · ₹Y left" **only if a budget is set** (else number + delta vs previous period); SVG health ring → **HealthSheet** *(sheet)*.
+1. **Header** — greeting + first name, then the icon row: **inbox badge** *(only when `reviewCount > 0`, showing the count or "9+")* → `/review`; 🔍 → `/search`; 🔔 *(labelled with the upcoming count)* → `/reminders`; avatar → `/settings`.
+2. **Catch-up banner** (conditional) — amber, when the app was closed 30+ days with active recurring rules. **Review entries** → `/history` (the only route to the audit log from Home); **Dismiss**.
+3. **HeroCard** — XL period spend (SpaceMono); pace bar + "X% · ₹Y left" **only if a budget is set** (else number + delta vs previous period); SVG health ring *(flag `healthScore` — `index.tsx:80` nulls the score when off, and `HeroCard` hides the ring on a null score)* → **HealthSheet** *(sheet)*.
 4. 🔘 **TabPills** — `Month · Today · Year` (re-runs the data load for that period).
-5. **CategoryRankList** ("WHERE IT WENT") — top 3 category bars; row tap → `/category/{name}?period={tab}`; **+N more** expands.
-6. **BalanceStrip** — shown if you owe / are owed > 0: "You owe / Owed to you" + **Settle** → `/add/quick?kind=transfer`.
+5. **CategoryRankList** ("WHERE IT WENT") — top 3 category bars; row tap → `/category/{name}?period={tab}`; **+N more** expands. `everHadCats` keeps the card mounted across period switches so it never collapses.
+6. **BalanceStrip** — shown if you owe / are owed > 0: "You owe / Owed to you" + **Settle** → `/add/quick?kind=transfer`. Hidden entirely when `flags.splitting` is off.
 7. **ForecastCard** *(flag `forecast`, Month view only, when `forecast.ready`)* — **below the Owe/Owed strip**: month-end projection vs budget + pace bar; biggest-shift teaser *(flag `dashboardInsights`)*; **See all insights** → `/insights`.
 8. **ComingUpList** — next recurring bills (`buildUpcoming`); hidden when empty.
 9. **StreakCard** *(flag `streak`)* — self-hides under 3 consecutive logged days.
 
-**Data loaded:** persons, groups (also pushed to the Zustand store), this+previous period
-txns, global net, per-group budget analytics, recurring rules, `computeHealthScore`,
-`buildUpcoming`, and (Month view) the last-month totals that feed the forecast + shift
-teaser. Reads AsyncStorage `hide_amounts` (obfuscates the hero) and `app_last_open`.
+**Data loaded** via `loadHomeData(db, groups, tab, {forecast, dashboardInsights})`
+(`src/lib/homeData.ts`), with `groups` read from the zustand store rather than re-queried.
+Deps `[groups, tab, flags.forecast, flags.dashboardInsights]`. Budget is stored monthly and
+**scaled to the active period** for the pace line: ÷ days for Today, × 12 for Year. On focus,
+outside the loader: reads AsyncStorage `hide_amounts` (obfuscates the hero), `app_last_open`
+(catch-up check), and the one-shot `pending_first_add` push into Quick Add.
 
 ---
 
-## 4. Groups
+## 5. Groups
 
 **Route:** `app/(tabs)/groups.tsx` · **Question:** "Who/what do I split with, and where do my balances stand?"
 
 ### States
-- **Error:** `ErrorState` + retry. No loading state (renders stale store data until reload).
-- **Empty:** `EmptyState` ("No groups yet" + New Group CTA); separate empty for archived.
+- **Loading:** none — renders stale store data until the reload lands.
+- **Error:** `ErrorState` + retry.
+- **Empty:** `EmptyState` "No groups yet" + New Group CTA; a **separate** `EmptyState`
+  "No archived groups" for the archived view.
 - **Full:** FlatList of group cards + a People balances footer.
 
 ### Layout & actions
 1. **Header** — title flips "Groups"/"Archived"; archive-toggle (only if archived groups exist); **+ New** group (active view only) → GroupForm *(sheet)*.
 2. **People balance chips** (`renderBalances`) — friends with non-zero net; tap → `/add/quick?kind=transfer&to={personId}`.
-3. **Group card** (`renderGroup`) — swipeable (swipe-left → Archive/Restore, suppressed for Personal); icon, name, "member count · spend", **AvatarStack**, **BudgetBar** + utilization label + over-budget badge, **BalanceChip**/chevron. **Tap → `/group/{id}`**.
+3. **Group card** (`renderGroup`) — swipeable (swipe-left → Archive/Restore, suppressed for Personal); icon, name, "member count · spend", **AvatarStack**, **BudgetBar** + utilization label + over-budget badge (in `colors.healthRed`, matching the budget-health scale rather than the expense colour), **BalanceChip** with a chevron beneath it when a balance exists. **Tap → `/group/{id}`**.
 4. **New Group sheet** (`SheetModal` + `GroupForm`): emoji/icon, name, type, members, default split. **Create** → `insertGroup` → reload → `/group/{newId}`.
 
-> **Personal card** (pinned first, "Everything involving you") → **`/personal`** (not `/group/{id}`):
-> the unified view (`app/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs **Activity · Budget ·
-> Recurring**. Activity = every txn involving me (`getMyActivity`) with 🔘 filters
-> `Personal · Groups · All · {each group}`, my-share amounts, tap → source `/txn/{id}`. Recurring =
-> collapsible, grouped by group. Budget tab currently links to the personal budget editor (global
-> budget arrives in Phase 3). See [PERSONAL_REDESIGN.md](./PERSONAL_REDESIGN.md).
+> **Personal card** (pinned first, "Everything involving you") → **`/personal`** (not
+> `/group/{id}`): the unified view (`app/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs
+> **Activity · Budget · Recurring**. Activity = every txn involving me (`getMyActivity`) with
+> 🔘 filters `Personal · Groups · All · {each group}`, my-share amounts, tap → source
+> `/txn/{id}`. Recurring = collapsible, grouped by group. Budget links to the personal budget
+> editor. It also carries what only the group hub used to have: swipe edit/delete, the FAB, the
+> audit log and an overflow menu (Audit log · Export as CSV).
+> See [PERSONAL_REDESIGN.md](./PERSONAL_REDESIGN.md).
 
-**Data loaded:** all groups (→ store), archived groups, me, per-group analytics+members+net,
+**Data loaded:** all groups (→ store), archived groups, me, per-group analytics + members + net,
 global net, all persons, friend balances via `simplify`.
 
 ---
 
-## 5. Group detail & sub-screens
+## 6. Group detail & sub-screens
 
 ### Group hub — `app/group/[id].tsx`
-**Reached from:** Groups list, Home group cards, Plan (personal group), Settings → Budget.
+**Reached from:** Groups list, Home group cards, Insights "See what to cut".
 **Tabs (local state, haptic on switch):** non-personal → **Expenses · Recurring · Budget ·
-Members**; personal → **Expenses · Budget**.
+Members**. A personal id never renders here — it `router.replace`s to `/personal`.
 
-1. **Header** — breadcrumb back `‹ Groups › {name}`; **Insights** chart icon (non-personal) → switches to the in-hub Insights view (`InsightsTab`); **⋯ options** *(sheet)*.
-2. **Group hero** — icon + name + (Personal: "₹X this month" · Shared: **AvatarStack** + "N members").
-3. **Balance card** (non-personal, your net ≠ 0) — "YOU OWE / OWED TO YOU" + amount + counterpart name + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`.
+### States
+- **Loading:** none (store-backed hero renders immediately).
+- **Error:** `ErrorState` + retry.
+- **Not found:** `EmptyState` "Group not found" / "This group may have been deleted or archived." + **Back to Groups**.
+- **Empty per tab:** Expenses gets an `EmptyState`; Budget shows the "no categories" path from the editor.
+
+### Layout
+1. **Header** — breadcrumb back `‹ Groups › {name}`; **Insights** chart icon → the in-hub Insights view (`InsightsTab`); **⋯ options** *(sheet)*.
+2. **Group hero** — icon + name + **AvatarStack** + "N members".
+3. **Balance card** (`GroupBalanceCard`) — when your net ≠ 0: "YOU OWE / OWED TO YOU" + amount + counterpart name + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`. When net **= 0** it renders an explicit **"All settled up"** card (check-circle, `colors.settle`) rather than nothing.
 4. 🔘 **Tab pills** (see set above).
 
-**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search note or category" + 🔘 `All · Expense · Income · Settlement`) → **SectionList** of **TransactionRow** grouped by date. Row tap → `/txn/{id}` (or → recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
+**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search note or category" + 🔘 `All · Expense · Income · Settlement`) → **SectionList** of **TransactionRow** grouped by date. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
 
-**Tab — Budget:** "Budget" heading + **Edit** pill → `/group/{id}/budget`. Overview card (used / of total + **BudgetBar** + counts **over · near limit · on track**); recommendation pills; "Driving overspend" rows (worst-first) *or* "Every category within budget"; "Who paid what" contributions (shared); 🔘 status filter `All · Over · Near limit · On track`; per-category **BudgetBar** cards.
+**Tab — Budget:** "Budget" heading + **Edit** pill → `/group/{id}/budget`. Overview card (used / of total + **BudgetBar** + counts **over · near limit · on track**); recommendation pills; "Driving overspend" rows (worst-first) *or* "Every category within budget"; **"Who paid what" contributions** — a per-member fairness breakdown (ahead/behind their fair share) that the standalone budget-editor route never shows, and the reason both surfaces exist; 🔘 status filter `All · Over · Near limit · On track`; per-category **BudgetBar** cards.
 
-**Tab — Members** (shared): Group balances (Total spent · Your balance); member rows (avatar, name, "is owed / owes / settled"); **Invite someone** → `/group/{id}/members`; 🔘 **Simplify debts** *(toggle)* ("Fewest payments" ↔ "Every direct debt"); **BalanceRow** settlement rows ("N payments to settle") → **Settle amount** → `/add/quick?kind=transfer&from=&to=&amount=&groupId=`.
+**Tab — Members:** Group balances (Total spent · Your balance); member rows (avatar, name, "is owed / owes / settled"); **Invite someone** → `/group/{id}/members`; 🔘 **Simplify debts** *(toggle)* ("Fewest payments" ↔ "Every direct debt", persisted to the group row); **BalanceRow** settlement rows ("N payments to settle") → **Settle amount** → `/add/quick?kind=transfer&from=&to=&amount=&groupId=`.
 
 **Tab — Recurring:** active / paused / ended rules; row → `/group/{id}/recurring?focus={ruleId}`; add → `/add/quick?groupId={id}&kind=expense`.
 
-**Insights view** (header chart icon): per-member spend bars, top categories, recommendations (the real group insights, via `InsightsTab`).
+**Insights view** (header chart icon): per-member spend bars, top categories, recommendations, via `InsightsTab`.
 
-**⋯ Options sheet:** **History** (`/history?groupId={id}`) · **Edit group** (`/group/{id}/edit`) · **Archive group** (confirm → `archiveGroupSafe` → back). *(Recurring & Manage-members were removed — they're tabs now.)*
+**⋯ Options sheet:** **Audit log** (`/history?groupId={id}`) · **Export as CSV** · **Edit group** (`/group/{id}/edit`) · **Archive group** (confirm → `archiveGroupSafe` → back).
 
 ### Sub-screens
-| Screen | Route | Purpose & key actions |
-|---|---|---|
-| **Budget editor** | `group/[id]/budget.tsx` | Per-category limit + 🔘 cadence *(sheet)*; collapsible sections; **Save** → `setCategoryBudgets` (only amounts > 0). Deep-link `?category=` auto-focuses a row. |
-| **Edit group** | `group/[id]/edit.tsx` | `GroupForm`; **Save** diffs members (add/remove); Archive → `/groups`; Delete → `deleteGroup` (Personal can't be deleted). |
-| **Members** | `group/[id]/members.tsx` | Avatar tap → photo picker; rename *(sheet)*; swipe-Remove (**blocked if net ≠ 0** — "Settle up first"); **Add or create person** via `PersonPicker` (multi-select + inline create). |
-| **Recurring** | `group/[id]/recurring.tsx` | Per-rule: **Skip** / **Undo skip** / **Pause·Resume** / **Stop** (confirm → `endRecurring`). `?focus=` highlights a card. |
+| Screen | Route | Purpose & key actions | States |
+|---|---|---|---|
+| **Budget editor** | `group/[id]/budget.tsx` | Per-category limit + 🔘 cadence *(sheet)*; collapsible sections; **Save** → `setCategoryBudgets` (only amounts > 0). `?category=` auto-focuses and scrolls to a row. Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories`. `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts. | Error + retry · `EmptyState` "No categories yet" · pull-to-refresh |
+| **Edit group** | `group/[id]/edit.tsx` | `GroupForm`; **Save** diffs members (add/remove); Archive → `/groups`; Delete → `deleteGroup` (Personal can't be deleted). | Error + retry only — it's a form, deliberately no pull-to-refresh |
+| **Members** | `group/[id]/members.tsx` | Avatar tap → photo picker; rename *(sheet)*; swipe-Remove (**blocked if net ≠ 0** — "Settle up first"); **Add or create person** via `PersonPicker` (multi-select + inline create). | Error + retry · pull-to-refresh · no empty state (you are always a member) |
+| **Recurring** | `group/[id]/recurring.tsx` | Per-rule: **Skip** / **Undo skip** / **Pause·Resume** / **Stop** (confirm → `endRecurring`). `?focus=` highlights a card. | Error + retry · `EmptyState` "No recurring transactions" · pull-to-refresh |
 
 ---
 
-## 6. Add flows
+## 7. Add flows
 
-All add screens are modal sheets (slide from bottom). Money parsed via `parseToPaise`;
-saves wrapped in try/catch with haptic + Alert on failure.
+Both add screens are `fullScreenModal` presentations sliding from the bottom. Money parsed via
+`parseToPaise`; saves wrapped in try/catch with haptic + Alert on failure. Neither gets
+pull-to-refresh — they're wizards.
 
-### Quick Add — `app/add/quick.tsx`
+### 7.1 Quick Add — `app/add/quick.tsx`
 **Purpose:** log one expense / income / settlement transfer (create or edit).
-1. **ModalHeader** + 🔘 **kind** — `Expense · Income · Transfer` (hidden when editing; Income forces the Personal group).
-2. **Amount input** (large SpaceMono).
-3. **Expense/Income body:** category + date pills (→ `CategoryPicker` / `DatePickerSheet`); **GroupSelector** (expense, >1 group) — frequent-group pills + a **More** picker *(sheet)*; Title/Note card; **budget nudge** ("₹X left in {cat} this month", from `getAffordSnapshot`); **More options** (smart-category note, **Split by items** → `/add/itemized`, attach receipt, location, recurring card); split-with + paid-by rows; remainder warning.
-4. **Transfer body** (`TransferBody`): from/to people, scope (per-group or "all groups"), 🔘 pay-method (UPI/Cash/Bank), note.
-5. **SplitSheet** *(sheet, shared expense)* — 🔘 `Equal · Exact · % · Shares`.
-6. **Smart category** (flag `smartCategory`): typing a title auto-picks a category via learned overrides → rules → "Other".
-7. **Save** (`✓`, gated by `canSave`): transfer → `handleSaveTransfer` (`planAllGroupsSettlement` largest-first, or single group); edit → `updateTxn`; recurring-edit → `splitRecurringSeries` ("this & future"); new expense → duplicate-check (`findRecentDuplicate`, ±24 h) → `insertTxn`.
-8. **Receipt attach:** iOS action sheet (camera/library); storage-full → Alert with a `/storage` deep-link; expense still saves.
+1. **ModalHeader** + 🔘 **kind** — `Expense · Income · Transfer` (Transfer hidden unless `flags.splitting` or you're editing an existing transfer; Income forces the Personal group).
+2. **Amount input** (large SpaceMono) — `sanitizeAmountInput` caps it live, `parseToPaise` on read.
+3. **Expense/Income body:** category + date pills (→ `CategoryPicker` / `DatePickerSheet`); **GroupSelector** (expense, >1 group) — frequent-group pills + a **More** picker *(sheet)*; Title/Note card; **budget nudge** ("₹X left in {cat} this month", from `getAffordSnapshot`); **More options** (smart-category note, **Split by items** → `/add/itemized`, attach receipt, location, pay method, recurring card); split-with + paid-by rows; remainder warning.
+4. **Transfer body** (`TransferBody`): from/to people, scope (per-group or "all groups"), 🔘 pay method, note.
+5. **SplitSheet** *(sheet, shared expense)* — 🔘 `Equal · Exact · % · Shares`; **PayersSheet** for who paid how much.
+6. **Smart category** *(flag `smartCategory`, off by default)*: typing a title auto-picks a category via learned overrides → rules → "Other".
+7. **Save** (`✓`, gated by `canSave` — see §16): transfer → `handleSaveTransfer` (`planAllGroupsSettlement` largest-first, or a single group); edit → `updateTxn`; recurring-edit → `splitRecurringSeries` ("this & future", atomically capping the old rule and starting a new one); new expense → duplicate-check (`findRecentDuplicate`, ±24 h) → `insertTxn`. Then `haptic.success()` → `refresh()` → `router.back()`.
+8. **Receipt attach:** iOS action sheet (camera/library); storage-full → Alert with a `/storage` deep-link; the expense still saves without the photo.
 
-### Income — handled by Quick (`app/add/quick.tsx`, `kind='income'`)
-There is no separate income screen anymore — the old `app/add/income.tsx` was folded into Quick
-(one code path, unified category pill + picker). Selecting **Income** forces the Personal group,
-loads the **income** category catalog, and saves with `payments:[{me,total}]`, `shares:[]`. Add /
-edit / recurring-edit all run through Quick.
+### 7.2 Income — handled by Quick (`kind='income'`)
+There is no separate income screen — the old `app/add/income.tsx` folded into Quick (one code
+path, unified category pill + picker). Selecting **Income** forces the Personal group, loads the
+**income** category catalog, and saves with `payments:[{me,total}]`, `shares:[]`. Add / edit /
+recurring-edit all run through Quick.
 
-### Itemized — `app/add/itemized.tsx`
-4-step wizard with progress dots:
-1. **Items** — name/qty/price rows; live subtotal; Tax/Tip/Discount adjustments.
-2. **Assign** — assign each item to people ("Split unassigned equally" shortcut); per-person totals; unassigned banner.
-3. **Payers** — who paid how much; balanced/remaining indicator.
-4. **Review** — category, note, location, your-share + paid-by cards. **Save** → `insertItemizedTxn` / `updateItemizedTxn`.
+### 7.3 Itemized — `app/add/itemized.tsx`
+4-step wizard with progress dots (`ITEMIZED_STEPS`, titles from `STEP_TITLE`):
+1. **Items** ("Add items") — name/qty/price rows; live subtotal; **Scan receipt** (§7.4); four adjustment types.
+2. **Assign** ("Assign items") — assign each item to people ("Split unassigned equally" shortcut); per-person totals; unassigned banner.
+3. **Payers** ("Who paid?") — who paid how much; balanced/remaining indicator reading **"Must equal total ₹X"**.
+4. **Review** ("Review & save") — category, note, location, your-share + paid-by cards. **Save** → `insertItemizedTxn` / `updateItemizedTxn`, which persists `line_item` rows (with `split_mode`/`split_values`) and an `adjustments` JSON blob so the bill round-trips on edit.
 
-Pure helpers (`computeAdjustedTotal`, `computeItemSubtotal`, `computePerPersonShares`) handle
-math including exact remainder distribution.
+**Adjustments** are **Tax · Tip · Service · Discount** (`ADJUSTMENT_LABELS` in
+`src/hooks/useItemizedForm.ts` — `service` renders as "Service Charge"), each flat or %, applied
+via `computeAdjustedTotal` and floored at 0. Pure helpers (`computeAdjustedTotal`,
+`computeItemSubtotal`, `computePerPersonShares`) handle the math, scaling every share by the
+adjustment ratio and nudging the rounding remainder so shares sum exactly.
+
+### 7.4 Receipt scanning (live, iOS)
+Step 1 of the itemized wizard has a **Scan receipt** button (Feather `camera`) that opens an
+`ActionSheetIOS` with **Take Photo / Choose from Library**. While a scan runs the label reads
+"Reading receipt…" and `ScanningOverlay` blocks all interaction — including the manual "Add
+item" — for the duration.
+
+Flow (`useItemizedForm.handleScanReceipt`):
+1. `pickAttachment(source)` — asks the OS for camera or media-library permission and returns
+   `null` on cancel **or** denial (indistinguishable by design; the flow simply aborts).
+2. A pre-flight `waitForFileReady(uri)` poll: a large camera photo can still be mid-flush when
+   the picker resolves, so the file is retried until it reports non-zero size. If it never does,
+   the scan sheet opens showing a `[Pre-flight check failed]` diagnostic that names the copy
+   step explicitly rather than blaming the OCR.
+3. `getReceiptExtractor()` picks the provider from `settings.ocrProvider()` and extracts line
+   items.
+4. **`ReceiptScanSheet`** *(sheet)* — a raw-OCR-text verification panel plus a checklist of
+   candidate line items, all pre-selected. Uncheck what's wrong, then **Add** appends the rest
+   to the item list. The raw-text panel is **device-provider only**: `rawText` is `null` on the
+   cloud path, because the model returns structured items rather than flattened text.
+
+**Two providers** (`src/lib/ocrProviders/`), documented in full at `ocrProviders/index.ts`:
+
+| Provider | What it is | Privacy |
+|---|---|---|
+| `gemini` (**default**) | Sends the photo to Gemini Flash's free tier through `server/receipt-ocr-proxy`. Best free accuracy — the model sees the real 2-D layout instead of flattened OCR text. | **The photo leaves the device.** See §19. |
+| `device` | Apple Vision OCR (`modules/expo-ocr`) + the regex line-item heuristic in `src/lib/ocr.ts`. Weakest on two-line item layouts, which is exactly why the raw-text panel exists. | Fully offline; the photo never leaves the phone. |
+
+**Choosing the provider:** Feature management → Smart capture → **Cloud Receipt Scanning**
+*(toggle)*. On = `gemini`, off = `device`; it writes `settings.setOcrProvider`, not a feature
+flag, because it selects between two implementations rather than showing/hiding a surface.
+Neither direction warns — off is the private choice and needs no defence, and on is already the
+default, so a confirm on returning to the default would be theatre. The row's caption changes
+with the state and names the consequence either way, and it is **deliberately not dimmed when
+off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which it isn't.
+
+> Receipt scanning itself still has **no on/off switch** — it ships unflagged, so the Scan
+> button can't be hidden. Tracked as [DEBT_TRACKER.md](./DEBT_TRACKER.md) F7.
 
 ---
 
-## 7. Plan tab & savings
+## 8. Plan tab & savings
 
 ### Plan — `app/(tabs)/savings.tsx` (route name stays `savings`)
 **Question:** "What am I saving toward, and what will my month look like?"
-- **States:** `ErrorState` + retry; pull-to-refresh.
+
+### States
+- **Loading:** none.
+- **Error:** `ErrorState` + retry.
+- **Empty:** goals list gets an `EmptyState` "No savings goals yet"; the rest of the screen still renders.
+- **Full:** money card + insights + goals + upcoming + forecast. Pull-to-refresh throughout.
+
 1. **ScreenHeader** "Plan" (large) + month pill.
-2. **Header icons** (top-right, not pills): `Insights` (always, `/insights`) · `Recurring` (flag `recurring`, `/plan/recurring`) · `Can I afford?` (`affordCheck`, `/afford`). *(Reminders lives in Settings; Reports is reached from Insights/Settings, not here.)*
-3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — net "Total Money": Your money / Cash available / Investments / Credit available / Credit used. Tap **edit** → **MoneyEditorSheet** to set the cash/investment/credit figures. (Replaced the old savings-Pool + "Cash available" cards — funding is now direct to goals, no pool.)
-4. **Savings insights** card (`savingsInsights`): opportunity-cost / habit nudges.
-5. **Goals** (`savingsGoals`): `DraggableList` (drag = funding priority); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → full goal sheet (name, target, icon, color, allocation + frequency, target-date) → `insertGoal`. / **EmptyState**.
-6. **ComingUpList** "Upcoming this month".
-7. **plan/ForecastCard** — month-end projection (distinct component from the Home `home/ForecastCard`).
+2. **Header icons** (top-right, **not pills**): `Insights` (always, `/insights`) · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Can I afford?` *(flag `affordCheck`, `/afford`)*. Reminders lives in Settings; **Reports is not reached from here** — it's Settings → Export & reports.
+3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — net "Total Money": Your money / Cash available / Investments / Credit available / Credit used. Tap **edit** → **MoneyEditorSheet** to set the cash / investment / credit figures. (Replaced the old savings-Pool + "Cash available" cards — funding is direct to goals, there is **no pool**.)
+4. **Overspend-raid notice** — when `runOverspendRaid` pulled from goals to cover negative cash, a notice names the raided goals with **Undo** → `undoOverspendRaid` re-funds the exact amounts.
+5. **Savings insights** card *(flag `savingsInsights`)*: opportunity-cost / habit nudges.
+6. **Goals** *(flag `savingsGoals`)*: `DraggableList` (drag = funding priority → `reorderGoals` writes `sort_order`); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → goal sheet (name, target, icon, colour, allocation + frequency, target-date) → `insertGoal`. Completed goals sink below the active list with a distinct card.
+7. **ComingUpList** "Upcoming this month".
+8. **plan/ForecastCard** — month-end projection (a distinct component from the Home `home/ForecastCard`).
 
 ### Goal detail — `app/savings/[id].tsx`
 SVG progress ring; Saved/Remaining/Goal tiles; monthly-contribution card with nudge;
 overfunded banner; contribution history.
-- **Add to goal** → `depositAndAllocate` (tops the pool up by the shortfall) + fires `GoalCelebration` at 100%.
-- **Withdraw** → `withdrawFromGoal` (clamped to saved). **Adjust** → `updateGoal`. **Lock** → `setGoalLocked`. **Delete** → confirm → `/savings`.
+- **States:** skeleton while loading · `EmptyState` "Goal not found" · `EmptyState` "No contributions yet" for an unfunded goal · error + retry · pull-to-refresh.
+- **Add funds** *(sheet)* → `fundGoal` (writes an `allocate` ledger row) + fires `GoalCelebration` at 100%.
+- **Withdraw to cash** *(sheet)* → `withdrawFromGoal` (clamped to saved). **Adjust goal** *(sheet)* → `updateGoal`. **Protect** → `setGoalLocked`, explained by **LockExplainerSheet**. **Delete** → confirm → `/savings`, restorable via `restoreGoal`.
 
 ### Savings automation
 `runSavingsMaintenance` (on boot + foreground): leftover-sweep → scheduled allocations
-(`planAutoAllocations`, drag-rank order) → reconcile. Auto-sweep is opt-in (`auto_sweep_enabled`).
+(`planAutoAllocations`, drag-rank order, advancing the anchor only for periods actually funded)
+→ overspend raid (`planOverspendRaid`, lowest-ranked **unlocked** goals first) → reconcile.
+Auto-sweep is opt-in (`auto_sweep_enabled`).
 
 ---
 
-## 8. Settle up
+## 9. Settle up
 
 **No standalone route** — `app/settle.tsx` is **deleted**. Settling is the **Transfer pill
-inside Quick Add** (`TransferBody` + `settleScope.ts`). It records a `kind:'settlement'` txn
-(payment from → share to) with `pay_method`, into a shared group; it does **not** count as
+inside Quick Add** (`TransferBody` + `src/lib/settleScope.ts`). It records a `kind:'settlement'`
+txn (payment from → share to) with `pay_method`, into a shared group; it does **not** count as
 spending. **Reached from** (all open `/add/quick?kind=transfer…`):
 - Home **BalanceStrip** → `…&` (picks a counterpart in the flow)
 - Groups **People chip** / Friends row → `…&to={personId}`
@@ -268,187 +445,730 @@ spending. **Reached from** (all open `/add/quick?kind=transfer…`):
 - Group **Members** settlement rows → `…&from=&to=&amount=&groupId=`
 - **Reminders** settle-ups → `…&to={counterpart}`
 
-Scope can be a single group or "all groups" (`planAllGroupsSettlement`, largest-first).
+**UPI handoff.** When the recipient has a `person.upi_vpa` and an amount is entered, `TransferBody`
+shows **Pay ₹X via UPI** — `buildUpiUri` (`src/lib/upiIntent.ts`) builds a `upi://pay?pa=…&am=…&cu=INR`
+URI and `Linking.openURL` hands it to the user's own UPI app. Money moves peer-to-peer between the
+two people's accounts; the app never touches funds and **never records a settlement it did not
+observe** — saving stays a separate, explicit step. No VPA → no button, and settling behaves as before.
+
+`computeTransferScopes` builds the per-group and global pair balance using the same `simplify`
+as every other balance surface. Scope can be a single group or "all groups"
+(`planAllGroupsSettlement`, largest-balance-first, remainder onto the last group), then one
+`recordSettlement` per plan row. **No shared group between the two people → an explicit Alert**,
+not a silent failure.
 
 ---
 
-## 9. Transaction & category detail
+## 10. Import → Review
+
+The ingestion pipeline. Nothing an import produces touches balances, budgets or reports until
+a row is confirmed in Review — `pending_txn` is a genuine staging table.
+
+### 10.1 Import — `app/import.tsx`
+**States:** no loading/error/empty states — it's a form, and every failure is a specific `Alert`
+(see below). No pull-to-refresh.
+
+1. **ScreenHeader** "Import transactions" + intro copy naming the accepted sources.
+2. **Choose a file** — `DocumentPicker` limited to PDF · Excel (.xlsx/.xls) · CSV · text. Label flips to "Reading PDF…" while extracting.
+   - **PDF** → base64 → the off-screen `PdfTextExtractor` WebView runs pdf.js → text back. (RN can't read a compressed/FlateDecode PDF directly, hence the WebView.)
+   - **xlsx** → `readXlsx(bytes)` → `parseAnyWorkbook`.
+   - **anything else** → read as text → `parseAnyText`.
+3. **File result card** — format name, "N transactions found · M lines skipped", filename, and an `×` to clear. A picked file is **never** loaded into the paste box: detection already answered the format question, so there's nothing to decide.
+4. 🔘 **Pasted-text source** — `Google Pay · Bank / UPI (CSV) · Email alert` (default `gpay`), consulted **only** for pasted text no detector claims. Each selection shows its own hint (how to copy a GPay statement; that one alert = one transaction).
+5. **Paste box** (monospace, 200 pt min) → **Parse**.
+6. **Add N to review** → `insertPending` → `refresh()` → `router.replace('/review')`.
+
+Each row is enriched on the way in: category from the source when it carries one (our own CSV
+export, a Paytm tag) else `matchCategory(description, catalog-for-that-kind)`; pay method from
+`r.payMethod ?? detectPayMethod(r.raw) ?? null`. `parseAnyText` / `parseAnyWorkbook`
+(`src/lib/importDetect.ts`) try parsers most-specific-first — Paytm (`paytmParse.ts`), Google
+Pay (`gpayParse.ts`), transaction-alert emails (`emailTxnParse.ts`), then generic CSV.
+
+**Failure messages are deliberately specific** — the three cases are distinguishable:
+| Case | Message |
+|---|---|
+| Picked file parsed, 0 rows | "No transactions in that file" — names the detected format and suggests pasting instead. |
+| PDF read, **0 characters** extracted | "pdf.js read the PDF but got 0 characters of text (it may be a scanned/image PDF). Open the statement, select all, and paste below." |
+| PDF read, text but **0 rows matched** | "Extracted N characters but no transactions matched a known statement layout" — **plus the first 200 characters**, so the layout can be diagnosed. |
+| pdf.js / WebView threw | "PDF read failed" + the **real** underlying message, not a generic one. |
+| Picker or file read threw | "Could not read that file" + the accepted formats. |
+
+### 10.2 Review — `app/review.tsx`
+The staging inbox, and the largest screen in the app. One screen, no wizard: every pending row
+is fully editable in place, edits auto-save as drafts, and **only Confirm/Save commits**.
+
+### States
+- **Loading:** four `SkeletonCard`s at 150 pt.
+- **Error:** `ErrorState` + retry.
+- **Empty (nothing pending):** `EmptyState` "Nothing to review" + **Import transactions** → `/import`.
+- **Empty (filtered):** a *different* `EmptyState` "No matches" + **Show all** → clears focus, filters and the active view.
+- **Full:** `SectionList` + sticky footer. Pull-to-refresh.
+
+### Layout
+1. **ScreenHeader** "Review" + right slot: **⋯** (overflow) normally, **Cancel** in selection mode. Hidden when nothing is pending.
+2. **RecurringSuggestionBanner** *(flag `recurringSuggest`)* — appears **after a batch Save**, never on load, and never auto-creates anything. Tap → **RecurringSuggestionsSheet** to pick which candidates become monthly rules (`convertToRecurring`). Detection is scoped to the batch just committed (`detectRecurringCandidates`), skips manually-typed rows, and requires a category.
+3. **Working-set banner** — when focused, filtered, or a saved view is active: the mode icon, "{name} · N of M", "· paid by {person}" when the view names a payer, and **Show all**.
+4. **List header** — "TO REVIEW", "N transactions. Set each one, then Confirm to save. Changes are kept as you go.", and an **All to:** row of one-tap bulk-destination chips (`Personal` + the first three shared groups). In selection mode this becomes "N selected" + **Select all / Clear**.
+5. **Section headers** — rows are grouped by `source` in canonical `TXN_SOURCE` order, with an icon, label and count. **Headers only render when more than one source is present** — a single source needs no header.
+6. **Per-row card** (see below).
+7. **Sticky footer** — **Save all N** normally; in selection mode a bulk bar: **Focus** · **Group** · **Save N**.
+
+### The row
+| Control | Behaviour |
+|---|---|
+| Description + timestamp | Read-only, `d MMM · h:mm a`. |
+| Checkbox | Selection mode only. |
+| Amount | Inline `TextInput`, digits and `.` only. Local on keystroke, flushed to the draft **on blur** (`onEndEditing`) — not per character. |
+| 🔘 Kind | `Exp · Inc · Txfr` ("Transfer" is the UI name for a `settlement`). Switching kind **clears the category** (the picker's list changes with it, so the old name would be a stale chip) and forces non-expense rows to Personal. |
+| 🗑 | Remove from the inbox — not saved anywhere — with Undo. |
+| Category pill | → the shared `CategoryPicker` *(sheet, `forceOpen hideTrigger`)*, catalog chosen by the row's kind. |
+| Destination pill | → "Personal or group" *(sheet)*. Hidden for income (always personal) and when there are no shared groups. |
+| Direction pill | Transfers only: **Money in / Money out**, one tap to flip. Seeded from the statement, but not every export signs its amounts — and money arriving can be a transfer *to* you rather than income. |
+| Counterparty pill | Group transfers only: "Who paid you? / Who did you pay?" *(sheet)*, listing the group's **other** members. Renders in `colors.expense` until set, because the row can't commit without it. A group with no other members says so instead of showing an empty list. |
+| Pay-method pill | → "How was it paid?" *(sheet)* — all 7 methods with emoji, plus **Clear**. Pre-filled from detection when the source carried a cue. |
+| Inline split | Group **expenses** only (a group transfer settles instead): `SplitEditor` with member toggles, mode, per-member values, and a live footer reading "Pick who shares this" / "Balanced" / "₹X unassigned" / "₹X over". |
+| **Confirm** | Per-row commit. Disabled until `ready`; hidden in selection mode. |
+
+**Category learning + fan-out:** setting a category calls `recordCorrection(description,
+category)` — the same learner Add-expense auto-suggests from — then, if other pending rows look
+like the same merchant (`isSimilarMerchant`), offers **"Apply to N"** vs **"Just this one"**.
+Never silent, never automatic.
+
+**Commit path.** `planCommit` (`src/lib/reviewCommit.ts`) resolves a row to its insert shape or
+refuses it. A refusal is explained by amount-vs-split: "Add an amount" when ≤ 0, else "Balance
+the split". `insertCommit` → `insertTxn` + `deletePending`, returning the pre-commit snapshot.
+Every commit path has a true inverse:
+
+| Action | Undo |
+|---|---|
+| **Confirm** one row | "Saved to {dest}" → `softDeleteTxn(txnId)` + `restorePending(snap)` |
+| **Save all / Save selected** | Confirms the count and names how many were **skipped** and why, then "Saved N transactions" → reverses every row |
+| **Remove** a row | "Removed from review" → `restorePending` |
+| **Clear all** | Captures the latest drafts first, then "Cleared N transactions" → restores every one |
+
+**Bulk & focus.** Selection mode drives three actions: **Focus** pulls the selected rows into an
+ephemeral in-Review subset (no DB group, no persistence), **Group** bulk-assigns a shared group
+(confirmed by Alert, and dropping each row's counterparty since it belonged to the old group),
+and **Save N** batch-commits.
+
+**Filters** (`src/lib/reviewFilter.ts`) narrow the working set by text, category (chips built
+from the categories actually present), amount range and date range — ephemeral, via `FilterForm`.
+
+**Saved views** (`src/lib/reviewViews.ts`, AsyncStorage) persist a filter plus an optional target
+group and default payer. Applying one sets the filter, bulk-assigns its **expense** rows to its
+group (income is always personal), and marks its payer active so commits attribute payment to
+that person — the "someone else always pays for this group" case.
+
+---
+
+## 11. Transaction & category detail
 
 ### Transaction detail — `app/txn/[id].tsx`
-Hero amount (kind-colored) + category + note + cash line; meta card (When / Group / Paid via /
+**States:** error + retry · `EmptyState` "Transaction not found" · no pull-to-refresh (it
+refetches on focus already — it's a detail + actions surface, not a feed).
+
+Hero amount (kind-coloured) + category + note + cash line; meta card (When / Group / Paid via /
 Added by / recurring link → `/group/{id}/recurring?focus=` / Location → opens Maps); receipt
-section (preview/add/replace/remove; not for settlements); split summary; itemized items
+section (preview / add / replace / remove; not for settlements) with a **full-screen attachment
+viewer** (`Modal transparent animationType="fade"`); split summary; itemized line items
 (read-only); audit-log timeline; **Delete** (soft-delete + undo → back).
 - **Edit** (only if not a materialized recurring occurrence) → routes to the right add screen (itemized / transfer / income / quick).
 
 ### Category insights — `app/category/[name].tsx`
-Reached from Home category rows (`?period=`) and Reports donut — a **comprehensive
-category-insights page** (all figures = my share). Period segment (Today/Month/Year); budget
-card (prorated) or amount card + "set budget"; **Where it goes** (personal vs each group);
-**Top places** (location-tagged); **Recurring** rules in the category → `/group/{id}/recurring`;
-**Goals** tagged to it → `/savings/{id}`; transaction list → `/txn/{id}`.
+**States:** `Skeleton`/`SkeletonCard` while loading · error + retry · `EmptyState` "No
+transactions" scoped to the period noun · pull-to-refresh.
+
+Reached from Home category rows (`?period=` carries the active tab) and the Reports donut — a
+comprehensive category page (all figures = **my share**). Period segment (Today/Month/Year);
+budget card (prorated) or amount card + "set budget" → `/group/{personal}/budget?category=`;
+**Where it goes** (personal vs each group); **Top places** (location-tagged); **Recurring** rules
+in the category → `/group/{id}/recurring?focus=`; **Goals** tagged to it → `/savings/{id}`;
+transaction list → `/txn/{id}`.
 
 ---
 
-## 10. Settings & sub-screens
+## 12. Analytics — Reports, drill-down, Insights
 
-### Settings — `app/(tabs)/settings.tsx`
-Static config list (loaded once; no loading/error state).
-1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), "Offline-first · no accounts".
+### Reports — `app/reports.tsx` (the analytics home)
+**States:** `Skeleton`/`SkeletonCard` behind an **artificial 450 ms floor** so the skeleton never
+flashes · error + retry · `EmptyState` "Nothing to report yet" · pull-to-refresh.
+
+`ScreenHeader` "Reports" + CSV/PDF export (right slot). Month nav — **cannot advance past the
+current month** (`reports.tsx:81`). SPENT/EARNED cards; then the synced breakdown: **top category
+labels** (`CategoryRankList`) + a **donut** (`CategoryDonut`, no bottom legend, centre label
+auto-shrinks to fit) + a **6-month trend** (`TrendBars`) — all two-way synced via `selectedCat`,
+so picking a category in any one redraws the trend for it. Un-adopted category names fold into
+one **"Others"** slice (`foldUncategorized`). Forecast line; year-in-review; export CSV / PDF.
+Tapping a category opens the drill-down.
+
+### Report transactions — `app/report-transactions.tsx`
+**States:** error + retry · `EmptyState` "No transactions" · pull-to-refresh.
+
+The month-scoped drill-down from Reports. Accepts `?month=yyyy-MM` and `?category=` (encoded),
+which sets the window and pre-applies the filter. Filters by category / type / group + sort;
+rows → `/txn/{id}`.
+
+### Insights — `app/insights.tsx` (narrative only)
+**States:** error + retry · `EmptyState` "No insights yet" · pull-to-refresh.
+
+All figures are **my share**, on the same basis as Home (`getMyGlobalBudgetStatus` for the budget it
+is compared against). A `SampleNote` under the eyebrow discloses how many transactions the
+projections rest on. `loadInsightsData` takes an injected `now` so it is deterministic.
+
+`ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
+overspend) → "See what to cut" (`/group/{personal}`); month-end **forecast line chart** (x-axis
+labels sized so they don't truncate); **shifts vs last month**; 🔘 **what-if** `10% · 20% · 30%`;
+recommendations; drivers; savings insights *(flag `savingsInsights`)*. Donut / trend /
+owe-owed / recurring analytics live in **Reports**, not here — insights has one home.
+
+---
+
+## 13. Settings & sub-screens
+
+### 13.1 Settings — `app/(tabs)/settings.tsx`
+**States:** error + retry; `ActivityIndicator` on the export row while a CSV builds. No loading
+state and no pull-to-refresh — it's a static config list. A persistent status-bar cover view
+keeps content from painting under the clock/notch.
+
+1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), and a privacy subtitle.
 2. **Manage** — People → `/friends` · Categories → `/categories` · **Budget** ("Personal budget") → `/group/{personal}/budget` (→ `/groups` if none).
-3. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`. *(Health/Subscription/Location toggles live in Feature management now, not here.)*
+3. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
 4. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
-5. **Notifications** (flag `reminders`) — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
-6. **Data & Help** — Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
+5. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
+6. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
 7. **About** — version; tap **7×** → `/storage` (hidden debug entry).
 
-### Settings sub-screens
-| Screen | Route | What it does |
-|---|---|---|
-| **People** | `friends.tsx` | You card + contacts with balance chips, group counts, tap → `/add/quick?kind=transfer&to=`; add/rename person *(sheet)*. |
-| **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/color) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Others"). |
-| **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module 🔘 switches by section (Insights & reports · Money tools · Smart capture). Location toggle asks OS permission + writes `save_location`. |
-| **Help** | `help.tsx` | Static FAQ accordion. |
-| **Audit log** | `history.tsx` | Date-grouped change log with colored dots, EDIT/DEL badges, "Load older". Filters by `?groupId=`. |
-| **Search** | `search.tsx` | `Input` + 🔘 kind & source filters → `SectionList` of `TransactionRow` (→ `/txn/{id}`). |
-| **Storage** | `storage.tsx` | Receipt-photo disk usage + "Delete all attachments"; **TESTING:** Load demo data / Erase all data (see §15). |
-| **Notifications** | `settings/notifications.tsx` | Permission banner; 🔘 renewal/daily toggles + `TimePickerSheet`; test notification. |
+### 13.2 Settings sub-screens
+| Screen | Route | What it does | States |
+|---|---|---|---|
+| **People** | `friends.tsx` | You card + contacts with balance chips, group counts, tap → `/add/quick?kind=transfer&to=`; add/rename person *(sheet)*. | Error + retry · `EmptyState` · pull-to-refresh |
+| **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/colour) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Others"). Self-heals an empty catalog. | Error + retry · pull-to-refresh |
+| **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module switches in four sections. Two rows are **not** feature flags and behave differently: **Location Tagging** asks OS permission and refuses if denied (§17), and **Cloud Receipt Scanning** picks the OCR provider (§7.4). Turning **splitting off** first names how many unsettled balances and what amount would disappear (nothing is deleted); turning it on is silent. | No loading/error state — flags are already in context |
+| **Help** | `help.tsx` | Static FAQ accordion. No data access. | None (static) |
+| **Audit log** | `history.tsx` | Date-grouped change log with coloured dots, EDIT/DEL badges, "Load older" (30/page). Filters by `?groupId=`. | Error + retry · `EmptyState` "Nothing logged yet" · pull-to-refresh |
+| **Search** | `search.tsx` | `Input` + 🔘 kind & source filters → `SectionList` of `TransactionRow` (→ `/txn/{id}`). Chip row has a gradient right-edge fade as a scroll affordance. | Error + retry · one `EmptyState` that switches copy between "Search your transactions" and "No matches" · **deliberately no pull-to-refresh** (the list *is* the query result) |
+| **Storage** | `storage.tsx` | Receipt-photo disk usage + "Delete all attachments"; **TESTING:** Load demo data / Erase all data (see §24). | Error + retry |
+| **Notifications** | `settings/notifications.tsx` | Reminder prefs + permission handling + test notification (§18). | Error + retry ("Couldn't load reminder settings") · no pull-to-refresh (it's a form) |
+| **Backup & restore** | `settings/backup.tsx` | §13.3. | `ActivityIndicator` per row while busy; every failure is an Alert |
+
+### 13.3 Backup & restore — `app/settings/backup.tsx`
+The highest-consequence flow in the app. There is **no cloud sync**: this builds a
+passphrase-encrypted snapshot and hands it to the OS share sheet.
+
+1. **Explainer card** — icon, the "your data lives only on this device" note, and **Last backup:
+   {date}** once one exists (`settings.backupAnchorAt()`).
+2. **Create backup** ("Encrypted file") → **PassphraseSheet** *(mode `create`)* →
+   `readAllTables` → `buildBackupPayload` → `encryptPayload` → write to cache as
+   `.bsbackup` → `Sharing.shareAsync`. If sharing isn't available it reports the on-disk path
+   instead of failing. Success stamps `setBackupAnchorAt(Date.now())`.
+3. **Restore from backup** ("Pick a file") → `DocumentPicker` → JSON parse + a `ciphertext`
+   shape check → **PassphraseSheet** *(mode `restore`)* → `decryptEnvelope` → a
+   **destructive-style confirm Alert** naming the backup's date → `restoreAllTables`.
+4. **Standing warning** under the rows: "Restoring replaces ALL current data on this device.
+   This cannot be undone."
+
+**Restore replaces, it does not merge.** `restoreAllTables` toggles `PRAGMA foreign_keys=OFF`
+(a no-op inside a transaction, so it's done outside one), then in a single transaction `DELETE`s
+every one of the 15 `BACKUP_TABLES` in reverse dependency order and re-inserts the backup's rows
+in forward order. Nothing is preserved from the current DB.
+
+**The passphrase is never stored** (`src/lib/backup.ts:12`) — a Keychain-derived key would be
+lost along with a lost phone, defeating the whole feature. **A forgotten passphrase makes its
+backup permanently unrecoverable, by design.** Failure modes are typed and distinguished:
+`BackupWrongPassphraseError` (shown inline in the sheet so the user can retry) vs
+`BackupCorruptError` ("This backup looks corrupted", sheet dismissed). Wrong-passphrase and
+not-a-backup are **deliberately indistinguishable** — an attacker shouldn't be able to tell
+which one they hit.
 
 ---
 
-## 11. Optional modules
+## 14. Optional modules
 
-All 12 keys below gate a real surface and appear in Feature Management. Eight further keys
+`DEFAULTS` in `src/lib/featureFlags.ts` defines **14** flags. All 14 gate a real surface and
+appear in Feature Management; the 15th row below (`save_location`) is a `settings` pref that
+sits in the same list but is not a flag. Seven further keys
 (`dashboardCash/Budget/Donut/Balances/Savings`, `budgetInsights`, `itemizedOcr`) were **deleted
 on 2026-07-28** — they gated nothing, and five of them rendered as working switches that did
-nothing. `src/__tests__/featureFlags.test.ts` now fails if a key stops gating something or stops
+nothing. `src/__tests__/featureFlags.test.ts` fails if a key stops gating something or stops
 being listed in the screen, so this table can't drift back.
 
 | Module | Flag | Surface(s) | Status |
 |---|---|---|---|
+| Group splitting | `splitting` | Groups tab (→ Personal when off), Home owe/owed strip, Add **Transfer** kind | ✅ wired |
 | Savings goals | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
 | Spending forecast | `forecast` | Home `ForecastCard` (Month view) | ✅ wired |
 | Spending insights | `dashboardInsights` | Home ForecastCard shift teaser + Insights | ✅ wired |
-| Financial health | `healthScore` | Home ring → `HealthSheet` | ✅ wired |
-| Savings insights | `savingsInsights` | Insights screen nudges | ✅ wired |
-| Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build for OS notifications) |
-| Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked recurring rules (the log-scanning "detector" was removed in P5) |
-| Smart category | `smartCategory` (off) | Quick-add note | ✅ wired |
+| Financial health | `healthScore` | Home ring → `HealthSheet` (`index.tsx:80` nulls the score when off) | ✅ wired |
+| Savings insights | `savingsInsights` | Plan + Insights nudges | ✅ wired |
+| Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
+| Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked rules only; the log-scanning detector was removed in P5 |
+| Recurring suggestions | `recurringSuggest` | Review post-save banner → `RecurringSuggestionsSheet` | ✅ wired — **on** by default (never auto-creates) |
+| Smart category | `smartCategory` | Quick-add title → category guess | ✅ wired — **on** by default (suggestion only) |
 | Reports donut | `reportsDonut` | `reports.tsx` category donut | ✅ wired |
 | Reports trend | `reportsTrend` | `reports.tsx` 6-month bars | ✅ wired |
-| Afford check | `affordCheck` (off) | Plan chip → `afford.tsx` | ✅ wired |
+| Afford check | `affordCheck` (off) | Plan header icon → `afford.tsx` | ✅ wired |
 | Tracking streak | `streak` (off) | Home `StreakCard` | ✅ wired (self-hides < 3 days) |
-| Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired — a `settings` pref, **not** a feature flag, despite sitting in the same list |
+| Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired — a `settings` pref, **not** a feature flag, despite sitting in the same list (§17) |
+| Cloud receipt scanning | `ocr_provider` pref | Which provider `getReceiptExtractor()` returns (§7.4) | ✅ wired — also a `settings` pref, not a flag: it selects an implementation, not a surface |
 
-Receipt OCR has **no flag**: the engine (`src/lib/ocr.ts`, `modules/expo-ocr/`) is parked because
-it could read a bill's total but not its line items, and its entry point was removed. It is
-dormant, not broken — see AUDIT F-31 / INT-09.
-
-### Reports — `app/reports.tsx` (the analytics home)
-`ScreenHeader` "Reports" + CSV/PDF export (right slot). Month nav; SPENT/EARNED cards; then the
-synced breakdown: **top category labels** (`CategoryRankList`, colored icons) + a **popping donut**
-(`CategoryDonut`, no bottom legend) + a **6-month trend** (`BarChart`) — all two-way synced via
-`selectedCat` (picking a category in any one redraws the trend for it). Un-adopted category names
-fold into one **"Others"** slice (`foldUncategorized`). Forecast line; year-in-review; export CSV / PDF.
-
-### Insights — `app/insights.tsx` (narrative only)
-`ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
-overspend) → "See what to cut" (`/group/{personal}`); **shifts vs last month**; 🔘 **what-if**
-`10% · 20% · 30%`. Analytics (donut/trend/owe-owed/recurring) live in Reports now, not here.
-
-### Reminders — `app/reminders.tsx`
-`ScreenHeader` → upcoming bills (`buildUpcoming`) → "Log payment" (`/add/quick?kind=expense`);
-settle-ups → "Settle now" (`/add/quick?kind=transfer&to=`); settings → `/settings/notifications`.
-
-### Recurring — `app/plan/recurring.tsx`
-Title "Recurring". Tracked recurring **expense rules** + monthly-total summary; rows →
-`/group/{id}/recurring`; empty CTA → `/add/quick?kind=expense`. *(The old log-scanning detector was
-removed in P5 — recurring rules are the single source of truth.)*
-
-### Afford check — `app/afford.tsx`
-Amount input + 🔘 **CategoryChip** picker → yes/tight/no verdict → CTA (`/add/quick` or `/savings`).
+**Receipt OCR has no flag.** It is live and unflagged — see §7.4. The old `itemizedOcr` flag was
+deleted in the 2026-07-28 purge, before scanning shipped, and was never re-added.
 
 ---
 
-## 12. System components & global behaviors
+## 15. Key user flows (FLOW-XX)
+
+Absorbed from `AUDIT.md` §3. Each step names the code that does it.
+
+### FLOW-01 — First run / onboarding
+| # | Step | Code |
+|---|---|---|
+| 1 | Fonts load, `openDB()` runs the schema + migrations + rebuilds + data fixes | `app/_layout.tsx:43`, `src/db/schema.ts` |
+| 2 | `seedIfNeeded` creates the local `person` (`is_me=1`) and the `Personal` group | `src/db/seed.ts` |
+| 3 | `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders` | `app/_layout.tsx:48-50` |
+| 4 | `BrandedLoader` until fonts + DB ready; DB failure → retryable `ErrorState` | `app/_layout.tsx:71-88` |
+| 5 | `LockGate` (biometric, default off) then `OnboardingGate` reads `onboarding_done` | `components/system/{LockGate,OnboardingGate}.tsx` |
+| 6 | 9-stage questionnaire (§1) | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
+| 7 | Intent → `onboarding_intent` **and the feature flags it implies** | `lib/personaDefaults.ts`, `lib/onboarding.ts` |
+| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, a `Total` budget line, and contacts — each step individually try/caught | `src/lib/onboarding.ts:42-88` |
+| 9 | `setMoneyProfile` writes cash / investments / credit, best-effort | `Onboarding.tsx:213-218` |
+| 10 | `onDone()` → `settings.setOnboardingDone(true)` in a `try/finally`; the gate opens regardless | `OnboardingGate.tsx:19-25` |
+| 11 | If the user chose "add my first expense", Home fires a one-shot push to Quick Add and clears the flag | `app/(tabs)/index.tsx:101-108` |
+
+### FLOW-02 — Feature selection / toggle
+| # | Step | Code |
+|---|---|---|
+| 1 | Settings → "Feature management" | `app/(tabs)/settings.tsx` |
+| 2 | S-24 renders the non-toggleable "Core" pillars + the module switches in sections | `app/features.tsx` |
+| 3 | Flipping a switch calls `setFlag(key, value)` from context | `components/system/FeatureFlagsProvider.tsx:25-28` |
+| 4 | Local state updates optimistically; `AsyncStorage.setItem('feature_' + key, …)` is best-effort | `src/lib/featureFlags.ts:67-69` |
+| 5 | Consuming screens re-render and gate with `{flags.x && …}` | e.g. `app/(tabs)/index.tsx` |
+| 6 | On next launch `loadFlags()` multi-gets every key, `DEFAULTS` for unset | `src/lib/featureFlags.ts:56-65` |
+
+Two toggles break the pattern deliberately: **location** must await an OS grant and can be
+refused (§17), and **splitting** warns about hidden balances before turning off (§13.2).
+
+### FLOW-03 — Premium upgrade
+**Does not exist.** No premium tier, paywall, purchase SDK, entitlement check or
+restore-purchases path anywhere. Every feature is available to every user. Recorded so the
+absence is explicit rather than an oversight.
+
+### FLOW-04 — Add an expense (the core flow)
+| # | Step | Code |
+|---|---|---|
+| 1 | Tab-bar FAB → `/add/quick?kind=expense` (full-screen modal from bottom) | `app/(tabs)/_layout.tsx:79`, `app/_layout.tsx:110` |
+| 2 | `useAddTxnForm(params)` loads me, groups, members, categories, flags | `src/hooks/useAddTxnForm.ts` |
+| 3 | Amount typed → `sanitizeAmountInput` caps it live → `parseToPaise` | `components/finance/add/AmountField.tsx`, `src/lib/money.ts` |
+| 4 | Category: manual pick, or auto-guessed from the title when `smartCategory` is on | `src/lib/smartCategory.ts` |
+| 5 | Optional: group, note, attachment, location, pay method, recurrence — all inside `MoreOptions` | `app/add/quick.tsx:147-189` |
+| 6 | Group with >1 member and total > 0 → `SplitSummary` opens `SplitSheet` / `PayersSheet` | `app/add/quick.tsx:191-200` |
+| 7 | Shares via `computeShares`, payments via `computePayments` (default: I paid it all) | `src/lib/splitMath.ts` |
+| 8 | Budget nudge shows remaining in the category as you type | `components/finance/add/BudgetNudge.tsx` |
+| 9 | Save → **duplicate check** for non-recurring expenses; a match prompts "Add anyway?" | `findRecentDuplicate` |
+| 10 | `insertTxn` writes `txn` + payments + shares + audit inside one `withTransactionAsync` | `src/db/queries/transactions.ts` |
+| 11 | `haptic.success()` → `refresh()` → `router.back()` | `useAddTxnForm.ts` |
+| 12 | `refresh()` coalesces 32 ms and bumps a version; the focused screen reloads, background tabs mark dirty | `components/system/DataRefreshProvider.tsx` |
+
+Editing takes the same path via `updateTxn`; a recurring-rule edit goes through
+`splitRecurringSeries` so the old rule is capped and a new one starts, atomically.
+
+### FLOW-05 — Split a bill by items
+| # | Step | Code |
+|---|---|---|
+| 1 | Quick Add → MoreOptions → "Split by items" → `/add/itemized` | `app/add/quick.tsx:155` |
+| 2 | Step 1 **items**: name, qty, unit price → `computeItemSubtotal` = qty × unitPrice. Or **Scan receipt** (§7.4) | `src/lib/itemized.ts:49-53` |
+| 3 | Step 2 **assign**: pick who shares each item; per-item split mode via `splitItemBase` | `src/lib/itemized.ts:24-26` |
+| 4 | Adjustments (tax / tip / service / discount, flat or %) → `computeAdjustedTotal`, floored at 0 | `src/lib/itemized.ts:37-46` |
+| 5 | Steps 3–4: `computePerPersonShares` scales every share by the adjustment ratio and nudges the rounding remainder so shares sum exactly | `src/lib/itemized.ts:60-93` |
+| 6 | Save → `insertItemizedTxn` writes the txn, splits, `line_item` rows and `adjustments` JSON so it round-trips on edit | `src/db/queries/transactions.ts:321` |
+
+### FLOW-06 — Settle up
+| # | Step | Code |
+|---|---|---|
+| 1 | Entry: Home balance strip, Groups "People", group balance card, Friends, Reminders — all push `/add/quick?kind=transfer&to=…` | various |
+| 2 | `computeTransferScopes` builds the per-group and global pair balance using the same `simplify` as everywhere else | `src/lib/settleScope.ts:30-54` |
+| 3 | User picks a scope (one group, or "All groups") and an amount | `components/finance/TransferBody.tsx` |
+| 4 | "All groups" → `planAllGroupsSettlement` distributes largest-first, remainder onto the last group | `src/lib/settleScope.ts:65-88` |
+| 5 | One `recordSettlement` per plan row → `insertTxn` with `kind='settlement'` | `transactions.ts:296-303` |
+| 6 | No shared group between the two people → explicit Alert, not a silent failure | `useAddTxnForm.ts:277` |
+| 7 | Balances recompute from `getGroupNet`/`getGlobalNet`; the settlement cancels the debt naturally because it uses the same payment/share shape | `src/db/queries/balances.ts` |
+
+### FLOW-07 — View the dashboard
+See §4 — the layout list there is this flow's step 6, in order. The load path:
+`useScreenData` → `loadHomeData(db, groups, tab, flags)`; deps
+`[groups, tab, flags.forecast, flags.dashboardInsights]`; focus-time extras (`hide_amounts`,
+30-day catch-up, one-shot first-add push) sit outside the loader.
+
+### FLOW-08 — Import a statement → Review → committed transactions
+| # | Step | Code |
+|---|---|---|
+| 1 | Settings → Import. Pick a file or paste text | `app/import.tsx` |
+| 2 | PDF → base64 → `PdfTextExtractor` WebView runs pdf.js; xlsx → `readXlsx`; else read as text | `import.tsx:100-113` |
+| 3 | `parseAnyText` / `parseAnyWorkbook` pick a parser most-specific-first | `src/lib/importDetect.ts` |
+| 4 | 0 rows → one of three *specific* Alerts (§10.1) | `import.tsx:120-146` |
+| 5 | Each row gets a category guess and a pay method | `import.tsx:153-168` |
+| 6 | `insertPending` → `pending_txn`. **Nothing touches balances or budgets yet** | `src/db/queries/pending.ts:37` |
+| 7 | `refresh()` → `router.replace('/review')`; Home shows an inbox badge | `import.tsx:170-171` |
+| 8 | In Review each row is editable in place; edits auto-save to the row's draft columns | `app/review.tsx`, `updatePendingDraft` |
+| 9 | `planCommit` resolves a row to its insert shape or refuses it | `src/lib/reviewCommit.ts` |
+| 10 | Confirm → `insertTxn` → `deletePending`, plus `recordCorrection` to teach the category learner | `review.tsx:206-266` |
+| 11 | Undo: `softDeleteTxn(txnId)` + `restorePending(snap)` — a true inverse from the pre-commit snapshot | `review.tsx:288-291` |
+| 12 | Bulk confirm and clear-all get the same snapshot-and-undo treatment | `review.tsx:298-367` |
+| 13 | Post-batch, `detectRecurringCandidates` may offer to convert rows into monthly rules | `src/lib/recurringSuggest.ts` |
+
+### FLOW-09 — Set and track a budget
+| # | Step | Code |
+|---|---|---|
+| 1 | Entry: Settings → Budget, Home get-started tile, group Budget tab, or a category's "Set budget" CTA (`?category=` + auto-scroll) | `app/group/[id]/budget.tsx:69-71` |
+| 2 | Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories` | `budget.tsx:98-102` |
+| 3 | Per line: amount + cadence (once / daily / monthly / yearly). `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts | `budget.tsx:104` |
+| 4 | Save → `setCategoryBudgets` upserts `category_budget` rows | `src/db/queries/categoryBudgets.ts:47` |
+| 5 | Tracking: `getCategoryBudgetStatus` compares each line against spend in the window of **its own** cadence, one query per distinct cadence, no rollover | `src/lib/budget.ts:160-179` |
+| 6 | Personal budgets measure **my share across all groups** via `getMyGlobalBudgetStatus` | `src/lib/budget.ts:198` |
+| 7 | Health band from the single `budgetHealth` threshold source: ≥100 red, ≥80 amber | `src/lib/budget.ts:27` |
+
+### FLOW-10 — Fund a savings goal
+| # | Step | Code |
+|---|---|---|
+| 1 | Plan → New goal (name, target, icon, colour, allocation, frequency, deadline) → `insertGoal` | `src/hooks/useSavingsTab.ts`, `savings.ts:79` |
+| 2 | Drag to reorder → `reorderGoals` writes `sort_order` = funding priority | `components/ui/DraggableList.tsx`, `savings.ts:101` |
+| 3 | Manual: "Add funds" on a goal → `fundGoal` writes an `allocate` ledger row | `savings.ts:156` |
+| 4 | Scheduled: on open / foreground, `runAutoFunding` → `planAutoAllocations` funds elapsed periods from available cash in rank order, advancing the anchor only for periods actually funded | `savingsEngine.ts:58` |
+| 5 | If cash went negative, `runOverspendRaid` → `planOverspendRaid` pulls from the lowest-ranked **unlocked** goals | `savingsEngine.ts:101` |
+| 6 | Plan shows a notice naming the raided goals, with Undo → `undoOverspendRaid` re-funds the exact amounts | `app/(tabs)/savings.tsx:115-135` |
+| 7 | Reaching the target triggers `GoalCelebration`; completed goals sink below the active list | `app/(tabs)/savings.tsx:171-180` |
+
+### FLOW-11 — Back up and restore
+See §13.3. The one flow in the app that destroys data on purpose, and the only one whose
+failure mode (a forgotten passphrase) is unrecoverable by design.
+
+---
+
+## 16. Validation rules
+
+Every rule that can block or alter a save, with the copy the user actually sees.
+
+| Field / rule | Rule | On failure |
+|---|---|---|
+| **Any amount** | `parseToPaise` → integer paise; `sanitizeAmountInput` caps the live input. Money is never a float. | Input can't be typed past the cap |
+| **Quick Add `canSave`** | Amount > 0 **and** a category (expense/income) **and**, for a transfer, a from-person, a to-person and a shared group between them | Save button disabled; transfer with no shared group → explicit Alert |
+| **Person name** | ≤ 30 chars; onboarding contacts dedup by name | Truncated / silently deduped |
+| **Budget line** | Only amounts **> 0** are written by `setCategoryBudgets`; a zeroed line removes the budget | Silent (zero = "no budget", not an error) |
+| **Split sum** | `computeShares` / `splitByMode` distribute the exact remainder so shares sum to the total with no rounding drift | Remainder warning in Add; Review row footer reads "₹X unassigned" / "₹X over" |
+| **Itemized payers** | Payments must equal the adjusted total | Step-3 indicator: **"Must equal total ₹X"** |
+| **Itemized assignment** | Items may be left unassigned | Unassigned banner + "Split unassigned equally" shortcut |
+| **Adjustments** | `computeAdjustedTotal` floors the total at 0, so a discount can't produce a negative bill | Silent clamp |
+| **Duplicate expense** | `findRecentDuplicate` matches on amount + group within **±24 h**, for non-recurring expenses only | "Add anyway?" prompt |
+| **Review row commit** | `planCommit`: amount > 0; group expense split balanced; group transfer has a counterparty | Alert — **"Add an amount"** when ≤ 0, else **"Balance the split"** |
+| **Review batch commit** | Unready rows are skipped, not blocked | Confirm names the count saved **and** the count skipped with the reason; all-unready → "Nothing ready to save" |
+| **Member removal** | Blocked while that member's net ≠ 0 | "Settle up first" |
+| **Goal withdrawal** | Clamped to the amount actually saved | Silent clamp |
+| **Goal deletion** | Confirmed, then restorable via `restoreGoal` + the undo toast | — |
+| **Group deletion** | The Personal group can never be deleted | Option absent |
+| **Reports month** | Cannot advance past the current month | Forward arrow disabled |
+| **Import file** | Must parse to ≥ 1 row | One of three specific Alerts (§10.1) |
+| **Backup file** | Must be JSON with a `ciphertext` string | "Not a valid backup file — pick the .bsbackup file this app created." |
+| **Backup passphrase** | Must decrypt to a valid payload | Wrong → inline sheet error, retryable. Corrupt/tampered → "This backup looks corrupted". The two are indistinguishable on purpose |
+| **Attachment copy** | A failed copy (usually a full disk) throws `AttachmentStorageError` | Alert with a `/storage` deep-link; **the expense still saves** without the photo |
+
+---
+
+## 17. Permissions
+
+Four OS permissions. None is requested at launch; each is asked for at the moment it's needed.
+
+| Permission | Asked at | If denied | If revoked later |
+|---|---|---|---|
+| **Camera** | `pickAttachment('camera')` — attach-receipt and Scan-receipt | Returns `null`. The flow aborts silently: a denial and a cancel are indistinguishable to the caller by design (both mean "no photo"). No Alert, no Settings link | Same — the next attempt re-prompts or aborts |
+| **Photo library** | `pickAttachment('gallery')` | Same as camera | Same |
+| **Notifications** | Onboarding stage 8 (priming), and again the first time any reminder toggle is switched on | `settings/notifications.tsx` sets `permStatus='denied'` and leaves the toggle off | A **denied banner** appears at the top of the Notifications screen — "Notifications are off / BudgetSplit can't send you reminders until you allow it" — with **Open Settings to allow** → `Linking.openSettings()` |
+| **Location (foreground)** | Onboarding stage 8, the Feature-management **Location tagging** toggle, and each capture in an add flow | Feature-management shows "Location off / Allow location access for BudgetSplit in your phone's Settings to tag where you spend" and **leaves the toggle off**. A capture inside an add flow returns `null` and the transaction saves without a place | The next capture just returns `null` — location is always best-effort |
+
+**Permission status is re-read, not cached.** The Notifications screen loads
+`Notifications.getPermissionsAsync()` inside `useScreenData`, so every focus and every
+cross-screen write re-syncs to OS truth; a local optimistic `granted`/`denied` only survives
+until the next load. It distinguishes three states — `granted`, `undetermined` (`canAskAgain`),
+and `denied` — and only the third shows the banner, because re-prompting is still possible in
+the second.
+
+**Why location isn't a feature flag.** Flags are optimistic, synchronous and can't fail; this
+toggle can be *refused by the OS*, so it must await a result and then decline to turn on.
+Folding it into `FeatureKey` would mean adding async validation to the flag API for one case.
+It lives in `settings` (AsyncStorage) instead and appears in the same Feature-management list —
+that split is intentional and commented at the call site (`toggleSaveLocation` in
+`app/features.tsx`, which cites AUDIT F-30 / DEBT-04 where it was originally filed as an
+inconsistency).
+
+**Biometrics are not a permission** but behave like one: `LockGate` handles the
+hardware-present-but-nothing-enrolled case explicitly with "Face ID not set up", an **Open iOS
+Settings** button, and an escape hatch — **Disable lock in BudgetSplit** — so a user can never
+be locked out of their own data.
+
+---
+
+## 18. Notifications
+
+All local, on-device scheduling. **No push, no server** (`src/lib/notifications.ts`).
+
+**Three reminder types**, all configured on `/settings/notifications` and persisted as one
+`ReminderPrefs` JSON blob (`src/lib/reminders.ts` — the fourth preference store in the app,
+alongside AsyncStorage flags, `settings`, and the `settings` table):
+
+| Type | Pref | Config |
+|---|---|---|
+| Bill / renewal reminders | `renewals` | Lead days + time-of-day (`TimePickerSheet`) |
+| Daily log reminder | `daily` | Time-of-day |
+| Backup nudge | `backup` | Monthly, counted from `settings.backupAnchorAt()` — **anchored to `Date.now()` the first time it's enabled**, and re-anchored on every backup *and* restore, so it can never nag right after a real backup |
+
+**Scheduling.** `rescheduleReminders` runs on boot and on every `AppState → active`
+(`app/_layout.tsx`), plus after any prefs change. It reads the prefs, builds the plan with
+`buildReminderPlan` (`src/lib/reminderPlan.ts`) from active recurring rules and pending
+settle-ups, `limitReminders` caps the count, and each entry is scheduled by
+`scheduleReminderAt(id, date, title, body)`. That helper **cancels the same id first** so
+rescheduling can't duplicate, and **no-ops on a past date or any error** — so a stale plan
+degrades to silence rather than a burst of notifications.
+
+**Permission.** `requestNotificationPermission()` checks first and only prompts when not
+already granted, so it's safe to call repeatedly. Everything is wrapped so Expo Go (where the
+notification module is unavailable) degrades to a no-op rather than throwing — OS notifications
+need a dev build.
+
+**Test notification.** The Notifications screen can fire one immediately, which is the only way
+to confirm the whole chain on a device without waiting for a real due date.
+
+**Tap-to-open.** Notifications open the app; there is **no deep-link routing from a
+notification payload to a specific screen**. The nearest surfaces are the Reminders screen
+(bills + settle-ups) and the Home catch-up banner. Worth adding, not currently present.
+
+---
+
+## 19. Network & data egress
+
+The app is local-first: SQLite on device, no accounts, no sync, no telemetry, no analytics SDK.
+There are exactly **two** places anything leaves the device, and only one of them sends user
+content.
+
+| # | What | Sends | When |
+|---|---|---|---|
+| 1 | **pdf.js**, loaded in the off-screen `PdfTextExtractor` WebView to read a compressed PDF | Nothing — the library is fetched/cached (`src/lib/pdfjsCache.ts`); the PDF itself is parsed locally | Importing a PDF statement |
+| 2 | **Receipt OCR, cloud provider** — `server/receipt-ocr-proxy` → Gemini Flash | **The receipt photo**, base64-encoded | Scanning a receipt while `settings.ocrProvider()` is `gemini` — **the default** |
+
+### The proxy
+[server/receipt-ocr-proxy/](../../server/receipt-ocr-proxy/) is a stateless **Cloudflare
+Worker** — `index.ts`, ~113 lines, and the repo's only server component. It POSTs
+`{imageBase64, mimeType}` to Gemini with a `responseSchema` and returns
+`{items: [{name, qty, unitPrice}]}`. `GEMINI_MODEL = 'gemini-flash-latest'` is a hardcoded
+constant, not an env var. It stores nothing.
+
+Its only reason to exist is holding `GEMINI_API_KEY` server-side, out of the app bundle. Its
+README puts it plainly: *"this one small stateless function is the whole 'backend'."*
+
+**Config** (README, not in the app): `wrangler secret put GEMINI_API_KEY` → `wrangler deploy` →
+set `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` in `budgetsplit/.env` or the EAS environment.
+
+**Quota caveat.** Gemini's free tier is shared across the whole app, not per-user, and was cut
+50–80% in late 2025. Fine for personal scale; watch it (or move to a paid tier) before any real
+user-base growth. `ocrProviders/index.ts` documents Mistral as a possible automatic fallback —
+documented, **not implemented**.
+
+### What this means for the privacy claims
+The default is `gemini`, so out of the box a scanned receipt photo does reach a third party.
+**Feature management → Smart capture → Cloud Receipt Scanning** turns that off and keeps
+everything on the phone (§7.4). Because the default is the cloud path, any absolute in-app claim
+("zero network calls", "nothing ever leaves your device") would be false as written, so the
+strings in `app/help.tsx`, `app/(tabs)/settings.tsx` and `app/storage.tsx` are scoped instead:
+no accounts, no cloud sync, no tracking, no analytics — with receipt scanning named as the one
+exception, and the toggle named as the way out.
+
+---
+
+## 20. Every screen's states
+
+The codebase is deliberately inconsistent about states, and the inconsistencies are the
+content. Derived from source, cross-checked against `AUDIT.md` §8 ("Error handling: swallowed
+vs. surfaced").
+
+| Route | Loading | Error | Empty | Pull-to-refresh |
+|---|---|---|---|---|
+| `/` Home | none (deliberate) | `ErrorState` + retry | first-run hero + 3 tiles | ✅ |
+| `/groups` | none (stale store data) | `ErrorState` + retry | "No groups yet" **+** separate "No archived groups" | ✅ |
+| `/savings` Plan | none | `ErrorState` + retry | goals: "No savings goals yet" | ✅ |
+| `/settings` | none (static list) | `ErrorState` + retry | n/a | ✖ static config |
+| `/add/quick` | none | try/catch → haptic + Alert | n/a | ✖ wizard |
+| `/add/itemized` | `ActivityIndicator`; `ScanningOverlay` during a scan | try/catch → haptic + Alert | n/a | ✖ wizard |
+| `/afford` | none | `ErrorState` — **never swallowed**, see below | n/a | ✖ form |
+| `/categories` | none | `ErrorState` + retry | self-heals instead | ✅ |
+| `/category/[name]` | `Skeleton` + `SkeletonCard` | `ErrorState` + retry | "No transactions" (period-scoped copy) | ✅ |
+| `/features` | none (flags in context) | none | n/a | ✖ |
+| `/friends` | none | `ErrorState` + retry | `EmptyState` | ✅ |
+| `/group/[id]` | none | `ErrorState` + retry | "Group not found"; per-tab empties | ✖ |
+| `/group/[id]/budget` | none | `ErrorState` + retry | "No categories yet" | ✅ |
+| `/group/[id]/edit` | none | `ErrorState` + retry | n/a | ✖ form |
+| `/group/[id]/members` | none | `ErrorState` + retry | n/a (you're always a member) | ✅ |
+| `/group/[id]/recurring` | none | `ErrorState` + retry | "No recurring transactions" | ✅ |
+| `/help` | n/a | n/a | n/a | ✖ static |
+| `/history` | none | `ErrorState` + retry | "Nothing logged yet" | ✅ |
+| `/import` | button label → "Reading PDF…" | 5 specific Alerts (§10.1) | n/a | ✖ form |
+| `/insights` | none | `ErrorState` + retry | "No insights yet" | ✅ |
+| `/personal` | none | `ErrorState` + retry | "Nothing here yet" **+** "No recurring items" | ✅ |
+| `/plan/recurring` | none | `ErrorState` + retry | "No recurring items yet" | ✅ |
+| `/reminders` | none | `ErrorState` + retry | "Nothing due" | ✅ |
+| `/report-transactions` | none | `ErrorState` + retry | "No transactions" | ✅ |
+| `/reports` | `Skeleton` behind a **450 ms floor** so it can't flash | `ErrorState` + retry | "Nothing to report yet" | ✅ |
+| `/review` | 4 × `SkeletonCard` (150 pt) | `ErrorState` + retry | "Nothing to review" **+** a distinct "No matches" for a filtered-empty set | ✅ |
+| `/savings/[id]` | `Skeleton` + `SkeletonCard` | `ErrorState` + retry | "Goal not found" **+** "No contributions yet" | ✅ |
+| `/search` | none (150 ms debounce) | `ErrorState` + retry | one `EmptyState`, copy switches "Search your transactions" ↔ "No matches" | ✖ **deliberate** — the list *is* the query |
+| `/settings/backup` | per-row `ActivityIndicator` | Alert per failure, typed (§13.3) | n/a | ✖ form |
+| `/settings/notifications` | none | `ErrorState` "Couldn't load reminder settings" | n/a | ✖ form |
+| `/storage` | none | `ErrorState` + retry | n/a | ✖ |
+| `/txn/[id]` | none | `ErrorState` + retry | "Transaction not found" | ✖ refetches on focus |
+| `_layout` (boot) | `BrandedLoader` | `ErrorState`, Retry re-runs DB init | n/a | n/a |
+
+**The clearest statement of intent in the codebase** is `app/afford.tsx:27-34`: load errors must
+**not** be swallowed here, because a zeroed snapshot would render as a confident "₹0 available" —
+a wrong answer stated with certainty. Screens that answer a question surface their errors;
+screens that decorate (streak, forecast teaser, insights nudges) self-hide instead.
+
+**Pull-to-refresh has one rule** (from [AGENTS.md](../AGENTS.md)): a screen gets
+`AppRefreshControl` iff it loads DB data via `useScreenData` **and** owns its scroll container.
+The `✖` rows above are the documented exemptions — query-driven (`search`), forms (`afford`,
+`group/[id]/edit`, `settings/notifications`, `import`, `settings/backup`), details
+(`txn/[id]`) and wizards (`add/*`).
+
+---
+
+## 21. System components & global behaviors
 
 | Behavior | Component | Notes |
 |---|---|---|
-| Biometric lock | `LockGate` | Face ID on background; truth in AsyncStorage `biometric_enabled`. |
+| Biometric lock | `LockGate` | Face ID on background; truth in AsyncStorage `biometric_enabled`. Handles not-enrolled with an Open-Settings button and a disable-lock escape hatch (§17). |
 | App-switcher privacy | `PrivacyScreen` | Branded cover over the snapshot. |
 | Undo deletes | `UndoProvider` / `UndoToast` | 5 s toast above nav; survives `router.back()`. |
-| Cross-screen refresh | `DataRefreshProvider` | `refresh()` bumps a version; `useRefreshOnDataChange` re-loads screens after a write elsewhere. |
+| Cross-screen refresh | `DataRefreshProvider` | `refresh()` coalesces 32 ms and bumps a version; the focused screen reloads via `useScreenData`, background tabs mark dirty. |
 | Goal celebration | `GoalCelebration` | Full-screen confetti at 100% (auto-dismiss). |
 | Health detail | `HealthSheet` | Score ring + 3 dimensions + factors + projected improvement. |
 | Boot splash | `BrandedLoader` | Logo + spinner during DB init. |
 | Boot failure | `_layout` `ErrorState` | Isolated; Retry re-runs DB init. |
 | Recurring catch-up | `materializeDueOccurrences` | On boot + foreground; surfaces the Home catch-up banner. |
-| Pull-to-refresh | `useRefresh` / `AppRefreshControl` | Home, Groups, Plan, Insights, Recurring, Reminders, group detail, Personal. |
+| PDF text extraction | `PdfTextExtractor` | Hidden WebView running pdf.js; mounted only while reading a PDF. |
+| OCR progress | `ScanningOverlay` | Absolute-fill; blocks all interaction during a receipt scan. |
+| Pull-to-refresh | `useRefresh` / `AppRefreshControl` | See §20 for the exact set. |
 | Brand animation | `LogoAssembly` | ⛔ **Never modify** (also the onboarding hero ring/fan). |
 
 ---
 
-## 13. Every pill, in one table
+## 22. Every pill, in one table
 
 | Screen | Pill set | Options |
 |---|---|---|
 | Home | Period | Month · Today · Year |
-| Add | Kind | Expense · Income · Transfer |
+| Groups | View | Active · Archived |
+| Add | Kind | Expense · Income · Transfer *(Transfer gated by `splitting`)* |
 | Add (expense) | GroupSelector | frequent-group pills + **More** picker *(sheet)* |
 | Add (shared) | Split mode | Equal · Exact · % · Shares |
-| Add (transfer) | Pay method | UPI · Cash · Bank |
-| Plan | Modules | Insights · Reports · Recurring · Can I afford? |
+| Add (any kind) | Pay method | UPI · Card · Cash · Bank · Wallet · Autopay · Other |
+| Itemized | Step dots | Add items · Assign items · Who paid? · Review & save |
 | Personal | Tabs | Activity · Budget · Recurring |
 | Personal › Activity | Scope filter | Personal · Groups · All · {each group} |
 | Group | Tabs | Expenses · Recurring · Budget · Members |
 | Group › Expenses | Kind filter | All · Expense · Income · Settlement |
 | Group › Budget | Status filter | All · Over · Near limit · On track |
+| Review | Row kind | Exp · Inc · Txfr |
+| Review | Row direction | Money in · Money out *(transfers only)* |
+| Review | All-to chips | Personal · first 3 shared groups |
+| Import | Pasted-text source | Google Pay · Bank / UPI (CSV) · Email alert |
+| Search | Kind / Source | All · Expense · Income · Settlement / All · Personal · Groups |
 | Insights | What-if | 10% · 20% · 30% |
-| Categories | Kind | Expense · Income |
+| Categories | Kind | Expense · Income · Transfer |
 | Settings | Cadence *(sheet)* | One-time · Daily · Monthly · Yearly |
+| Features › Smart capture | Cloud Receipt Scanning *(toggle)* | on = cloud OCR (`gemini`) · off = on-device (`device`) |
+
+**Not pills:** Plan's `Insights · Recurring · Can I afford?` are **header icons** (§8), and
+Reports is not among them.
 
 ---
 
-## 14. Feature catalog — moved
+## 23. Sheets & overlays, in one table
 
-This section was a second, differently-grained inventory of the same features covered by
-[AUDIT.md](./AUDIT.md) §1 (F-01 … F-34), with no shared IDs between the two. Two catalogues of
-one app guarantee they drift apart, and this one already had: it described onboarding as
-8 stages (it is 9) and inherited the feature-flag model from `ARCHITECTURE.md` §10, which was
-substantially wrong (see [AUDIT_DOC_DRIFT.md](./AUDIT_DOC_DRIFT.md), DRIFT-20 / DRIFT-21).
+Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
+`DraggableSheet`) unless noted.
 
-**Use [AUDIT.md](./AUDIT.md) §1 instead.** It carries stable IDs, a status per feature
-(`working` / `partial` / `dormant`), the files behind each one, and what gates it — all derived
-from source rather than from another document.
+### Reusable sheet components
+| Sheet (title) | File | Opened from |
+|---|---|---|
+| "Money Health" — `HealthSheet` | `finance/HealthSheet.tsx` | Home `HealthBand`/ring tap |
+| "Your money" — `MoneyEditorSheet` | `finance/plan/MoneyEditorSheet.tsx` | Plan `TotalMoneyCard` → Edit |
+| "What protecting does" — `LockExplainerSheet` | `finance/plan/LockExplainerSheet.tsx` | Goal detail protect toggle |
+| "Category" — `CategoryPicker` | `finance/CategoryPicker.tsx` | Quick Add, Itemized, **Review** (`forceOpen hideTrigger`) |
+| "Choose group" — `GroupSelector` | `finance/GroupSelector.tsx` | Quick Add group row |
+| "Add a friend" / "Rename" / "Your name" — `PersonNameSheet` | `finance/PersonNameSheet.tsx` | Friends (add + rename), group Members (rename) |
+| "Who paid?" — `PayersSheet` | `finance/add/PayersSheet.tsx` | Quick Add payers row |
+| "Split" — `SplitSheet` | `finance/add/SplitSheet.tsx` | Quick Add split row |
+| "Who paid?" / "Who received?" — `TransferSlotSheet` | `finance/add/TransferSlotSheet.tsx` | Quick Add transfer from/to slots |
+| "Scanned receipt" — `ReceiptScanSheet` | `finance/add/ReceiptScanSheet.tsx` | Itemized, after an OCR scan |
+| "Set a backup passphrase" / "Enter passphrase" — `PassphraseSheet` | `finance/backup/PassphraseSheet.tsx` | Backup & restore (**two instances**: create + restore) |
+| "Looks recurring?" — `RecurringSuggestionsSheet` | `finance/review/RecurringSuggestionsSheet.tsx` | Review suggestion banner |
+| "Select date" — `DatePickerSheet` | `ui/DatePickerSheet.tsx` | Quick Add (txn date, recurring end date), Review `FilterForm` |
+| Time picker (dynamic title) — `TimePickerSheet` | `ui/TimePickerSheet.tsx` | Notifications (renewal + daily times), Review `FilterForm` |
+| FAB action menu | `ui/FAB.tsx` (own `<Modal>`) | Only when `actions` is passed; group detail and Personal use single-tap mode |
 
-The screen-by-screen narrative in sections 1–13 above is kept: it explains *why* screens behave
-as they do, which the audit's inventory deliberately does not.
+### Inline `SheetModal`s declared in screens
+| Sheet title | Screen |
+|---|---|
+| "New Group" (`GroupForm`) | `app/(tabs)/groups.tsx` |
+| "Add to {goal}" · "New goal" | `app/(tabs)/savings.tsx` |
+| "Your name" · "Default budget cadence" | `app/(tabs)/settings.tsx` |
+| "Add Tax" / "Add Tip" / "Add Service Charge" / "Add Discount" | `app/add/itemized.tsx` |
+| "{group.name}" options (Audit log · Export as CSV · Edit group · Archive group) | `app/group/[id].tsx` |
+| "How often?" (per-category cadence) | `app/group/[id]/budget.tsx` |
+| "Add to group" (`PersonPicker`) | `app/group/[id]/members.tsx` |
+| "Personal" options (Audit log · Export as CSV) | `app/personal.tsx` |
+| "Personal or group" · "Who paid you?/Who did you pay?" · "How was it paid?" · "Assign N to a group" · "Filter" · "Review options" · "Saved views" · "Save view" | `app/review.tsx` (**8**) |
+| "Add funds" · "Withdraw to cash" · "Adjust goal" | `app/savings/[id].tsx` |
+
+### Non-sheet overlays
+| Overlay | File | Shown when |
+|---|---|---|
+| Onboarding flow | `system/Onboarding.tsx` | First launch, via `OnboardingGate` |
+| Lock screen | `system/LockGate.tsx` | Lock enabled + returning to foreground |
+| Privacy blur | `system/PrivacyScreen.tsx` | App backgrounded |
+| Branded splash | `system/BrandedLoader.tsx` | Fonts/DB not ready |
+| DB-open error | inline `ErrorState` in `app/_layout.tsx` | `openDB()` throws |
+| Undo toast | `system/UndoToast.tsx` | Global `useUndo()` |
+| PDF text extractor | `system/PdfTextExtractor.tsx` | `/import` PDF parse |
+| `ScanningOverlay` | `finance/add/ScanningOverlay.tsx` | Receipt scan in flight |
+| `GoalCelebration` | `finance/GoalCelebration.tsx` | Goal hits 100% |
+| Attachment viewer | inline `Modal` in `app/txn/[id].tsx` | Receipt thumbnail tap |
 
 ---
 
-## 15. Developer / QA tooling
+## 24. Developer / QA tooling
 
-Reached via **Settings → tap "BudgetSplit v2.0" ×7 → `/storage`**.
+Reached via **Settings → tap the version row ×7 → `/storage`**.
 
-- **Load demo data** — wipes the DB and rebuilds a comprehensive dataset that exercises every
-  component state. Also flips **all feature flags on** and preserves your name & avatar.
+- **Load demo data** — wipes the DB and rebuilds a dataset that exercises every component
+  state. Also flips **all feature flags on** and preserves your name & avatar.
   Source: `src/db/seedDemo.ts → loadDemoData`. Coverage:
   - **6 people · 8 groups** (Personal, Roommates, Goa, Office, Family, Manali, an **empty** group
     "Weekend Plans" for empty-tab states, and an **archived** "Old Flat") · ~70 transactions / 3 months.
-  - **Splits:** equal · exact · shares/weights · itemized (tax + tip + **discount**). **Settlements:** partial (live balances) + fully-settled, all pay methods. **simplify-debt OFF** on Goa.
+  - **Splits:** equal · exact · shares/weights · itemized (tax + tip + discount). **Settlements:** partial (live balances) + fully-settled, all pay methods. **simplify-debt OFF** on Goa.
   - **TransactionRow states:** note-primary, **category-primary (no note)**, attachment clip, lent/borrowed attribution, income, settlement (two avatars).
   - **Recurring:** active / paused / ended across daily→weekly→monthly→yearly→**custom**; plus **near-due rules** (1–3 days out) so **Home "Coming up"** + **Plan "Upcoming"** populate.
-  - **Recurring:** tracked rules with varied cadence + next-charge dates.
   - **Budgets:** over / near / under, every cadence (once/daily/monthly/yearly).
   - **Savings — 7 goals:** locked@40% · reached 100% (deadline) · over-funded 120% · partial · 0% empty · withdrawal history · **overdue** (deadline past) · manual + auto funding.
+  - **Pending rows:** seeded `pending_txn` from multiple sources so Review's sectioned inbox populates.
   - **Edge cases:** ₹65k large, ₹5 tiny, soft-deleted txn, location-tagged + attachment rows.
 - **Erase all data** — `resetToEmpty`: wipes everything to an empty app (name/avatar kept) for
   testing empty states.
 - **Delete all attachments** — clears receipt photo files + DB refs.
 
+**Doc coverage guard.** `src/__tests__/docCoverage.test.ts` walks every route file under `app/`
+and fails if one isn't mentioned in this document. A new screen can't ship undocumented, which
+is the failure mode that produced this rewrite.
+
 ---
 
-## 16. Component inventory
+## 25. Component inventory
 
 Every component in `src/components/**`, with what it is and where it's used. Folder rule:
 `ui/` = generic primitives (no domain knowledge); `finance/` = budget/txn/member/settle
@@ -457,115 +1177,132 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 ### `ui/` — generic primitives
 | Component | What it is / where |
 |---|---|
-| `AmountText` | Money text in SpaceMono, kind-colored, obfuscation-aware. Used in balances, forecast, goals, reports. |
-| `AppRefreshControl` (+ `useRefresh`) | Themed pull-to-refresh for scroll/list screens. |
-| `Badge` | Small labeled pill (e.g. Reports forecast badge). Used across reports/insights/history/settings/etc. |
+| `AmountText` | Money text in SpaceMono, kind-coloured, obfuscation-aware. Balances, forecast, goals, reports. |
+| `AppRefreshControl` (+ `useRefresh`) | Themed pull-to-refresh for scroll/list screens (§20). |
+| `Badge` | Small labeled pill. Reports/insights/history/settings. |
 | `BalanceChip` | Owe/owed chip on group cards (Groups list). |
-| `DatePickerSheet` | Bottom-sheet date picker (Add flows). |
+| `DatePickerSheet` | Bottom-sheet date picker (Add flows, Review filter). |
 | `DraggableList` | Gesture-handler reorderable list — drag = savings funding priority (Plan). |
 | `DraggableSheet` | Low-level draggable-sheet primitive used internally by `SheetModal`. |
 | `EmptyState` | Icon circle + title + body + CTA. Every list's empty state. |
 | `ErrorState` | Error icon + message + Retry. |
-| `FAB` | Floating action button — `aboveTabBar` (tab-bar centered) or bottom-right (group detail). |
+| `FAB` | Floating action button — `aboveTabBar` (tab-bar centered) or bottom-right; optional action-menu mode. |
 | `FadeIn` | Staggered fade-in wrapper for list/section mounts. |
-| `FilterBar` | **Search box + chip filter groups**; collapsible mode (chips + 🔍 icon → expanding search). Group Expenses/Budget, Search, History. |
-| `Input` | Design-system text input (bgInput, focus border, amount mode). |
+| `FilterBar` | Search box + chip filter groups; collapsible mode. Group Expenses/Budget, Search, History. |
+| `IconCircle` | The canonical icon-in-a-coloured-dot (replaced ~40 hand-rolled copies). |
+| `Input` | Design-system text input (bgInput, focus border, amount mode, secure mode for passphrases). |
 | `ModalHeader` | Header for modal sheets (title + close). Add flows. |
-| `MoreOptions` | Expandable "more options" block in Add — date, attachment, location, pay method, recurring. (quick/income) |
+| `MoreOptions` | Expandable "more options" block in Add — date, attachment, location, pay method, recurring. |
 | `PressableScale` | Spring-scale tappable wrapper for cards/rows. |
-| `PrimaryButton` | Gradient primary CTA (52px). All primary actions. |
+| `PrimaryButton` | Gradient primary CTA (52 px). All primary actions. |
 | `ScreenHeader` | Safe-area header (back chevron + title + right slot) for every **pushed** screen. |
 | `SecondaryButton` | Bordered secondary button. |
-| `SettingsRow` (+ `settingsRowDivider`) | Icon + label + value + chevron row. Settings, group ⋯ menu. |
-| `SheetModal` | The reusable gesture-handler **bottom sheet** used everywhere (pickers, menus, forms). |
-| `Skeleton` / `SkeletonCard` | Skeleton loaders (Reports, Category, Goal detail). |
+| `SectionCard` | Card wrapper for a titled section. |
+| `SettingsRow` (+ `settingsRowDivider`) | Icon + label + value + chevron row. Settings, options menus, Review overflow. |
+| `SheetModal` | The reusable gesture-handler **bottom sheet** used everywhere. |
+| `Skeleton` / `SkeletonCard` | Skeleton loaders (Reports, Category, Goal detail, Review). |
 | `TabPills` | Segmented pill control (Home period; reused for in-screen segments). |
-| `TimePickerSheet` | Bottom-sheet time picker (Notifications). |
+| `TimePickerSheet` | Bottom-sheet time picker (Notifications, Review filter). |
 
 ### `finance/` — domain widgets
 | Component | What it is / where |
 |---|---|
 | `AvatarStack` | Overlapping member avatars (Groups cards, group hero). |
 | `BalanceRow` | "A owes B" row + **Settle amount** CTA (group Members settlements). |
-| `BudgetBar` | Animated utilization bar, health-colored. Budgets, group cards, category detail. |
+| `BudgetBar` | Animated utilization bar, health-coloured. Budgets, group cards, category detail. |
 | `CategoryChip` | Selectable category chip (Afford check). |
-| `CategoryDonut` | SVG donut of category spend (Reports). |
-| `CategoryPicker` | **Searchable** category grid *(sheet)* + inline create. Add flows. |
+| `CategoryDonut` | SVG donut of category spend (Reports); centre label auto-shrinks. |
+| `CategoryPicker` | Searchable category grid *(sheet)* + inline create. Add flows, Review. |
 | `GoalCelebration` | Full-screen confetti at 100% goal (auto-dismiss). |
-| `GroupForm` | Create/edit group form — icon, name, type, members, default split. |
-| `GroupSelector` | **Frequent-group pills + a "More" picker sheet** for switching group in Add-expense. |
+| `GroupForm` | Create/edit group form — icon, name, type, members, default split. Shared by the create sheet and Edit group. |
+| `GroupSelector` | Frequent-group pills + a "More" picker sheet (Add-expense). |
 | `HealthSheet` | Financial-health detail sheet (ring + dimensions + factors). |
-| `InsightText` | Rich/parsed insight text with emphasis (Plan insights). |
-| `MemberAvatar` | Circular avatar (initials or photo), tappable for photo pick. Everywhere people appear. |
-| `PersonPicker` | **Searchable** multi-select person list + inline create (Members add). |
+| `InsightText` | Rich/parsed insight text with emphasis. |
+| `MemberAvatar` | Circular avatar (initials or photo), tappable for photo pick. |
+| `PayMethodSelector` | Pay-method chip row — all **7** methods (UPI/card/cash/bank/wallet/autopay/other) from `PAY_METHOD`. Shared by Add expense/income/transfer. |
+| `PersonNameSheet` | Add / rename a person *(sheet)*. Friends, group Members. |
+| `PersonPicker` | Searchable multi-select person list + inline create (Members add). |
 | `TransactionRow` | Transaction list row — title/category, amount, attribution, attachment clip, settlement avatars. |
-| `TransferBody` | Transfer/settle body — from/to people, scope, pay-method, note (Quick-Add Transfer). |
+| `TransferBody` | Transfer/settle body — from/to people, scope, pay method, note (Quick-Add Transfer). |
+| `TrendBars` | 6-month spend bars (Reports). |
 
 ### `finance/home/` — Dashboard widgets
 | Component | What it is |
 |---|---|
-| `HeroCard` | Hero period spend + pace bar + prev-delta + health ring. |
-| `TabPills` *(ui)* | Period segments (re-listed here for context). |
-| `CategoryRankList` | "Where it went" top-category bars, expandable. |
+| `HeroCard` | Hero period spend + pace bar + prev-delta + health ring (hidden on a null score). |
+| `CategoryRankList` | "Where it went" top-category bars, expandable. Reused by Reports. |
 | `BalanceStrip` | Owe/Owed summary + Settle. |
 | `ForecastCard` (home) | Month-end forecast + budget pace + biggest-shift teaser → Insights. |
 | `ComingUpList` | Upcoming recurring bills. |
 | `StreakCard` | Logging-streak calendar (self-hides < 3 days). |
-| `HealthBand` | Health band strip — **imported on Home but not currently rendered** (HeroCard's ring is used instead). |
+| `HealthBand` | Health band strip — **dead code**: exists on disk, imported by nothing. `HeroCard`'s ring replaced it. |
 
-### `finance/group/`, `finance/plan/`, `finance/add/`
+### `finance/group/`, `finance/plan/`, `finance/add/`, `finance/review/`, `finance/backup/`
 | Component | What it is |
 |---|---|
+| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. `GroupBalanceCard` also renders the "All settled up" zero state. |
 | `group/InsightsTab` | In-hub group Insights view (member spend bars, top categories, recommendations). |
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |
 | `plan/GoalCard` | Savings goal card — progress bar, deadline, contribution/needed per month. |
 | `plan/TotalMoneyCard` | Net "Total Money" card — cash / investments / credit available + used. |
-| `plan/MoneyEditorSheet` | Editor *(sheet)* for the cash / investment / credit figures behind Total Money. |
-| `add/SplitSheet` | Split editor *(sheet)* — Equal / Exact / % / Shares. |
-| `add/KindToggle` · `add/AmountField` · `add/CategoryDatePills` · `add/NoteField` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` | Add-flow sub-views extracted from `quick.tsx` (driven by the `useAddTxnForm` hook). |
-| `finance/PayMethodSelector` | Pay-method chip row (UPI/card/cash/bank/wallet/autopay/other); shared by Add expense/income/transfer. |
-| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. |
+| `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money. |
+| `plan/LockExplainerSheet` | Explains what protecting a goal does. |
+| `add/KindToggle` · `add/AmountField` · `add/CategoryDatePills` · `add/NoteField` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |
+| `add/RecurringControls` | The Add screen's recurring block — collapsed toggle, or the expanded card: frequency, next charge (`nthOccurrenceMs`), and ends **never / on a date / after N**. |
+| `add/ReceiptScanSheet` · `add/ScanningOverlay` | Receipt-scan result sheet and blocking progress overlay (§7.4). |
+| `review/DestOption` · `review/FChip` · `review/FilterForm` · `review/SaveViewForm` · `review/RecurringSuggestionBanner` · `review/RecurringSuggestionsSheet` | Review sub-views (§10.2). |
+| `backup/PassphraseSheet` | Passphrase create/unlock sheet (§13.3). |
 
 ### `system/` — global behaviors
 | Component | What it is |
 |---|---|
 | `BrandedLoader` | Boot splash (logo + spinner) during DB init. |
-| `DataRefreshProvider` (+ `useRefreshOnDataChange`) | Version-bump context so screens reload after a write elsewhere. |
-| `FeatureFlagsProvider` (+ `useFeatureFlags`) | Feature-flag context (AsyncStorage-backed). |
-| `LockGate` | Biometric (Face/Touch ID) lock on background. |
+| `DataRefreshProvider` (+ `useDataRefresh`) | Version-bump context so screens reload after a write elsewhere. |
+| `FeatureFlagsProvider` (+ `useFeatureFlags`, `FlagsGate`) | Feature-flag context (AsyncStorage-backed). |
+| `LockGate` | Biometric lock on background, with the not-enrolled escape hatches (§17). |
 | `LogoAssembly` | Brand assembly animation — ⛔ **never modify**. |
-| `Onboarding` | The 8-stage onboarding flow. |
+| `Onboarding` (+ `onboarding/SlideArt`) | The **9-stage** onboarding flow (§1). |
 | `OnboardingGate` | Gates onboarding via AsyncStorage `onboarding_done`. |
+| `PdfTextExtractor` | Off-screen WebView running pdf.js for PDF import. |
 | `PrivacyScreen` | App-switcher privacy cover. |
-| `UndoToast` (+ `UndoProvider`) | 5-second undo toast above nav. |
+| `StoreHydrator` | Hydrates the zustand store (`me`, `groups`) at the root. |
+| `UndoToast` (+ `UndoProvider`, `useUndo`) | 5-second undo toast above nav. |
 
 > **Two `ForecastCard`s exist:** `home/ForecastCard` (Dashboard, with the shift teaser) and
 > `plan/ForecastCard` (Plan tab). Different props, different screens.
 
 ---
 
-## 17. Manual test flows
+## 26. Manual test flows
 
-These are the **interactive** behaviours that static data can't show on its own — the demo
-seed (§15) **pre-stages the data so each is one or two taps from completing**. After **Load
-demo data**, run these:
+The **interactive** behaviours static data can't show on its own — the demo seed (§24)
+pre-stages the data so each is one or two taps from completing. After **Load demo data**:
 
 | # | Flow / component to see | Pre-staged data | Steps to complete |
 |---|---|---|---|
-| 1 | **GoalCelebration** (100% confetti) | "Weekend Getaway" goal at **97.5%** (₹19.5k/₹20k) | Plan → Weekend Getaway → **Add to goal** ₹500 → confetti fires. |
-| 2 | **Undo toast** (`UndoToast`) | Personal txn noted **"Delete me — tests the Undo toast"** | Open it (or long-press in a list) → Delete → tap **Undo** within 5 s. |
+| 1 | **GoalCelebration** (100% confetti) | "Weekend Getaway" goal at **97.5%** (₹19.5k/₹20k) | Plan → Weekend Getaway → **Add funds** ₹500 → confetti fires. |
+| 2 | **Undo toast** (`UndoToast`) | Personal txn noted **"Delete me — tests the Undo toast"** | Open it → Delete → tap **Undo** within 5 s. |
 | 3 | **Settle up** (Transfer pill) | Live balances in Roommates / Goa / Family / Manali | Home **Owe/Owed → Settle**, or Group → Members → **Settle amount** → pick method → Save. |
-| 4 | **Recurring skip / pause / stop** | Active rules incl. **near-due** ones (1–3 days) | Group/Personal → Recurring → a rule → **Skip next / Pause / Stop**. |
-| 5 | **Member remove — blocked vs allowed** | Roommates members have balances; **Office Lunch** is fully settled | Group → Members → swipe-remove: blocked in Roommates ("settle first"), allowed in Office Lunch. |
-| 6 | **Empty states** (within a populated app) | **"Weekend Plans"** group (members, 0 txns) | Open it → empty Expenses & Budget tabs. (Whole-app empty → **Erase all data**.) |
-| 7 | **Import → Review** (pending txns) | seeded `pending_txn` rows from Google Pay + email sources | Dashboard inbox badge → **Review**: rows **grouped by source** ("Google Pay", "Email alert"), each with amount, category, pay-method chip → Confirm/Save. |
-| 8 | **Coming up / Upcoming** | 3 near-due recurring rules (1–3 days out) | Home **"Coming up"** + Plan **"Upcoming this month"** already show them. |
-| 9 | **Smart-category learning** | flag ON; many noted txns to learn from | Add expense → type a title (e.g. "Uber") → category auto-suggests; correct it once → it learns. |
-| 10 | **Itemized split** (4-step wizard) | groups with members | Add → expense → **Split by items** → add items, assign, payers, review → Save. |
-| 11 | **Budget over/near/under live** | Groceries **over**, Eating Out **near**, Fuel **under** | Personal → Budget tab; or add a Groceries expense to watch a bar flip red. |
-| 12 | **Goal withdraw / lock / adjust / delete** | funded goals (Emergency locked, Laptop partial) | Plan → a goal → withdraw / lock / adjust / delete. |
-| 13 | **Group create / edit / archive / delete** | existing groups | Groups → **New**; or Group → ⋯ → Edit / Archive. |
-| 14 | **Receipt attach** *(needs camera/library)* | — | Add expense → More options → **Attach receipt**. (OCR auto-fill is parked.)|
-| 15 | **Export CSV / PDF** | 3 months of data | Reports (Settings → Export, or Plan → Reports) → **CSV / PDF**. |
-| 16 | **Replay onboarding** | — | Settings → **Replay welcome tour** → fully reopen the app. |
-| 17 | **Privacy** (hide amounts / biometric) | amounts present | Settings → Security toggles; Home amounts mask to ••••. |
+| 4 | **"All settled up" card** | **Office Lunch** is fully settled | Open it — the balance card shows the check-circle state instead of nothing. |
+| 5 | **Recurring skip / pause / stop** | Active rules incl. **near-due** ones (1–3 days) | Group/Personal → Recurring → a rule → **Skip next / Pause / Stop**. |
+| 6 | **Member remove — blocked vs allowed** | Roommates members have balances; Office Lunch is settled | Group → Members → swipe-remove: blocked in Roommates ("settle first"), allowed in Office Lunch. |
+| 7 | **Empty states** (within a populated app) | **"Weekend Plans"** group (members, 0 txns) | Open it → empty Expenses & Budget tabs. (Whole-app empty → **Erase all data**.) |
+| 8 | **Import → Review** | seeded `pending_txn` rows from multiple sources | Home inbox badge → **Review**: rows **grouped by source**, each with amount, kind chip, category, destination and pay method → Confirm one, then **Save all** → Undo. |
+| 9 | **Review focus + saved view** | ≥ 10 pending rows | Review → ⋯ → **Select** → check a few → **Focus**; then ⋯ → **Save current view** with a group + payer → ⋯ → **Saved views** → apply it. |
+| 10 | **Review "apply to similar"** | several rows from the same merchant | Set one row's category → the "Apply to N?" prompt appears. |
+| 11 | **Import failure messages** | — | `/import` → paste gibberish → Parse ("No transactions found"); pick a scanned/image PDF → the 0-characters message. |
+| 12 | **Backup → restore round-trip** | any populated app | Settings → **Backup & restore** → Create backup (passphrase) → share to Files → Erase all data → Restore → same file → correct passphrase. Also try a **wrong** passphrase (inline error) and a non-backup file ("Not a valid backup file"). ⚠️ Restore **replaces** everything. |
+| 13 | **Receipt scan** *(iOS, needs camera/library)* | a real receipt photo | Add → expense → Split by items → **Scan receipt** → Take Photo / Choose from Library → `ScanningOverlay` blocks input → `ReceiptScanSheet` → uncheck a bad row → **Add**. Run it once on each provider — Features → Smart capture → **Cloud Receipt Scanning** off to compare, which is also the only way to see the raw-text panel (it's null on `gemini`). Check the row is **not** dimmed in the off state. |
+| 14 | **Coming up / Upcoming** | 3 near-due recurring rules (1–3 days out) | Home **"Coming up"** + Plan **"Upcoming this month"** already show them. |
+| 15 | **Smart-category learning** | flag ON; many noted txns | Add expense → type a title (e.g. "Uber") → category auto-suggests; correct it once → it learns. |
+| 16 | **Itemized split + Service charge** | groups with members | Add → expense → **Split by items** → items → **Service** adjustment → assign → payers (watch "Must equal total ₹X") → review → Save. |
+| 17 | **Budget over/near/under live** | Groceries **over**, Eating Out **near**, Fuel **under** | Personal → Budget tab; or add a Groceries expense to watch a bar flip red. |
+| 18 | **Goal withdraw / protect / adjust / delete** | funded goals (Emergency locked, Laptop partial) | Plan → a goal → Withdraw to cash / Protect (read the explainer sheet) / Adjust / Delete. |
+| 19 | **Overspend raid + Undo** | goals funded, cash drivable negative | Log a large expense until cash goes negative → Plan shows the raid notice → **Undo**. |
+| 20 | **Group create / edit / archive / delete** | existing groups | Groups → **New**; or Group → ⋯ → Edit / Archive. |
+| 21 | **Export CSV / PDF + drill-down** | 3 months of data | Settings → Export & reports → **CSV / PDF**; tap a donut category → **Report transactions** → a row → txn detail. |
+| 22 | **Notification permission denial** | — | Deny notifications, then Settings → Notifications → the denied banner + **Open Settings to allow**. Send a **test notification** once granted. |
+| 23 | **Location denial** | — | Deny location, then Features → **Location tagging** on → the "Location off" Alert, toggle stays off. |
+| 24 | **Biometric not-enrolled path** | device with no Face ID enrolled | Enable the lock → background → foreground → "Face ID not set up" + **Disable lock in BudgetSplit**. |
+| 25 | **Replay onboarding** | — | Settings → **Replay welcome tour** → fully reopen the app. Try both the *personal* intent (People stage skipped) and *both*. |
+| 26 | **Privacy** (hide amounts / biometric) | amounts present | Settings → Security toggles; Home amounts mask to ••••. |
