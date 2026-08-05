@@ -74,6 +74,10 @@ export type TotalMoney = {
   creditAvailable: number; // max(0, limit − used)
   creditLimit: number;
   creditUsed: number;
+  /** Spendable right now: cash only. The Plan hero (`V2-12`). */
+  available: number;
+  /** cash + investments − credit used. Unused limit is headroom, not an asset. */
+  netWorth: number;
 };
 
 export function computeTotalMoney(cash: CashPosition, profile: MoneyProfile): TotalMoney {
@@ -91,5 +95,16 @@ export function computeTotalMoney(cash: CashPosition, profile: MoneyProfile): To
     creditAvailable,
     creditLimit,
     creditUsed,
+    // `V2-12` — the two figures the old single `total` conflated.
+    //
+    // `available` is what you can spend right now. Investments are yours but not
+    // liquid, and unused credit is not money at all — counting a ₹2L limit made the
+    // hero read ₹2L richer than the bank did, which is exactly backwards for an app
+    // whose job is telling you when to stop.
+    available: cashAvailable,
+    // Assets minus what you actually owe. Credit *used* is a liability; credit
+    // *available* is neither an asset nor a debt, so it appears in neither figure —
+    // it is headroom, shown separately and labelled as such.
+    netWorth: cashAvailable + investments - creditUsed,
   };
 }

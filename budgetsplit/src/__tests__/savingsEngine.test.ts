@@ -1,3 +1,4 @@
+import { applyOverspendRaid } from '../db/queries/savings';
 import { periodsElapsed, advanceAnchor, planAutoAllocations, planOverspendRaid, type GoalLike, type RaidGoal } from '../lib/savingsEngine';
 
 const jan1 = new Date('2026-01-01T00:00:00Z').getTime();
@@ -76,5 +77,55 @@ describe('planOverspendRaid', () => {
   });
   it('returns nothing when there is no deficit', () => {
     expect(planOverspendRaid([g('a', 'low')], { a: 1000 }, 0)).toEqual([]);
+  });
+});
+
+describe('applyOverspendRaid — consent is the whole point (V2-10)', () => {
+  function fakeDb() {
+    const inserts: unknown[][] = [];
+    return {
+      inserts,
+      db: {
+        withTransactionAsync: async (fn: () => Promise<void>) => { await fn(); },
+        runAsync: async (_sql: string, args: unknown[]) => { inserts.push(args); },
+      } as unknown as Parameters<typeof applyOverspendRaid>[0],
+    };
+  }
+
+  it('writes exactly the withdrawals it was handed, not a recomputed plan', async () => {
+    // The prompt named these goals; re-planning inside apply could quietly take from
+    // a different one if anything changed between showing and agreeing.
+    const { db, inserts } = fakeDb();
+    const out = await applyOverspendRaid(db, [
+      { goalId: 'g1', name: 'Goa Trip', amount: 3000 },
+      { goalId: 'g2', name: 'Laptop', amount: 2000 },
+    ]);
+    expect(out.total).toBe(5000);
+    expect(out.withdrawals.map(w => w.goalId)).toEqual(['g1', 'g2']);
+    expect(inserts).toHaveLength(2);
+  });
+
+  it('moves nothing at all for an empty plan', async () => {
+    const { db, inserts } = fakeDb();
+    const out = await applyOverspendRaid(db, []);
+    expect(out).toEqual({ withdrawals: [], total: 0 });
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('ignores zero and negative amounts rather than writing them', async () => {
+    const { db, inserts } = fakeDb();
+    const out = await applyOverspendRaid(db, [
+      { goalId: 'g1', name: 'A', amount: 0 },
+      { goalId: 'g2', name: 'B', amount: -500 },
+      { goalId: 'g3', name: 'C', amount: 1200 },
+    ]);
+    expect(out.total).toBe(1200);
+    expect(inserts).toHaveLength(1);
+  });
+
+  it('is a no-op when every amount is unusable', async () => {
+    const { db, inserts } = fakeDb();
+    expect((await applyOverspendRaid(db, [{ goalId: 'g', name: 'A', amount: 0 }])).total).toBe(0);
+    expect(inserts).toHaveLength(0);
   });
 });

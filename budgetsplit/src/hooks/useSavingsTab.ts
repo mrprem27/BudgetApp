@@ -7,7 +7,7 @@ import { haptic } from '../lib/haptics';
 import { GOAL_ICONS, GOAL_COLORS } from '../constants/palette';
 import {
   getGoals, getGoalSavedMap, getTotalMoney, insertGoal, fundGoal, reorderGoals,
-  runSavingsMaintenance, undoOverspendRaid,
+  runSavingsMaintenance, undoOverspendRaid, applyOverspendRaid,
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../db/queries/savings';
 import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
@@ -37,6 +37,8 @@ export function useSavingsTab() {
   const { refresh } = useDataRefresh();
 
   const [overspend, setOverspend] = useState<OverspendRaid | null>(null);
+  // A raid the user approved this session — drives the confirmation + Undo.
+  const [applied, setApplied] = useState<OverspendRaid | null>(null);
 
   const [showMoneyEditor, setShowMoneyEditor] = useState(false);
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
@@ -120,13 +122,17 @@ export function useSavingsTab() {
   // the tab is actually open.
   useFocusEffect(useCallback(() => {
     (async () => {
-      const pending = await getPendingOverspendNotice();
-      if (pending) setOverspend(pending);
-
+      // `pending` is now a *proposal* the user hasn't answered yet, not a completed
+      // raid (`V2-10`). Re-proposing on every focus keeps it truthful: if cash
+      // recovered in the meantime, the prompt disappears instead of asking to cover
+      // a deficit that no longer exists.
       const raid = await runSavingsMaintenance(db);
       if (raid.total > 0) {
         setOverspend(raid);
         await setPendingOverspendNotice(raid);
+      } else {
+        setOverspend(null);
+        if (await getPendingOverspendNotice()) await setPendingOverspendNotice(null);
       }
       reload();
     })();
@@ -153,18 +159,39 @@ export function useSavingsTab() {
     refresh();
   }
 
-  async function handleUndoOverspend() {
+  /** The user agreed: move the money exactly as proposed. */
+  async function handleApproveOverspend() {
     if (!overspend) return;
-    await undoOverspendRaid(db, overspend.withdrawals);
+    const done = await applyOverspendRaid(db, overspend.withdrawals);
     haptic.success();
+    setApplied(done);
     setOverspend(null);
     await setPendingOverspendNotice(null);
     await reload();
     refresh();
   }
 
+  /** Undo an approved raid — still reachable, since agreeing in a hurry is a thing. */
+  async function handleUndoOverspend() {
+    if (!applied) return;
+    await undoOverspendRaid(db, applied.withdrawals);
+    haptic.success();
+    setApplied(null);
+    await reload();
+    refresh();
+  }
+
+  /**
+   * Declined. The goals keep their money and cash stays negative, which is the
+   * honest picture — the overspend already happened; covering it was only ever
+   * moving the shortfall somewhere less visible.
+   *
+   * Not persisted as "never ask again": the proposal is recomputed on focus, so it
+   * returns while the deficit does. Dismiss clears this visit, not the fact.
+   */
   async function handleDismissOverspend() {
     setOverspend(null);
+    setApplied(null);
     await setPendingOverspendNotice(null);
   }
 
@@ -198,7 +225,7 @@ export function useSavingsTab() {
     goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
     // overspend raid
-    overspend, setOverspend, handleUndoOverspend, handleDismissOverspend,
+    overspend, setOverspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     // money editor
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     // fund a goal

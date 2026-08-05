@@ -76,3 +76,47 @@ describe('computeTotalMoney', () => {
     expect(tm.total).toBe(8000); // -2000 + 0 investments + 10000 credit
   });
 });
+
+describe('computeTotalMoney — Available vs Net Worth (V2-12)', () => {
+  const cash = (available: number) => ({ available, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0 });
+  const profile = (over: Partial<MoneyProfile> = {}): MoneyProfile =>
+    ({ openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0, ...over });
+
+  it('never counts unused credit as money you have', () => {
+    // The bug: a ₹2L limit made the hero read ₹2L richer than the bank did.
+    const m = computeTotalMoney(cash(50000), profile({ creditLimit: 20000000 }));
+    expect(m.available).toBe(50000);
+    expect(m.netWorth).toBe(50000);
+    expect(m.creditAvailable).toBe(20000000); // still shown — as headroom, not money
+  });
+
+  it('keeps investments out of Available but inside Net Worth', () => {
+    const m = computeTotalMoney(cash(50000), profile({ investments: 300000 }));
+    expect(m.available).toBe(50000);   // not liquid
+    expect(m.netWorth).toBe(350000);
+  });
+
+  it('subtracts credit actually used from Net Worth', () => {
+    const m = computeTotalMoney(cash(100000), profile({ creditLimit: 500000, creditUsed: 200000 }));
+    expect(m.netWorth).toBe(-100000);         // 100000 − 200000
+    expect(m.available).toBe(100000);         // spending cash is unaffected by the debt
+    expect(m.creditAvailable).toBe(300000);
+  });
+
+  it('lets Available go negative rather than papering over it', () => {
+    // Overspending is the state the app most needs to show honestly.
+    const m = computeTotalMoney(cash(-116188), profile({ creditLimit: 100000 }));
+    expect(m.available).toBe(-116188);
+  });
+
+  it('treats negative profile entries as zero, not as a discount', () => {
+    const m = computeTotalMoney(cash(1000), profile({ investments: -5000, creditLimit: -1, creditUsed: -9 }));
+    expect(m.netWorth).toBe(1000);
+    expect(m.creditAvailable).toBe(0);
+  });
+
+  it('keeps the legacy total intact for anything still reading it', () => {
+    const m = computeTotalMoney(cash(1000), profile({ investments: 2000, creditLimit: 5000 }));
+    expect(m.total).toBe(m.yourMoney + m.creditAvailable);
+  });
+});

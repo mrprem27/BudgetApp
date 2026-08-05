@@ -50,9 +50,10 @@ export default function RootLayout() {
         // Catch-up: any recurring occurrence that came due (incl. across a missed
         // "midnight") materializes into a real editable row the moment the app loads.
         await materializeDueOccurrences(db);
-        // Sweep leftover → schedule → reconcile. A raid here happens before the
-        // user is looking at the Savings tab, so persist the result — otherwise
-        // it's invisible by the time they get there (cash is already fixed up).
+        // Scheduled goal funding runs unattended — the user set it up, and it moves
+        // money *into* goals. The overspend raid no longer applies here: it only
+        // *proposes*, and Plan asks before anything leaves a goal (`V2-10`). Persist
+        // the proposal so it survives to whenever the user next opens that tab.
         const raid = await runSavingsMaintenance(db);
         if (raid.total > 0) setPendingOverspendNotice(raid).catch(() => {});
         rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)

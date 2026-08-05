@@ -75,7 +75,7 @@ export default function SavingsScreen() {
   const {
     goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
-    overspend, handleUndoOverspend, handleDismissOverspend,
+    overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
@@ -114,24 +114,45 @@ export default function SavingsScreen() {
         {/* Total Money — cash + investments + available credit, with breakdown */}
         {money && <TotalMoneyCard money={money} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} />}
 
-        {/* Overspend notice — money auto-pulled from lowest-priority goals to cover a deficit */}
+        {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
+            money during app boot and tell you afterwards. */}
         {overspend && overspend.total > 0 && (
           <View style={styles.overspendCard}>
             <View style={styles.overspendIcon}>
               <Feather name="alert-triangle" size={16} color={colors.expense} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.overspendTitle}>Covered {formatCompact(overspend.total)} overspend</Text>
+              <Text style={styles.overspendTitle}>You’re {formatCompact(overspend.total)} short this month</Text>
+              <Text style={styles.overspendBody}>
+                Cover it from {overspend.withdrawals.map(w => w.name).join(', ')}? Nothing moves unless you say so.
+              </Text>
+              <View style={styles.overspendBtnRow}>
+                <TouchableOpacity style={styles.overspendPrimary} onPress={handleApproveOverspend} accessibilityRole="button" accessibilityLabel={`Use savings to cover ${formatCompact(overspend.total)}`}>
+                  <Text style={styles.overspendPrimaryText}>Use savings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.overspendGhost} onPress={handleDismissOverspend} accessibilityRole="button" accessibilityLabel="Keep my goals untouched">
+                  <Text style={styles.overspendGhostText}>Keep goals</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Confirmation of a raid the user just approved, with Undo. */}
+        {applied && applied.total > 0 && (
+          <View style={styles.overspendCard}>
+            <View style={styles.overspendIcon}>
+              <Feather name="check" size={16} color={colors.expense} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.overspendTitle}>Covered {formatCompact(applied.total)} from savings</Text>
               <Text style={styles.overspendBody} numberOfLines={2}>
-                Pulled from {overspend.withdrawals.map(w => w.name).join(', ')} (lowest priority).
+                Taken from {applied.withdrawals.map(w => w.name).join(', ')}.
               </Text>
             </View>
             <View style={styles.overspendActions}>
               <TouchableOpacity onPress={handleUndoOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo">
                 <Text style={styles.overspendUndo}>Undo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDismissOverspend} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
-                <Feather name="x" size={16} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
           </View>
@@ -296,6 +317,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
+  overspendBtnRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  overspendPrimary: { backgroundColor: colors.expense, borderRadius: radius.md, paddingHorizontal: space.md, height: 36, alignItems: 'center', justifyContent: 'center' },
+  overspendPrimaryText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
+  overspendGhost: { borderRadius: radius.md, paddingHorizontal: space.md, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: alpha(colors.expense, 33) },
+  overspendGhostText: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   overspendCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: alpha(colors.expense, 8), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.expense, 25), padding: space.md },
   overspendIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: alpha(colors.expense, 13), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   overspendTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

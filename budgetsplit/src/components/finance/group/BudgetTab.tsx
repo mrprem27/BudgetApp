@@ -13,6 +13,7 @@ import { BudgetBar } from '../BudgetBar';
 import { MemberAvatar } from '../MemberAvatar';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { planRebalance } from '../../../lib/rebalance';
 import { alpha } from '../../../theme';
 
 type Props = {
@@ -21,11 +22,13 @@ type Props = {
   contributions: Contributions;
   onEditBudget: () => void;
   onCreateBudget: () => void;
+  /** Open the re-plan sheet for an over-budget category (`V2-07`). */
+  onRebalance?: (category: string) => void;
 };
 
 /** Group Budget tab: overview + recommendations + driving-overspend + who-paid-what
  *  + per-category sectioned list. Owns its own status filter (tab-local). */
-export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget }: Props) {
+export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget, onRebalance }: Props) {
   const [budgetFilter, setBudgetFilter] = useState('all');
 
   if (catStatus.length === 0) {
@@ -154,6 +157,19 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
                         <Text style={styles.catAmt}><Text style={{ color: healthColor(c.health) }}>{formatCompact(c.spent)}</Text> / {formatCompact(c.allocated)}</Text>
                       </View>
                       <BudgetBar pct={c.pct} health={c.health} height={6} />
+                      {/* V2-07: a red bar used to be the whole response to an overrun.
+                          Only offered when a re-plan is actually possible. */}
+                      {c.remaining < 0 && onRebalance && planRebalance(catStatus, c.category) && (
+                        <TouchableOpacity
+                          style={styles.replanBtn}
+                          onPress={() => onRebalance(c.category)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Re-plan ${c.category} for the rest of this month`}
+                        >
+                          <Feather name="shuffle" size={12} color={colors.accent} />
+                          <Text style={styles.replanText}>Re-plan the rest of this month</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   );
                 })}
@@ -168,6 +184,8 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
 
 const styles = StyleSheet.create({
   listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
+  replanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, alignSelf: 'flex-start', paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: alpha(colors.accent, 13) },
+  replanText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, marginBottom: space.sm },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },

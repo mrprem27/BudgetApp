@@ -1,10 +1,10 @@
-# V2 Fix Plan — Waves 1–3
+# V2 Fix Plan — Waves 1–4
 
 > **What this is.** The execution worklist for [`V2_PRODUCT_REVIEW.md`](./V2_PRODUCT_REVIEW.md)'s
-> Waves 1–3. The review is the *argument*; this is the *worklist*. If you want to know **why** an
+> Waves 1–4. The review is the *argument*; this is the *worklist*. If you want to know **why** an
 > item exists, read the review. If you want to know **what to do**, read this.
 >
-> **Scope:** 19 items across three waves — 10 as originally planned, plus `V2-29`…`V2-36` found
+> **Scope:** 27 items across four waves — 10 as originally planned, plus `V2-29`…`V2-36` found
 > while executing (five of those by *running* the app or the suite, not by reading code). **Wave 4
 > and V3 remain out of scope here** — see [Out of scope](#out-of-scope).
 >
@@ -59,7 +59,35 @@ would have deleted the fragments and left the real gap. So the fragments went, t
 surfaces got keys, and the personas now compose them into four genuinely different apps, which is
 what the flags were for.
 
-**Result after three waves:** `npx tsc --noEmit` clean · **685/685 jest, 54 suites** (was 633 with
+| **Wave 4 — product depth** — ✅ **complete 2026-08-05** ||||
+| 18 | ~~`V2-09`~~ | ~~Caption contrast below WCAG AA on the app-wide muted token~~ | M | ✅ done |
+| 19 | ~~`V2-13`~~ | ~~Cloud OCR quota has no fallback~~ | M | ✅ done |
+| 20 | ~~`V2-15`~~ | ~~Notification taps go nowhere~~ | L | ✅ done |
+| 21 | ~~`V2-20`~~ | ~~No duplicate check on the Review commit path~~ | L | ✅ done |
+| 22 | ~~`V2-10`~~ | ~~Unlocked goals silently auto-raided~~ | L | ✅ done |
+| 23 | ~~`V2-12`~~ | ~~Total Money conflates cash, investments and credit~~ | M | ✅ done |
+| 24 | ~~`V2-07`~~ | ~~No re-plan surface when a category blows up mid-month~~ | M | ✅ done |
+| — | ~~`V2-16`~~ | ~~CSV demo-row filter drift~~ | — | ❌ **INVALID — no such filter exists** |
+
+**`V2-16` was a false finding, and no code was written for it.** It describes a demo-row filter
+matching hardcoded signatures. That filter does not exist: `is_demo` was removed from all five
+tables *before* this review was written, and `schema.ts:264-269` records why. Writing the proposed
+test would have asserted agreement between two things, one of which is not there. It was carried in
+from a stale project note rather than read from source — the one lapse against the review's own
+rule that *"a claim without evidence gets deleted, not debated."*
+
+**Two Wave-4 decisions worth recording**, both chosen over cheaper alternatives:
+
+- **`V2-10` asks now.** Overspend used to move money out of goals during app boot and tell you
+  after. It now *proposes* and Plan asks; `runSavingsMaintenance` still funds goals unattended,
+  because that moves money **in** and the user set it up. Declining leaves cash negative, which is
+  the honest picture — the overspend already happened, and covering it was only ever moving the
+  shortfall somewhere less visible.
+- **`V2-12` demoted credit.** Unused limit is not an asset and not a debt, so it appears in neither
+  Available Money nor Net Worth — it is headroom, labelled *"borrowing, not money"*. The old single
+  figure made a ₹2L card limit read as ₹2L of money, in an app whose job is telling you when to stop.
+
+**Result after four waves:** `npx tsc --noEmit` clean · **740/740 jest, 58 suites** (was 633 with
 2 failing) · `npm run test:calendar` green at all seven pinned dates — month starts and ends, a
 leap day, and a new-year rollover.
 
@@ -413,9 +441,8 @@ Deliberately excluded, with their review IDs — do not scope-creep into these:
 
 | Area | IDs |
 |---|---|
-| Wave 4 (product depth) | `V2-07`, `V2-09`, `V2-10`, `V2-12`, `V2-13`, `V2-15`, `V2-16`, `V2-20` |
 | V3 | `V2-17`, `V2-18`, `V2-22`, `V2-23`, `V2-24`, `V2-25`, `V2-26` |
 | Externally blocked | `F4` GPay format · `F5` Gmail OAuth CASA · Account Aggregator partner |
 
-Nothing in Waves 1–3 depends on any external blocker — that is deliberate, so this plan could be
-finished without waiting on a third party. **All three waves are complete.**
+Nothing in Waves 1–4 depends on any external blocker — that is deliberate, so this plan could be
+finished without waiting on a third party. **All four waves are complete; only V3 remains.**

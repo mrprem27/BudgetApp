@@ -34,10 +34,10 @@ function docFiles(): string[] {
 function definedIds(): Set<string> {
   const review = fs.readFileSync(REVIEW, 'utf8');
   const out = new Set<string>();
-  // `~~` is tolerated: a struck-through row (a landed or invalidated finding) is still
-  // a definition — arguably the one a reader most needs to find, since it explains why
-  // the ID stopped mattering.
-  for (const m of review.matchAll(/^\s*(?:\|\s*)?~{0,2}\*\*`?(V2-\d+)`?\*\*~{0,2}\s*\|/gm)) out.add(m[1]);
+  // `~~` and a trailing status marker (✅, a date) are tolerated: a struck-through row
+  // — landed or invalidated — is still a definition, and arguably the one a reader most
+  // needs to find, since it explains why the ID stopped mattering.
+  for (const m of review.matchAll(/^\s*(?:\|\s*)?~{0,2}\*\*`?(V2-\d+)`?\*\*~{0,2}[^|\n]*\|/gm)) out.add(m[1]);
   for (const m of review.matchAll(/^#{2,4}\s+.*?\b(V2-\d+)\b/gm)) out.add(m[1]);
   return out;
 }

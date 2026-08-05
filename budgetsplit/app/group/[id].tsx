@@ -23,6 +23,7 @@ import {
   computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
 } from '../../src/lib/groupDetail';
 import { haptic } from '../../src/lib/haptics';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -33,6 +34,9 @@ import { GroupHero } from '../../src/components/finance/group/GroupHero';
 import { GroupBalanceCard } from '../../src/components/finance/group/GroupBalanceCard';
 import { TransactionsTab } from '../../src/components/finance/group/TransactionsTab';
 import { BudgetTab } from '../../src/components/finance/group/BudgetTab';
+import { RebalanceSheet } from '../../src/components/finance/group/RebalanceSheet';
+import { planRebalance, applyRebalance, type RebalancePlan } from '../../src/lib/rebalance';
+import { setCategoryBudgets } from '../../src/db/queries/categoryBudgets';
 import { MembersTab } from '../../src/components/finance/group/MembersTab';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
@@ -49,6 +53,11 @@ export default function GroupDetailScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
+  // A budget write moves Home's pace and Insights, so it needs the global signal.
+  const { refresh } = useDataRefresh();
+  // V2-07: the proposed mid-month re-plan, or null when the sheet is closed.
+  const [rebalance, setRebalance] = useState<RebalancePlan | null>(null);
+  const [applyingRebalance, setApplyingRebalance] = useState(false);
 
   // Pure read: group + its txns/members/balances/budget/recurring. Refetches on
   // focus and on cross-screen writes; retry = reload().
@@ -220,6 +229,7 @@ export default function GroupDetailScreen() {
           contributions={contributions}
           onEditBudget={() => router.push(`/group/${id}/budget`)}
           onCreateBudget={() => router.push(`/group/${id}/budget`)}
+          onRebalance={(category) => setRebalance(planRebalance(catStatus, category))}
         />
       )}
 
@@ -278,6 +288,24 @@ export default function GroupDetailScreen() {
           <Text style={styles.archiveText}>Archive group</Text>
         </TouchableOpacity>
       </SheetModal>
+      <RebalanceSheet
+        plan={rebalance}
+        applying={applyingRebalance}
+        onClose={() => setRebalance(null)}
+        onApply={async () => {
+          if (!rebalance) return;
+          setApplyingRebalance(true);
+          try {
+            await setCategoryBudgets(db, id, applyRebalance(catStatus, rebalance));
+            haptic.success();
+            setRebalance(null);
+            await reload();
+            refresh();
+          } finally {
+            setApplyingRebalance(false);
+          }
+        }}
+      />
     </View>
   );
 }

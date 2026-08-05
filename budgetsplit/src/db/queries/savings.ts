@@ -265,34 +265,55 @@ export type OverspendRaid = { withdrawals: { goalId: string; name: string; amoun
  * raid as auto goal withdrawals and returns what moved so the Plan screen can
  * show a notice + offer Undo. Investments are never touched.
  */
-export async function runOverspendRaid(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
+/**
+ * What a raid *would* take, without taking it (`V2-10`).
+ *
+ * Splitting propose from apply is the whole fix. Money used to move out of goals
+ * during app boot, with an after-the-fact notice — and `COMPETITIVE_ANALYSIS.md` §7
+ * asked whether that was right and never got an answer. No competitor auto-transfers
+ * between goals, so there was no evidence users read it as reassuring, and "unlocked"
+ * was a trap default: it meant "may be spent without asking", which is not what the
+ * word implies.
+ */
+export async function proposeOverspendRaid(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   const cash = await getCashPosition(db);
   if (cash.available >= 0) return { withdrawals: [], total: 0 };
-  const deficit = -cash.available;
   const [goals, saved] = await Promise.all([getGoals(db), getGoalSavedMap(db)]);
   const raids = planOverspendRaid(
     goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order })),
-    saved, deficit,
+    saved, -cash.available,
   );
-  if (raids.length === 0) return { withdrawals: [], total: 0 };
-
   const nameById = new Map(goals.map(g => [g.id, g.name]));
+  return {
+    withdrawals: raids.map(r => ({ goalId: r.goalId, name: nameById.get(r.goalId) ?? 'Goal', amount: r.amount })),
+    total: raids.reduce((s, r) => s + r.amount, 0),
+  };
+}
+
+/**
+ * Actually move the money, for a plan the user has agreed to.
+ *
+ * Takes the withdrawals rather than recomputing so that what was shown is exactly
+ * what happens — re-planning here could quietly raid a different goal than the one
+ * named in the prompt if anything changed in between.
+ */
+export async function applyOverspendRaid(
+  db: SQLite.SQLiteDatabase,
+  withdrawals: { goalId: string; name: string; amount: number }[],
+): Promise<OverspendRaid> {
+  const chosen = withdrawals.filter(w => w.amount > 0);
+  if (chosen.length === 0) return { withdrawals: [], total: 0 };
   const now = Date.now();
-  let total = 0;
   await db.withTransactionAsync(async () => {
-    for (const r of raids) {
+    for (const r of chosen) {
       await db.runAsync(
         `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
          VALUES (?, ?, ?, 'withdraw', 'auto', ?, 'Covered overspend', ?)`,
         [uuid(), r.goalId, r.amount, now, now],
       );
-      total += r.amount;
     }
   });
-  return {
-    withdrawals: raids.map(r => ({ goalId: r.goalId, name: nameById.get(r.goalId) ?? 'Goal', amount: r.amount })),
-    total,
-  };
+  return { withdrawals: chosen, total: chosen.reduce((s, r) => s + r.amount, 0) };
 }
 
 /** Undo an overspend raid by re-funding the goals it pulled from. */
@@ -313,7 +334,9 @@ export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: 
  */
 export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   await runAutoFunding(db).catch(() => {});
-  return runOverspendRaid(db).catch(() => ({ withdrawals: [], total: 0 }));
+  // Proposes only. Scheduled funding still runs unattended — the user set that up on
+  // purpose and it moves money *into* goals. Taking money *out* now needs a yes.
+  return proposeOverspendRaid(db).catch(() => ({ withdrawals: [], total: 0 }));
 }
 
 // --- Insights (Phase 3) --------------------------------------------------
