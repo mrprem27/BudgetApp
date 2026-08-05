@@ -958,6 +958,15 @@ settle-ups, `limitReminders` caps the count, and each entry is scheduled by
 rescheduling can't duplicate, and **no-ops on a past date or any error** — so a stale plan
 degrades to silence rather than a burst of notifications.
 
+**No push entitlement, deliberately.** Every notification is scheduled locally, so the app needs
+neither the Push Notifications capability nor `aps-environment` — there is no `getExpoPushToken`,
+`getDevicePushToken` or push-token listener anywhere. The `expo-notifications` config plugin adds
+`aps-environment` regardless, which **breaks signing on a free/personal Apple developer team**
+(those cannot create a profile with Push Notifications), so `plugins/withoutPushEntitlement.js`
+strips it back out. It must be registered **before** `expo-notifications` in `app.json` — Expo
+composes mods by wrapping, so the last registered runs first, and getting this backwards fails
+silently: prebuild succeeds and the key is still there.
+
 **Permission.** `requestNotificationPermission()` checks first and only prompts when not
 already granted, so it's safe to call repeatedly. Everything is wrapped so Expo Go (where the
 notification module is unavailable) degrades to a no-op rather than throwing — OS notifications

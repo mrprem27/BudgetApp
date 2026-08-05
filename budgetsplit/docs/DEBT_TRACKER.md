@@ -30,6 +30,11 @@
 external blockers (GPay export format, Google CASA assessment), which are not
 code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
 
+> **Free Apple team + push entitlement.** `expo-notifications` adds `aps-environment` on prebuild,
+> which a personal developer team cannot sign. `plugins/withoutPushEntitlement.js` removes it — the
+> app only ever schedules **local** notifications. If remote push is ever wanted, deleting that
+> plugin is the small part; **moving to a paid Apple team is the actual blocker.**
+
 > **`review.tsx` regrew: 1354 → 977 (paid down 2026-07-28) → 1029 today.** `C1` stays struck
 > because the paydown really happened; the file then grew back past its own fixed size. That is the
 > argument for a *mechanism* over a fourth manual paydown, so `sourceCounts.test.ts` now pins a

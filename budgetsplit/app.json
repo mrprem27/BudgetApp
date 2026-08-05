@@ -66,6 +66,7 @@
           "microphonePermission": false
         }
       ],
+      "./plugins/withoutPushEntitlement",
       "expo-notifications"
     ],
     "experiments": {
