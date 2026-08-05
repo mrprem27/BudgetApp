@@ -451,6 +451,20 @@ URI and `Linking.openURL` hands it to the user's own UPI app. Money moves peer-t
 two people's accounts; the app never touches funds and **never records a settlement it did not
 observe** — saving stays a separate, explicit step. No VPA → no button, and settling behaves as before.
 
+**Choosing between several UPI apps works differently per platform, and that is not a style choice.**
+
+| | Behaviour |
+|---|---|
+| **Android** | `upi://pay` is the NPCI-standard deep link, so the OS resolves it to every UPI-capable app and shows its **own** chooser — which remembers a default. `useUpiApps` returns `null` here, meaning "don't draw a picker": ours would be strictly worse. |
+| **iOS** | There is **no chooser for custom URL schemes at all** — with two apps registered to one scheme, which wins is undefined by Apple. Worse, the Indian UPI apps on iOS mostly register their own scheme rather than claiming `upi://`, so the generic link can resolve to nothing with four UPI apps installed. So we are the picker: `useUpiApps` probes each app with `canOpenURL`, and `TransferBody` opens the only match directly, action-sheets between several, and says plainly that none is installed when the list is empty. |
+
+`canOpenURL` on iOS answers only for schemes listed in `LSApplicationQueriesSchemes` (`app.json` →
+`ios.infoPlist`), so **adding a UPI app to `UPI_APPS` means adding its scheme there too** — an
+undeclared scheme reads as "not installed" and the app silently never appears. The per-app scheme
+strings are published by each vendor and do shift between releases; a stale one degrades to a
+missing row, never a crash. They are **unverified on physical hardware** — the simulator has no UPI
+apps, so it can only exercise the empty case.
+
 `computeTransferScopes` builds the per-group and global pair balance using the same `simplify`
 as every other balance surface. Scope can be a single group or "all groups"
 (`planAllGroupsSettlement`, largest-balance-first, remainder onto the last group), then one

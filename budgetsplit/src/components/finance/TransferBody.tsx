@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, Alert, ActionSheetIOS } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
 import { PayMethodSelector } from './PayMethodSelector';
 import { formatRupees } from '../../lib/money';
 import { buildUpiUri } from '../../lib/upiIntent';
+import { useUpiApps } from '../../hooks/useUpiApps';
 import { haptic } from '../../lib/haptics';
 import type { Person } from '../../db/queries/persons';
 import type { TransferScopes } from '../../lib/settleScope';
@@ -62,9 +63,48 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 
   // Only when we know who is being paid, have their handle, and have an amount.
   // No VPA → no button, and settling behaves exactly as it did before.
-  const upiUri = flags.upiSettle && to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
-    ? buildUpiUri({ vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up' })
+  const payee = flags.upiSettle && to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
+    ? { vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up' }
     : null;
+  // `null` on Android — the OS draws its own chooser for `upi://`, better than ours.
+  const iosApps = useUpiApps();
+  // A malformed VPA yields no URI at all, so there is nothing to offer.
+  const canPay = !!payee && !!buildUpiUri(payee);
+
+  function open(uri: string | null) {
+    if (!uri) return;
+    Linking.openURL(uri).catch(() => Alert.alert(
+      'Couldn’t open that app',
+      'Try another UPI app, or record this settlement manually.',
+    ));
+  }
+
+  /**
+   * Android hands `upi://` to the OS and gets the system chooser for free.
+   *
+   * iOS has no such chooser, so we are the picker: probe what's installed, and
+   * open it directly when there's only one — a one-item action sheet is a tap
+   * charging rent. With none installed we say exactly that, rather than firing a
+   * scheme nothing claims and reporting a failure the user can't act on.
+   */
+  function payViaUpi() {
+    if (!payee) return;
+    if (iosApps === null) { open(buildUpiUri(payee)); return; }
+
+    if (iosApps.length === 0) {
+      Alert.alert(
+        'No UPI app found',
+        'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here — or record this settlement manually.',
+      );
+      return;
+    }
+    if (iosApps.length === 1) { open(buildUpiUri(payee, iosApps[0].key)); return; }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: ['Cancel', ...iosApps.map(a => a.label)], cancelButtonIndex: 0, title: `Pay ${formatRupees(amountPaise)}` },
+      i => { if (i > 0) open(buildUpiUri(payee, iosApps[i - 1].key)); },
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -116,12 +156,12 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
       <Text style={styles.label}>HOW WAS IT PAID?</Text>
       <PayMethodSelector value={payMethod} onChange={onPayMethod} accent={colors.settle} />
 
-      {upiUri && (
+      {canPay && (
         <>
           <Text style={styles.label}>PAY NOW</Text>
           <TouchableOpacity
             style={styles.upiBtn}
-            onPress={() => Linking.openURL(upiUri).catch(() => Alert.alert('No UPI app found', 'Install a UPI app, or record this settlement manually.'))}
+            onPress={payViaUpi}
             accessibilityRole="button"
             accessibilityLabel={`Pay ${formatRupees(amountPaise)} to ${nameOf(to, 'them')} via UPI`}
           >

@@ -20,16 +20,16 @@ import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '
 import { haptic } from '../src/lib/haptics';
 import { alpha } from '../src/theme';
 
-// The pillars are always on — the app's reason to exist. They show a "Core" badge
+// The pillar is always on — the app's reason to exist. It shows a "Core" badge
 // instead of a toggle so users understand they can't switch off the basics.
 //
-// "Group Splitting" used to sit here as a third Core pillar. It moved into the
-// toggleable list below: the onboarding persona can now switch it off for someone
-// who only tracks their own money, and a Core badge over a switchable module was a
-// promise the app no longer keeps.
+// Two modules used to sit here and no longer do. "Group Splitting" left when the
+// onboarding persona gained the power to switch it off, and "Insights" left when it
+// gained a real flag of its own — a Core badge above the same module's live switch
+// lower down the screen is a straight contradiction, and the badge is the half
+// that's lying. Anything genuinely toggleable belongs in the list, not here.
 const CORES: { icon: keyof typeof Feather.glyphMap; tint: string; label: string; caption: string }[] = [
-  { icon: 'dollar-sign', tint: colors.accent, label: 'Personal Finance', caption: 'Budgets, categories, spending tracking' },
-  { icon: 'bar-chart-2', tint: colors.healthAmber, label: 'Insights', caption: 'Trends, alerts, and patterns across both' },
+  { icon: 'dollar-sign', tint: colors.accent, label: 'Personal Finance', caption: 'Transactions, categories, budgets and history' },
 ];
 
 
@@ -226,7 +226,10 @@ export default function FeaturesScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Feature Management" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.intro}>Turn on what you need. Off by default keeps the app clean.</Text>
+        {/* This used to read "Off by default keeps the app clean", which stopped
+            being true when the flags were reworked: everything except the streak
+            now starts on, and your setup decides what you actually see. */}
+        <Text style={styles.intro}>Your setup below switches these on and off together. Change any one whenever you like — nothing is deleted either way.</Text>
 
         {/* YOUR SETUP — the persona that chose the switches below */}
         {intent && (() => {

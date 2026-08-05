@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa } from '../lib/upiIntent';
+import { buildUpiUri, isValidVpa, UpiApp, UPI_APPS } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -46,5 +46,41 @@ describe('buildUpiUri', () => {
 
   it('falls back to a placeholder name rather than an empty pn', () => {
     expect(buildUpiUri({ vpa: 'a@ybl', name: '  ', amountPaise: 500 })).toContain('pn=Payee');
+  });
+});
+
+describe('per-app URIs', () => {
+  const req = { vpa: 'friend@okhdfcbank', name: 'Asha', amountPaise: 125050, note: 'Dinner' };
+
+  it('defaults to the NPCI-standard scheme', () => {
+    expect(buildUpiUri(req)).toMatch(/^upi:\/\/pay\?/);
+    expect(buildUpiUri(req, UpiApp.Generic)).toBe(buildUpiUri(req));
+  });
+
+  it('swaps only the scheme and path, never the parameters', () => {
+    const generic = buildUpiUri(req)!;
+    for (const app of UPI_APPS) {
+      const uri = buildUpiUri(req, app.key)!;
+      expect(uri.startsWith(app.prefix + '?')).toBe(true);
+      expect(uri.split('?')[1]).toBe(generic.split('?')[1]);
+    }
+  });
+
+  it('rejects a bad request the same way for every app', () => {
+    for (const app of UPI_APPS) {
+      expect(buildUpiUri({ ...req, vpa: 'nope' }, app.key)).toBeNull();
+      expect(buildUpiUri({ ...req, amountPaise: 0 }, app.key)).toBeNull();
+    }
+  });
+
+  it('gives every app a distinct scheme and a probe that matches it', () => {
+    const prefixes = UPI_APPS.map(a => a.prefix);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+    for (const a of UPI_APPS) expect(a.prefix.startsWith(a.probe)).toBe(true);
+  });
+
+  it('keeps the amount in rupees with two decimals across apps', () => {
+    // 125050 paise = ₹1250.50 — the paise/rupee boundary lives in this one function.
+    for (const app of UPI_APPS) expect(buildUpiUri(req, app.key)).toContain('am=1250.50');
   });
 });

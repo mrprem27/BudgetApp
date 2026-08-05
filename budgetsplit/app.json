@@ -14,7 +14,14 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "BudgetSplit can optionally tag a transaction with where you made it. This is off by default and never leaves your device.",
         "NSCameraUsageDescription": "BudgetSplit uses the camera so you can photograph a receipt and attach it to an expense. Photos are stored on your device and never uploaded.",
-        "NSPhotoLibraryUsageDescription": "BudgetSplit needs access to your photos so you can attach a receipt to an expense or set a profile picture. Photos are stored on your device and never uploaded."
+        "NSPhotoLibraryUsageDescription": "BudgetSplit needs access to your photos so you can attach a receipt to an expense or set a profile picture. Photos are stored on your device and never uploaded.",
+        "LSApplicationQueriesSchemes": [
+          "phonepe",
+          "tez",
+          "paytmmp",
+          "bhim",
+          "upi"
+        ]
       }
     },
     "android": {
