@@ -136,11 +136,11 @@ Every row below is over it; C1–C3 are 3–4.5× over.
 
 ## 📌 Found during the 🟢 pass — recorded, not actioned
 
-Two things surfaced that are outside what a cosmetic pass should decide alone.
+Two things surfaced that are outside what a cosmetic pass should decide alone. **N1 has since been decided and fixed** (`V2-09`); N2 stands.
 
 | # | Item | Why it wasn't done here |
 |---|---|---|
-| **N1** | `colors.textMuted` is **2.98:1** on `bgCard` — below WCAG AA's 4.5:1 for small text. It's the app-wide caption token, used everywhere. | Fixing it means darkening or lightening a core palette entry, which changes the look of every screen. That's a design decision, not a cleanup. (The specific bug behind U5 — `history.tsx` at **1.44:1** — *was* fixed.) |
+| ~~**N1**~~ ✅ | ~~`colors.textMuted` is **2.98:1** on `bgCard` — below WCAG AA's 4.5:1 for small text.~~ | **Fixed 2026-08-05** as `V2-09`. It *was* a design decision, which is why it needed deciding rather than deferring again: `#5A6B69` → **`#7C918E`** (5.02:1 on `bgCard`, 5.78 on `bg`, 4.62 on `bgInput`). Deliberately not lightened further — clearing AA on `bgMuted`/`bgElevated` too needs `#8A9D9A`, indistinguishable from `textSecondary`, collapsing three text tiers into two to fix surfaces that carry no muted text. `contrast.test.ts` computes the ratios from the palette and asserts the hierarchy survives. |
 | **N2** | `help.tsx` is a third collapsible, structurally unlike the other two (bare header + card body, plus a nested item-level accordion). | Converting it to `SectionCard` would add card chrome to its header — a real visual change I can't device-verify. Its missing `accessibilityState` **was** fixed; only the structural convergence is deferred. |
 
 ---

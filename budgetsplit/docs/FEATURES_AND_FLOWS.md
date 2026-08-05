@@ -150,7 +150,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 |---|---|---|---|---|
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
-| S-05 | **Plan** | `app/(tabs)/savings.tsx` | Total Money card, overspend-raid notice with Undo, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
+| S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
 | S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
@@ -382,7 +382,7 @@ Flow (`useItemizedForm.handleScanReceipt`):
 
 | Provider | What it is | Privacy |
 |---|---|---|
-| `gemini` (**default**) | Sends the photo to Gemini Flash's free tier through `server/receipt-ocr-proxy`. Best free accuracy — the model sees the real 2-D layout instead of flattened OCR text. | **The photo leaves the device.** See §19. |
+| `gemini` (**default**) | Sends the photo to Gemini Flash's free tier through `server/receipt-ocr-proxy`. Best free accuracy — the model sees the real 2-D layout instead of flattened OCR text. **Falls back to `device` automatically if the cloud call fails** (`V2-13`), and the sheet says so, because on-device reading misses more. | **The photo leaves the device.** See §19. |
 | `device` | Apple Vision OCR (`modules/expo-ocr`) + the regex line-item heuristic in `src/lib/ocr.ts`. Weakest on two-line item layouts, which is exactly why the raw-text panel exists. | Fully offline; the photo never leaves the phone. |
 
 **Choosing the provider:** Feature management → Smart capture → **Cloud Receipt Scanning**
@@ -411,8 +411,8 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 
 1. **ScreenHeader** "Plan" (large) + month pill.
 2. **Header icons** (top-right, **not pills**): `Insights` *(flag `insights`, `/insights`)* · `Reports` *(flag `reports`, `/reports`)* · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Can I afford?` *(flag `affordCheck`, `/afford`)*. Reminders lives in Settings. Reports is **also** still in Settings → Reports & export; it was reachable *only* from there, which is where you look for an export, not for last month's numbers (`V2-08`).
-3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — net "Total Money": Your money / Cash available / Investments / Credit available / Credit used. Tap **edit** → **MoneyEditorSheet** to set the cash / investment / credit figures. (Replaced the old savings-Pool + "Cash available" cards — funding is direct to goals, there is **no pool**.)
-4. **Overspend-raid notice** — when `runOverspendRaid` pulled from goals to cover negative cash, a notice names the raided goals with **Undo** → `undoOverspendRaid` re-funds the exact amounts.
+3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — hero is **Available Money** = spendable cash only. Below it: **Net worth** (cash + investments − credit *used*) and **Credit headroom**, labelled *"borrowing, not money"*. Tap **edit** → **MoneyEditorSheet**. (`V2-12`: the hero used to be one figure adding cash + investments + *unused credit*, so a ₹2L card limit read as ₹2L of money. Unused limit is neither an asset nor a debt, so it is now in neither figure.)
+4. **Overspend consent prompt** — when cash is negative, `proposeOverspendRaid` names which unlocked goals *could* cover it and asks: **Use savings** / **Keep goals**. Nothing moves until you agree; `applyOverspendRaid` then writes exactly the withdrawals shown (never a recomputed plan), and a confirmation offers **Undo** → `undoOverspendRaid`. Declining leaves cash negative, which is the honest picture. (`V2-10`: this used to happen automatically during app boot with an after-the-fact notice.)
 5. **Savings insights** card: opportunity-cost / habit nudges.
 6. **Goals** *(flag `savingsGoals`)*: `DraggableList` (drag = funding priority → `reorderGoals` writes `sort_order`); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → goal sheet (name, target, icon, colour, allocation + frequency, target-date) → `insertGoal`. Completed goals sink below the active list with a distinct card.
 7. **ComingUpList** "Upcoming this month".
@@ -428,7 +428,7 @@ overfunded banner; contribution history.
 ### Savings automation
 `runSavingsMaintenance` (on boot + foreground): leftover-sweep → scheduled allocations
 (`planAutoAllocations`, drag-rank order, advancing the anchor only for periods actually funded)
-→ overspend raid (`planOverspendRaid`, lowest-ranked **unlocked** goals first) → reconcile.
+→ overspend **proposal** (`planOverspendRaid`, lowest-ranked **unlocked** goals first — applied only on consent) → reconcile.
 Auto-sweep is opt-in (`auto_sweep_enabled`).
 
 ---
@@ -794,7 +794,7 @@ absence is explicit rather than an oversight.
 | 6 | Group with >1 member and total > 0 → `SplitSummary` opens `SplitSheet` / `PayersSheet` | `app/add/quick.tsx:191-200` |
 | 7 | Shares via `computeShares`, payments via `computePayments` (default: I paid it all) | `src/lib/splitMath.ts` |
 | 8 | Budget nudge shows remaining in the category as you type | `components/finance/add/BudgetNudge.tsx` |
-| 9 | Save → **duplicate check** for non-recurring expenses; a match prompts "Add anyway?" | `findRecentDuplicate` |
+| 9 | Save → **duplicate check** for non-recurring expenses; a match prompts "Add anyway?" | `findRecentDuplicate` — and the Review commit path runs the same check via `findDuplicatesAmong` (`V2-20`) |
 | 10 | `insertTxn` writes `txn` + payments + shares + audit inside one `withTransactionAsync` | `src/db/queries/transactions.ts` |
 | 11 | `haptic.success()` → `refresh()` → `router.back()` | `useAddTxnForm.ts` |
 | 12 | `refresh()` coalesces 32 ms and bumps a version; the focused screen reloads, background tabs mark dirty | `components/system/DataRefreshProvider.tsx` |
@@ -864,8 +864,8 @@ See §4 — the layout list there is this flow's step 6, in order. The load path
 | 2 | Drag to reorder → `reorderGoals` writes `sort_order` = funding priority | `components/ui/DraggableList.tsx`, `savings.ts:101` |
 | 3 | Manual: "Add funds" on a goal → `fundGoal` writes an `allocate` ledger row | `savings.ts:156` |
 | 4 | Scheduled: on open / foreground, `runAutoFunding` → `planAutoAllocations` funds elapsed periods from available cash in rank order, advancing the anchor only for periods actually funded | `savingsEngine.ts:58` |
-| 5 | If cash went negative, `runOverspendRaid` → `planOverspendRaid` pulls from the lowest-ranked **unlocked** goals | `savingsEngine.ts:101` |
-| 6 | Plan shows a notice naming the raided goals, with Undo → `undoOverspendRaid` re-funds the exact amounts | `app/(tabs)/savings.tsx:115-135` |
+| 5 | If cash went negative, `proposeOverspendRaid` → `planOverspendRaid` *plans* a pull from the lowest-ranked **unlocked** goals. **Nothing is written.** | `savingsEngine.ts:101` |
+| 6 | Plan asks before anything moves; on **Use savings**, `applyOverspendRaid` writes the shown withdrawals and offers Undo → `undoOverspendRaid` | `app/(tabs)/savings.tsx` |
 | 7 | Reaching the target triggers `GoalCelebration`; completed goals sink below the active list | `app/(tabs)/savings.tsx:171-180` |
 
 ### FLOW-11 — Back up and restore
@@ -966,9 +966,21 @@ need a dev build.
 **Test notification.** The Notifications screen can fire one immediately, which is the only way
 to confirm the whole chain on a device without waiting for a real due date.
 
-**Tap-to-open.** Notifications open the app; there is **no deep-link routing from a
-notification payload to a specific screen**. The nearest surfaces are the Reminders screen
-(bills + settle-ups) and the Home catch-up banner. Worth adding, not currently present.
+**Tap-to-open.** A tapped reminder lands on what it was talking about (`V2-15`, fixed
+2026-08-05 — this section previously read *"worth adding, not currently present"*).
+
+| Reminder id | Opens |
+|---|---|
+| `renew_{ruleId}_d{n}` | `/plan/recurring?focus={ruleId}` — the rule, scrolled to and highlighted |
+| `daily_log` | `/add/quick` — the thing it is asking you to do |
+| `backup_nudge` | `/reports`, where the export lives |
+| anything else | nothing. A wrong destination is worse than none: it moves you away from what you were doing |
+
+The route is derived from the **identifier** (`lib/notificationRoutes.ts`), not from a payload,
+because those ids are already this app's contract for a reminder's source — so reminders scheduled
+*before* this shipped route correctly, with no payload migration and no second source of truth.
+`app/_layout.tsx` registers `addNotificationResponseReceivedListener` and also checks
+`getLastNotificationResponseAsync`, which covers a tap that cold-started the app.
 
 ---
 
@@ -1270,11 +1282,12 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 ### `finance/group/`, `finance/plan/`, `finance/add/`, `finance/review/`, `finance/backup/`
 | Component | What it is |
 |---|---|
-| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. `GroupBalanceCard` also renders the "All settled up" zero state. |
+| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. `GroupBalanceCard` also renders the "All settled up" zero state. `BudgetTab` offers **Re-plan the rest of this month** on an over-budget category (`V2-07`). |
+| `group/RebalanceSheet` | The re-plan proposal: which limits move and by how much, before anything is written (`V2-07`). |
 | `group/InsightsTab` | In-hub group Insights view (member spend bars, top categories, recommendations). |
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |
 | `plan/GoalCard` | Savings goal card — progress bar, deadline, contribution/needed per month. |
-| `plan/TotalMoneyCard` | Net "Total Money" card — cash / investments / credit available + used. |
+| `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money. |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
 | `add/KindToggle` · `add/AmountField` · `add/CategoryDatePills` · `add/NoteField` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |
@@ -1328,7 +1341,7 @@ pre-stages the data so each is one or two taps from completing. After **Load dem
 | 16 | **Itemized split + Service charge** | groups with members | Add → expense → **Split by items** → items → **Service** adjustment → assign → payers (watch "Must equal total ₹X") → review → Save. |
 | 17 | **Budget over/near/under live** | Groceries **over**, Eating Out **near**, Fuel **under** | Personal → Budget tab; or add a Groceries expense to watch a bar flip red. |
 | 18 | **Goal withdraw / protect / adjust / delete** | funded goals (Emergency locked, Laptop partial) | Plan → a goal → Withdraw to cash / Protect (read the explainer sheet) / Adjust / Delete. |
-| 19 | **Overspend raid + Undo** | goals funded, cash drivable negative | Log a large expense until cash goes negative → Plan shows the raid notice → **Undo**. |
+| 19 | **Overspend consent + Undo** | an **unlocked** goal with money, cash drivable negative | Log a large expense until cash goes negative → Plan asks *"Cover it from X?"* → **Keep goals** leaves the goal untouched; **Use savings** moves it and offers **Undo**. A *locked* goal must never be offered. |
 | 20 | **Group create / edit / archive / delete** | existing groups | Groups → **New**; or Group → ⋯ → Edit / Archive. |
 | 21 | **Export CSV / PDF + drill-down** | 3 months of data | Settings → Export & reports → **CSV / PDF**; tap a donut category → **Report transactions** → a row → txn detail. |
 | 22 | **Notification permission denial** | — | Deny notifications, then Settings → Notifications → the denied banner + **Open Settings to allow**. Send a **test notification** once granted. |

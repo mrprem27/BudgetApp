@@ -194,7 +194,7 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 | `colors.bgInput` | `#162825` | TextInput background |
 | `colors.textPrimary` | `#ECF3F1` | All primary text |
 | `colors.textSecondary` | `#8FA3A0` | Supporting text, labels |
-| `colors.textMuted` | `#5A6B69` | Placeholders, captions, disabled |
+| `colors.textMuted` | `#7C918E` | Placeholders, captions, disabled. Was `#5A6B69` — 2.98:1 on `bgCard`, below WCAG AA. `contrast.test.ts` holds the floor |
 | `colors.border` | `#21302E` | Card borders, dividers |
 
 ---
