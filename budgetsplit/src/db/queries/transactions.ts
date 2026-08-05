@@ -4,7 +4,7 @@ import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
-import type { EntryMode, RecurFreq, RecurState, PayMethod } from '../../constants/enums';
+import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind } from '../../constants/enums';
 
 export type Txn = {
   id: string;
@@ -477,6 +477,30 @@ export async function findRecentDuplicate(
     [groupId, category, dateMs - window, dateMs + window],
   );
   return rows.some(r => r.total === amountPaise);
+}
+
+/**
+ * Which of these candidates already look like something logged in the last ±24 h.
+ *
+ * Quick Add has warned about duplicates since it shipped; the Review commit path never did, even
+ * though it is the one that bulk-inserts rows parsed out of a statement — the place a duplicate is
+ * *most* likely, because re-importing an overlapping export is a normal thing to do (`V2-20`).
+ *
+ * Returns the indices that matched, so the caller can name a count instead of interrogating the
+ * user row by row. Expenses only, matching Quick Add: an income or a settlement repeating at the
+ * same amount is ordinary, and warning about it would train people to dismiss the warning.
+ */
+export async function findDuplicatesAmong(
+  db: SQLite.SQLiteDatabase,
+  candidates: { groupId: string; kind: TxnKind; category: string; total: number; dateMs: number }[],
+): Promise<number[]> {
+  const hits: number[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    if (c.kind !== 'expense') continue;
+    if (await findRecentDuplicate(db, c.groupId, c.category, c.total, c.dateMs)) hits.push(i);
+  }
+  return hits;
 }
 
 /** Null out every transaction's attachment reference (used by "clear all attachments"). */

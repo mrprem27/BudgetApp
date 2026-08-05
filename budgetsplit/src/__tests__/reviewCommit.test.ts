@@ -1,3 +1,4 @@
+import { toRecurRows } from '../lib/recurringSuggest';
 import {
   effectiveRow, effectiveSplit, snapshotRow, payerFor, planCommit,
   DEFAULT_CATEGORY, type ReviewContext, type RowEdit, type SplitState,
@@ -314,5 +315,36 @@ describe('planCommit — group expenses', () => {
   it('falls back to a generic destination name for an unknown group', () => {
     const c = ctx({ sharedGroups: [], groupMembers: { g1: [person('me')] } });
     expect(plan(c, row({ dest_group_id: 'g1' }), {}, equalSplit(['me']))).toMatchObject({ destName: 'group' });
+  });
+});
+
+describe('toRecurRows — what qualifies as recurring evidence', () => {
+  const snap = (over: Record<string, unknown> = {}) => ({
+    txnId: 't1',
+    snap: { kind: 'expense', source: 'import', category: 'Bills', description: 'Netflix', amount: 49900, date: 1, ...over },
+  });
+
+  it('keeps an imported, categorised expense', () => {
+    expect(toRecurRows([snap()])).toHaveLength(1);
+  });
+
+  it('drops a manually-typed row — you would have used the recurring toggle', () => {
+    expect(toRecurRows([snap({ source: 'manual' })])).toEqual([]);
+    // An absent source is manual too, not unknown.
+    expect(toRecurRows([snap({ source: null })])).toEqual([]);
+  });
+
+  it('drops income and transfers', () => {
+    expect(toRecurRows([snap({ kind: 'income' })])).toEqual([]);
+    expect(toRecurRows([snap({ kind: 'settlement' })])).toEqual([]);
+  });
+
+  it('drops an uncategorised row, which has nothing to group by', () => {
+    expect(toRecurRows([snap({ category: null })])).toEqual([]);
+    expect(toRecurRows([snap({ category: '' })])).toEqual([]);
+  });
+
+  it('carries the committed txn id through, not the pending id', () => {
+    expect(toRecurRows([snap()])[0].id).toBe('t1');
   });
 });

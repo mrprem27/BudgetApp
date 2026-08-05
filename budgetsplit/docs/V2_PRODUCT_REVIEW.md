@@ -650,9 +650,21 @@ backup at all. **`V2-02`.**
 ### Unnumbered flows
 
 - **Review commit** — genuinely the strongest flow in the app; see §3.15.
-- **CSV round-trip** — per-group export re-imports through the same pipeline. The demo-row filter
-  matches on **hardcoded signatures**, which will drift against `seedDemo.ts` the first time the
-  demo data changes. A test asserting the two agree costs almost nothing. **`V2-16`.**
+- **CSV round-trip** — per-group export re-imports through the same pipeline. ~~The demo-row filter
+  matches on **hardcoded signatures**, which will drift against `seedDemo.ts`.~~ **`V2-16` — see the
+  correction below; this filter does not exist.**
+
+> **Correction (2026-08-05).** `V2-16` was **wrong**, and no code was written for it. There is no
+> demo-row filter to drift: `is_demo` was removed from all five tables *before* this review was
+> written, and `src/db/schema.ts:264-269` says why — *"Nothing ever read it, so it looked like a
+> safety mechanism while excluding nothing from exports or reports. Removed rather than left as a
+> false promise."* `grep -rn "is_demo" src app` returns that comment and nothing else, and
+> `groupExport.ts` does no demo filtering at all. Demo data is wiped by "erase all data", not
+> filtered out of exports.
+>
+> The finding was carried in from a stale project note rather than read from source — the one lapse
+> in a review whose own rule was *"a claim without evidence gets deleted, not debated."* Writing the
+> proposed test would have asserted agreement between two things, one of which does not exist.
 - **Recurring catch-up** — `materializeDueOccurrences` on boot and foreground, surfacing an amber
   Home banner after 30+ days closed. A well-handled edge case most apps get wrong.
 
@@ -1026,7 +1038,7 @@ OCR providers (accuracy vs privacy), the bespoke Home hero (`U9`), the itemized 
 | **V2-13** | Gemini free tier is app-wide not per-user, cut 50-80% in late 2025; the documented Mistral fallback is not implemented (§19) | Implement the fallback, or default to `device` before any user growth | **M** |
 | **V2-14** | Flag count has drifted three times (`ARCHITECTURE.md:304` and `TAGS.md` F-33 say 12; code says 14); `review.tsx` tracked at 977, actually 1029; and `FEATURES_AND_FLOWS.md:749` cites the FAB at `_layout.tsx:79` where it now sits at `:99` — found while verifying this review's own citations | A guard test asserting documented counts match source — the `DRIFT-26` pattern. Line-number citations are the harder case: either drop them in favour of symbol names, or accept them as approximate | **L** |
 | **V2-15** | No notification deep-link routing; verified no `addNotificationResponseReceivedListener` anywhere. §18 already says "worth adding" | Route a reminder tap to `/reminders` or the specific rule | **L** |
-| **V2-16** | The CSV demo-row filter matches hardcoded signatures that will drift against `seedDemo.ts` | A test asserting the two agree | **L** |
+| ~~**V2-16**~~ | ~~The CSV demo-row filter matches hardcoded signatures that will drift against `seedDemo.ts`~~ | ❌ **INVALID — the filter does not exist.** `is_demo` was removed before this review was written (`schema.ts:264-269`). No code written. See the correction in §8 | **—** |
 | **V2-20** | ±24 h duplicate detection runs on Quick Add but not on the Review commit path | Reuse `findRecentDuplicate` in `planCommit` | **L** |
 | **V2-21** | `review.tsx` at 1029 LOC and growing; `F-18`/`S-19`/`DEBT-11` all DEFER decomposition for want of a safe split | A LOC ceiling test to stop the growth, rather than a fourth manual paydown | **L** |
 | **V2-11** | `Onboarding.tsx:443` still renders `that's — of your take-home` when income is set and budget is empty | Guard the block on `budgetNum > 0` too | **L** |

@@ -73,6 +73,33 @@ export function rowMatches(row: FilterRow, f: ReviewFilters): boolean {
  * (drives the "apply category to similar rows?" prompt). Empty/word-less
  * descriptions never match.
  */
+/**
+ * The working set: focus subset first, then filters, plus what the screen needs to
+ * describe the result.
+ *
+ * `distinctCats` comes from `baseRows`, **not** `visibleRows` — deriving the category
+ * chips from the filtered set would delete the chip you just used, leaving no way back.
+ */
+export function deriveWorkingSet<T extends { id: string }>(
+  all: T[],
+  focusIds: Set<string> | null,
+  filters: ReviewFilters,
+  toFilterRow: (row: T) => FilterRow,
+  categoryOf: (row: T) => string,
+): { visibleRows: T[]; baseRows: T[]; focusActive: boolean; hasFilters: boolean; narrowed: boolean; distinctCats: string[] } {
+  const focusActive = focusIds !== null;
+  const hasFilters = filtersActive(filters);
+  const baseRows = focusActive ? all.filter(r => focusIds!.has(r.id)) : all;
+  return {
+    baseRows,
+    visibleRows: hasFilters ? baseRows.filter(r => rowMatches(toFilterRow(r), filters)) : baseRows,
+    focusActive,
+    hasFilters,
+    narrowed: focusActive || hasFilters,
+    distinctCats: Array.from(new Set(baseRows.map(categoryOf).filter(Boolean))),
+  };
+}
+
 export function isSimilarMerchant(a: string, b: string): boolean {
   const wa = new Set(wordsOf(a));
   if (wa.size === 0) return false;

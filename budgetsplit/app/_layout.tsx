@@ -2,7 +2,7 @@ import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import React, { useEffect, useState } from 'react';
 import { View, AppState } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SQLiteProvider } from 'expo-sqlite';
@@ -13,7 +13,9 @@ import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/recurring';
+import * as Notifications from 'expo-notifications';
 import { rescheduleReminders } from '../src/lib/reminders';
+import { routeForReminder } from '../src/lib/notificationRoutes';
 import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
 import { colors } from '../src/constants/colors';
 import { LockGate } from '../src/components/system/LockGate';
@@ -27,6 +29,7 @@ import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 
 export default function RootLayout() {
+  const router = useRouter();
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -72,7 +75,23 @@ export default function RootLayout() {
       }
     });
 
-    return () => { alive = false; sub.remove(); };
+    // A tapped reminder lands where it was talking about (`V2-15`). Registered here
+    // because this listener must exist before the OS delivers a cold-start tap, and
+    // `getLastNotificationResponseAsync` covers the case where it already did.
+    const tapSub = Notifications.addNotificationResponseReceivedListener(res => {
+      const to = routeForReminder(res.notification.request.identifier);
+      if (to) router.push(to as Href);
+    });
+    Notifications.getLastNotificationResponseAsync()
+      .then(res => {
+        const to = res && routeForReminder(res.notification.request.identifier);
+        // Deferred past the splash: routing while the DB is still opening would push
+        // onto a tree that hasn't mounted.
+        if (to) setTimeout(() => router.push(to as Href), 0);
+      })
+      .catch(() => {});
+
+    return () => { alive = false; sub.remove(); tapSub.remove(); };
   }, [attempt]);
 
   if (dbError) {

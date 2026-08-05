@@ -33,20 +33,21 @@ import {
   getPending, deletePending, clearPending, updatePendingDraft, restorePending,
   type PendingTxn, type PendingDraft,
 } from '../src/db/queries/pending';
-import { insertTxn, softDeleteTxn } from '../src/db/queries/transactions';
+import { insertTxn, softDeleteTxn, findDuplicatesAmong } from '../src/db/queries/transactions';
+import { confirmDuplicates } from '../src/lib/confirm';
 import { convertToRecurring } from '../src/db/queries/recurring';
 import { getMe, getGroupMembers, type Person } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories, type Category } from '../src/db/queries/categories';
 import { parseToPaise, formatRupees, splitByMode } from '../src/lib/money';
 import { recordCorrection } from '../src/lib/smartCategoryLearn';
-import { detectRecurringCandidates, type RecurRow, type RecurringCandidate } from '../src/lib/recurringSuggest';
+import { detectRecurringCandidates, toRecurRows, type RecurringCandidate } from '../src/lib/recurringSuggest';
 import { RecurringSuggestionBanner } from '../src/components/finance/review/RecurringSuggestionBanner';
 import { RecurringSuggestionsSheet } from '../src/components/finance/review/RecurringSuggestionsSheet';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import {
   type ReviewFilters, DEFAULT_FILTERS,
-  filtersActive, rowMatches, isSimilarMerchant,
+  filtersActive, deriveWorkingSet, isSimilarMerchant,
 } from '../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../src/lib/reviewViews';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -149,18 +150,9 @@ export default function ReviewScreen() {
     planCommitPure(ctx(), row, eff(row), splitState(row));
 
   /** Normalize a pending row to the filter engine's shape (uses effective edits). */
-  function filterRow(row: PendingTxn) {
-    const v = eff(row);
-    return { description: row.description, category: v.category, amountPaise: parseToPaise(v.amount), date: row.date };
-  }
-
-  const focusActive = focusIds !== null;
-  const hasFilters = filtersActive(filters);
-  const baseRows = focusActive ? pending.filter(r => focusIds!.has(r.id)) : pending;
-  const visibleRows = hasFilters ? baseRows.filter(r => rowMatches(filterRow(r), filters)) : baseRows;
-  const narrowed = focusActive || hasFilters;
-  // Distinct categories present in the working set → category filter chips.
-  const distinctCats = Array.from(new Set(baseRows.map(r => eff(r).category).filter(Boolean)));
+  const filterRowOf = (row: PendingTxn) => ({ description: row.description, category: eff(row).category, amountPaise: parseToPaise(eff(row).amount), date: row.date });
+  const { visibleRows, baseRows, focusActive, hasFilters, narrowed, distinctCats } =
+    deriveWorkingSet(pending, focusIds, filters, filterRowOf, row => eff(row).category);
 
   /** Apply an edit locally (instant UI) and auto-save the matching draft columns. */
   function patch(id: string, p: Partial<RowEdit>) {
@@ -233,10 +225,7 @@ export default function ReviewScreen() {
    */
   function checkRecurringSuggestions(done: { txnId: string; snap: PendingTxn }[]) {
     if (!flags.recurringSuggest) return;
-    const rows: RecurRow[] = done
-      .filter(d => d.snap.kind === 'expense' && (d.snap.source ?? 'manual') !== 'manual' && d.snap.category)
-      .map(d => ({ id: d.txnId, description: d.snap.description, amountPaise: d.snap.amount, date: d.snap.date, category: d.snap.category! }));
-    const candidates = detectRecurringCandidates(rows);
+    const candidates = detectRecurringCandidates(toRecurRows(done));
     if (candidates.length > 0) setRecurCandidates(candidates);
   }
 
@@ -279,6 +268,11 @@ export default function ReviewScreen() {
       );
       return;
     }
+    // Re-importing an overlapping statement is normal, so this path needs the same
+    // ±24 h warning Quick Add has always had (`V2-20`).
+    const dupes = await findDuplicatesAmong(db, [{ groupId: plan.groupId, kind: plan.kind, category: plan.category, total: plan.total, dateMs: row.date }]);
+    if (dupes.length > 0 && !(await confirmDuplicates(1, 1))) return;
+
     setSavingId(row.id);
     try {
       const done = await insertCommit(row, plan);
@@ -295,7 +289,7 @@ export default function ReviewScreen() {
   }
 
   /** Commit many rows at once (Save all / Save selected), with a batch Undo. */
-  function saveMany(rows: PendingTxn[], label: string) {
+  async function saveMany(rows: PendingTxn[], label: string) {
     if (savingId) return;
     const ready = rows.map(r => ({ row: r, plan: planCommit(r) })).filter((x): x is { row: PendingTxn; plan: Extract<CommitPlan, { ok: true }> } => x.plan.ok);
     const skipped = rows.length - ready.length;
@@ -303,6 +297,8 @@ export default function ReviewScreen() {
       Alert.alert('Nothing ready to save', 'These rows still need an amount — a balanced split for group expenses, or who the transfer was with for group transfers.');
       return;
     }
+    const dupes = await findDuplicatesAmong(db, ready.map(({ row, plan }) => ({ groupId: plan.groupId, kind: plan.kind, category: plan.category, total: plan.total, dateMs: row.date })));
+    if (dupes.length > 0 && !(await confirmDuplicates(dupes.length, ready.length))) return;
     Alert.alert(
       label,
       `${ready.length} transaction${ready.length === 1 ? '' : 's'} will be saved${skipped > 0 ? `. ${skipped} skipped — they need an amount, a balanced split, or who the transfer was with.` : '.'}`,
@@ -404,7 +400,7 @@ export default function ReviewScreen() {
     setViewsSheet(false);
     setMenuOpen(false);
     if (view.groupId) {
-      const inView = filtersActive(view.filters) ? pending.filter(r => rowMatches(filterRow(r), view.filters)) : pending;
+      const inView = deriveWorkingSet(pending, null, view.filters, filterRowOf, r => eff(r).category).visibleRows;
       // Only expense rows can belong to a group (income is always personal).
       setDestMany(inView.filter(r => eff(r).kind === 'expense').map(r => r.id), view.groupId);
     }

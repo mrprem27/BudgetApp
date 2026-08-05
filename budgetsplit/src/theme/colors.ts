@@ -9,7 +9,14 @@ export const colors = {
   // Text
   textPrimary: '#ECF3F1',
   textSecondary: '#8FA3A0',
-  textMuted: '#5A6B69',
+  // Was #5A6B69 — 2.98:1 on bgCard, well under WCAG AA's 4.5:1, on the token used for
+  // every caption, placeholder and disabled label in the app (`V2-09` / `N1`, deferred
+  // once). Now 5.02:1 on bgCard, 5.78 on bg, 4.62 on bgInput. Same hue, minimally
+  // lightened: going far enough to clear AA on bgMuted/bgElevated too would land on
+  // #8A9D9A, indistinguishable from textSecondary (#8FA3A0), collapsing the two-level
+  // text hierarchy to fix surfaces that carry no muted text — those are pills, tracks
+  // and ring strokes. `contrast.test.ts` holds the line.
+  textMuted: '#7C918E',
 
   // Brand — teal primary with coral highlight
   accent: '#20C4B8',

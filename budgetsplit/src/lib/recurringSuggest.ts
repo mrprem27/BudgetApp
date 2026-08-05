@@ -37,6 +37,24 @@ function median(nums: number[]): number {
  * amounts cluster within `AMOUNT_TOLERANCE` of the median and whose
  * consecutive dates land 24-37 days apart (roughly monthly) as candidates.
  */
+/**
+ * Committed Review rows → detector input.
+ *
+ * Only **imported expenses with a category** qualify. A manually-typed row is not
+ * evidence of a repeating bill (you'd have used the recurring toggle), and an
+ * uncategorised one has nothing to group by.
+ *
+ * Pure, and lives here rather than in the screen because it is the detector's own
+ * input contract — `review.tsx` had it inline while every other rule sat in this file.
+ */
+export function toRecurRows(
+  done: { txnId: string; snap: { kind: string; source?: string | null; category?: string | null; description: string; amount: number; date: number } }[],
+): RecurRow[] {
+  return done
+    .filter(d => d.snap.kind === 'expense' && (d.snap.source ?? 'manual') !== 'manual' && d.snap.category)
+    .map(d => ({ id: d.txnId, description: d.snap.description, amountPaise: d.snap.amount, date: d.snap.date, category: d.snap.category! }));
+}
+
 export function detectRecurringCandidates(rows: RecurRow[]): RecurringCandidate[] {
   const groups = new Map<string, RecurRow[]>();
   for (const r of rows) {

@@ -535,6 +535,7 @@ export default function ItemizedScreen() {
         onClose={() => f.setShowScanSheet(false)}
         rawText={f.scanResult?.rawText ?? null}
         candidates={f.scanResult?.candidates ?? []}
+        fellBack={f.scanResult?.fellBack ?? false}
         onAddItems={(drafts) => { f.addItems(drafts); f.setShowScanSheet(false); }}
       />
 

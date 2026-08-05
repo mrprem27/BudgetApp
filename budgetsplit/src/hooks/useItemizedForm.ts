@@ -98,7 +98,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   const [capturingLoc, setCapturingLoc] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<{ rawText: string | null; candidates: ParsedLineItem[] } | null>(null);
+  const [scanResult, setScanResult] = useState<{ rawText: string | null; candidates: ParsedLineItem[]; fellBack?: boolean } | null>(null);
   const [showScanSheet, setShowScanSheet] = useState(false);
 
   async function captureLocation() {

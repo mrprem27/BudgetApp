@@ -33,18 +33,26 @@ afterEach(() => {
 });
 
 describe('getReceiptExtractor (factory)', () => {
-  it('defaults to gemini when no provider setting is stored', async () => {
-    expect(await getReceiptExtractor()).toBe(geminiExtractor);
+  // The cloud path is no longer the bare gemini extractor: it is wrapped so a failed
+  // cloud call falls back to on-device rather than dead-ending (`V2-13`). Identity
+  // against `geminiExtractor` is therefore the wrong assertion — behaviour is the
+  // contract. `ocrFallback.test.ts` covers the wrapper itself.
+  it('defaults to the cloud path when no provider setting is stored', async () => {
+    const e = await getReceiptExtractor();
+    expect(e).not.toBe(deviceExtractor);
+    expect(typeof e.extractLineItems).toBe('function');
   });
 
-  it('returns the device extractor when explicitly set', async () => {
+  it('returns the device extractor UNWRAPPED when explicitly set', async () => {
+    // Choosing on-device is a privacy choice: there is nothing to fall back to, and
+    // wrapping it would imply a cloud attempt that must never happen.
     await settings.setOcrProvider('device');
     expect(await getReceiptExtractor()).toBe(deviceExtractor);
   });
 
-  it('falls back to gemini for any stored value other than "device"', async () => {
+  it('treats any stored value other than "device" as the cloud path', async () => {
     await settings.setOcrProvider('gemini');
-    expect(await getReceiptExtractor()).toBe(geminiExtractor);
+    expect(await getReceiptExtractor()).not.toBe(deviceExtractor);
   });
 });
 
