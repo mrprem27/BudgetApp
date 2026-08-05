@@ -12,6 +12,7 @@
     "date-fns": "^4.4.0",
     "expo": "~56.0.11",
     "expo-blur": "~56.0.3",
+    "expo-camera": "~56.0.8",
     "expo-crypto": "~56.0.4",
     "expo-device": "~56.0.4",
     "expo-document-picker": "~56.0.4",
@@ -63,7 +64,7 @@
     "test:watch": "jest --watch",
     "deploy": "npx expo export -p web && wrangler deploy",
     "preview": "npx expo export -p web && wrangler dev",
-    "test:calendar": "for d in 2026-01-01 2026-01-31 2026-02-28 2026-03-01 2026-06-30 2026-12-31 2027-02-28; do echo \"\u2014 $d\"; FAKE_TODAY=$d npx jest --silent || exit 1; done"
+    "test:calendar": "for d in 2026-01-01 2026-01-31 2026-02-28 2026-03-01 2026-06-30 2026-12-31 2027-02-28; do echo \"— $d\"; FAKE_TODAY=$d npx jest --silent || exit 1; done"
   },
   "private": true
 }

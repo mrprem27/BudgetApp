@@ -30,6 +30,15 @@
 external blockers (GPay export format, Google CASA assessment), which are not
 code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
 
+> **`SwiftUICore` link workaround.** `expo-camera` (live UPI QR scanning) pulls SwiftUI in, and
+> Xcode 16's **simulator** SDK ships `SwiftUICore.tbd` as a private framework only SwiftUI may
+> link — the build fails with *"cannot link directly with 'SwiftUICore' because product being built
+> is not an allowed client of it"*. `plugins/withSwiftUICoreLinkFix.js` adds
+> `"$(SDKROOT)/System/Library/Frameworks"` to `FRAMEWORK_SEARCH_PATHS` so the linker resolves the
+> real framework instead of the stub. ⚠️ **`-Wl,-weak_framework,SwiftUICore` does NOT fix this** —
+> tried on the pod targets and then on the app target, failing identically both times. Don't re-try
+> it. Delete the plugin once a newer Xcode stops emitting the implicit link.
+
 > **Free Apple team + push entitlement.** `expo-notifications` adds `aps-environment` on prebuild,
 > which a personal developer team cannot sign. `plugins/withoutPushEntitlement.js` removes it — the
 > app only ever schedules **local** notifications. If remote push is ever wanted, deleting that

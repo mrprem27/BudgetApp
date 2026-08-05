@@ -66,8 +66,15 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "BudgetSplit uses the camera to scan a friend's UPI QR code and to photograph receipts. Nothing is uploaded."
+        }
+      ],
       "./plugins/withoutPushEntitlement",
-      "expo-notifications"
+      "expo-notifications",
+      "./plugins/withSwiftUICoreLinkFix"
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa, UpiApp, UPI_APPS } from '../lib/upiIntent';
+import { buildUpiUri, isValidVpa, parseUpiQr, UpiApp, UPI_APPS } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -82,5 +82,56 @@ describe('per-app URIs', () => {
   it('keeps the amount in rupees with two decimals across apps', () => {
     // 125050 paise = ₹1250.50 — the paise/rupee boundary lives in this one function.
     for (const app of UPI_APPS) expect(buildUpiUri(req, app.key)).toContain('am=1250.50');
+  });
+});
+
+describe('parseUpiQr — reading a friend’s UPI QR', () => {
+  it('extracts the handle and name from a standard P2P QR', () => {
+    expect(parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha%20Rao&cu=INR'))
+      .toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao' });
+  });
+
+  it('returns just the handle when the QR carries no name', () => {
+    expect(parseUpiQr('upi://pay?pa=asha@okicici')).toEqual({ vpa: 'asha@okicici' });
+  });
+
+  it('accepts a bare VPA, which some apps encode instead of a URI', () => {
+    expect(parseUpiQr('asha@okaxis')).toEqual({ vpa: 'asha@okaxis' });
+  });
+
+  it('tolerates whitespace around the decoded payload', () => {
+    expect(parseUpiQr('  upi://pay?pa=asha@okhdfcbank  ')).toEqual({ vpa: 'asha@okhdfcbank' });
+  });
+
+  it('reads any app’s scheme, since the parameters are identical', () => {
+    expect(parseUpiQr('phonepe://pay?pa=asha@ybl&pn=Asha')).toEqual({ vpa: 'asha@ybl', name: 'Asha' });
+  });
+
+  it('ignores an amount baked into the QR', () => {
+    // We are capturing a person, not accepting their payment request — carrying `am`
+    // through would silently pre-fill a settle-up with someone else's figure.
+    expect(parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&am=500.00'))
+      .toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha' });
+  });
+
+  it('rejects a QR whose handle is not a VPA', () => {
+    expect(parseUpiQr('upi://pay?pa=not-a-vpa&pn=X')).toBeNull();
+    expect(parseUpiQr('upi://pay?pn=Asha')).toBeNull();
+  });
+
+  it('rejects anything that is not a UPI code at all', () => {
+    // A wrong payee is the one error that must not happen when money follows.
+    for (const junk of ['', '   ', 'https://example.com', 'WIFI:S:home;P:pw;;', '1234567890']) {
+      expect(parseUpiQr(junk)).toBeNull();
+    }
+  });
+
+  it('rejects an EMV/BharatQR merchant code rather than half-reading it', () => {
+    expect(parseUpiQr('00020101021226580011in.gov.upi0119asha@okhdfcbank5204')).toBeNull();
+  });
+
+  it('round-trips with buildUpiUri', () => {
+    const uri = buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', amountPaise: 12345 })!;
+    expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao' });
   });
 });

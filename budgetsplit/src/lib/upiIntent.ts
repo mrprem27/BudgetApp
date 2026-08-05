@@ -76,6 +76,39 @@ const PREFIX: Record<UpiApp, string> = {
   [UpiApp.Bhim]: 'bhim://pay',
 };
 
+export type ScannedUpi = { vpa: string; name?: string };
+
+/**
+ * Pull a VPA (and payee name, if present) out of a scanned UPI QR code.
+ *
+ * A person's UPI QR *is* a `upi://pay?pa=…&pn=…` URI — the same shape this file
+ * builds — so reading one gives both the handle and their name, and typing
+ * `name@okhdfcbank` off someone else's phone screen stops being the way in.
+ *
+ * Accepted: a `upi://pay?…` URI (or any app's scheme, since the parameters are
+ * identical), and a bare VPA, which a few apps encode instead.
+ *
+ * **Not** accepted: EMV/BharatQR merchant codes, which are a TLV binary format
+ * rather than a URI. Those are for paying shops, and half-parsing one risks
+ * extracting a wrong payee — the one error that must not happen when the next step
+ * is sending money. `null` means "let them type it".
+ */
+export function parseUpiQr(raw: string): ScannedUpi | null {
+  const data = raw.trim();
+  if (!data) return null;
+
+  const q = data.indexOf('?');
+  if (q >= 0 && /^[a-z]+:\/\//i.test(data)) {
+    const params = new URLSearchParams(data.slice(q + 1));
+    const vpa = (params.get('pa') ?? '').trim();
+    if (!isValidVpa(vpa)) return null;
+    const name = (params.get('pn') ?? '').trim();
+    return name ? { vpa, name } : { vpa };
+  }
+
+  return isValidVpa(data) ? { vpa: data } : null;
+}
+
 export type UpiRequest = {
   /** Payee VPA (`pa`). */
   vpa: string;

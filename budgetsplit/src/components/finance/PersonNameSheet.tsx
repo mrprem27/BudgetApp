@@ -1,10 +1,12 @@
-import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, type, space } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { Input } from '../ui/Input';
 import { PrimaryButton } from '../ui/PrimaryButton';
+import { Feather } from '@expo/vector-icons';
 import { isValidVpa } from '../../lib/upiIntent';
+import { UpiQrScanner } from './UpiQrScanner';
 
 /**
  * A one-field sheet for naming a person — used to add a friend and to rename
@@ -41,6 +43,7 @@ export function PersonNameSheet({
   vpa?: string;
   onChangeVpa?: (v: string) => void;
 }) {
+  const [scanning, setScanning] = useState(false);
   const disabled = !value.trim();
   const vpaText = vpa ?? '';
   // Shown but never required: a person with no VPA just doesn't get the pay button.
@@ -70,6 +73,10 @@ export function PersonNameSheet({
             maxLength={256}
             style={styles.gap}
           />
+          <TouchableOpacity style={styles.scanBtn} onPress={() => setScanning(true)} accessibilityRole="button" accessibilityLabel="Scan their UPI QR code">
+            <Feather name="maximize" size={14} color={colors.accent} />
+            <Text style={styles.scanText}>Scan their UPI QR instead</Text>
+          </TouchableOpacity>
           <Text style={[styles.hint, vpaBad && styles.hintBad]}>
             {vpaBad
               ? "That doesn't look like a UPI ID — expected something like name@bank."
@@ -78,6 +85,18 @@ export function PersonNameSheet({
         </>
       )}
       <PrimaryButton label={submitLabel} onPress={onSubmit} disabled={disabled} />
+
+      <UpiQrScanner
+        visible={scanning}
+        onClose={() => setScanning(false)}
+        onScan={({ vpa: scanned, name }) => {
+          onChangeVpa?.(scanned);
+          // The QR usually carries their name too — used only when the field is
+          // still empty, never overwriting a name the user deliberately typed.
+          if (name && !value.trim()) onChangeText(name);
+          setScanning(false);
+        }}
+      />
     </SheetModal>
   );
 }
@@ -86,4 +105,6 @@ const styles = StyleSheet.create({
   gap: { marginBottom: space.md },
   hint: { ...type.caption, color: colors.textMuted, marginTop: -space.sm, marginBottom: space.md },
   hintBad: { color: colors.expense },
+  scanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', marginTop: -space.sm, marginBottom: space.sm, paddingVertical: space.xs },
+  scanText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

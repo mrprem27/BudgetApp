@@ -451,6 +451,19 @@ URI and `Linking.openURL` hands it to the user's own UPI app. Money moves peer-t
 two people's accounts; the app never touches funds and **never records a settlement it did not
 observe** — saving stays a separate, explicit step. No VPA → no button, and settling behaves as before.
 
+**Capturing the handle: scan, don't type.** A person's UPI QR *is* a `upi://pay?pa=…&pn=…`
+string — the same shape `buildUpiUri` produces — so `parseUpiQr` reads the handle **and their name**
+straight off it. `UpiQrScanner` (live `CameraView`, QR only) opens from *"Scan their UPI QR instead"*
+in `PersonNameSheet`; typing stays as the fallback. Typing `name@okhdfcbank` off someone else's
+phone screen was the highest-friction step in the settle-up flow and the easiest to get subtly
+wrong — a mistyped handle saves fine and then silently produces **no Pay button at all**.
+
+`parseUpiQr` accepts a `upi://` (or any app's) URI and a bare VPA. It deliberately **rejects
+EMV/BharatQR merchant codes** — a TLV binary format, not a URI. Those are for paying shops, and
+half-parsing one risks extracting a wrong payee, which is the one error that must not happen when
+the next step is sending money. An amount baked into the QR is ignored: this captures a *person*,
+not their payment request.
+
 **Choosing between several UPI apps works differently per platform, and that is not a style choice.**
 
 | | Behaviour |
@@ -909,7 +922,7 @@ Four OS permissions. None is requested at launch; each is asked for at the momen
 
 | Permission | Asked at | If denied | If revoked later |
 |---|---|---|---|
-| **Camera** | `pickAttachment('camera')` — attach-receipt and Scan-receipt | Returns `null`. The flow aborts silently: a denial and a cancel are indistinguishable to the caller by design (both mean "no photo"). No Alert, no Settings link | Same — the next attempt re-prompts or aborts |
+| **Camera** | `pickAttachment('camera')` — attach-receipt and Scan-receipt; **also `UpiQrScanner`** for reading a friend's UPI QR (`useCameraPermissions`, which unlike the picker exposes `canAskAgain`, so a permanent denial gets a Settings-shaped message instead of silence) | Returns `null`. The flow aborts silently: a denial and a cancel are indistinguishable to the caller by design (both mean "no photo"). No Alert, no Settings link | Same — the next attempt re-prompts or aborts |
 | **Photo library** | `pickAttachment('gallery')` | Same as camera | Same |
 | **Notifications** | Onboarding stage 8 (priming), and again the first time any reminder toggle is switched on | `settings/notifications.tsx` sets `permStatus='denied'` and leaves the toggle off | A **denied banner** appears at the top of the Notifications screen — "Notifications are off / BudgetSplit can't send you reminders until you allow it" — with **Open Settings to allow** → `Linking.openSettings()` |
 | **Location (foreground)** | Onboarding stage 8, the Feature-management **Location tagging** toggle, and each capture in an add flow | Feature-management shows "Location off / Allow location access for BudgetSplit in your phone's Settings to tag where you spend" and **leaves the toggle off**. A capture inside an add flow returns `null` and the transaction saves without a place | The next capture just returns `null` — location is always best-effort |
@@ -1296,6 +1309,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `group/InsightsTab` | In-hub group Insights view (member spend bars, top categories, recommendations). |
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |
 | `plan/GoalCard` | Savings goal card — progress bar, deadline, contribution/needed per month. |
+| `UpiQrScanner` | Live camera sheet that reads a friend's UPI QR into their contact. |
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money. |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
