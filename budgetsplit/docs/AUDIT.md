@@ -1,5 +1,24 @@
 # BudgetSplit — Codebase Audit
 
+> ## ⚠️ Dated record — parts of this describe a state that no longer exists
+>
+> **This file is evidence of what an audit found on 2026-07-28, not a description of the app
+> today.** Its findings are deliberately left unedited: rewriting them would destroy the before/after
+> that makes the audit worth keeping. Read it as history.
+>
+> Known superseded claims, as of **2026-08-05** (Waves 1–3):
+>
+> | Says here | Actually now |
+> |---|---|
+> | `affordCheck` is **off by default** (§F-28, §4.3 flag table) | **On.** The engine grew past a cash check in `V2-32`; defaulting it off is why nobody found it |
+> | The flag table lists **12 keys**, incl. `forecast`, `dashboardInsights`, `savingsInsights`, `reportsDonut`, `reportsTrend` | **15 keys.** Those five gated chart *fragments* and were deleted; six real surfaces (`itemized`, `upiSettle`, `insights`, `reports`, `receiptScan`, `importReview`) gained keys |
+> | `smartCategory` is **off by default** | **On** — it only ever suggests, and a miss costs one tap (`V2-19`) |
+>
+> **The live sources are [`FEATURES_AND_FLOWS.md`](./FEATURES_AND_FLOWS.md) §14 (flags) and
+> [`DEBT_TRACKER.md`](./DEBT_TRACKER.md) (open debt).** `sourceCounts.test.ts` keeps the flag count
+> in those honest; it deliberately does **not** read this file, precisely because this one is allowed
+> to be out of date.
+
 > **Read-only audit.** Derived from the code as it exists on branch `refactor/phase-1-perf-safety`
 > (HEAD `95e88ca`) on 2026-07-28. Nothing here was copied from the other docs in this folder —
 > sections 1–9 were written from source only. §10 records where the pre-existing docs disagree

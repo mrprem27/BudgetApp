@@ -1,10 +1,12 @@
-# V2 Fix Plan — Waves 1 & 2
+# V2 Fix Plan — Waves 1–3
 
 > **What this is.** The execution worklist for [`V2_PRODUCT_REVIEW.md`](./V2_PRODUCT_REVIEW.md)'s
-> Waves 1–2. The review is the *argument*; this is the *worklist*. If you want to know **why** an
+> Waves 1–3. The review is the *argument*; this is the *worklist*. If you want to know **why** an
 > item exists, read the review. If you want to know **what to do**, read this.
 >
-> **Scope:** 10 items. Waves 3–4 and V3 are deliberately excluded — see [Out of scope](#out-of-scope).
+> **Scope:** 19 items across three waves — 10 as originally planned, plus `V2-29`…`V2-36` found
+> while executing (five of those by *running* the app or the suite, not by reading code). **Wave 4
+> and V3 remain out of scope here** — see [Out of scope](#out-of-scope).
 >
 > **Conventions** (from [`DEBT_TRACKER.md`](./DEBT_TRACKER.md)):
 > 1. Every row cites `file:line`. **A claim without evidence gets deleted, not debated.**
@@ -43,6 +45,10 @@
 | 14 | ~~`V2-08`~~ | ~~Reports reachable from Plan, not only from a Settings export row~~ | L | ✅ done |
 | — | ~~`V2-31`~~ | ~~Make the calendar check a repo script (`npm run test:calendar`)~~ | L | ✅ done |
 | — | ~~`F7`~~ | ~~**Closed as a side effect:** receipt scanning had no flag, so Scan couldn't be hidden~~ | L | ✅ done |
+| **Wave 3 addendum — found after the plan was written** ||||
+| 15 | ~~`V2-34`~~ | ~~**iOS has no UPI app chooser**; `upi://` may resolve to nothing even with UPI apps installed~~ | M | ✅ done |
+| 16 | ~~`V2-35`~~ | ~~"Insights" rendered as an always-on Core pillar **and** a live switch~~ | L | ✅ done |
+| 17 | ~~`V2-36`~~ | ~~Feature Management intro claimed "off by default" after the rework made it false~~ | L | ✅ done |
 
 **The flag cut went the other way from the plan.** Wave 3 was scoped as "14 → 7 flags". What
 shipped is **14 → 15**, and that is the better answer to the same complaint. The problem was never
@@ -53,7 +59,7 @@ would have deleted the fragments and left the real gap. So the fragments went, t
 surfaces got keys, and the personas now compose them into four genuinely different apps, which is
 what the flags were for.
 
-**Result after three waves:** `npx tsc --noEmit` clean · **678/678 jest, 53 suites** (was 633 with
+**Result after three waves:** `npx tsc --noEmit` clean · **685/685 jest, 54 suites** (was 633 with
 2 failing) · `npm run test:calendar` green at all seven pinned dates — month starts and ends, a
 leap day, and a new-year rollover.
 
@@ -411,5 +417,5 @@ Deliberately excluded, with their review IDs — do not scope-creep into these:
 | V3 | `V2-17`, `V2-18`, `V2-22`, `V2-23`, `V2-24`, `V2-25`, `V2-26` |
 | Externally blocked | `F4` GPay format · `F5` Gmail OAuth CASA · Account Aggregator partner |
 
-Nothing in Waves 1–2 depends on any external blocker — that is deliberate, so this plan can be
-finished without waiting on a third party.
+Nothing in Waves 1–3 depends on any external blocker — that is deliberate, so this plan could be
+finished without waiting on a third party. **All three waves are complete.**

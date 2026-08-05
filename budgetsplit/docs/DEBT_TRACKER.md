@@ -23,12 +23,18 @@
 | Hex-suffix colour concatenations | 153 | **0** (via `alpha()`) |
 | Screen-reader-silent controls | 6 | **0** |
 | Colour palettes | 3 sources | **1 file** |
-| Largest screen | 1354 LOC | **977** (`app/review.tsx`) |
+| Largest screen | 1354 LOC | **1029** (`app/review.tsx`) — see the note below |
 | Hand-rolled data loaders | 1 | **0** |
 
 **Every 🔴, 🟡 and 🟢 item is closed.** The only rows still open are the two ⛔
 external blockers (GPay export format, Google CASA assessment), which are not
 code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
+
+> **`review.tsx` regrew: 1354 → 977 (paid down 2026-07-28) → 1029 today.** `C1` stays struck
+> because the paydown really happened; the file then grew back past its own fixed size. That is the
+> argument for a *mechanism* over a fourth manual paydown, so `sourceCounts.test.ts` now pins a
+> ceiling at 1030 — lower it when you decompose, never raise it. This figure said **977** here for
+> long enough to be quoted twice, which is `V2-14` happening to the drift tracker itself.
 
 **Pass 4 (2026-07-28)** additionally closed 7 items that `AUDIT.md` had tagged `DEFER`
 because they needed an owner decision rather than more analysis — the personal-screen
@@ -147,7 +153,7 @@ Recorded so they stop being re-raised as bugs.
 |---|---|
 | `PRAGMA foreign_keys` OFF on the live connection | ON only during migrations ([schema.ts:294-438](../src/db/schema.ts#L294)). Cascades are hand-rolled deliberately; flipping it needs every delete path audited first. |
 | Dead schema columns + unused `settings` table | Column drops require a risky table rebuild. Zero runtime cost. **Named set, as of 2026-07-28:** `person.remote_uid`, `budget_group.limit_daily/monthly/yearly`, `budget_group.carry_over`. These are now dead *config* with **no reader at all** — `getBudgetUsage`, the last consumer, was deleted (see Resolved). The `settings` table is not unused either: it holds the `category_global_v1` flag and the one-time-fix completion keys. The five `is_demo` columns that used to be listed here are **gone** — they were written but never read, so the writes and migrations were removed; pre-existing databases keep an inert column. |
-| Files over the ~300-line rule | `AGENTS.md` prescribes extracting **opportunistically** — "whenever you're already editing one for a feature; no big-bang migration". That makes it standing policy, not a scheduled task, so it should not sit on a backlog as if it were. The genuine outliers (`review.tsx` 977, `Onboarding.tsx` 793, `itemized.tsx` 614) are tracked individually instead. |
+| Files over the ~300-line rule | `AGENTS.md` prescribes extracting **opportunistically** — "whenever you're already editing one for a feature; no big-bang migration". That makes it standing policy, not a scheduled task, so it should not sit on a backlog as if it were. The genuine outliers (`review.tsx` **1029**, `Onboarding.tsx` 793, `itemized.tsx` 614) are tracked individually instead. |
 | Two token import paths (`src/constants/*` → `src/theme`) | `constants/{colors,typography,layout}` are documented back-compat re-export shims; `src/theme` is canonical. 45 files still import the old path. A sweep is safe but is a large diff that changes no behaviour, and `AGENTS.md` already says to prefer `src/theme` in new code — so it converges without a migration. |
 | Subscription auto-detection dormant | Subscriptions are sourced from **recurring rules** — there is no bank feed to detect from. `lib/subscriptions.ts` stays dormant intentionally. |
 | Raw `TextInput`s not converted to `Input` | Audited 2026-07-13: the remainder are search bars with a clear (×) button, deliberately border-less inline card rows (AGENTS.md rule 4), and hero amount fields. Converting them would *degrade* the design. |

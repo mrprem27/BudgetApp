@@ -931,6 +931,19 @@ mechanical, matching how `DRIFT-26` was closed. **`V2-14`.**
 
 The review's mandate was to name things to delete. Here they are, with what is lost.
 
+> ⚠️ **Both §9.1 and §9.2 were deliberately NOT followed. Do not implement them as written.**
+> They were argued from a correct diagnosis to the wrong remedy, and the record of that is more
+> useful than a quiet edit. What shipped instead, and why, is in
+> [`V2_FIX_PLAN.md`](./V2_FIX_PLAN.md) — see the Wave 3 notes.
+>
+> - **§9.1 (cut 14 flags → 7):** the count was never the problem. Five keys gated chart *fragments*
+>   while six real surfaces had no switch at all. Cutting to 7 would have removed the fragments and
+>   left the real gap. Shipped: **14 → 15**, fragments deleted, real surfaces gated, personas
+>   composing them.
+> - **§9.2 (delete `afford.tsx`):** the argument was really about *discoverability*, and an inline
+>   verdict solves that without discarding the depth. Shipped: the screen **stays** and `BudgetNudge`
+>   gained a one-line verdict from the same engine — one engine, two depths.
+
 ### 9.1 Cut 6 of 14 feature flags
 
 **The argument.** 14 flags is 16,384 app configurations, none tested in combination. Five exist
@@ -1034,6 +1047,32 @@ OCR providers (accuracy vs privacy), the bespoke Home hero (`U9`), the itemized 
 **Externally blocked — not prioritisable:** `F4` GPay export format · `F5` Gmail OAuth CASA ·
 Account Aggregator partner. Per project notes the sequence is: finish UI/UX → free Testing-mode
 OAuth pilot → CASA/AA later. Nothing in this plan depends on them, which is deliberate.
+
+### Found after publication (`V2-29` … `V2-36`)
+
+> **Why this section exists.** These IDs were assigned *while executing* the plan, not during the
+> review sweep, and for a while they were cited in `V2_FIX_PLAN.md` while being **defined nowhere** —
+> the exact drift this document keeps catching in others. `docIds.test.ts` now fails the suite if any
+> cited `V2-nn` has no definition here, so it cannot recur.
+>
+> None of these came from reading code in the abstract. Five came from **running the app or the
+> suite**, which is the honest argument for doing both: the review sweep did not find one of them.
+
+| ID | Problem | How it surfaced | Status |
+|---|---|---|---|
+| **V2-29** | `makeViewId` derived an id from the view's name, so two saved views named alike **overwrote each other** — saved views are keyed by that id | Wave 1's fake-clock sweep | ✅ fixed — `v_${uuid()}` |
+| **V2-30** | Two test fixtures were calendar-dependent: `setMonth(0)` **is** the selected month in January, so the fixture only failed in one month of twelve | Wave 1's fake-clock sweep | ✅ fixed |
+| **V2-31** | The fake-clock harness that found `V2-29`/`V2-30` existed only as a scratchpad config — a bug-finding mechanism nobody could re-run | Noticed while writing up Wave 1 | ✅ fixed — `npm run test:calendar`, 7 pinned dates |
+| **V2-32** | The afford engine judged only cash, buffer, category and income share — no history, no necessity, no month projection, no goal cost | Owner request, 2026-08-05 | ✅ fixed — 4 → 7 axes |
+| **V2-33** | Home paired **my-share** spend with the **all-groups** budget, showing 33% where the true figure was 40% — the same class of bug as `V2-28`, one screen over | Running the app on device | ✅ fixed |
+| **V2-34** | The UPI handoff fired `upi://pay` on both platforms. Android is right (the OS chooser resolves it); **iOS has no chooser for custom schemes at all**, and its UPI apps mostly register their own scheme, so the button could dead-end on a phone with four UPI apps — then blame the user with *"No UPI app found"* | Owner asked "what if there are multiple UPI apps?" | ✅ fixed — per-app probe + picker on iOS |
+| **V2-35** | "Insights" rendered as an always-on **Core** pillar *and* as a live switch further down the same screen — a straight contradiction, introduced by the Wave 3 flag rework | Simulator pass | ✅ fixed — Core badge removed |
+| **V2-36** | Feature Management's intro still read *"Off by default keeps the app clean"* after the rework made 14 of 15 flags default **on** | Simulator pass | ✅ fixed |
+
+**`V2-34` is the one worth remembering.** It was not found by reading the code, the tests, or this
+review — it was found because someone asked what happens with more than one UPI app installed. The
+unit tests passed throughout, and still do; they assert URI construction, which was never wrong. The
+wrong assumption was that one platform's behaviour was every platform's.
 
 ---
 
