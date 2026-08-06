@@ -58,6 +58,27 @@ export enum UpiApp {
   Kiwi = 'kiwi',
 }
 
+/**
+ * Optional fields an app is known to want, or to choke on.
+ *
+ * These exist because the apps genuinely disagree, and device testing proved it rather
+ * than suggested it: **CRED and Airtel moved in opposite directions across the same
+ * payload change.** CRED paid on a bare `pa/pn/am/cu` and failed the moment `mode` and
+ * `tr` were added; Airtel paid *with* both. There is no single payload that is simply
+ * "correct" — so instead of sweeping every app again and breaking one to fix another,
+ * each app carries what it is known to accept.
+ *
+ * Absent means the default, which is what an unproven app gets: `mode` on, `tr` only
+ * for merchant payments. Only set a flag from an observed device result, and say which
+ * one in a comment — a guess here is indistinguishable from evidence later.
+ */
+export type UpiPayloadQuirks = {
+  /** Send `mode`. Default `true`. */
+  mode?: boolean;
+  /** Send `tr` even on a personal transfer. Default: merchant payments only. */
+  refOnPersonal?: boolean;
+};
+
 export type UpiAppSpec = {
   key: UpiApp;
   label: string;
@@ -65,6 +86,20 @@ export type UpiAppSpec = {
   prefix: string;
   /** Bare scheme, for a `canOpenURL` installed-check. */
   probe: string;
+  /** Per-app payload deviations. Omit unless a device proved one is needed. */
+  payload?: UpiPayloadQuirks;
+  /**
+   * How much we actually know about this row.
+   *
+   * In the type rather than a comment because the distinction kept collapsing: I called
+   * an inference a finding more than once in this file's history, and a comment saying
+   * so is easy to contradict later while a field is not.
+   *
+   *   `device`      — a payment completed, or the app opened correctly pre-filled, here.
+   *   `documented`  — the vendor publishes this path. Not the same as it working.
+   *   `unverified`  — the scheme is from a maintained list, the path is inferred.
+   */
+  provenance: 'device' | 'documented' | 'unverified';
 };
 
 /**
@@ -72,18 +107,28 @@ export type UpiAppSpec = {
  * market share, so the most likely choice needs the least thought.
  */
 export const UPI_APPS: UpiAppSpec[] = [
-  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://' },
-  { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://' },
-  { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://upi/pay', probe: 'paytmmp://' },
-  { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://' },
-  { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://' },
-  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://' },
-  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://' },
-  { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://' },
-  { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://upi/pay', probe: 'mobikwik://' },
-  { key: UpiApp.Airtel, label: 'Airtel', prefix: 'myairtel://upi/pay', probe: 'myairtel://' },
-  { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://upi/pay', probe: 'super://' },
-  { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://upi/pay', probe: 'kiwi://' },
+  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://', provenance: 'documented' },
+  { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://', provenance: 'documented' },
+  // Paytm's own docs give `paytmmp://pay` — a bare `pay`, unlike almost everything else.
+  // One device report had it opening blank on that path, but a vendor's documentation
+  // outweighs a single ambiguous observation, and Paytm also documents `tid` rather than
+  // `tr`, so its blank screen may never have been about the path at all.
+  { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://', provenance: 'documented' },
+  { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
+  // Paid on a bare `pa/pn/am/cu`, then failed the moment `mode` and `tr` arrived — path
+  // byte-identical across both builds, so the payload is the only explanation. Pinned to
+  // exactly what worked.
+  { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://', payload: { mode: false }, provenance: 'device' },
+  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://', provenance: 'unverified' },
+  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://', provenance: 'unverified' },
+  { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://', provenance: 'unverified' },
+  { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://upi/pay', probe: 'mobikwik://', provenance: 'unverified' },
+  // Paid with `mode` and `tr` both present, on a personal transfer. Its path changed in
+  // the same build, so we cannot say *which* fixed it — but this reproduces the exact
+  // payload it succeeded with, rather than betting that it did not need them.
+  { key: UpiApp.Airtel, label: 'Airtel', prefix: 'myairtel://upi/pay', probe: 'myairtel://', payload: { mode: true, refOnPersonal: true }, provenance: 'device' },
+  { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://upi/pay', probe: 'super://', provenance: 'unverified' },
+  { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://upi/pay', probe: 'kiwi://', provenance: 'unverified' },
 ];
 
 /**
@@ -160,6 +205,7 @@ export const GENERIC_UPI_APP: UpiAppSpec = {
   label: 'Other UPI app',
   prefix: 'upi://pay',
   probe: 'upi://',
+  provenance: 'device',
 };
 
 /**
@@ -169,6 +215,11 @@ export const GENERIC_UPI_APP: UpiAppSpec = {
  */
 const PREFIX: Record<string, string> = Object.fromEntries(
   [GENERIC_UPI_APP, ...UPI_APPS].map(a => [a.key, a.prefix]),
+);
+
+/** The whole spec by key, so `buildUpiUri` can read an app's payload quirks. */
+const SPEC: Record<string, UpiAppSpec> = Object.fromEntries(
+  [GENERIC_UPI_APP, ...UPI_APPS].map(a => [a.key, a]),
 );
 
 export type ScannedUpi = {
@@ -335,10 +386,16 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);
 
+  // Which optional fields this particular app gets — the apps disagree, and one payload
+  // for all of them means breaking one to fix another. See UpiPayloadQuirks.
+  const quirks = SPEC[app]?.payload;
+  const wantMode = quirks?.mode ?? true;
+  const wantRef = quirks?.refOnPersonal ?? req.kind === 'merchant';
+
   // A scanned code's own `mode` wins: a merchant QR calling itself `01` is describing
   // its real origin, and overwriting that with `04` would make the request lie.
-  params.push(['mode', req.mode?.trim() || UPI_MODE_INTENT]);
-  if (req.ref?.trim()) params.push(['tr', req.ref.trim()]);
+  if (wantMode) params.push(['mode', req.mode?.trim() || UPI_MODE_INTENT]);
+  if (wantRef && req.ref?.trim()) params.push(['tr', req.ref.trim()]);
 
   // Re-emitted last so they can never displace the payee, amount or currency above —
   // a scanned code must not be able to redirect where the money goes.

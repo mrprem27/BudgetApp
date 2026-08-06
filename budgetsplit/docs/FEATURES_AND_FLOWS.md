@@ -569,6 +569,35 @@ scanned code goes last, so a hostile QR can never displace the payee or the amou
 | Google Pay | `tez://upi/pay` |
 | PhonePe · Paytm · BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · Airtel · super.money · Kiwi | `<scheme>://upi/pay` |
 
+**The apps genuinely disagree, so each carries its own path and payload** (`UpiAppSpec.payload`,
+`UpiPayloadQuirks`). One URI for all of them means breaking one app to fix another — proven, because
+CRED and Airtel moved in *opposite* directions across the same change.
+
+Every row records **`provenance`**, in the type rather than a comment, because the distinction kept
+collapsing during this work — an inference was written up as a finding more than once, and a field
+is harder to contradict than prose.
+
+| App | Path | Payload | Provenance |
+|---|---|---|---|
+| **CRED** | `credpay://upi/pay` | no `mode`, no `tr` | **device** — paid |
+| **Airtel** | `myairtel://upi/pay` | `mode` + `tr`, even on P2P | **device** — paid |
+| Generic | `upi://pay` | default | **device** — populated |
+| PhonePe | `phonepe://upi/pay` | default | documented |
+| **Paytm** | **`paytmmp://pay`** | default | documented — vendor uses a bare `pay` |
+| Google Pay | `tez://upi/pay` | default | documented |
+| BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · super.money · Kiwi | `<scheme>://upi/pay` | default | **unverified** — scheme sourced, path inferred |
+
+Default payload = `mode` on, `tr` for merchant payments only.
+
+Only four apps have public iOS deep-link documentation. The UPI ecosystem is **Android-first** —
+there the generic `upi://` intent plus a package name is the whole story, so per-app iOS paths were
+never published. Amazon Pay's in particular is not findable anywhere.
+
+**Long-pressing the Pay button opens `UpiUriSheet`**, showing the exact URI for every installed app
+with its provenance tag. It calls `buildUpiUri` directly, so it cannot drift from what is really
+sent — a preview that could disagree with reality would launder a guess into a reading. It exists
+because otherwise each unverified app costs a full rebuild-and-test cycle to settle.
+
 Device results so far, and what each can actually prove:
 
 | App | Build | Path | Payload | Result |

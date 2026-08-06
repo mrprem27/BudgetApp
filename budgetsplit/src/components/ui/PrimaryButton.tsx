@@ -7,12 +7,14 @@ import { haptic } from '../../lib/haptics';
 type Props = {
   label: string;
   onPress: () => void;
+  /** Optional secondary gesture. Nothing essential may live here — it is undiscoverable. */
+  onLongPress?: () => void;
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
 };
 
-export function PrimaryButton({ label, onPress, disabled, loading, style }: Props) {
+export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, style }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const inactive = disabled || loading;
 
@@ -24,6 +26,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
       onPressIn={() => { if (!inactive) { haptic.light(); to(0.97); } }}
       onPressOut={() => to(1, 8)}
       onPress={inactive ? undefined : onPress}
+      onLongPress={inactive ? undefined : onLongPress}
       disabled={inactive}
       accessibilityRole="button"
       accessibilityLabel={label}

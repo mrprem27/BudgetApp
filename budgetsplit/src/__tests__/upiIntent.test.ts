@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS } from '../lib/upiIntent';
+import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -65,13 +65,25 @@ describe('per-app URIs', () => {
     expect(buildUpiUri(req, UpiApp.Generic)).toBe(buildUpiUri(req));
   });
 
-  it('swaps only the scheme and path, never the parameters', () => {
-    const generic = buildUpiUri(req)!;
+  it('always sends the payee, amount and currency, whatever the app', () => {
+    // The optional fields now vary per app — see UpiPayloadQuirks — but the ones that
+    // decide where the money goes never do.
     for (const app of UPI_APPS) {
       const uri = buildUpiUri(req, app.key)!;
       expect(uri.startsWith(app.prefix + '?')).toBe(true);
-      expect(uri.split('?')[1]).toBe(generic.split('?')[1]);
+      expect(uri).toContain('pa=friend%40okhdfcbank');
+      expect(uri).toContain('am=1250.50');
+      expect(uri).toContain('cu=INR');
     }
+  });
+
+  it('varies only the optional fields between apps', () => {
+    // CRED failed once `mode` arrived; Airtel paid with it. Both cannot be served by one
+    // payload, so this asserts the difference exists rather than pretending it doesn't.
+    const cred = buildUpiUri(req, UpiApp.Cred)!;
+    const airtel = buildUpiUri({ ...req, ref: 'BSX' }, UpiApp.Airtel)!;
+    expect(cred).not.toContain('mode=');
+    expect(airtel).toContain('mode=');
   });
 
   it('rejects a bad request the same way for every app', () => {
@@ -357,18 +369,18 @@ describe('tr and mode — the fields whose absence PSPs punished', () => {
     expect(buildUpiUri({ ...req, mode: '01' })).toContain('mode=01');
   });
 
-  it('carries the reference when one is supplied', () => {
-    expect(buildUpiUri({ ...req, ref: 'BSABC123' })).toContain('tr=BSABC123');
+  it('carries the reference when one is supplied and the payment warrants it', () => {
+    expect(buildUpiUri({ ...req, kind: 'merchant', ref: 'BSABC123' })).toContain('tr=BSABC123');
   });
 
   it('omits tr rather than sending an empty one', () => {
-    expect(buildUpiUri({ ...req, ref: '   ' })).not.toContain('tr=');
-    expect(buildUpiUri(req)).not.toContain('tr=');
+    expect(buildUpiUri({ ...req, kind: 'merchant', ref: '   ' })).not.toContain('tr=');
+    expect(buildUpiUri({ ...req, kind: 'merchant' })).not.toContain('tr=');
   });
 
   it('keeps ours ahead of anything the scanned code carried', () => {
     // Order is the whole defence: a hostile QR must not be able to displace the payee.
-    const uri = buildUpiUri({ ...req, ref: 'BSX', passthrough: { pa: 'attacker@evil' } })!;
+    const uri = buildUpiUri({ ...req, kind: 'merchant', ref: 'BSX', passthrough: { pa: 'attacker@evil' } })!;
     expect(uri.indexOf('pa=asha')).toBeLessThan(uri.indexOf('tr=BSX'));
     expect(uri).not.toContain('attacker');
   });
@@ -388,15 +400,19 @@ describe('newUpiRef', () => {
 
   it('survives a round trip through the URI unchanged', () => {
     const ref = newUpiRef();
-    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100, ref })).toContain(`tr=${ref}`);
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100, kind: 'merchant', ref })).toContain(`tr=${ref}`);
   });
 });
 
 describe('deep-link paths follow the shape that worked on device', () => {
-  it('routes every app through upi/pay', () => {
-    // credpay://upi/pay completed a real payment; whatsapp-consumer://pay and
-    // paytmmp://pay both opened blank. The rest follow the shape that worked.
-    for (const a of UPI_APPS) expect(a.prefix.endsWith('://upi/pay')).toBe(true);
+  it('routes apps through upi/pay unless the vendor documents otherwise', () => {
+    // credpay://upi/pay completed a real payment, so that is the default shape. Paytm is
+    // the documented exception — its own docs give a bare `pay`.
+    for (const a of UPI_APPS) {
+      if (a.key === UpiApp.Paytm) continue;
+      expect(a.prefix.endsWith('://upi/pay')).toBe(true);
+    }
+    expect(UPI_APPS.find(a => a.key === UpiApp.Paytm)?.prefix).toBe('paytmmp://pay');
   });
 
   it('pins the one path proven end to end', () => {
@@ -435,5 +451,63 @@ describe('the payload matches the kind of payment it actually is', () => {
     // suspicion, since CRED broke when `tr` and `mode` arrived together. If CRED still
     // fails, drop `mode` here next and this line is where to do it.
     expect(buildUpiUri(person)).toBe('upi://pay?pa=asha%40okhdfcbank&pn=Asha&am=2.00&cu=INR&mode=04');
+  });
+});
+
+describe('per-app payload quirks', () => {
+  const req = { vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 200, kind: 'person' as const, ref: 'BSREF1' };
+
+  // CRED and Airtel moved in *opposite* directions across the same payload change, which
+  // is why one payload for all of them is not achievable: CRED paid on a bare
+  // pa/pn/am/cu and failed once mode+tr arrived, Airtel paid with both present.
+  it('gives CRED exactly the payload it paid with', () => {
+    const uri = buildUpiUri(req, UpiApp.Cred)!;
+    expect(uri).toBe('credpay://upi/pay?pa=asha%40okhdfcbank&pn=Asha&am=2.00&cu=INR');
+  });
+
+  it('gives Airtel the payload it paid with, tr included on a personal transfer', () => {
+    const uri = buildUpiUri(req, UpiApp.Airtel)!;
+    expect(uri).toContain('mode=04');
+    expect(uri).toContain('tr=BSREF1');
+  });
+
+  it('leaves an app without quirks on the default payload', () => {
+    const uri = buildUpiUri(req, UpiApp.PhonePe)!;
+    expect(uri).toContain('mode=04');
+    expect(uri).not.toContain('tr='); // person-to-person
+  });
+
+  it('still sends tr to a quirk-free app on a merchant payment', () => {
+    expect(buildUpiUri({ ...req, kind: 'merchant' }, UpiApp.PhonePe)).toContain('tr=BSREF1');
+  });
+
+  it('covers every UpiApp member, so no app silently loses its prefix', () => {
+    for (const key of Object.values(UpiApp)) {
+      expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100 }, key)).not.toBeNull();
+    }
+  });
+});
+
+describe('provenance is recorded, not assumed', () => {
+  // This field exists because the distinction kept collapsing in review: an inference
+  // was written up as a finding more than once. A type is harder to contradict than a
+  // comment.
+  it('marks as device-proven only what a device actually did', () => {
+    const proven = [...UPI_APPS, GENERIC_UPI_APP].filter(a => a.provenance === 'device').map(a => a.key);
+    expect(proven.sort()).toEqual([UpiApp.Airtel, UpiApp.Cred, UpiApp.Generic].sort());
+  });
+
+  it('gives every app a provenance', () => {
+    for (const a of [...UPI_APPS, GENERIC_UPI_APP]) {
+      expect(['device', 'documented', 'unverified']).toContain(a.provenance);
+    }
+  });
+
+  it('never marks a payload quirk on an app nobody has run', () => {
+    // A quirk is a claim about observed behaviour. Inventing one would be the same
+    // mistake as the guessed deep-link paths, with less to show for it.
+    for (const a of UPI_APPS) {
+      if (a.payload) expect(a.provenance).toBe('device');
+    }
   });
 });

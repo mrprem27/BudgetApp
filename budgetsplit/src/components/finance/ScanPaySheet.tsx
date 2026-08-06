@@ -8,6 +8,7 @@ import { PrimaryButton } from '../ui/PrimaryButton';
 import { Input } from '../ui/Input';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
 import { useUpiHandoff } from '../../hooks/useUpiHandoff';
+import { UpiUriSheet } from './UpiUriSheet';
 import { formatRupees, parseToPaise } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
 import { alpha } from '../../theme';
@@ -50,6 +51,7 @@ export function ScanPaySheet({
   const [target, setTarget] = useState<ScanTarget | null>(null);
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
+  const [showUris, setShowUris] = useState(false);
   const handoff = useUpiHandoff('Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
 
   function reset() {
@@ -206,7 +208,13 @@ export function ScanPaySheet({
             </>
           ) : (
             <>
-              <PrimaryButton label={canPay ? `Pay ${formatRupees(amountPaise)}` : 'Pay'} onPress={pay} disabled={!canPay} />
+              {/* Long-press reveals the exact URIs — see UpiUriSheet for why that exists. */}
+              <PrimaryButton
+                label={canPay ? `Pay ${formatRupees(amountPaise)}` : 'Pay'}
+                onPress={pay}
+                onLongPress={() => canPay && setShowUris(true)}
+                disabled={!canPay}
+              />
 
               {/*
                 Destination and the way to change it on one line, rather than a long
@@ -250,6 +258,13 @@ export function ScanPaySheet({
           )}
         </>
       )}
+
+      <UpiUriSheet
+        visible={showUris}
+        onClose={() => setShowUris(false)}
+        request={payee}
+        apps={handoff.apps}
+      />
     </SheetModal>
   );
 }
