@@ -235,3 +235,22 @@ describe('a scanned code is re-emitted, not rebuilt', () => {
     expect(parseAnyUpiQr(shop)?.params).toBeUndefined();
   });
 });
+
+describe('the app list stays internally consistent', () => {
+  it('gives every UpiApp member a usable prefix', () => {
+    // PREFIX is derived from UPI_APPS, so an enum member nobody added to the list has
+    // no prefix — and buildUpiUri would otherwise emit "undefined?pa=…".
+    for (const key of Object.values(UpiApp)) {
+      expect(buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 100 }, key)).not.toBeNull();
+    }
+  });
+
+  it('keeps every app key unique', () => {
+    const keys = UPI_APPS.map(a => a.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('points each app at its own scheme', () => {
+    for (const a of UPI_APPS) expect(a.prefix.startsWith(a.probe)).toBe(true);
+  });
+});

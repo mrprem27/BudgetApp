@@ -1,5 +1,5 @@
 import appJson from '../../app.json';
-import { UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
+import { UPI_APPS, GENERIC_UPI_APP, IOS_QUERY_SCHEME_LIMIT } from '../lib/upiIntent';
 
 const expo = appJson.expo as unknown as {
   ios: { infoPlist: Record<string, unknown> };
@@ -33,12 +33,24 @@ describe('iOS can actually reach the UPI apps it offers', () => {
     for (const app of pickable) expect(app.probe).toMatch(/^[a-z][a-z0-9.+-]*:\/\/$/);
   });
 
-  // The whole point of the generic row is reaching apps we never enumerated (CRED,
-  // Amazon Pay, WhatsApp…). If it stopped being probeable the picker would quietly
-  // shrink back to the hardcoded four.
+  // The whole point of the generic row is reaching apps we never enumerated. If it
+  // stopped being probeable the picker would quietly shrink to the hardcoded list.
   it('keeps a generic row so an unlisted UPI app is still reachable', () => {
     expect(GENERIC_UPI_APP.prefix.startsWith('upi://')).toBe(true);
     expect(expo.ios.infoPlist.LSApplicationQueriesSchemes).toContain('upi');
+  });
+
+  // Past 50, iOS stops answering canOpenURL for *everything* rather than for the
+  // excess — so overrunning this disables the picker wholesale instead of trimming it.
+  it('stays under the iOS query-scheme limit', () => {
+    const declared = expo.ios.infoPlist.LSApplicationQueriesSchemes as string[];
+    expect(declared.length).toBeLessThanOrEqual(IOS_QUERY_SCHEME_LIMIT);
+  });
+
+  it('declares no scheme the picker never probes', () => {
+    const declared = expo.ios.infoPlist.LSApplicationQueriesSchemes as string[];
+    const probed = new Set(pickable.map(a => a.probe.replace('://', '')));
+    for (const s of declared) expect(probed.has(s)).toBe(true);
   });
 });
 

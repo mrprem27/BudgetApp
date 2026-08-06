@@ -48,6 +48,16 @@ export enum UpiApp {
   Bhim = 'bhim',
   Cred = 'cred',
   AmazonPay = 'amazonpay',
+  WhatsApp = 'whatsapp',
+  Mobikwik = 'mobikwik',
+  Freecharge = 'freecharge',
+  Navi = 'navi',
+  Slice = 'slice',
+  Groww = 'groww',
+  Jupiter = 'jupiter',
+  IciciImobile = 'imobile',
+  HdfcPayzapp = 'payzapp',
+  AxisPay = 'axispay',
 }
 
 export type UpiAppSpec = {
@@ -70,7 +80,24 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://pay', probe: 'bhim://' },
   { key: UpiApp.Cred, label: 'CRED', prefix: 'cred://upi/pay', probe: 'cred://' },
   { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://pay', probe: 'amazonpay://' },
+  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp://pay', probe: 'whatsapp://' },
+  { key: UpiApp.Navi, label: 'Navi', prefix: 'navi://pay', probe: 'navi://' },
+  { key: UpiApp.Slice, label: 'Slice', prefix: 'slice://pay', probe: 'slice://' },
+  { key: UpiApp.Groww, label: 'Groww', prefix: 'groww://pay', probe: 'groww://' },
+  { key: UpiApp.Jupiter, label: 'Jupiter', prefix: 'jupiter://pay', probe: 'jupiter://' },
+  { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://pay', probe: 'mobikwik://' },
+  { key: UpiApp.Freecharge, label: 'Freecharge', prefix: 'freecharge://pay', probe: 'freecharge://' },
+  { key: UpiApp.IciciImobile, label: 'ICICI iMobile', prefix: 'imobileapp://pay', probe: 'imobileapp://' },
+  { key: UpiApp.HdfcPayzapp, label: 'HDFC PayZapp', prefix: 'payzapp://pay', probe: 'payzapp://' },
+  { key: UpiApp.AxisPay, label: 'Axis Pay', prefix: 'axispay://pay', probe: 'axispay://' },
 ];
+
+/**
+ * iOS caps `LSApplicationQueriesSchemes` at 50 entries and silently answers `false`
+ * for everything once you exceed it — which would disable the picker wholesale rather
+ * than trim it. Asserted in `iosPermissions.test.ts` against the real Info.plist config.
+ */
+export const IOS_QUERY_SCHEME_LIMIT = 50;
 
 /**
  * The escape hatch, and the reason the list above doesn't have to be complete.
@@ -95,15 +122,14 @@ export const GENERIC_UPI_APP: UpiAppSpec = {
   probe: 'upi://',
 };
 
-const PREFIX: Record<UpiApp, string> = {
-  [UpiApp.Generic]: 'upi://pay',
-  [UpiApp.PhonePe]: 'phonepe://pay',
-  [UpiApp.GooglePay]: 'tez://upi/pay',
-  [UpiApp.Paytm]: 'paytmmp://pay',
-  [UpiApp.Bhim]: 'bhim://pay',
-  [UpiApp.Cred]: 'cred://upi/pay',
-  [UpiApp.AmazonPay]: 'amazonpay://pay',
-};
+/**
+ * Derived from the list above rather than restated. Held as a second literal, every
+ * app added had to be written twice, and the compiler only caught it because the
+ * `Record` is exhaustive — a lookup keyed by a subset type would have failed silently.
+ */
+const PREFIX: Record<string, string> = Object.fromEntries(
+  [GENERIC_UPI_APP, ...UPI_APPS].map(a => [a.key, a.prefix]),
+);
 
 export type ScannedUpi = {
   vpa: string;
@@ -208,9 +234,14 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
     if (!OWN_PARAMS.has(k.toLowerCase()) && v.trim()) params.push([k, v]);
   }
 
+  // An enum member absent from UPI_APPS has no prefix. Returning null makes the caller
+  // hide the action; the alternative is a literal "undefined?pa=…" handed to the OS.
+  const prefix = PREFIX[app];
+  if (!prefix) return null;
+
   // Every app takes the same NPCI parameter set; only the scheme and path differ.
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-  return `${PREFIX[app]}?${qs}`;
+  return `${prefix}?${qs}`;
 }
 
 export type ScanTarget = ScannedUpi & {

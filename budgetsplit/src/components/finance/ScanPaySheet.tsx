@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
@@ -7,7 +7,7 @@ import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { Input } from '../ui/Input';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
-import { useUpiApps } from '../../hooks/useUpiApps';
+import { useUpiHandoff } from '../../hooks/useUpiHandoff';
 import { formatRupees, parseToPaise } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
 import { alpha } from '../../theme';
@@ -41,7 +41,7 @@ export function ScanPaySheet({
   const [target, setTarget] = useState<ScanTarget | null>(null);
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
-  const iosApps = useUpiApps();
+  const handoff = useUpiHandoff('Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
 
   function reset() {
     setTarget(null);
@@ -54,9 +54,9 @@ export function ScanPaySheet({
     onClose();
   }
 
-  // Exactly one installed app means no picker — so the button has to say which one it
-  // is, or the app that opens looks like something the sheet chose at random.
-  const soleApp = iosApps?.length === 1 ? iosApps[0] : null;
+  // When we're not going to ask, the button has to say where it's about to go, or the
+  // app that opens looks like something the sheet picked at random.
+  const soleApp = handoff.target;
   const amountPaise = target?.amountPaise ?? parseToPaise(amount);
   // A code that fixes its own amount is not editable — changing it would send a
   // figure the merchant did not ask for.
@@ -68,46 +68,28 @@ export function ScanPaySheet({
     : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
 
-  async function open(uri: string | null) {
-    if (!uri || !payee) return;
+  /**
+   * Remember the payment, *then* leave. `openURL` resolves as the OS takes the
+   * foreground, so anything started after it races our own suspension — and losing
+   * that race means the payment is never recorded and the feature silently does
+   * nothing, which is the entire point of it.
+   */
+  const hooks = {
+    before: () =>
+      payee ? onHandoff({ vpa: payee.vpa, name: target?.name, amountPaise }) : Promise.resolve(),
+    // Cancelled or failed to launch, so the record above would ask about a payment
+    // that was never even attempted.
+    onCancel: onAbandon,
+  };
 
-    // Record BEFORE handing over, not after. `openURL` resolves at the moment the OS
-    // takes the foreground away, so a write started in its `.then` races our own
-    // suspension — and if it loses, the payment is never remembered and the feature
-    // silently does nothing. Persisting first costs one storage write on a path that
-    // is about to leave the app anyway.
-    try {
-      await onHandoff({ vpa: payee.vpa, name: target?.name, amountPaise });
-    } catch {
-      // Couldn't remember it, so don't pretend we will. Paying is still the point.
-    }
-
-    try {
-      await Linking.openURL(uri);
-      haptic.success();
-      close();
-    } catch {
-      // No app switch happened, so the record above would ask about a payment that
-      // was never even attempted.
-      await onAbandon().catch(() => {});
-      Alert.alert('Couldn’t open that app', 'Try another UPI app, or pay in your bank app and add it here.');
-    }
-  }
-
-  /** Identical hand-off rules to settle-up — see `useUpiApps` for the platform split. */
-  function pay() {
+  /** Closes only once an app actually opened — a cancelled picker leaves you here. */
+  async function run(go: (req: typeof payee & object, h: typeof hooks) => Promise<boolean>) {
     if (!payee || !canPay) return;
-    if (iosApps === null) { open(buildUpiUri(payee)); return; }
-    if (iosApps.length === 0) {
-      Alert.alert('No UPI app found', 'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
-      return;
-    }
-    if (iosApps.length === 1) { open(buildUpiUri(payee, iosApps[0].key)); return; }
-    ActionSheetIOS.showActionSheetWithOptions(
-      { options: ['Cancel', ...iosApps.map(a => a.label)], cancelButtonIndex: 0, title: `Pay ${formatRupees(amountPaise)}` },
-      i => { if (i > 0) open(buildUpiUri(payee, iosApps[i - 1].key)); },
-    );
+    if (await go(payee, hooks)) { haptic.success(); close(); }
   }
+
+  const pay = () => run(handoff.pay);
+  const changeApp = () => run(handoff.choose);
 
   if (!visible) return null;
 
@@ -188,6 +170,12 @@ export function ScanPaySheet({
             onPress={pay}
             disabled={!canPay}
           />
+          {/* Only worth drawing when there is somewhere else to go. */}
+          {soleApp && handoff.canChoose && (
+            <TouchableOpacity onPress={changeApp} hitSlop={8} accessibilityRole="button" style={styles.changeApp}>
+              <Text style={styles.changeAppText}>Use a different app</Text>
+            </TouchableOpacity>
+          )}
           {/* The app never learns the outcome, so it must not claim to. */}
           <Text style={styles.footnote}>
             Opens your UPI app. Come back and we’ll ask whether it went through, then add it for you.
@@ -213,5 +201,7 @@ const styles = StyleSheet.create({
   fixedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   fixedLabel: { ...type.caption, color: colors.textMuted },
   fixedValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
+  changeApp: { alignSelf: 'center', paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center' },
+  changeAppText: { ...type.body, color: colors.accent },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

@@ -27,6 +27,7 @@ const K = {
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
   scanPayHintPending: 'scan_pay_hint_pending',
+  preferredUpiApp: 'preferred_upi_app',
   backupAnchorAt: 'backup_anchor_at',
   ocrProvider: 'ocr_provider',
 } as const;
@@ -98,6 +99,14 @@ export const settings = {
   // anyone who simply never long-pressed.
   scanPayHintPending: () => getBool(K.scanPayHintPending, false),
   setScanPayHintPending: (v: boolean) => setBool(K.scanPayHintPending, v),
+
+  // The UPI app to hand payments to, so the picker is a first-time question rather
+  // than a toll on every payment. Stored as the raw key and validated on read — an
+  // app can be uninstalled, and a preference pointing at something absent must fall
+  // back to asking rather than open nothing.
+  preferredUpiApp: () => getString(K.preferredUpiApp),
+  setPreferredUpiApp: (v: string | null) =>
+    v === null ? AsyncStorage.removeItem(K.preferredUpiApp) : setString(K.preferredUpiApp, v),
 
   // Backup reminder cadence anchor — last real export, or when the reminder
   // was first turned on if the user hasn't exported yet.
