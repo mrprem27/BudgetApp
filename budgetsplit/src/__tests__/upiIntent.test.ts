@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, UpiApp, UPI_APPS } from '../lib/upiIntent';
+import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -18,7 +18,7 @@ describe('buildUpiUri', () => {
   it('builds a payable URI with rupees at the boundary', () => {
     // 12345678 paise = ₹1,23,456.78 — the only place money stops being paise.
     const uri = buildUpiUri({ vpa: 'prem@ybl', name: 'Prem', amountPaise: 12345678 });
-    expect(uri).toBe('upi://pay?pa=prem%40ybl&pn=Prem&am=123456.78&cu=INR');
+    expect(uri).toBe('upi://pay?pa=prem%40ybl&pn=Prem&am=123456.78&cu=INR&mode=04');
   });
 
   it('always emits two decimals', () => {
@@ -132,7 +132,8 @@ describe('parseUpiQr — reading a friend’s UPI QR', () => {
 
   it('round-trips with buildUpiUri', () => {
     const uri = buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', amountPaise: 12345 })!;
-    expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao' });
+    // `mode` comes back because we now emit it — the round trip is still lossless.
+    expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', mode: '04' });
   });
 });
 
@@ -179,13 +180,16 @@ describe('a scanned code is re-emitted, not rebuilt', () => {
   // for. Observed on device as "payment failed — UPI risk policy" after PIN entry.
   it('keeps the extra parameters a person QR carried', () => {
     const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&sign=ABC123&mode=01&orgid=159761');
-    expect(scanned?.params).toEqual({ sign: 'ABC123', mode: '01', orgid: '159761' });
+    // `mode` is ours to emit now, so it is read separately rather than re-carried —
+    // otherwise the URI would end up with two of them.
+    expect(scanned?.params).toEqual({ sign: 'ABC123', orgid: '159761' });
+    expect(scanned?.mode).toBe('01');
   });
 
   it('does not re-carry the fields we set ourselves', () => {
     const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&am=10.00&cu=INR&tn=lunch&mode=01');
     // `am` especially: the user's amount must win over whatever the code suggested.
-    expect(scanned?.params).toEqual({ mode: '01' });
+    expect(scanned?.params).toBeUndefined();
   });
 
   it('omits params entirely when the code carried nothing extra', () => {
@@ -195,10 +199,23 @@ describe('a scanned code is re-emitted, not rebuilt', () => {
   it('puts them back on the outgoing URI', () => {
     const uri = buildUpiUri({
       vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 4500,
-      passthrough: { sign: 'ABC123', mode: '01' },
+      passthrough: { sign: 'ABC123', orgid: '159761' }, mode: '01',
     });
     expect(uri).toContain('sign=ABC123');
+    expect(uri).toContain('orgid=159761');
     expect(uri).toContain('mode=01');
+  });
+
+  it('emits exactly one mode, never the scanned one twice', () => {
+    // `mode` travels via its own field rather than passthrough. Were it in both, the
+    // URI would carry two — and a passthrough copy must not override the real one.
+    const uri = buildUpiUri({
+      vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 4500,
+      passthrough: { mode: '99' }, mode: '01',
+    })!;
+    expect(uri.match(/[?&]mode=/g)).toHaveLength(1);
+    expect(uri).toContain('mode=01');
+    expect(uri).not.toContain('mode=99');
   });
 
   it('cannot be used to redirect the money', () => {
@@ -314,5 +331,71 @@ describe('UPI app schemes match their published values', () => {
     // targets at all, so no path would have made them work.
     const invented = ['slice://', 'groww://', 'jupiter://', 'imobileapp://', 'payzapp://', 'axispay://'];
     for (const p of invented) expect(UPI_APPS.some(a => a.probe === p)).toBe(false);
+  });
+});
+
+describe('tr and mode — the fields whose absence PSPs punished', () => {
+  const req = { vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 200 };
+
+  // PhonePe refused a ₹2 payment citing a ₹2,000 gallery-QR cap. That message is a
+  // generic parse/typing failure, not a limit — the documented causes being a missing
+  // unique `tr` and an improperly flagged transaction type.
+  it('declares itself an intent by default', () => {
+    expect(buildUpiUri(req)).toContain('mode=04');
+  });
+
+  it('lets a scanned code declare its own origin instead', () => {
+    // A merchant QR calling itself `01` is describing where it really came from.
+    expect(buildUpiUri({ ...req, mode: '01' })).toContain('mode=01');
+  });
+
+  it('carries the reference when one is supplied', () => {
+    expect(buildUpiUri({ ...req, ref: 'BSABC123' })).toContain('tr=BSABC123');
+  });
+
+  it('omits tr rather than sending an empty one', () => {
+    expect(buildUpiUri({ ...req, ref: '   ' })).not.toContain('tr=');
+    expect(buildUpiUri(req)).not.toContain('tr=');
+  });
+
+  it('keeps ours ahead of anything the scanned code carried', () => {
+    // Order is the whole defence: a hostile QR must not be able to displace the payee.
+    const uri = buildUpiUri({ ...req, ref: 'BSX', passthrough: { pa: 'attacker@evil' } })!;
+    expect(uri.indexOf('pa=asha')).toBeLessThan(uri.indexOf('tr=BSX'));
+    expect(uri).not.toContain('attacker');
+  });
+});
+
+describe('newUpiRef', () => {
+  it('is alphanumeric and within the 35-character spec limit', () => {
+    const ref = newUpiRef();
+    expect(ref).toMatch(/^[A-Z0-9]+$/);
+    expect(ref.length).toBeLessThanOrEqual(35);
+  });
+
+  it('never repeats — a reused reference reads as a duplicate transaction', () => {
+    const refs = new Set(Array.from({ length: 500 }, () => newUpiRef()));
+    expect(refs.size).toBe(500);
+  });
+
+  it('survives a round trip through the URI unchanged', () => {
+    const ref = newUpiRef();
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100, ref })).toContain(`tr=${ref}`);
+  });
+});
+
+describe('deep-link paths follow the shape that worked on device', () => {
+  it('routes every app through upi/pay', () => {
+    // credpay://upi/pay completed a real payment; whatsapp-consumer://pay and
+    // paytmmp://pay both opened blank. The rest follow the shape that worked.
+    for (const a of UPI_APPS) expect(a.prefix.endsWith('://upi/pay')).toBe(true);
+  });
+
+  it('pins the one path proven end to end', () => {
+    expect(UPI_APPS.find(a => a.key === UpiApp.Cred)?.prefix).toBe('credpay://upi/pay');
+  });
+
+  it('leaves the generic link alone — it populated correctly as-is', () => {
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100 })).toMatch(/^upi:\/\/pay\?/);
   });
 });

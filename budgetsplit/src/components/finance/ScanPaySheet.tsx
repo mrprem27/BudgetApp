@@ -73,7 +73,7 @@ export function ScanPaySheet({
   // No `note`: a `tn` the payee never wrote makes the request differ from the code they
   // published, and `passthrough` carries the fields that say it *is* their request.
   const payee = target
-    ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, passthrough: target.params }
+    ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, passthrough: target.params, mode: target.mode }
     : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
   // A shop code we can't re-emit honestly. We know everything except how they'll pay.

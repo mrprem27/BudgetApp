@@ -547,11 +547,41 @@ rather than trimming the excess, disabling the picker wholesale.
 | Wrong **path** | App launches to its home screen, payee and amount dropped | The user has left BudgetSplit and must type what they came here not to type |
 
 CRED demonstrated both at once: `cred://` *is* a CRED scheme, so the row appeared and the app
-opened — but CRED's UPI entry point is `credpay://`, so the parameters went nowhere. The schemes now
-come from the list Cashfree maintains against the real apps; the `://pay` vs `://upi/pay` **path**
-per app is not publicly documented and remains verifiable only on hardware. `slice`, `groww`,
-`jupiter`, `imobileapp`, `payzapp` and `axispay` were removed as invented — absent from every
-maintained UPI-intent list, so no path would have made them work.
+opened — but CRED's UPI entry point is `credpay://`, so the parameters went nowhere. `slice`,
+`groww`, `jupiter`, `imobileapp`, `payzapp` and `axispay` were removed as invented — absent from
+every maintained UPI-intent list, so no path would have made them work.
+
+#### The deep links we generate
+
+Every app receives the **same NPCI parameter set**; only the scheme and path differ.
+
+```
+<prefix>?pa=<vpa>&pn=<name>&am=<rupees.00>&cu=INR[&tn=<note>]&mode=<04|scanned>[&tr=<ref>][&…passthrough]
+```
+
+Parameter order is load-bearing: `pa`/`pn`/`am`/`cu` are written first and anything carried off the
+scanned code goes last, so a hostile QR can never displace the payee or the amount.
+
+| App | Prefix |
+|---|---|
+| **CRED** | `credpay://upi/pay` ✅ **completed a real payment** |
+| Generic | `upi://pay` ✅ **populated correctly** |
+| Google Pay | `tez://upi/pay` |
+| PhonePe · Paytm · BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · Airtel · super.money · Kiwi | `<scheme>://upi/pay` |
+
+`upi/pay` is used throughout because that is the shape everything observed to populate shares —
+`credpay://upi/pay` paid, `upi://pay` filled in correctly, while `whatsapp-consumer://pay` and
+`paytmmp://pay` both opened blank. Inference from device results, so an app that regresses gets its
+own row reverted rather than the whole set.
+
+**`mode` and `tr` are sent because their absence was punished.** PhonePe refused a **₹2** payment
+citing a ₹2,000 gallery-QR cap — a limit ₹2 cannot breach. That message is a *generic* parse/typing
+exception PSPs raise when a URI omits expected fields, and the documented causes are a missing
+unique `tr` and an improperly flagged transaction type. So `mode` defaults to `04` (intent — a
+description of what we do, not a claim; `05` would claim a signature we lack), and `newUpiRef()`
+mints a fresh `tr` per **attempt** in `useUpiHandoff`, since PSPs read a repeated reference as a
+duplicate of the earlier transaction. A scanned code's own `mode` wins over our default — a QR
+declaring itself `01` is telling the truth about its origin.
 
 `computeTransferScopes` builds the per-group and global pair balance using the same `simplify`
 as every other balance surface. Scope can be a single group or "all groups"

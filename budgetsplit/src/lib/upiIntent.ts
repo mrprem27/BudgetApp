@@ -1,3 +1,5 @@
+import { v4 as uuid } from 'uuid';
+
 /**
  * UPI intent handoff — build a `upi://pay?…` URI for the OS to hand to the user's
  * own UPI app, pre-filled.
@@ -70,34 +72,44 @@ export type UpiAppSpec = {
  * market share, so the most likely choice needs the least thought.
  */
 export const UPI_APPS: UpiAppSpec[] = [
-  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://pay', probe: 'phonepe://' },
+  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://' },
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://' },
-  { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://' },
-  { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://pay', probe: 'bhim://' },
+  { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://upi/pay', probe: 'paytmmp://' },
+  { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://' },
   { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://' },
-  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://pay', probe: 'amazonpay://' },
-  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://pay', probe: 'whatsapp-consumer://' },
-  { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://pay', probe: 'navipay://' },
-  { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://pay', probe: 'mobikwik://' },
-  { key: UpiApp.Airtel, label: 'Airtel', prefix: 'myairtel://pay', probe: 'myairtel://' },
-  { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://pay', probe: 'super://' },
-  { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://pay', probe: 'kiwi://' },
+  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://' },
+  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://' },
+  { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://' },
+  { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://upi/pay', probe: 'mobikwik://' },
+  { key: UpiApp.Airtel, label: 'Airtel', prefix: 'myairtel://upi/pay', probe: 'myairtel://' },
+  { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://upi/pay', probe: 'super://' },
+  { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://upi/pay', probe: 'kiwi://' },
 ];
 
 /**
- * **Schemes are sourced; paths are not. An app is proven only on a device.**
+ * **Schemes are sourced. Paths come from device results, and only CRED is proven.**
  *
- * The two failure modes are not symmetric, which is why that distinction matters:
+ * The two failure modes are not symmetric, which is why the distinction matters:
  *   - wrong **scheme** → `canOpenURL` reports absent → the row never appears. Harmless.
- *   - wrong **path** → the app opens to its home screen having dropped the payee and
+ *   - wrong **path** → the app opens to its own home screen having dropped the payee and
  *     amount. The user has left BudgetSplit and must now type what they came here not
  *     to type. Only a device catches this.
  *
  * CRED demonstrated both at once. `cred://` *is* a CRED scheme, so it launched and the
  * row looked fine — but CRED's UPI entry point is `credpay://`, so our parameters went
- * nowhere. The schemes above now come from the list Cashfree maintains against the real
- * apps rather than from inference; the `://pay` vs `://upi/pay` path per app is still
- * undocumented publicly, so treat every unconfirmed row as provisional.
+ * nowhere. With `credpay://upi/pay` a real payment went through.
+ *
+ * That result also settled the path shape. Everything observed to populate correctly
+ * uses `upi/pay`; everything observed to open blank used a bare `pay`:
+ *
+ *   credpay://upi/pay          ✅ payment completed
+ *   upi://pay                  ✅ populated (opened WhatsApp, which claims `upi://`)
+ *   whatsapp-consumer://pay    ✗ opened, nothing filled in
+ *   paytmmp://pay              ✗ opened, nothing filled in
+ *
+ * So the rest were moved to `upi/pay` by inference from those results. That is a much
+ * better-founded guess than the last one, and still a guess — an app that regresses
+ * gets its own row reverted rather than the whole set.
  *
  * Removed as invented, not merely unverified: `slice`, `groww`, `jupiter`, `imobileapp`,
  * `payzapp`, `axispay` — none appear in any maintained UPI-intent list.
@@ -154,14 +166,36 @@ export type ScannedUpi = {
    * dropping them and rebuilding a bare URI produces something indistinguishable from
    * a regenerated QR, which is what risk engines exist to decline.
    *
-   * Excludes the fields we set ourselves (`pa`, `pn`, `am`, `cu`, `tn`); see
-   * `buildUpiUri`, which layers those on top.
+   * Excludes the fields we set ourselves (`pa`, `pn`, `am`, `cu`, `tn`, `tr`, `mode`);
+   * see `buildUpiUri`, which layers those on top.
    */
   params?: Record<string, string>;
+  /**
+   * The code's own `mode`, surfaced separately because we emit that field ourselves.
+   *
+   * Left inside `params` it would be emitted twice, and stripped as one of "our"
+   * fields it would be lost — so it is read out here and preferred over our default,
+   * since a code declaring its own origin is telling the truth about it.
+   */
+  mode?: string;
 };
 
 /** Set by us on every request, so carrying the scanned copy through would be noise. */
-const OWN_PARAMS = new Set(['pa', 'pn', 'am', 'cu', 'tn']);
+const OWN_PARAMS = new Set(['pa', 'pn', 'am', 'cu', 'tn', 'tr', 'mode']);
+
+/**
+ * `mode` says how the payment was initiated. NPCI's values: `00` default · `01` QR ·
+ * `02` secure QR · `04` **intent** · `05` secure intent · `06` NFC · `07` BLE.
+ *
+ * We generate an intent and hand it to another app, so `04` is a description rather
+ * than a claim. `05` would be a claim — it asserts a signature we do not have.
+ *
+ * Omitting it entirely is what we did before, and PSPs then guess. PhonePe guessed
+ * "QR shared from the gallery" and refused a ₹2 payment against a ₹2,000 cap, which is
+ * how we learned that the message is a generic parse/typing failure rather than a
+ * limit.
+ */
+export const UPI_MODE_INTENT = '04';
 
 /**
  * Pull a VPA (and payee name, if present) out of a scanned UPI QR code.
@@ -197,6 +231,8 @@ export function parseUpiQr(raw: string): ScannedUpi | null {
     const out: ScannedUpi = name ? { vpa, name } : { vpa };
     // Omitted rather than set empty, so a plain `pa`+`pn` code stays a two-field object.
     if (Object.keys(extras).length) out.params = extras;
+    const mode = (params.get('mode') ?? '').trim();
+    if (mode) out.mode = mode;
     return out;
   }
 
@@ -212,9 +248,29 @@ export type UpiRequest = {
   amountPaise: number;
   /** Optional note (`tn`). Leave unset on a scanned code — see `buildUpiUri`. */
   note?: string;
+  /**
+   * Transaction reference (`tr`), unique **per attempt** — a retry needs a fresh one.
+   * Use `newUpiRef()`. Supplied by the caller rather than minted here so that
+   * `buildUpiUri` stays pure and every URI assertion stays deterministic.
+   */
+  ref?: string;
+  /** Initiation mode (`mode`). Defaults to `UPI_MODE_INTENT`. */
+  mode?: string;
   /** Parameters from the scanned code, re-emitted beneath our own. */
   passthrough?: Record<string, string>;
 };
+
+/**
+ * A fresh `tr` for one payment attempt.
+ *
+ * The spec allows up to 35 alphanumeric characters. The `BS` prefix makes ours
+ * identifiable in a PSP's logs, and the hyphen-stripped uuid supplies the uniqueness —
+ * PSPs treat a repeated reference as a duplicate of the earlier transaction, so
+ * reusing one across a retry could suppress the retry entirely.
+ */
+export function newUpiRef(): string {
+  return `BS${uuid().replace(/-/g, '').slice(0, 14)}`.toUpperCase();
+}
 
 /**
  * `null` when the request can't produce a payable URI (bad VPA, non-positive
@@ -238,6 +294,11 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);
+
+  // A scanned code's own `mode` wins: a merchant QR calling itself `01` is describing
+  // its real origin, and overwriting that with `04` would make the request lie.
+  params.push(['mode', req.mode?.trim() || UPI_MODE_INTENT]);
+  if (req.ref?.trim()) params.push(['tr', req.ref.trim()]);
 
   // Re-emitted last so they can never displace the payee, amount or currency above —
   // a scanned code must not be able to redirect where the money goes.
