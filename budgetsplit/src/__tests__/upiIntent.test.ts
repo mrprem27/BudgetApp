@@ -548,8 +548,8 @@ describe('provenance is recorded, not assumed', () => {
     );
     for (const a of UPI_APPS) {
       if (!a.blocked) continue;
-      // Blocking an app nobody has run would be a guess with real consequences — it hides
-      // that app from the picker. Every one of these has been watched failing.
+      // Blocking an app nobody has run would be a guess with a real consequence: it stops
+      // that app being sent a payment at all. Every one of these has been watched failing.
       expect(a.provenance).not.toBe('unverified');
       // Shown to the user verbatim, so it has to read as a sentence and name the app.
       expect(a.blocked).toMatch(/^[A-Z].*\.$/);
@@ -557,10 +557,11 @@ describe('provenance is recorded, not assumed', () => {
     }
   });
 
-  it('leaves at least one way to hand off a payment', () => {
-    // Blocking is subtraction from the picker, and subtraction can reach zero. If a change
-    // ever blocks everything, Scan & Pay silently becomes record-only — worth failing here
-    // rather than discovering it on a device.
+  it('leaves at least one app that can receive a pre-filled payment', () => {
+    // `blocked` no longer hides an app — it decides that we open it rather than hand it a
+    // payment, so blocking everything would not empty the picker, it would quietly turn
+    // every hand-off into "open the app and type it yourself". That is a real regression
+    // wearing a working UI, which is exactly the kind worth failing a test over.
     expect(UPI_APPS.filter(a => !a.blocked).length).toBeGreaterThan(0);
     expect(GENERIC_UPI_APP.blocked).toBeUndefined();
   });

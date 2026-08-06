@@ -155,15 +155,24 @@ export function ScanPaySheet({
     onCancel: onAbandon,
   };
 
+  /**
+   * A signed merchant code cannot be re-emitted to anybody, so no app gets parameters —
+   * every one of them is opened for the user to scan the code again themselves.
+   */
+  const bare = recordOnly;
+  /** Nothing to hand off to. The scan is still worth keeping. */
+  const noApps = handoff.apps?.length === 0;
+
   /** Closes only once an app actually opened — a cancelled picker leaves you here. */
-  async function run(go: (req: typeof payee & object, h: typeof hooks) => Promise<boolean>) {
-    if (!payee || !canPay) return;
-    if (await go(payee, hooks)) { haptic.success(); close(); }
+  async function run(go: (req: typeof payee & object, h: typeof hooks, b: boolean) => Promise<boolean>) {
+    if (!payee || amountPaise <= 0 || (!bare && !canPay)) return;
+    if (await go(payee, hooks, bare)) { haptic.success(); close(); }
   }
 
   const pay = () => run(handoff.pay);
   const changeApp = () => run(handoff.choose);
 
+  /** The whole flow with the app switch removed, for a phone with no UPI app on it. */
   async function recordIt() {
     if (!scanned || amountPaise <= 0) return;
     try {
@@ -174,29 +183,6 @@ export function ScanPaySheet({
       haptic.error();
       Alert.alert('Couldn’t save that', 'Please add the expense yourself this time.');
     }
-  }
-
-  /**
-   * Which apps are worth launching bare, and in a signed-QR flow that is *all* of them.
-   *
-   * Normally only the blocked ones: an app that accepts a hand-off should receive the
-   * payment pre-filled, not be opened for the user to retype. But when the code is signed
-   * we cannot re-emit it to anybody, so every installed app is in the same position — and
-   * scanning the code again in the user's own app is the whole answer.
-   */
-  const launchable = recordOnly ? [...(handoff.apps ?? []), ...handoff.blocked] : handoff.blocked;
-  const launchLabel = launchable.length === 1 ? launchable[0].label : 'UPI app';
-
-  /**
-   * Record, then open the app so the payment can be made there.
-   *
-   * The record is not conditional on the launch: `openApp` files it via `before` and, if the
-   * launch then fails, `onAbandon` unwinds it — the same contract the paying path uses. What
-   * must never happen is leaving with the money spent and no row to review.
-   */
-  async function recordAndOpen() {
-    if (!payee || amountPaise <= 0) return;
-    if (await handoff.openApp(launchable, hooks)) { haptic.success(); close(); }
   }
 
   if (!visible) return null;
@@ -279,97 +265,61 @@ export function ScanPaySheet({
             />
           )}
 
-          {recordOnly ? (
-            <>
-              {/*
-                Opening the app is the *answer* here, not a consolation. A signed code
-                cannot be re-emitted to anyone, and scanning it again in the user's own app
-                is exactly how it is meant to be paid — so take them there rather than
-                leaving them to find it.
-              */}
-              <PrimaryButton
-                label={launchable.length > 0
-                  ? `Record & open ${launchLabel}`
-                  : (amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it')}
-                onPress={launchable.length > 0 ? recordAndOpen : recordIt}
-                disabled={amountPaise <= 0}
-              />
-              {/*
-                Said plainly, because the alternative is handing off to a payment that
-                fails only after they've entered their PIN.
-              */}
-              <Text style={styles.footnote}>
-                This shop’s code is secured, so it has to be paid from your UPI app directly.
-                Scan it again there and we’ll have it waiting in your review inbox — nothing to type.
+          {/*
+            **One button.** It records the expense and opens a UPI app, and whether that app
+            arrives pre-filled is the app's decision rather than a different feature: the
+            ones that accept our intent get the full URI, the ones that reject it get opened.
+            Every route files the expense before leaving, so the outcome of the payment can
+            never cost the record.
+
+            This replaced a Pay button plus a "Record it, I'll pay" row plus a "Record &
+            open PhonePe" variant of it. Three controls for what is one intention — pay this
+            person, and remember it — and the split between them encoded our knowledge of
+            which apps misbehave into the user's decision, where it does not belong.
+
+            The only case with no app to open is a phone with no UPI app at all, and there
+            the same button simply records.
+          */}
+          <PrimaryButton
+            label={noApps
+              ? (amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it')
+              : (amountPaise > 0 ? `Pay ${formatRupees(amountPaise)}` : 'Pay')}
+            onPress={noApps ? recordIt : pay}
+            // Long-press reveals the exact URIs — see UpiUriSheet for why that exists.
+            onLongPress={() => canPay && setShowUris(true)}
+            disabled={amountPaise <= 0 || (!noApps && !bare && !canPay)}
+          />
+
+          {/*
+            Destination and the way to change it on one line, rather than a long button
+            label plus a separate link plus a footnote — three stacked blocks saying what one
+            row can. Absent when nothing is remembered, because the picker is about to ask.
+
+            A remembered app that won't take a pre-filled payment says so here, in the same
+            words the picker uses. Not a warning: it opens, and the payment still works — you
+            just enter it there.
+          */}
+          {soleApp && !noApps && (
+            <View style={styles.destRow}>
+              <Text style={styles.destText} numberOfLines={1}>
+                {bare || soleApp.blocked
+                  ? `Opens ${soleApp.label} — enter it there`
+                  : `Opens ${soleApp.label}`}
               </Text>
-            </>
-          ) : (
-            <>
-              {/* Long-press reveals the exact URIs — see UpiUriSheet for why that exists. */}
-              <PrimaryButton
-                label={canPay ? `Pay ${formatRupees(amountPaise)}` : 'Pay'}
-                onPress={pay}
-                onLongPress={() => canPay && setShowUris(true)}
-                disabled={!canPay}
-              />
-
-              {/*
-                Destination and the way to change it on one line, rather than a long
-                button label plus a separate link plus a footnote — three stacked blocks
-                saying what one row can. Absent when nothing is remembered, because the
-                picker is about to ask anyway.
-              */}
-              {soleApp && (
-                <View style={styles.destRow}>
-                  {/* `handoff.target` can only be an app that accepts us — blocked ones are
-                      filtered out upstream, so this never needs a refusal state. */}
-                  <Text style={styles.destText} numberOfLines={1}>Opens {soleApp.label}</Text>
-                  {handoff.canChoose && (
-                    <TouchableOpacity onPress={changeApp} hitSlop={12} accessibilityRole="button">
-                      <Text style={styles.destChange}>Change</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+              {handoff.canChoose && (
+                <TouchableOpacity onPress={changeApp} hitSlop={12} accessibilityRole="button">
+                  <Text style={styles.destChange}>Change</Text>
+                </TouchableOpacity>
               )}
-
-              {/*
-                Always offered, not only when hand-off is known-broken.
-                PhonePe and Amazon Pay refuse externally-supplied intents by policy, and
-                nothing reports that back to us — so without this the user is left having
-                made a payment with no record of it, which is precisely what Scan & Pay
-                exists to prevent. The scan already knows payee, amount and category.
-              */}
-              {/*
-                One row, never two. When a refusing app is installed this becomes the way
-                round it — PhonePe and Paytm reject *externally-supplied* intents, but a live
-                scan in their own app is their most-trusted input, so with the code still in
-                front of you it completes the payment they blocked, and the expense is filed
-                on the way out.
-
-                It replaces "Record it, I'll pay" rather than sitting beside it. The cost is
-                that paying in cash while PhonePe is installed opens an app you didn't want —
-                minor, and the record is made either way.
-
-                A "Type amount there" action briefly sat here too, handing over the payee with
-                `am` withheld. It failed on PhonePe, Paytm and Amazon Pay alike, each giving
-                the identical error it gave with the amount pre-filled, so it was removed.
-              */}
-              <TouchableOpacity
-                onPress={launchable.length > 0 ? recordAndOpen : recordIt}
-                disabled={amountPaise <= 0}
-                hitSlop={8}
-                accessibilityRole="button"
-                style={styles.recordRow}
-              >
-                <Text style={[styles.recordText, amountPaise <= 0 && styles.recordTextOff]}>
-                  {launchable.length > 0 ? `Record & open ${launchLabel}` : 'Record it, I’ll pay'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* The app never learns the outcome, so it must not claim to. */}
-              <Text style={styles.footnote}>We’ll ask whether it went through when you come back.</Text>
-            </>
+            </View>
           )}
+
+          {/* The app never learns the outcome, so it must not claim to. */}
+          <Text style={styles.footnote}>
+            {recordOnly
+              ? 'This shop’s code is secured, so scan it again in your UPI app. We’ll have the expense waiting in your review inbox — nothing to type.'
+              : 'We’ll ask whether it went through when you come back.'}
+          </Text>
         </>
       )}
 
@@ -401,8 +351,5 @@ const styles = StyleSheet.create({
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
   destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
   destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  recordRow: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md, marginTop: space.xs },
-  recordText: { ...type.body, color: colors.accent },
-  recordTextOff: { color: colors.textMuted },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

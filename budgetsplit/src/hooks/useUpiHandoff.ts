@@ -31,43 +31,48 @@ export type PayHooks = {
 
 export type UpiHandoff = {
   /**
-   * Apps that are installed **and** will accept a payment we started; `null` on Android,
-   * where the OS draws its own chooser.
+   * Every installed UPI app; `null` on Android, where the OS draws its own chooser.
    *
-   * Blocked apps are absent. Offering an app that refuses every payment is not a choice,
-   * it is a trap that costs a rate-limited UPI PIN attempt to discover.
+   * **All of them, including the ones that refuse a pre-filled payment.** They were briefly
+   * filtered out, and hiding them was the wrong fix: a user with PhonePe installed sees it
+   * missing and reads that as our bug, and the app is still the one they want to pay from.
+   * What actually cost them a rate-limited PIN attempt was sending PhonePe a payment it
+   * would reject — so we stop doing *that* and open it instead. Nothing is hidden, and
+   * every route records the expense first.
    */
   apps: UpiAppSpec[] | null;
-  /** Installed but refusing a hand-off, with the reason. Never offered a payment. */
-  blocked: UpiAppSpec[];
   /**
-   * Launch an app with **no payment attached**, so the user completes it there themselves.
+   * Installed, but only openable — a payment we build gets rejected, so we send none.
    *
-   * This is the way round a blocked app rather than a consolation prize. PhonePe and Paytm
-   * refuse *externally-supplied* intents; a live camera scan inside their own app is their
-   * most-trusted input, subject to no gallery-QR cap and no intent risk scoring. So with the
-   * shop's code still in front of you, opening PhonePe and scanning there completes the
-   * payment their refusal blocks — and `hooks.before` has already filed the expense, so
-   * nothing needs typing on the way back.
+   * Still listed and still chooseable; `blocked` now decides *what we send*, not whether
+   * the app appears. Opening it is the way round the refusal rather than a consolation:
+   * PhonePe and Paytm reject *externally-supplied* intents, while a live camera scan
+   * inside their own app is their most-trusted input, subject to no gallery-QR cap and no
+   * intent risk scoring. With the shop's code still in front of you, scanning it there
+   * completes the payment their refusal blocked.
    *
    * Weaker with no code to scan, i.e. a person-to-person transfer: the payee has to be
    * re-entered by hand, and we cannot even put the handle on the clipboard because no
    * clipboard package is installed.
-   *
-   * Resolves `false` if nothing was opened. Picks for the user when only one app is
-   * plausible, and asks when several are.
    */
-  openApp: (choices: UpiAppSpec[], hooks?: PayHooks) => Promise<boolean>;
+  blocked: UpiAppSpec[];
   /** The remembered app — only when it is set *and* still installed. */
   preferred: UpiAppSpec | null;
   /** Where the next payment goes without asking: the preference, or a lone installed app. */
   target: UpiAppSpec | null;
   /** True when there is a real choice to offer, so a "change app" affordance is worth drawing. */
   canChoose: boolean;
-  /** Hand off, asking only when there is a choice and nothing is remembered. */
-  pay: (req: UpiRequest, hooks?: PayHooks) => Promise<boolean>;
+  /**
+   * Record and go, asking which app only when there is a choice and nothing is remembered.
+   *
+   * One action for both kinds of app. Whether the destination arrives pre-filled is the
+   * app's decision, not a different feature: apps that accept our intent get the full URI,
+   * apps that reject it get opened bare. `bare` forces the second for everything, which is
+   * what a signed merchant QR needs — it cannot be re-emitted to anybody.
+   */
+  pay: (req: UpiRequest, hooks?: PayHooks, bare?: boolean) => Promise<boolean>;
   /** Ask again even when one is remembered, and remember the new answer. */
-  choose: (req: UpiRequest, hooks?: PayHooks) => Promise<boolean>;
+  choose: (req: UpiRequest, hooks?: PayHooks, bare?: boolean) => Promise<boolean>;
   /** Forget the remembered app, so the next payment asks again. */
   forget: () => void;
 };
@@ -79,55 +84,60 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
   useEffect(() => { settings.preferredUpiApp().then(setPreferredKey).catch(() => {}); }, []);
 
   /**
-   * Blocked apps are removed from every decision below, not merely labelled.
+   * Every installed app is offered. `blocked` decides the payload, never the listing.
    *
-   * PhonePe, Paytm, Amazon Pay and WhatsApp each refuse every payment we start — proven
-   * across path, `mode`, `tr`, `pn` and finally withholding `am` so the payer typed the
-   * amount in the app itself. Listing them was costing a real UPI PIN attempt per
-   * discovery, of a supply NPCI rate-limits per day, and leaving the user unsure whether
-   * they had been debited.
+   * These were filtered out for one commit, and that traded one confusion for a worse one:
+   * PhonePe simply vanishing reads as a bug in our detection, and it is still the app the
+   * user wants to pay from. What actually wasted a rate-limited PIN attempt was handing
+   * PhonePe a payment it would reject — so we stop building one and open the app instead.
    *
-   * `blocked` is still surfaced by name where its absence would otherwise read as a bug —
-   * a user with PhonePe installed deserves to know why it is missing rather than assume we
-   * failed to find it.
+   * The user learns which apps arrive pre-filled by using them, which is a small, honest
+   * difference. Every route records the expense before leaving, so none of them can lose it.
    */
-  const apps = installed?.filter(a => !a.blocked) ?? null;
+  const apps = installed;
   const blocked = installed?.filter(a => !!a.blocked) ?? [];
 
-  // Resolved against `apps` rather than trusted alone — this covers both an uninstall and
-  // a preference remembered before that app was known to refuse us.
+  // Resolved against `apps` rather than trusted alone — this is the uninstall case.
   const preferred = apps?.find(a => a.key === preferredKey) ?? null;
   const target = preferred ?? (apps?.length === 1 ? apps[0] : null);
   const canChoose = (apps?.length ?? 0) > 1;
 
-  /** One sentence explaining an absence, or nothing to explain. Plural-correct. */
-  const blockedNote = blocked.length === 0 ? null : (() => {
-    const names = blocked.map(a => a.label);
-    const list = names.length === 1 ? names[0]
-      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-    return names.length === 1
-      ? `${list} isn’t listed — it refuses payments started in another app.`
-      : `${list} aren’t listed — they refuse payments started in another app.`;
-  })();
-
+  /**
+   * Record, then go — with the payment attached where the app will take it.
+   *
+   * The whole difference between a working app and a refusing one lives on this line.
+   * A blocked app is sent its bare scheme, which just launches it; everything else gets
+   * the full URI and arrives pre-filled. `bare` forces the plain launch for any app, for
+   * a signed merchant QR that cannot be re-emitted to anybody.
+   *
+   * `before` runs first and is awaited either way: after `openURL` we are racing our own
+   * suspension, and losing that race loses the record — which is the one thing that must
+   * survive regardless of what the payment app decides.
+   */
   const open = useCallback(async (
     req: UpiRequest,
-    app: UpiApp | undefined,
+    spec: UpiAppSpec | null,
     hooks?: PayHooks,
+    bare = false,
   ): Promise<boolean> => {
     // Always minted, never conditionally: whether a `tr` actually goes on the wire is
     // `buildUpiUri`'s call, since only it knows the target app's quirks. Minted here
     // rather than at the call sites so a retry never reuses the previous reference —
     // PSPs read a repeated `tr` as a duplicate of the earlier transaction.
-    const uri = buildUpiUri({ ...req, ref: req.ref ?? newUpiRef() }, app);
-    if (!uri) return false;
+    const url = bare || spec?.blocked
+      ? (spec?.probe ?? null)
+      : buildUpiUri({ ...req, ref: req.ref ?? newUpiRef() }, spec?.key);
+    if (!url) return false;
     try { await hooks?.before?.(); } catch { /* record failed; paying is still the point */ }
     try {
-      await Linking.openURL(uri);
+      await Linking.openURL(url);
       return true;
     } catch {
       await hooks?.onCancel?.().catch(() => {});
-      Alert.alert('Couldn’t open that app', 'Try another UPI app, or record this payment yourself.');
+      Alert.alert(
+        spec ? `Couldn’t open ${spec.label}` : 'Couldn’t open that app',
+        'Try another UPI app — the expense is saved either way.',
+      );
       return false;
     }
   }, []);
@@ -137,103 +147,47 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     req: UpiRequest,
     list: UpiAppSpec[],
     hooks?: PayHooks,
+    bare = false,
   ): Promise<boolean> => new Promise(resolve => {
     ActionSheetIOS.showActionSheetWithOptions(
       {
-        options: ['Cancel', ...list.map(a => a.label)],
+        // Every installed app, with a word on the ones that won't arrive pre-filled.
+        // Not a warning — it opens and the payment still works, you just type it there —
+        // so it reads as a description rather than a reason to avoid the row.
+        options: ['Cancel', ...list.map(a => (bare || a.blocked ? `${a.label} — enter it there` : a.label))],
         cancelButtonIndex: 0,
         title: `Pay ${formatRupees(req.amountPaise)}`,
-        // Naming the absences matters: a user who has PhonePe and does not see it will read
-        // that as us failing to find it, and go looking for the bug.
-        message: blockedNote
-          ? `We’ll use this app next time. ${blockedNote}`
-          : 'We’ll use this app next time — you can change it before paying.',
+        message: 'We’ll save the expense either way, and use this app next time.',
       },
       i => {
         if (i <= 0) { hooks?.onCancel?.().catch(() => {}); resolve(false); return; }
         const app = list[i - 1];
         setPreferredKey(app.key);
         settings.setPreferredUpiApp(app.key).catch(() => {});
-        open(req, app.key, hooks).then(resolve);
+        open(req, app, hooks, bare).then(resolve);
       },
     );
-  }), [open, blockedNote]);
+  }), [open]);
 
-  /**
-   * Nothing left to offer — but *why* decides what to say.
-   *
-   * Filtering created a second empty case: apps are installed, they are simply all ones
-   * that refuse us. Telling that user "no UPI app found" would be false, and they would go
-   * looking for a detection bug that isn't there. Name what was skipped and point at the
-   * one route that always works.
-   */
-  const reportNothingToOpen = useCallback(() => {
-    if (blockedNote) {
-      Alert.alert('Can’t open a UPI app for this', `${blockedNote}\n\nUse “Record it, I’ll pay” — the expense is still saved and split.`);
-    } else {
-      Alert.alert('No UPI app found', noAppMessage);
-    }
-    return false;
-  }, [blockedNote, noAppMessage]);
-
-  const pay = useCallback(async (req: UpiRequest, hooks?: PayHooks): Promise<boolean> => {
+  const pay = useCallback(async (req: UpiRequest, hooks?: PayHooks, bare = false): Promise<boolean> => {
     // Android: `upi://` reaches the OS chooser, which is complete and keeps its own
     // default. Ours would be a worse copy of something already better.
-    if (apps === null) return open(req, undefined, hooks);
-    if (apps.length === 0) return reportNothingToOpen();
-    if (target) return open(req, target.key, hooks);
-    return ask(req, apps, hooks);
-  }, [apps, target, open, ask, reportNothingToOpen]);
+    if (apps === null) return open(req, null, hooks, bare);
+    if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
+    if (target) return open(req, target, hooks, bare);
+    return ask(req, apps, hooks, bare);
+  }, [apps, target, noAppMessage, open, ask]);
 
-  const choose = useCallback(async (req: UpiRequest, hooks?: PayHooks): Promise<boolean> => {
-    if (apps === null) return open(req, undefined, hooks);
-    if (apps.length === 0) return reportNothingToOpen();
-    return ask(req, apps, hooks);
-  }, [apps, open, ask, reportNothingToOpen]);
-
-  /**
-   * Launch bare, no payment parameters — the probe scheme is exactly that.
-   *
-   * `before` runs first and is awaited for the same reason the paying path does it: after
-   * `openURL` we are racing our own suspension, and losing that race loses the record.
-   */
-  const launch = useCallback(async (spec: UpiAppSpec, hooks?: PayHooks): Promise<boolean> => {
-    try { await hooks?.before?.(); } catch { /* record failed; opening is still the point */ }
-    try {
-      await Linking.openURL(spec.probe);
-      return true;
-    } catch {
-      await hooks?.onCancel?.().catch(() => {});
-      Alert.alert(`Couldn’t open ${spec.label}`, 'Open it yourself — the expense is saved either way.');
-      return false;
-    }
-  }, []);
-
-  const openApp = useCallback(async (choices: UpiAppSpec[], hooks?: PayHooks): Promise<boolean> => {
-    if (choices.length === 0) return false;
-    if (choices.length === 1) return launch(choices[0], hooks);
-    return new Promise<boolean>(resolve => {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', ...choices.map(a => a.label)],
-          cancelButtonIndex: 0,
-          // Not "Pay ₹X" — this sheet does not pay, and saying so avoids promising a
-          // pre-filled screen that is the one thing these apps will not give us.
-          title: 'Open which app?',
-          message: 'We’ll save the expense first. You’ll enter the payment there.',
-        },
-        i => {
-          if (i <= 0) { hooks?.onCancel?.().catch(() => {}); resolve(false); return; }
-          launch(choices[i - 1], hooks).then(resolve);
-        },
-      );
-    });
-  }, [launch]);
+  const choose = useCallback(async (req: UpiRequest, hooks?: PayHooks, bare = false): Promise<boolean> => {
+    if (apps === null) return open(req, null, hooks, bare);
+    if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
+    return ask(req, apps, hooks, bare);
+  }, [apps, noAppMessage, open, ask]);
 
   const forget = useCallback(() => {
     setPreferredKey(null);
     settings.setPreferredUpiApp(null).catch(() => {});
   }, []);
 
-  return { apps, blocked, openApp, preferred, target, canChoose, pay, choose, forget };
+  return { apps, blocked, preferred, target, canChoose, pay, choose, forget };
 }

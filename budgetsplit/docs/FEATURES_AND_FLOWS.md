@@ -664,9 +664,8 @@ start; the experiments only confirmed it. **Do not reopen without merchant crede
 
 #### Four apps are blocked and are not offered at all
 
-**`UpiAppSpec.blocked`** holds a one-sentence user-facing reason, and a blocked app is **removed
-from the picker** — `useUpiHandoff` filters it out of `apps`, `preferred`, `target` and `canChoose`
-alike. It stays in `UPI_APPS` for scheme detection and for the explanation.
+**`UpiAppSpec.blocked`** decides **what we send an app, never whether it is listed.** A blocked app
+appears in the picker like any other; it is opened with its bare scheme instead of a payment URI.
 
 | Blocked | Why | Documented? |
 |---|---|---|
@@ -677,22 +676,23 @@ alike. It stays in `UPI_APPS` for scheme detection and for the explanation.
 
 The bar is **every lever pulled with an identical failure each time** — path, `mode`, `tr`, `pn`,
 and finally withholding `am`. Vendor documentation is *not* required: an earlier version of this
-rule demanded a citation and so held only PhonePe and Paytm, which meant offering two apps already
-known to refuse every payment. That served the documentation rather than the user.
+rule demanded a citation and so held only PhonePe and Paytm, while Amazon Pay and WhatsApp publish
+nothing and fail just as consistently. That served the documentation rather than the user.
 
-Removed rather than labelled, because the failure is expensive in a way a blank screen is not: the
-user reaches PIN entry before being refused, spends one of a day's **rate-limited** UPI PIN attempts,
-and is left unsure whether they were debited.
+**These apps were briefly filtered out of the picker, and that was the wrong fix.** It traded one
+confusion for a worse one: PhonePe simply vanishing reads as a bug in our detection, and it is still
+the app the user wants to pay from. What actually wasted a rate-limited UPI PIN attempt was *handing
+PhonePe a payment it would reject* — so the fix is to stop building one and open the app instead.
+Nothing is hidden, the picker lists everything installed, and every route files the expense first.
 
-Two consequences handled explicitly:
+The picker marks them descriptively — *"PhonePe — enter it there"* — and the destination line under
+the button says the same for a remembered one. It is a description, not a warning: the app opens and
+the payment still works, you just type it there. Users learn which apps arrive pre-filled by using
+them, which is a small and honest difference.
 
-- **The absence is named, never silent.** The picker's message reads *"PhonePe, Paytm, Amazon Pay and
-  WhatsApp aren't listed — they refuse payments started in another app."* A user who has PhonePe and
-  doesn't see it would otherwise read that as a detection bug and go hunting for it.
-- **Filtering created a second empty case.** Apps installed, all of them blocked. "No UPI app found"
-  would be false, so `reportNothingToOpen` distinguishes the two and points at record-only. A test
-  also asserts at least one app remains unblocked, since blocking is subtraction and subtraction can
-  reach zero — that would silently reduce Scan & Pay to record-only.
+A test still asserts at least one app remains unblocked. Blocking no longer empties the picker, so
+the failure it guards has changed shape: blocking everything would quietly turn every hand-off into
+"open the app and type it yourself" — a real regression wearing a working UI.
 
 #### What the scan captures beyond payee and amount
 
@@ -728,28 +728,38 @@ is usually later and elsewhere, and indistinguishable from the truth once writte
 importer leaves them null for the same reason: an emailed receipt parsed days later would otherwise
 be stamped with the user's sofa.
 
-#### "Record & open PhonePe" — the way round a blocked app
+#### One button
 
-A blocked app is never handed a payment, but it **is** worth opening. PhonePe and Paytm refuse
-*externally-supplied* intents; a live camera scan inside their own app is their most-trusted input,
-subject to no gallery-QR cap and no intent risk scoring. So with the shop's code still in front of
-you, opening PhonePe and scanning it there completes the very payment their refusal blocked — and
-`hooks.before` has already filed the expense, so nothing needs typing on the way back.
+The sheet has a single action: **`Pay ₹X`** records the expense and opens a UPI app. Whether that
+app arrives pre-filled is the app's decision, not a different feature.
 
-`useUpiHandoff.openApp(choices, hooks)` launches the bare probe scheme with no payment parameters,
-records first, and action-sheets when several apps qualify — titled *"Open which app?"*, never
-"Pay ₹X", because this sheet does not pay and must not promise a pre-filled screen.
+It replaced three controls — a Pay button, a "Record it, I'll pay" row, and a "Record & open
+PhonePe" variant of that row. All three served one intention (pay this person, and remember it), and
+splitting them encoded *our* knowledge of which apps misbehave into the *user's* decision, where it
+does not belong.
 
-It **replaces** "Record it, I'll pay" rather than sitting beside it; one row, never two. The cost is
-that paying in cash while PhonePe is installed opens an app you didn't want — minor, and the record
-is made either way.
+`useUpiHandoff.pay(req, hooks, bare?)` is the whole thing:
 
-In the **signed-QR** flow (`canHandoff === false`) the launch set widens to *every* installed app,
-not just blocked ones: a signed code cannot be re-emitted to anybody, so every app is in the same
-position, and rescanning in the user's own app is the whole answer.
+| | Sent | Result |
+|---|---|---|
+| Normal app | full URI from `buildUpiUri` | opens pre-filled |
+| `blocked` app | bare probe scheme | opens; you enter the payment there |
+| `bare = true` | bare probe scheme, for every app | signed merchant QR — see below |
+| No app installed | nothing | the button records and stays put |
 
-Weaker with no code to scan — a person-to-person transfer means re-entering the payee by hand, and
-we cannot even offer the handle on the clipboard because no clipboard package is installed.
+`hooks.before` files the expense before `openURL` in every branch, because after that call we are
+racing our own suspension — and the record is the one thing that must survive whatever the payment
+app decides.
+
+**Opening a refusing app is the way round it, not a consolation.** PhonePe and Paytm reject
+*externally-supplied* intents, while a live camera scan inside their own app is their most-trusted
+input — no gallery-QR cap, no intent risk scoring. With the shop's code still in front of you,
+scanning it there completes the payment their refusal blocked. Weaker with no code to scan: a
+person-to-person transfer means re-entering the payee by hand, and we cannot even offer the handle
+on the clipboard because no clipboard package is installed.
+
+**`bare` is set for a signed merchant QR** (`canHandoff === false`). That code cannot be re-emitted
+to anybody, so no app gets parameters and the footnote says to scan it again in your own app.
 
 #### There is no "Other UPI app" row, and there should not be
 
