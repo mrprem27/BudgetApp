@@ -639,6 +639,14 @@ Airtel.
 about *who* is asking, which no parameter answers. They stay in the picker because the failure is
 recoverable — see record-only below.
 
+**The scan sheet leads with the VPA, not the name.** A QR's `pn` is written by whoever made the
+code and nothing on-device can check it — a swapped counter sticker can carry an honest-looking
+name over a stranger's handle. NPCI reached the same conclusion and now requires UPI apps to
+display only the bank-registered name resolved from the handle. BudgetSplit has no PSP access and
+so cannot resolve it, which means it must not present an unverifiable name as the answer to "who
+am I paying". The handle is shown prominently; the code's name appears below it, quoted and
+attributed (*"Chai Stop" — as written on the code*).
+
 **`pn` is sent only when it is real.** NPCI requires UPI apps to display the payee's
 **bank-registered** name, resolved from the VPA via ValidateAddress; names from QR codes, contacts
 or user labels may no longer be shown. We used to send the literal string `Payee` when a code

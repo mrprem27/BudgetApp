@@ -165,9 +165,19 @@ export function ScanPaySheet({
             <View style={styles.payeeIcon}>
               <Feather name={target.kind === 'merchant' ? 'shopping-bag' : 'user'} size={16} color={colors.accent} />
             </View>
+            {/*
+              The VPA leads, the name follows. A QR's `pn` is written by whoever made the
+              code and nothing here can check it — a swapped sticker can carry an honest
+              name over a stranger's handle. NPCI reached the same conclusion and now
+              requires UPI apps to display only the *bank-registered* name, resolved from
+              the handle; ours cannot resolve it, so it must not present an unverifiable
+              name as the answer to "who am I paying".
+            */}
             <View style={{ flex: 1 }}>
-              <Text style={styles.payeeName} numberOfLines={1}>{target.name ?? target.vpa}</Text>
-              <Text style={styles.payeeVpa} numberOfLines={1}>{target.vpa}</Text>
+              <Text style={styles.payeeVpaLead} numberOfLines={1}>{target.vpa}</Text>
+              <Text style={styles.payeeNameSub} numberOfLines={1}>
+                {target.name ? `“${target.name}” — as written on the code` : 'No name on this code'}
+              </Text>
             </View>
             <TouchableOpacity onPress={reset} hitSlop={10} accessibilityRole="button" accessibilityLabel="Scan a different code">
               <Feather name="refresh-cw" size={16} color={colors.textMuted} />
@@ -280,8 +290,8 @@ const styles = StyleSheet.create({
   hintBad: { color: colors.expense },
   payeeCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md },
   payeeIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: alpha(colors.accent, 13), alignItems: 'center', justifyContent: 'center' },
-  payeeName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  payeeVpa: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  payeeVpaLead: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  payeeNameSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   fixedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   fixedLabel: { ...type.caption, color: colors.textMuted },
   fixedValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
