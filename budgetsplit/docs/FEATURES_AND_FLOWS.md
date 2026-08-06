@@ -646,6 +646,14 @@ carried no name — a fabricated name on a real payment, and the likely cause of
 to verify UPI ID"*. Passing the VPA and letting the app resolve the name is also exactly what a
 merchant hand-off does.
 
+**`mode` is always ours, never the scanned code's.** `mode` says how the transaction reached *the
+app receiving it*, and that app receives an **intent** from us — whatever the details were
+originally printed on. UPI QR codes routinely carry `mode=01` ("QR Code"), and we used to forward
+it, which told the receiving app the payment came from a QR *it* had scanned. PhonePe believed us
+and applied its QR rules, including the gallery-image cap that refused **₹2** against a ₹2,000
+limit. So `parseUpiQr` reads the code's `mode` and discards it, and `buildUpiUri` always sends `04`
+(intent).
+
 **`tr` goes only on merchant payments.** It is documented mandatory there, and on a P2P transfer it
 makes the intent merchant-shaped while carrying no `mc` and no `sign` — a malformed merchant
 payment rather than a well-formed personal one. Device testing showed it neither fixed nor broke

@@ -152,8 +152,8 @@ describe('parseUpiQr — reading a friend’s UPI QR', () => {
 
   it('round-trips with buildUpiUri', () => {
     const uri = buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', amountPaise: 12345 })!;
-    // `mode` comes back because we now emit it — the round trip is still lossless.
-    expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao', mode: '04' });
+    // `mode` is not read back onto the object — we always emit our own. See buildUpiUri.
+    expect(parseUpiQr(uri)).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha Rao' });
   });
 });
 
@@ -200,10 +200,18 @@ describe('a scanned code is re-emitted, not rebuilt', () => {
   // for. Observed on device as "payment failed — UPI risk policy" after PIN entry.
   it('keeps the extra parameters a person QR carried', () => {
     const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&sign=ABC123&mode=01&orgid=159761');
-    // `mode` is ours to emit now, so it is read separately rather than re-carried —
-    // otherwise the URI would end up with two of them.
     expect(scanned?.params).toEqual({ sign: 'ABC123', orgid: '159761' });
-    expect(scanned?.mode).toBe('01');
+  });
+
+  it('drops the code’s own mode instead of forwarding it', () => {
+    // A UPI QR routinely says `mode=01` ("QR Code"). Passing that on told the receiving
+    // app the payment came from a QR *it* scanned — so PhonePe applied its gallery-image
+    // rules and refused ₹2 against a ₹2,000 cap. `mode` describes how the transaction
+    // reached the receiving app, and what reaches it is an intent.
+    const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&mode=01')!;
+    expect(scanned.params?.mode).toBeUndefined();
+    expect(buildUpiUri({ ...scanned, amountPaise: 200 })).toContain('mode=04');
+    expect(buildUpiUri({ ...scanned, amountPaise: 200 })).not.toContain('mode=01');
   });
 
   it('does not re-carry the fields we set ourselves', () => {

@@ -78,7 +78,8 @@ export function ScanPaySheet({
   const payee = target
     ? {
         vpa: target.vpa, name: target.name, amountPaise,
-        passthrough: target.params, mode: target.mode, kind: target.kind,
+        // Deliberately no `mode` — the scanned code's is not ours to repeat. See buildUpiUri.
+        passthrough: target.params, kind: target.kind,
       }
     : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);

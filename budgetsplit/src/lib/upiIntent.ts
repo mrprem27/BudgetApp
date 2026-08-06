@@ -238,14 +238,6 @@ export type ScannedUpi = {
    * see `buildUpiUri`, which layers those on top.
    */
   params?: Record<string, string>;
-  /**
-   * The code's own `mode`, surfaced separately because we emit that field ourselves.
-   *
-   * Left inside `params` it would be emitted twice, and stripped as one of "our"
-   * fields it would be lost — so it is read out here and preferred over our default,
-   * since a code declaring its own origin is telling the truth about it.
-   */
-  mode?: string;
 };
 
 /** Set by us on every request, so carrying the scanned copy through would be noise. */
@@ -299,8 +291,8 @@ export function parseUpiQr(raw: string): ScannedUpi | null {
     const out: ScannedUpi = name ? { vpa, name } : { vpa };
     // Omitted rather than set empty, so a plain `pa`+`pn` code stays a two-field object.
     if (Object.keys(extras).length) out.params = extras;
-    const mode = (params.get('mode') ?? '').trim();
-    if (mode) out.mode = mode;
+    // The code's own `mode` is read and discarded — `OWN_PARAMS` already keeps it out of
+    // `extras`, and nothing should carry it onward. See `buildUpiUri`.
     return out;
   }
 
@@ -392,8 +384,18 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   const wantMode = quirks?.mode ?? true;
   const wantRef = quirks?.refOnPersonal ?? req.kind === 'merchant';
 
-  // A scanned code's own `mode` wins: a merchant QR calling itself `01` is describing
-  // its real origin, and overwriting that with `04` would make the request lie.
+  // Always our own mode, never the scanned code's.
+  //
+  // `mode` says how the transaction reached *the app receiving it* — and that app is
+  // receiving an intent from us, whatever the payment details were originally printed
+  // on. A UPI QR routinely carries `mode=01` ("QR Code"), and forwarding that told the
+  // receiving app the payment came from a QR *it* had scanned. PhonePe believed us and
+  // applied its QR rules, including the gallery-image cap that refused ₹2 against a
+  // ₹2,000 limit.
+  //
+  // An earlier version of this comment argued the opposite — that echoing `01` was
+  // honest about the code's origin. That confused the origin of the *data* with the
+  // origin of the *transaction*. `04` is what is actually true at the receiving end.
   if (wantMode) params.push(['mode', req.mode?.trim() || UPI_MODE_INTENT]);
   if (wantRef && req.ref?.trim()) params.push(['tr', req.ref.trim()]);
 
