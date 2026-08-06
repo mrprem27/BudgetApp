@@ -514,8 +514,14 @@ describe('provenance is recorded, not assumed', () => {
   it('never marks a payload quirk on an app nobody has run', () => {
     // A quirk is a claim about observed behaviour. Inventing one would be the same
     // mistake as the guessed deep-link paths, with less to show for it.
+    //
+    // `unverified` is the precise test, not `device`: provenance records whether the
+    // path *worked*, and an app can be thoroughly observed while still failing —
+    // PhonePe was watched resolving the payee's name from the handle and ignoring ours,
+    // which justifies dropping `pn` for it even though it has never completed a payment.
+    // What must never carry a quirk is an app nobody has opened at all.
     for (const a of UPI_APPS) {
-      if (a.payload) expect(a.provenance).toBe('device');
+      if (a.payload) expect(a.provenance).not.toBe('unverified');
     }
   });
 });

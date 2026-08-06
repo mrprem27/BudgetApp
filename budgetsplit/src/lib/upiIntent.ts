@@ -77,6 +77,15 @@ export type UpiPayloadQuirks = {
   mode?: boolean;
   /** Send `tr` even on a personal transfer. Default: merchant payments only. */
   refOnPersonal?: boolean;
+  /**
+   * Send `pn`. Default `true`.
+   *
+   * Confirmed unused for display: PhonePe showed the payee's registered name resolved
+   * from the handle, not the one we sent. `pn` is mandatory in the NPCI spec, though,
+   * so this is off only where an app is already failing — there is nothing to gain by
+   * removing it from one that works.
+   */
+  name?: boolean;
 };
 
 export type UpiAppSpec = {
@@ -107,7 +116,19 @@ export type UpiAppSpec = {
  * market share, so the most likely choice needs the least thought.
  */
 export const UPI_APPS: UpiAppSpec[] = [
-  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://', provenance: 'documented' },
+  // `pn` off because PhonePe was watched resolving and displaying the payee's registered
+  // name from the handle, ignoring ours (NPCI now requires exactly that). Tidiness only —
+  // it will not make PhonePe accept us.
+  //
+  // **PhonePe's refusal is onboarding, not payload.** Their own iOS Intent SDK requires a
+  // merchant ID, a salt key, a server-side checksum and a PhonePeAppId issued after you
+  // share your Apple Team ID with their integration team — over `ppemerchantsdkv1..v5`,
+  // not `phonepe://` — and their docs say it is for merchants, not third-party apps
+  // making P2P payments. So an unauthorised app-to-app payment is bucketed with
+  // untrusted sources, which is the "QR via gallery" message. That decision is made
+  // before our parameters are read, which is why path, `mode`, `tr` and `pn` all moved
+  // nothing. Do not spend another round on it.
+  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://', payload: { name: false }, provenance: 'documented' },
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://', provenance: 'documented' },
   // Paytm's own docs give `paytmmp://pay` — a bare `pay`, unlike almost everything else.
   // One device report had it opening blank on that path, but a vendor's documentation
@@ -371,8 +392,10 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   if (!Number.isFinite(req.amountPaise) || req.amountPaise <= 0) return null;
 
   const rupees = (Math.round(req.amountPaise) / 100).toFixed(2);
+  const quirks = SPEC[app]?.payload;
+
   const params: Array<[string, string]> = [['pa', vpa]];
-  if (req.name?.trim()) params.push(['pn', req.name.trim()]);
+  if ((quirks?.name ?? true) && req.name?.trim()) params.push(['pn', req.name.trim()]);
   params.push(['am', rupees], ['cu', 'INR']);
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
@@ -380,7 +403,6 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
 
   // Which optional fields this particular app gets — the apps disagree, and one payload
   // for all of them means breaking one to fix another. See UpiPayloadQuirks.
-  const quirks = SPEC[app]?.payload;
   const wantMode = quirks?.mode ?? true;
   const wantRef = quirks?.refOnPersonal ?? req.kind === 'merchant';
 
