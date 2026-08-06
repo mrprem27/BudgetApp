@@ -105,7 +105,26 @@ const PREFIX: Record<UpiApp, string> = {
   [UpiApp.AmazonPay]: 'amazonpay://pay',
 };
 
-export type ScannedUpi = { vpa: string; name?: string };
+export type ScannedUpi = {
+  vpa: string;
+  name?: string;
+  /**
+   * Everything else the scanned code carried, to be re-emitted untouched.
+   *
+   * A UPI QR is not just a payee and an amount. It can carry a merchant category
+   * (`mc`), a signature (`sign`), an originator (`orgid`), a mode, a reference. Those
+   * are what tell the PSP the request is the one the payee actually published — so
+   * dropping them and rebuilding a bare URI produces something indistinguishable from
+   * a regenerated QR, which is what risk engines exist to decline.
+   *
+   * Excludes the fields we set ourselves (`pa`, `pn`, `am`, `cu`, `tn`); see
+   * `buildUpiUri`, which layers those on top.
+   */
+  params?: Record<string, string>;
+};
+
+/** Set by us on every request, so carrying the scanned copy through would be noise. */
+const OWN_PARAMS = new Set(['pa', 'pn', 'am', 'cu', 'tn']);
 
 /**
  * Pull a VPA (and payee name, if present) out of a scanned UPI QR code.
@@ -132,7 +151,16 @@ export function parseUpiQr(raw: string): ScannedUpi | null {
     const vpa = (params.get('pa') ?? '').trim();
     if (!isValidVpa(vpa)) return null;
     const name = (params.get('pn') ?? '').trim();
-    return name ? { vpa, name } : { vpa };
+
+    const extras: Record<string, string> = {};
+    for (const [k, v] of params.entries()) {
+      if (!OWN_PARAMS.has(k.toLowerCase()) && v.trim()) extras[k] = v;
+    }
+
+    const out: ScannedUpi = name ? { vpa, name } : { vpa };
+    // Omitted rather than set empty, so a plain `pa`+`pn` code stays a two-field object.
+    if (Object.keys(extras).length) out.params = extras;
+    return out;
   }
 
   return isValidVpa(data) ? { vpa: data } : null;
@@ -145,8 +173,10 @@ export type UpiRequest = {
   name: string;
   /** Amount in integer paise — converted to rupees at this boundary only. */
   amountPaise: number;
-  /** Optional note (`tn`). */
+  /** Optional note (`tn`). Leave unset on a scanned code — see `buildUpiUri`. */
   note?: string;
+  /** Parameters from the scanned code, re-emitted beneath our own. */
+  passthrough?: Record<string, string>;
 };
 
 /**
@@ -168,7 +198,15 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
     ['am', rupees],
     ['cu', 'INR'],
   ];
+  // A note we invented is not neutral on a scanned payment: the payee never wrote it,
+  // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);
+
+  // Re-emitted last so they can never displace the payee, amount or currency above —
+  // a scanned code must not be able to redirect where the money goes.
+  for (const [k, v] of Object.entries(req.passthrough ?? {})) {
+    if (!OWN_PARAMS.has(k.toLowerCase()) && v.trim()) params.push([k, v]);
+  }
 
   // Every app takes the same NPCI parameter set; only the scheme and path differ.
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
@@ -209,6 +247,11 @@ export function parseAnyUpiQr(raw: string): ScanTarget | null {
     // City is dropped: it is useful for a receipt, not for naming a transaction.
     name: merchant.name,
     amountPaise: merchant.amountPaise,
+    // The merchant category travels on as `mc`. Note what still cannot: a merchant
+    // QR's signature lives in sub-tags this parser doesn't decode, and no signature
+    // we didn't receive can be reconstructed. A shop payment therefore reaches the
+    // PSP less complete than one scanned in a UPI app, and may still be declined.
+    ...(merchant.mcc ? { params: { mc: merchant.mcc } } : {}),
     kind: 'merchant',
   };
 }

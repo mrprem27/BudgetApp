@@ -61,7 +61,11 @@ export function ScanPaySheet({
   // A code that fixes its own amount is not editable — changing it would send a
   // figure the merchant did not ask for.
   const amountFixed = !!target?.amountPaise;
-  const payee = target ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, note: 'BudgetSplit' } : null;
+  // No `note`: a `tn` the payee never wrote makes the request differ from the code they
+  // published, and `passthrough` carries the fields that say it *is* their request.
+  const payee = target
+    ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, passthrough: target.params }
+    : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
 
   async function open(uri: string | null) {

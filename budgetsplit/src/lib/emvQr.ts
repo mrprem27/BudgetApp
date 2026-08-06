@@ -29,6 +29,7 @@ const ACCOUNT_TEMPLATE_MIN = 26;
 const ACCOUNT_TEMPLATE_MAX = 51;
 const UPI_GUID = 'in.gov.upi';
 
+const TAG_MCC = '52';
 const TAG_CURRENCY = '53';
 const TAG_AMOUNT = '54';
 const TAG_MERCHANT_NAME = '59';
@@ -45,6 +46,13 @@ export type MerchantQr = {
   city?: string;
   /** Amount in paise, only on a fixed-price code (tag 54). */
   amountPaise?: number;
+  /**
+   * Merchant Category Code (tag 52) — the four digits saying what kind of shop this
+   * is. It travels onward as the UPI `mc` parameter: a payment to a merchant VPA
+   * arriving with no category is one of the ways a rebuilt QR differs from the real
+   * one, and PSP risk rules read that difference.
+   */
+  mcc?: string;
 };
 
 /**
@@ -116,6 +124,11 @@ export function parseMerchantQr(raw: string): MerchantQr | null {
 
   const city = top.get(TAG_MERCHANT_CITY)?.trim();
   if (city) out.city = city;
+
+  // Exactly four digits by the spec. Anything else is a code we misread, and a wrong
+  // category is worse than none — so drop it rather than forward a guess.
+  const mcc = top.get(TAG_MCC)?.trim();
+  if (mcc && /^\d{4}$/.test(mcc)) out.mcc = mcc;
 
   // Tag 54 is decimal rupees ("100.00"), not paise. Absent on an open-amount code,
   // which is the common case — the user types the amount then.

@@ -169,3 +169,69 @@ describe('parseAnyUpiQr — routing person vs merchant', () => {
     expect(parseAnyUpiQr(shop)).not.toBeNull();
   });
 });
+
+describe('a scanned code is re-emitted, not rebuilt', () => {
+  const tlv = (t: string, v: string) => `${t}${String(v.length).padStart(2, '0')}${v}`;
+
+  // Rebuilding a bare pa/pn/am/cu URI strips the fields that tell the PSP this is the
+  // request the payee actually published — signature, mode, originator, category. The
+  // result is indistinguishable from a regenerated QR, which is what a risk decline is
+  // for. Observed on device as "payment failed — UPI risk policy" after PIN entry.
+  it('keeps the extra parameters a person QR carried', () => {
+    const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&sign=ABC123&mode=01&orgid=159761');
+    expect(scanned?.params).toEqual({ sign: 'ABC123', mode: '01', orgid: '159761' });
+  });
+
+  it('does not re-carry the fields we set ourselves', () => {
+    const scanned = parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&am=10.00&cu=INR&tn=lunch&mode=01');
+    // `am` especially: the user's amount must win over whatever the code suggested.
+    expect(scanned?.params).toEqual({ mode: '01' });
+  });
+
+  it('omits params entirely when the code carried nothing extra', () => {
+    expect(parseUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha')).toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha' });
+  });
+
+  it('puts them back on the outgoing URI', () => {
+    const uri = buildUpiUri({
+      vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 4500,
+      passthrough: { sign: 'ABC123', mode: '01' },
+    });
+    expect(uri).toContain('sign=ABC123');
+    expect(uri).toContain('mode=01');
+  });
+
+  it('cannot be used to redirect the money', () => {
+    // The passthrough comes off a scanned code, so it is not trusted to name the payee,
+    // the amount or the currency — those are appended before it and must win.
+    const uri = buildUpiUri({
+      vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 4500,
+      passthrough: { pa: 'attacker@evil', am: '99999.00', cu: 'USD' },
+    });
+    expect(uri).toContain('pa=asha%40okhdfcbank');
+    expect(uri).toContain('am=45.00');
+    expect(uri).not.toContain('attacker');
+    expect(uri).not.toContain('99999');
+    expect(uri).not.toContain('USD');
+  });
+
+  it('adds no note of its own — the payee never wrote one', () => {
+    expect(buildUpiUri({ vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 4500 })).not.toContain('tn=');
+  });
+
+  it('forwards a shop code’s merchant category as mc', () => {
+    const shop =
+      tlv('00', '01') +
+      tlv('26', tlv('00', 'in.gov.upi') + tlv('01', 'chaistop@okhdfcbank')) +
+      tlv('52', '5814') + tlv('53', '356') + tlv('59', 'Chai Stop');
+    expect(parseAnyUpiQr(shop)?.params).toEqual({ mc: '5814' });
+  });
+
+  it('drops a merchant category that is not four digits rather than forwarding a guess', () => {
+    const shop =
+      tlv('00', '01') +
+      tlv('26', tlv('00', 'in.gov.upi') + tlv('01', 'chaistop@okhdfcbank')) +
+      tlv('52', '58') + tlv('53', '356') + tlv('59', 'Chai Stop');
+    expect(parseAnyUpiQr(shop)?.params).toBeUndefined();
+  });
+});
