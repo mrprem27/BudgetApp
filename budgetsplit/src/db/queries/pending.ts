@@ -26,10 +26,27 @@ export type PendingTxn = {
   source: TxnSource;
   /** Detected/edited payment method carried through ingest → Review → txn. */
   pay_method: PayMethod | null;
+  /**
+   * Where the payment happened, when the import knows it first-hand.
+   *
+   * Only Scan & Pay does: it is the one ingest route that runs *while* the user is at the
+   * merchant, so the device's own position is the real thing rather than a guess. Parsed
+   * email and statement imports arrive days later and must leave these null — a location
+   * captured at import time would be the user's sofa, recorded as though it were the shop.
+   */
+  lat: number | null;
+  lng: number | null;
+  /** Reverse-geocoded place name, e.g. "Cyber Hub, Gurgaon". Null if geocoding failed. */
+  place_label: string | null;
 };
 
 // Ingest never knows about app people or groups — those are Review-only drafts.
-export type NewPending = Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id'>;
+// Location is optional rather than omitted: most importers genuinely have none, and
+// forcing every one of them to write `lat: null` would be noise around the single
+// route that does.
+export type NewPending =
+  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label'>
+  & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label'>>;
 
 /** The subset of a pending row the Review screen auto-saves as you edit it. */
 export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method' | 'counterparty_id' | 'direction'>>;
@@ -40,9 +57,10 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
   await db.withTransactionAsync(async () => {
     for (const r of rows) {
       await db.runAsync(
-        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null],
+        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, lat, lng, place_label)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
+          r.lat ?? null, r.lng ?? null, r.place_label ?? null],
       );
     }
   });

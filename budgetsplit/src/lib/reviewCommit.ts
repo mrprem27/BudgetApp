@@ -185,3 +185,33 @@ export function planCommit(
     destName: 'Personal',
   };
 }
+
+/**
+ * The `insertTxn` input a committed pending row becomes.
+ *
+ * Pure mapping, so it belongs here beside the plan it consumes rather than inline in the
+ * screen — same reasoning as `planCommit` above: the screen keeps state, writes and Undo,
+ * this file decides what a row *means*.
+ *
+ * The location is **carried, never recaptured.** Only Scan & Pay sets it, and it does so at
+ * the moment of the scan while the user stands at the merchant. Reading the device's
+ * position at commit time would stamp wherever they happen to be while reviewing, which is
+ * indistinguishable from the real thing once written — and Review is usually done later,
+ * elsewhere.
+ */
+export function txnInputFromPlan(row: PendingTxn, plan: Extract<CommitPlan, { ok: true }>) {
+  return {
+    groupId: plan.groupId,
+    kind: plan.kind,
+    entryMode: 'quick' as const,
+    date: row.date,
+    category: plan.category,
+    note: row.description,
+    payMethod: plan.payMethod,
+    payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
+    shares: plan.shares,
+    lat: row.lat ?? undefined,
+    lng: row.lng ?? undefined,
+    placeLabel: row.place_label ?? undefined,
+  };
+}

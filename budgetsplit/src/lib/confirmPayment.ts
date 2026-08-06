@@ -66,6 +66,8 @@ export async function recordScannedPayment(
   nowMs: number = Date.now(),
 ): Promise<void> {
   const description = p.name ?? p.vpa;
+  // `p.category` is already MCC-derived where the code carried one — the merchant's own
+  // declaration to their bank, so it outranks anything read off a display name.
   let category = p.category ?? null;
   if (!category) {
     // Reuse the same guesser Quick Add uses on a typed title — a merchant name is
@@ -87,5 +89,10 @@ export async function recordScannedPayment(
     source: 'upi_qr',
     pay_method: 'upi',
     raw: `Scanned & paid ${p.vpa}`,
+    // Captured at scan time, not now: `nowMs` can be hours after the payment, and the
+    // user has moved. See `PendingPayment.lat`.
+    lat: p.lat,
+    lng: p.lng,
+    place_label: p.placeLabel,
   }]);
 }

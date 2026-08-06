@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ import { useUpiHandoff } from '../../hooks/useUpiHandoff';
 import { UpiUriSheet } from './UpiUriSheet';
 import { formatRupees, parseToPaise } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
+import { getCurrentPlaceIfPermitted, type CapturedPlace } from '../../lib/location';
+import { categoryForMcc } from '../../lib/mcc';
 import { alpha } from '../../theme';
 
 /**
@@ -25,6 +27,24 @@ import { alpha } from '../../theme';
  * It still cannot observe the *outcome* — the UPI app never reports back — so nothing
  * is written here. `onHandoff` persists the attempt and the app asks on return.
  */
+/**
+ * Everything the scan knew, handed to whichever route files it.
+ *
+ * One type for both callbacks because they must record the *same* facts — they differ
+ * only in when the payment is known to have happened, never in what we learned.
+ */
+export type ScannedPayment = {
+  vpa: string;
+  name?: string;
+  amountPaise: number;
+  /** From the code's MCC, when it carried one. Absent means "let the guesser decide". */
+  category?: string;
+  /** Where the user was at the moment of the scan. Absent if denied or unavailable. */
+  lat?: number;
+  lng?: number;
+  placeLabel?: string;
+};
+
 export function ScanPaySheet({
   visible,
   onClose,
@@ -35,7 +55,7 @@ export function ScanPaySheet({
   visible: boolean;
   onClose: () => void;
   /** Persist what we know about the payment. Awaited *before* the UPI app opens. */
-  onHandoff: (p: { vpa: string; name?: string; amountPaise: number }) => Promise<void>;
+  onHandoff: (p: ScannedPayment) => Promise<void>;
   /** Undo that record — the hand-off never actually happened. */
   onAbandon: () => Promise<void>;
   /**
@@ -45,19 +65,40 @@ export function ScanPaySheet({
    * when the user returns from a UPI app, and here they never leave. Asking on the
    * next foreground would be asking about a payment we watched them not make.
    */
-  onRecordOnly: (p: { vpa: string; name?: string; amountPaise: number }) => Promise<void>;
+  onRecordOnly: (p: ScannedPayment) => Promise<void>;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [target, setTarget] = useState<ScanTarget | null>(null);
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
   const [showUris, setShowUris] = useState(false);
+  const [place, setPlace] = useState<CapturedPlace | null>(null);
   const handoff = useUpiHandoff('Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
+
+  /**
+   * Start the location fix as soon as a code is recognised — and never wait for it.
+   *
+   * This is the one import that runs while the user is standing at the merchant, so the
+   * device's position *is* the transaction's location. But a GPS fix takes seconds, and
+   * this flow exists to be fast: awaiting one when they tap Pay would put a stall between
+   * the tap and the UPI app for the sake of a bonus field. Started here, it is almost
+   * always ready by the time they have read the payee and typed an amount; if it isn't,
+   * the payment goes without it.
+   *
+   * Never prompts — see `getCurrentPlaceIfPermitted`.
+   */
+  useEffect(() => {
+    if (!target) return;
+    let alive = true;
+    getCurrentPlaceIfPermitted().then(p => { if (alive) setPlace(p); }).catch(() => {});
+    return () => { alive = false; };
+  }, [target]);
 
   function reset() {
     setTarget(null);
     setAmount('');
     setBadCode(false);
+    setPlace(null);
   }
 
   function close() {
@@ -82,6 +123,20 @@ export function ScanPaySheet({
         passthrough: target.params, kind: target.kind,
       }
     : null;
+
+  /**
+   * What we file, as opposed to what we send a UPI app. Superset: the URI carries only
+   * NPCI parameters, while the record also keeps the category and where we were.
+   */
+  const scanned: ScannedPayment | null = payee && {
+    vpa: payee.vpa,
+    name: target?.name,
+    amountPaise,
+    // The merchant's MCC off the QR, which outranks a guess from their display name —
+    // it is what they registered with their own bank. Null falls through to the guesser.
+    category: categoryForMcc(target?.params?.mc) ?? undefined,
+    ...(place ? { lat: place.lat, lng: place.lng, placeLabel: place.label ?? undefined } : {}),
+  };
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
   // A shop code we can't re-emit honestly. We know everything except how they'll pay.
   const recordOnly = !!target && !target.canHandoff;
@@ -94,7 +149,7 @@ export function ScanPaySheet({
    */
   const hooks = {
     before: () =>
-      payee ? onHandoff({ vpa: payee.vpa, name: target?.name, amountPaise }) : Promise.resolve(),
+      scanned ? onHandoff(scanned) : Promise.resolve(),
     // Cancelled or failed to launch, so the record above would ask about a payment
     // that was never even attempted.
     onCancel: onAbandon,
@@ -110,9 +165,9 @@ export function ScanPaySheet({
   const changeApp = () => run(handoff.choose);
 
   async function recordIt() {
-    if (!payee || amountPaise <= 0) return;
+    if (!scanned || amountPaise <= 0) return;
     try {
-      await onRecordOnly({ vpa: payee.vpa, name: target?.name, amountPaise });
+      await onRecordOnly(scanned);
       haptic.success();
       close();
     } catch {

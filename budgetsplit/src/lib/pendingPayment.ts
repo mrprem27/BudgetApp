@@ -18,8 +18,20 @@ export type PendingPayment = {
   /** Payee/merchant name, when the QR carried one. */
   name?: string;
   amountPaise: number;
-  /** Category guessed from the merchant name at scan time. */
+  /** Category, from the code's MCC or guessed from the merchant name at scan time. */
   category?: string;
+  /**
+   * Where the user was when they scanned, captured *before* the app switch.
+   *
+   * Timing is the whole point. This is the only import that runs while the user is
+   * standing at the merchant, so the device's position is the transaction's real
+   * location — but only at that moment. Capturing it on return would record wherever
+   * they had walked to by then, and capturing it in Review would record their sofa,
+   * both indistinguishable from the truth once written.
+   */
+  lat?: number;
+  lng?: number;
+  placeLabel?: string;
   /** When we handed off — used to ignore a stale record. */
   startedAt: number;
 };

@@ -11,7 +11,34 @@ export async function getCurrentPlace(): Promise<CapturedPlace | null> {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return null;
+    return await readPlace();
+  } catch {
+    return null;
+  }
+}
 
+/**
+ * The same capture, but **never prompts** — if permission hasn't already been granted,
+ * this returns null silently.
+ *
+ * For Scan & Pay. A permission dialog in the middle of paying a shopkeeper hijacks the one
+ * flow whose entire purpose is speed, to obtain something that is a bonus rather than the
+ * feature. The user grants location in Add Transaction or in Settings, deliberately, and
+ * scanning then benefits from it; declining costs them nothing here.
+ */
+export async function getCurrentPlaceIfPermitted(): Promise<CapturedPlace | null> {
+  try {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+    return await readPlace();
+  } catch {
+    return null;
+  }
+}
+
+/** Position + reverse-geocode. Assumes permission is already granted. */
+async function readPlace(): Promise<CapturedPlace | null> {
+  try {
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
     const { latitude, longitude } = pos.coords;
 

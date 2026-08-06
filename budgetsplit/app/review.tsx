@@ -23,7 +23,7 @@ import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import type { ParsedDirection } from '../src/lib/importParse';
 import { SplitEditor } from '../src/components/finance/add/SplitEditor';
 import {
-  effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure,
+  effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
   type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
 } from '../src/lib/reviewCommit';
 import { FilterForm } from '../src/components/finance/review/FilterForm';
@@ -244,12 +244,7 @@ export default function ReviewScreen() {
 
   /** Insert a planned row and drop it from the inbox. Returns undo material. */
   async function insertCommit(row: PendingTxn, plan: Extract<CommitPlan, { ok: true }>): Promise<{ txnId: string; snap: PendingTxn }> {
-    const txnId = await insertTxn(db, {
-      groupId: plan.groupId, kind: plan.kind, entryMode: 'quick', date: row.date,
-      category: plan.category, note: row.description, payMethod: plan.payMethod,
-      payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
-      shares: plan.shares,
-    });
+    const txnId = await insertTxn(db, txnInputFromPlan(row, plan));
     await deletePending(db, row.id);
     return { txnId, snap: plan.snap };
   }

@@ -69,7 +69,7 @@ describe('documented flag count matches the source', () => {
  */
 describe('screen size ceilings', () => {
   const CEILINGS: Record<string, number> = {
-    'app/review.tsx': 1026,
+    'app/review.tsx': 1021,
   };
 
   for (const [rel, ceiling] of Object.entries(CEILINGS)) {

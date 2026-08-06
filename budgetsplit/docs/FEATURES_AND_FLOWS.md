@@ -694,6 +694,40 @@ Two consequences handled explicitly:
   also asserts at least one app remains unblocked, since blocking is subtraction and subtraction can
   reach zero — that would silently reduce Scan & Pay to record-only.
 
+#### What the scan captures beyond payee and amount
+
+**Category, from the merchant's own MCC.** A shop's EMV/BharatQR carries its ISO 18245 merchant
+category code in tag `52`. That is the merchant's declaration to their acquiring bank, so it beats
+anything read off a display name — `MCC_CATEGORY` in `src/lib/mcc.ts` maps it, and it is consulted
+*before* `matchCategory`. Only codes with one defensible answer are mapped: 5999 "miscellaneous
+retail", 5311 "department stores" and 5300 "wholesale clubs" are deliberately absent, because
+mapping them to Shopping would be right often enough to look fine and wrong often enough to
+mis-budget, while a name like "Krishna Medical Store" carries more signal than the code does. An
+unmapped code falls through to the name guesser. `categoryForMcc` fails closed on anything that
+isn't four digits — the value comes off a scanned QR, so it is attacker-controlled — and a test
+asserts every mapped target is a real `DEFAULT_CATEGORIES` name, since a category string matching
+nothing drops silently on the way into Review.
+
+**Location, captured at the moment of the scan.** Scan & Pay is the only ingest route that runs
+while the user is standing at the merchant, so the device's position *is* the transaction's
+location rather than an inference. Timing is the whole point, and it constrains the design twice:
+
+- **Started on recognition, never awaited.** The fix begins the moment a code parses, not when Pay
+  is tapped. A GPS fix takes seconds, and this flow exists to be fast — awaiting one would put a
+  stall between the tap and the UPI app for a bonus field. It is usually ready by the time the payee
+  has been read and an amount typed; if it isn't, the payment goes without it.
+- **Never prompts.** `getCurrentPlaceIfPermitted` uses the existing grant and returns null silently
+  otherwise. A permission dialog in the middle of paying a shopkeeper hijacks the one flow whose
+  purpose is speed, for something that is a bonus rather than the feature. Location is granted
+  deliberately in Add Transaction or Settings; scanning then benefits from it.
+
+`pending_txn` gained `lat`/`lng`/`place_label` (`txn` has held them since v2), and
+`txnInputFromPlan` carries them into the real transaction. They are **carried, never recaptured** —
+reading the device's position at commit time would stamp wherever the user is while reviewing, which
+is usually later and elsewhere, and indistinguishable from the truth once written. Every other
+importer leaves them null for the same reason: an emailed receipt parsed days later would otherwise
+be stamped with the user's sofa.
+
 #### "Record & open PhonePe" — the way round a blocked app
 
 A blocked app is never handed a payment, but it **is** worth opening. PhonePe and Paytm refuse

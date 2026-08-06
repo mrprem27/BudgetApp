@@ -201,7 +201,10 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   split_draft   TEXT,                       -- Review draft: JSON {included, mode, values}
   counterparty_id TEXT,                     -- Review draft: the other person on a group transfer
   source      TEXT NOT NULL DEFAULT 'manual', -- where it came from (email/gpay/bank_csv/…); drives sectioned Review
-  pay_method  TEXT                          -- detected payment method (upi/card/…); pre-filled in Review, editable
+  pay_method  TEXT,                         -- detected payment method (upi/card/…); pre-filled in Review, editable
+  lat         REAL,                         -- where it happened, when the import knows (Scan & Pay does)
+  lng         REAL,
+  place_label TEXT                           -- reverse-geocoded name, e.g. "Cyber Hub, Gurgaon"
 );
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 `;
@@ -271,6 +274,13 @@ export const COLUMN_MIGRATIONS = [
   // payment method. Additive — pre-existing rows default to 'manual' / null.
   "ALTER TABLE pending_txn ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'",
   "ALTER TABLE pending_txn ADD COLUMN pay_method TEXT",
+  // Scan & Pay captures where the payment happened, which `txn` has held since v2 but
+  // `pending_txn` did not — so a scanned payment lost its location on the way through
+  // Review, the one import where we actually know it first-hand. Additive; pre-existing
+  // rows stay null, which is indistinguishable from "capture was denied or failed".
+  "ALTER TABLE pending_txn ADD COLUMN lat REAL",
+  "ALTER TABLE pending_txn ADD COLUMN lng REAL",
+  "ALTER TABLE pending_txn ADD COLUMN place_label TEXT",
 ];
 
 /**
