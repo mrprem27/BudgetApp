@@ -569,10 +569,60 @@ scanned code goes last, so a hostile QR can never displace the payee or the amou
 | Google Pay | `tez://upi/pay` |
 | PhonePe · Paytm · BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · Airtel · super.money · Kiwi | `<scheme>://upi/pay` |
 
-`upi/pay` is used throughout because that is the shape everything observed to populate shares —
-`credpay://upi/pay` paid, `upi://pay` filled in correctly, while `whatsapp-consumer://pay` and
-`paytmmp://pay` both opened blank. Inference from device results, so an app that regresses gets its
-own row reverted rather than the whole set.
+`upi/pay` is used throughout, confirmed on device. **Airtel is the clean experiment for the path**:
+same app, same payload, only the path changed — `myairtel://pay` failed, `myairtel://upi/pay`
+completed a payment. `upi://pay` populated correctly, while `whatsapp-consumer://pay` and
+`paytmmp://pay` opened blank.
+
+**CRED is the clean experiment for the payload, in the opposite direction.** It completed a real
+payment on `pa/pn/am/cu`, then failed once `tr` and `mode` were added with the path unchanged.
+Airtel paid with both present, so neither field is universally fatal — but a merchant reference on
+a personal transfer is the part with no justification, so `tr` became merchant-only first. If CRED
+still fails, `mode` is next.
+
+#### Why a merchant app's hand-off works and ours often doesn't
+
+| | Swiggy / Zomato | BudgetSplit |
+|---|---|---|
+| Who is paid | **Themselves** — their own registered merchant VPA | An arbitrary payee we scanned |
+| Standing | Merchant via a payment gateway, or a licensed **TPAP** (Zomato, with ICICI) | None — no PSP partnership, no registered VPA |
+| Intent | Built server-side by the gateway with `mc`, `tid`, `tr`, `mode`, and for verified merchants a `sign` | Built on-device, unsigned |
+| Outcome | PSP verifies the merchant → trusted | PSP cannot verify who built it |
+| Return to app | Gateway polls its own backend; the merchant learns from its server | We never learn the outcome — hence Review |
+
+**This gap cannot be closed by editing a URI.** Becoming a merchant would mean payments going to
+*us*, which is a different and licensed business.
+
+**PhonePe, Paytm and Amazon Pay refuse by policy.** Their errors survived a payload change (`mode`,
+`tr`) and a path change together — PhonePe still calls a **₹2** transfer a gallery QR breaching a
+₹2,000 cap. They classify externally-supplied intents as untrusted whatever we send: a judgement
+about *who* is asking, which no parameter answers. They stay in the picker because the failure is
+recoverable — see record-only below.
+
+**`pn` is sent only when it is real.** NPCI requires UPI apps to display the payee's
+**bank-registered** name, resolved from the VPA via ValidateAddress; names from QR codes, contacts
+or user labels may no longer be shown. We used to send the literal string `Payee` when a code
+carried no name — a fabricated name on a real payment, and the likely cause of WhatsApp's *"unable
+to verify UPI ID"*. Passing the VPA and letting the app resolve the name is also exactly what a
+merchant hand-off does.
+
+**`tr` goes only on merchant payments.** It is documented mandatory there, and on a P2P transfer it
+makes the intent merchant-shaped while carrying no `mc` and no `sign` — a malformed merchant
+payment rather than a well-formed personal one. Device testing showed it neither fixed nor broke
+anything, so the scoping is on correctness grounds: send the fields belonging to the transaction
+you are actually making.
+
+```
+person QR    upi://pay?pa=…&pn=…&am=2.00&cu=INR&mode=04
+merchant QR  upi://pay?pa=…&pn=…&am=45.00&cu=INR&mode=04&mc=5814&tr=BS7F3A9C21D045
+```
+
+**Record-only is offered on every payment, not only for unreproducible shop codes.** Any hand-off
+can be refused by policy, nothing reports that back to us, and the user would otherwise be left
+having made a payment with no record of it — precisely what this feature exists to prevent. The
+scan already knows payee, amount and category, so *"Record it, I'll pay"* sits under the Pay button
+throughout and writes the same row via `recordScannedPayment`. This is what makes the feature
+independent of every policy decision we do not control.
 
 **`mode` and `tr` are sent because their absence was punished.** PhonePe refused a **₹2** payment
 citing a ₹2,000 gallery-QR cap — a limit ₹2 cannot breach. That message is a *generic* parse/typing

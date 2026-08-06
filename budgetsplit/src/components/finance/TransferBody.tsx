@@ -64,7 +64,8 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
   // Only when we know who is being paid, have their handle, and have an amount.
   // No VPA → no button, and settling behaves exactly as it did before.
   const payee = flags.upiSettle && to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
-    ? { vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up' }
+    // Settling up with a friend is always person-to-person, so no `tr` — see UpiRequest.
+    ? { vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up', kind: 'person' as const }
     : null;
   // Every hand-off rule — the Android/iOS split, the remembered app, the picker —
   // lives in the hook, so this path and Scan & Pay cannot drift apart again.

@@ -99,17 +99,26 @@ export const UPI_APPS: UpiAppSpec[] = [
  * row looked fine — but CRED's UPI entry point is `credpay://`, so our parameters went
  * nowhere. With `credpay://upi/pay` a real payment went through.
  *
- * That result also settled the path shape. Everything observed to populate correctly
- * uses `upi/pay`; everything observed to open blank used a bare `pay`:
+ * That result also settled the path shape, and a later round confirmed it:
  *
- *   credpay://upi/pay          ✅ payment completed
+ *   myairtel://upi/pay         ✅ payment completed — and `myairtel://pay` had failed
+ *   credpay://upi/pay          ✅ paid on the `pa/pn/am/cu` payload…
+ *                              ✗ …then failed once `tr`+`mode` were added, same path
  *   upi://pay                  ✅ populated (opened WhatsApp, which claims `upi://`)
  *   whatsapp-consumer://pay    ✗ opened, nothing filled in
  *   paytmmp://pay              ✗ opened, nothing filled in
  *
- * So the rest were moved to `upi/pay` by inference from those results. That is a much
- * better-founded guess than the last one, and still a guess — an app that regresses
- * gets its own row reverted rather than the whole set.
+ * Airtel is the clean experiment for the path: same app, same payload, only the path
+ * changed, failing → paying. So `upi/pay` is right and the remaining failures are not
+ * path bugs. CRED is the clean experiment for the payload, in the other direction —
+ * same path, payload changed, paying → failing. Hence `tr` is now merchant-only.
+ *
+ * **PhonePe, Paytm and Amazon Pay refuse by policy, not by payload.** Their errors
+ * survived a payload change (`mode`, `tr`) and a path change together — PhonePe still
+ * calls a ₹2 transfer a gallery-QR breaching a ₹2,000 cap. They classify
+ * externally-supplied intents as untrusted whatever we send, which is a judgement about
+ * *who* is asking, and nothing in this file can answer that. They stay listed because a
+ * row that fails is recoverable — see the always-available "Record it, I'll pay".
  *
  * Removed as invented, not merely unverified: `slice`, `groww`, `jupiter`, `imobileapp`,
  * `payzapp`, `axispay` — none appear in any maintained UPI-intent list.
@@ -242,8 +251,19 @@ export function parseUpiQr(raw: string): ScannedUpi | null {
 export type UpiRequest = {
   /** Payee VPA (`pa`). */
   vpa: string;
-  /** Payee display name (`pn`). */
-  name: string;
+  /**
+   * Payee display name (`pn`), omitted entirely when we don't genuinely have one.
+   *
+   * NPCI now requires UPI apps to show only the payee's **bank-registered** name,
+   * resolved from the VPA via ValidateAddress — names carried by QR codes, contacts or
+   * user labels may no longer be displayed. So `pn` is close to decorative, and a
+   * placeholder is strictly worse than nothing: we used to send the literal string
+   * `Payee`, which is a fabricated name attached to a real payment.
+   *
+   * This is also how a merchant app's hand-off looks from the outside — it passes the
+   * VPA and lets the payer's app resolve who that is.
+   */
+  name?: string;
   /** Amount in integer paise — converted to rupees at this boundary only. */
   amountPaise: number;
   /** Optional note (`tn`). Leave unset on a scanned code — see `buildUpiUri`. */
@@ -256,6 +276,21 @@ export type UpiRequest = {
   ref?: string;
   /** Initiation mode (`mode`). Defaults to `UPI_MODE_INTENT`. */
   mode?: string;
+  /**
+   * What kind of payment this is, which decides whether `tr` is sent at all.
+   *
+   * `tr` is documented **mandatory for merchant payments**, so attaching one to a
+   * person-to-person transfer makes the intent merchant-shaped while still carrying no
+   * `mc` and no `sign` — i.e. it looks like a malformed merchant payment rather than a
+   * well-formed P2P one.
+   *
+   * This is not theoretical. CRED completed a real payment on the `pa/pn/am/cu` payload
+   * and **failed once `tr` and `mode` were added**, with the path unchanged. Airtel paid
+   * with both present, so neither field is universally fatal — but attaching a merchant
+   * reference to a personal transfer is the part that has no justification, so it goes
+   * first. If CRED still fails without it, `mode` follows.
+   */
+  kind?: 'person' | 'merchant';
   /** Parameters from the scanned code, re-emitted beneath our own. */
   passthrough?: Record<string, string>;
 };
@@ -285,12 +320,9 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   if (!Number.isFinite(req.amountPaise) || req.amountPaise <= 0) return null;
 
   const rupees = (Math.round(req.amountPaise) / 100).toFixed(2);
-  const params: Array<[string, string]> = [
-    ['pa', vpa],
-    ['pn', req.name.trim() || 'Payee'],
-    ['am', rupees],
-    ['cu', 'INR'],
-  ];
+  const params: Array<[string, string]> = [['pa', vpa]];
+  if (req.name?.trim()) params.push(['pn', req.name.trim()]);
+  params.push(['am', rupees], ['cu', 'INR']);
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);

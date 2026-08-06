@@ -62,10 +62,13 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     app: UpiApp | undefined,
     hooks?: PayHooks,
   ): Promise<boolean> => {
-    // Minted per attempt, here rather than at the call sites, so Scan & Pay and
-    // settle-up both get one and a retry never reuses the previous reference — PSPs
-    // read a repeated `tr` as a duplicate of the earlier transaction.
-    const uri = buildUpiUri({ ref: newUpiRef(), ...req }, app);
+    // Merchant payments only — `tr` is mandatory there and out of place on a P2P
+    // transfer, where it makes the intent look like a merchant payment missing its
+    // other merchant fields. Minted here rather than at the call sites so a retry never
+    // reuses the previous reference; PSPs read a repeated `tr` as a duplicate of the
+    // earlier transaction.
+    const ref = req.kind === 'merchant' ? newUpiRef() : undefined;
+    const uri = buildUpiUri({ ...req, ref: req.ref ?? ref }, app);
     if (!uri) return false;
     try { await hooks?.before?.(); } catch { /* record failed; paying is still the point */ }
     try {

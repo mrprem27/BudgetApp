@@ -44,8 +44,16 @@ describe('buildUpiUri', () => {
     expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: NaN })).toBeNull();
   });
 
-  it('falls back to a placeholder name rather than an empty pn', () => {
-    expect(buildUpiUri({ vpa: 'a@ybl', name: '  ', amountPaise: 500 })).toContain('pn=Payee');
+  it('omits pn rather than inventing a payee name', () => {
+    // NPCI requires UPI apps to display the payee's bank-registered name, resolved from
+    // the VPA — a name we supply is not shown, so a placeholder is a fabricated name
+    // attached to a real payment and buys nothing. This used to send `pn=Payee`.
+    expect(buildUpiUri({ vpa: 'a@ybl', name: '  ', amountPaise: 500 })).not.toContain('pn=');
+    expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500 })).not.toContain('pn=');
+  });
+
+  it('sends pn when the name is real', () => {
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'Asha Rao', amountPaise: 500 })).toContain('pn=Asha%20Rao');
   });
 });
 
@@ -397,5 +405,35 @@ describe('deep-link paths follow the shape that worked on device', () => {
 
   it('leaves the generic link alone — it populated correctly as-is', () => {
     expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100 })).toMatch(/^upi:\/\/pay\?/);
+  });
+});
+
+describe('the payload matches the kind of payment it actually is', () => {
+  const person = { vpa: 'asha@okhdfcbank', name: 'Asha', amountPaise: 200, kind: 'person' as const };
+
+  // `tr` is documented mandatory for *merchant* payments. On a P2P transfer it makes the
+  // intent merchant-shaped while still carrying no `mc` and no `sign` — a malformed
+  // merchant payment rather than a well-formed personal one. Confirmed on device: CRED
+  // paid on `pa/pn/am/cu` and failed once `tr`+`mode` were added, path unchanged.
+  it('sends no tr on a person-to-person transfer', () => {
+    expect(buildUpiUri(person)).not.toContain('tr=');
+  });
+
+  it('sends tr on a merchant payment, where it belongs', () => {
+    expect(buildUpiUri({ ...person, kind: 'merchant', ref: 'BSX1' })).toContain('tr=BSX1');
+  });
+
+  it('declares the initiation mode either way', () => {
+    // `mode` describes how the payment was started, which is true of both kinds, and it
+    // carries no merchant implication — so it is the half of the fix that stays.
+    expect(buildUpiUri(person)).toContain('mode=04');
+    expect(buildUpiUri({ ...person, kind: 'merchant' })).toContain('mode=04');
+  });
+
+  it('pins the exact person-to-person URI', () => {
+    // The payload CRED paid with, plus `mode` — which is the one field still under
+    // suspicion, since CRED broke when `tr` and `mode` arrived together. If CRED still
+    // fails, drop `mode` here next and this line is where to do it.
+    expect(buildUpiUri(person)).toBe('upi://pay?pa=asha%40okhdfcbank&pn=Asha&am=2.00&cu=INR&mode=04');
   });
 });

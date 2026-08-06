@@ -72,8 +72,12 @@ export function ScanPaySheet({
   const amountFixed = !!target?.amountPaise;
   // No `note`: a `tn` the payee never wrote makes the request differ from the code they
   // published, and `passthrough` carries the fields that say it *is* their request.
+  // No invented `pn` either — the UPI app resolves the real name from the VPA.
   const payee = target
-    ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, passthrough: target.params, mode: target.mode }
+    ? {
+        vpa: target.vpa, name: target.name, amountPaise,
+        passthrough: target.params, mode: target.mode, kind: target.kind,
+      }
     : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
   // A shop code we can't re-emit honestly. We know everything except how they'll pay.
@@ -221,6 +225,25 @@ export function ScanPaySheet({
                 </View>
               )}
 
+              {/*
+                Always offered, not only when hand-off is known-broken.
+                PhonePe and Amazon Pay refuse externally-supplied intents by policy, and
+                nothing reports that back to us — so without this the user is left having
+                made a payment with no record of it, which is precisely what Scan & Pay
+                exists to prevent. The scan already knows payee, amount and category.
+              */}
+              <TouchableOpacity
+                onPress={recordIt}
+                disabled={amountPaise <= 0}
+                hitSlop={8}
+                accessibilityRole="button"
+                style={styles.recordRow}
+              >
+                <Text style={[styles.recordText, amountPaise <= 0 && styles.recordTextOff]}>
+                  Record it, I’ll pay
+                </Text>
+              </TouchableOpacity>
+
               {/* The app never learns the outcome, so it must not claim to. */}
               <Text style={styles.footnote}>We’ll ask whether it went through when you come back.</Text>
             </>
@@ -249,5 +272,8 @@ const styles = StyleSheet.create({
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
   destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
   destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  recordRow: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md, marginTop: space.xs },
+  recordText: { ...type.body, color: colors.accent },
+  recordTextOff: { color: colors.textMuted },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });
