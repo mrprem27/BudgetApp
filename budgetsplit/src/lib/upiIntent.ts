@@ -99,19 +99,27 @@ export const UPI_APPS: UpiAppSpec[] = [
  * row looked fine — but CRED's UPI entry point is `credpay://`, so our parameters went
  * nowhere. With `credpay://upi/pay` a real payment went through.
  *
- * That result also settled the path shape, and a later round confirmed it:
+ * Device results so far, and what each one can and cannot prove:
  *
- *   myairtel://upi/pay         ✅ payment completed — and `myairtel://pay` had failed
- *   credpay://upi/pay          ✅ paid on the `pa/pn/am/cu` payload…
- *                              ✗ …then failed once `tr`+`mode` were added, same path
- *   upi://pay                  ✅ populated (opened WhatsApp, which claims `upi://`)
- *   whatsapp-consumer://pay    ✗ opened, nothing filled in
- *   paytmmp://pay              ✗ opened, nothing filled in
+ *              build      path                     payload        result
+ *   CRED       e7f2438    credpay://upi/pay        pa/pn/am/cu    ✅ paid
+ *              4cec88d    credpay://upi/pay        + mode + tr    ✗ failed
+ *   Airtel     e7f2438    myairtel://pay           pa/pn/am/cu    ✗ failed
+ *              4cec88d    myairtel://upi/pay       + mode + tr    ✅ paid
  *
- * Airtel is the clean experiment for the path: same app, same payload, only the path
- * changed, failing → paying. So `upi/pay` is right and the remaining failures are not
- * path bugs. CRED is the clean experiment for the payload, in the other direction —
- * same path, payload changed, paying → failing. Hence `tr` is now merchant-only.
+ * **CRED is a clean experiment; Airtel is not.** CRED's path was byte-identical across
+ * both builds, so only the payload can explain it breaking — that is why `tr` became
+ * merchant-only. Airtel had *both* variables change at once, so its recovery could be
+ * the path, the payload, or both, and it cannot be cited as evidence for either. An
+ * earlier version of this comment claimed Airtel proved the path; it does not.
+ *
+ * The two apps also moved in opposite directions across the same change, which is the
+ * uncomfortable possibility worth stating: **there may be no single payload every app
+ * accepts.** If so, the answer is per-app payload quirks rather than one more sweep.
+ *
+ * `upi/pay` is still the better bet — `upi://pay` and `credpay://upi/pay` both populate
+ * correctly, while `whatsapp-consumer://pay` and `paytmmp://pay` opened blank — but it
+ * rests on those, not on Airtel.
  *
  * **PhonePe, Paytm and Amazon Pay refuse by policy, not by payload.** Their errors
  * survived a payload change (`mode`, `tr`) and a path change together — PhonePe still

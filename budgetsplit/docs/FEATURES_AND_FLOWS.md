@@ -569,16 +569,27 @@ scanned code goes last, so a hostile QR can never displace the payee or the amou
 | Google Pay | `tez://upi/pay` |
 | PhonePe · Paytm · BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · Airtel · super.money · Kiwi | `<scheme>://upi/pay` |
 
-`upi/pay` is used throughout, confirmed on device. **Airtel is the clean experiment for the path**:
-same app, same payload, only the path changed — `myairtel://pay` failed, `myairtel://upi/pay`
-completed a payment. `upi://pay` populated correctly, while `whatsapp-consumer://pay` and
-`paytmmp://pay` opened blank.
+Device results so far, and what each can actually prove:
 
-**CRED is the clean experiment for the payload, in the opposite direction.** It completed a real
-payment on `pa/pn/am/cu`, then failed once `tr` and `mode` were added with the path unchanged.
-Airtel paid with both present, so neither field is universally fatal — but a merchant reference on
-a personal transfer is the part with no justification, so `tr` became merchant-only first. If CRED
-still fails, `mode` is next.
+| App | Build | Path | Payload | Result |
+|---|---|---|---|---|
+| CRED | `e7f2438` | `credpay://upi/pay` | `pa/pn/am/cu` | ✅ paid |
+| CRED | `4cec88d` | `credpay://upi/pay` *(same)* | `+ mode + tr` | ✗ failed |
+| Airtel | `e7f2438` | `myairtel://pay` | `pa/pn/am/cu` | ✗ failed |
+| Airtel | `4cec88d` | `myairtel://upi/pay` *(changed)* | `+ mode + tr` | ✅ paid |
+
+**CRED is a clean experiment; Airtel is not.** CRED's path was byte-identical across both builds,
+so only the payload can explain it breaking — which is why `tr` became merchant-only. Airtel had
+*both* variables change at once, so its recovery cannot be attributed to either, and it is not
+evidence for the path change.
+
+The two apps moved in **opposite directions across the same change**, which raises the possibility
+that **no single payload satisfies every app**. If the next round confirms that, the answer is a
+small per-app payload quirks table rather than another sweep.
+
+`upi/pay` remains the better bet on the strength of `upi://pay` and `credpay://upi/pay` both
+populating correctly while `whatsapp-consumer://pay` and `paytmmp://pay` opened blank — not on
+Airtel.
 
 #### Why a merchant app's hand-off works and ours often doesn't
 
