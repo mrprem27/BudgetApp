@@ -59,12 +59,14 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
     return () => sub.remove();
   }, [db, refresh]);
 
-  // Teach the long-press once. Dismissed by using it, or by tapping the FAB at all.
-  useEffect(() => { settings.scanPayHintSeen().then(seen => setShowHint(!seen)).catch(() => {}); }, []);
+  // Shown only to a just-onboarded user (armed in `finalizeOnboarding`), and only
+  // until they touch the FAB either way. It is onboarding guidance, not a permanent
+  // Home fixture.
+  useEffect(() => { settings.scanPayHintPending().then(setShowHint).catch(() => {}); }, []);
   function setHintSeen() {
     if (!showHint) return;
     setShowHint(false);
-    settings.setScanPayHintSeen(true).catch(() => {});
+    settings.setScanPayHintPending(false).catch(() => {});
   }
 
   const tab = (name: string) => {

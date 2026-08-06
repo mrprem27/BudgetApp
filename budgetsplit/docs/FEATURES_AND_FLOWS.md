@@ -473,7 +473,7 @@ can know a payment happened without any of them.
 
 | Step | What happens |
 |---|---|
-| 1 | **Long-press the FAB** → `ScanPaySheet`. A one-time coach mark teaches the gesture (`scanPayHintSeen`, following the `lockExplainerSeen` precedent) — a hidden gesture with no teaching is the mistake `V2-08` and the afford screen both made. |
+| 1 | **Long-press the FAB** → `ScanPaySheet`. A coach mark teaches the gesture — shown **only to a just-onboarded user** (`scanPayHintPending`, armed in `finalizeOnboarding`, cleared the first time the FAB is touched either way). It defaults **off**, so an existing install is never taught a gesture it may already use, and the bubble can't sit on Home indefinitely for anyone who simply never long-presses. A hidden gesture with no teaching is the mistake `V2-08` and the afford screen both made; a permanent hint is the opposite one. |
 | 2 | Scan any UPI QR. `parseAnyUpiQr` reads a **person's** `upi://` code *or* a **shop's** EMV/BharatQR (`lib/emvQr.ts`). |
 | 3 | Amount: typed, or fixed by the code (EMV tag `54`) — a fixed amount is **not editable**, since changing it would send a figure the merchant did not ask for. |
 | 4 | Hand off via the **same** `useUpiApps` + `buildUpiUri` path as settle-up. No second implementation of the platform split. |

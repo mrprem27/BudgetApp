@@ -127,3 +127,18 @@ describe('key namespace', () => {
     expect(Object.values(SETTINGS_KEYS).some(k => k.startsWith('feature_'))).toBe(false);
   });
 });
+
+describe('scanPayHintPending — onboarding-only coach mark', () => {
+  it('is off on an existing install, so nobody is taught a gesture they already use', async () => {
+    // Default FALSE is the whole point: a hint armed by absence would appear on Home
+    // for every existing user and sit there until they happened to long-press.
+    await expect(settings.scanPayHintPending()).resolves.toBe(false);
+  });
+
+  it('round-trips once onboarding arms it', async () => {
+    await settings.setScanPayHintPending(true);
+    await expect(settings.scanPayHintPending()).resolves.toBe(true);
+    await settings.setScanPayHintPending(false);
+    await expect(settings.scanPayHintPending()).resolves.toBe(false);
+  });
+});

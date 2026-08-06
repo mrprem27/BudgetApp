@@ -26,7 +26,7 @@ const K = {
   onboardingIntent: 'onboarding_intent',
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
-  scanPayHintSeen: 'scan_pay_hint_seen',
+  scanPayHintPending: 'scan_pay_hint_pending',
   backupAnchorAt: 'backup_anchor_at',
   ocrProvider: 'ocr_provider',
 } as const;
@@ -92,8 +92,12 @@ export const settings = {
   // Goal "protect" (overspend-raid shield) one-time explainer
   lockExplainerSeen: () => getBool(K.lockExplainerSeen, false),
   setLockExplainerSeen: (v: boolean) => setBool(K.lockExplainerSeen, v),
-  scanPayHintSeen: () => getBool(K.scanPayHintSeen, false),
-  setScanPayHintSeen: (v: boolean) => setBool(K.scanPayHintSeen, v),
+  // Armed by onboarding, cleared the first time the FAB is touched. Defaults to
+  // FALSE so an existing install never sees it — a coach mark for a gesture you may
+  // have been using for months is noise, and it would sit on Home indefinitely for
+  // anyone who simply never long-pressed.
+  scanPayHintPending: () => getBool(K.scanPayHintPending, false),
+  setScanPayHintPending: (v: boolean) => setBool(K.scanPayHintPending, v),
 
   // Backup reminder cadence anchor — last real export, or when the reminder
   // was first turned on if the user hasn't exported yet.

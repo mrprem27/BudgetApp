@@ -62,6 +62,13 @@ export async function finalizeOnboarding(
     await applyPersona(data.intent);
   } catch { /* the app still works on DEFAULTS */ }
 
+  // Arm the Scan & Pay coach mark for this user's first visit to Home. Its own try:
+  // a persona write failing has nothing to do with whether the hint should show.
+  // Only new users get it — an existing install has no business being taught a
+  // gesture it may already use, and the hint would otherwise sit on Home forever
+  // for anyone who never long-pressed.
+  try { await settings.setScanPayHintPending(true); } catch { /* best-effort */ }
+
   try {
     const grps = await getAllGroups(db);
     const me = await getMe(db);
