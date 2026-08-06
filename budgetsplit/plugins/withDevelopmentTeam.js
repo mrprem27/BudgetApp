@@ -1,7 +1,21 @@
 const { withXcodeProject } = require('expo/config-plugins');
 
-/** Personal Apple developer team. Change here, not in Xcode — see below. */
-const TEAM_ID = '7ZKC4Q77UW';
+/**
+ * Personal Apple developer team. Change here, not in Xcode — see below.
+ *
+ * Do NOT read this off `security find-identity`, which prints only the certificate's
+ * common name — "Apple Development: 917734998963 (7ZKC4Q77UW)". The parenthesised
+ * value there is the certificate identifier, *not* the team; the team is the subject's
+ * OU. Mistaking one for the other fails with "No Account for Team", because no Apple
+ * ID owns the team you named.
+ *
+ *   security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+ *   #=> ... (7ZKC4Q77UW), OU=Q85DBJ88R8, ...   <- OU is the team
+ *
+ * Cross-check against `IDEProvisioningTeamByIdentifier` in `defaults read com.apple.dt.Xcode`,
+ * which lists the teams whose Apple ID is actually signed in.
+ */
+const TEAM_ID = 'Q85DBJ88R8';
 
 /**
  * Pin `DEVELOPMENT_TEAM` so signing survives a regenerated project.
