@@ -614,6 +614,13 @@ Device results so far, and what each can actually prove:
 | Amazon Pay | `6d44884` | `amazonpay://upi/pay` | default, friend's `@kotak` | ✗ populated, name ✅ resolved, **declined after submit** |
 | WhatsApp | `6d44884` | `whatsapp-consumer://upi/pay` | default, friend's `@kotak` | ✗ *"Couldn't verify UPI ID"* |
 | WhatsApp | `6d44884` | `upi://pay` *(the spec)* | default | ✗ same verification failure |
+| PhonePe | *open-amount* | `phonepe://upi/pay` | **no `am`** — amount typed in PhonePe | ✗ same gallery-QR refusal |
+| Paytm | *open-amount* | `paytmmp://pay` | **no `am`** | ✗ same "UPI risk policy" |
+
+**The open-amount round exhausted the payload space.** `am` was the last parameter with a plausible
+mechanism, and the result is negative for both documented-gated apps. What remains — `mc`, `tid`,
+`sign` — are merchant fields, and `sign` is an RSA signature over the other params that requires a
+PSP's private key. There is no further URI to try.
 
 **CRED is a clean experiment; Airtel is not.** CRED's path was byte-identical across both builds,
 so only the payload can explain it breaking — which is why `tr` became merchant-only. Airtel had
@@ -641,11 +648,33 @@ Airtel.
 **This gap cannot be closed by editing a URI.** Becoming a merchant would mean payments going to
 *us*, which is a different and licensed business.
 
-**PhonePe and Paytm refuse by policy, and say so in their own docs.** Their errors survived a
-payload change (`mode`, `tr`) and a path change together — PhonePe still calls a **₹2** transfer a
-gallery QR breaching a ₹2,000 cap. They classify externally-supplied intents as untrusted whatever
-we send: a judgement about *who* is asking, which no parameter answers. They stay in the picker
-because the failure is recoverable — see record-only below.
+**PhonePe and Paytm are closed, and every lever has now been pulled.** Their errors survived the
+path change, `mode`, `tr`, `pn`, and finally **withholding `am` entirely** so the user typed the
+amount in the app itself. PhonePe still calls a **₹2** transfer a gallery QR breaching a ₹2,000 cap;
+Paytm still says "UPI risk policy".
+
+Withholding `am` was the last hypothesis worth testing, because it was the only change that moved
+*who supplied the amount* rather than how the request was spelled — and PhonePe's own message named
+routes where the payer enters the details. It moved nothing. That message is a canned string, not a
+clue. Both apps classify externally-supplied intents as untrusted before reading a single parameter:
+a judgement about *who* is asking, which no parameter answers. Their docs said exactly this from the
+start; the experiments only confirmed it. **Do not reopen without merchant credentials.**
+
+Both therefore carry `UpiAppSpec.blocked`, a one-sentence user-facing reason. It is set only where
+vendor documentation and repeated device results agree and no lever remains — a higher bar than
+`provenance`, because it claims retrying *cannot* work. Amazon Pay and WhatsApp fail without a
+documented gate and stay unmarked.
+
+`blocked` is honoured in three places: the picker labels the row *"— won't accept"*, the destination
+line under Pay turns to *"PhonePe won't accept this"* in `colors.expense`, and the hand-off warns
+with an "Open anyway" / "Go back" choice **before** `hooks.before` persists anything, so backing out
+never records an attempt that did not happen.
+
+Why warn rather than remove: the failure is expensive in a way a blank screen is not. The user
+reaches PIN entry before being refused, spends one of a day's rate-limited UPI PIN attempts, and is
+left wondering whether they were debited. And these are two of India's most-used apps — a user whose
+only UPI app is PhonePe must not be told no UPI app was found. It is not a hard block either, since
+a vendor policy can change without telling us.
 
 **Amazon Pay and WhatsApp fail past the point a URI reaches, which is a different finding.** I had
 filed Amazon Pay with the policy refusals and, before that, blamed its generic *"technical error"*

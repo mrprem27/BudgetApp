@@ -57,6 +57,26 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
   const target = preferred ?? (apps?.length === 1 ? apps[0] : null);
   const canChoose = (apps?.length ?? 0) > 1;
 
+  /**
+   * Say so before the user spends a PIN attempt on an app we know will refuse.
+   *
+   * Resolves `true` only on an explicit "Open anyway" — declining leaves the caller's
+   * sheet up, where "Record it, I'll pay" is already sitting. That is deliberately not a
+   * hard block: the refusals are the vendors' policies, and a policy can change without
+   * telling us. What we must not do is stay quiet about what we already know.
+   */
+  const warnBlocked = useCallback((spec: UpiAppSpec): Promise<boolean> => new Promise(resolve => {
+    Alert.alert(
+      `${spec.label} won’t accept this`,
+      `${spec.blocked}\n\nRecord it here instead and pay in ${spec.label} yourself — the expense is still saved and split.`,
+      [
+        { text: 'Open anyway', style: 'destructive', onPress: () => resolve(true) },
+        { text: 'Go back', style: 'cancel', onPress: () => resolve(false) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  }), []);
+
   const open = useCallback(async (
     req: UpiRequest,
     app: UpiApp | undefined,
@@ -68,6 +88,12 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     // PSPs read a repeated `tr` as a duplicate of the earlier transaction.
     const uri = buildUpiUri({ ...req, ref: req.ref ?? newUpiRef() }, app);
     if (!uri) return false;
+
+    // Ahead of `before`, which persists the payment: a warning the user backs out of must
+    // not leave a record of an attempt that never happened.
+    const spec = apps?.find(a => a.key === app);
+    if (spec?.blocked && !(await warnBlocked(spec))) return false;
+
     try { await hooks?.before?.(); } catch { /* record failed; paying is still the point */ }
     try {
       await Linking.openURL(uri);
@@ -77,7 +103,7 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
       Alert.alert('Couldn’t open that app', 'Try another UPI app, or record this payment yourself.');
       return false;
     }
-  }, []);
+  }, [apps, warnBlocked]);
 
   /** The picker, as a promise — so callers can close their own UI only once it resolves. */
   const ask = useCallback((
@@ -87,7 +113,9 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
   ): Promise<boolean> => new Promise(resolve => {
     ActionSheetIOS.showActionSheetWithOptions(
       {
-        options: ['Cancel', ...list.map(a => a.label)],
+        // Marked in the list, not hidden from it. Steering a user away from the app they
+        // actually use, silently, would be a worse lie than the failure itself.
+        options: ['Cancel', ...list.map(a => (a.blocked ? `${a.label} — won’t accept` : a.label))],
         cancelButtonIndex: 0,
         title: `Pay ${formatRupees(req.amountPaise)}`,
         message: 'We’ll use this app next time — you can change it before paying.',

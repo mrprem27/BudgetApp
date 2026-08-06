@@ -98,6 +98,23 @@ export type UpiAppSpec = {
   /** Per-app payload deviations. Omit unless a device proved one is needed. */
   payload?: UpiPayloadQuirks;
   /**
+   * Why this app will refuse a payment we started — user-facing, one sentence.
+   *
+   * Set **only** where the vendor's own documentation and repeated device results agree,
+   * and every payload lever has been pulled without moving it. It is a claim that trying
+   * again cannot work, so the bar is higher than for `provenance`.
+   *
+   * It exists because the failure is expensive in a way a blank screen is not: the user
+   * reaches PIN entry before being refused, spends one of a day's rate-limited UPI PIN
+   * attempts, and is left wondering whether they were debited. Knowing the answer in
+   * advance and not saying so is the worst of the options available to us.
+   *
+   * Not a removal from the picker: these are two of India's most-used apps, and a user
+   * whose only UPI app is PhonePe must not be told no UPI app was found. They are
+   * labelled, and the hand-off warns before it opens.
+   */
+  blocked?: string;
+  /**
    * How much we actually know about this row.
    *
    * In the type rather than a comment because the distinction kept collapsing: I called
@@ -127,8 +144,18 @@ export const UPI_APPS: UpiAppSpec[] = [
   // making P2P payments. So an unauthorised app-to-app payment is bucketed with
   // untrusted sources, which is the "QR via gallery" message. That decision is made
   // before our parameters are read, which is why path, `mode`, `tr` and `pn` all moved
-  // nothing. Do not spend another round on it.
-  { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://', payload: { name: false }, provenance: 'documented' },
+  // nothing.
+  //
+  // **Withholding `am` was the last lever, and it moved nothing either.** The ₹2,000
+  // gallery-QR message had suggested the objection was to *where the amount came from*, so
+  // the payee was handed over with the amount left for the user to type in PhonePe itself.
+  // Same refusal. That was a canned string, not a clue, and the hypothesis is dead. Every
+  // parameter has now been varied. Closed — do not reopen it without merchant credentials.
+  {
+    key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://',
+    payload: { name: false }, provenance: 'documented',
+    blocked: 'PhonePe only accepts payments started by registered merchants, so it will refuse this one — even if you type the amount yourself.',
+  },
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://', provenance: 'documented' },
   // Paytm's own docs give `paytmmp://pay` — a bare `pay`, unlike almost everything else.
   //
@@ -138,7 +165,13 @@ export const UPI_APPS: UpiAppSpec[] = [
   // never constructed by the calling app. Their docs say the model is not designed for
   // third-party apps to build deep links, and that non-merchant apps cannot use it for
   // person-to-person payments. The path below is therefore correct and irrelevant.
-  { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://', provenance: 'documented' },
+  // Its "UPI risk policy" refusal also survived withholding `am` — the risk engine scores
+  // the *source* of the intent, not the origin of the figure.
+  {
+    key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://',
+    provenance: 'documented',
+    blocked: 'Paytm blocks payments started outside its own apps as a risk policy, so it will refuse this one — typing the amount there does not help.',
+  },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
   // Paid on a bare `pa/pn/am/cu`, then failed the moment `mode` and `tr` arrived — path
   // byte-identical across both builds, so the payload is the only explanation. Pinned to

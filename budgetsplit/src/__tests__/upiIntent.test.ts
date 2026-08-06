@@ -548,6 +548,23 @@ describe('provenance is recorded, not assumed', () => {
     }
   });
 
+  it('blocks only what both the vendor and the device agree on', () => {
+    // `blocked` claims trying again *cannot* work, so it carries a higher bar than
+    // provenance: PhonePe and Paytm each document a merchant-credential requirement, and
+    // each survived path, `mode`, `tr`, `pn` and finally withholding `am` — the lever that
+    // moves who supplied the amount. An app that merely failed is not blocked; Amazon Pay
+    // and WhatsApp fail without a documented gate and stay unmarked.
+    const blocked = UPI_APPS.filter(a => a.blocked).map(a => a.key);
+    expect(blocked.sort()).toEqual([UpiApp.Paytm, UpiApp.PhonePe].sort());
+    for (const a of UPI_APPS) {
+      if (!a.blocked) continue;
+      expect(a.provenance).toBe('documented');
+      // It is shown to the user verbatim, so it has to read as a sentence.
+      expect(a.blocked).toMatch(/^[A-Z].*\.$/);
+      expect(a.blocked).toContain(a.label);
+    }
+  });
+
   it('never marks a payload quirk on an app nobody has run', () => {
     // A quirk is a claim about observed behaviour. Inventing one would be the same
     // mistake as the guessed deep-link paths, with less to show for it.

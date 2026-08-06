@@ -237,7 +237,10 @@ export function ScanPaySheet({
               */}
               {soleApp && (
                 <View style={styles.destRow}>
-                  <Text style={styles.destText} numberOfLines={1}>Opens {soleApp.label}</Text>
+                  {/* A remembered app that refuses us must say so here, not after the tap. */}
+                  <Text style={[styles.destText, !!soleApp.blocked && styles.destWarn]} numberOfLines={1}>
+                    {soleApp.blocked ? `${soleApp.label} won’t accept this` : `Opens ${soleApp.label}`}
+                  </Text>
                   {handoff.canChoose && (
                     <TouchableOpacity onPress={changeApp} hitSlop={12} accessibilityRole="button">
                       <Text style={styles.destChange}>Change</Text>
@@ -323,6 +326,7 @@ const styles = StyleSheet.create({
   fixedValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
   destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  destWarn: { color: colors.expense },
   destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   altRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: space.xs },
   altAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm },
