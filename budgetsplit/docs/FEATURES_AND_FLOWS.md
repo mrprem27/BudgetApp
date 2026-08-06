@@ -616,11 +616,17 @@ Device results so far, and what each can actually prove:
 | WhatsApp | `6d44884` | `upi://pay` *(the spec)* | default | ✗ same verification failure |
 | PhonePe | *open-amount* | `phonepe://upi/pay` | **no `am`** — amount typed in PhonePe | ✗ same gallery-QR refusal |
 | Paytm | *open-amount* | `paytmmp://pay` | **no `am`** | ✗ same "UPI risk policy" |
+| Amazon Pay | *open-amount* | `amazonpay://upi/pay` | **no `am`** | ✗ same "technical error" |
 
-**The open-amount round exhausted the payload space.** `am` was the last parameter with a plausible
-mechanism, and the result is negative for both documented-gated apps. What remains — `mc`, `tid`,
-`sign` — are merchant fields, and `sign` is an RSA signature over the other params that requires a
-PSP's private key. There is no further URI to try.
+**The open-amount round exhausted the payload space, and it went 0 for 3.** `am` was the last
+parameter with a plausible mechanism — the only one that changed *who supplied the amount* rather
+than how the request was spelled — and every app returned the identical error it gave with the amount
+pre-filled. The `omitAmount` option and its UI action were **removed** rather than left in place: an
+unproven control on the payment path is worse than none. A test pins that `am` is always sent, so it
+is not quietly reintroduced as a fix.
+
+What remains in the spec — `mc`, `tid`, `sign` — are merchant fields, and `sign` is an RSA signature
+over the other parameters requiring a PSP's private key. **There is no further URI to try.**
 
 **CRED is a clean experiment; Airtel is not.** CRED's path was byte-identical across both builds,
 so only the payload can explain it breaking — which is why `tr` became merchant-only. Airtel had
@@ -660,21 +666,37 @@ clue. Both apps classify externally-supplied intents as untrusted before reading
 a judgement about *who* is asking, which no parameter answers. Their docs said exactly this from the
 start; the experiments only confirmed it. **Do not reopen without merchant credentials.**
 
-Both therefore carry `UpiAppSpec.blocked`, a one-sentence user-facing reason. It is set only where
-vendor documentation and repeated device results agree and no lever remains — a higher bar than
-`provenance`, because it claims retrying *cannot* work. Amazon Pay and WhatsApp fail without a
-documented gate and stay unmarked.
+#### Four apps are blocked and are not offered at all
 
-`blocked` is honoured in three places: the picker labels the row *"— won't accept"*, the destination
-line under Pay turns to *"PhonePe won't accept this"* in `colors.expense`, and the hand-off warns
-with an "Open anyway" / "Go back" choice **before** `hooks.before` persists anything, so backing out
-never records an attempt that did not happen.
+**`UpiAppSpec.blocked`** holds a one-sentence user-facing reason, and a blocked app is **removed
+from the picker** — `useUpiHandoff` filters it out of `apps`, `preferred`, `target` and `canChoose`
+alike. It stays in `UPI_APPS` for scheme detection and for the explanation.
 
-Why warn rather than remove: the failure is expensive in a way a blank screen is not. The user
-reaches PIN entry before being refused, spends one of a day's rate-limited UPI PIN attempts, and is
-left wondering whether they were debited. And these are two of India's most-used apps — a user whose
-only UPI app is PhonePe must not be told no UPI app was found. It is not a hard block either, since
-a vendor policy can change without telling us.
+| Blocked | Why | Documented? |
+|---|---|---|
+| PhonePe | Merchant credentials required; unauthorised intents are bucketed as untrusted | Yes |
+| Paytm | Deep link must be built by Paytm's server; risk policy scores the intent's source | Yes |
+| Amazon Pay | Parses and validates our URI perfectly, then declines after submission | No |
+| WhatsApp | Cannot verify the payee, even through the generic `upi://pay` spec URI | No |
+
+The bar is **every lever pulled with an identical failure each time** — path, `mode`, `tr`, `pn`,
+and finally withholding `am`. Vendor documentation is *not* required: an earlier version of this
+rule demanded a citation and so held only PhonePe and Paytm, which meant offering two apps already
+known to refuse every payment. That served the documentation rather than the user.
+
+Removed rather than labelled, because the failure is expensive in a way a blank screen is not: the
+user reaches PIN entry before being refused, spends one of a day's **rate-limited** UPI PIN attempts,
+and is left unsure whether they were debited.
+
+Two consequences handled explicitly:
+
+- **The absence is named, never silent.** The picker's message reads *"PhonePe, Paytm, Amazon Pay and
+  WhatsApp aren't listed — they refuse payments started in another app."* A user who has PhonePe and
+  doesn't see it would otherwise read that as a detection bug and go hunting for it.
+- **Filtering created a second empty case.** Apps installed, all of them blocked. "No UPI app found"
+  would be false, so `reportNothingToOpen` distinguishes the two and points at record-only. A test
+  also asserts at least one app remains unblocked, since blocking is subtraction and subtraction can
+  reach zero — that would silently reduce Scan & Pay to record-only.
 
 **Amazon Pay and WhatsApp fail past the point a URI reaches, which is a different finding.** I had
 filed Amazon Pay with the policy refusals and, before that, blamed its generic *"technical error"*

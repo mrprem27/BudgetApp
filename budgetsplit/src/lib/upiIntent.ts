@@ -98,20 +98,24 @@ export type UpiAppSpec = {
   /** Per-app payload deviations. Omit unless a device proved one is needed. */
   payload?: UpiPayloadQuirks;
   /**
-   * Why this app will refuse a payment we started — user-facing, one sentence.
+   * Why this app refuses a payment we started — user-facing, one sentence.
    *
-   * Set **only** where the vendor's own documentation and repeated device results agree,
-   * and every payload lever has been pulled without moving it. It is a claim that trying
-   * again cannot work, so the bar is higher than for `provenance`.
+   * **A blocked app is not offered as a payment target.** It stays in `UPI_APPS` for
+   * detection and for the explanation, but `useUpiHandoff` filters it out of the picker.
    *
-   * It exists because the failure is expensive in a way a blank screen is not: the user
-   * reaches PIN entry before being refused, spends one of a day's rate-limited UPI PIN
-   * attempts, and is left wondering whether they were debited. Knowing the answer in
-   * advance and not saying so is the worst of the options available to us.
+   * Set only where every payload lever has been pulled and the app failed identically
+   * each time: path, `mode`, `tr`, `pn`, and finally withholding `am` so the payer typed
+   * the amount in the app itself. That is a claim that retrying cannot work, so the bar is
+   * higher than for `provenance` — and unlike `provenance` it is not about our URI at all.
    *
-   * Not a removal from the picker: these are two of India's most-used apps, and a user
-   * whose only UPI app is PhonePe must not be told no UPI app was found. They are
-   * labelled, and the hand-off warns before it opens.
+   * Vendor documentation is not required. PhonePe and Paytm publish the merchant-credential
+   * gate that explains theirs; Amazon Pay and WhatsApp publish nothing and fail just as
+   * consistently. Requiring a citation would have meant listing two apps we know refuse
+   * every payment, which serves the documentation rather than the user.
+   *
+   * The failure is expensive in a way a blank screen is not: the user reaches PIN entry
+   * before being refused, spends one of a day's rate-limited UPI PIN attempts, and is left
+   * unsure whether they were debited.
    */
   blocked?: string;
   /**
@@ -186,7 +190,17 @@ export const UPI_APPS: UpiAppSpec[] = [
   // controls. I earlier read that generic error as evidence of a wrong path; the screenshot
   // refutes that reading. No parameter change is indicated, and each attempt costs a real
   // debit, so do not spend rounds guessing at the payload here.
-  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://', provenance: 'device' },
+  //
+  // **Closed too, on evidence rather than documentation.** It also failed with `am` withheld
+  // and the amount typed in Amazon Pay itself, giving the same "technical error". So the
+  // decline is not about the figure or its provenance, and every lever is spent. The URI is
+  // demonstrably perfect and the app refuses anyway — which is the clearest case in this
+  // file that a correct link is not sufficient.
+  {
+    key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://',
+    provenance: 'device',
+    blocked: 'Amazon Pay reads the payment correctly but its own system declines anything started in another app — every attempt has failed.',
+  },
   // **Fails ValidateAddress, and it is not our URI.** "Couldn't verify UPI ID" appeared on
   // a friend's `@kotak` handle, so it is not the self-payment confound. More decisively, the
   // same failure occurs through the generic `upi://pay` route, which WhatsApp itself claims
@@ -197,7 +211,11 @@ export const UPI_APPS: UpiAppSpec[] = [
   // Consequence worth remembering: on a device where WhatsApp claims `upi://`, the generic
   // "Other UPI app" row inherits this failure. It is still correct to offer — elsewhere
   // `upi://` resolves to whatever the user actually has.
-  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://', provenance: 'device' },
+  {
+    key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://',
+    provenance: 'device',
+    blocked: 'WhatsApp cannot verify the payee when the payment is started somewhere else, so it refuses before you can pay.',
+  },
   { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://', provenance: 'unverified' },
   { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://upi/pay', probe: 'mobikwik://', provenance: 'unverified' },
   // Paid with `mode` and `tr` both present, on a personal transfer. Its path changed in
@@ -394,30 +412,13 @@ export type UpiRequest = {
   name?: string;
   /** Amount in integer paise — converted to rupees at this boundary only. */
   amountPaise: number;
-  /**
-   * Leave `am` off the URI, so the app opens on the payee with the amount blank and the
-   * payer types it there. Default `false`.
-   *
-   * `am` is optional in the NPCI spec — an unsigned static shop sticker carries no amount,
-   * which makes "payee supplied, amount typed by the payer" the most-travelled flow in
-   * UPI rather than an exotic one.
-   *
-   * It exists because it is the **last untried lever** on the apps that refuse us, and it
-   * is the only one that changes *who supplied the amount* rather than merely how the
-   * request is spelled. PhonePe's refusal is the reason to reach for it: it called a **₹2**
-   * transfer a gallery QR breaching a **₹2,000** cap and told us to "pay with mobile number
-   * or scan QR code" — i.e. to use a route where the payer enters the details. ₹2 is not
-   * over ₹2,000, so that message is only coherent if the objection is to the *provenance*
-   * of the amount, not its size.
-   *
-   * `amountPaise` is still required and still validated: the split, the local record and
-   * the Review row all need it. This changes only what goes on the wire.
-   *
-   * Not a per-app quirk. Quirks are pinned device findings, and this is a hypothesis — it
-   * is offered as a user-chosen retry so a guess cannot silently degrade CRED and Airtel,
-   * which already pay with the amount pre-filled.
-   */
-  omitAmount?: boolean;
+  // There was an `omitAmount` here, which left `am` off so the payer typed the amount in
+  // their own app. It was the last lever with a mechanism behind it — the only one that
+  // changed *who supplied the amount* rather than how the request was spelled — and it
+  // failed on PhonePe, Paytm and Amazon Pay alike, with each app giving the identical error
+  // it gave with the amount pre-filled. Removed rather than kept as a dead option: it never
+  // helped anything, and an unproven control on the payment path is worse than none.
+  // The negative result is recorded in docs/FEATURES_AND_FLOWS.md so it is not re-tried.
   /** Optional note (`tn`). Leave unset on a scanned code — see `buildUpiUri`. */
   note?: string;
   /**
@@ -476,9 +477,7 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
 
   const params: Array<[string, string]> = [['pa', vpa]];
   if ((quirks?.name ?? true) && req.name?.trim()) params.push(['pn', req.name.trim()]);
-  // `cu` stays either way — it scopes the currency, not the figure.
-  if (!req.omitAmount) params.push(['am', rupees]);
-  params.push(['cu', 'INR']);
+  params.push(['am', rupees], ['cu', 'INR']);
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);

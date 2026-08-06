@@ -56,31 +56,14 @@ describe('buildUpiUri', () => {
     expect(buildUpiUri({ vpa: 'a@ybl', name: 'Asha Rao', amountPaise: 500 })).toContain('pn=Asha%20Rao');
   });
 
-  describe('omitAmount — payee supplied, amount typed in the app', () => {
-    it('drops am but keeps everything else, cu included', () => {
-      // `am` is optional in the NPCI spec: an unsigned shop sticker carries no amount.
-      // `cu` stays because it scopes the currency, not the figure.
-      const uri = buildUpiUri({ vpa: 'a@ybl', name: 'Asha', amountPaise: 500, omitAmount: true });
-      expect(uri).toBe('upi://pay?pa=a%40ybl&pn=Asha&cu=INR&mode=04');
-    });
-
-    it('still requires a valid amount, because the local record needs one', () => {
-      // The split, the Review row and the confirm-on-return prompt all need the figure.
-      // Withholding it from the URI must not mean not knowing it.
-      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 0, omitAmount: true })).toBeNull();
-      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: -1, omitAmount: true })).toBeNull();
-      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: NaN, omitAmount: true })).toBeNull();
-    });
-
-    it('composes with per-app quirks instead of overriding them', () => {
-      // A retry, not a different code path — CRED must still get no `mode`.
-      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500, omitAmount: true }, UpiApp.Cred))
-        .toBe('credpay://upi/pay?pa=a%40ybl&cu=INR');
-    });
-
-    it('defaults off, so the apps that already pay are untouched', () => {
-      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500 })).toContain('am=5.00');
-    });
+  it('always sends am, because withholding it helped nothing', () => {
+    // There was an `omitAmount` option here that left `am` off so the payer typed the amount
+    // in their own app — the last lever with a mechanism behind it, since it was the only
+    // one that moved *who supplied the amount*. PhonePe, Paytm and Amazon Pay each gave the
+    // identical error they gave with the amount pre-filled. Removed, and pinned so it is not
+    // quietly reintroduced as a fix.
+    expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500 })).toContain('am=5.00');
+    expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500 }, UpiApp.Cred)).toContain('am=5.00');
   });
 });
 
@@ -548,21 +531,38 @@ describe('provenance is recorded, not assumed', () => {
     }
   });
 
-  it('blocks only what both the vendor and the device agree on', () => {
-    // `blocked` claims trying again *cannot* work, so it carries a higher bar than
-    // provenance: PhonePe and Paytm each document a merchant-credential requirement, and
-    // each survived path, `mode`, `tr`, `pn` and finally withholding `am` — the lever that
-    // moves who supplied the amount. An app that merely failed is not blocked; Amazon Pay
-    // and WhatsApp fail without a documented gate and stay unmarked.
+  it('blocks every app that refused after all four levers were pulled', () => {
+    // `blocked` claims retrying cannot work, so the bar is every payload lever pulled with
+    // an identical failure each time: path, `mode`, `tr`, `pn`, and finally withholding
+    // `am` so the payer typed the amount in the app itself.
+    //
+    // This list previously required vendor documentation and so held only PhonePe and
+    // Paytm. That bar was wrong. Amazon Pay and WhatsApp publish nothing and fail just as
+    // consistently — Amazon Pay declines after submission on a URI it demonstrably parsed
+    // and validated; WhatsApp fails to verify the payee even through the generic `upi://pay`
+    // spec URI. Requiring a citation would have meant offering two apps we know refuse
+    // every payment, which serves the documentation rather than the user.
     const blocked = UPI_APPS.filter(a => a.blocked).map(a => a.key);
-    expect(blocked.sort()).toEqual([UpiApp.Paytm, UpiApp.PhonePe].sort());
+    expect(blocked.sort()).toEqual(
+      [UpiApp.AmazonPay, UpiApp.Paytm, UpiApp.PhonePe, UpiApp.WhatsApp].sort(),
+    );
     for (const a of UPI_APPS) {
       if (!a.blocked) continue;
-      expect(a.provenance).toBe('documented');
-      // It is shown to the user verbatim, so it has to read as a sentence.
+      // Blocking an app nobody has run would be a guess with real consequences — it hides
+      // that app from the picker. Every one of these has been watched failing.
+      expect(a.provenance).not.toBe('unverified');
+      // Shown to the user verbatim, so it has to read as a sentence and name the app.
       expect(a.blocked).toMatch(/^[A-Z].*\.$/);
       expect(a.blocked).toContain(a.label);
     }
+  });
+
+  it('leaves at least one way to hand off a payment', () => {
+    // Blocking is subtraction from the picker, and subtraction can reach zero. If a change
+    // ever blocks everything, Scan & Pay silently becomes record-only — worth failing here
+    // rather than discovering it on a device.
+    expect(UPI_APPS.filter(a => !a.blocked).length).toBeGreaterThan(0);
+    expect(GENERIC_UPI_APP.blocked).toBeUndefined();
   });
 
   it('never marks a payload quirk on an app nobody has run', () => {
