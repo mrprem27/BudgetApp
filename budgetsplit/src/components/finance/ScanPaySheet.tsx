@@ -54,6 +54,9 @@ export function ScanPaySheet({
     onClose();
   }
 
+  // Exactly one installed app means no picker — so the button has to say which one it
+  // is, or the app that opens looks like something the sheet chose at random.
+  const soleApp = iosApps?.length === 1 ? iosApps[0] : null;
   const amountPaise = target?.amountPaise ?? parseToPaise(amount);
   // A code that fixes its own amount is not editable — changing it would send a
   // figure the merchant did not ask for.
@@ -173,7 +176,11 @@ export function ScanPaySheet({
           )}
 
           <PrimaryButton
-            label={canPay ? `Pay ${formatRupees(amountPaise)}` : 'Pay'}
+            label={
+              !canPay ? 'Pay'
+                : soleApp ? `Pay ${formatRupees(amountPaise)} with ${soleApp.label}`
+                : `Pay ${formatRupees(amountPaise)}`
+            }
             onPress={pay}
             disabled={!canPay}
           />
