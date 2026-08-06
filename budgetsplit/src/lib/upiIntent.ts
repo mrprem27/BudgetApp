@@ -93,15 +93,38 @@ export type UpiAppSpec = {
   label: string;
   /** Scheme + path the payment params hang off. */
   prefix: string;
-  /** Bare scheme, for a `canOpenURL` installed-check. */
+  /** Bare scheme, for a `canOpenURL` installed-check. Also what we open to launch it plain. */
   probe: string;
+  /**
+   * A guess at the app's QR-scanner route, opened *instead of* `probe` when the user has a
+   * code in front of them and the app won't take a pre-filled payment.
+   *
+   * **Every one of these is unverified, and that is affordable here in a way it never was
+   * for a payment path.** A wrong payment path opens the app to its home screen having
+   * silently dropped the payee and amount — the user believes it is pre-filled and it is
+   * not. A wrong *scanner* path opens the app to its home screen, which is exactly where
+   * `probe` was going to land them anyway. The downside is zero and the upside is one tap
+   * and a camera already open, so the guess is worth making.
+   *
+   * Nothing is published. Four rounds of searching found no scanner deep link documented
+   * for any Indian UPI app — the ecosystem is Android-first, where an intent handles this
+   * and no per-app URL was ever needed. So these follow the ordinary convention and are
+   * candidates, not findings.
+   *
+   * **Keep the ones that land on a scanner; delete the rest.** They are cheap to test —
+   * open the app from the sheet and see where it lands — and a route that quietly does
+   * nothing is worth removing so this list never becomes folklore.
+   */
+  scanPath?: string;
   /** Per-app payload deviations. Omit unless a device proved one is needed. */
   payload?: UpiPayloadQuirks;
   /**
    * Why this app refuses a payment we started — user-facing, one sentence.
    *
-   * **A blocked app is not offered as a payment target.** It stays in `UPI_APPS` for
-   * detection and for the explanation, but `useUpiHandoff` filters it out of the picker.
+   * **This decides what we send the app, never whether it is listed.** A blocked app is
+   * offered in the picker like any other and opened with `scanPath ?? probe` instead of a
+   * payment URI — which is the way round the refusal rather than a consolation, since a
+   * live scan in the app's own camera is the input these apps trust most.
    *
    * Set only where every payload lever has been pulled and the app failed identically
    * each time: path, `mode`, `tr`, `pn`, and finally withholding `am` so the payer typed
@@ -157,9 +180,21 @@ export const UPI_APPS: UpiAppSpec[] = [
   // parameter has now been varied. Closed — do not reopen it without merchant credentials.
   {
     key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://',
+    scanPath: 'phonepe://scan',
     payload: { name: false }, provenance: 'documented',
     blocked: 'PhonePe only accepts payments started by registered merchants, so it will refuse this one — even if you type the amount yourself.',
   },
+  // **If Google Pay fails on device, `gpay://upi/pay` is the first thing to try.** Google's
+  // own India in-app-payments guide gives `gpay://upi/pay?pa=…` verbatim and never mentions
+  // `tez://` — the pre-2018 Tez brand the app was renamed from — and `gpay` appears in the
+  // LSApplicationQueriesSchemes lists real integrations ship. Ours came from third-party SDK
+  // lists that still carry `tez`.
+  //
+  // Not switched yet, deliberately. `tez://` was *observed* detecting Google Pay here, while
+  // `gpay://` has only been read in a document, and Google Pay has never been tested at all.
+  // Changing the scheme on its first run would move two things at once and a failure would
+  // say nothing about either — which is precisely the confound Airtel already produced in
+  // this file. Test `tez://` first; if it fails, this is one line.
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://', provenance: 'documented' },
   // Paytm's own docs give `paytmmp://pay` — a bare `pay`, unlike almost everything else.
   //
@@ -173,7 +208,7 @@ export const UPI_APPS: UpiAppSpec[] = [
   // the *source* of the intent, not the origin of the figure.
   {
     key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://',
-    provenance: 'documented',
+    scanPath: 'paytmmp://scan', provenance: 'documented',
     blocked: 'Paytm blocks payments started outside its own apps as a risk policy, so it will refuse this one — typing the amount there does not help.',
   },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
@@ -198,7 +233,7 @@ export const UPI_APPS: UpiAppSpec[] = [
   // file that a correct link is not sufficient.
   {
     key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://',
-    provenance: 'device',
+    scanPath: 'amazonpay://scan', provenance: 'device',
     blocked: 'Amazon Pay reads the payment correctly but its own system declines anything started in another app — every attempt has failed.',
   },
   // **Fails ValidateAddress, and it is not our URI.** "Couldn't verify UPI ID" appeared on

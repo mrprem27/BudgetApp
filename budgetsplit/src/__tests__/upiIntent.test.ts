@@ -566,6 +566,23 @@ describe('provenance is recorded, not assumed', () => {
     expect(GENERIC_UPI_APP.blocked).toBeUndefined();
   });
 
+  it('only guesses a scanner route for apps that would otherwise open on nothing useful', () => {
+    // `scanPath` is unverified everywhere and that is affordable: a wrong scanner route
+    // lands on the app's home screen, which is exactly where `probe` was going. A wrong
+    // *payment* path lands there too but with the payee silently dropped, which is why one
+    // is a guess worth making and the other never was.
+    for (const a of UPI_APPS) {
+      if (!a.scanPath) continue;
+      // Must share the app's own scheme, or it opens something else entirely — the
+      // failure `cred://` vs `credpay://` already caused once in this file.
+      const scheme = a.probe.replace(/:\/\/$/, '');
+      expect(a.scanPath.startsWith(`${scheme}://`) || a.scanPath.startsWith(a.prefix.split('://')[0] + '://')).toBe(true);
+      // It is only ever reached on the launch-bare path, so guessing one for an app that
+      // always receives a real payment URI would be dead code pretending to be a feature.
+      expect(a.blocked).toBeDefined();
+    }
+  });
+
   it('never marks a payload quirk on an app nobody has run', () => {
     // A quirk is a claim about observed behaviour. Inventing one would be the same
     // mistake as the guessed deep-link paths, with less to show for it.

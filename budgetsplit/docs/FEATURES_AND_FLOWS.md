@@ -582,13 +582,22 @@ is harder to contradict than prose.
 | WhatsApp | `whatsapp-consumer://upi/pay` | default | **device** — populated, cannot verify the handle |
 | PhonePe | `phonepe://upi/pay` | default | documented |
 | **Paytm** | **`paytmmp://pay`** | default | documented — vendor uses a bare `pay` |
-| Google Pay | `tez://upi/pay` | default | documented |
+| Google Pay | `tez://upi/pay` | default | documented — **but see `gpay://` below** |
 | BHIM · Navi · MobiKwik · super.money · Kiwi | `<scheme>://upi/pay` | default | **unverified** — scheme sourced, path inferred |
 
 Default payload = `mode` on, `tr` for merchant payments only.
 
 **`device` means the path works, not that the payment completes.** Amazon Pay and WhatsApp are the
 rows that separate the two, and keeping the distinction visible is the point of the field.
+
+**Google Pay: if `tez://` fails, try `gpay://upi/pay`.** Google's own India in-app-payments guide
+gives `gpay://upi/pay?pa=…` verbatim and never mentions `tez://`, which is the pre-2018 Tez brand
+the app was renamed from; `gpay` also appears in the query-scheme lists real integrations ship.
+Ours came from third-party SDK lists that still carry `tez`. It is **not switched yet** on purpose:
+`tez://` was observed detecting Google Pay on device while `gpay://` has only been read in a
+document, and Google Pay has never been tested at all — changing the scheme on its first run would
+move two variables at once and a failure would say nothing about either, which is exactly the
+confound Airtel already produced here. It is a one-line change once `tez://` has had its turn.
 
 Only four apps have public iOS deep-link documentation. The UPI ecosystem is **Android-first** —
 there the generic `upi://` intent plus a package name is the whole story, so per-app iOS paths were
@@ -757,6 +766,22 @@ input — no gallery-QR cap, no intent risk scoring. With the shop's code still 
 scanning it there completes the payment their refusal blocked. Weaker with no code to scan: a
 person-to-person transfer means re-entering the payee by hand, and we cannot even offer the handle
 on the clipboard because no clipboard package is installed.
+
+**`scanPath` aims at the app's scanner instead of its home screen, and every entry is a guess.**
+No Indian UPI app publishes a scanner deep link — four rounds of searching found nothing, because
+the ecosystem is Android-first where an intent covers this and no per-app URL was ever needed. The
+guess is worth making anyway, and this is the one place in this file where an unverified path is
+affordable: a wrong *payment* path opens the app to its home screen having silently dropped the
+payee, so the user believes it is pre-filled when it isn't; a wrong *scanner* path opens the app to
+its home screen, which is exactly where `probe` was going to land them. Downside zero, upside one
+tap and a camera already open. Keep the ones that land on a scanner, delete the rest — a route that
+quietly does nothing would otherwise become folklore.
+
+`PayOpts.hasCode` gates it. Scan & Pay sets it because the code is still in front of the user;
+settling up with a friend must not, because there is nothing to point a camera at and a scanner is
+a *worse* landing than a home screen. A test also requires `scanPath` to share the app's own scheme
+— the `cred://` vs `credpay://` mistake, where a real-but-wrong scheme opened the app and dropped
+everything, already happened once here.
 
 **`bare` is set for a signed merchant QR** (`canHandoff === false`). That code cannot be re-emitted
 to anybody, so no app gets parameters and the footnote says to scan it again in your own app.

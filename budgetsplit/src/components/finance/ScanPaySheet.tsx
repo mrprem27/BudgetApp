@@ -162,11 +162,16 @@ export function ScanPaySheet({
   const bare = recordOnly;
   /** Nothing to hand off to. The scan is still worth keeping. */
   const noApps = handoff.apps?.length === 0;
+  /**
+   * Always true here — this sheet exists because a code was scanned, and it is still in
+   * front of the user. That is what earns an app's scanner over its home screen.
+   */
+  const opts = { bare, hasCode: true };
 
   /** Closes only once an app actually opened — a cancelled picker leaves you here. */
-  async function run(go: (req: typeof payee & object, h: typeof hooks, b: boolean) => Promise<boolean>) {
+  async function run(go: (req: typeof payee & object, h: typeof hooks, o: typeof opts) => Promise<boolean>) {
     if (!payee || amountPaise <= 0 || (!bare && !canPay)) return;
-    if (await go(payee, hooks, bare)) { haptic.success(); close(); }
+    if (await go(payee, hooks, opts)) { haptic.success(); close(); }
   }
 
   const pay = () => run(handoff.pay);

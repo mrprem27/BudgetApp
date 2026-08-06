@@ -29,6 +29,25 @@ export type PayHooks = {
   onCancel?: () => Promise<void>;
 };
 
+/** What the caller knows about this payment that changes where the app should land. */
+export type PayOpts = {
+  /**
+   * Send no payment parameters to *any* app, however well it behaves.
+   *
+   * For a signed merchant QR: it cannot be re-emitted to anybody, so pre-filling is not
+   * on offer and the honest thing is to open the app for the user to scan the code again.
+   */
+  bare?: boolean;
+  /**
+   * The user has a physical QR code in front of them.
+   *
+   * The only thing that makes opening an app on its *scanner* better than its home screen.
+   * Scan & Pay sets it; settling up with a friend must not, because there would be nothing
+   * to point the camera at and a camera is a worse landing than a home screen.
+   */
+  hasCode?: boolean;
+};
+
 export type UpiHandoff = {
   /**
    * Every installed UPI app; `null` on Android, where the OS draws its own chooser.
@@ -67,12 +86,12 @@ export type UpiHandoff = {
    *
    * One action for both kinds of app. Whether the destination arrives pre-filled is the
    * app's decision, not a different feature: apps that accept our intent get the full URI,
-   * apps that reject it get opened bare. `bare` forces the second for everything, which is
-   * what a signed merchant QR needs — it cannot be re-emitted to anybody.
+   * apps that reject it get opened — on their scanner where we have a guess at one and the
+   * user has a code to point it at. See `PayOpts`.
    */
-  pay: (req: UpiRequest, hooks?: PayHooks, bare?: boolean) => Promise<boolean>;
+  pay: (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
   /** Ask again even when one is remembered, and remember the new answer. */
-  choose: (req: UpiRequest, hooks?: PayHooks, bare?: boolean) => Promise<boolean>;
+  choose: (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
   /** Forget the remembered app, so the next payment asks again. */
   forget: () => void;
 };
@@ -106,9 +125,8 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
    * Record, then go — with the payment attached where the app will take it.
    *
    * The whole difference between a working app and a refusing one lives on this line.
-   * A blocked app is sent its bare scheme, which just launches it; everything else gets
-   * the full URI and arrives pre-filled. `bare` forces the plain launch for any app, for
-   * a signed merchant QR that cannot be re-emitted to anybody.
+   * A blocked app is launched rather than handed a payment; everything else gets the full
+   * URI and arrives pre-filled.
    *
    * `before` runs first and is awaited either way: after `openURL` we are racing our own
    * suspension, and losing that race loses the record — which is the one thing that must
@@ -118,14 +136,18 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     req: UpiRequest,
     spec: UpiAppSpec | null,
     hooks?: PayHooks,
-    bare = false,
+    opts?: PayOpts,
   ): Promise<boolean> => {
     // Always minted, never conditionally: whether a `tr` actually goes on the wire is
     // `buildUpiUri`'s call, since only it knows the target app's quirks. Minted here
     // rather than at the call sites so a retry never reuses the previous reference —
     // PSPs read a repeated `tr` as a duplicate of the earlier transaction.
-    const url = bare || spec?.blocked
-      ? (spec?.probe ?? null)
+    //
+    // `scanPath` only when there is genuinely a code in front of the user. Dropping
+    // someone into a camera to settle up with a friend would be worse than the home
+    // screen, not better — there is nothing there to point it at.
+    const url = opts?.bare || spec?.blocked
+      ? ((opts?.hasCode ? spec?.scanPath : undefined) ?? spec?.probe ?? null)
       : buildUpiUri({ ...req, ref: req.ref ?? newUpiRef() }, spec?.key);
     if (!url) return false;
     try { await hooks?.before?.(); } catch { /* record failed; paying is still the point */ }
@@ -147,14 +169,14 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     req: UpiRequest,
     list: UpiAppSpec[],
     hooks?: PayHooks,
-    bare = false,
+    opts?: PayOpts,
   ): Promise<boolean> => new Promise(resolve => {
     ActionSheetIOS.showActionSheetWithOptions(
       {
         // Every installed app, with a word on the ones that won't arrive pre-filled.
         // Not a warning — it opens and the payment still works, you just type it there —
         // so it reads as a description rather than a reason to avoid the row.
-        options: ['Cancel', ...list.map(a => (bare || a.blocked ? `${a.label} — enter it there` : a.label))],
+        options: ['Cancel', ...list.map(a => (opts?.bare || a.blocked ? `${a.label} — enter it there` : a.label))],
         cancelButtonIndex: 0,
         title: `Pay ${formatRupees(req.amountPaise)}`,
         message: 'We’ll save the expense either way, and use this app next time.',
@@ -164,24 +186,24 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
         const app = list[i - 1];
         setPreferredKey(app.key);
         settings.setPreferredUpiApp(app.key).catch(() => {});
-        open(req, app, hooks, bare).then(resolve);
+        open(req, app, hooks, opts).then(resolve);
       },
     );
   }), [open]);
 
-  const pay = useCallback(async (req: UpiRequest, hooks?: PayHooks, bare = false): Promise<boolean> => {
+  const pay = useCallback(async (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts): Promise<boolean> => {
     // Android: `upi://` reaches the OS chooser, which is complete and keeps its own
     // default. Ours would be a worse copy of something already better.
-    if (apps === null) return open(req, null, hooks, bare);
+    if (apps === null) return open(req, null, hooks, opts);
     if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
-    if (target) return open(req, target, hooks, bare);
-    return ask(req, apps, hooks, bare);
+    if (target) return open(req, target, hooks, opts);
+    return ask(req, apps, hooks, opts);
   }, [apps, target, noAppMessage, open, ask]);
 
-  const choose = useCallback(async (req: UpiRequest, hooks?: PayHooks, bare = false): Promise<boolean> => {
-    if (apps === null) return open(req, null, hooks, bare);
+  const choose = useCallback(async (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts): Promise<boolean> => {
+    if (apps === null) return open(req, null, hooks, opts);
     if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
-    return ask(req, apps, hooks, bare);
+    return ask(req, apps, hooks, opts);
   }, [apps, noAppMessage, open, ask]);
 
   const forget = useCallback(() => {
