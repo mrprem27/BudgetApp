@@ -46,6 +46,8 @@ export enum UpiApp {
   PhonePe = 'phonepe',
   Paytm = 'paytm',
   Bhim = 'bhim',
+  Cred = 'cred',
+  AmazonPay = 'amazonpay',
 }
 
 export type UpiAppSpec = {
@@ -66,6 +68,8 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://' },
   { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://' },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://pay', probe: 'bhim://' },
+  { key: UpiApp.Cred, label: 'CRED', prefix: 'cred://upi/pay', probe: 'cred://' },
+  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://pay', probe: 'amazonpay://' },
 ];
 
 /**
@@ -97,6 +101,8 @@ const PREFIX: Record<UpiApp, string> = {
   [UpiApp.GooglePay]: 'tez://upi/pay',
   [UpiApp.Paytm]: 'paytmmp://pay',
   [UpiApp.Bhim]: 'bhim://pay',
+  [UpiApp.Cred]: 'cred://upi/pay',
+  [UpiApp.AmazonPay]: 'amazonpay://pay',
 };
 
 export type ScannedUpi = { vpa: string; name?: string };

@@ -20,6 +20,8 @@
           "tez",
           "paytmmp",
           "bhim",
+          "cred",
+          "amazonpay",
           "upi"
         ]
       }
