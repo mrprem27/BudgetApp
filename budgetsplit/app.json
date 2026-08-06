@@ -13,7 +13,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "BudgetSplit can optionally tag a transaction with where you made it. This is off by default and never leaves your device.",
-        "NSCameraUsageDescription": "BudgetSplit uses the camera so you can photograph a receipt and attach it to an expense. Photos are stored on your device and never uploaded.",
+        "NSCameraUsageDescription": "BudgetSplit uses the camera to scan a payment QR code and to photograph receipts. Codes are read on your device, photos are stored on your device, and neither is uploaded.",
         "NSPhotoLibraryUsageDescription": "BudgetSplit needs access to your photos so you can attach a receipt to an expense or set a profile picture. Photos are stored on your device and never uploaded.",
         "LSApplicationQueriesSchemes": [
           "phonepe",
@@ -62,14 +62,14 @@
         "expo-image-picker",
         {
           "photosPermission": "BudgetSplit needs access to your photos so you can attach a receipt to an expense or set a profile picture. Photos are stored on your device and never uploaded.",
-          "cameraPermission": "BudgetSplit uses the camera so you can photograph a receipt and attach it to an expense. Photos are stored on your device and never uploaded.",
+          "cameraPermission": "BudgetSplit uses the camera to scan a payment QR code and to photograph receipts. Codes are read on your device, photos are stored on your device, and neither is uploaded.",
           "microphonePermission": false
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "BudgetSplit uses the camera to scan a friend's UPI QR code and to photograph receipts. Nothing is uploaded."
+          "cameraPermission": "BudgetSplit uses the camera to scan a payment QR code and to photograph receipts. Codes are read on your device, photos are stored on your device, and neither is uploaded."
         }
       ],
       "./plugins/withoutPushEntitlement",

@@ -155,7 +155,8 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       <ScanPaySheet
         visible={scanPay}
         onClose={() => setScanPay(false)}
-        onHandoff={p => { setPendingPayment({ ...p, startedAt: Date.now() }).catch(() => {}); }}
+        onHandoff={p => setPendingPayment({ ...p, startedAt: Date.now() })}
+        onAbandon={() => setPendingPayment(null)}
       />
     </View>
   );

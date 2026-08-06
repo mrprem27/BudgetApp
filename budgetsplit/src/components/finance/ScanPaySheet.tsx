@@ -28,11 +28,14 @@ export function ScanPaySheet({
   visible,
   onClose,
   onHandoff,
+  onAbandon,
 }: {
   visible: boolean;
   onClose: () => void;
-  /** Called once the UPI app has been opened, with what we know about the payment. */
-  onHandoff: (p: { vpa: string; name?: string; amountPaise: number }) => void;
+  /** Persist what we know about the payment. Awaited *before* the UPI app opens. */
+  onHandoff: (p: { vpa: string; name?: string; amountPaise: number }) => Promise<void>;
+  /** Undo that record — the hand-off never actually happened. */
+  onAbandon: () => Promise<void>;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [target, setTarget] = useState<ScanTarget | null>(null);
@@ -58,15 +61,30 @@ export function ScanPaySheet({
   const payee = target ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, note: 'BudgetSplit' } : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
 
-  function open(uri: string | null) {
+  async function open(uri: string | null) {
     if (!uri || !payee) return;
-    Linking.openURL(uri)
-      .then(() => {
-        haptic.success();
-        onHandoff({ vpa: payee.vpa, name: target?.name, amountPaise });
-        close();
-      })
-      .catch(() => Alert.alert('Couldn’t open that app', 'Try another UPI app, or pay in your bank app and add it here.'));
+
+    // Record BEFORE handing over, not after. `openURL` resolves at the moment the OS
+    // takes the foreground away, so a write started in its `.then` races our own
+    // suspension — and if it loses, the payment is never remembered and the feature
+    // silently does nothing. Persisting first costs one storage write on a path that
+    // is about to leave the app anyway.
+    try {
+      await onHandoff({ vpa: payee.vpa, name: target?.name, amountPaise });
+    } catch {
+      // Couldn't remember it, so don't pretend we will. Paying is still the point.
+    }
+
+    try {
+      await Linking.openURL(uri);
+      haptic.success();
+      close();
+    } catch {
+      // No app switch happened, so the record above would ask about a payment that
+      // was never even attempted.
+      await onAbandon().catch(() => {});
+      Alert.alert('Couldn’t open that app', 'Try another UPI app, or pay in your bank app and add it here.');
+    }
   }
 
   /** Identical hand-off rules to settle-up — see `useUpiApps` for the platform split. */
