@@ -361,6 +361,30 @@ export type UpiRequest = {
   name?: string;
   /** Amount in integer paise — converted to rupees at this boundary only. */
   amountPaise: number;
+  /**
+   * Leave `am` off the URI, so the app opens on the payee with the amount blank and the
+   * payer types it there. Default `false`.
+   *
+   * `am` is optional in the NPCI spec — an unsigned static shop sticker carries no amount,
+   * which makes "payee supplied, amount typed by the payer" the most-travelled flow in
+   * UPI rather than an exotic one.
+   *
+   * It exists because it is the **last untried lever** on the apps that refuse us, and it
+   * is the only one that changes *who supplied the amount* rather than merely how the
+   * request is spelled. PhonePe's refusal is the reason to reach for it: it called a **₹2**
+   * transfer a gallery QR breaching a **₹2,000** cap and told us to "pay with mobile number
+   * or scan QR code" — i.e. to use a route where the payer enters the details. ₹2 is not
+   * over ₹2,000, so that message is only coherent if the objection is to the *provenance*
+   * of the amount, not its size.
+   *
+   * `amountPaise` is still required and still validated: the split, the local record and
+   * the Review row all need it. This changes only what goes on the wire.
+   *
+   * Not a per-app quirk. Quirks are pinned device findings, and this is a hypothesis — it
+   * is offered as a user-chosen retry so a guess cannot silently degrade CRED and Airtel,
+   * which already pay with the amount pre-filled.
+   */
+  omitAmount?: boolean;
   /** Optional note (`tn`). Leave unset on a scanned code — see `buildUpiUri`. */
   note?: string;
   /**
@@ -419,7 +443,9 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
 
   const params: Array<[string, string]> = [['pa', vpa]];
   if ((quirks?.name ?? true) && req.name?.trim()) params.push(['pn', req.name.trim()]);
-  params.push(['am', rupees], ['cu', 'INR']);
+  // `cu` stays either way — it scopes the currency, not the figure.
+  if (!req.omitAmount) params.push(['am', rupees]);
+  params.push(['cu', 'INR']);
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);

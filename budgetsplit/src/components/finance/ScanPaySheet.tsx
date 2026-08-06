@@ -108,6 +108,8 @@ export function ScanPaySheet({
 
   const pay = () => run(handoff.pay);
   const changeApp = () => run(handoff.choose);
+  /** Same hand-off, `am` withheld — see `UpiRequest.omitAmount`. */
+  const payOpenAmount = () => run((req, h) => handoff.pay({ ...req, omitAmount: true }, h));
 
   async function recordIt() {
     if (!payee || amountPaise <= 0) return;
@@ -251,17 +253,41 @@ export function ScanPaySheet({
                 made a payment with no record of it, which is precisely what Scan & Pay
                 exists to prevent. The scan already knows payee, amount and category.
               */}
-              <TouchableOpacity
-                onPress={recordIt}
-                disabled={amountPaise <= 0}
-                hitSlop={8}
-                accessibilityRole="button"
-                style={styles.recordRow}
-              >
-                <Text style={[styles.recordText, amountPaise <= 0 && styles.recordTextOff]}>
-                  Record it, I’ll pay
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.altRow}>
+                <TouchableOpacity
+                  onPress={recordIt}
+                  disabled={amountPaise <= 0}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  style={styles.altAction}
+                >
+                  <Text style={[styles.recordText, amountPaise <= 0 && styles.recordTextOff]}>
+                    Record it, I’ll pay
+                  </Text>
+                </TouchableOpacity>
+
+                {/*
+                  The retry for an app that refuses a pre-filled amount: same payee, `am`
+                  left off, so you type it in the app you trust. It sits beside record-only
+                  because both are the same kind of thing — what to do when the hand-off
+                  won't complete — and a third stacked block would be the clutter.
+                  Not automatic per app: pre-filling is the whole point, and CRED and Airtel
+                  already pay that way.
+                */}
+                {canPay && (
+                  <>
+                    <Text style={styles.altDot}>·</Text>
+                    <TouchableOpacity
+                      onPress={payOpenAmount}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      style={styles.altAction}
+                    >
+                      <Text style={styles.recordText}>Type amount there</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
 
               {/* The app never learns the outcome, so it must not claim to. */}
               <Text style={styles.footnote}>We’ll ask whether it went through when you come back.</Text>
@@ -298,7 +324,9 @@ const styles = StyleSheet.create({
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
   destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
   destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  recordRow: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md, marginTop: space.xs },
+  altRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: space.xs },
+  altAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm },
+  altDot: { ...type.body, color: colors.textMuted },
   recordText: { ...type.body, color: colors.accent },
   recordTextOff: { color: colors.textMuted },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },

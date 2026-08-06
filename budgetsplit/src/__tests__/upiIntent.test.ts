@@ -55,6 +55,33 @@ describe('buildUpiUri', () => {
   it('sends pn when the name is real', () => {
     expect(buildUpiUri({ vpa: 'a@ybl', name: 'Asha Rao', amountPaise: 500 })).toContain('pn=Asha%20Rao');
   });
+
+  describe('omitAmount — payee supplied, amount typed in the app', () => {
+    it('drops am but keeps everything else, cu included', () => {
+      // `am` is optional in the NPCI spec: an unsigned shop sticker carries no amount.
+      // `cu` stays because it scopes the currency, not the figure.
+      const uri = buildUpiUri({ vpa: 'a@ybl', name: 'Asha', amountPaise: 500, omitAmount: true });
+      expect(uri).toBe('upi://pay?pa=a%40ybl&pn=Asha&cu=INR&mode=04');
+    });
+
+    it('still requires a valid amount, because the local record needs one', () => {
+      // The split, the Review row and the confirm-on-return prompt all need the figure.
+      // Withholding it from the URI must not mean not knowing it.
+      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 0, omitAmount: true })).toBeNull();
+      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: -1, omitAmount: true })).toBeNull();
+      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: NaN, omitAmount: true })).toBeNull();
+    });
+
+    it('composes with per-app quirks instead of overriding them', () => {
+      // A retry, not a different code path — CRED must still get no `mode`.
+      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500, omitAmount: true }, UpiApp.Cred))
+        .toBe('credpay://upi/pay?pa=a%40ybl&cu=INR');
+    });
+
+    it('defaults off, so the apps that already pay are untouched', () => {
+      expect(buildUpiUri({ vpa: 'a@ybl', amountPaise: 500 })).toContain('am=5.00');
+    });
+  });
 });
 
 describe('per-app URIs', () => {
