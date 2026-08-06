@@ -531,7 +531,7 @@ Only Scan & Pay uses the permissive `parseAnyUpiQr`. Two callers, two different 
 | | Behaviour |
 |---|---|
 | **Android** | `upi://pay` is the NPCI-standard deep link, so the OS resolves it to every UPI-capable app and shows its **own** chooser — which remembers a default. `useUpiApps` returns `null` here, meaning "don't draw a picker": ours would be strictly worse. |
-| **iOS** | There is **no chooser for custom URL schemes at all** — with two apps registered to one scheme, which wins is undefined by Apple. Worse, the Indian UPI apps on iOS mostly register their own scheme rather than claiming `upi://`, so the generic link can resolve to nothing with four UPI apps installed. So we are the picker: `useUpiApps` probes each app with `canOpenURL`, and `TransferBody` opens the only match directly, action-sheets between several, and says plainly that none is installed when the list is empty. |
+| **iOS** | There is **no chooser for custom URL schemes at all** — with two apps registered to one scheme, which wins is undefined by Apple. Worse, the Indian UPI apps on iOS mostly register their own scheme rather than claiming `upi://`, so the generic link can resolve to nothing with four UPI apps installed. So we are the picker: `useUpiApps` probes each **named** app with `canOpenURL`, and `TransferBody` opens the only match directly, action-sheets between several, and says plainly that none is installed when the list is empty. It does not probe `upi://` — a row that cannot name its destination is not offered. |
 
 `canOpenURL` on iOS answers only for schemes listed in `LSApplicationQueriesSchemes` (`app.json` →
 `ios.infoPlist`), so **adding a UPI app to `UPI_APPS` means adding its scheme there too** — an
@@ -553,25 +553,21 @@ every maintained UPI-intent list, so no path would have made them work.
 
 #### The deep links we generate
 
-Every app receives the **same NPCI parameter set**; only the scheme and path differ.
+The shape, with the optional parts marked. **`mode` is always ours — never the scanned code's**, and
+`pn`, `mode` and `tr` each vary by app:
 
 ```
-<prefix>?pa=<vpa>&pn=<name>&am=<rupees.00>&cu=INR[&tn=<note>]&mode=<04|scanned>[&tr=<ref>][&…passthrough]
+<prefix>?pa=<vpa>[&pn=<name>]&am=<rupees.00>&cu=INR[&tn=<note>][&mode=04][&tr=<ref>][&…passthrough]
 ```
 
 Parameter order is load-bearing: `pa`/`pn`/`am`/`cu` are written first and anything carried off the
 scanned code goes last, so a hostile QR can never displace the payee or the amount.
 
-| App | Prefix |
-|---|---|
-| **CRED** | `credpay://upi/pay` ✅ **completed a real payment** |
-| Generic | `upi://pay` ✅ **populated correctly** |
-| Google Pay | `tez://upi/pay` |
-| PhonePe · Paytm · BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · Airtel · super.money · Kiwi | `<scheme>://upi/pay` |
-
 **The apps genuinely disagree, so each carries its own path and payload** (`UpiAppSpec.payload`,
 `UpiPayloadQuirks`). One URI for all of them means breaking one app to fix another — proven, because
-CRED and Airtel moved in *opposite* directions across the same change.
+CRED and Airtel moved in *opposite* directions across the same change. The authoritative per-app
+table is immediately below; there was a second, coarser prefix table here that drifted out of
+agreement with it, so it is gone rather than maintained twice.
 
 Every row records **`provenance`**, in the type rather than a comment, because the distinction kept
 collapsing during this work — an inference was written up as a finding more than once, and a field
@@ -581,7 +577,7 @@ is harder to contradict than prose.
 |---|---|---|---|
 | **CRED** | `credpay://upi/pay` | no `mode`, no `tr` | **device** — paid |
 | **Airtel** | `myairtel://upi/pay` | `mode` + `tr`, even on P2P | **device** — paid |
-| Generic | `upi://pay` | default | **device** — populated |
+| Generic | `upi://pay` | default | **device** — populated. **Android hand-off only; not an iOS picker row** |
 | Amazon Pay | `amazonpay://upi/pay` | default | **device** — populated + name resolved, then declined |
 | WhatsApp | `whatsapp-consumer://upi/pay` | default | **device** — populated, cannot verify the handle |
 | PhonePe | `phonepe://upi/pay` | default | documented |
@@ -698,6 +694,26 @@ Two consequences handled explicitly:
   also asserts at least one app remains unblocked, since blocking is subtraction and subtraction can
   reach zero — that would silently reduce Scan & Pay to record-only.
 
+#### There is no "Other UPI app" row, and there should not be
+
+`GENERIC_UPI_APP` is the **Android** hand-off and, on iOS, only the URI-preview baseline.
+`useUpiApps` no longer probes it, so it never reaches the picker.
+
+It was offered as an "Other UPI app" row, and the row was incoherent. The label promises a choice
+among your remaining apps; iOS has no chooser for custom schemes, so `upi://` resolves to **exactly
+one** app, chosen by the OS, and undefined when several claim it. The row therefore could not say
+where it went. On a phone where WhatsApp claims `upi://` it went into an app we know refuses every
+payment — a known failure dressed as a fallback.
+
+Nor did it serve the case it existed for. A UPI app outside our twelve, typically a bank's own, was
+no likelier to receive it than a listed app was. That user is served honestly by "Record it, I'll
+pay", which promises nothing it cannot do. **A row whose destination we cannot name is not a
+fallback, it is a coin flip.**
+
+Android is untouched: there `upi://pay` reaches the OS chooser, which lists every UPI app and
+remembers a default — better than anything we would draw, which is why `useUpiApps` returns `null`
+there and we don't draw one.
+
 **Amazon Pay and WhatsApp fail past the point a URI reaches, which is a different finding.** I had
 filed Amazon Pay with the policy refusals and, before that, blamed its generic *"technical error"*
 on a wrong path. Both readings were wrong. On a friend's handle it populated payee, handle and
@@ -711,9 +727,9 @@ the NPCI spec, claimed by WhatsApp itself, so a refusal there cannot be a malfor
 It reaches the payment sheet and then cannot resolve the handle it was given.
 
 Two consequences. Neither app justifies further payload guessing, and Amazon Pay attempts cost a
-real debit, so they should stop. And on a device where WhatsApp claims `upi://`, the generic
-"Other UPI app" row inherits WhatsApp's failure — still correct to offer, since elsewhere `upi://`
-resolves to whatever the user actually has.
+real debit, so they should stop. And on a device where WhatsApp claims `upi://`, the old
+"Other UPI app" row routed straight into this failure — which is part of why that row is gone; see
+below.
 
 **The scan sheet leads with the VPA, not the name.** A QR's `pn` is written by whoever made the
 code and nothing on-device can check it — a swapped counter sticker can carry an honest-looking

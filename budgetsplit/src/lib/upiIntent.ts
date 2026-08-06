@@ -288,12 +288,20 @@ export const IOS_QUERY_SCHEME_LIMIT = 50;
  * but a wrong path opens the app to its home screen having silently dropped the payee
  * and amount, which is precisely the typing this feature exists to remove.
  *
- * `upi://pay` is the NPCI standard, so any conforming app can claim it and receives
- * the parameters properly. Offering it as one more row costs nothing when no app
- * claims it (it simply doesn't appear) and covers every app we never listed when one
- * does. Which app iOS picks is undefined where several claim it — acceptable for a
- * clearly-labelled "other", not acceptable as the only route, which is why the named
- * entries above still exist.
+ * `upi://pay` is the NPCI standard, so any conforming app can claim it and receives the
+ * parameters properly.
+ *
+ * **This is the Android hand-off, and on iOS only the URI-preview baseline. It is not a
+ * picker row.** On Android `upi://pay` reaches the OS chooser, which lists every UPI app
+ * and remembers a default — better than anything we would draw. On iOS there is no chooser
+ * for custom schemes: `upi://` resolves to exactly one app, chosen by the OS, undefined
+ * when several claim it.
+ *
+ * It was offered as an "Other UPI app" row and that was a mistake. The label promised a
+ * choice among your remaining apps; what it delivered was one unnameable destination — and
+ * on a phone where WhatsApp claims `upi://`, that destination was an app we know refuses
+ * every payment. `label` is kept for the preview sheet, which shows what the standard URI
+ * looks like; it is no longer shown as something to tap.
  */
 export const GENERIC_UPI_APP: UpiAppSpec = {
   key: UpiApp.Generic,
