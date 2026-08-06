@@ -131,15 +131,23 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://', payload: { name: false }, provenance: 'documented' },
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://', provenance: 'documented' },
   // Paytm's own docs give `paytmmp://pay` — a bare `pay`, unlike almost everything else.
-  // One device report had it opening blank on that path, but a vendor's documentation
-  // outweighs a single ambiguous observation, and Paytm also documents `tid` rather than
-  // `tr`, so its blank screen may never have been about the path at all.
+  //
+  // **Closed for the same reason as PhonePe, and documented.** Paytm's iOS UPI Intent
+  // guide requires a merchant account (MID + merchant key) and the deep link must be
+  // produced by *Paytm's server* — Initiate Transaction, then Process Transaction —
+  // never constructed by the calling app. Their docs say the model is not designed for
+  // third-party apps to build deep links, and that non-merchant apps cannot use it for
+  // person-to-person payments. The path below is therefore correct and irrelevant.
   { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://', provenance: 'documented' },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
   // Paid on a bare `pa/pn/am/cu`, then failed the moment `mode` and `tr` arrived — path
   // byte-identical across both builds, so the payload is the only explanation. Pinned to
   // exactly what worked.
   { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://', payload: { mode: false }, provenance: 'device' },
+  // Failed with a plain "technical error" — notably *not* a policy message like PhonePe's
+  // or Paytm's, and no published gate could be found for Amazon Pay either way. Since its
+  // path is unverified and a wrong path produces exactly that sort of generic error, this
+  // is more likely ours than theirs. Do not file it with the closed ones.
   { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://', provenance: 'unverified' },
   { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://', provenance: 'unverified' },
   { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://', provenance: 'unverified' },
