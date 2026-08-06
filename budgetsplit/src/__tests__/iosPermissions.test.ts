@@ -1,5 +1,5 @@
 import appJson from '../../app.json';
-import { UPI_APPS } from '../lib/upiIntent';
+import { UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
 
 const expo = appJson.expo as unknown as {
   ios: { infoPlist: Record<string, unknown> };
@@ -19,20 +19,26 @@ describe('iOS can actually reach the UPI apps it offers', () => {
   // LSApplicationQueriesSchemes, whatever is installed. So a UPI app added to
   // UPI_APPS without its scheme here doesn't error — it just never appears in the
   // picker, on real phones only, which is close to undiagnosable from a simulator.
+  const pickable = [...UPI_APPS, GENERIC_UPI_APP];
+
   it('declares a query scheme for every app in the picker', () => {
     const declared = expo.ios.infoPlist.LSApplicationQueriesSchemes as string[];
-    for (const app of UPI_APPS) {
+    for (const app of pickable) {
       const scheme = app.probe.replace('://', '');
       expect(declared).toContain(scheme);
     }
   });
 
-  it('declares the generic upi scheme, which the Android path and settle-up use', () => {
-    expect(expo.ios.infoPlist.LSApplicationQueriesSchemes).toContain('upi');
+  it('keeps every probe a bare scheme — canOpenURL matches on scheme alone', () => {
+    for (const app of pickable) expect(app.probe).toMatch(/^[a-z][a-z0-9.+-]*:\/\/$/);
   });
 
-  it('keeps every probe a bare scheme — canOpenURL matches on scheme alone', () => {
-    for (const app of UPI_APPS) expect(app.probe).toMatch(/^[a-z][a-z0-9.+-]*:\/\/$/);
+  // The whole point of the generic row is reaching apps we never enumerated (CRED,
+  // Amazon Pay, WhatsApp…). If it stopped being probeable the picker would quietly
+  // shrink back to the hardcoded four.
+  it('keeps a generic row so an unlisted UPI app is still reachable', () => {
+    expect(GENERIC_UPI_APP.prefix.startsWith('upi://')).toBe(true);
+    expect(expo.ios.infoPlist.LSApplicationQueriesSchemes).toContain('upi');
   });
 });
 

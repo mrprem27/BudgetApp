@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform, Linking } from 'react-native';
-import { UPI_APPS, type UpiAppSpec } from '../lib/upiIntent';
+import { UPI_APPS, GENERIC_UPI_APP, type UpiAppSpec } from '../lib/upiIntent';
 
 /**
  * Which UPI apps this phone can hand a payment to.
@@ -25,8 +25,11 @@ export function useUpiApps(): UpiAppSpec[] | null {
     if (Platform.OS !== 'ios') return;
     let alive = true;
     (async () => {
+      // Generic goes last: it opens whichever app iOS decides claims `upi://`, which is
+      // undefined when several do. A named app is always the better answer when we have
+      // one, so this is the fallback row, never the first suggestion.
       const checks = await Promise.all(
-        UPI_APPS.map(async a => {
+        [...UPI_APPS, GENERIC_UPI_APP].map(async a => {
           // A throw here means "can't tell", which we treat as absent: showing a
           // row that dead-ends is worse than omitting one that might have worked.
           try { return (await Linking.canOpenURL(a.probe)) ? a : null; } catch { return null; }

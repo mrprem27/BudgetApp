@@ -68,6 +68,29 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://pay', probe: 'bhim://' },
 ];
 
+/**
+ * The escape hatch, and the reason the list above doesn't have to be complete.
+ *
+ * India has dozens of UPI apps — CRED, Amazon Pay, WhatsApp, Navi, Fi, Slice — and any
+ * enumeration of them is out of date immediately. Worse, guessing an app's deep-link
+ * *path* fails in the expensive direction: an unknown scheme merely looks uninstalled,
+ * but a wrong path opens the app to its home screen having silently dropped the payee
+ * and amount, which is precisely the typing this feature exists to remove.
+ *
+ * `upi://pay` is the NPCI standard, so any conforming app can claim it and receives
+ * the parameters properly. Offering it as one more row costs nothing when no app
+ * claims it (it simply doesn't appear) and covers every app we never listed when one
+ * does. Which app iOS picks is undefined where several claim it — acceptable for a
+ * clearly-labelled "other", not acceptable as the only route, which is why the named
+ * entries above still exist.
+ */
+export const GENERIC_UPI_APP: UpiAppSpec = {
+  key: UpiApp.Generic,
+  label: 'Other UPI app',
+  prefix: 'upi://pay',
+  probe: 'upi://',
+};
+
 const PREFIX: Record<UpiApp, string> = {
   [UpiApp.Generic]: 'upi://pay',
   [UpiApp.PhonePe]: 'phonepe://pay',
