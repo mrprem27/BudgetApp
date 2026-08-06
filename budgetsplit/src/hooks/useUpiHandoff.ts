@@ -38,8 +38,26 @@ export type UpiHandoff = {
    * it is a trap that costs a rate-limited UPI PIN attempt to discover.
    */
   apps: UpiAppSpec[] | null;
-  /** Installed but refusing, with the reason. Named where it helps, never offered. */
+  /** Installed but refusing a hand-off, with the reason. Never offered a payment. */
   blocked: UpiAppSpec[];
+  /**
+   * Launch an app with **no payment attached**, so the user completes it there themselves.
+   *
+   * This is the way round a blocked app rather than a consolation prize. PhonePe and Paytm
+   * refuse *externally-supplied* intents; a live camera scan inside their own app is their
+   * most-trusted input, subject to no gallery-QR cap and no intent risk scoring. So with the
+   * shop's code still in front of you, opening PhonePe and scanning there completes the
+   * payment their refusal blocks — and `hooks.before` has already filed the expense, so
+   * nothing needs typing on the way back.
+   *
+   * Weaker with no code to scan, i.e. a person-to-person transfer: the payee has to be
+   * re-entered by hand, and we cannot even put the handle on the clipboard because no
+   * clipboard package is installed.
+   *
+   * Resolves `false` if nothing was opened. Picks for the user when only one app is
+   * plausible, and asks when several are.
+   */
+  openApp: (choices: UpiAppSpec[], hooks?: PayHooks) => Promise<boolean>;
   /** The remembered app — only when it is set *and* still installed. */
   preferred: UpiAppSpec | null;
   /** Where the next payment goes without asking: the preference, or a lone installed app. */
@@ -173,10 +191,49 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     return ask(req, apps, hooks);
   }, [apps, open, ask, reportNothingToOpen]);
 
+  /**
+   * Launch bare, no payment parameters — the probe scheme is exactly that.
+   *
+   * `before` runs first and is awaited for the same reason the paying path does it: after
+   * `openURL` we are racing our own suspension, and losing that race loses the record.
+   */
+  const launch = useCallback(async (spec: UpiAppSpec, hooks?: PayHooks): Promise<boolean> => {
+    try { await hooks?.before?.(); } catch { /* record failed; opening is still the point */ }
+    try {
+      await Linking.openURL(spec.probe);
+      return true;
+    } catch {
+      await hooks?.onCancel?.().catch(() => {});
+      Alert.alert(`Couldn’t open ${spec.label}`, 'Open it yourself — the expense is saved either way.');
+      return false;
+    }
+  }, []);
+
+  const openApp = useCallback(async (choices: UpiAppSpec[], hooks?: PayHooks): Promise<boolean> => {
+    if (choices.length === 0) return false;
+    if (choices.length === 1) return launch(choices[0], hooks);
+    return new Promise<boolean>(resolve => {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', ...choices.map(a => a.label)],
+          cancelButtonIndex: 0,
+          // Not "Pay ₹X" — this sheet does not pay, and saying so avoids promising a
+          // pre-filled screen that is the one thing these apps will not give us.
+          title: 'Open which app?',
+          message: 'We’ll save the expense first. You’ll enter the payment there.',
+        },
+        i => {
+          if (i <= 0) { hooks?.onCancel?.().catch(() => {}); resolve(false); return; }
+          launch(choices[i - 1], hooks).then(resolve);
+        },
+      );
+    });
+  }, [launch]);
+
   const forget = useCallback(() => {
     setPreferredKey(null);
     settings.setPreferredUpiApp(null).catch(() => {});
   }, []);
 
-  return { apps, blocked, preferred, target, canChoose, pay, choose, forget };
+  return { apps, blocked, openApp, preferred, target, canChoose, pay, choose, forget };
 }

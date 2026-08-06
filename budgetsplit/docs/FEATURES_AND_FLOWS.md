@@ -694,6 +694,29 @@ Two consequences handled explicitly:
   also asserts at least one app remains unblocked, since blocking is subtraction and subtraction can
   reach zero — that would silently reduce Scan & Pay to record-only.
 
+#### "Record & open PhonePe" — the way round a blocked app
+
+A blocked app is never handed a payment, but it **is** worth opening. PhonePe and Paytm refuse
+*externally-supplied* intents; a live camera scan inside their own app is their most-trusted input,
+subject to no gallery-QR cap and no intent risk scoring. So with the shop's code still in front of
+you, opening PhonePe and scanning it there completes the very payment their refusal blocked — and
+`hooks.before` has already filed the expense, so nothing needs typing on the way back.
+
+`useUpiHandoff.openApp(choices, hooks)` launches the bare probe scheme with no payment parameters,
+records first, and action-sheets when several apps qualify — titled *"Open which app?"*, never
+"Pay ₹X", because this sheet does not pay and must not promise a pre-filled screen.
+
+It **replaces** "Record it, I'll pay" rather than sitting beside it; one row, never two. The cost is
+that paying in cash while PhonePe is installed opens an app you didn't want — minor, and the record
+is made either way.
+
+In the **signed-QR** flow (`canHandoff === false`) the launch set widens to *every* installed app,
+not just blocked ones: a signed code cannot be re-emitted to anybody, so every app is in the same
+position, and rescanning in the user's own app is the whole answer.
+
+Weaker with no code to scan — a person-to-person transfer means re-entering the payee by hand, and
+we cannot even offer the handle on the clipboard because no clipboard package is installed.
+
 #### There is no "Other UPI app" row, and there should not be
 
 `GENERIC_UPI_APP` is the **Android** hand-off and, on iOS, only the URI-preview baseline.

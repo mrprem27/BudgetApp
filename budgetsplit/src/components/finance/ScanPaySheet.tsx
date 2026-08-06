@@ -121,6 +121,29 @@ export function ScanPaySheet({
     }
   }
 
+  /**
+   * Which apps are worth launching bare, and in a signed-QR flow that is *all* of them.
+   *
+   * Normally only the blocked ones: an app that accepts a hand-off should receive the
+   * payment pre-filled, not be opened for the user to retype. But when the code is signed
+   * we cannot re-emit it to anybody, so every installed app is in the same position — and
+   * scanning the code again in the user's own app is the whole answer.
+   */
+  const launchable = recordOnly ? [...(handoff.apps ?? []), ...handoff.blocked] : handoff.blocked;
+  const launchLabel = launchable.length === 1 ? launchable[0].label : 'UPI app';
+
+  /**
+   * Record, then open the app so the payment can be made there.
+   *
+   * The record is not conditional on the launch: `openApp` files it via `before` and, if the
+   * launch then fails, `onAbandon` unwinds it — the same contract the paying path uses. What
+   * must never happen is leaving with the money spent and no row to review.
+   */
+  async function recordAndOpen() {
+    if (!payee || amountPaise <= 0) return;
+    if (await handoff.openApp(launchable, hooks)) { haptic.success(); close(); }
+  }
+
   if (!visible) return null;
 
   return (
@@ -203,9 +226,17 @@ export function ScanPaySheet({
 
           {recordOnly ? (
             <>
+              {/*
+                Opening the app is the *answer* here, not a consolation. A signed code
+                cannot be re-emitted to anyone, and scanning it again in the user's own app
+                is exactly how it is meant to be paid — so take them there rather than
+                leaving them to find it.
+              */}
               <PrimaryButton
-                label={amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it'}
-                onPress={recordIt}
+                label={launchable.length > 0
+                  ? `Record & open ${launchLabel}`
+                  : (amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it')}
+                onPress={launchable.length > 0 ? recordAndOpen : recordIt}
                 disabled={amountPaise <= 0}
               />
               {/*
@@ -214,7 +245,7 @@ export function ScanPaySheet({
               */}
               <Text style={styles.footnote}>
                 This shop’s code is secured, so it has to be paid from your UPI app directly.
-                Pay there and we’ll have it waiting in your review inbox — nothing to type.
+                Scan it again there and we’ll have it waiting in your review inbox — nothing to type.
               </Text>
             </>
           ) : (
@@ -254,20 +285,29 @@ export function ScanPaySheet({
                 exists to prevent. The scan already knows payee, amount and category.
               */}
               {/*
-                A "Type amount there" action briefly sat beside this, handing over the payee
-                with `am` withheld. It failed on PhonePe, Paytm and Amazon Pay alike, each
-                giving the identical error it gave with the amount pre-filled, so it was
-                removed — an unproven control on the payment path is worse than none.
+                One row, never two. When a refusing app is installed this becomes the way
+                round it — PhonePe and Paytm reject *externally-supplied* intents, but a live
+                scan in their own app is their most-trusted input, so with the code still in
+                front of you it completes the payment they blocked, and the expense is filed
+                on the way out.
+
+                It replaces "Record it, I'll pay" rather than sitting beside it. The cost is
+                that paying in cash while PhonePe is installed opens an app you didn't want —
+                minor, and the record is made either way.
+
+                A "Type amount there" action briefly sat here too, handing over the payee with
+                `am` withheld. It failed on PhonePe, Paytm and Amazon Pay alike, each giving
+                the identical error it gave with the amount pre-filled, so it was removed.
               */}
               <TouchableOpacity
-                onPress={recordIt}
+                onPress={launchable.length > 0 ? recordAndOpen : recordIt}
                 disabled={amountPaise <= 0}
                 hitSlop={8}
                 accessibilityRole="button"
                 style={styles.recordRow}
               >
                 <Text style={[styles.recordText, amountPaise <= 0 && styles.recordTextOff]}>
-                  Record it, I’ll pay
+                  {launchable.length > 0 ? `Record & open ${launchLabel}` : 'Record it, I’ll pay'}
                 </Text>
               </TouchableOpacity>
 
