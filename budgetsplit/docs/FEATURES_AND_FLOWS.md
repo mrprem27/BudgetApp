@@ -582,16 +582,21 @@ is harder to contradict than prose.
 | **CRED** | `credpay://upi/pay` | no `mode`, no `tr` | **device** — paid |
 | **Airtel** | `myairtel://upi/pay` | `mode` + `tr`, even on P2P | **device** — paid |
 | Generic | `upi://pay` | default | **device** — populated |
+| Amazon Pay | `amazonpay://upi/pay` | default | **device** — populated + name resolved, then declined |
+| WhatsApp | `whatsapp-consumer://upi/pay` | default | **device** — populated, cannot verify the handle |
 | PhonePe | `phonepe://upi/pay` | default | documented |
 | **Paytm** | **`paytmmp://pay`** | default | documented — vendor uses a bare `pay` |
 | Google Pay | `tez://upi/pay` | default | documented |
-| BHIM · Amazon Pay · WhatsApp · Navi · MobiKwik · super.money · Kiwi | `<scheme>://upi/pay` | default | **unverified** — scheme sourced, path inferred |
+| BHIM · Navi · MobiKwik · super.money · Kiwi | `<scheme>://upi/pay` | default | **unverified** — scheme sourced, path inferred |
 
 Default payload = `mode` on, `tr` for merchant payments only.
 
+**`device` means the path works, not that the payment completes.** Amazon Pay and WhatsApp are the
+rows that separate the two, and keeping the distinction visible is the point of the field.
+
 Only four apps have public iOS deep-link documentation. The UPI ecosystem is **Android-first** —
 there the generic `upi://` intent plus a package name is the whole story, so per-app iOS paths were
-never published. Amazon Pay's in particular is not findable anywhere.
+never published. Amazon Pay's was not findable anywhere and was settled on-device instead.
 
 **Long-pressing the Pay button opens `UpiUriSheet`**, showing the exact URI for every installed app
 with its provenance tag. It calls `buildUpiUri` directly, so it cannot drift from what is really
@@ -606,6 +611,9 @@ Device results so far, and what each can actually prove:
 | CRED | `4cec88d` | `credpay://upi/pay` *(same)* | `+ mode + tr` | ✗ failed |
 | Airtel | `e7f2438` | `myairtel://pay` | `pa/pn/am/cu` | ✗ failed |
 | Airtel | `4cec88d` | `myairtel://upi/pay` *(changed)* | `+ mode + tr` | ✅ paid |
+| Amazon Pay | `6d44884` | `amazonpay://upi/pay` | default, friend's `@kotak` | ✗ populated, name ✅ resolved, **declined after submit** |
+| WhatsApp | `6d44884` | `whatsapp-consumer://upi/pay` | default, friend's `@kotak` | ✗ *"Couldn't verify UPI ID"* |
+| WhatsApp | `6d44884` | `upi://pay` *(the spec)* | default | ✗ same verification failure |
 
 **CRED is a clean experiment; Airtel is not.** CRED's path was byte-identical across both builds,
 so only the payload can explain it breaking — which is why `tr` became merchant-only. Airtel had
@@ -633,11 +641,28 @@ Airtel.
 **This gap cannot be closed by editing a URI.** Becoming a merchant would mean payments going to
 *us*, which is a different and licensed business.
 
-**PhonePe, Paytm and Amazon Pay refuse by policy.** Their errors survived a payload change (`mode`,
-`tr`) and a path change together — PhonePe still calls a **₹2** transfer a gallery QR breaching a
-₹2,000 cap. They classify externally-supplied intents as untrusted whatever we send: a judgement
-about *who* is asking, which no parameter answers. They stay in the picker because the failure is
-recoverable — see record-only below.
+**PhonePe and Paytm refuse by policy, and say so in their own docs.** Their errors survived a
+payload change (`mode`, `tr`) and a path change together — PhonePe still calls a **₹2** transfer a
+gallery QR breaching a ₹2,000 cap. They classify externally-supplied intents as untrusted whatever
+we send: a judgement about *who* is asking, which no parameter answers. They stay in the picker
+because the failure is recoverable — see record-only below.
+
+**Amazon Pay and WhatsApp fail past the point a URI reaches, which is a different finding.** I had
+filed Amazon Pay with the policy refusals and, before that, blamed its generic *"technical error"*
+on a wrong path. Both readings were wrong. On a friend's handle it populated payee, handle and
+amount, ran ValidateAddress, and displayed a green-ticked banking name that matched — every job the
+deep link has, done — then was declined after submission with an offer to refund within 24 hrs.
+That is Amazon's PSP, past anything we send.
+
+WhatsApp is the cleaner proof. It fails *"Couldn't verify UPI ID"* on a third party's handle both
+through `whatsapp-consumer://upi/pay` and through the generic `upi://pay` — and `upi://pay` **is**
+the NPCI spec, claimed by WhatsApp itself, so a refusal there cannot be a malformed link of ours.
+It reaches the payment sheet and then cannot resolve the handle it was given.
+
+Two consequences. Neither app justifies further payload guessing, and Amazon Pay attempts cost a
+real debit, so they should stop. And on a device where WhatsApp claims `upi://`, the generic
+"Other UPI app" row inherits WhatsApp's failure — still correct to offer, since elsewhere `upi://`
+resolves to whatever the user actually has.
 
 **The scan sheet leads with the VPA, not the name.** A QR's `pn` is written by whoever made the
 code and nothing on-device can check it — a swapped counter sticker can carry an honest-looking
@@ -650,9 +675,12 @@ attributed (*"Chai Stop" — as written on the code*).
 **`pn` is sent only when it is real.** NPCI requires UPI apps to display the payee's
 **bank-registered** name, resolved from the VPA via ValidateAddress; names from QR codes, contacts
 or user labels may no longer be shown. We used to send the literal string `Payee` when a code
-carried no name — a fabricated name on a real payment, and the likely cause of WhatsApp's *"unable
-to verify UPI ID"*. Passing the VPA and letting the app resolve the name is also exactly what a
-merchant hand-off does.
+carried no name — a fabricated name on a real payment, which is reason enough to have removed it.
+
+I also guessed it was the cause of WhatsApp's *"Couldn't verify UPI ID"*. **It wasn't** — WhatsApp
+still fails that check with no fabricated name, on a real handle, including through the generic
+spec URI. Passing the VPA and letting the app resolve the name remains right because it is what a
+merchant hand-off does and what NPCI requires, not because it fixed anything.
 
 **`mode` is always ours, never the scanned code's.** `mode` says how the transaction reached *the
 app receiving it*, and that app receives an **intent** from us — whatever the details were

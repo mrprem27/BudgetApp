@@ -144,12 +144,27 @@ export const UPI_APPS: UpiAppSpec[] = [
   // byte-identical across both builds, so the payload is the only explanation. Pinned to
   // exactly what worked.
   { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://', payload: { mode: false }, provenance: 'device' },
-  // Failed with a plain "technical error" — notably *not* a policy message like PhonePe's
-  // or Paytm's, and no published gate could be found for Amazon Pay either way. Since its
-  // path is unverified and a wrong path produces exactly that sort of generic error, this
-  // is more likely ours than theirs. Do not file it with the closed ones.
-  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://', provenance: 'unverified' },
-  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://', provenance: 'unverified' },
+  // **This path is right, and that is now settled by observation.** Amazon Pay opened with
+  // the payee, the handle and the amount all populated, ran ValidateAddress against the
+  // handle and displayed a green-ticked "Banking name" that matched. Everything a deep link
+  // is responsible for succeeded. It then failed *after* submission with "the transaction
+  // failed due to some technical error… you should get a refund within 24 hrs" — a decline
+  // from Amazon's PSP, on a third party's handle, which is downstream of anything a URI
+  // controls. I earlier read that generic error as evidence of a wrong path; the screenshot
+  // refutes that reading. No parameter change is indicated, and each attempt costs a real
+  // debit, so do not spend rounds guessing at the payload here.
+  { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://', provenance: 'device' },
+  // **Fails ValidateAddress, and it is not our URI.** "Couldn't verify UPI ID" appeared on
+  // a friend's `@kotak` handle, so it is not the self-payment confound. More decisively, the
+  // same failure occurs through the generic `upi://pay` route, which WhatsApp itself claims
+  // on this device: that URI *is* the NPCI spec, so a refusal there cannot be a malformed
+  // link of ours. WhatsApp populates the payment sheet and then cannot resolve the handle it
+  // was handed. That is its own PSP integration, not our payload.
+  //
+  // Consequence worth remembering: on a device where WhatsApp claims `upi://`, the generic
+  // "Other UPI app" row inherits this failure. It is still correct to offer — elsewhere
+  // `upi://` resolves to whatever the user actually has.
+  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://upi/pay', probe: 'whatsapp-consumer://', provenance: 'device' },
   { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://upi/pay', probe: 'navipay://', provenance: 'unverified' },
   { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://upi/pay', probe: 'mobikwik://', provenance: 'unverified' },
   // Paid with `mode` and `tr` both present, on a personal transfer. Its path changed in

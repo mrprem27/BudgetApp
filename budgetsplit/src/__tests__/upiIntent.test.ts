@@ -501,8 +501,18 @@ describe('provenance is recorded, not assumed', () => {
   // was written up as a finding more than once. A type is harder to contradict than a
   // comment.
   it('marks as device-proven only what a device actually did', () => {
+    // `device` means the *path* was observed working — the app opened on our URI with the
+    // payee and amount populated. It does **not** mean the payment completes. Amazon Pay
+    // and WhatsApp both belong here and both still fail: Amazon Pay resolves the handle,
+    // green-ticks the banking name and is then declined by its own PSP after submission;
+    // WhatsApp cannot verify the handle even through the generic `upi://pay` spec URI.
+    // Keeping them at `unverified` would have implied our link was still suspect, which
+    // the device evidence contradicts. Where a working path and a working payment diverge
+    // is recorded per row above and in docs/FEATURES_AND_FLOWS.md.
     const proven = [...UPI_APPS, GENERIC_UPI_APP].filter(a => a.provenance === 'device').map(a => a.key);
-    expect(proven.sort()).toEqual([UpiApp.Airtel, UpiApp.Cred, UpiApp.Generic].sort());
+    expect(proven.sort()).toEqual(
+      [UpiApp.Airtel, UpiApp.AmazonPay, UpiApp.Cred, UpiApp.Generic, UpiApp.WhatsApp].sort(),
+    );
   });
 
   it('gives every app a provenance', () => {
