@@ -53,7 +53,31 @@ export type MerchantQr = {
    * one, and PSP risk rules read that difference.
    */
   mcc?: string;
+  /**
+   * Whether this code can be honestly re-emitted as a `upi://pay` intent.
+   *
+   * UPI 2.0 signs merchant QRs: `sign` is an RSA signature over a canonical string of
+   * the other parameters, and PSPs verify it. Two things follow, and both are fatal to
+   * a rebuilt intent rather than merely awkward:
+   *
+   *   1. We don't decode the signature, so we cannot forward it.
+   *   2. Even if we did, adding an amount to an open-amount code changes the signed
+   *      string — the signature would no longer verify. That is arithmetic. No amount
+   *      of engineering makes a modified payload validate against the original.
+   *
+   * A stripped or broken signature is refused by the PSP *after* the user has picked a
+   * bank and entered their PIN, which is the worst possible moment to discover it.
+   *
+   * The signature's sub-tag number isn't documented publicly, so rather than guess at
+   * one this is inferred: a code is reproducible only if its UPI template holds nothing
+   * beyond the sub-tags we decode. Unknown content means unknown obligations, so we
+   * fail closed. Being wrong here costs the pre-fill, never correctness.
+   */
+  reproducible: boolean;
 };
+
+/** Sub-tags of the `in.gov.upi` template that this parser understands in full. */
+const KNOWN_UPI_SUBTAGS = new Set(['00', '01']);
 
 /**
  * Split one level of `TTLLVALUE` triplets.
@@ -81,8 +105,11 @@ function parseTlv(input: string): Map<string, string> | null {
   return out;
 }
 
-/** The VPA out of whichever 26–51 template declares the UPI GUID. */
-function findVpa(top: Map<string, string>): string | null {
+/**
+ * The VPA out of whichever 26–51 template declares the UPI GUID, plus whether that
+ * template held anything we couldn't account for — see `reproducible`.
+ */
+function findUpiAccount(top: Map<string, string>): { vpa: string; reproducible: boolean } | null {
   for (let t = ACCOUNT_TEMPLATE_MIN; t <= ACCOUNT_TEMPLATE_MAX; t++) {
     const raw = top.get(String(t).padStart(2, '0'));
     if (!raw) continue;
@@ -90,7 +117,9 @@ function findVpa(top: Map<string, string>): string | null {
     if (!inner) continue;
     if (inner.get('00')?.trim().toLowerCase() !== UPI_GUID) continue;
     const vpa = inner.get('01')?.trim();
-    if (vpa && isValidVpa(vpa)) return vpa;
+    if (!vpa || !isValidVpa(vpa)) continue;
+    const extra = [...inner.keys()].some(k => !KNOWN_UPI_SUBTAGS.has(k));
+    return { vpa, reproducible: !extra };
   }
   return null;
 }
@@ -114,10 +143,10 @@ export function parseMerchantQr(raw: string): MerchantQr | null {
   const currency = top.get(TAG_CURRENCY)?.trim();
   if (currency && currency !== INR) return null;
 
-  const vpa = findVpa(top);
-  if (!vpa) return null;
+  const account = findUpiAccount(top);
+  if (!account) return null;
 
-  const out: MerchantQr = { vpa };
+  const out: MerchantQr = { vpa: account.vpa, reproducible: account.reproducible };
 
   const name = top.get(TAG_MERCHANT_NAME)?.trim();
   if (name) out.name = name;

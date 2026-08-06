@@ -22,12 +22,12 @@ function merchantQr(parts: { vpa?: string; name?: string; city?: string; amount?
 
 describe('parseMerchantQr — the happy path', () => {
   it('pulls the VPA out of the UPI account template', () => {
-    expect(parseMerchantQr(merchantQr())).toEqual({ vpa: 'chaistop@okhdfcbank' });
+    expect(parseMerchantQr(merchantQr())).toEqual({ vpa: 'chaistop@okhdfcbank', reproducible: true });
   });
 
   it('carries merchant name and city through', () => {
     expect(parseMerchantQr(merchantQr({ name: 'Chai Stop', city: 'Mumbai' })))
-      .toEqual({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', city: 'Mumbai' });
+      .toEqual({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', city: 'Mumbai', reproducible: true });
   });
 
   it('reads a fixed amount as paise, not rupees', () => {

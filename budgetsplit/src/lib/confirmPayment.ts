@@ -43,12 +43,28 @@ export async function askAboutPendingPayment(
   );
   if (!paid) return false;
 
-  await filePayment(db, p, nowMs);
+  await recordScannedPayment(db, p, nowMs);
   return true;
 }
 
-/** Write the confirmed payment as a pending row, category guessed from the payee. */
-async function filePayment(db: SQLite.SQLiteDatabase, p: PendingPayment, nowMs: number): Promise<void> {
+/**
+ * Write a scanned payment as a pending row, category guessed from the payee.
+ *
+ * Shared by both routes into Review, because they differ only in *when* we know the
+ * payment happened, never in what gets written:
+ *   - hand-off → confirmed on return by `askAboutPendingPayment`;
+ *   - record-only → written at scan time, for a shop code we can't re-emit honestly
+ *     (`ScanTarget.canHandoff`), where the user pays in their own UPI app instead.
+ *
+ * `pending_txn` either way. The app never observes a payment succeeding, so every row
+ * goes through Review like any other import, where category, group and split can be
+ * corrected before it counts.
+ */
+export async function recordScannedPayment(
+  db: SQLite.SQLiteDatabase,
+  p: PendingPayment,
+  nowMs: number = Date.now(),
+): Promise<void> {
   const description = p.name ?? p.vpa;
   let category = p.category ?? null;
   if (!category) {

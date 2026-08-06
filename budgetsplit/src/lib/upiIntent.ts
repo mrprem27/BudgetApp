@@ -49,15 +49,11 @@ export enum UpiApp {
   Cred = 'cred',
   AmazonPay = 'amazonpay',
   WhatsApp = 'whatsapp',
-  Mobikwik = 'mobikwik',
-  Freecharge = 'freecharge',
   Navi = 'navi',
-  Slice = 'slice',
-  Groww = 'groww',
-  Jupiter = 'jupiter',
-  IciciImobile = 'imobile',
-  HdfcPayzapp = 'payzapp',
-  AxisPay = 'axispay',
+  Mobikwik = 'mobikwik',
+  Airtel = 'airtel',
+  SuperMoney = 'supermoney',
+  Kiwi = 'kiwi',
 }
 
 export type UpiAppSpec = {
@@ -78,19 +74,34 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.GooglePay, label: 'Google Pay', prefix: 'tez://upi/pay', probe: 'tez://' },
   { key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://' },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://pay', probe: 'bhim://' },
-  { key: UpiApp.Cred, label: 'CRED', prefix: 'cred://upi/pay', probe: 'cred://' },
+  { key: UpiApp.Cred, label: 'CRED', prefix: 'credpay://upi/pay', probe: 'credpay://' },
   { key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://pay', probe: 'amazonpay://' },
-  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp://pay', probe: 'whatsapp://' },
-  { key: UpiApp.Navi, label: 'Navi', prefix: 'navi://pay', probe: 'navi://' },
-  { key: UpiApp.Slice, label: 'Slice', prefix: 'slice://pay', probe: 'slice://' },
-  { key: UpiApp.Groww, label: 'Groww', prefix: 'groww://pay', probe: 'groww://' },
-  { key: UpiApp.Jupiter, label: 'Jupiter', prefix: 'jupiter://pay', probe: 'jupiter://' },
+  { key: UpiApp.WhatsApp, label: 'WhatsApp', prefix: 'whatsapp-consumer://pay', probe: 'whatsapp-consumer://' },
+  { key: UpiApp.Navi, label: 'Navi', prefix: 'navipay://pay', probe: 'navipay://' },
   { key: UpiApp.Mobikwik, label: 'MobiKwik', prefix: 'mobikwik://pay', probe: 'mobikwik://' },
-  { key: UpiApp.Freecharge, label: 'Freecharge', prefix: 'freecharge://pay', probe: 'freecharge://' },
-  { key: UpiApp.IciciImobile, label: 'ICICI iMobile', prefix: 'imobileapp://pay', probe: 'imobileapp://' },
-  { key: UpiApp.HdfcPayzapp, label: 'HDFC PayZapp', prefix: 'payzapp://pay', probe: 'payzapp://' },
-  { key: UpiApp.AxisPay, label: 'Axis Pay', prefix: 'axispay://pay', probe: 'axispay://' },
+  { key: UpiApp.Airtel, label: 'Airtel', prefix: 'myairtel://pay', probe: 'myairtel://' },
+  { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://pay', probe: 'super://' },
+  { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://pay', probe: 'kiwi://' },
 ];
+
+/**
+ * **Schemes are sourced; paths are not. An app is proven only on a device.**
+ *
+ * The two failure modes are not symmetric, which is why that distinction matters:
+ *   - wrong **scheme** → `canOpenURL` reports absent → the row never appears. Harmless.
+ *   - wrong **path** → the app opens to its home screen having dropped the payee and
+ *     amount. The user has left BudgetSplit and must now type what they came here not
+ *     to type. Only a device catches this.
+ *
+ * CRED demonstrated both at once. `cred://` *is* a CRED scheme, so it launched and the
+ * row looked fine — but CRED's UPI entry point is `credpay://`, so our parameters went
+ * nowhere. The schemes above now come from the list Cashfree maintains against the real
+ * apps rather than from inference; the `://pay` vs `://upi/pay` path per app is still
+ * undocumented publicly, so treat every unconfirmed row as provisional.
+ *
+ * Removed as invented, not merely unverified: `slice`, `groww`, `jupiter`, `imobileapp`,
+ * `payzapp`, `axispay` — none appear in any maintained UPI-intent list.
+ */
 
 /**
  * iOS caps `LSApplicationQueriesSchemes` at 50 entries and silently answers `false`
@@ -248,6 +259,19 @@ export type ScanTarget = ScannedUpi & {
   /** Amount the code fixes, in paise. Absent on open-amount and personal codes. */
   amountPaise?: number;
   kind: 'person' | 'merchant';
+  /**
+   * Whether we can hand this off to a UPI app pre-filled, or can only record it.
+   *
+   * Always true for a person's code: those are unsigned `upi://pay?pa=&pn=` URIs, and
+   * re-emitting one with an amount is exactly what any UPI app does when you scan a
+   * friend's QR. Merchant codes inherit `reproducible` from the EMV parser — a signed
+   * shop QR cannot survive having an amount added to it. See `emvQr.ts`.
+   *
+   * False does not mean the scan was wasted: payee, amount and category are all still
+   * known, so the transaction can be recorded without being paid through us, which is
+   * the manual entry this feature exists to remove.
+   */
+  canHandoff: boolean;
 };
 
 /**
@@ -265,7 +289,7 @@ export type ScanTarget = ScannedUpi & {
  */
 export function parseAnyUpiQr(raw: string): ScanTarget | null {
   const person = parseUpiQr(raw);
-  if (person) return { ...person, kind: 'person' };
+  if (person) return { ...person, kind: 'person', canHandoff: true };
 
   // Required here rather than at the top: emvQr imports isValidVpa from this module.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -278,11 +302,10 @@ export function parseAnyUpiQr(raw: string): ScanTarget | null {
     // City is dropped: it is useful for a receipt, not for naming a transaction.
     name: merchant.name,
     amountPaise: merchant.amountPaise,
-    // The merchant category travels on as `mc`. Note what still cannot: a merchant
-    // QR's signature lives in sub-tags this parser doesn't decode, and no signature
-    // we didn't receive can be reconstructed. A shop payment therefore reaches the
-    // PSP less complete than one scanned in a UPI app, and may still be declined.
+    // The merchant category travels on as `mc`; an unknown category is itself one of
+    // the fail-closed rejection triggers.
     ...(merchant.mcc ? { params: { mc: merchant.mcc } } : {}),
     kind: 'merchant',
+    canHandoff: merchant.reproducible,
   };
 }

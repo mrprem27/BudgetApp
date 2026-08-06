@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ScanPaySheet } from '../../src/components/finance/ScanPaySheet';
 import { setPendingPayment } from '../../src/lib/pendingPayment';
-import { askAboutPendingPayment } from '../../src/lib/confirmPayment';
+import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
 import { settings } from '../../src/lib/settings';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -157,6 +157,9 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
         onClose={() => setScanPay(false)}
         onHandoff={p => setPendingPayment({ ...p, startedAt: Date.now() })}
         onAbandon={() => setPendingPayment(null)}
+        // Written straight to Review: there is no app switch to come back from, so
+        // there is nothing to ask about later.
+        onRecordOnly={p => recordScannedPayment(db, { ...p, startedAt: Date.now() }).then(refresh)}
       />
     </View>
   );

@@ -476,9 +476,36 @@ can know a payment happened without any of them.
 | 1 | **Long-press the FAB** → `ScanPaySheet`. A coach mark teaches the gesture — shown **only to a just-onboarded user** (`scanPayHintPending`, armed in `finalizeOnboarding`, cleared the first time the FAB is touched either way). It defaults **off**, so an existing install is never taught a gesture it may already use, and the bubble can't sit on Home indefinitely for anyone who simply never long-presses. A hidden gesture with no teaching is the mistake `V2-08` and the afford screen both made; a permanent hint is the opposite one. |
 | 2 | Scan any UPI QR. `parseAnyUpiQr` reads a **person's** `upi://` code *or* a **shop's** EMV/BharatQR (`lib/emvQr.ts`). |
 | 3 | Amount: typed, or fixed by the code (EMV tag `54`) — a fixed amount is **not editable**, since changing it would send a figure the merchant did not ask for. |
-| 4 | Hand off via the **same** `useUpiApps` + `buildUpiUri` path as settle-up. No second implementation of the platform split. |
-| 5 | The attempt is persisted (`lib/pendingPayment.ts`) across the app switch — same reasoning as `overspendNotice.ts`. |
+| 4 | Hand off via the **same** `useUpiHandoff` path as settle-up. It owns the platform split, the remembered app and the picker, so the two flows cannot drift. |
+| 5 | The attempt is persisted (`lib/pendingPayment.ts`) **before** the app switch — `openURL` resolves as iOS takes the foreground, so a write started afterwards races our own suspension, and losing it means the payment is never recorded at all. |
 | 6 | On return, the app **asks once**: *"Did that payment go through?"* Yes → a `pending_txn` row with `source: 'upi_qr'`, `pay_method: 'upi'`, and a category guessed from the merchant name via the existing `matchCategory`. No → discarded. |
+
+**Your UPI app is remembered.** The first payment asks; after that it opens straight into that app,
+with the destination named on-screen (*"Opens CRED · Change"*) so it is never a surprise. The
+preference is re-validated against what is installed on **every** use — an app can be deleted, and a
+stale preference must fall back to asking rather than to opening nothing.
+
+#### Record-only: when a shop code cannot be handed off
+
+UPI 2.0 signs merchant QRs, and **PSPs verify that signature**. Two consequences, both fatal to a
+rebuilt intent rather than merely awkward:
+
+1. The signature sits in sub-tags `emvQr.ts` does not decode, so it cannot be forwarded.
+2. It is computed over the other parameters — so **adding an amount to an open-amount code
+   invalidates it**. That is arithmetic, not an engineering gap.
+
+The PSP refuses *after* the user has chosen a bank and entered their PIN. Observed on device as
+**"payment failed — UPI risk policy"**.
+
+So `ScanTarget.canHandoff` is false for any merchant code carrying sub-tags we can't account for
+(the signature's tag number isn't publicly documented, so this infers rather than guesses at one,
+and fails closed). Those show **"Record ₹45.00"** instead of Pay: no hand-off, the row is written
+straight to Review via `recordScannedPayment`, and the user pays in their own UPI app. The scan
+still supplied payee, amount and category — the manual entry this feature exists to remove is still
+removed. ~18% of Indian shop QRs are signed (March 2026), so most still hand off normally.
+
+Record-only deliberately does **not** go through `pendingPayment`: there is no app switch to return
+from, so arming the "did it go through?" prompt would ask about a payment we watched them not make.
 
 **Nothing is written at hand-off.** The app never learns the outcome — it only opens someone else's
 app — so recording optimistically would leave a phantom expense behind every cancelled payment. The
@@ -508,10 +535,23 @@ Only Scan & Pay uses the permissive `parseAnyUpiQr`. Two callers, two different 
 
 `canOpenURL` on iOS answers only for schemes listed in `LSApplicationQueriesSchemes` (`app.json` →
 `ios.infoPlist`), so **adding a UPI app to `UPI_APPS` means adding its scheme there too** — an
-undeclared scheme reads as "not installed" and the app silently never appears. The per-app scheme
-strings are published by each vendor and do shift between releases; a stale one degrades to a
-missing row, never a crash. They are **unverified on physical hardware** — the simulator has no UPI
-apps, so it can only exercise the empty case.
+undeclared scheme reads as "not installed" and the app silently never appears. `iosPermissions.test.ts`
+enforces both directions, plus the 50-scheme cap: exceed it and iOS answers `false` for *everything*
+rather than trimming the excess, disabling the picker wholesale.
+
+**Wrong scheme and wrong path fail very differently, which is why the list is curated conservatively.**
+
+| Mistake | Symptom | Cost |
+|---|---|---|
+| Wrong **scheme** | `canOpenURL` reports absent → the row never appears | Harmless, invisible |
+| Wrong **path** | App launches to its home screen, payee and amount dropped | The user has left BudgetSplit and must type what they came here not to type |
+
+CRED demonstrated both at once: `cred://` *is* a CRED scheme, so the row appeared and the app
+opened — but CRED's UPI entry point is `credpay://`, so the parameters went nowhere. The schemes now
+come from the list Cashfree maintains against the real apps; the `://pay` vs `://upi/pay` **path**
+per app is not publicly documented and remains verifiable only on hardware. `slice`, `groww`,
+`jupiter`, `imobileapp`, `payzapp` and `axispay` were removed as invented — absent from every
+maintained UPI-intent list, so no path would have made them work.
 
 `computeTransferScopes` builds the per-group and global pair balance using the same `simplify`
 as every other balance surface. Scope can be a single group or "all groups"

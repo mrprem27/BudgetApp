@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
@@ -29,6 +29,7 @@ export function ScanPaySheet({
   onClose,
   onHandoff,
   onAbandon,
+  onRecordOnly,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -36,6 +37,14 @@ export function ScanPaySheet({
   onHandoff: (p: { vpa: string; name?: string; amountPaise: number }) => Promise<void>;
   /** Undo that record — the hand-off never actually happened. */
   onAbandon: () => Promise<void>;
+  /**
+   * File the transaction without handing off, for a code we can't re-emit honestly.
+   *
+   * Deliberately not `onHandoff`: that one arms the "did it go through?" prompt for
+   * when the user returns from a UPI app, and here they never leave. Asking on the
+   * next foreground would be asking about a payment we watched them not make.
+   */
+  onRecordOnly: (p: { vpa: string; name?: string; amountPaise: number }) => Promise<void>;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [target, setTarget] = useState<ScanTarget | null>(null);
@@ -67,6 +76,8 @@ export function ScanPaySheet({
     ? { vpa: target.vpa, name: target.name ?? 'Payee', amountPaise, passthrough: target.params }
     : null;
   const canPay = !!payee && amountPaise > 0 && !!buildUpiUri(payee);
+  // A shop code we can't re-emit honestly. We know everything except how they'll pay.
+  const recordOnly = !!target && !target.canHandoff;
 
   /**
    * Remember the payment, *then* leave. `openURL` resolves as the OS takes the
@@ -90,6 +101,18 @@ export function ScanPaySheet({
 
   const pay = () => run(handoff.pay);
   const changeApp = () => run(handoff.choose);
+
+  async function recordIt() {
+    if (!payee || amountPaise <= 0) return;
+    try {
+      await onRecordOnly({ vpa: payee.vpa, name: target?.name, amountPaise });
+      haptic.success();
+      close();
+    } catch {
+      haptic.error();
+      Alert.alert('Couldn’t save that', 'Please add the expense yourself this time.');
+    }
+  }
 
   if (!visible) return null;
 
@@ -161,25 +184,47 @@ export function ScanPaySheet({
             />
           )}
 
-          <PrimaryButton
-            label={
-              !canPay ? 'Pay'
-                : soleApp ? `Pay ${formatRupees(amountPaise)} with ${soleApp.label}`
-                : `Pay ${formatRupees(amountPaise)}`
-            }
-            onPress={pay}
-            disabled={!canPay}
-          />
-          {/* Only worth drawing when there is somewhere else to go. */}
-          {soleApp && handoff.canChoose && (
-            <TouchableOpacity onPress={changeApp} hitSlop={8} accessibilityRole="button" style={styles.changeApp}>
-              <Text style={styles.changeAppText}>Use a different app</Text>
-            </TouchableOpacity>
+          {recordOnly ? (
+            <>
+              <PrimaryButton
+                label={amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it'}
+                onPress={recordIt}
+                disabled={amountPaise <= 0}
+              />
+              {/*
+                Said plainly, because the alternative is handing off to a payment that
+                fails only after they've entered their PIN.
+              */}
+              <Text style={styles.footnote}>
+                This shop’s code is secured, so it has to be paid from your UPI app directly.
+                Pay there and we’ll have it waiting in your review inbox — nothing to type.
+              </Text>
+            </>
+          ) : (
+            <>
+              <PrimaryButton label={canPay ? `Pay ${formatRupees(amountPaise)}` : 'Pay'} onPress={pay} disabled={!canPay} />
+
+              {/*
+                Destination and the way to change it on one line, rather than a long
+                button label plus a separate link plus a footnote — three stacked blocks
+                saying what one row can. Absent when nothing is remembered, because the
+                picker is about to ask anyway.
+              */}
+              {soleApp && (
+                <View style={styles.destRow}>
+                  <Text style={styles.destText} numberOfLines={1}>Opens {soleApp.label}</Text>
+                  {handoff.canChoose && (
+                    <TouchableOpacity onPress={changeApp} hitSlop={12} accessibilityRole="button">
+                      <Text style={styles.destChange}>Change</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* The app never learns the outcome, so it must not claim to. */}
+              <Text style={styles.footnote}>We’ll ask whether it went through when you come back.</Text>
+            </>
           )}
-          {/* The app never learns the outcome, so it must not claim to. */}
-          <Text style={styles.footnote}>
-            Opens your UPI app. Come back and we’ll ask whether it went through, then add it for you.
-          </Text>
         </>
       )}
     </SheetModal>
@@ -201,7 +246,8 @@ const styles = StyleSheet.create({
   fixedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   fixedLabel: { ...type.caption, color: colors.textMuted },
   fixedValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  changeApp: { alignSelf: 'center', paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center' },
-  changeAppText: { ...type.body, color: colors.accent },
+  destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
+  destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

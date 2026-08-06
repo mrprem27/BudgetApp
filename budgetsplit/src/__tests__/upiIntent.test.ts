@@ -145,12 +145,12 @@ describe('parseAnyUpiQr — routing person vs merchant', () => {
 
   it('reads a person code as a person', () => {
     expect(parseAnyUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha'))
-      .toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha', kind: 'person' });
+      .toEqual({ vpa: 'asha@okhdfcbank', name: 'Asha', kind: 'person', canHandoff: true });
   });
 
   it('reads a shop code as a merchant, with its fixed amount', () => {
     expect(parseAnyUpiQr(shopQr('chaistop@okhdfcbank', 'Chai Stop', '45.50')))
-      .toEqual({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', amountPaise: 4550, kind: 'merchant' });
+      .toEqual({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', amountPaise: 4550, kind: 'merchant', canHandoff: true });
   });
 
   it('leaves the amount open when the shop code fixes none', () => {
@@ -252,5 +252,67 @@ describe('the app list stays internally consistent', () => {
 
   it('points each app at its own scheme', () => {
     for (const a of UPI_APPS) expect(a.prefix.startsWith(a.probe)).toBe(true);
+  });
+});
+
+describe('a code we cannot re-emit honestly is recorded, not paid', () => {
+  const tlv = (t: string, v: string) => `${t}${String(v.length).padStart(2, '0')}${v}`;
+  const shop = (upiTemplate: string) =>
+    tlv('00', '01') + tlv('26', upiTemplate) + tlv('53', '356') + tlv('59', 'Chai Stop');
+  const minimal = tlv('00', 'in.gov.upi') + tlv('01', 'chaistop@okhdfcbank');
+
+  it('hands off a plain shop code', () => {
+    expect(parseAnyUpiQr(shop(minimal))?.canHandoff).toBe(true);
+  });
+
+  it('refuses to hand off a code carrying anything we do not decode', () => {
+    // UPI 2.0 signs merchant QRs and PSPs verify `sign`. We cannot forward a signature
+    // we never decoded — and adding an amount would invalidate it even if we could,
+    // because it is computed over the other parameters. Declining after the user has
+    // entered their PIN is the worst way to discover that.
+    expect(parseAnyUpiQr(shop(minimal + tlv('05', 'SIGNATUREBLOB')))?.canHandoff).toBe(false);
+  });
+
+  it('still reads the payee and amount off a code it will not hand off', () => {
+    // The scan is not wasted: this is what makes record-only worth offering at all.
+    const signed = parseAnyUpiQr(
+      tlv('00', '01') +
+      tlv('26', minimal + tlv('05', 'SIG')) +
+      tlv('53', '356') + tlv('54', '45.50') + tlv('59', 'Chai Stop'),
+    );
+    expect(signed).toMatchObject({ vpa: 'chaistop@okhdfcbank', name: 'Chai Stop', amountPaise: 4550, canHandoff: false });
+  });
+
+  it('always hands off a person code — those are unsigned', () => {
+    expect(parseAnyUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha')?.canHandoff).toBe(true);
+    expect(parseAnyUpiQr('upi://pay?pa=asha@okhdfcbank&pn=Asha&sign=X&mode=01')?.canHandoff).toBe(true);
+  });
+});
+
+describe('UPI app schemes match their published values', () => {
+  const spec = (k: UpiApp) => UPI_APPS.find(a => a.key === k);
+
+  // `cred://` is a real CRED scheme, so the row appeared and the app launched — but
+  // CRED's UPI entry point is `credpay://`, so our parameters went nowhere and it
+  // opened blank. A wrong scheme hides a row; a wrong path wastes the user's trip.
+  it('uses credpay for CRED, not cred', () => {
+    expect(spec(UpiApp.Cred)?.probe).toBe('credpay://');
+    expect(spec(UpiApp.Cred)?.prefix).toBe('credpay://upi/pay');
+  });
+
+  it('uses whatsapp-consumer for WhatsApp', () => {
+    expect(spec(UpiApp.WhatsApp)?.probe).toBe('whatsapp-consumer://');
+  });
+
+  it('uses navipay for Navi and myairtel for Airtel', () => {
+    expect(spec(UpiApp.Navi)?.probe).toBe('navipay://');
+    expect(spec(UpiApp.Airtel)?.probe).toBe('myairtel://');
+  });
+
+  it('carries no app absent from every maintained UPI-intent list', () => {
+    // These were invented outright rather than mis-sourced — they are not UPI intent
+    // targets at all, so no path would have made them work.
+    const invented = ['slice://', 'groww://', 'jupiter://', 'imobileapp://', 'payzapp://', 'axispay://'];
+    for (const p of invented) expect(UPI_APPS.some(a => a.probe === p)).toBe(false);
   });
 });
