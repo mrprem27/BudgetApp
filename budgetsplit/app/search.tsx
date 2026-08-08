@@ -108,7 +108,13 @@ export default function SearchScreen() {
       }
       return { title, data: rows };
     });
-    const totalAmt = filtered.filter(t => t.kind === 'expense').reduce((s, t) => s + txnTotal(t), 0);
+    // Summed for the SELECTED kind only. It used to sum expenses whatever was listed, so
+    // "24 results · ₹12,400 total" was measuring something other than the 24 rows above it
+    // — and on "All" a single figure across money-in, money-out and settlements answers no
+    // question at all, so there is none.
+    const totalAmt = kind === 'all'
+      ? 0
+      : filtered.reduce((s, t) => s + txnTotal(t), 0);
     return { sections: secs, totalCount: filtered.length, totalAmount: totalAmt };
   }, [all, debouncedQuery, kind, source, personalGroupId, expanded]);
 
@@ -192,7 +198,12 @@ export default function SearchScreen() {
               <View style={styles.resultHeader}>
                 <Text style={styles.resultCount}>
                   {totalCount} {totalCount === 1 ? 'result' : 'results'}
-                  {totalAmount > 0 ? <Text style={styles.resultAmt}> · {formatCompact(totalAmount)} total</Text> : null}
+                  {totalAmount > 0 ? (
+                    <Text style={styles.resultAmt}>
+                      {' · '}{formatCompact(totalAmount)}
+                      {kind === 'expense' ? ' spent' : kind === 'income' ? ' received' : ' moved'}
+                    </Text>
+                  ) : null}
                 </Text>
               </View>
             )}

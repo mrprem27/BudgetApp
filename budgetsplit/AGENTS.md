@@ -345,6 +345,31 @@ Rules:
 - Swipe-to-delete with `react-native-gesture-handler`
 - Bottom padding from **`useContentInset({ fab })`**, never a literal.
 
+### The three kinds: analysis is two-sided, the ledger is three-sided
+
+`txn.kind` is `expense` / `income` / `settlement` (a **Transfer** in the UI). They are not
+interchangeable in an aggregation, and the rule is:
+
+| Surface | expense | income | settlement |
+|---|---|---|---|
+| **Analysis** — category breakdowns, budgets, spend pace, the Reports donut | ✅ counted | ✅ counted, separately | ⛔ **excluded** |
+| **Ledger** — transaction lists, Search, the expanded month list | ✅ shown | ✅ shown | ✅ **shown** |
+| **Money math** (`lib/cash.ts`) | lowers cash | raises cash | moves cash both ways |
+
+**Why settlements are excluded from analysis:** settling a debt isn't consumption. The
+original purchase was already booked as an expense; counting the settlement too would
+double-count the same money. `cash.ts` is the exception on purpose — cash genuinely moved.
+
+**Never show one total across kinds.** Money in, money out and money moved do not belong in
+a single figure — a "₹12,400 total" over a mixed list is measuring nothing. Sum per kind and
+label it (`spent` / `received` / `moved`), or show a two-sided figure. Both
+`report-transactions` and `search` shipped this bug: one dropped settlements from a filter
+labelled "All", the other summed only expenses under the word "total".
+
+**A kind's categories are its own** (`CATEGORY_KIND`), and the Add screen calls a transfer's
+category its "Reason". If a kind's categories are collected, something must show them back —
+collecting input you never display is the same as not collecting it.
+
 ### Pull-to-refresh — one rule
 
 A screen gets `AppRefreshControl` **iff it loads DB data via `useScreenData`

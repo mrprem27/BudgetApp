@@ -26,10 +26,22 @@ import { haptic } from '../src/lib/haptics';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 
 type SortKey = 'date' | 'amount';
+
+/**
+ * All three kinds, because this is a **ledger** — a record of what happened — not an
+ * analysis. Transfers were silently excluded: the filter dropped every settlement while
+ * the tab said "All", so a settlement you made was invisible here and this screen's total
+ * quietly disagreed with Reports.
+ *
+ * (Reports' *breakdowns* still exclude transfers, and should: settling a debt isn't
+ * consumption — the original purchase was already expensed, so counting both double-counts.
+ * Analysis is two-sided; the ledger is three-sided.)
+ */
 const TYPE_TABS = [
   { key: 'all', label: 'All' },
   { key: 'expense', label: 'Expenses' },
   { key: 'income', label: 'Income' },
+  { key: 'settlement', label: 'Transfers' },
 ];
 
 // Full transaction magnitude (all shares/payments), used for the "Largest" sort
@@ -118,16 +130,21 @@ export default function ReportTransactionsScreen() {
     return t.category === c;
   };
 
-  const { rows, total } = useMemo(() => {
+  const { rows, byKind } = useMemo(() => {
     const filtered = txns.filter(t => {
-      if (t.kind !== 'expense' && t.kind !== 'income') return false;
       if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
       if (group !== 'all' && t.group_id !== group) return false;
       if (!matchesCat(t, cat)) return false;
       return true;
     });
     filtered.sort((a, b) => sort === 'amount' ? txnAmount(b) - txnAmount(a) : b.date - a.date);
-    return { rows: filtered, total: filtered.reduce((s, t) => s + txnAmount(t), 0) };
+    // Summed PER KIND. A single total across income + expense + transfers answers no
+    // question anyone has: money in and money out don't belong in one figure, and a
+    // settlement is neither. This is the crux of "should the three kinds be treated
+    // differently" — in a total, yes, always.
+    const by = { expense: 0, income: 0, settlement: 0 } as Record<string, number>;
+    for (const t of filtered) by[t.kind] = (by[t.kind] ?? 0) + txnAmount(t);
+    return { rows: filtered, byKind: by };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txns, cat, typeFilter, group, sort, known]);
 
@@ -187,10 +204,35 @@ export default function ReportTransactionsScreen() {
                   <Feather name="chevron-right" size={20} color={isCurrentMonth ? colors.border : colors.textSecondary} />
                 </TouchableOpacity>
               </View>
-              {/* The hero: what these transactions add up to. */}
-              <AmountText paise={total} size="xl" forceColor={colors.textPrimary} />
+              {/* The hero. With one kind selected it's that kind's total; with "All" it
+                  is two-sided, because money in and money out are not one number. */}
+              {typeFilter === 'all' ? (
+                <View style={styles.twoSided}>
+                  <View>
+                    <Text style={styles.sideLabel}>Out</Text>
+                    <AmountText paise={byKind.expense} size="lg" forceColor={colors.expense} />
+                  </View>
+                  <View>
+                    <Text style={styles.sideLabel}>In</Text>
+                    <AmountText paise={byKind.income} size="lg" forceColor={colors.income} />
+                  </View>
+                  {byKind.settlement > 0 && (
+                    <View>
+                      <Text style={styles.sideLabel}>Moved</Text>
+                      <AmountText paise={byKind.settlement} size="lg" forceColor={colors.settle} />
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <AmountText
+                  paise={byKind[typeFilter] ?? 0}
+                  size="xl"
+                  forceColor={typeFilter === 'income' ? colors.income : typeFilter === 'settlement' ? colors.settle : colors.textPrimary}
+                />
+              )}
               <Text style={styles.countLine}>
                 {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}
+                {typeFilter === 'settlement' ? ' · settled between people, not spending' : ''}
               </Text>
             </Card>
 
@@ -249,6 +291,8 @@ const styles = StyleSheet.create({
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   monthLabel: { ...type.bodySemi, color: colors.textPrimary },
   countLine: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  twoSided: { flexDirection: 'row', gap: space.lg, flexWrap: 'wrap' },
+  sideLabel: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
   typeRow: { marginTop: space.md, marginBottom: space.md },
   sortBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
