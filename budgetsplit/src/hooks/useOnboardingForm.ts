@@ -9,10 +9,17 @@ import { setReminderPrefs } from '../lib/reminders';
 import { finalizeOnboarding } from '../lib/onboarding';
 import type { OnboardingIntent } from '../lib/personaDefaults';
 
+/**
+ * `payoff` and `committing` are **presentational** stages — they ask nothing and store
+ * nothing. `payoff` reflects the numbers just entered back at the user; `committing`
+ * covers the single `finalizeOnboarding` write. Neither is a questionnaire step, so
+ * neither appears in `SETUP_STEPS` or the progress count.
+ */
 export type OnboardingStage =
-  | 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget' | 'people' | 'permissions';
+  | 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget'
+  | 'payoff' | 'people' | 'permissions' | 'committing';
 
-/** The setup steps after the name screen — these drive the progress dots. */
+/** The setup steps after the name screen — these drive the progress indicator. */
 export const SETUP_STEPS: OnboardingStage[] = ['income', 'money', 'budget', 'people', 'permissions'];
 
 /**
@@ -81,6 +88,18 @@ export function useOnboardingForm({
   const afterBudget: OnboardingStage = intent === 'personal' ? 'permissions' : 'people';
   const beforePermissions: OnboardingStage = intent === 'personal' ? 'budget' : 'people';
 
+  /**
+   * Where Continue goes from the budget step: through the payoff beat when there's
+   * something to say, straight on when both income and budget were skipped (an empty
+   * congratulation is worse than no screen).
+   *
+   * The payoff is **forward-only** — Back from `people`/`permissions` returns to
+   * `budget`, not through it. It's a reflection, not a question, and re-showing a
+   * celebration on the way backwards reads as a loop.
+   */
+  const afterBudgetOrPayoff: OnboardingStage =
+    incomeNum > 0 || budgetNum > 0 ? 'payoff' : afterBudget;
+
   // Synced on BOTH drag-end and momentum-end so a slow drag can't leave us stale.
   function syncPage(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const p = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -136,6 +155,9 @@ export function useOnboardingForm({
   /** Single commit point for the whole questionnaire — see lib/onboarding.ts. */
   async function finalize() {
     setSaving(true);
+    // Show the commit rather than pausing silently on the permissions screen. This
+    // does NOT split the write — `finalizeOnboarding` stays one atomic call.
+    setStage('committing');
     const ok = await finalizeOnboarding(db, {
       intent, name, incomeNum, payday, budgetNum, people, addFirst: addFirstRef.current,
       money: {
@@ -147,6 +169,9 @@ export function useOnboardingForm({
     });
     if (ok) haptic.success(); else haptic.error();
     setSaving(false);
+    // Let the last checklist item land as done before handing over; without this the
+    // screen would flash and be gone on a fast device.
+    await new Promise(r => setTimeout(r, 420));
     onDone();
   }
 
@@ -175,7 +200,7 @@ export function useOnboardingForm({
 
   return {
     // stage machine
-    stage, setStage, afterBudget, beforePermissions,
+    stage, setStage, afterBudget, beforePermissions, afterBudgetOrPayoff,
     // carousel
     page, scrollRef, scrollX, progress, syncPage, advance, backFromFeatures,
     // persona

@@ -18,7 +18,7 @@
 > resolve to §3 and §15 below. Corrected against source: **receipt scanning is live**, not
 > parked (§7.4) and ships with a **cloud OCR provider** that makes a network call (§19);
 > **`/settings/backup`**, **`/review`**, **`/import`** and **`/report-transactions`** now have
-> sections; onboarding is **9 stages**, not 8; there are **7 pay methods**, not 3; goal funding
+> sections; onboarding is **11 stages**, not 8; there are **7 pay methods**, not 3; goal funding
 > is `fundGoal` with **no pool**. Every route now carries a documented state set (§20).
 
 ---
@@ -59,10 +59,23 @@
 
 ## 1. First run & onboarding
 
-`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **9-stage**
+`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **11-stage**
 `Onboarding` flow (`src/hooks/useOnboardingForm.ts` owns the stage machine; `OnboardingStage`
 is the authoritative list). A single DB commit (`finalizeOnboarding`) happens at the very end —
 nothing is written mid-flow except two AsyncStorage preferences and the persona flag defaults.
+
+**Two of the eleven ask nothing.** `payoff` reflects the numbers just entered back at the user,
+and `committing` covers the commit itself; neither collects input, neither is in `SETUP_STEPS`,
+and neither appears in the progress count. They exist because the flow previously asked for a
+name, income, pay-day, four money figures and a budget cap and returned **nothing** until the
+app opened.
+
+**Shared chrome.** Every non-hero stage renders through `StepScaffold` (back + one progress bar
+in a single top row, scrolling body, pinned `StepFooter`). Before this, the back chevron was
+copy-pasted into seven stages, the footer into six, and there were **two** unrelated progress
+systems shown on different subsets of steps. ⛔ The hero keeps its own layout, `styles.footer`
+and `bottomPad` — those are tuned to `LogoAssembly`'s ~3.7 s run, so `StepFooter` **forks**
+equivalent styling rather than sharing theirs.
 
 | # | Stage | What the user does | Persisted |
 |---|---|---|---|
@@ -73,12 +86,17 @@ nothing is written mid-flow except two AsyncStorage preferences and the persona 
 | 4 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L) + pay-day chips. **Skip**. | committed in `finalize` |
 | 5 | **Money** | Opening position: cash on hand, investments, credit limit, credit used. **Skip**. | `setMoneyProfile`, best-effort |
 | 6 | **Budget** | Monthly cap field + presets; shows "X% of take-home" if income set. **Skip**. | committed in `finalize` |
+| 6.5 | **Payoff** | Reads the answers back: "₹18,000 a month left over" / "₹27,000 a month is your ceiling" when income was skipped. Asks nothing. **Forward-only** — Back from People/Permissions returns to Budget, not through here. Skipped entirely when income *and* budget were both skipped (`payoffFor` returns null). Copy + arithmetic live in `lib/onboardingPayoff.ts`, unit-tested. | nothing |
 | 7 | **People** | Add split-contacts inline (dedup by name). **Skipped entirely when intent is *personal*** (`setupSteps()`). | committed in `finalize` |
 | 8 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`, read by add flows). | `save_location` on grant |
+| 9 | **Committing** | "Setting things up" checklist over the single `finalizeOnboarding` write. No back, no skip. The phases tick on a timer *because the commit is atomic and has no per-phase progress to report* — but the last phase never completes until the write actually resolves, so the screen can't claim to be done early. | the commit itself |
 
 **Stage order** comes from `SETUP_STEPS = ['income','money','budget','people','permissions']`,
 filtered by intent. Back navigation uses `afterBudget` / `beforePermissions`, which skip
-`people` for the personal persona in both directions.
+`people` for the personal persona in both directions; `afterBudgetOrPayoff` routes Budget's
+Continue through the payoff beat when there's something to show. The progress indicator counts
+`name` plus the intent-filtered setup steps, so the personal persona reads "3 of 4" rather than
+leaving a gap where `people` would have been.
 
 **`finalizeOnboarding()`** (`src/lib/onboarding.ts:42-88`, best-effort, each step isolated so
 one failure never blocks finishing):

@@ -28,7 +28,11 @@ import { StepProgress } from './onboarding/StepProgress';
 import { StepBack } from './onboarding/StepBack';
 import { StepAmountField } from './onboarding/StepAmountField';
 import { MoneyRow } from './onboarding/MoneyRow';
+import { PayoffStage } from './onboarding/PayoffStage';
+import { payoffFor } from '../../lib/onboardingPayoff';
+import { CommitStage } from './onboarding/CommitStage';
 import { haptic } from '../../lib/haptics';
+import { formatRupees } from '../../lib/money';
 import { LogoAssembly } from './LogoAssembly';
 import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
 import { alpha } from '../../theme';
@@ -140,7 +144,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
     people, setPeople, personDraft, setPersonDraft, addPerson,
     notifPerm, locPerm, allowNotifications, allowLocation,
-    addFirstRef, saving, finalize,
+    addFirstRef, saving, finalize, afterBudgetOrPayoff,
   } = useOnboardingForm({ onDone, slideCount: SLIDES.length, width });
 
   return (
@@ -406,7 +410,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           footer={
             <StepFooter
               primaryLabel="Continue"
-              onPrimary={() => setStage(afterBudget)}
+              onPrimary={() => setStage(afterBudgetOrPayoff)}
               skipLabel="Skip — I'll set it later"
               onSkip={() => { setBudgetText(''); setStage(afterBudget); }}
             />
@@ -532,6 +536,34 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </StepScaffold>
       )}
 
+      {/* PAYOFF — reads the numbers just entered back at the user. Asks nothing.
+          The flow previously returned nothing at all until the app opened. */}
+      {stage === 'payoff' && (() => {
+        const payoff = payoffFor(incomeNum, budgetNum);
+        // Defensive: `afterBudgetOrPayoff` already skips this stage when both are 0,
+        // so a null here would mean the numbers were cleared after routing.
+        if (!payoff) { setStage(afterBudget); return null; }
+        return (
+          <StepScaffold
+            stageKey="payoff"
+            onBack={() => setStage('budget')}
+            title={`${formatRupees(payoff.amountPaise)} ${payoff.headline}`}
+            titlePosition="bottom"
+            footer={<StepFooter primaryLabel="Keep going" onPrimary={() => setStage(afterBudget)} />}
+          >
+            <PayoffStage payoff={payoff} />
+          </StepScaffold>
+        );
+      })()}
+
+      {/* COMMITTING — covers the one atomic finalizeOnboarding write. No back, no
+          skip: the commit is already running. */}
+      {stage === 'committing' && (
+        <View style={styles.commitPage}>
+          <CommitStage saving={saving} />
+        </View>
+      )}
+
     </KeyboardAvoidingView>
   );
 }
@@ -620,4 +652,8 @@ const styles = StyleSheet.create({
 
   // Permissions step
   permList: { gap: space.sm },
+
+  /** The commit stage has no back button and no footer — it isn't a step you can
+   *  leave — so it centres its own content instead of using StepScaffold. */
+  commitPage: { flex: 1, justifyContent: 'center', paddingHorizontal: layout.screenPaddingH },
 });
