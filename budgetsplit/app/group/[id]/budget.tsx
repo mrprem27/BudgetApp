@@ -29,8 +29,13 @@ import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import { alpha } from '../../../src/theme';
 import { SectionCard } from '../../../src/components/ui/SectionCard';
+import { Card } from '../../../src/components/ui/Card';
+import { Chip } from '../../../src/components/ui/Chip';
+import { Divider } from '../../../src/components/ui/Divider';
+import { IconCircle } from '../../../src/components/ui/IconCircle';
+import { ListRow } from '../../../src/components/ui/ListRow';
+import { useContentInset } from '../../../src/hooks/useContentInset';
 
 const CADENCES: { key: BudgetCadence; label: string }[] = [
   { key: 'once', label: 'One-time' },
@@ -53,6 +58,13 @@ const SECTION_ICON: Record<string, FeatherName> = {
 
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
 
+/**
+ * One-tap amounts, offered only while a row is empty. Typing 40-odd numbers is the actual
+ * friction on this screen; once a value exists the chips would just be clutter competing
+ * with it, so they disappear. Same pattern as onboarding's budget step.
+ */
+const PRESETS = [1000, 2000, 5000];
+
 export default function BudgetEditorScreen() {
   const { id, category: focusCategoryRaw } = useLocalSearchParams<{ id: string; category?: string }>();
   // Deep-linked from a category's "Set budget" CTA → jump straight to its field.
@@ -66,7 +78,11 @@ export default function BudgetEditorScreen() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
+  // Measured, not guessed: the footer is a fixed CTA over a scroll view, and the old
+  // `height: kbVisible ? space.lg : 100` spacer was a literal 100pt.
+  const [footerH, setFooterH] = useState(0);
   const kbVisible = useKeyboardVisible();
+  const listPad = useContentInset({ footer: footerH });
   const scrollRef = useRef<ScrollView>(null);
   const focusRowRef = useRef<View>(null);
   const scrolledToFocus = useRef(false);
@@ -212,7 +228,7 @@ export default function BudgetEditorScreen() {
         <ErrorState onRetry={() => { void reload(); }} />
       ) : (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
@@ -221,8 +237,10 @@ export default function BudgetEditorScreen() {
             </Text>
           </View>
 
+          {/* One line. The full explanation lives in the tab's empty state, which is
+              where someone with no budget actually reads it. */}
           <Text style={styles.explain}>
-            Open a group and type a limit on any category. Daily, monthly and yearly budgets repeat each period — the limit resets and unused amount doesn't carry over; one-time doesn't repeat.
+            Each period starts fresh — limits reset and unused amounts don't carry over.
           </Text>
 
           {sections.length > 0 ? sections.map(sec => {
@@ -244,11 +262,9 @@ export default function BudgetEditorScreen() {
                   const hasAmt = parseToPaise(amt) > 0;
                   return (
                     <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
-                      <View style={styles.divider} />
+                      <Divider indent="text" />
                       <View style={styles.rowItem}>
-                        <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
-                          <Feather name={vis.icon} size={15} color={vis.color} />
-                        </View>
+                        <IconCircle icon={vis.icon} size={layout.iconCircle} color={vis.color} />
                         <View style={styles.rowMid}>
                           <Text style={styles.rowName} numberOfLines={1}>{c.name}</Text>
                           {hasAmt && (
@@ -264,10 +280,12 @@ export default function BudgetEditorScreen() {
                             </TouchableOpacity>
                           )}
                         </View>
-                        <View style={[styles.amountWrap, hasAmt && styles.amountWrapActive]}>
+                        {/* No border of its own: AGENTS §4 — an inline field inside a card
+                            row is right-aligned, never a second box. */}
+                        <View style={styles.amountWrap}>
                           <Text style={[styles.rupee, hasAmt && { color: colors.textSecondary }]}>₹</Text>
                           <TextInput
-                            style={styles.amountInput}
+                            style={[styles.amountInput, hasAmt && styles.amountInputSet]}
                             value={amt}
                             onChangeText={v => setAmount(c.name, v)}
                             keyboardType="decimal-pad"
@@ -278,6 +296,18 @@ export default function BudgetEditorScreen() {
                           />
                         </View>
                       </View>
+                      {!hasAmt && (
+                        <View style={styles.presetRow}>
+                          {PRESETS.map(v => (
+                            <Chip
+                              key={v}
+                              label={`₹${v >= 1000 ? `${v / 1000}k` : v}`}
+                              onPress={() => setAmount(c.name, String(v))}
+                              accessibilityLabel={`Set ${c.name} to ${formatRupees(v * 100)}`}
+                            />
+                          ))}
+                        </View>
+                      )}
                     </View>
                   );
                 })}
@@ -287,31 +317,37 @@ export default function BudgetEditorScreen() {
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
 
-          <View style={{ height: kbVisible ? space.lg : 100 }} />
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: (kbVisible ? space.sm : insets.bottom) + space.md }]}>
+        <View
+          style={[styles.footer, { paddingBottom: (kbVisible ? space.sm : insets.bottom) + space.md }]}
+          onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}
+        >
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
       </KeyboardAvoidingView>
       )}
 
       <SheetModal visible={!!cadenceSheetFor} onClose={() => setCadenceSheetFor(null)} title="How often?" scroll={false}>
-        {CADENCES.map(c => {
-          const active = cadenceSheetFor ? cadenceOf(cadenceSheetFor) === c.key : false;
-          return (
-            <TouchableOpacity
-              key={c.key}
-              style={[styles.cadOption, active && styles.cadOptionActive]}
-              onPress={() => { if (cadenceSheetFor) setCadence(cadenceSheetFor, c.key); setCadenceSheetFor(null); }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text style={[styles.cadOptionText, active && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{c.label}</Text>
-              {active && <Feather name="check" size={18} color={colors.accent} />}
-            </TouchableOpacity>
-          );
-        })}
+        {/* `ListRow` like every other picker sheet — this was a fifth selection idiom
+            (accentMuted fill + accent text) reachable from the same flow. */}
+        <Card clip>
+          {CADENCES.map((c, i) => {
+            const active = cadenceSheetFor ? cadenceOf(cadenceSheetFor) === c.key : false;
+            return (
+              <View key={c.key}>
+                {i > 0 && <Divider indent="none" />}
+                <ListRow
+                  title={c.label}
+                  value={active ? <Feather name="check" size={18} color={colors.accent} /> : undefined}
+                  chevron={false}
+                  selected={active}
+                  onPress={() => { if (cadenceSheetFor) setCadence(cadenceSheetFor, c.key); setCadenceSheetFor(null); }}
+                />
+              </View>
+            );
+          })}
+        </Card>
       </SheetModal>
     </View>
   );
@@ -327,19 +363,15 @@ const styles = StyleSheet.create({
   explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
 
 
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: space.md + 34 + space.md },
-  rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 52 },
-  iconDot: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: layout.rowMinHeight },
+  presetRow: { flexDirection: 'row', gap: space.sm, paddingLeft: layout.dividerIndent, paddingRight: space.md, paddingBottom: space.smd },
   rowMid: { flex: 1, gap: space.xs },
   rowName: { ...type.body, color: colors.textPrimary },
-  amountWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 96 },
-  amountWrapActive: { borderColor: colors.accent },
+  amountWrap: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 88 },
   rupee: { ...type.body, color: colors.textMuted },
-  amountInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
+  amountInput: { ...type.amountMD, color: colors.textMuted, flex: 1, textAlign: 'right', paddingVertical: space.sm },
+  amountInputSet: { color: colors.textPrimary },
   cadenceSelect: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
   cadenceSelectText: { ...type.caption, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
-  cadOptionActive: { backgroundColor: colors.accentMuted },
-  cadOptionText: { ...type.body, color: colors.textPrimary },
   footer: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
 });

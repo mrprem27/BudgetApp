@@ -82,7 +82,10 @@ export default function ReportsScreen() {
 
   // Reports only ever runs up to "now" — the month selector can go back through
   // history but never into a future month.
-  const canGoNext = format(month, 'yyyy-MM') !== format(new Date(), 'yyyy-MM');
+  // Viewing a month other than the one we're in. Drives both the forward arrow and the
+  // budget caveat below (budgets aren't historical — see the note at its use site).
+  const isCurrentMonth = format(month, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
+  const canGoNext = !isCurrentMonth;
 
   // A real export resets the monthly "back up your data" nudge's clock — no
   // point nagging someone right after they just backed up.
@@ -361,6 +364,16 @@ export default function ReportsScreen() {
                       health={budgetHealth(an.utilizationPct)}
                       height={6}
                     />
+                    {/* Budgets have no history: `category_budget` holds exactly one row per
+                        category and saving the editor overwrites it, so a past month is
+                        being measured against TODAY's limits — not the ones that were in
+                        force at the time. Say so rather than present the figure as that
+                        month's. Wave 6 adds `effective_from` and this note goes away. */}
+                    {!isCurrentMonth && (
+                      <Text style={styles.utilNote}>
+                        Compared with your current budget, not {format(month, 'MMMM')}'s.
+                      </Text>
+                    )}
                   </>
                 );
               })()}
@@ -446,6 +459,7 @@ const styles = StyleSheet.create({
   emptyGroup: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingVertical: space.sm },
   utilRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs },
   utilPct: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
+  utilNote: { ...type.caption, color: colors.textMuted, marginTop: space.xs, lineHeight: 15 },
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   reviewLabel: { ...type.body, color: colors.textSecondary },
   reviewValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
