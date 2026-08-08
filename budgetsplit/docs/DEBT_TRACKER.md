@@ -23,7 +23,7 @@
 | Hex-suffix colour concatenations | 153 | **0** (via `alpha()`) |
 | Screen-reader-silent controls | 6 | **0** |
 | Colour palettes | 3 sources | **1 file** |
-| Largest screen | 1354 LOC | **1029** (`app/review.tsx`) — see the note below |
+| Largest screen | 1354 LOC | **749** (`app/review.tsx`) — see the note below |
 | Hand-rolled data loaders | 1 | **0** |
 
 **Every 🔴, 🟡 and 🟢 item is closed.** The only rows still open are the two ⛔
@@ -44,11 +44,18 @@ code. See [§ Resolved](#-resolved) and [§ Won't fix](#-wont-fix--by-design).
 > app only ever schedules **local** notifications. If remote push is ever wanted, deleting that
 > plugin is the small part; **moving to a paid Apple team is the actual blocker.**
 
-> **`review.tsx` regrew: 1354 → 977 (paid down 2026-07-28) → 1029 today.** `C1` stays struck
-> because the paydown really happened; the file then grew back past its own fixed size. That is the
-> argument for a *mechanism* over a fourth manual paydown, so `sourceCounts.test.ts` now pins a
-> ceiling at 1030 — lower it when you decompose, never raise it. This figure said **977** here for
-> long enough to be quoted twice, which is `V2-14` happening to the drift tracker itself.
+> **`review.tsx`: 1354 → 977 (2026-07-28) → 1029 (regrown) → 749 (2026-08-08).** `C1` stays struck
+> because the first paydown really happened; the file then grew back past its own fixed size, which
+> is the argument for a *mechanism* over repeated manual paydowns. `sourceCounts.test.ts` pins the
+> ceiling — now **750** — and it is only ever lowered.
+>
+> The 2026-08-08 pass extracted `ReviewRowCard` plus five overlays (`ReviewDestSheet`,
+> `CounterpartySheet`, `BulkGroupSheet`, `ReviewOverflowSheet`, `SavedViewsSheet`) into
+> `components/finance/review/`, and reused Add's `PayMethodSheet` instead of a second
+> pay-method list. **`ReviewRowCard` must stay at module scope** — defining it inside
+> `ReviewScreen` creates a new component type per render, which remounts the row and drops
+> keyboard focus while typing an amount. That regression has happened once already; the file
+> carries a comment saying so.
 
 **Pass 4 (2026-07-28)** additionally closed 7 items that `AUDIT.md` had tagged `DEFER`
 because they needed an owner decision rather than more analysis — the personal-screen
@@ -58,6 +65,24 @@ device-tested** — `tsc` and `jest` cannot see a broken layout, and the new `sp
 flag changes the tab bar.
 
 ---
+
+## Open money-model gaps (2026-08-08)
+
+**Card repayment is not modelled.** `pay_method = card` now correctly routes spend to
+used credit instead of cash (`lib/cash.ts` + `cashQuery.ts`, parity locked by
+`cashSql.test.ts`), and `creditUsed` is read as *stated balance + card spend since
+`money.updated_at`* — so it self-corrects whenever the user re-enters the balance in
+the Plan editor. What's missing is the other direction: paying your card bill should
+move cash down and `creditUsed` down, and there is no card-bill concept to hang that
+on. Guessing (a magic category name, or a bank→card transfer) would be worse than the
+gap. Until a real card-payment path exists, `creditUsed` only grows between Plan edits.
+
+**Accounts as entities.** Income records *where it landed* (`INCOME_LANDING`, a view
+over `pay_method`), but cash is a single pooled figure — choosing Bank vs Cash labels
+the transaction, it does not maintain separate balances. Real accounts with balances
+would reopen Total Money, the settlement engine and the transfer flow; deliberately
+deferred. The two gaps above are the same missing model.
+
 
 ## How to use this file
 
@@ -104,6 +129,11 @@ flag changes the tab bar.
 | **F5** | ⛔ | Live email ingestion blocked — Google OAuth needs CASA assessment | Paste path shipped as the workaround | ⛔ external |
 | ~~**F6**~~ | ✅ | ~~Receipt-OCR provider has no Settings row~~ | **Fixed 2026-08-04** — **Cloud Receipt Scanning** added to Feature management → Smart capture (`app/features.tsx`, `toggleCloudOcr` → `settings.setOcrProvider`). On = `gemini`, off = `device`. A `settings` pref rather than a `FeatureKey` for the same reason `save_location` is: it isn't a show/hide-a-surface boolean. Neither direction warns (off needs no defence; on is the default) — the caption carries the consequence and flips with the state. Not dimmed when off, since off means "read locally", not "scanning disabled". | done |
 | ~~**F7**~~ | ✅ | ~~**Receipt scanning ships unflagged.**~~ Closed 2026-08-05 in the Wave-3 flag rework: `receiptScan` now gates the Scan button, and `featureFlags.test.ts` asserts it gates something. | `app/add/itemized.tsx`; AUDIT F-31 | **done** |
+| **F8** | ⛔ | **UPI hand-off: PhonePe · Paytm · Amazon Pay · WhatsApp refuse a payment we start.** Closed on our side — every payload lever was varied (path, `mode`, `tr`, `pn`, withholding `am`) with an identical refusal each time; HTTPS universal links are impossible (PhonePe serves **404** at its `apple-app-site-association` path, so iOS can never route one) and aggregator `sign=` is made by the *payee's* PSP, so no gateway can sign for a friend's VPA. The way round is the request-QR, which needs no credentials. Would only reopen with merchant/TPAP registration. | `src/lib/upiIntent.ts`; FEATURES_AND_FLOWS §14 | ⛔ external |
+| **F9** | 🟡 | **Every per-app UPI result on record is iOS.** On Android `useUpiApps` returns `null`, so `spec` is null, no per-app prefix or `blocked` flag is ever reached and all four "blocked" apps get the generic `upi://pay` through the OS chooser — untested. Android intents carry the calling package, which is what PhonePe is known to whitelist against, so this is the one test that could reopen F8 for PhonePe/Paytm. Amazon Pay and WhatsApp fail PSP-side and would likely fail there too. **Costs one Android build and ₹1 per app.** | `src/hooks/useUpiApps.ts`; FEATURES_AND_FLOWS device table | open |
+| **F10** | 🟡 | **Per-app payload quirks are dead on Android.** `UpiPayloadQuirks` are read from the app's spec, and there is no spec on Android — so CRED receives `mode=04` (the parameter it is pinned to avoid) and Airtel loses the `tr` it paid with. The two apps with *proven* payloads are the only two getting a payload they were never proven on. Structural rather than careless: the OS chooser means we cannot know the target app. Needs a decision, not a patch. | `src/hooks/useUpiHandoff.ts`, `src/lib/upiIntent.ts` | ⏸️ blocked |
+| **F11** | 🟢 | **CRED's `mode` vs `tr` was never isolated.** It paid on `pa/pn/am/cu` and failed once **both** `mode` and `tr` were added, so the cause is the payload but not which half. Both are off for CRED today, closing the question by avoidance. Two attempts settle it — and if `mode` is innocent, one app-specific quirk disappears. | `src/lib/upiIntent.ts` CRED entry | open |
+| **F12** | 🟢 | **Amazon Pay and WhatsApp were both tested against the same `@kotak` handle**, so the two "blocked" verdicts share an uncontrolled variable — the same confound Airtel already produced here. Amazon Pay resolved that handle (green-ticked name) while WhatsApp could not, and Kotak is not among WhatsApp's five PSP banks. Retrying WhatsApp against an `@okhdfcbank`/`@ybl` handle could show it is not blocked at all. | FEATURES_AND_FLOWS device table | open |
 
 ---
 
@@ -207,7 +237,7 @@ These were carried as open work and are verified fixed. This is why rule 4 exist
 | `edit.tsx handleSave` silent failure | Has `try/catch` + `Alert` + `finally` — [edit.tsx:63-82](../app/group/[id]/edit.tsx#L63) |
 | No max-amount/overflow guard in `money.ts` | `MAX_INT_DIGITS` / `MAX_PAISE` + clamping — [money.ts:120-148](../src/lib/money.ts#L120) |
 | Missing `maxLength` on group + goal names | Both present — [GroupForm.tsx:62](../src/components/finance/GroupForm.tsx#L62), [savings.tsx:374](../app/%28tabs%29/savings.tsx#L374) |
-| Missing `AmountInput`, `RecurrenceEditor`, `GroupPickerSheet`, `LocationRow` | All built — `add/AmountField.tsx`, `add/RecurringControls.tsx`, `GroupSelector.tsx`, `add/LocationRow.tsx`. (`income.tsx`, the other half of each cited pair, no longer exists.) |
+| Missing `AmountInput`, `RecurrenceEditor`, `GroupPickerSheet`, `LocationRow` | All built — `add/AmountField.tsx`, `add/RecurringControls.tsx`, `add/DestinationSheet.tsx` (which replaced `GroupSelector.tsx`), `add/LocationRow.tsx`. (`income.tsx`, the other half of each cited pair, no longer exists.) |
 | `add/quick.tsx` has no error handling | Handled in [useAddTxnForm.ts:256-380](../src/hooks/useAddTxnForm.ts#L256) — `try/catch` + `Alert` on every write path |
 
 ### Fixed during the 🔴 paydown (2026-07-28)
@@ -225,3 +255,21 @@ N+1 split loader batched · atomic `splitRecurringSeries` · `deleteCategory` bu
 one `recurringMonthlyEquivalent` · one `forecast` model · one `budgetHealth`/`utilLabel` ·
 `recordSettlement` single write path · `Card.tsx`/`settle.tsx`/`computeNet` deleted ·
 central `src/theme` module · Phase 0–3 screen migrations to `useScreenData`.
+
+---
+
+## Known intermittent: chained `test:calendar` suite-load flake
+
+`npm run test:calendar` spawns `jest` seven times in a row (one per `FAKE_TODAY`). Twice now,
+one **randomly chosen** suite has failed at *load* time in the middle of that loop —
+`txnInvariant.test.ts` once, `financialHealth.test.ts` once — reporting a suite failure while
+the remaining 62 suites pass and the test count drops by exactly that suite's size.
+
+Neither has ever reproduced: the same date runs 884/884 in isolation, three times consecutively,
+and a repeat of the full seven-date matrix comes back green on all seven. Different suite each
+time, load-level rather than assertion-level, and only under repeated jest invocation — which
+points at the runner (worker/haste-map reuse across back-to-back spawns), not at app code.
+
+**If you hit it:** re-run the single date directly before believing it. It is recorded here so
+the third occurrence isn't mistaken for a new regression — and so that if it ever *does*
+reproduce, this is the note to delete.

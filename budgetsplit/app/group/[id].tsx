@@ -26,6 +26,7 @@ import { haptic } from '../../src/lib/haptics';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
+import { TabPills } from '../../src/components/ui/TabPills';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { FAB } from '../../src/components/ui/FAB';
@@ -171,18 +172,22 @@ export default function GroupDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Breadcrumb header */}
-      <View style={[styles.header, { paddingTop: insets.top + space.xs }]}>
-        <TouchableOpacity style={styles.breadcrumb} onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back to Groups">
-          <Feather name="chevron-left" size={18} color={colors.accent} />
-          <Text style={styles.breadcrumbBack}>Groups</Text>
-          <Text style={styles.breadcrumbSep}>›</Text>
-          <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{group.name}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      {/* `ScreenHeader` rather than a hand-rolled bar: this screen used to pad to
+          `insets.top + space.xs` while every screen you navigate to from it uses
+          `+ space.sm`, so the header jumped 4px on each push. It also rendered
+          `ScreenHeader` in its error/not-found branches and a breadcrumb here, so
+          the header changed shape depending on load state.
+          The title names where Back goes — `GroupHero` right below already carries
+          the group's name at 26px, so repeating it here would just be redundant. */}
+      <ScreenHeader
+        title="Groups"
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
+            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        }
+      />
 
       <GroupHero group={group} members={members} />
 
@@ -194,19 +199,16 @@ export default function GroupDetailScreen() {
         onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
       />
 
-      {/* Segmented tabs */}
-      <View style={styles.tabStrip}>
-        {TABS.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tab, activeTab === t.key && styles.tabActive]}
-            onPress={() => { setActiveTab(t.key); haptic.selection(); }}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === t.key }}
-          >
-            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* `TabPills`, not a local copy of it. This strip was a byte-for-byte
+          duplicate of that component's intent at different values (borderRadius 10
+          vs radius.pill, 32pt tall vs 36, fontSize 12) — and `personal.tsx` held an
+          identical copy of the duplicate. */}
+      <View style={styles.tabs}>
+        <TabPills
+          tabs={TABS}
+          active={activeTab}
+          onChange={(k) => { setActiveTab(k as TabKey); haptic.selection(); }}
+        />
       </View>
 
       {activeTab === 'transactions' && (
@@ -224,6 +226,8 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'budget' && (
         <BudgetTab
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           analytics={analytics}
           catStatus={catStatus}
           contributions={contributions}
@@ -235,6 +239,8 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'members' && (
         <MembersTab
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           members={members}
           net={net}
           meId={meId}
@@ -251,6 +257,8 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'recurring' && (
         <RecurringTab
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           rules={recurringRules}
           meId={meId}
           defaultSplit={group.default_split}
@@ -312,16 +320,7 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
-  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flex: 1 },
-  breadcrumbBack: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  breadcrumbSep: { ...type.body, color: colors.border, marginHorizontal: 1 },
-  breadcrumbCurrent: { ...type.label, color: colors.textSecondary, flex: 1 },
-  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
-  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: radius.sm },
-  tabActive: { backgroundColor: colors.accent },
-  tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
-  tabLabelActive: { color: colors.bg },
+  tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },

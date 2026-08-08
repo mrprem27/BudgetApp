@@ -16,22 +16,11 @@ import { getRecurringForGroup, getSkipsMap } from '../../../src/db/queries/recur
 import { useRecurringActions } from '../../../src/hooks/useRecurringActions';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
-import { nextOccurrenceOnOrAfter } from '../../../src/lib/recurrence';
+import { nextOccurrenceOnOrAfter, freqLabel } from '../../../src/lib/recurrence';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 import { alpha } from '../../../src/theme';
 
 type Rule = TxnWithSplits;
-
-function freqLabel(freq: string | null, interval: number | null): string {
-  const n = interval ?? 1;
-  switch (freq) {
-    case 'daily':   return n === 1 ? 'Every day' : `Every ${n} days`;
-    case 'weekly':  return n === 1 ? 'Every week' : `Every ${n} weeks`;
-    case 'monthly': return n === 1 ? 'Every month' : `Every ${n} months`;
-    case 'custom':  return `Every ${n} days`;
-    default:        return 'Repeats';
-  }
-}
 
 /**
  * The next occurrence strictly after now, stepping past any the user skipped.

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, ViewStyle, StyleProp } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 
 type Props = {
   children: React.ReactNode;
@@ -12,16 +13,20 @@ type Props = {
 
 /** Fades + rises its children in on mount — used for content entrance cascades. */
 export function FadeIn({ children, delay = 0, offset = 12, style }: Props) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const reduced = useReducedMotion();
+  // Start fully visible when motion is reduced, so content never depends on an
+  // animation that won't run.
+  const anim = useRef(new Animated.Value(reduced ? 1 : 0)).current;
 
   useEffect(() => {
+    if (reduced) { anim.setValue(1); return; }
     Animated.timing(anim, {
       toValue: 1,
       duration: 380,
       delay,
       useNativeDriver: true,
     }).start();
-  }, [anim, delay]);
+  }, [anim, delay, reduced]);
 
   return (
     <Animated.View

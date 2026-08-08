@@ -1,4 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
+import { PayMethod } from '../constants/enums';
 import { insertPending } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
 import { matchCategory } from './smartCategory';
@@ -87,7 +88,7 @@ export async function recordScannedPayment(
     category,
     direction: 'debit',
     source: 'upi_qr',
-    pay_method: 'upi',
+    pay_method: PayMethod.Upi,
     raw: `Scanned & paid ${p.vpa}`,
     // Captured at scan time, not now: `nowMs` can be hours after the payment, and the
     // user has moved. See `PendingPayment.lat`.

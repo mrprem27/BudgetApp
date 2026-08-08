@@ -13,7 +13,9 @@ import { type } from '../../src/constants/typography';
 import { space, layout, radius, shadow } from '../../src/constants/layout';
 import { haptic } from '../../src/lib/haptics';
 import { formatAgoCompact } from '../../src/lib/time';
-import { getMe, getAllPersons, updatePersonName, setPersonImage } from '../../src/db/queries/persons';
+import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa } from '../../src/db/queries/persons';
+import { isValidVpa } from '../../src/lib/upiIntent';
+import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
 import { shareCsv } from '../../src/lib/shareCsv';
@@ -42,6 +44,9 @@ export default function SettingsScreen() {
 
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
+  const [showVpa, setShowVpa] = useState(false);
+  const [vpaText, setVpaText] = useState('');
+  const [showMyQr, setShowMyQr] = useState(false);
 
   // DB-backed values: one loader, with the hook owning focus refetch + errors.
   // The self-heal write is idempotent (only fires on an empty catalog), so it's
@@ -128,6 +133,29 @@ export default function SettingsScreen() {
     setShowName(false);
   }
 
+  /**
+   * Your own handle — the one thing a request QR cannot be built without.
+   *
+   * `friends.tsx` sets a VPA for everyone *except* you (it filters `is_me`), so until
+   * this existed there was no way to record your own. Validated with the same
+   * `isValidVpa` the pay path uses; a second validator here would be a second answer to
+   * the same question.
+   */
+  async function saveVpa() {
+    if (!me) return;
+    const trimmed = vpaText.trim();
+    // Empty clears it — the only way back out once you have set one.
+    if (trimmed && !isValidVpa(trimmed)) {
+      haptic.error();
+      Alert.alert('That doesn’t look like a UPI ID', 'It should read like name@bank — for example prem@okhdfcbank.');
+      return;
+    }
+    await setPersonUpiVpa(db, me.id, trimmed || null);
+    await reload();
+    haptic.success();
+    setShowVpa(false);
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     {/* Persistent status-bar cover — outside the ScrollView so scrolled content
@@ -173,8 +201,32 @@ export default function SettingsScreen() {
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
+      {/* GETTING PAID — your own handle, and the code others scan to pay you.
+          Sits directly under the profile because both rows are about *you*, not about
+          the app. `friends.tsx` covers everyone else's handle; it filters out `is_me`. */}
+      {flags.upiSettle && (
+        <>
+          <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Getting paid</Text>
+          <View style={styles.card}>
+            <SettingsRow
+              icon="credit-card"
+              label="Your UPI ID"
+              value={me?.upi_vpa ?? 'Not set'}
+              onPress={() => { setVpaText(me?.upi_vpa ?? ''); setShowVpa(true); }}
+            />
+            <View style={settingsRowDivider} />
+            <SettingsRow
+              icon="maximize"
+              label="Show my UPI QR"
+              value="Any UPI app"
+              onPress={() => setShowMyQr(true)}
+            />
+          </View>
+        </>
+      )}
+
       {/* MANAGE */}
-      <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Manage</Text>
+      <Text style={[styles.sectionTitle, flags.upiSettle ? null : { marginTop: 0 }]}>Manage</Text>
       <View style={styles.card}>
         <SettingsRow
           icon="users"
@@ -293,6 +345,37 @@ export default function SettingsScreen() {
         <PrimaryButton label="Save" onPress={saveName} disabled={!nameText.trim()} />
       </SheetModal>
 
+      <SheetModal visible={showVpa} onClose={() => setShowVpa(false)} title="Your UPI ID">
+        <Input
+          value={vpaText}
+          onChangeText={setVpaText}
+          placeholder="name@bank"
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          maxLength={100}
+          returnKeyType="done"
+          onSubmitEditing={saveVpa}
+          style={styles.nameInputGap}
+        />
+        <Text style={styles.vpaHint}>
+          Goes into the QR others scan to pay you. It stays on this phone — nothing is uploaded.
+        </Text>
+        <PrimaryButton label="Save" onPress={saveVpa} />
+      </SheetModal>
+
+      {/* Amount-less: this is the standing "here's my handle" code, not a request for a
+          specific sum. Settling up passes an amount — see TransferBody. */}
+      <RequestQrSheet
+        visible={showMyQr}
+        onClose={() => setShowMyQr(false)}
+        vpa={me?.upi_vpa ?? null}
+        name={me?.name}
+        onSetUpiId={() => { setShowMyQr(false); setVpaText(me?.upi_vpa ?? ''); setShowVpa(true); }}
+      />
+
+
       <SheetModal visible={showCadence} onClose={() => setShowCadence(false)} title="Default budget cadence" scroll={false}>
         {CADENCE_KEYS.map(c => (
           <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} accessibilityState={{ selected: defaultCadence === c }} onPress={() => pickCadence(c)} accessibilityRole="button">
@@ -335,6 +418,7 @@ const styles = StyleSheet.create({
   aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingTop: 2 },
   aboutHint: { ...type.caption, color: colors.textMuted, fontSize: 10, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 6 },
   nameInputGap: { marginBottom: space.md },
+  vpaHint: { ...type.label, color: colors.textSecondary, marginBottom: space.md, lineHeight: 19 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },

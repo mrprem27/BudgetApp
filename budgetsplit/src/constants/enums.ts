@@ -25,6 +25,30 @@ export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
   expense: 'Expenses', income: 'Income', settlement: 'Settlements',
 };
 
+/**
+ * What the Add screen is adding. Deliberately *not* `TxnKind`: the user picks
+ * "Transfer", which is stored as a `settlement`. This is the UI-facing set, and
+ * the order here is the order of the switcher.
+ *
+ * Previously declared in `components/finance/add/KindToggle.tsx`, so a type every
+ * layer needed (the form hook, the amount field, the category pills) was reached
+ * for through a component.
+ */
+/** Transfer sits in the MIDDLE deliberately: it's the switcher's neutral centre,
+ *  with money-out on the left and money-in on the right. */
+export enum AddKind {
+  Expense = 'expense',
+  Income = 'income',
+  Transfer = 'transfer',
+}
+/** Render order for the switcher — not the same thing as the member list. */
+export const ADD_KIND = [AddKind.Expense, AddKind.Transfer, AddKind.Income] as const;
+export const ADD_KIND_LABEL: Record<AddKind, string> = {
+  [AddKind.Expense]: 'Expense',
+  [AddKind.Income]: 'Income',
+  [AddKind.Transfer]: 'Transfer',
+};
+
 /** `txn.entry_mode CHECK(entry_mode IN ('quick','itemized'))`. */
 export const ENTRY_MODE = ['quick', 'itemized'] as const;
 export type EntryMode = typeof ENTRY_MODE[number];
@@ -32,15 +56,57 @@ export type EntryMode = typeof ENTRY_MODE[number];
 /** `txn.pay_method` / `pending_txn.pay_method` — nullable. How a payment was made.
  *  Applies to every txn kind (expense/income/transfer/settlement). Detected from
  *  imported text (see `payMethodDetect`), pre-filled in Review, always editable. */
-export const PAY_METHOD = ['upi', 'card', 'cash', 'bank', 'wallet', 'autopay', 'other'] as const;
-export type PayMethod = typeof PAY_METHOD[number];
+export enum PayMethod {
+  Upi = 'upi',
+  Card = 'card',
+  Cash = 'cash',
+  Bank = 'bank',
+  Wallet = 'wallet',
+  Autopay = 'autopay',
+  Other = 'other',
+}
+/** Render order for the pay-method picker. */
+export const PAY_METHOD = [
+  PayMethod.Upi, PayMethod.Card, PayMethod.Cash, PayMethod.Bank,
+  PayMethod.Wallet, PayMethod.Autopay, PayMethod.Other,
+] as const;
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
-  upi: 'UPI', card: 'Card', cash: 'Cash', bank: 'Bank', wallet: 'Wallet', autopay: 'Autopay', other: 'Other',
+  [PayMethod.Upi]: 'UPI', [PayMethod.Card]: 'Card', [PayMethod.Cash]: 'Cash',
+  [PayMethod.Bank]: 'Bank', [PayMethod.Wallet]: 'Wallet',
+  [PayMethod.Autopay]: 'Autopay', [PayMethod.Other]: 'Other',
 };
 /** Emoji glyph per pay method — the single source for the pay-method chips. */
 export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
-  upi: '📱', card: '💳', cash: '💵', bank: '🏦', wallet: '👛', autopay: '🔁', other: '•',
+  [PayMethod.Upi]: '📱', [PayMethod.Card]: '💳', [PayMethod.Cash]: '💵',
+  [PayMethod.Bank]: '🏦', [PayMethod.Wallet]: '👛',
+  [PayMethod.Autopay]: '🔁', [PayMethod.Other]: '•',
 };
+
+/**
+ * Where incoming money can land. The same `pay_method` column, asked the other way
+ * round: income arrives *into* cash, a bank account or a wallet — it never arrives
+ * "by card" or "by autopay". Bank is the default because salary is the common case.
+ *
+ * This is deliberately a view over `PAY_METHOD` rather than a new `account` concept.
+ * Accounts as real entities (with balances) is a separate, larger design — see the
+ * note in `DEBT_TRACKER.md`.
+ */
+export const INCOME_LANDING: readonly PayMethod[] = [
+  PayMethod.Bank, PayMethod.Cash, PayMethod.Wallet, PayMethod.Upi,
+];
+export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
+
+/**
+ * A settlement's scope: which debt is being paid down. Either every shared group
+ * at once, or one group's id — so the type is a union with a group id, and this is
+ * the named sentinel rather than a bare `'all'` scattered across the transfer flow.
+ *
+ * It is *not* cosmetic: `all` fans the payment across every group's balance
+ * largest-first (`planAllGroupsSettlement`), while a group id writes a single
+ * settlement against that group.
+ */
+export const TRANSFER_SCOPE_ALL = 'all' as const;
+export type TransferScope = typeof TRANSFER_SCOPE_ALL | string;
 
 /** `pending_txn.source` — where an imported/pending row came from. Drives the
  *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
@@ -63,6 +129,34 @@ export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */
 export const RECUR_FREQ = ['daily', 'weekly', 'monthly', 'yearly', 'custom'] as const;
 export type RecurFreq = typeof RECUR_FREQ[number];
+export const RECUR_FREQ_LABEL: Record<RecurFreq, string> = {
+  daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', custom: 'Custom',
+};
+/**
+ * The frequencies the Add screen offers, in switcher order — monthly first because
+ * subscriptions and rent are the common case. A subset, not the whole set: `daily` is
+ * reachable through `custom` ("every 1 days") and a fifth segment made the control too
+ * tight to hit. Same relationship `INCOME_LANDING` has to `PAY_METHOD`.
+ */
+export const RECUR_FREQ_ADD_CHOICES: readonly RecurFreq[] = ['monthly', 'weekly', 'yearly', 'custom'];
+
+/**
+ * When a recurring rule stops. Not a stored column — it's how the UI asks for one of
+ * `recur_end` (a date) or `recur_count` (a number of occurrences), with `never` meaning
+ * both are null. Declared here because it was written out as a bare
+ * `'never' | 'date' | 'count'` union in three separate files.
+ */
+export enum RecurEndMode {
+  Never = 'never',
+  Date = 'date',
+  Count = 'count',
+}
+export const RECUR_END_MODE = [RecurEndMode.Never, RecurEndMode.Date, RecurEndMode.Count] as const;
+export const RECUR_END_MODE_LABEL: Record<RecurEndMode, string> = {
+  [RecurEndMode.Never]: 'Never',
+  [RecurEndMode.Date]: 'On date',
+  [RecurEndMode.Count]: 'After N',
+};
 
 /** `txn.recur_state CHECK(recur_state IN ('active','paused','ended'))`. */
 export const RECUR_STATE = ['active', 'paused', 'ended'] as const;

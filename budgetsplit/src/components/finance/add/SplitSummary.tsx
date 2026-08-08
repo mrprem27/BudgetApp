@@ -16,10 +16,12 @@ type Props = {
   meId: string | undefined;
   onOpenSplit: () => void;
   onOpenPayers: () => void;
+  /** The screen's kind colour, so the summary agrees with the rest of the form. */
+  accent?: string;
 };
 
 /** "Split with [avatars] · Equal · ₹X each" + "Paid by …" rows (shared expense). */
-export function SplitSummary({ members, splitMembers, splitType, total, payments, meId, onOpenSplit, onOpenPayers }: Props) {
+export function SplitSummary({ members, splitMembers, splitType, total, payments, meId, onOpenSplit, onOpenPayers, accent = colors.accent }: Props) {
   const inSplit = members.filter(m => splitMembers.includes(m.id));
   const perEach = inSplit.length > 0 ? Math.round(total / inSplit.length) : 0;
   const summary = splitType === 'equal'
@@ -36,7 +38,7 @@ export function SplitSummary({ members, splitMembers, splitType, total, payments
         <Text style={styles.splitWithLabel}>Split with</Text>
         <View style={styles.splitWithRight}>
           <AvatarStack people={inSplit} size={24} max={4} />
-          <Text style={styles.splitWithValue}>{summary}</Text>
+          <Text style={[styles.splitWithValue, { color: accent }]}>{summary}</Text>
         </View>
       </TouchableOpacity>
       <TouchableOpacity style={styles.paidByLine} onPress={onOpenPayers} accessibilityRole="button" accessibilityLabel="Who paid">
@@ -53,8 +55,8 @@ const styles = StyleSheet.create({
   splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   splitWithLabel: { ...type.body, color: colors.textSecondary },
   splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  splitWithValue: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingTop: space.sm + 2 },
+  splitWithValue: { ...type.labelSemi, color: colors.accent },
+  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingTop: space.smd },
   paidByLabel: { ...type.body, color: colors.textSecondary },
-  paidByValue: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  paidByValue: { ...type.bodySemi, color: colors.textPrimary },
 });

@@ -6,6 +6,12 @@ const txn = (kind: string, pay: number, share: number, payer = ME, sharer = ME):
   payments: pay ? [{ personId: payer, amount: pay }] : [],
   shares: share ? [{ personId: sharer, amount: share }] : [],
 });
+/** A card purchase — debt, not cash out. `date` matters only against a baseline. */
+const cardTxn = (pay: number, date = 1000): CashTxn => ({
+  kind: 'expense', pay_method: 'card', date,
+  payments: [{ personId: ME, amount: pay }],
+  shares: [{ personId: ME, amount: pay }],
+});
 
 describe('computeCash', () => {
   it('fronting a group bill shows full cash out, then settlements net it to your share', () => {
@@ -49,6 +55,37 @@ describe('computeCash', () => {
   });
 });
 
+describe('computeCash — card spend is debt, not cash', () => {
+  it('a card purchase leaves cash untouched and lands in cardSpend', () => {
+    const c = computeCash([cardTxn(10000)], ME, 0);
+    expect(c.available).toBe(0);      // no cash moved
+    expect(c.paidExpenses).toBe(0);
+    expect(c.cardSpend).toBe(10000);
+  });
+
+  it('cash and card spend are tracked separately in the same month', () => {
+    const c = computeCash([cardTxn(10000), txn('expense', 700, 700)], ME, 0);
+    expect(c.paidExpenses).toBe(700);
+    expect(c.cardSpend).toBe(10000);
+    expect(c.available).toBe(-700);
+  });
+
+  it('only counts card spend after the baseline the user last confirmed', () => {
+    const txns = [cardTxn(10000, 500), cardTxn(3000, 900)];
+    expect(computeCash(txns, ME, 0, 0, null).cardSpend).toBe(13000); // never confirmed
+    expect(computeCash(txns, ME, 0, 0, 500).cardSpend).toBe(3000);   // 500 is already stated
+    expect(computeCash(txns, ME, 0, 0, 900).cardSpend).toBe(0);      // all stated
+  });
+
+  it('an expense with no recorded pay method still counts as cash out', () => {
+    // Most rows predate pay-method capture; treating them as card would silently
+    // inflate credit and understate spending.
+    const c = computeCash([txn('expense', 500, 500)], ME, 0);
+    expect(c.paidExpenses).toBe(500);
+    expect(c.cardSpend).toBe(0);
+  });
+});
+
 describe('computeTotalMoney', () => {
   const cash = (available: number) => computeCash([], ME, 0, available); // openingCash drives available
   const profile = (p: Partial<MoneyProfile> = {}): MoneyProfile =>
@@ -74,6 +111,37 @@ describe('computeTotalMoney', () => {
     expect(tm.cashAvailable).toBe(-2000);
     expect(tm.creditAvailable).toBe(10000);
     expect(tm.total).toBe(8000); // -2000 + 0 investments + 10000 credit
+  });
+});
+
+describe('computeCash — card spend is debt, not cash', () => {
+  it('a card purchase leaves cash untouched and lands in cardSpend', () => {
+    const c = computeCash([cardTxn(10000)], ME, 0);
+    expect(c.available).toBe(0);      // no cash moved
+    expect(c.paidExpenses).toBe(0);
+    expect(c.cardSpend).toBe(10000);
+  });
+
+  it('cash and card spend are tracked separately in the same month', () => {
+    const c = computeCash([cardTxn(10000), txn('expense', 700, 700)], ME, 0);
+    expect(c.paidExpenses).toBe(700);
+    expect(c.cardSpend).toBe(10000);
+    expect(c.available).toBe(-700);
+  });
+
+  it('only counts card spend after the baseline the user last confirmed', () => {
+    const txns = [cardTxn(10000, 500), cardTxn(3000, 900)];
+    expect(computeCash(txns, ME, 0, 0, null).cardSpend).toBe(13000); // never confirmed
+    expect(computeCash(txns, ME, 0, 0, 500).cardSpend).toBe(3000);   // 500 is already stated
+    expect(computeCash(txns, ME, 0, 0, 900).cardSpend).toBe(0);      // all stated
+  });
+
+  it('an expense with no recorded pay method still counts as cash out', () => {
+    // Most rows predate pay-method capture; treating them as card would silently
+    // inflate credit and understate spending.
+    const c = computeCash([txn('expense', 500, 500)], ME, 0);
+    expect(c.paidExpenses).toBe(500);
+    expect(c.cardSpend).toBe(0);
   });
 });
 

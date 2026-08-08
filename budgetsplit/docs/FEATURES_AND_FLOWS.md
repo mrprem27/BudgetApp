@@ -151,7 +151,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
-| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
+| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
 
@@ -204,7 +204,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
 | S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden: attachment stats, clear attachments, load demo data, erase all data. Settings → version ×7. |
 | S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
-| S-29 | **Help** | `app/help.tsx` | Static accordion of help copy. No data access. |
+| S-29 | **Help** | `app/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
 | S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
 | S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
 | S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. Per-row **Skip next · Pause · Stop** (shared `useRecurringActions`); row tap → `/group/{id}/recurring?focus={ruleId}`. |
@@ -300,7 +300,7 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 3. **Balance card** (`GroupBalanceCard`) — when your net ≠ 0: "YOU OWE / OWED TO YOU" + amount + counterpart name + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`. When net **= 0** it renders an explicit **"All settled up"** card (check-circle, `colors.settle`) rather than nothing.
 4. 🔘 **Tab pills** (see set above).
 
-**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search note or category" + 🔘 `All · Expense · Income · Settlement`) → **SectionList** of **TransactionRow** grouped by date. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
+**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search note or category" + 🔘 `All · Expense · Income · Settlement`) → **SectionList** of **TransactionRow** in **TxnCell**, grouped by date ("Today" / "Yesterday" / "14 Jun" via `dateSectionLabel`); each date's rows share one card. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
 
 **Tab — Budget:** "Budget" heading + **Edit** pill → `/group/{id}/budget`. Overview card (used / of total + **BudgetBar** + counts **over · near limit · on track**); recommendation pills; "Driving overspend" rows (worst-first) *or* "Every category within budget"; **"Who paid what" contributions** — a per-member fairness breakdown (ahead/behind their fair share) that the standalone budget-editor route never shows, and the reason both surfaces exist; 🔘 status filter `All · Over · Near limit · On track`; per-category **BudgetBar** cards.
 
@@ -330,14 +330,36 @@ pull-to-refresh — they're wizards.
 
 ### 7.1 Quick Add — `app/add/quick.tsx`
 **Purpose:** log one expense / income / settlement transfer (create or edit).
-1. **ModalHeader** + 🔘 **kind** — `Expense · Income · Transfer` (Transfer hidden unless `flags.splitting` or you're editing an existing transfer; Income forces the Personal group).
-2. **Amount input** (large SpaceMono) — `sanitizeAmountInput` caps it live, `parseToPaise` on read.
-3. **Expense/Income body:** category + date pills (→ `CategoryPicker` / `DatePickerSheet`); **GroupSelector** (expense, >1 group) — frequent-group pills + a **More** picker *(sheet)*; Title/Note card; **budget nudge** ("₹X left in {cat} this month", from `getAffordSnapshot`); **More options** (smart-category note, **Split by items** → `/add/itemized`, attach receipt, location, pay method, recurring card); split-with + paid-by rows; remainder warning.
-4. **Transfer body** (`TransferBody`): from/to people, scope (per-group or "all groups"), 🔘 pay method, note.
-5. **SplitSheet** *(sheet, shared expense)* — 🔘 `Equal · Exact · % · Shares`; **PayersSheet** for who paid how much.
-6. **Smart category** *(flag `smartCategory`, off by default)*: typing a title auto-picks a category via learned overrides → rules → "Other".
-7. **Save** (`✓`, gated by `canSave` — see §16): transfer → `handleSaveTransfer` (`planAllGroupsSettlement` largest-first, or a single group); edit → `updateTxn`; recurring-edit → `splitRecurringSeries` ("this & future", atomically capping the old rule and starting a new one); new expense → duplicate-check (`findRecentDuplicate`, ±24 h) → `insertTxn`. Then `haptic.success()` → `refresh()` → `router.back()`.
-8. **Receipt attach:** iOS action sheet (camera/library); storage-full → Alert with a `/storage` deep-link; the expense still saves without the photo.
+Body order, top to bottom:
+
+1. **ModalHeader** — ✕ left, title centre, **Save** right (a tinted text button, kind-coloured, disabled until `canSave`). AGENTS §5's PrimaryButton rule has a recorded exception for modal headers.
+2. 🔘 **Kind** — `TabPills` at `size="lg"` (full-width, 56pt): `Expense · Income · Transfer`. Transfer is hidden unless `flags.splitting` or you're editing an existing transfer; Income forces the Personal group.
+3. **ContextPill** — one compact centred pill answering "what is this about?", used by **both** kinds. For an **expense** it shows the destination group + "N people · equal" / "just you" → **DestinationSheet** (every group, ordered by `getGroupsByRecentUse` — Personal pinned, then most-recently-used); **rendered even with one group**, unlike the old `GroupSelector` which was gated on `groups.length > 1`. For a **transfer** it shows which debt is being settled + its balance → **ScopeSheet** (All groups + each shared group, each with its outstanding amount). Transfer previously asked this a second time with its own chip row inside `TransferBody`.
+4. **Amount input** (`type.amountXL` SpaceMono) — `sanitizeAmountInput` caps it live, `parseToPaise` on read.
+5. **Category + date chips** → `CategoryPicker` / `DatePickerSheet`. Both are `ui/Chip` with a trailing chevron — the *same* primitive as the "Other details" chips below, so the screen has one pill shape. Category `grow`s to fill the row (a long name truncates instead of pushing Date off-screen) and shows its own colour+glyph in an `IconCircle`; Date carries a `calendar` glyph it previously had none of.
+6. **Transfer body** (`TransferBody`, transfer only): from/to people, scope (per-group or "all groups"), 🔘 pay method, note.
+7. **Title/Note field** (`ui/Input`, `edit-3` glyph, focus ring), then the **budget nudge** ("₹X left in {cat} this month", from `getAffordSnapshot`).
+8. **SplitSummary** *(shared expense, total > 0)* — split-with + paid-by. Sits **above** the optional details, so nothing can push it off-screen.
+9. **Remainder warning** when payers or shares don't add up.
+10. **DetailChips** under an "Other details" header — one named chip each for `Note`, `Receipt`, `Location`, pay method, **Split by items** and `Repeat`. **Every chip shows its own glyph in both states** (`align-left`, `paperclip`, `map-pin`, `credit-card`/`download`, `list`, `repeat`); unset reads muted with the field name, set shows the value tinted with a ✕ to clear. The first version used a shared `plus` glyph while unset, so four different chips looked identical exactly when the user needed to tell them apart. Each opens a focused sheet (`NoteSheet`, `PayMethodSheet`, `RecurringSheet`) or acts directly (receipt → OS picker, location → capture, split-by-items → `/add/itemized`).
+
+**Income asks where the money landed.** The pay-method chip is the same `txn.pay_method` field read the other way round: for income the sheet is titled **"Where did it land?"** and offers only `INCOME_LANDING` (Bank · Cash · Wallet · UPI), defaulting to **Bank** — salary is the common case, and the spending default (UPI) isn't a place money arrives into. This is deliberately a view over the existing column, **not** an accounts model; accounts as real entities with balances is a separate open design (see `DEBT_TRACKER.md`).
+
+**The budget insight is one line.** `BudgetNudge` shows the /afford warning when there is one, otherwise "₹X left in {cat} this month" — a single tinted line under the category pills, not a bordered card. It used to stack two bordered strips with status dots, which made ordinary information look like two error states.
+
+**Kind colour propagates through the whole form.** `kindAccent` / `kindGradient` / `kindAmountColor` (`src/lib/kindTheme.ts`) derive one colour from the kind — teal expense, green income, purple settlement — and it drives the switcher, amount, category dot, chips, split summary and save button. Previously only the switcher and amount responded, so Income showed a green number in an otherwise teal form.
+
+**One pill vocabulary.** Every pill on the screen — and in its sheets — is `ui/Chip`, with `✕` meaning "clearable" and `⌄` meaning "opens a picker" (never both). Mutually exclusive choices are `TabPills` instead: the kind switcher, the split mode in `SplitEditor`, and frequency/ends in `RecurringControls`. Before this there were **seven** hand-rolled variants of one shape across the flow, differing only in padding and radius — `CategoryDatePills` and `NoteField` on the form, three inside `RecurringControls`, and `SplitEditor`'s tab strip. `add/ContextPill` is the one deliberate second weight (quiet context above the hero); see AGENTS §9.
+
+**Overlays** all live in `QuickAddSheets` with a single `open` value, so two can never be open at once. The recurring end-date picker *swaps* with the recurring sheet rather than nesting (both are RN `<Modal>`s), and closing it returns you to the recurring sheet.
+
+**Save** (gated by `canSave` — see §16): transfer → `handleSaveTransfer` (`planAllGroupsSettlement` largest-first, or a single group); edit → `updateTxn`; recurring-edit → `splitRecurringSeries` ("this & future", atomically capping the old rule and starting a new one); new expense → duplicate-check (`findRecentDuplicate`, ±24 h) → `insertTxn`. Then `haptic.success()` → `refresh()` → `router.back()`.
+
+**Receipt attach** (`useAttachmentPicker`): iOS action sheet (camera/library), camera on Android; storage-full → Alert with a `/storage` deep-link; the expense still saves without the photo.
+
+**Smart category** *(flag `smartCategory`, off by default)*: typing a title auto-picks a category via learned overrides → rules → "Other". When it's on, the top field is the Title and the secondary note becomes the `Note` chip; when off, the top field *is* the note and no note chip is offered.
+
+Choosing a group **keeps the category you already picked** — `selectGroup` passes it to `loadGroup`, which re-resolves it by name in the new group's catalog. Without that it fell through to `cats[0]` and silently replaced your choice.
 
 ### 7.2 Income — handled by Quick (`kind='income'`)
 There is no separate income screen — the old `app/add/income.tsx` folded into Quick (one code
@@ -604,24 +626,54 @@ there the generic `upi://` intent plus a package name is the whole story, so per
 never published. Amazon Pay's was not findable anywhere and was settled on-device instead.
 
 **Long-pressing the Pay button opens `UpiUriSheet`**, showing the exact URI for every installed app
-with its provenance tag. It calls `buildUpiUri` directly, so it cannot drift from what is really
-sent — a preview that could disagree with reality would launder a guess into a reading. It exists
-because otherwise each unverified app costs a full rebuild-and-test cycle to settle.
+with its provenance tag. It exists because otherwise each unverified app costs a full
+rebuild-and-test cycle to settle.
+
+**It resolves through `upiLaunchUrl`, the same function the hand-off launches through** — a preview
+that could disagree with reality would launder a guess into a reading. It *did* disagree, and the
+shared function is the fix. The sheet used to call `buildUpiUri` for every app, so it advertised
+`paytmmp://pay?pa=…&am=…` for Paytm while `useUpiHandoff` was really sending `paytmmp://scan`. The
+bare open is intentional — blocked apps are deliberately handed no payment — but the preview was
+the last thing still claiming otherwise, which made a deliberate design read as a broken deep link.
+Rows that receive no payment now say so, quoting the app's own `blocked` reason.
+
+`handoffVerb(opts)` supplies the matching wording in one place, because the picker row and the
+destination line under the Pay button drifted too: both said *"enter it there"* even in Scan & Pay,
+where the app is opened **on its scanner** with the code still in front of the user. There it now
+reads *"scan it there"* — the accurate and easier instruction of the two.
 
 Device results so far, and what each can actually prove:
 
-| App | Build | Path | Payload | Result |
-|---|---|---|---|---|
-| CRED | `e7f2438` | `credpay://upi/pay` | `pa/pn/am/cu` | ✅ paid |
-| CRED | `4cec88d` | `credpay://upi/pay` *(same)* | `+ mode + tr` | ✗ failed |
-| Airtel | `e7f2438` | `myairtel://pay` | `pa/pn/am/cu` | ✗ failed |
-| Airtel | `4cec88d` | `myairtel://upi/pay` *(changed)* | `+ mode + tr` | ✅ paid |
-| Amazon Pay | `6d44884` | `amazonpay://upi/pay` | default, friend's `@kotak` | ✗ populated, name ✅ resolved, **declined after submit** |
-| WhatsApp | `6d44884` | `whatsapp-consumer://upi/pay` | default, friend's `@kotak` | ✗ *"Couldn't verify UPI ID"* |
-| WhatsApp | `6d44884` | `upi://pay` *(the spec)* | default | ✗ same verification failure |
-| PhonePe | *open-amount* | `phonepe://upi/pay` | **no `am`** — amount typed in PhonePe | ✗ same gallery-QR refusal |
-| Paytm | *open-amount* | `paytmmp://pay` | **no `am`** | ✗ same "UPI risk policy" |
-| Amazon Pay | *open-amount* | `amazonpay://upi/pay` | **no `am`** | ✗ same "technical error" |
+| App | Platform | Build | Path | Payload | Result |
+|---|---|---|---|---|---|
+| CRED | iOS | `e7f2438` | `credpay://upi/pay` | `pa/pn/am/cu` | ✅ paid |
+| CRED | iOS | `4cec88d` | `credpay://upi/pay` *(same)* | `+ mode + tr` | ✗ failed |
+| Airtel | iOS | `e7f2438` | `myairtel://pay` | `pa/pn/am/cu` | ✗ failed |
+| Airtel | iOS | `4cec88d` | `myairtel://upi/pay` *(changed)* | `+ mode + tr` | ✅ paid |
+| Amazon Pay | iOS | `6d44884` | `amazonpay://upi/pay` | default, friend's `@kotak` | ✗ populated, name ✅ resolved, **declined after submit** |
+| WhatsApp | iOS | `6d44884` | `whatsapp-consumer://upi/pay` | default, friend's `@kotak` | ✗ *"Couldn't verify UPI ID"* |
+| WhatsApp | iOS | `6d44884` | `upi://pay` *(the spec)* | default | ✗ same verification failure |
+| PhonePe | iOS | *open-amount* | `phonepe://upi/pay` | **no `am`** — amount typed in PhonePe | ✗ same gallery-QR refusal |
+| Paytm | iOS | *open-amount* | `paytmmp://pay` | **no `am`** | ✗ same "UPI risk policy" |
+| Amazon Pay | iOS | *open-amount* | `amazonpay://upi/pay` | **no `am`** | ✗ same "technical error" |
+| *Android* | — | — | — | — | **never run — see below** |
+
+**Every row above is iOS, and that is forced by the code rather than a gap in the testing.**
+On Android `useUpiApps` returns `null`, so `useUpiHandoff.pay` calls `open(req, null, …)`: `spec` is
+null, `spec?.blocked` can never be true, and no per-app prefix is ever used. PhonePe on Android has
+therefore never received `phonepe://upi/pay` from this app — it receives the generic `upi://pay`
+through the OS chooser, which is the mechanism the whole ecosystem ships on and the one Splitwise's
+Paytm integration and FairShare's deep link both use. **The four "blocked" apps are, on the present
+evidence, blocked on iOS only.** Until an Android build has run them, the `blocked` strings should
+be read as iOS findings — which is all the picker they appear in can show, since it is iOS-only.
+
+**Open tests, cheapest first:**
+
+| Test | Why it is worth a build |
+|---|---|
+| Android: the four blocked apps via the generic chooser, ₹1 each | Settles whether the refusals are platform-specific. The single highest-value unknown left. |
+| iOS: `gpay://upi/pay` vs `tez://upi/pay` | Google Pay is the largest UPI app by share and has never been run. See the note above on moving one variable at a time. |
+| iOS: BHIM, Navi, MobiKwik, super.money, Kiwi | All `provenance: 'unverified'` — scheme sourced, path inferred. A wrong path opens the app to its home screen having dropped the payee. |
 
 **The open-amount round exhausted the payload space, and it went 0 for 3.** `am` was the last
 parameter with a plausible mechanism — the only one that changed *who supplied the amount* rather
@@ -658,6 +710,54 @@ Airtel.
 
 **This gap cannot be closed by editing a URI.** Becoming a merchant would mean payments going to
 *us*, which is a different and licensed business.
+
+#### Two escapes that were investigated and closed
+
+**HTTPS universal links** — `https://phon.pe/…`, `https://paytm.com/…` and similar, on the theory
+that the whitelisted web link would route where the custom scheme is refused. Closed without a
+build:
+
+- No such endpoint is documented for third-party payment parameters. `phon.pe` is PhonePe's link
+  shortener. The published HTTPS surfaces for both vendors are merchant checkout links generated
+  server-side *after* merchant onboarding — the same gate the custom scheme already hits.
+- On iOS a universal link opens the app **only** if that app's `apple-app-site-association` file
+  declares the path. An undeclared path opens **Safari**, which is strictly worse than today's
+  scanner fallback: the user leaves for a browser rather than a camera.
+- The suggested `mode=02` means *secure QR* — it asserts an NPCI signature over the payload. We
+  have no PSP key, so it would be a claim rather than a description, which is the same error as
+  forwarding a scanned code's `mode=01` into an intent. That one is already documented above as
+  the cause of PhonePe's gallery-QR refusal.
+
+**Payment-aggregator signed intents** (Razorpay / Cashfree / PayU) — on the theory that a gateway
+could supply the `sign=` and `orgid=` that the strict apps want. Closed on the spec: NPCI's linking
+specification has the **payee's PSP** sign the intent with its private key. A gateway can therefore
+only sign for VPAs it controls — its own merchants' — never a friend's. Moving money A→B would mean
+collect **plus** payout, making this app a party to the transfer holding float, which is the
+payment-intermediary case the design note at the top of `upiIntent.ts` exists to stay out of.
+
+#### Why the apps split the way they do
+
+Worth stating because "NPCI blocks this" is the wrong model and leads to wasted payload rounds.
+**No NPCI rule is being enforced.** A plain P2P `upi://pay?pa=…&am=…` is a legal intent and every
+app is *permitted* to honour it; the `sign`/`orgid` gate covers **merchant** intents. The four
+failures are three separate causes:
+
+- **CRED, Airtel** implement the P2P deep link as specified and add no policy on top.
+- **PhonePe, Paytm** added one. Both publish merchant-credential requirements for their deep-link
+  surface and refuse callers they cannot attribute — a defensible position for the two largest
+  targets of UPI deep-link abuse.
+- **Amazon Pay, WhatsApp** refuse *nothing* at the URI layer. Both populated correctly and failed
+  downstream inside their own PSP integration. Documented above.
+
+A mechanism for why the split falls on an iOS line, tagged **`unverified`** because no vendor
+documents it: an Android intent carries the calling package identity and PhonePe is known to
+operate a whitelist against exactly that, while an iOS `openURL` on a custom scheme carries no
+verifiable caller identity at all — leaving an attribution-checking app nothing to check and
+"refuse by default" as its only option. Plausible, fits every observation, and not a finding.
+
+**Consequence worth keeping in view: CRED and Airtel working is a policy accident, not a
+guarantee.** Either can add source-scoring in any release and leave the hand-off with zero working
+destinations. That is the standing argument for the request QR below, which depends on none of this.
 
 **PhonePe and Paytm are closed, and every lever has now been pulled.** Their errors survived the
 path change, `mode`, `tr`, `pn`, and finally **withholding `am` entirely** so the user typed the
@@ -702,6 +802,45 @@ them, which is a small and honest difference.
 A test still asserts at least one app remains unblocked. Blocking no longer empties the picker, so
 the failure it guards has changed shape: blocking everything would quietly turn every hand-off into
 "open the app and type it yourself" — a real regression wearing a working UI.
+
+#### The other direction: a QR they scan (`RequestQrSheet`)
+
+Everything above is the **payer's** side, and it is the side that can be refused: we build an intent
+and hand it to a UPI app, which then judges an intent it did not originate. `TransferBody` requires
+`to.id !== me.id` for its Pay button, so **when the money was owed *to* you, the block rendered
+nothing at all** — the one case a hand-off can never serve, since we cannot reach into someone
+else's phone to open their UPI app.
+
+`buildUpiRequestUri(vpa, name, amountPaise?)` builds a `upi://pay` payload for a QR **we display and
+they scan**. It sidesteps the refusal rather than arguing with it: there is no inbound intent to
+attribute and no caller to identify, because the payment starts inside the payer's own app when
+their camera reads the code. That is the input path every UPI app must support, and it carries no
+gallery-QR cap and no intent risk scoring — the same reasoning that already sends blocked apps to
+their scanner. **It works on every app, on both platforms, with no merchant status**, and survives
+a policy change that would break the deep link.
+
+The cost is that both people must be in the same room. Real, and not liftable here — so this is an
+addition, not a replacement.
+
+| | Detail |
+|---|---|
+| Builder | `buildUpiRequestUri` → `composeUpiUri`, shared with `buildUpiUri` so the parameter assembly exists once |
+| `mode` | **`UPI_MODE_QR` (`01`)**, not `04`. `mode` describes how the payment reached the receiving app, and that app's camera really did scan a QR. Never `02` — *secure* QR asserts a PSP signature we cannot produce |
+| `tr` | Absent — person-to-person, per the existing `UpiRequest.kind` rule |
+| Open amount | Omitting `am` is the ordinary case here (a standing "here's my handle"), unlike the pay path where a missing amount returns `null` so the caller hides the action |
+| Entry points | `TransferBody` **GET PAID** block when `to` is you; Settings › **Getting paid** › *Show my UPI QR* (no amount) |
+| Recording | Nothing is written. The app never observes the outcome, so saving stays the explicit step — the same rule as the pay direction |
+
+**Your own handle had nowhere to live until this.** `friends.tsx` sets a VPA for everyone *except*
+you (it filters `is_me`), so Settings › **Getting paid** › *Your UPI ID* was added, validated with
+the same `isValidVpa` the pay path uses. Empty clears it.
+
+**The QR renders black-on-white inside a white card, against the dark theme.** That is deliberate:
+cameras want a light quiet zone and high contrast, and a QR drawn in theme colours is unreliable to
+scan. It is the one place in the app where a raw hex is correct.
+
+Screen brightness is *not* raised while the code is shown — `expo-brightness` is not installed, and
+this is a candidate follow-up rather than a dependency worth adding unverified.
 
 #### What the scan captures beyond payee and amount
 
@@ -767,15 +906,24 @@ scanning it there completes the payment their refusal blocked. Weaker with no co
 person-to-person transfer means re-entering the payee by hand, and we cannot even offer the handle
 on the clipboard because no clipboard package is installed.
 
-**`scanPath` aims at the app's scanner instead of its home screen, and every entry is a guess.**
-No Indian UPI app publishes a scanner deep link — four rounds of searching found nothing, because
-the ecosystem is Android-first where an intent covers this and no per-app URL was ever needed. The
-guess is worth making anyway, and this is the one place in this file where an unverified path is
-affordable: a wrong *payment* path opens the app to its home screen having silently dropped the
-payee, so the user believes it is pre-filled when it isn't; a wrong *scanner* path opens the app to
-its home screen, which is exactly where `probe` was going to land them. Downside zero, upside one
-tap and a camera already open. Keep the ones that land on a scanner, delete the rest — a route that
-quietly does nothing would otherwise become folklore.
+**`scanPath` aims at the app's scanner instead of its home screen. It is currently empty on every
+app, and that is a result rather than an omission.** No Indian UPI app publishes a scanner deep
+link — repeated rounds of searching found nothing, because the ecosystem is Android-first where an
+intent covers this and no per-app URL was ever needed. PhonePe's docs cover `scanQRCode()`, a JS
+call *inside* PhonePe Switch for merchants; Paytm's cover generating `upi://` QR images. Neither is
+a URL openable from outside.
+
+Two guesses shipped and a device settled both:
+
+| Guess | Result |
+|---|---|
+| `phonepe://scan` | Opened PhonePe's **home screen** — no camera |
+| `paytmmp://scan` | Opened a **stale internal route** — not a camera, and somewhere the user must navigate back out of |
+
+Both are deleted, and both now fall back to `probe`. Paytm's is the useful correction: this
+paragraph used to argue an unverified `scanPath` was free, because the worst case was the home
+screen `probe` would have reached anyway. Paytm's guess was *worse* than the home screen, so that
+argument is retired. The bar for adding one back is a device that lands on a camera.
 
 `PayOpts.hasCode` gates it. Scan & Pay sets it because the code is still in front of the user;
 settling up with a friend must not, because there is nothing to point a camera at and a scanner is
@@ -919,8 +1067,16 @@ Pay (`gpayParse.ts`), transaction-alert emails (`emailTxnParse.ts`), then generi
 | Picker or file read threw | "Could not read that file" + the accepted formats. |
 
 ### 10.2 Review — `app/review.tsx`
-The staging inbox, and the largest screen in the app. One screen, no wizard: every pending row
-is fully editable in place, edits auto-save as drafts, and **only Confirm/Save commits**.
+The staging inbox. One screen, no wizard: every pending row is fully editable in place, edits
+auto-save as drafts, and **only Confirm/Save commits**.
+
+The row card and every per-row overlay live in `components/finance/review/`, leaving the screen
+as state + data + composition. **`ReviewRowCard` is at module scope on purpose** — declared
+inside `ReviewScreen` it becomes a new component type on each render, remounting the row and
+dropping keyboard focus mid-amount. The pay-method sheet is **Add's `PayMethodSheet`** (with
+`onClear`), not a second implementation: Review previously listed its own `payOption` rows
+selected in `colors.accent` while the destination sheet beside it selected in `colors.settle`,
+so one screen showed two different "selected" colours in adjacent sheets.
 
 ### States
 - **Loading:** four `SkeletonCard`s at 150 pt.
@@ -932,11 +1088,11 @@ is fully editable in place, edits auto-save as drafts, and **only Confirm/Save c
 ### Layout
 1. **ScreenHeader** "Review" + right slot: **⋯** (overflow) normally, **Cancel** in selection mode. Hidden when nothing is pending.
 2. **RecurringSuggestionBanner** *(flag `recurringSuggest`)* — appears **after a batch Save**, never on load, and never auto-creates anything. Tap → **RecurringSuggestionsSheet** to pick which candidates become monthly rules (`convertToRecurring`). Detection is scoped to the batch just committed (`detectRecurringCandidates`), skips manually-typed rows, and requires a category.
-3. **Working-set banner** — when focused, filtered, or a saved view is active: the mode icon, "{name} · N of M", "· paid by {person}" when the view names a payer, and **Show all**.
-4. **List header** — "TO REVIEW", "N transactions. Set each one, then Confirm to save. Changes are kept as you go.", and an **All to:** row of one-tap bulk-destination chips (`Personal` + the first three shared groups). In selection mode this becomes "N selected" + **Select all / Clear**.
+3. **Working-set banner** — when focused, filtered, or a saved view is active: the mode icon, "{name} · N of M", "· paid by {person}" when the view names a payer, and **Show all**. Uses `ui/Banner`, shared with the recurring-suggestion strip above it — the two were separate copies of one chrome.
+4. **List header** — "TO REVIEW", "N transactions. Set each one, then Confirm to save. Changes are kept as you go.", and an **All to:** row of one-tap bulk-destination `ui/Chip`s (`Personal` + the first three shared groups). In selection mode this becomes "N selected" + **Select all / Clear**.
 5. **Section headers** — rows are grouped by `source` in canonical `TXN_SOURCE` order, with an icon, label and count. **Headers only render when more than one source is present** — a single source needs no header.
 6. **Per-row card** (see below).
-7. **Sticky footer** — **Save all N** normally; in selection mode a bulk bar: **Focus** · **Group** · **Save N**.
+7. **Sticky footer** — **Save all N** normally; in selection mode a bulk bar: **Focus** · **Group** · **Save N**. All four are `PrimaryButton`/`SecondaryButton` at 52 pt, so the footer no longer changes height when you enter or leave selection mode, and the list's bottom inset is **measured from the footer** (`onLayout` → `useContentInset({ footer })`) rather than the old `insets.bottom + 96` guess.
 
 ### The row
 | Control | Behaviour |
@@ -1056,12 +1212,13 @@ state and no pull-to-refresh — it's a static config list. A persistent status-
 keeps content from painting under the clock/notch.
 
 1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), and a privacy subtitle.
-2. **Manage** — People → `/friends` · Categories → `/categories` · **Budget** ("Personal budget") → `/group/{personal}/budget` (→ `/groups` if none).
-3. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
-4. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
-5. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
-6. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
-7. **About** — version; tap **7×** → `/storage` (hidden debug entry).
+2. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
+3. **Manage** — People → `/friends` · Categories → `/categories` · **Budget** ("Personal budget") → `/group/{personal}/budget` (→ `/groups` if none).
+4. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
+5. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
+6. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
+7. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
+8. **About** — version; tap **7×** → `/storage` (hidden debug entry).
 
 ### 13.2 Settings sub-screens
 | Screen | Route | What it does | States |
@@ -1069,7 +1226,7 @@ keeps content from painting under the clock/notch.
 | **People** | `friends.tsx` | You card + contacts with balance chips, group counts, tap → `/add/quick?kind=transfer&to=`; add/rename person *(sheet)*. | Error + retry · `EmptyState` · pull-to-refresh |
 | **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/colour) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Others"). Self-heals an empty catalog. | Error + retry · pull-to-refresh |
 | **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module switches in four sections. Two rows are **not** feature flags and behave differently: **Location Tagging** asks OS permission and refuses if denied (§17), and **Cloud Receipt Scanning** picks the OCR provider (§7.4). Turning **splitting off** first names how many unsettled balances and what amount would disappear (nothing is deleted); turning it on is silent. | No loading/error state — flags are already in context |
-| **Help** | `help.tsx` | Static FAQ accordion. No data access. | None (static) |
+| **Help** | `help.tsx` | Static FAQ accordion, ordered by screen flow, including **Settling Up & Paying** (UPI hand-off, which apps arrive pre-filled, request-QR). No data access. | None (static) |
 | **Audit log** | `history.tsx` | Date-grouped change log with coloured dots, EDIT/DEL badges, "Load older" (30/page). Filters by `?groupId=`. | Error + retry · `EmptyState` "Nothing logged yet" · pull-to-refresh |
 | **Search** | `search.tsx` | `Input` + 🔘 kind & source filters → `SectionList` of `TransactionRow` (→ `/txn/{id}`). Chip row has a gradient right-edge fade as a scroll affordance. | Error + retry · one `EmptyState` that switches copy between "Search your transactions" and "No matches" · **deliberately no pull-to-refresh** (the list *is* the query result) |
 | **Storage** | `storage.tsx` | Receipt-photo disk usage + "Delete all attachments"; **TESTING:** Load demo data / Erase all data (see §24). | Error + retry |
@@ -1121,7 +1278,7 @@ being listed in the screen, so this table can't drift back.
 |---|---|---|---|
 | Group splitting | `splitting` | Groups tab (→ Personal when off), Home owe/owed strip, Add **Transfer** kind | ✅ wired |
 | Itemized bills | `itemized` | Quick-add **Split by items** → `add/itemized.tsx` | ✅ wired |
-| Pay via UPI | `upiSettle` | Transfer sheet **Pay via UPI** button (needs the payee's `upi_vpa`) | ✅ wired |
+| Settle via UPI | `upiSettle` | Transfer sheet **Pay ₹X via UPI** (needs the payee's `upi_vpa`) *and* **Show QR to get ₹X** (needs your own), plus Settings › **Getting paid** | ✅ wired |
 | Savings goals | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` (`index.tsx:80` nulls the score when off) | ✅ wired |
 | Afford check | `affordCheck` | Plan header icon → `afford.tsx`, plus the inline verdict in Add | ✅ wired — **on** by default since the engine grew past a cash check |
@@ -1197,12 +1354,13 @@ absence is explicit rather than an oversight.
 ### FLOW-04 — Add an expense (the core flow)
 | # | Step | Code |
 |---|---|---|
-| 1 | Tab-bar FAB → `/add/quick?kind=expense` (full-screen modal from bottom) | `app/(tabs)/_layout.tsx:79`, `app/_layout.tsx:110` |
+| 1 | Tab-bar FAB → `/add/quick?kind=expense` (full-screen modal from bottom) | `app/(tabs)/_layout.tsx`, `app/_layout.tsx` |
 | 2 | `useAddTxnForm(params)` loads me, groups, members, categories, flags | `src/hooks/useAddTxnForm.ts` |
 | 3 | Amount typed → `sanitizeAmountInput` caps it live → `parseToPaise` | `components/finance/add/AmountField.tsx`, `src/lib/money.ts` |
 | 4 | Category: manual pick, or auto-guessed from the title when `smartCategory` is on | `src/lib/smartCategory.ts` |
-| 5 | Optional: group, note, attachment, location, pay method, recurrence — all inside `MoreOptions` | `app/add/quick.tsx:147-189` |
-| 6 | Group with >1 member and total > 0 → `SplitSummary` opens `SplitSheet` / `PayersSheet` | `app/add/quick.tsx:191-200` |
+| 5a | Destination: always-visible `DestinationRow` → `DestinationSheet` (recency-ordered) | `components/finance/add/DestinationRow.tsx`, `DestinationSheet.tsx` |
+| 5b | Optional details: note, receipt, location, pay method, recurrence — one named chip each | `components/finance/add/DetailChips.tsx` |
+| 6 | Group with >1 member and total > 0 → `SplitSummary` opens `SplitSheet` / `PayersSheet` | `components/finance/add/SplitSummary.tsx` |
 | 7 | Shares via `computeShares`, payments via `computePayments` (default: I paid it all) | `src/lib/splitMath.ts` |
 | 8 | Budget nudge shows remaining in the category as you type | `components/finance/add/BudgetNudge.tsx` |
 | 9 | Save → **duplicate check** for non-recurring expenses; a match prompts "Add anyway?" | `findRecentDuplicate` — and the Review commit path runs the same check via `findDuplicatesAmong` (`V2-20`) |
@@ -1216,7 +1374,7 @@ Editing takes the same path via `updateTxn`; a recurring-rule edit goes through
 ### FLOW-05 — Split a bill by items
 | # | Step | Code |
 |---|---|---|
-| 1 | Quick Add → MoreOptions → "Split by items" → `/add/itemized` | `app/add/quick.tsx:155` |
+| 1 | Quick Add → "Split by items" chip (in **Other details**) → `/add/itemized` | `app/add/quick.tsx` → `add/DetailChips.tsx` |
 | 2 | Step 1 **items**: name, qty, unit price → `computeItemSubtotal` = qty × unitPrice. Or **Scan receipt** (§7.4) | `src/lib/itemized.ts:49-53` |
 | 3 | Step 2 **assign**: pick who shares each item; per-item split mode via `splitItemBase` | `src/lib/itemized.ts:24-26` |
 | 4 | Adjustments (tax / tip / service / discount, flat or %) → `computeAdjustedTotal`, floored at 0 | `src/lib/itemized.ts:37-46` |
@@ -1526,7 +1684,8 @@ The `✖` rows above are the documented exemptions — query-driven (`search`), 
 | Home | Period | Month · Today · Year |
 | Groups | View | Active · Archived |
 | Add | Kind | Expense · Income · Transfer *(Transfer gated by `splitting`)* |
-| Add (expense) | GroupSelector | frequent-group pills + **More** picker *(sheet)* |
+| Add (expense) | Destination | `DestinationRow` → `DestinationSheet`, all groups, Personal first then most-recently-used |
+| Add | Other details | Note · Receipt · Location · Pay method · Repeat *(chips, set ones show their value)* |
 | Add (shared) | Split mode | Equal · Exact · % · Shares |
 | Add (any kind) | Pay method | UPI · Card · Cash · Bank · Wallet · Autopay · Other |
 | Itemized | Step dots | Add items · Assign items · Who paid? · Review & save |
@@ -1562,7 +1721,10 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 | "Your money" — `MoneyEditorSheet` | `finance/plan/MoneyEditorSheet.tsx` | Plan `TotalMoneyCard` → Edit |
 | "What protecting does" — `LockExplainerSheet` | `finance/plan/LockExplainerSheet.tsx` | Goal detail protect toggle |
 | "Category" — `CategoryPicker` | `finance/CategoryPicker.tsx` | Quick Add, Itemized, **Review** (`forceOpen hideTrigger`) |
-| "Choose group" — `GroupSelector` | `finance/GroupSelector.tsx` | Quick Add group row |
+| "Where does this go?" — `DestinationSheet` | `finance/add/DestinationSheet.tsx` | Quick Add `DestinationRow` |
+| "How was it paid?" — `PayMethodSheet` | `finance/add/PayMethodSheet.tsx` | Quick Add pay-method chip |
+| "Repeat this" — `RecurringSheet` | `finance/add/RecurringSheet.tsx` | Quick Add repeat chip |
+| "Note" — `NoteSheet` | `finance/add/NoteSheet.tsx` | Quick Add note chip |
 | "Add a friend" / "Rename" / "Your name" — `PersonNameSheet` | `finance/PersonNameSheet.tsx` | Friends (add + rename), group Members (rename) |
 | "Who paid?" — `PayersSheet` | `finance/add/PayersSheet.tsx` | Quick Add payers row |
 | "Split" — `SplitSheet` | `finance/add/SplitSheet.tsx` | Quick Add split row |
@@ -1654,7 +1816,6 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `IconCircle` | The canonical icon-in-a-coloured-dot (replaced ~40 hand-rolled copies). |
 | `Input` | Design-system text input (bgInput, focus border, amount mode, secure mode for passphrases). |
 | `ModalHeader` | Header for modal sheets (title + close). Add flows. |
-| `MoreOptions` | Expandable "more options" block in Add — date, attachment, location, pay method, recurring. |
 | `PressableScale` | Spring-scale tappable wrapper for cards/rows. |
 | `PrimaryButton` | Gradient primary CTA (52 px). All primary actions. |
 | `ScreenHeader` | Safe-area header (back chevron + title + right slot) for every **pushed** screen. |
@@ -1677,7 +1838,6 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `CategoryPicker` | Searchable category grid *(sheet)* + inline create. Add flows, Review. |
 | `GoalCelebration` | Full-screen confetti at 100% goal (auto-dismiss). |
 | `GroupForm` | Create/edit group form — icon, name, type, members, default split. Shared by the create sheet and Edit group. |
-| `GroupSelector` | Frequent-group pills + a "More" picker sheet (Add-expense). |
 | `HealthSheet` | Financial-health detail sheet (ring + dimensions + factors). |
 | `InsightText` | Rich/parsed insight text with emphasis. |
 | `MemberAvatar` | Circular avatar (initials or photo), tappable for photo pick. |
@@ -1712,8 +1872,8 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money. |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
-| `add/KindToggle` · `add/AmountField` · `add/CategoryDatePills` · `add/NoteField` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |
-| `add/RecurringControls` | The Add screen's recurring block — collapsed toggle, or the expanded card: frequency, next charge (`nthOccurrenceMs`), and ends **never / on a date / after N**. |
+| `add/AmountField` · `add/CategoryDatePills` · `add/ContextPill` · `add/DetailChips` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |
+| `add/RecurringControls` | The recurring block inside `RecurringSheet` — collapsed toggle, or the expanded card: frequency, next charge (`nthOccurrenceMs`), and ends **never / on a date / after N**. Frequency and Ends are `TabPills` (mutually exclusive choices), driven by `RECUR_FREQ_ADD_CHOICES` / `RECUR_END_MODE`. |
 | `add/ReceiptScanSheet` · `add/ScanningOverlay` | Receipt-scan result sheet and blocking progress overlay (§7.4). |
 | `review/DestOption` · `review/FChip` · `review/FilterForm` · `review/SaveViewForm` · `review/RecurringSuggestionBanner` · `review/RecurringSuggestionsSheet` | Review sub-views (§10.2). |
 | `backup/PassphraseSheet` | Passphrase create/unlock sheet (§13.3). |

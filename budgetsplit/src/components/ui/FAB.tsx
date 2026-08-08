@@ -126,7 +126,7 @@ export function FAB({ actions, onPress, aboveTabBar = true }: Props) {
             end={{ x: 1, y: 1 }}
             style={styles.fabGradient}
           >
-            <Feather name="plus" size={28} color="#fff" />
+            <Feather name="plus" size={28} color={colors.onAccent} />
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>

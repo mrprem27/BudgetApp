@@ -11,6 +11,8 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
+import { TxnCell } from '../src/components/finance/TxnCell';
+import { SectionHeader } from '../src/components/ui/SectionHeader';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getMe } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
@@ -205,16 +207,13 @@ export default function SearchScreen() {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 stickySectionHeadersEnabled={false}
-                renderSectionHeader={({ section }) => <Text style={styles.monthLabel}>{section.title}</Text>}
+                renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
                 renderItem={({ item, index, section }) => {
-                  // Rows in a month join into ONE card: top row rounds the top, last
-                  // row rounds the bottom, hairline dividers sit between them.
                   const isFirst = index === 0;
                   const isLast = index === section.data.length - 1;
-                  const cell = [styles.cell, isFirst && styles.cellFirst, isLast && styles.cellLast];
                   if (isMore(item)) {
                     return (
-                      <View style={cell}>
+                      <TxnCell first={isFirst} last={isLast} padded={false}>
                         <TouchableOpacity
                           style={styles.moreRow}
                           onPress={() => setExpanded(prev => new Set(prev).add(item.section))}
@@ -224,24 +223,21 @@ export default function SearchScreen() {
                           <Text style={styles.moreText}>Show {item.count} more in {item.monthName.charAt(0) + item.monthName.slice(1).toLowerCase()}</Text>
                           <Feather name="chevron-down" size={16} color={colors.accent} />
                         </TouchableOpacity>
-                      </View>
+                      </TxnCell>
                     );
                   }
                   const isPersonalTxn = item.group_id === personalGroupId;
                   return (
-                    <View style={cell}>
-                      <View style={styles.cellInner}>
-                        <TransactionRow
-                          txn={item}
-                          myId={myId}
-                          showDate
-                          highlight={query.trim()}
-                          groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
-                          onPress={() => router.push(`/txn/${item.id}`)}
-                        />
-                      </View>
-                      {!isLast && <View style={styles.rowDivider} />}
-                    </View>
+                    <TxnCell first={isFirst} last={isLast}>
+                      <TransactionRow
+                        txn={item}
+                        myId={myId}
+                        showDate
+                        highlight={query.trim()}
+                        groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
+                        onPress={() => router.push(`/txn/${item.id}`)}
+                      />
+                    </TxnCell>
                   );
                 }}
               />
@@ -277,15 +273,6 @@ const styles = StyleSheet.create({
   resultAmt: { color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
   listFlex: { flex: 1 },
   list: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.lg },
-  monthLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
-  // A month's rows share ONE card: side borders always; the first row rounds the
-  // top, the last rounds the bottom; hairline dividers (indented past the icon)
-  // separate rows within the card.
-  cell: { backgroundColor: colors.bgCard, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
-  cellFirst: { borderTopWidth: 1, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
-  cellLast: { borderBottomWidth: 1, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
-  cellInner: { paddingHorizontal: space.md },
-  rowDivider: { height: 1, backgroundColor: colors.border, marginLeft: 64, marginRight: space.md },
   moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.md },
   moreText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, space } from '../../tokens';
+import { Feather } from '@expo/vector-icons';
+import { colors, type, space } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
-import { alpha } from '../../../theme';
 import { AffordVerdict, AffordReason, type AffordResult } from '../../../lib/afford';
 
 type Props = {
@@ -41,33 +41,49 @@ function affordLine(r: AffordResult, categoryName: string): string | null {
   }
 }
 
-/** Inline "₹X left / over budget" nudge under the category (expense only). */
+/**
+ * One quiet line of context under the category — what's left in this budget, or the
+ * one thing worth knowing before you commit.
+ *
+ * Deliberately **not** a card. This used to stack up to two bordered strips with
+ * status dots, which made ordinary information ("₹400 left in Food") look like two
+ * error states on a form you hadn't finished filling in. It also showed both at
+ * once, so the warning it actually wanted you to read competed with a number you
+ * could already infer. Now: the warning when there is one, otherwise the remainder.
+ */
 export function BudgetNudge({ color, remaining, categoryName, afford }: Props) {
-  const line = afford ? affordLine(afford, categoryName) : null;
-  const lineColor = afford?.verdict === AffordVerdict.No ? colors.expense : colors.healthAmber;
-  return (
-    <View style={styles.wrap}>
-      <View style={styles.nudge}>
-        <View style={[styles.nudgeDot, { backgroundColor: color }]} />
-        <Text style={[styles.nudgeText, { color }]}>
-          {remaining >= 0
-            ? `${formatCompact(remaining)} left in ${categoryName} this month`
-            : `${formatCompact(-remaining)} over budget in ${categoryName}`}
-        </Text>
+  const warning = afford ? affordLine(afford, categoryName) : null;
+
+  if (warning) {
+    const tint = afford?.verdict === AffordVerdict.No ? colors.expense : colors.healthAmber;
+    return (
+      <View style={styles.row}>
+        <Feather name="alert-triangle" size={13} color={tint} />
+        <Text style={[styles.text, { color: tint }]}>{warning}</Text>
       </View>
-      {line && (
-        <View style={[styles.nudge, { borderColor: alpha(lineColor, 33) }]}>
-          <View style={[styles.nudgeDot, { backgroundColor: lineColor }]} />
-          <Text style={[styles.nudgeText, { color: lineColor }]}>{line}</Text>
-        </View>
-      )}
+    );
+  }
+
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.text, { color }]}>
+        {remaining >= 0
+          ? `${formatCompact(remaining)} left in ${categoryName} this month`
+          : `${formatCompact(-remaining)} over budget in ${categoryName}`}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space.sm },
-  nudge: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bg, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
-  nudgeDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
-  nudgeText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
+  // Negative top margin pulls it up under the category pills it annotates, so it
+  // reads as a caption on them rather than as its own block in the form's rhythm.
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: -space.sm,
+    paddingHorizontal: space.xs,
+  },
+  text: { ...type.label, flex: 1 },
 });

@@ -45,7 +45,7 @@ export const DEFAULTS: FeatureFlags = {
   // presence, which is why the onboarding persona sets it.
   splitting: true,
   itemized: true,
-  upiSettle: true,       // no VPA on a person ⇒ no button anyway
+  upiSettle: true,       // no VPA (theirs to pay, yours to be paid) ⇒ no button anyway
   savingsGoals: true,
   healthScore: true,
   affordCheck: true,     // a real feature since the engine grew; off is why nobody found it

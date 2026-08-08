@@ -1,4 +1,4 @@
-import { groupByDate } from '../lib/txnGrouping';
+import { groupByDate, dateSectionLabel } from '../lib/txnGrouping';
 
 const at = (d: Date) => ({ date: d.getTime() });
 const daysAgo = (n: number) => {
@@ -8,6 +8,41 @@ const daysAgo = (n: number) => {
   return d;
 };
 
+// `dateSectionLabel` takes `now` explicitly so these assertions are fixed points,
+// not functions of the wall clock. That matters because `npm run test:calendar`
+// re-runs the whole suite under seven different FAKE_TODAY values — a hardcoded
+// "5 Jan" expectation would flip to "5 Jan 2026" the moment the fake year moved,
+// which is exactly how the previous version of this file would have broken.
+describe('dateSectionLabel', () => {
+  const now = new Date(2026, 5, 30, 12); // 30 Jun 2026
+
+  it('labels the same day "Today"', () => {
+    expect(dateSectionLabel(new Date(2026, 5, 30, 9), now)).toBe('Today');
+  });
+
+  it('labels the previous day "Yesterday"', () => {
+    expect(dateSectionLabel(new Date(2026, 5, 29, 23), now)).toBe('Yesterday');
+  });
+
+  it('drops the year inside the current year', () => {
+    expect(dateSectionLabel(new Date(2026, 0, 5, 12), now)).toBe('5 Jan');
+  });
+
+  it('keeps the year outside the current year', () => {
+    expect(dateSectionLabel(new Date(2025, 0, 5, 12), now)).toBe('5 Jan 2025');
+  });
+
+  it('crosses a year boundary correctly — 1 Jan sees 31 Dec as Yesterday', () => {
+    const newYear = new Date(2026, 0, 1, 10);
+    expect(dateSectionLabel(new Date(2025, 11, 31, 22), newYear)).toBe('Yesterday');
+  });
+
+  it('a date two days before 1 Jan is last year, so it carries the year', () => {
+    const newYear = new Date(2026, 0, 1, 10);
+    expect(dateSectionLabel(new Date(2025, 11, 30, 10), newYear)).toBe('30 Dec 2025');
+  });
+});
+
 describe('groupByDate', () => {
   it('labels today\'s items "Today"', () => {
     const out = groupByDate([at(new Date())]);
@@ -15,9 +50,10 @@ describe('groupByDate', () => {
     expect(out[0].title).toBe('Today');
   });
 
-  it('formats older days as "dd MMM yyyy"', () => {
-    const out = groupByDate([at(new Date(2026, 0, 5, 12))]);
-    expect(out[0].title).toBe('05 Jan 2026');
+  it('labels yesterday\'s items "Yesterday"', () => {
+    const out = groupByDate([at(daysAgo(1))]);
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe('Yesterday');
   });
 
   it('puts every item from the same day in one section', () => {
@@ -65,6 +101,8 @@ describe('groupByDate', () => {
   it('handles the epoch without throwing', () => {
     const out = groupByDate([{ date: 0 }]);
     expect(out).toHaveLength(1);
-    expect(out[0].title).toMatch(/\d{2} \w{3} \d{4}/);
+    // 1970 is never the current year, so the label carries a year. Day is
+    // unpadded now ("1 Jan 1970"), hence \d{1,2}.
+    expect(out[0].title).toMatch(/^\d{1,2} \w{3} \d{4}$/);
   });
 });

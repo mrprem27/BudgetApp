@@ -16,6 +16,7 @@ import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
+import { TxnCell } from '../../src/components/finance/TxnCell';
 import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { getCategoryBudgets, type CategoryBudget } from '../../src/db/queries/categoryBudgets';
 import { getMe } from '../../src/db/queries/persons';
@@ -170,15 +171,18 @@ export default function CategoryDetailScreen() {
   // No recurring budget set at all → prompt to set one (applies to every period).
   const showSetBudget = dailyRate === 0;
 
-  const renderTxn = useCallback(({ item: txn }: { item: typeof view.txns[number] }) => (
-    <TransactionRow
-      txn={txn}
-      myId={myId}
-      onPress={() => router.push(`/txn/${txn.id}`)}
-      groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
-    />
+  const txnCount = view.txns.length;
+  const renderTxn = useCallback(({ item: txn, index }: { item: typeof view.txns[number]; index: number }) => (
+    <TxnCell first={index === 0} last={index === txnCount - 1}>
+      <TransactionRow
+        txn={txn}
+        myId={myId}
+        onPress={() => router.push(`/txn/${txn.id}`)}
+        groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
+      />
+    </TxnCell>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [myId, personalGroupId, groupNames]);
+  ), [myId, personalGroupId, groupNames, txnCount]);
 
   // Everything above the transaction list — rendered as the FlatList header so the
   // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
@@ -348,7 +352,6 @@ export default function CategoryDetailScreen() {
         data={loading || loadError ? [] : view.txns}
         keyExtractor={(txn) => txn.id}
         renderItem={renderTxn}
-        ItemSeparatorComponent={TxnDivider}
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={11}
@@ -365,10 +368,6 @@ export default function CategoryDetailScreen() {
       />
     </View>
   );
-}
-
-function TxnDivider() {
-  return <View style={styles.txnDivider} />;
 }
 
 const styles = StyleSheet.create({
@@ -408,7 +407,6 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
 
   txnLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
-  txnDivider: { height: 1, backgroundColor: colors.border, marginLeft: 56 },
 
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
   insRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 7 },

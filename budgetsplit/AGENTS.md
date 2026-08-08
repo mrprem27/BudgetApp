@@ -40,42 +40,69 @@ Never render just a `<Text>` saying "Nothing here" or "No X yet". That looks bro
 
 Never let form fields, rows, or data float bare on the dark background.
 
+**Use the `Card` component** (`components/ui/Card.tsx`) — the four-property recipe
+below was hand-written ~30 times, and the screens that didn't bother left their
+content floating.
+
 ```tsx
-// Correct: grouped in a card
-<View style={{ backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.sm }}>
-  <Row />
-  <Divider />
-  <Row />
-</View>
+// Correct
+<Card>
+  <ListRow … />
+  <Divider indent="text" />
+  <ListRow … />
+</Card>
+
+<Card padded>{/* `padded` when the card holds content, not rows */}</Card>
 
 // Wrong: bare field in ScrollView
 <TextInput style={...} />
 <TextInput style={...} />
 ```
 
-Rules:
+What `Card` gives you (don't re-declare these):
 - Card background: `colors.bgCard`
 - Border: `1px, colors.border`
 - Border radius: `radius.lg` (16px)
 - Shadow: `shadow.sm`
+
+Spacing is still the caller's job:
 - Between cards: `marginBottom: space.md` (16px)
 - Between sections: `marginBottom: space.lg` (24px)
 
+Section eyebrows use **`SectionHeader`**, which owns its own vertical margins — do
+not also put a `gap` on the scroll container, or the two silently add up.
+
 ---
 
-## 4. Settings-Style Form Rows (for forms inside cards)
+## 4. Form Rows (for forms inside cards)
 
-All forms use this pattern:
+**Use the `ListRow` component** (`components/ui/ListRow.tsx`) — don't hand-roll rows.
+It has two variants, and both are correct:
 
 ```
-[icon circle 32×32]  [Label]             [Value text]  [›]
+inline   [icon circle 32×32]  [Label]            [Value text]  [›]
+stacked  [icon circle 32×32]  [LABEL]                          [›]
+                              [Value text                        ]
 ```
 
-- Row height: minimum 52pt (iOS HIG minimum touch target)
-- Left: 32×32 colored icon circle + label (`type.body`, `textPrimary`)
-- Right: value (`type.body`, `textSecondary`) + `chevron-right` if tappable
+- **`inline`** — settings rows, and anything whose value is short. The label holds
+  its width; the value shrinks and is capped at 45%.
+- **`stacked`** — form rows whose value can be long: category names, place labels,
+  `"Monthly · until 12 Dec"`. The value gets the full row width, so it doesn't
+  truncate, and a labelled value is a stronger signifier of "tappable" than a bare
+  pill. `V2_PRODUCT_REVIEW.md` §7.4 called truncation "a pattern, not four bugs" —
+  caused by fixed-width value text. This variant is what closes that class.
+
+Rules for both:
+- Row height: minimum `layout.rowMinHeight` (52pt, iOS HIG minimum touch target)
+- Left: `layout.iconCircle` (32) `IconCircle` + label (`type.body`, `textPrimary`)
+- Right: value + `chevron-right` if tappable
 - Inline TextInput: right-aligned, NO separate border inside a card row
-- Hairline divider between rows: `{ height: 1, backgroundColor: colors.border, marginLeft: 32 + 16 + 16 }` (indented past icon)
+- Hairline divider between rows: **`<Divider indent="text" />`** (`layout.dividerIndent`,
+  64px — clears the icon disc). `settingsRowDivider` is a deprecated alias for it.
+
+`SettingsRow` still exists as a thin adapter over `ListRow` for the icon+label+value
+case; prefer `ListRow` directly in new code.
 
 ---
 
@@ -90,6 +117,12 @@ All forms use this pattern:
   <Text>Save</Text>
 </TouchableOpacity>
 ```
+
+**Exception — modal headers.** A `fullScreenModal` form puts its commit action in the
+header's right slot as a text button (`type.button`, tinted, `hitSlop={10}`), opposite
+the ✕. The two ends of one bar read as "leave without saving" / "save"; a footer CTA
+reads as a page action and pushes the form up. `add/quick.tsx` is the reference.
+Everywhere that isn't a modal header, the rule below stands.
 
 Rules:
 - **Primary CTA**: `PrimaryButton` component (gradient fill, 52px height, white text)
@@ -162,11 +195,61 @@ Icon in a colored dot — **use the `IconCircle` component**, don't hand-roll it
 |---|---|---|
 | `space.xs` | 4px | Icon gap, dot separator |
 | `space.sm` | 8px | Between label and value, row padding |
+| `space.smd` | 12px | Chip padding, tight row gaps — the step that was being improvised as `space.sm + 4` |
 | `space.md` | 16px | Card padding, between cards, row padding |
 | `space.lg` | 24px | Between sections, bottom of screen |
 | `space.xl` | 32px | Empty state padding, hero padding |
 | `space.xxl` | 48px | Top of hero section |
 | `layout.screenPaddingH` | 16px | Screen horizontal padding |
+
+**Never do arithmetic on a spacing token.** `space.sm + 2` (=10) and `space.sm + 4` (=12) appeared ~70 times between them and are not part of the scale. Use `space.smd` for 12; round a 10 to 8 or 12.
+
+Sizing tokens — reach for these instead of a literal:
+
+| Token | Value | Use |
+|---|---|---|
+| `layout.touchMin` | 44 | Minimum tappable size (§6) |
+| `layout.rowMinHeight` | 52 | Settings / list row floor (§4) |
+| `layout.txnRowHeight` | 60 | Transaction row floor (§12) |
+| `layout.iconCircle` | 32 | Icon disc in a form row (§4) |
+| `layout.avatarSize` | 40 | Member/person avatar |
+| `layout.dividerIndent` | 64 | Row divider indent, clears the icon disc |
+
+Bottom padding for a scroll container comes from **`useContentInset({ fab, tabBar, footer })`** (`src/hooks/useContentInset.ts`) — never a literal. Hard-coded `paddingBottom: 100` is why `UX_AUDIT.md` High #3 found the FAB covering real content on six screens.
+
+### Pills and chips — one component, no exceptions
+
+**The pill shape is `ui/Chip`.** Never hand-roll one. Seven near-identical variants
+existed before it, and four *survived* the first sweep — the Add screen ended up with
+primitive-built chips stacked directly above hand-rolled pills of almost the same shape,
+which reads worse than plainly different controls do.
+
+A chip has **one** trailing affordance, and it says what tapping does:
+
+| Trailing | Means | Prop |
+|---|---|---|
+| `✕` | this value can be cleared | `onRemove` |
+| `⌄` | this opens a picker | `chevron` |
+| nothing | it's a toggle, or read-only | — |
+
+Never both — a chip showing `✕` and `⌄` claims to be each.
+
+**The icon is identity, not state.** Every chip shows its own glyph in *every* state.
+Unset is when the user most needs to know what a control is, so a shared `+` glyph on
+four unset chips (which is what `DetailChips` shipped with) is exactly backwards. State
+is carried by the tint, by the value replacing the name, and by the `✕`.
+
+Use `grow` for a chip that should fill its row; it wraps in a plain `View` because
+`PressableScale` applies `style` to an inner `Animated.View`.
+
+**Segmented choice → `TabPills`, not a chip row.** A row of chips says "toggle any of
+these"; a segmented control says "pick exactly one". `RecurringControls`' frequency and
+end-mode were chip rows and read as multi-select.
+
+**One deliberate second pill weight exists:** `finance/add/ContextPill`. It is quieter
+and centred because a transaction's destination is *context above the hero*, not a field
+— uniform tokens, deliberate hierarchy. That distinction is the reason this rule is about
+hand-rolling rather than about looking identical.
 
 ---
 
@@ -201,21 +284,58 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 
 ## 11. Animations
 
-- `PressableScale` on all tappable cards and rows — spring scale 0.97, `haptics={false}`
-- `FadeIn` with stagger on list renders: `delay={index * 55}`, don't exceed 330ms total
-- `BudgetBar` animated on mount
+**Take one off the shelf; don't hand-roll.** The primitives live in
+`components/ui/` and `components/ui/anim/`:
+
+| Primitive | For |
+|---|---|
+| `PressableScale` | All tappable cards and rows — spring 0.97, `haptics={false}` |
+| `FadeIn` | A single element entering on mount |
+| `Stagger` | A list cascading in. Enforces the 330ms cap for you |
+| `Collapse` | A row leaving, and the gap closing behind it |
+| `StepTransition` | Moving between wizard steps (onboarding, itemized) |
+| `AnimatedNumber` | The one hero figure on a screen landing on its value |
+| `AnimatedBar` | Progress / meter fills |
+
+Rules:
+- **Native driver, opacity and transform only.** `height` and `width` are not
+  native-drivable — animating them interpolates on the JS thread. Animate `scaleX`
+  or use Reanimated's `layout` prop instead.
+- **Reanimated is already a dependency** (required by `expo-router`, used by
+  `DraggableList`/`DraggableSheet`, worklets plugin configured in `babel.config.js`).
+  Use it where layout itself must animate. Do **not** use `LayoutAnimation` — it's a
+  legacy global API, unreliable under the New Architecture, and can't be scoped to
+  one component.
+- **Reanimated layout-animation callbacks run on the UI thread** (they're returned
+  from inside a `'worklet'`). Reaching a React closure from one needs `runOnJS`.
+- **Honour Reduce Motion.** Reanimated animations take
+  `.reduceMotion(ReduceMotion.System)`; RN `Animated` ones read
+  `useReducedMotion()` (exported by `react-native-reanimated` — don't write your own)
+  and snap to the final state. Motion is polish; it must never be the only signal
+  that something changed.
+- **Never animate on scroll.** `Stagger` must not go inside a `FlatList`/`SectionList`
+  `renderItem` — rows mount on recycle, so every row would re-animate as you scroll.
 - Skeleton loaders while data loads — never bare `ActivityIndicator` on full screens
 - Navigation: modals slide from bottom, push screens slide from right, tabs fade
+- ⛔ `LogoAssembly.tsx` and the onboarding hero ring/fan are **never** modified.
 
 ---
 
 ## 12. Lists and Transactions
 
-- Transaction rows: min 60px height
-- Section headers: `type.caption`, UPPERCASE, `colors.textMuted`, `letterSpacing: 0.5`
-- Row separators: 1px `colors.border`, full width OR indented to text (not icon)
-- "Today" / "Yesterday" / "14 Jun" for date section headers
+- **Transaction lists use `TransactionRow` inside `TxnCell`** — a section's rows share
+  one card (first rounds the top, last the bottom, `Divider indent="text"` between).
+  One chrome, everywhere. Rows must never float bare on `colors.bg` (§3).
+- Transaction rows: min `layout.txnRowHeight` (64; §12's floor is 60)
+- Section headers: **use `SectionHeader`**. It owns its vertical margins — do not also
+  put a `gap` on the scroll container, or the two add up.
+- Row separators: **`Divider`**. `indent="text"` (64px, clears the icon) or `"none"`.
+- Date section headers come from **`dateSectionLabel`** (`lib/txnGrouping`):
+  "Today" / "Yesterday" / "14 Jun" / "14 Jun 2025" outside the current year.
+- **`stickySectionHeadersEnabled={false}`** on transaction lists — these headers have
+  no background, so a stuck one sits transparently over the rows scrolling under it.
 - Swipe-to-delete with `react-native-gesture-handler`
+- Bottom padding from **`useContentInset({ fab })`**, never a literal.
 
 ### Pull-to-refresh — one rule
 

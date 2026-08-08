@@ -1,10 +1,14 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
+import { TabPills } from '../../ui/TabPills';
 import { MemberAvatar } from '../MemberAvatar';
 import { formatRupees } from '../../../lib/money';
 import { SPLIT_MODE, SPLIT_MODE_LABEL, type SplitMode } from '../../../constants/enums';
 import type { Person } from '../../../db/queries/persons';
+
+/** The split-mode segmented control's tabs — `SPLIT_MODE` is the source of order. */
+const SPLIT_MODE_TABS = SPLIT_MODE.map(m => ({ key: m, label: SPLIT_MODE_LABEL[m] }));
 
 /**
  * The shared split allocator — split-mode tabs (Equal / Exact / Percent / Shares)
@@ -39,19 +43,7 @@ type Props = {
 export function SplitEditor({ members, included, onToggle, mode, onMode, rawValue, onValue, result, avatarSize = 36 }: Props) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.tabs}>
-        {SPLIT_MODE.map(m => (
-          <TouchableOpacity
-            key={m}
-            style={[styles.tab, mode === m && styles.tabOn]}
-            onPress={() => onMode(m)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === m }}
-          >
-            <Text style={[styles.tabText, mode === m && styles.tabTextOn]}>{SPLIT_MODE_LABEL[m]}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TabPills tabs={SPLIT_MODE_TABS} active={mode} onChange={(m) => onMode(m as SplitMode)} />
 
       {members.map(mem => {
         const on = included.includes(mem.id);
@@ -80,11 +72,6 @@ export function SplitEditor({ members, included, onToggle, mode, onMode, rawValu
 
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
-  tabs: { flexDirection: 'row', gap: space.xs, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  tab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: radius.sm },
-  tabOn: { backgroundColor: colors.accent },
-  tabText: { ...type.caption, color: colors.textSecondary },
-  tabTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   name: { ...type.body, color: colors.textPrimary, flex: 1 },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, width: 80, textAlign: 'right', borderWidth: 1, borderColor: colors.border },

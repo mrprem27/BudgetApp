@@ -29,6 +29,33 @@ export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGro
   );
 }
 
+/**
+ * Groups ordered for a "where does this go?" picker: Personal pinned first, then
+ * whichever group you used most recently, then creation order as a tiebreak.
+ *
+ * `getAllGroups` is `created_at ASC`, which is why the Add screen's group pills
+ * were ordered by age — while both `FEATURES_AND_FLOWS.md` §7.1 and §22 described
+ * them as "frequent-group pills". Nothing computed that. This is the query that
+ * makes the docs true; it mirrors `getCategoriesByFrequency`.
+ *
+ * Personal stays pinned rather than competing on recency: it's the safe default
+ * destination, and a picker whose first row moves around is harder to aim at than
+ * one that saves a scroll.
+ */
+export async function getGroupsByRecentUse(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
+  return db.getAllAsync<BudgetGroup>(
+    `SELECT g.* FROM budget_group g
+     LEFT JOIN (
+       SELECT group_id, MAX(date) AS last_used
+         FROM txn
+        WHERE is_deleted = 0 AND recur_freq IS NULL
+        GROUP BY group_id
+     ) t ON t.group_id = g.id
+     WHERE g.is_archived = 0
+     ORDER BY g.is_personal DESC, COALESCE(t.last_used, 0) DESC, g.created_at ASC`,
+  );
+}
+
 export async function getGroupById(db: SQLite.SQLiteDatabase, id: string): Promise<BudgetGroup | null> {
   return db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id = ?', [id]);
 }

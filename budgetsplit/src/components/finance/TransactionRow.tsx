@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { AmountText } from '../ui/AmountText';
+import { IconCircle } from '../ui/IconCircle';
+import { PressableScale } from '../ui/PressableScale';
 import { MemberAvatar } from './MemberAvatar';
-import { colors, type, space } from '../tokens';
+import { colors, type, space, layout } from '../tokens';
 import { formatRupees, formatCompact } from '../../lib/money';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
@@ -110,25 +112,21 @@ export const TransactionRow = React.memo(function TransactionRow({
   const secondaryText = !settlementTitle && note ? txn.category : null;
 
   return (
-    <TouchableOpacity
+    <PressableScale
       style={styles.row}
       onPress={onPress}
       onLongPress={onDelete}
-      activeOpacity={0.6}
-      accessibilityRole="button"
       accessibilityLabel={`${primaryText}: ${formatRupees(Math.abs(displayAmount))}`}
     >
       {settlementPair ? (
         <View style={styles.avatarPair}>
-          <MemberAvatar name={settlementPair.from!.name} color={settlementPair.from!.avatar_color} size={30} imageUri={settlementPair.from!.image_uri} />
+          <MemberAvatar name={settlementPair.from!.name} color={settlementPair.from!.avatar_color} size={PAIR_AVATAR} imageUri={settlementPair.from!.image_uri} />
           <View style={styles.avatarPairOverlap}>
-            <MemberAvatar name={settlementPair.to!.name} color={settlementPair.to!.avatar_color} size={30} imageUri={settlementPair.to!.image_uri} />
+            <MemberAvatar name={settlementPair.to!.name} color={settlementPair.to!.avatar_color} size={PAIR_AVATAR} imageUri={settlementPair.to!.image_uri} />
           </View>
         </View>
       ) : (
-        <View style={[styles.iconCircle, { backgroundColor: alpha(visual.color, 13) }]}>
-          <Feather name={visual.icon} size={18} color={visual.color} />
-        </View>
+        <IconCircle icon={visual.icon} size={LEADING} color={visual.color} iconSize={18} />
       )}
 
       <View style={styles.middle}>
@@ -173,39 +171,43 @@ export const TransactionRow = React.memo(function TransactionRow({
           <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
         ) : null}
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 });
+
+/** Leading slot width — the icon disc, and the settlement avatar pair, both. */
+const LEADING = 40;
+const PAIR_OVERLAP = 12;
+/**
+ * Sized so two overlapped avatars occupy exactly `LEADING`:
+ * 2 × 26 − 12 = 40. They were 30px at the same overlap, which is 48px of content
+ * in a 40px box — it overflowed and pushed the text column out of line with every
+ * icon row above and below it.
+ */
+const PAIR_AVATAR = (LEADING + PAIR_OVERLAP) / 2;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: space.sm,
-    minHeight: 64,
+    minHeight: layout.txnRowHeight,
     gap: space.sm,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  // Overlapping payer→payee avatars for settlement rows; same 40px footprint
-  // as iconCircle so the text column stays aligned with other rows.
   avatarPair: {
-    width: 40,
+    width: LEADING,
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
   },
   avatarPairOverlap: {
-    marginLeft: -12,
+    marginLeft: -PAIR_OVERLAP,
     borderWidth: 2,
+    // Rows sit on a card, so the ring that separates the two avatars matches the
+    // card fill. (On the screens that used to render these rows bare on
+    // `colors.bg`, this ring was subtly the wrong colour.)
     borderColor: colors.bgCard,
-    borderRadius: 16,
+    borderRadius: PAIR_AVATAR / 2 + 2,
   },
   middle: {
     flex: 1,
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
   groupChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: space.xs,
     marginTop: 2,
   },
   groupText: {
@@ -250,8 +252,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   attribution: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
+    ...type.captionSemi,
   },
   date: {
     ...type.caption,

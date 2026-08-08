@@ -3,15 +3,22 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
+import { useContentInset } from '../../../hooks/useContentInset';
 import { formatRupees } from '../../../lib/money';
 import { splitLabel, freqWord } from '../../../lib/groupDetail';
 import { nextOccurrenceOnOrAfter } from '../../../lib/recurrence';
 import { categoryVisual } from '../../../constants/categories';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionHeader } from '../../ui/SectionHeader';
+import { Divider } from '../../ui/Divider';
+import { RecurringRow } from '../RecurringRow';
+import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 import { alpha } from '../../../theme';
 
 type Props = {
+  refreshing: boolean;
+  onRefresh: () => void;
   rules: TxnWithSplits[];
   meId: string;
   defaultSplit: string;
@@ -22,10 +29,14 @@ type Props = {
 };
 
 /** Group Recurring tab: monthly-total summary + active recurring rules + add CTA. */
-export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabel, onAdd, onOpenRule }: Props) {
+export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabel, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
+  const bottomPad = useContentInset({ fab: true });
   if (rules.length === 0) {
     return (
-      <ScrollView contentContainerStyle={styles.listContent}>
+      <ScrollView
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <EmptyState
           icon="repeat"
           title="No recurring yet"
@@ -38,7 +49,10 @@ export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabe
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.listContent}>
+    <ScrollView
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       <View style={styles.recurSummaryCard}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs }}>
           <Text style={styles.recurSummaryTitle}>Group recurring</Text>
@@ -49,38 +63,14 @@ export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabe
         </Text>
       </View>
 
-      <Text style={styles.insightSectionLabel}>ACTIVE · {rules.length}</Text>
+      <SectionHeader title={`Active · ${rules.length}`} />
       <View style={[styles.insightCard, { paddingHorizontal: 0 }]}>
-        {rules.map((r, i) => {
-          const vis = categoryVisual(r.category);
-          const total = r.shares.reduce((s, x) => s + x.amount, 0) || r.payments.reduce((s, p) => s + p.amount, 0);
-          const myShare = r.shares.find(s => s.personId === meId)?.amount ?? 0;
-          const next = nextOccurrenceOnOrAfter(r, Date.now());
-          const label = (r.note && r.note.trim()) || r.category;
-          return (
-            <TouchableOpacity
-              key={r.id}
-              style={[styles.recurItem, i < rules.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
-              onPress={() => onOpenRule(r.id)}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-            >
-              <View style={[styles.recurItemIcon, { backgroundColor: alpha(vis?.color ?? colors.accent, 13) }]}>
-                <Feather name={vis?.icon ?? 'repeat'} size={18} color={vis?.color ?? colors.accent} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.recurItemName} numberOfLines={1}>{label}</Text>
-                <Text style={styles.recurItemSub} numberOfLines={1}>
-                  {formatRupees(total)} · {freqWord(r.recur_freq)}{next ? ` · next ${format(next, 'MMM d')}` : ''}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.recurItemShare}>{formatRupees(myShare)}</Text>
-                <Text style={styles.recurItemShareLabel}>your share</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        {rules.map((r, i) => (
+          <React.Fragment key={r.id}>
+            {i > 0 && <Divider indent="text" />}
+            <RecurringRow rule={r} meId={meId} showNext onPress={() => onOpenRule(r.id)} />
+          </React.Fragment>
+        ))}
       </View>
 
       <TouchableOpacity style={styles.addRecurBtn} onPress={onAdd} accessibilityRole="button">
@@ -95,19 +85,12 @@ export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabe
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
+  listContent: { padding: layout.screenPaddingH, gap: space.sm },
   recurSummaryCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
   recurSummaryTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
   recurSummaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.settle, letterSpacing: -0.5 },
   recurSummarySub: { fontSize: 12, color: colors.textMuted },
-  insightSectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
-  recurItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: space.md, paddingVertical: 14 },
-  recurItemIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  recurItemName: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
-  recurItemSub: { fontSize: 11, color: colors.textMuted },
-  recurItemShare: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary, letterSpacing: -0.5 },
-  recurItemShareLabel: { fontSize: 10, color: colors.textMuted, textAlign: 'right' },
   addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: radius.md, padding: 12, marginBottom: space.md },
   addRecurBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.accent },
   addRecurBtnSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },

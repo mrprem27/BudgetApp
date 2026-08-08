@@ -1,5 +1,8 @@
 import React, { useRef } from 'react';
-import { Animated, Pressable, ViewStyle, StyleProp, GestureResponderEvent, Insets } from 'react-native';
+import {
+  Animated, Pressable, ViewStyle, StyleProp, GestureResponderEvent, Insets,
+  type AccessibilityState,
+} from 'react-native';
 import { haptic } from '../../lib/haptics';
 
 type Props = {
@@ -15,6 +18,9 @@ type Props = {
   accessibilityLabel?: string;
   /** Extends the touch target beyond the visual bounds (icon-only / small rows). */
   hitSlop?: number | Insets;
+  /** Merged over the computed `disabled` state — pass `{ selected }` on rows that
+   *  represent a chosen option, or `{ expanded }` on disclosures. */
+  accessibilityState?: AccessibilityState;
 };
 
 /**
@@ -24,6 +30,7 @@ type Props = {
 export function PressableScale({
   children, onPress, onLongPress, style,
   disabled, activeScale = 0.97, haptics = false, accessibilityLabel, hitSlop,
+  accessibilityState,
 }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const interactive = !!(onPress || onLongPress);
@@ -41,7 +48,11 @@ export function PressableScale({
       hitSlop={hitSlop}
       // Only announce as a button when it actually does something on tap.
       accessibilityRole={interactive ? 'button' : undefined}
-      accessibilityState={interactive ? { disabled: !!disabled } : undefined}
+      accessibilityState={
+        interactive || accessibilityState
+          ? { ...(interactive ? { disabled: !!disabled } : null), ...accessibilityState }
+          : undefined
+      }
       accessibilityLabel={accessibilityLabel}
     >
       <Animated.View style={[style, { transform: [{ scale }] }]}>

@@ -101,5 +101,5 @@ export function SplitSheet({
 
 const styles = StyleSheet.create({
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
-  remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
+  remainderText: { ...type.labelSemi },
 });

@@ -1,4 +1,4 @@
-import type { PayMethod } from '../constants/enums';
+import { PayMethod } from '../constants/enums';
 
 /**
  * Detect how a payment was made from the plain text of an ingested transaction
@@ -28,11 +28,11 @@ const CASH_RE = /\bcash\b/i;
 export function detectPayMethod(text: string | null | undefined): PayMethod | null {
   const t = text ?? '';
   if (!t) return null;
-  if (AUTOPAY_RE.test(t)) return 'autopay';
-  if (WALLET_RE.test(t)) return 'wallet';
-  if (UPI_RE.test(t)) return 'upi';
-  if (CARD_RE.test(t)) return 'card';
-  if (BANK_RE.test(t)) return 'bank';
-  if (CASH_RE.test(t)) return 'cash';
+  if (AUTOPAY_RE.test(t)) return PayMethod.Autopay;
+  if (WALLET_RE.test(t)) return PayMethod.Wallet;
+  if (UPI_RE.test(t)) return PayMethod.Upi;
+  if (CARD_RE.test(t)) return PayMethod.Card;
+  if (BANK_RE.test(t)) return PayMethod.Bank;
+  if (CASH_RE.test(t)) return PayMethod.Cash;
   return null;
 }

@@ -3,17 +3,22 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 're
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { useContentInset } from '../../../hooks/useContentInset';
 import { formatCompact } from '../../../lib/money';
 import { oweView } from '../../../lib/owe';
 import { MemberAvatar } from '../MemberAvatar';
 import { AvatarStack } from '../AvatarStack';
 import { BalanceRow } from '../BalanceRow';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionHeader } from '../../ui/SectionHeader';
+import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import type { Person } from '../../../db/queries/persons';
 
 type Settle = { from: string; to: string; amount: number };
 
 type Props = {
+  refreshing: boolean;
+  onRefresh: () => void;
   members: Person[];
   net: Record<string, number>;
   meId: string;
@@ -29,12 +34,16 @@ type Props = {
 
 /** Group Members tab: balances summary, collapsible member list, invite, simplify
  *  toggle, and the settlement (who-owes-whom) list. Owns the expand state. */
-export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName }: Props) {
+export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, refreshing, onRefresh }: Props) {
   const [membersExpanded, setMembersExpanded] = useState(false);
+  const bottomPad = useContentInset({ fab: true });
   const myNet = net[meId] ?? 0;
 
   return (
-    <ScrollView contentContainerStyle={styles.listContent}>
+    <ScrollView
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       {/* GROUP BALANCES summary */}
       <View style={styles.groupBalCard}>
         <View style={styles.groupBalItem}>
@@ -111,7 +120,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
 
       {settlements.length > 0 ? (
         <>
-          <Text style={styles.balSectionLabel}>{settlements.length} payment{settlements.length > 1 ? 's' : ''} to settle</Text>
+          <SectionHeader title={`${settlements.length} payment${settlements.length > 1 ? 's' : ''} to settle`} />
           <View style={styles.card}>
             {settlements.map((s, i) => {
               const fromPerson = personMap.get(s.from);
@@ -133,7 +142,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
+  listContent: { padding: layout.screenPaddingH, gap: space.sm },
   groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
   groupBalItem: { flex: 1, alignItems: 'center', paddingVertical: space.md, gap: 3 },
   groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
@@ -155,6 +164,5 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
   toggleTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   toggleSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  balSectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm, marginTop: space.xs },
   balanceRowWrap: { paddingHorizontal: space.md },
 });

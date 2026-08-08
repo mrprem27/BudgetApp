@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { useContentInset } from '../../../hooks/useContentInset';
 import { healthColor } from './helpers';
 import { budgetHealth, utilLabel } from '../../../lib/budget';
 import type { CategoryBudgetStatus } from '../../../lib/budget';
@@ -13,10 +14,15 @@ import { BudgetBar } from '../BudgetBar';
 import { MemberAvatar } from '../MemberAvatar';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionHeader } from '../../ui/SectionHeader';
+import { BudgetCategoryRow } from '../BudgetCategoryRow';
+import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { planRebalance } from '../../../lib/rebalance';
 import { alpha } from '../../../theme';
 
 type Props = {
+  refreshing: boolean;
+  onRefresh: () => void;
   analytics: BudgetAnalytics | null;
   catStatus: CategoryBudgetStatus[];
   contributions: Contributions;
@@ -28,12 +34,16 @@ type Props = {
 
 /** Group Budget tab: overview + recommendations + driving-overspend + who-paid-what
  *  + per-category sectioned list. Owns its own status filter (tab-local). */
-export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget, onRebalance }: Props) {
+export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget, onRebalance, refreshing, onRefresh }: Props) {
   const [budgetFilter, setBudgetFilter] = useState('all');
+  const bottomPad = useContentInset({ fab: true });
 
   if (catStatus.length === 0) {
     return (
-      <ScrollView contentContainerStyle={styles.listContent}>
+      <ScrollView
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <EmptyState
           icon="target"
           title="No budget yet"
@@ -53,9 +63,13 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
   const visible = catStatus.filter(matches);
 
   return (
-    <ScrollView contentContainerStyle={styles.listContent}>
+    <ScrollView
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+      {/* The tab is already labelled "Budget" in the strip above; repeating it
+          here just pushed the real content down. */}
       <View style={styles.budgetHeadingRow}>
-        <Text style={styles.budgetHeading}>Budget</Text>
         <TouchableOpacity style={styles.editPill} onPress={onEditBudget} accessibilityRole="button" accessibilityLabel="Edit budget">
           <Feather name="edit-2" size={13} color={colors.accent} />
           <Text style={styles.editPillText}>Edit</Text>
@@ -140,23 +154,19 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
           if (lines.length === 0) return null;
           return (
             <View key={section} style={{ marginBottom: space.md }}>
-              <Text style={styles.cadenceLabel}>{section}</Text>
+              <SectionHeader title={section} />
               <View style={styles.catCard}>
                 {lines.map((c, i) => {
-                  const vis = categoryVisual(c.category);
                   return (
-                    <View key={c.category} style={[styles.catRow, i < lines.length - 1 && styles.catRowBorder]}>
-                      <View style={styles.catTop}>
-                        <View style={[styles.catIcon, { backgroundColor: alpha(vis.color, 13) }]}>
-                          <Feather name={vis.icon} size={14} color={vis.color} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.catName} numberOfLines={1}>{c.category}</Text>
-                          <Text style={styles.catCadenceTag}>{c.cadence === 'once' ? 'one-time' : c.cadence}</Text>
-                        </View>
-                        <Text style={styles.catAmt}><Text style={{ color: healthColor(c.health) }}>{formatCompact(c.spent)}</Text> / {formatCompact(c.allocated)}</Text>
-                      </View>
-                      <BudgetBar pct={c.pct} health={c.health} height={6} />
+                    <View key={c.category} style={i < lines.length - 1 ? styles.catRowBorder : undefined}>
+                      <BudgetCategoryRow
+                        category={c.category}
+                        cadence={c.cadence}
+                        spent={c.spent}
+                        allocated={c.allocated}
+                        pct={c.pct}
+                        health={c.health}
+                      >
                       {/* V2-07: a red bar used to be the whole response to an overrun.
                           Only offered when a re-plan is actually possible. */}
                       {c.remaining < 0 && onRebalance && planRebalance(catStatus, c.category) && (
@@ -170,6 +180,7 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
                           <Text style={styles.replanText}>Re-plan the rest of this month</Text>
                         </TouchableOpacity>
                       )}
+                      </BudgetCategoryRow>
                     </View>
                   );
                 })}
@@ -183,11 +194,10 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, paddingBottom: 100, gap: space.sm },
+  listContent: { padding: layout.screenPaddingH, gap: space.sm },
   replanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, alignSelf: 'flex-start', paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: alpha(colors.accent, 13) },
   replanText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, marginBottom: space.sm },
-  budgetHeading: { ...type.subheading, color: colors.textPrimary },
   editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, marginBottom: space.md, ...shadow.md },
@@ -212,13 +222,6 @@ const styles = StyleSheet.create({
   contribTrack: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
   contribFill: { height: 6, borderRadius: 3 },
   contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  cadenceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
-  catRow: { paddingVertical: space.md, gap: space.sm },
   catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  catTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  catIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  catName: { ...type.body, color: colors.textPrimary },
-  catCadenceTag: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
-  catAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
 });

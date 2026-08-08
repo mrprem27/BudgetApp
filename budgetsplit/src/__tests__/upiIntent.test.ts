@@ -1,4 +1,4 @@
-import { buildUpiUri, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
+import { buildUpiUri, buildUpiRequestUri, upiLaunchUrl, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -594,6 +594,150 @@ describe('provenance is recorded, not assumed', () => {
     // What must never carry a quirk is an app nobody has opened at all.
     for (const a of UPI_APPS) {
       if (a.payload) expect(a.provenance).not.toBe('unverified');
+    }
+  });
+});
+
+describe('buildUpiRequestUri', () => {
+  it('builds a scannable code carrying the payee and the amount', () => {
+    const uri = buildUpiRequestUri('prem@ybl', 'Prem', 45000);
+    expect(uri).toBe('upi://pay?pa=prem%40ybl&pn=Prem&am=450.00&cu=INR&mode=01');
+  });
+
+  it('says QR, not intent', () => {
+    // `mode` describes how the payment reached the app receiving it, and the app
+    // receiving this one read it with its camera. `04` would be the same false claim as
+    // forwarding a scanned code's `01` into an intent — see buildUpiUri.
+    expect(buildUpiRequestUri('a@ybl', 'A', 100)).toContain('mode=01');
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 100 })).toContain('mode=04');
+  });
+
+  it('never claims a signature it does not have', () => {
+    // `02` is *secure* QR — an assertion that the payload is signed by the payee's PSP.
+    // We have no such key, so emitting it would be unsignable and declinable.
+    expect(buildUpiRequestUri('a@ybl', 'A', 100)).not.toContain('mode=02');
+    expect(buildUpiRequestUri('a@ybl', 'A', 100)).not.toContain('sign=');
+  });
+
+  it('drops the amount rather than the code when there is no figure to state', () => {
+    // An open-amount personal QR is the ordinary case, not an error — unlike the pay
+    // path, where a missing amount must produce null so the caller hides the action.
+    for (const open of [undefined, 0, -1, NaN]) {
+      const uri = buildUpiRequestUri('a@ybl', 'A', open)!;
+      expect(uri).not.toContain('am=');
+      expect(uri).toContain('cu=INR');
+    }
+    expect(buildUpiUri({ vpa: 'a@ybl', name: 'A', amountPaise: 0 })).toBeNull();
+  });
+
+  it('carries no transaction reference — this is person-to-person', () => {
+    expect(buildUpiRequestUri('a@ybl', 'A', 100)).not.toContain('tr=');
+  });
+
+  it('encodes the name, so a space cannot break the code', () => {
+    expect(buildUpiRequestUri('a@ybl', 'Aarav K', 100)).toContain('pn=Aarav%20K');
+  });
+
+  it('omits pn entirely when there is no name', () => {
+    expect(buildUpiRequestUri('a@ybl', undefined, 100)).toBe('upi://pay?pa=a%40ybl&am=1.00&cu=INR&mode=01');
+    expect(buildUpiRequestUri('a@ybl', '   ', 100)).not.toContain('pn=');
+  });
+
+  it('refuses a malformed handle instead of rendering an unscannable square', () => {
+    for (const bad of ['', 'prem', '@ybl', 'prem@']) {
+      expect(buildUpiRequestUri(bad, 'A', 100)).toBeNull();
+    }
+  });
+
+  it('round-trips through our own parser', () => {
+    // The generator and the parser are two halves of one format, and the app already
+    // scans exactly this shape off other people's phones. Pinning them together is what
+    // stops one drifting from the other.
+    for (const amount of [45000, undefined]) {
+      const parsed = parseUpiQr(buildUpiRequestUri('prem@ybl', 'Prem', amount)!);
+      expect(parsed).toEqual({ vpa: 'prem@ybl', name: 'Prem' });
+    }
+  });
+
+  it('round-trips a name that needed encoding', () => {
+    const parsed = parseUpiQr(buildUpiRequestUri('a@ybl', 'Aarav K & Co', 100)!);
+    expect(parsed?.name).toBe('Aarav K & Co');
+  });
+});
+
+describe('upiLaunchUrl', () => {
+  const req = { vpa: 'prem@ybl', name: 'Prem', amountPaise: 20000, kind: 'person' as const };
+  const spec = (key: UpiApp) => UPI_APPS.find(a => a.key === key)!;
+
+  it('hands a working app the full payment', () => {
+    const launch = upiLaunchUrl(req, spec(UpiApp.Cred))!;
+    expect(launch.filled).toBe(true);
+    expect(launch.url).toContain('credpay://upi/pay?pa=prem%40ybl');
+  });
+
+  it('never sends a payment to a blocked app, whatever the options', () => {
+    // This is the whole point of `blocked`: a payment we build reaches PIN entry and is
+    // refused, costing the user one of a day's rate-limited attempts. The regression that
+    // matters is any of these silently regaining `pa=`.
+    for (const app of UPI_APPS.filter(a => a.blocked)) {
+      for (const opts of [undefined, { hasCode: true }, { hasCode: false }, { bare: true }]) {
+        const launch = upiLaunchUrl(req, app, opts);
+        expect(launch?.filled).toBe(false);
+        expect(launch?.url).not.toContain('pa=');
+        expect(launch?.url).not.toContain('am=');
+      }
+    }
+  });
+
+  it('aims at the scanner only when there is a code to point it at', () => {
+    // Synthetic, because no shipped app carries a `scanPath` any more — `phonepe://scan`
+    // opened a home screen and `paytmmp://scan` a stale internal route, so both were
+    // deleted. The *rule* still has to hold for whenever one is proven and added back.
+    const withScanner = { ...spec(UpiApp.Paytm), scanPath: 'example://scan' };
+    expect(upiLaunchUrl(req, withScanner, { hasCode: true })?.url).toBe('example://scan');
+    // Settling up with a friend: a viewfinder with nothing to read is worse than a home
+    // screen, so it falls back to the bare scheme.
+    expect(upiLaunchUrl(req, withScanner, { hasCode: false })?.url).toBe(withScanner.probe);
+    expect(upiLaunchUrl(req, withScanner)?.url).toBe(withScanner.probe);
+  });
+
+  it('falls back to the home screen when an app has no proven scanner route', () => {
+    // Today that is every blocked app. Deleting an unverified `scanPath` must degrade to
+    // `probe`, never to nothing — the app still has to open.
+    for (const app of UPI_APPS.filter(a => a.blocked && !a.scanPath)) {
+      expect(upiLaunchUrl(req, app, { hasCode: true })?.url).toBe(app.probe);
+    }
+  });
+
+  it('withholds the payment from even a proven app when the code cannot be re-emitted', () => {
+    // A signed merchant QR: nobody gets parameters, however well the app behaves.
+    const launch = upiLaunchUrl(req, spec(UpiApp.Cred), { bare: true })!;
+    expect(launch.filled).toBe(false);
+    expect(launch.url).toBe(spec(UpiApp.Cred).probe);
+  });
+
+  it('falls back to the generic intent when there is no spec — the Android path', () => {
+    const launch = upiLaunchUrl(req, null)!;
+    expect(launch.filled).toBe(true);
+    expect(launch.url).toContain('upi://pay?pa=');
+  });
+
+  it('returns null rather than a broken launch', () => {
+    expect(upiLaunchUrl({ ...req, vpa: 'nonsense' }, spec(UpiApp.Cred))).toBeNull();
+    // Nothing to open: no spec to supply a scheme, and no payment allowed.
+    expect(upiLaunchUrl(req, null, { bare: true })).toBeNull();
+  });
+
+  it('is what the preview sheet and the hand-off both read', () => {
+    // These were two implementations that looked alike and then diverged: the preview ran
+    // every app through buildUpiUri and advertised `paytmmp://pay?pa=…` while the launch
+    // sent `paytmmp://scan`. One function means the sheet cannot lie about the hand-off.
+    for (const app of UPI_APPS) {
+      for (const opts of [{ hasCode: true }, { hasCode: false }, { bare: true }]) {
+        const a = upiLaunchUrl(req, app, opts);
+        const b = upiLaunchUrl(req, app, opts);
+        expect(a).toEqual(b);
+      }
     }
   });
 });

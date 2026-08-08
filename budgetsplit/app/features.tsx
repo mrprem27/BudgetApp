@@ -181,7 +181,7 @@ export default function FeaturesScreen() {
       items: [
         { icon: 'users', label: 'Group Splitting', caption: 'Groups tab, shared bills, settle up, the owe/owed strip on Home', value: flags.splitting, onChange: toggleSplitting },
         { icon: 'list', label: 'Itemized Bills', caption: 'Split a bill line by line, with tax, tip and discounts', value: flags.itemized, onChange: v => setFlag('itemized', v) },
-        { icon: 'smartphone', label: 'Pay via UPI', caption: 'Hand a settle-up to your UPI app, pre-filled', value: flags.upiSettle, onChange: v => setFlag('upiSettle', v) },
+        { icon: 'smartphone', label: 'Settle via UPI', caption: 'Pay from your UPI app, or show a QR to get paid', value: flags.upiSettle, onChange: v => setFlag('upiSettle', v) },
       ],
     },
     {

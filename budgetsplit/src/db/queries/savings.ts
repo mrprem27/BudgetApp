@@ -359,17 +359,19 @@ export async function getCategorySpend30d(db: SQLite.SQLiteDatabase): Promise<Ca
 /** Your real money — derived cash position across all groups, minus money in goals. */
 export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPosition> {
   const me = await getMe(db);
-  const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0 };
+  const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0, cardSpend: 0 };
   if (!me) return empty;
   // Aggregate the four running sums in SQL instead of loading every txn + all its
   // split rows across all history and reducing in JS. Parity with computeCash() is
   // locked by cashSql.test.ts.
-  const [row, savedTotal, profile] = await Promise.all([
-    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [me.id, me.id, Date.now()]),
+  // The profile's timestamp bounds the card-spend window, so it's read before the
+  // totals query rather than alongside it.
+  const profile = await getMoneyProfile(db);
+  const [row, savedTotal] = await Promise.all([
+    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.updatedAt ?? 0, me.id, me.id, Date.now()]),
     getTotalSaved(db),
-    getMoneyProfile(db),
   ]);
-  const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0 };
+  const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };
   return cashPositionFromTotals(totals, savedTotal, profile.openingCash);
 }
 

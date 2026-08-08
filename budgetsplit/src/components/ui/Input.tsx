@@ -19,6 +19,8 @@ type Props = {
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  /** Off for identifiers — autocorrect will happily rewrite a UPI handle or username. */
+  autoCorrect?: boolean;
   accessibilityLabel?: string;
   secureTextEntry?: boolean;
   style?: ViewStyle;
@@ -43,6 +45,7 @@ export function Input({
   returnKeyType,
   onSubmitEditing,
   autoCapitalize,
+  autoCorrect,
   accessibilityLabel,
   secureTextEntry,
   style,
@@ -74,6 +77,7 @@ export function Input({
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
           accessibilityLabel={accessibilityLabel}
           secureTextEntry={secureTextEntry}
           onFocus={() => setFocused(true)}

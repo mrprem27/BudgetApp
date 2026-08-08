@@ -7,9 +7,7 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { insertCategory } from '../../src/db/queries/categories';
 import { formatRupees, parseToPaise } from '../../src/lib/money';

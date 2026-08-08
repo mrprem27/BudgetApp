@@ -9,6 +9,20 @@ import { v4 as uuid } from 'uuid';
  * funds, holds no float and is not a party to the transfer — so it is not the
  * payment-intermediary case that needs a PA/PG licence. Nothing leaves the device
  * except a URI the OS consumes locally.
+ *
+ * **Two escapes are closed; do not reopen either.** HTTPS universal links
+ * (`https://phon.pe/…`) have no documented third-party payment endpoint, and on iOS a
+ * path an app's AASA does not declare opens Safari — worse than the scanner fallback we
+ * already have. Aggregator-signed intents cannot help either: NPCI has the *payee's* PSP
+ * sign, so a gateway can only sign for VPAs it controls, never a friend's. Both are
+ * written up in docs/FEATURES_AND_FLOWS.md.
+ *
+ * **Every per-app result on record is iOS.** On Android `useUpiApps` returns `null`, so
+ * `spec` is always null in `useUpiHandoff` and no per-app prefix or `blocked` flag is
+ * ever reached — PhonePe there gets the generic `upi://pay` through the OS chooser, and
+ * has never been tested. Read the `blocked` strings as iOS findings until it has.
+ *
+ * The one route no app refuses runs the other way: see `buildUpiRequestUri`.
  */
 
 /**
@@ -96,24 +110,25 @@ export type UpiAppSpec = {
   /** Bare scheme, for a `canOpenURL` installed-check. Also what we open to launch it plain. */
   probe: string;
   /**
-   * A guess at the app's QR-scanner route, opened *instead of* `probe` when the user has a
-   * code in front of them and the app won't take a pre-filled payment.
+   * The app's QR-scanner route, opened *instead of* `probe` when the user has a code in
+   * front of them and the app won't take a pre-filled payment.
    *
-   * **Every one of these is unverified, and that is affordable here in a way it never was
-   * for a payment path.** A wrong payment path opens the app to its home screen having
-   * silently dropped the payee and amount — the user believes it is pre-filled and it is
-   * not. A wrong *scanner* path opens the app to its home screen, which is exactly where
-   * `probe` was going to land them anyway. The downside is zero and the upside is one tap
-   * and a camera already open, so the guess is worth making.
+   * **Currently empty, and that is a result rather than an omission.** `phonepe://scan`
+   * and `paytmmp://scan` were both here as guesses, and a device settled both: PhonePe
+   * landed on its home screen, Paytm on a stale internal route — worse than the home
+   * screen, because it is a place the user then has to navigate *out* of. Both were
+   * deleted rather than left in, which is the rule this comment used to state as a
+   * prediction and now states as something that happened.
    *
-   * Nothing is published. Four rounds of searching found no scanner deep link documented
-   * for any Indian UPI app — the ecosystem is Android-first, where an intent handles this
-   * and no per-app URL was ever needed. So these follow the ordinary convention and are
-   * candidates, not findings.
+   * Nothing is published, and that is not for want of looking: repeated rounds have found
+   * no scanner deep link documented for any Indian UPI app. The ecosystem is Android-first,
+   * where an intent handles this and no per-app URL was ever needed. PhonePe's own docs
+   * cover `scanQRCode()` — a JS call *inside* PhonePe Switch, for merchants — and Paytm's
+   * cover generating `upi://` QR images. Neither is a URL you can open from outside.
    *
-   * **Keep the ones that land on a scanner; delete the rest.** They are cheap to test —
-   * open the app from the sheet and see where it lands — and a route that quietly does
-   * nothing is worth removing so this list never becomes folklore.
+   * So the bar for adding one back is a device that lands on a camera. A guess costs more
+   * than it looks: it is indistinguishable from a finding three months later, and Paytm's
+   * showed that a wrong route is not always as harmless as a home screen.
    */
   scanPath?: string;
   /** Per-app payload deviations. Omit unless a device proved one is needed. */
@@ -180,7 +195,9 @@ export const UPI_APPS: UpiAppSpec[] = [
   // parameter has now been varied. Closed — do not reopen it without merchant credentials.
   {
     key: UpiApp.PhonePe, label: 'PhonePe', prefix: 'phonepe://upi/pay', probe: 'phonepe://',
-    scanPath: 'phonepe://scan',
+    // `phonepe://scan` was here and opened the home screen — no camera. Removed: it cost a
+    // rebuild to learn, and leaving it would have kept promising a scanner that isn't there.
+    // Falls back to `probe`, which lands in exactly the same place, honestly.
     payload: { name: false }, provenance: 'documented',
     blocked: 'PhonePe only accepts payments started by registered merchants, so it will refuse this one — even if you type the amount yourself.',
   },
@@ -208,7 +225,11 @@ export const UPI_APPS: UpiAppSpec[] = [
   // the *source* of the intent, not the origin of the figure.
   {
     key: UpiApp.Paytm, label: 'Paytm', prefix: 'paytmmp://pay', probe: 'paytmmp://',
-    scanPath: 'paytmmp://scan', provenance: 'documented',
+    // `paytmmp://scan` was here and opened a stale internal route — not a camera, and worse
+    // than the home screen, since it is somewhere the user must navigate back out of. That
+    // is the counter-example to this field's old claim that a wrong scanner route costs
+    // nothing. Removed; `probe` lands on the home screen.
+    provenance: 'documented',
     blocked: 'Paytm blocks payments started outside its own apps as a risk policy, so it will refuse this one — typing the amount there does not help.',
   },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
@@ -396,6 +417,20 @@ const OWN_PARAMS = new Set(['pa', 'pn', 'am', 'cu', 'tn', 'tr', 'mode']);
 export const UPI_MODE_INTENT = '04';
 
 /**
+ * `01` — QR. What we set on a code we *display* for someone else to scan.
+ *
+ * Same reasoning as `UPI_MODE_INTENT`, applied to the other direction: `mode` describes
+ * how the transaction reached the app that receives it, and the app receiving a request
+ * QR reached it through its own camera. `04` there would be the same category of false
+ * claim as forwarding a scanned code's `01` into an intent — see `buildUpiUri`.
+ *
+ * Not `02` (secure QR). That asserts an NPCI signature over the payload, produced by the
+ * payee's PSP with its private key. We have no such key, so `02` would be a claim rather
+ * than a description — and an unsignable claim is exactly what risk engines decline.
+ */
+export const UPI_MODE_QR = '01';
+
+/**
  * Pull a VPA (and payee name, if present) out of a scanned UPI QR code.
  *
  * A person's UPI QR *is* a `upi://pay?pa=…&pn=…` URI — the same shape this file
@@ -511,16 +546,36 @@ export function newUpiRef(): string {
  * decimals, so the conversion happens here and nowhere else.
  */
 export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): string | null {
+  if (!Number.isFinite(req.amountPaise) || req.amountPaise <= 0) return null;
+  return composeUpiUri(req, app);
+}
+
+/**
+ * The parameter assembly, with the amount made optional.
+ *
+ * Split out so `buildUpiRequestUri` can omit `am` without restating any of this. The
+ * amount guard stays in `buildUpiUri` rather than moving here, because the two callers
+ * genuinely disagree about a missing amount: on the pay path it is a bug and must
+ * produce `null` so the caller hides the action, while on a displayed QR it is the
+ * ordinary open-amount case.
+ */
+function composeUpiUri(
+  req: Omit<UpiRequest, 'amountPaise'> & { amountPaise?: number },
+  app: UpiApp,
+): string | null {
   const vpa = req.vpa.trim();
   if (!isValidVpa(vpa)) return null;
-  if (!Number.isFinite(req.amountPaise) || req.amountPaise <= 0) return null;
 
-  const rupees = (Math.round(req.amountPaise) / 100).toFixed(2);
   const quirks = SPEC[app]?.payload;
 
   const params: Array<[string, string]> = [['pa', vpa]];
   if ((quirks?.name ?? true) && req.name?.trim()) params.push(['pn', req.name.trim()]);
-  params.push(['am', rupees], ['cu', 'INR']);
+  // Absent, zero and negative all mean the same thing here — no figure to state — and
+  // `cu` still goes out, so the code says "rupees, you choose how many".
+  if (Number.isFinite(req.amountPaise) && (req.amountPaise as number) > 0) {
+    params.push(['am', (Math.round(req.amountPaise as number) / 100).toFixed(2)]);
+  }
+  params.push(['cu', 'INR']);
   // A note we invented is not neutral on a scanned payment: the payee never wrote it,
   // and an unexpected `tn` is one more way the request differs from the published code.
   if (req.note?.trim()) params.push(['tn', req.note.trim()]);
@@ -559,6 +614,92 @@ export function buildUpiUri(req: UpiRequest, app: UpiApp = UpiApp.Generic): stri
   // Every app takes the same NPCI parameter set; only the scheme and path differ.
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   return `${prefix}?${qs}`;
+}
+
+/**
+ * The payload for a QR **we display and someone else scans** — the other direction of
+ * the same payment, and the one route in this file that no app refuses.
+ *
+ * Everything above is the payer's side: we build an intent and hand it to a UPI app,
+ * which then decides whether to trust an intent it did not originate. PhonePe and Paytm
+ * decided no. This function sidesteps that decision entirely rather than arguing with
+ * it — there is no inbound intent to attribute and no caller to identify, because the
+ * payment starts inside the payer's own app when their camera reads this code. That is
+ * the input path every UPI app must support, and the one subject to no gallery-QR cap
+ * and no intent risk scoring.
+ *
+ * It costs the two people being in the same room, which is a real limit and not one this
+ * file can lift. It is not a replacement for the hand-off — it is the direction the
+ * hand-off never covered, since `TransferBody` offers nothing at all when the money is
+ * owed *to* you.
+ *
+ * Always `upi://pay`: a camera reads this, so no app's scheme is involved and a per-app
+ * prefix would mean nothing. `kind: 'person'` keeps `tr` off, per `UpiRequest.kind`.
+ *
+ * `amountPaise` omitted (or non-positive) yields an open-amount code — a standing
+ * "here's my handle", which is what a personal UPI QR normally is.
+ *
+ * `null` on a malformed VPA, so callers show an empty state instead of an unscannable
+ * square.
+ */
+export function buildUpiRequestUri(vpa: string, name?: string, amountPaise?: number): string | null {
+  return composeUpiUri(
+    { vpa, name, amountPaise, mode: UPI_MODE_QR, kind: 'person' },
+    UpiApp.Generic,
+  );
+}
+
+/** What the caller knows about a payment that changes where the app should land. */
+export type UpiLaunchOpts = {
+  /** Send no payment parameters to any app — a signed merchant QR cannot be re-emitted. */
+  bare?: boolean;
+  /** The user has a physical code in front of them, which earns a scanner over a home screen. */
+  hasCode?: boolean;
+};
+
+export type UpiLaunch = {
+  /** Exactly what gets handed to the OS. */
+  url: string;
+  /**
+   * Whether the app arrives with the payment in it.
+   *
+   * False means we deliberately sent nothing — see `UpiAppSpec.blocked`. The UI must be
+   * able to say so, because an app opening blank is otherwise indistinguishable from a
+   * broken deep link.
+   */
+  filled: boolean;
+};
+
+/**
+ * Where a hand-off actually goes — the single decision about what an app receives.
+ *
+ * Held here rather than in the hook because two places need the answer and they must
+ * agree: `useUpiHandoff` launches it, and `UpiUriSheet` previews it. They *didn't* agree
+ * — the preview ran every app through `buildUpiUri`, so it showed `paytmmp://pay?pa=…`
+ * for Paytm while the launch sent `paytmmp://scan`. A preview that disagrees with what is
+ * sent is worse than no preview, which is what the sheet's own comment already said, so
+ * the fix is one function rather than two that look alike.
+ *
+ * `null` when nothing can be opened — a bad VPA, or a blocked app with no scheme to fall
+ * back to. Callers should hide the action.
+ */
+export function upiLaunchUrl(
+  req: UpiRequest,
+  spec: UpiAppSpec | null,
+  opts?: UpiLaunchOpts,
+): UpiLaunch | null {
+  // A blocked app is opened, never handed a payment. Sending one costs the user a
+  // rate-limited UPI PIN attempt for a refusal we can already predict — and `scanPath`
+  // only when there is genuinely a code to point the camera at, since dropping someone
+  // into a viewfinder to settle up with a friend is worse than a home screen.
+  if (opts?.bare || spec?.blocked) {
+    const url = (opts?.hasCode ? spec?.scanPath : undefined) ?? spec?.probe ?? null;
+    return url ? { url, filled: false } : null;
+  }
+  // `spec` is null on Android, where `buildUpiUri`'s default lands on the generic
+  // `upi://pay` and the OS chooser takes it from there.
+  const url = buildUpiUri(req, spec?.key);
+  return url ? { url, filled: true } : null;
 }
 
 export type ScanTarget = ScannedUpi & {

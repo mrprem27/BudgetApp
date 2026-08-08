@@ -12,9 +12,15 @@ type Props = {
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
+  /**
+   * Overrides the default teal `gradients.accent`. Use when the button's colour
+   * carries meaning — the Add screen tints its save button by transaction kind, so
+   * the CTA agrees with the rest of the form.
+   */
+  gradient?: readonly [string, string, ...string[]];
 };
 
-export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, style }: Props) {
+export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, style, gradient }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const inactive = disabled || loading;
 
@@ -35,7 +41,7 @@ export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, 
     >
       <Animated.View style={[styles.shadow, inactive && styles.disabled, { transform: [{ scale }] }]}>
         <LinearGradient
-          colors={gradients.accent}
+          colors={gradient ?? gradients.accent}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btn}

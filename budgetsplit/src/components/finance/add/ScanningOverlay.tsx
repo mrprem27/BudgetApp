@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
     position: 'absolute', width: 72, height: 72, borderRadius: 36,
     borderWidth: 2, borderColor: colors.accent,
   },
-  title: { ...type.subheading, color: colors.textPrimary, marginTop: space.lg, fontFamily: 'Inter_600SemiBold' },
+  title: { ...type.subheading, color: colors.textPrimary, marginTop: space.lg },
   subtitle: { ...type.body, color: colors.textSecondary, marginTop: space.xs },
 });

@@ -23,7 +23,7 @@ import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
 import { insertPending } from './queries/pending';
 import { seedGlobalCategories } from './seedCategories';
 import { setMoneyProfile } from './queries/moneyProfile';
-import type { RecurFreq, PayMethod } from '../constants/enums';
+import { RecurFreq, PayMethod } from '../constants/enums';
 
 /** Rupees → integer paise. */
 const R = (rupees: number) => Math.round(rupees * 100);
@@ -145,33 +145,33 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date, category, note: o.note, payMethod: o.pay, lat: o.lat, lng: o.lng, placeLabel: o.place, attachmentUri: o.attach, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
 
   // This month — drives forecast, budgets (over/near/under) and shift teaser.
-  await exp('Rent', 22000, thisMonth(2), { note: 'Flat rent', pay: 'bank' });
-  await exp('Groceries', 3500, thisMonth(3), { place: 'BigBasket', pay: 'upi' });
+  await exp('Rent', 22000, thisMonth(2), { note: 'Flat rent', pay: PayMethod.Bank });
+  await exp('Groceries', 3500, thisMonth(3), { place: 'BigBasket', pay: PayMethod.Upi });
   await exp('Groceries', 3200, thisMonth(9), { place: 'DMart, HSR Layout', lat: 12.91, lng: 77.64 });
-  await exp('Groceries', 2300, thisMonth(15), { pay: 'upi' });                         // → ₹9,000 vs ₹8,000 budget = OVER
+  await exp('Groceries', 2300, thisMonth(15), { pay: PayMethod.Upi });                         // → ₹9,000 vs ₹8,000 budget = OVER
   await exp('Eating Out', 1200, thisMonth(4), { note: 'Dinner with friends', place: 'Truffles, Koramangala', lat: 12.93, lng: 77.62 });
-  await exp('Eating Out', 900, thisMonth(11), { pay: 'cash' });
+  await exp('Eating Out', 900, thisMonth(11), { pay: PayMethod.Cash });
   await exp('Eating Out', 600, thisMonth(18), { note: 'Brunch' });                      // → ₹2,700 vs ₹3,000 = NEAR
-  await exp('Fuel', 1500, thisMonth(6), { place: 'Indian Oil', pay: 'upi' });           // → under budget
+  await exp('Fuel', 1500, thisMonth(6), { place: 'Indian Oil', pay: PayMethod.Upi });           // → under budget
   await exp('Electricity', 2200, thisMonth(7), { note: 'BESCOM bill', attach: 'demo://receipt-bescom.pdf' });
   await exp('Shopping', 4500, thisMonth(8), { note: 'Winter clothes', place: 'Phoenix Mall' });
-  await exp('Health & Pharmacy', 800, thisMonth(10), { pay: 'cash' });
+  await exp('Health & Pharmacy', 800, thisMonth(10), { pay: PayMethod.Cash });
   await exp('Chai & Snacks', 5, thisMonth(12));                                          // tiny-amount edge case
   await exp('Chai & Snacks', 5, thisMonth(14));
-  await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: 'upi' });
+  await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: PayMethod.Upi });
 
   // Last month — gives shifts vs this month + reports/trend depth + a big one-off.
-  await exp('Rent', 22000, monthsBack(1, 2), { pay: 'bank' });
+  await exp('Rent', 22000, monthsBack(1, 2), { pay: PayMethod.Bank });
   await exp('Groceries', 6500, monthsBack(1, 5));
   await exp('Eating Out', 1500, monthsBack(1, 8));                                       // this month 2,700 → +80% shift
   await exp('Fuel', 2000, monthsBack(1, 10));
-  await exp('Electronics', 65000, monthsBack(1, 14), { note: 'New laptop', pay: 'bank' }); // large-amount edge case
+  await exp('Electronics', 65000, monthsBack(1, 14), { note: 'New laptop', pay: PayMethod.Bank }); // large-amount edge case
   await exp('Electricity', 1900, monthsBack(1, 7));
   await exp('Shopping', 3000, monthsBack(1, 20));
   await exp('Entertainment', 1200, monthsBack(1, 22), { note: 'Concert tickets' });
 
   // Two months ago — lighter, for a 3-point trend.
-  await exp('Rent', 22000, monthsBack(2, 2), { pay: 'bank' });
+  await exp('Rent', 22000, monthsBack(2, 2), { pay: PayMethod.Bank });
   await exp('Groceries', 5800, monthsBack(2, 6));
   await exp('Eating Out', 2100, monthsBack(2, 9));
   await exp('Fuel', 1700, monthsBack(2, 12));
@@ -221,8 +221,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
-  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: 'upi', category: 'Rent', note: 'Part of rent' });
-  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: 'cash', category: 'Repayment' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: PayMethod.Upi, category: 'Rent', note: 'Part of rent' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: PayMethod.Cash, category: 'Repayment' });
   // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
 
@@ -257,8 +257,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Office Lunch: fully settled (tests the "all settled up" state) ------
   await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: thisMonth(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
-  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'upi', category: 'Shared Bill' });
-  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: 'cash', category: 'Shared Bill' });
+  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Upi, category: 'Shared Bill' });
+  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Cash, category: 'Shared Bill' });
 
   // --- Family: I owe THEM (they paid) → a "you owe" balance direction --------
   await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: priya.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: priya.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
@@ -266,7 +266,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Manali Trip: single expense + a full settle-back ----------------------
   await insertTxn(db, { groupId: manali.id, kind: 'expense', entryMode: 'quick', date: monthsBack(2, 20), category: 'Travel', note: 'Cabs & stay', payments: [{ personId: meId, amount: R(15000) }], shares: [{ personId: meId, amount: R(5000) }, { personId: rohan.id, amount: R(5000) }, { personId: vikram.id, amount: R(5000) }] });
-  await recordSettlement(db, { groupId: manali.id, fromId: rohan.id, toId: meId, amount: R(5000), date: monthsBack(1, 5), payMethod: 'bank', category: 'Repayment' });
+  await recordSettlement(db, { groupId: manali.id, fromId: rohan.id, toId: meId, amount: R(5000), date: monthsBack(1, 5), payMethod: PayMethod.Bank, category: 'Repayment' });
 
   // --- Category budgets (over / near / under, every cadence) --------------
   await setCategoryBudgets(db, personalId, [
@@ -334,16 +334,16 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // expense/income, some pre-categorized, one shareable-in-a-group, one uncategorized.
   await insertPending(db, [
     // Google Pay import (most rows) — a couple carry a detected pay method.
-    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: 'upi', raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
-    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: 'upi', raw: null },
+    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
+    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
     { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
-    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: 'wallet', raw: null },
+    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: PayMethod.Wallet, raw: null },
     { date: thisMonth(18), amount: R(1000), description: 'PREM PURUSHOTTAM BHATI', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
-    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: 'upi', raw: null },
+    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
     // Bank / UPI email alerts — a separate section in Review.
-    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: 'card', raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
-    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: 'upi', raw: 'You paid ₹73 to Rapido via UPI' },
-    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', source: 'email', pay_method: 'autopay', raw: 'E-mandate debit of Rs 6000 towards Flat rent share' },
+    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: PayMethod.Card, raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
+    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Upi, raw: 'You paid ₹73 to Rapido via UPI' },
+    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', source: 'email', pay_method: PayMethod.Autopay, raw: 'E-mandate debit of Rs 6000 towards Flat rent share' },
   ]);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.

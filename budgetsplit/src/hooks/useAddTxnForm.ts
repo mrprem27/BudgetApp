@@ -7,7 +7,7 @@ import { settings } from '../lib/settings';
 import { matchCategory } from '../lib/smartCategory';
 import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../lib/smartCategoryLearn';
 import { DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
-import { getAllGroups, getGroupById } from '../db/queries/groups';
+import { getAllGroups, getGroupById, getGroupsByRecentUse } from '../db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
@@ -26,8 +26,8 @@ import { useLocationCapture } from './useLocationCapture';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
-import type { SplitMode, RecurFreq, PayMethod } from '../constants/enums';
-import type { AddKind } from '../components/finance/add/KindToggle';
+import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, type TransferScope } from '../constants/enums';
+import type { SplitMode, RecurFreq } from '../constants/enums';
 
 export type AddTxnParams = {
   groupId?: string; kind?: string; editId?: string; recurEditId?: string;
@@ -59,16 +59,16 @@ export function useAddTxnForm(params: AddTxnParams) {
   const me = useStore(s => s.me);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
   const [kind, setKind] = useState<AddKind>(
-    paramKind === 'income' ? 'income' : paramKind === 'transfer' ? 'transfer' : 'expense',
+    paramKind === AddKind.Income ? AddKind.Income : paramKind === AddKind.Transfer ? AddKind.Transfer : AddKind.Expense,
   );
   const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? (parseInt(paramAmount, 10) / 100).toString() : '');
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [personNet, setPersonNet] = useState<Record<string, number>>({});
   const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
   const [transferToId, setTransferToId] = useState(paramTo ?? '');
-  const [transferScope, setTransferScope] = useState<'all' | string>(paramGroupId ?? 'all');
+  const [transferScope, setTransferScope] = useState<TransferScope>(paramGroupId ?? TRANSFER_SCOPE_ALL);
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>('upi');
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
   const [transferNote, setTransferNote] = useState('');
   const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState('');
@@ -77,6 +77,10 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [catManual, setCatManual] = useState(false);
   const [learned, setLearned] = useState<LearnedMap>({});
   const [members, setMembers] = useState<Person[]>([]);
+  // The store's `groups` is creation-ordered (it hydrates from `getAllGroups`) and
+  // is shared app-wide, so it isn't the place to impose a picker's ordering. The
+  // destination picker wants most-recently-used first, so it gets its own read.
+  const [pickerGroups, setPickerGroups] = useState<BudgetGroup[]>([]);
   const [txnDate, setTxnDate] = useState(paramDate && /^\d+$/.test(paramDate) ? parseInt(paramDate, 10) : Date.now());
   const [splitType, setSplitType] = useState<SplitMode>('equal');
   const [splitMembers, setSplitMembers] = useState<string[]>([]);
@@ -90,7 +94,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
-  const [recurEndMode, setRecurEndMode] = useState<'never' | 'date' | 'count'>('never');
+  const [recurEndMode, setRecurEndMode] = useState<RecurEndMode>(RecurEndMode.Never);
   const [recurCount, setRecurCount] = useState('12');
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
@@ -132,6 +136,9 @@ export function useAddTxnForm(params: AddTxnParams) {
       const meRow = me ?? await getMe(db);
       loadLearned().then(setLearned).catch(() => {});
       getAffordSnapshot(db).then(setSnapshot).catch(() => {});
+      // Fire-and-forget: the destination row renders from the selected group, so
+      // it doesn't wait on this — only the sheet's ordering does.
+      getGroupsByRecentUse(db).then(setPickerGroups).catch(() => {});
       const savedCur = await settings.defaultCurrency();
       if (savedCur) setCurrency(savedCur as CurrencyCode);
 
@@ -140,13 +147,13 @@ export function useAddTxnForm(params: AddTxnParams) {
         const txn = await getTxnById(db, loadId);
         if (txn) {
           setSelectedGroupId(txn.group_id);
-          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
-          setKind(txn.kind === 'income' ? 'income' : txn.kind === 'settlement' ? 'transfer' : 'expense');
+          await loadGroup(txn.group_id, meRow, txn.category, txn.kind === 'income' ? AddKind.Income : txn.kind === 'settlement' ? AddKind.Transfer : AddKind.Expense);
+          setKind(txn.kind === 'income' ? AddKind.Income : txn.kind === 'settlement' ? AddKind.Transfer : AddKind.Expense);
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText((total / 100).toString());
           setNote(txn.note ?? '');
-          setPayMethod(txn.pay_method ?? 'upi');
+          setPayMethod(txn.pay_method ?? PayMethod.Upi);
 
           if (txn.kind === 'settlement') {
             setTransferFromId(txn.payments[0]?.personId ?? '');
@@ -165,7 +172,7 @@ export function useAddTxnForm(params: AddTxnParams) {
             setRecurEnabled(true);
             setRecurFreq(txn.recur_freq);
             setRecurInterval(String(txn.recur_interval ?? 1));
-            if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode('date'); }
+            if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode(RecurEndMode.Date); }
           }
         }
         return;
@@ -199,7 +206,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   }, [db, kind, transferFromId, transferToId]);
 
   const total = parseToPaise(amountText);
-  const transferScopeBal = transferScope === 'all'
+  const transferScopeBal = transferScope === TRANSFER_SCOPE_ALL
     ? (transferScopes?.all.amount ?? 0)
     : (transferScopes?.groups.find(g => g.groupId === transferScope)?.amount ?? 0);
 
@@ -258,7 +265,10 @@ export function useAddTxnForm(params: AddTxnParams) {
     haptic.selection();
     setKind(k);
     if (k === 'expense') {
-      if (selectedGroupId) loadGroup(selectedGroupId, me, undefined, 'expense');
+      // Same group, so the category survives the catalog reload. (Income and
+      // transfer genuinely switch to a different category catalog below, where
+      // resetting the selection is the correct behaviour.)
+      if (selectedGroupId) loadGroup(selectedGroupId, me, selectedCategory?.name, 'expense');
     } else if (k === 'transfer') {
       const gid = selectedGroupId || groups.find(g => g.is_personal === 1)?.id || groups[0]?.id || '';
       if (gid) loadGroup(gid, me, undefined, 'transfer');
@@ -267,12 +277,24 @@ export function useAddTxnForm(params: AddTxnParams) {
       const gid = p?.id ?? selectedGroupId;
       if (p && p.id !== selectedGroupId) setSelectedGroupId(p.id);
       if (gid) loadGroup(gid, me, undefined, 'income');
+      // For income the pay-method field means "where did it land?", and the default
+      // for spending (UPI) isn't a place money arrives into. Salary lands in a bank
+      // account, so that's the sensible pre-fill. Only overridden when the user is
+      // still on the spending default — never clobber a deliberate choice.
+      if (!isEditing && payMethod === PayMethod.Upi) setPayMethod(INCOME_LANDING_DEFAULT);
     }
   }
 
   async function selectGroup(gid: string) {
+    if (gid === selectedGroupId) return;
     setSelectedGroupId(gid);
-    await loadGroup(gid, me);
+    // Carry the chosen category across. Without this, `loadGroup` falls through to
+    // `cats[0]` and silently replaces whatever the user picked with the new
+    // group's most-used category — so choosing "Food" and *then* picking the group
+    // quietly changed it, and the payer amounts were wiped too. Categories are
+    // per-group rows keyed by name, so passing the name re-resolves it if the new
+    // group has one to match, and falls back to `cats[0]` only when it doesn't.
+    await loadGroup(gid, me, selectedCategory?.name);
   }
 
   async function handleSaveTransfer() {
@@ -283,7 +305,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     try {
       if (isEditing) {
         await updateTxn(db, {
-          id: editId!, groupId: transferScope === 'all' ? selectedGroupId : transferScope,
+          id: editId!, groupId: transferScope === TRANSFER_SCOPE_ALL ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: transferCategory,
           note: transferFullNote, payMethod,
           payments: [{ personId: transferFromId, amount: total }],
@@ -294,7 +316,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         return;
       }
 
-      const plans = transferScope === 'all'
+      const plans = transferScope === TRANSFER_SCOPE_ALL
         ? planAllGroupsSettlement(transferScopes ?? { groups: [], all: { amount: 0, from: transferFromId, to: transferToId } }, total, transferFromId, transferToId)
         : [{ groupId: transferScope, from: transferFromId, to: transferToId, amount: total }];
 
@@ -376,9 +398,9 @@ export function useAddTxnForm(params: AddTxnParams) {
       const recurIntervalN = recurFreq === 'custom' ? (parseInt(recurInterval, 10) || 1) : 1;
       let recurEnd: number | undefined;
       if (recurEnabled) {
-        if (recurEndMode === 'date') {
+        if (recurEndMode === RecurEndMode.Date) {
           recurEnd = recurEndMs && recurEndMs > txnDate ? recurEndMs : undefined;
-        } else if (recurEndMode === 'count') {
+        } else if (recurEndMode === RecurEndMode.Count) {
           const n = Math.max(1, parseInt(recurCount, 10) || 1);
           recurEnd = nthOccurrenceMs(txnDate, recurFreq, recurIntervalN, n);
         }
@@ -436,6 +458,9 @@ export function useAddTxnForm(params: AddTxnParams) {
     // core
     kind, onSelectKind, amountText, setAmountText, total,
     groups, selectedGroupId, setSelectedGroupId, selectGroup, loadGroup, me,
+    /** Recency-ordered, for the destination picker. Falls back to store order. */
+    pickerGroups: pickerGroups.length ? pickerGroups : groups,
+    selectedGroup: groups.find(g => g.id === selectedGroupId) ?? null,
     categories, setCategories, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
     title, note, setNote, setTitle,
     txnDate, setTxnDate,

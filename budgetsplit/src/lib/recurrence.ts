@@ -115,6 +115,25 @@ export function recurringMonthlyEquivalent(
   }
 }
 
+/**
+ * Human label for a recurrence: "Every month", "Every 3 weeks".
+ *
+ * Was a local helper inside `app/group/[id]/recurring.tsx`, which meant it wasn't
+ * reusable (the Add screen needed the same sentence) and it was missing the
+ * `yearly` case entirely — a yearly rule fell through to the bare word "Repeats".
+ */
+export function freqLabel(freq: string | null | undefined, interval: number | null | undefined): string {
+  const n = interval && interval > 0 ? interval : 1;
+  switch (freq) {
+    case 'daily':   return n === 1 ? 'Every day' : `Every ${n} days`;
+    case 'weekly':  return n === 1 ? 'Every week' : `Every ${n} weeks`;
+    case 'monthly': return n === 1 ? 'Every month' : `Every ${n} months`;
+    case 'yearly':  return n === 1 ? 'Every year' : `Every ${n} years`;
+    case 'custom':  return n === 1 ? 'Every day' : `Every ${n} days`;
+    default:        return 'Repeats';
+  }
+}
+
 function advance(
   date: Date,
   freq: NonNullable<Txn['recur_freq']>,

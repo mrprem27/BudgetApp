@@ -8,8 +8,14 @@ import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { TabPills } from '../src/components/ui/TabPills';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
+import { TxnCell } from '../src/components/finance/TxnCell';
+import { SectionHeader } from '../src/components/ui/SectionHeader';
+import { Divider } from '../src/components/ui/Divider';
+import { RecurringRow } from '../src/components/finance/RecurringRow';
+import { BudgetCategoryRow } from '../src/components/finance/BudgetCategoryRow';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
@@ -24,6 +30,7 @@ import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
 import { useScreenData } from '../src/hooks/useScreenData';
+import { useContentInset } from '../src/hooks/useContentInset';
 import { useStore } from '../src/store';
 import { getMyGlobalBudgetStatus } from '../src/lib/budget';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
@@ -53,6 +60,7 @@ export default function PersonalScreen() {
   const me = useStore((s) => s.me);
   const myId = me?.id ?? '';
 
+  const bottomPad = useContentInset({ fab: true });
   const [tab, setTab] = useState<TabKey>('activity');
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -181,19 +189,14 @@ export default function PersonalScreen() {
             </View>
           </View>
 
-          {/* Tab strip */}
-          <View style={styles.tabStrip}>
-            {TABS.map(t => (
-              <TouchableOpacity
-                key={t.key}
-                style={[styles.tab, tab === t.key && styles.tabActive]}
-                onPress={() => { setTab(t.key); haptic.selection(); }}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === t.key }}
-              >
-                <Text style={[styles.tabLabel, tab === t.key && styles.tabLabelActive]}>{t.label}</Text>
-              </TouchableOpacity>
-            ))}
+          {/* Was a byte-identical copy of the group screen's local tab strip, which
+              was itself a reimplementation of `TabPills`. One component now. */}
+          <View style={styles.tabs}>
+            <TabPills
+              tabs={TABS}
+              active={tab}
+              onChange={(k) => { setTab(k as typeof tab); haptic.selection(); }}
+            />
           </View>
 
           {/* ACTIVITY */}
@@ -201,7 +204,7 @@ export default function PersonalScreen() {
             <SectionList
               sections={sections}
               keyExtractor={t => t.id}
-              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]}
+              contentContainerStyle={[styles.activityContent, { paddingBottom: bottomPad }]}
               refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               ListHeaderComponent={
                 activity.length > 0 ? (
@@ -222,17 +225,20 @@ export default function PersonalScreen() {
                   </View>
                 ) : null
               }
-              renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
-              renderItem={({ item }) => (
-                <TransactionRow
-                  txn={item}
-                  myId={myId}
-                  members={persons}
-                  isPersonal={item.isPersonal}
-                  groupName={item.isPersonal ? undefined : item.groupName}
-                  onPress={() => handleEditTxn(item)}
-                  onDelete={() => handleDelete(item.id)}
-                />
+              renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
+              stickySectionHeadersEnabled={false}
+              renderItem={({ item, index, section }) => (
+                <TxnCell first={index === 0} last={index === section.data.length - 1}>
+                  <TransactionRow
+                    txn={item}
+                    myId={myId}
+                    members={persons}
+                    isPersonal={item.isPersonal}
+                    groupName={item.isPersonal ? undefined : item.groupName}
+                    onPress={() => handleEditTxn(item)}
+                    onDelete={() => handleDelete(item.id)}
+                  />
+                </TxnCell>
               )}
               ListEmptyComponent={
                 loading ? null : (
@@ -249,7 +255,7 @@ export default function PersonalScreen() {
 
           {/* BUDGET — global: my total share-spend (personal + groups) vs my limits */}
           {tab === 'budget' && (
-            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
               {budget.length === 0 ? (
                 <View style={styles.budgetCard}>
                   <Feather name="target" size={22} color={colors.accent} />
@@ -272,18 +278,15 @@ export default function PersonalScreen() {
                       const vis = categoryVisual(b.category);
                       const tint = b.health === 'red' ? colors.expense : b.health === 'amber' ? colors.healthAmber : colors.income;
                       return (
-                        <View key={`${b.category}-${b.cadence}`} style={[styles.budgetRow, i < budget.length - 1 && styles.budgetRowBorder]}>
-                          <View style={styles.budgetRowTop}>
-                            <View style={[styles.budgetIcon, { backgroundColor: alpha(vis.color, 13) }]}>
-                              <Feather name={vis.icon} size={14} color={vis.color} />
-                            </View>
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text style={styles.budgetCat} numberOfLines={1}>{b.category}</Text>
-                              <Text style={styles.budgetCadence}>{b.cadence === 'once' ? 'one-time' : b.cadence}</Text>
-                            </View>
-                            <Text style={styles.budgetAmt}><Text style={{ color: tint }}>{formatCompact(b.spent)}</Text> / {formatCompact(b.allocated)}</Text>
-                          </View>
-                          <BudgetBar pct={b.pct} health={b.health} height={6} />
+                        <View key={`${b.category}-${b.cadence}`} style={i < budget.length - 1 ? styles.budgetRowBorder : undefined}>
+                          <BudgetCategoryRow
+                            category={b.category}
+                            cadence={b.cadence}
+                            spent={b.spent}
+                            allocated={b.allocated}
+                            pct={b.pct}
+                            health={b.health}
+                          />
                         </View>
                       );
                     })}
@@ -295,7 +298,7 @@ export default function PersonalScreen() {
 
           {/* RECURRING — collapsible, grouped by group (personal first) */}
           {tab === 'recurring' && (
-            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
               {recurGroups.length === 0 ? (
                 <EmptyState icon="repeat" title="No recurring items" body="Mark an expense as Recurring when you add it and it'll show here, grouped by where it lives." tint={colors.textSecondary} />
               ) : recurGroups.map(rg => {
@@ -314,25 +317,15 @@ export default function PersonalScreen() {
                     {isOpen && (
                       <View style={styles.recurCard}>
                         {rg.rules.map((r, i) => {
-                          const vis = categoryVisual(r.category);
-                          const mine = r.shares.find(x => x.personId === myId)?.amount ?? r.shares.reduce((a, x) => a + x.amount, 0);
-                          const name = (r.note && r.note.trim()) || r.category;
                           return (
-                            <TouchableOpacity
-                              key={r.id}
-                              style={[styles.recurRow, i < rg.rules.length - 1 && styles.recurRowBorder]}
-                              onPress={() => router.push(`/group/${rg.groupId}/recurring?focus=${r.id}`)}
-                              accessibilityRole="button"
-                            >
-                              <View style={[styles.recurIcon, { backgroundColor: alpha(vis.color, 13) }]}>
-                                <Feather name={vis.icon} size={14} color={vis.color} />
-                              </View>
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text style={styles.recurName} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.recurCadence}>{r.recur_state !== 'active' ? `${r.recur_state} · ` : ''}{r.recur_freq}</Text>
-                              </View>
-                              <Text style={styles.recurAmt}>{formatCompact(mine)}</Text>
-                            </TouchableOpacity>
+                            <React.Fragment key={r.id}>
+                              {i > 0 && <Divider indent="text" />}
+                              <RecurringRow
+                                rule={r}
+                                meId={myId}
+                                onPress={() => router.push(`/group/${rg.groupId}/recurring?focus=${r.id}`)}
+                              />
+                            </React.Fragment>
                           );
                         })}
                       </View>
@@ -374,20 +367,18 @@ export default function PersonalScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md },
   summaryCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.md, ...shadow.sm },
   summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
   summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginVertical: space.xs },
   summaryLabel: { ...type.caption, color: colors.textMuted },
   summaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.3 },
 
-  tabStrip: { flexDirection: 'row', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border },
-  tab: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: radius.sm },
-  tabActive: { backgroundColor: colors.accent },
-  tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.textMuted },
-  tabLabelActive: { color: colors.bg },
 
   listContent: { paddingHorizontal: layout.screenPaddingH, gap: space.sm },
-  sectionHeader: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm, marginBottom: 2 },
+  // No `gap` here: a date section's rows form ONE card, so any gap between them
+  // slices it into separate slabs. `SectionHeader` supplies its own spacing.
+  activityContent: { paddingHorizontal: layout.screenPaddingH },
 
   budgetCard: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
   budgetTitle: { ...type.subheading, color: colors.textPrimary },
@@ -398,25 +389,13 @@ const styles = StyleSheet.create({
   editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   budgetNote: { ...type.caption, color: colors.textMuted, marginTop: 2, marginBottom: space.xs },
   budgetList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  budgetRow: { paddingHorizontal: space.md, paddingVertical: space.md, gap: space.sm },
   budgetRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  budgetRowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  budgetIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  budgetCat: { ...type.body, color: colors.textPrimary },
-  budgetCadence: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
-  budgetAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
 
   recurGroup: { marginBottom: space.sm },
   recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
   recurGroupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   recurGroupTotal: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   recurCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  recurRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.md, minHeight: 52 },
-  recurRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  recurIcon: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  recurName: { ...type.body, color: colors.textPrimary },
-  recurCadence: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
-  recurAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
 
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },

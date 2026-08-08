@@ -3,6 +3,10 @@ import { colors } from './colors';
 export const space = {
   xs:  4,
   sm:  8,
+  /** The step between `sm` and `md`. Added because ~40 sites were improvising it
+   *  as `space.sm + 4`, and another ~30 were writing a raw 10 or 12. Reach for
+   *  this instead of arithmetic on another token. */
+  smd: 12,
   md:  16,
   lg:  24,
   xl:  32,
@@ -22,6 +26,21 @@ export const layout = {
   tabBarHeight:   64,
   headerHeight:   56,
   fabHeight:      56,
+
+  /** Minimum interactive size — iOS HIG (AGENTS.md §6). Anything tappable that
+   *  measures less than this needs a `hitSlop` to make up the difference. */
+  touchMin:       44,
+  /** Settings-style / list row floor (AGENTS.md §4). */
+  rowMinHeight:   52,
+  /** Transaction rows sit taller than list rows — AGENTS.md §12 sets the floor at
+   *  60; this is the height they've actually used. */
+  txnRowHeight:   64,
+  /** The icon disc inside a form row (AGENTS.md §4). */
+  iconCircle:     32,
+  /** Member/person avatar. Settles a 36-vs-44 split across member rows. */
+  avatarSize:     40,
+  /** Divider indent that clears the icon disc: iconCircle + gap + gutter. */
+  dividerIndent:  64,
 };
 
 /**

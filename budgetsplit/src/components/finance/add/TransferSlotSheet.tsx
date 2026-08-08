@@ -52,8 +52,8 @@ export function TransferSlotSheet({
 }
 
 const styles = StyleSheet.create({
-  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
+  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd, paddingHorizontal: space.sm, borderRadius: radius.md },
   groupPickerRowActive: { backgroundColor: colors.accentMuted },
   groupPickerName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  transferBal: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginRight: space.xs },
+  transferBal: { ...type.captionSemi, marginRight: space.xs },
 });

@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, Keyboard, findNodeHandle,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../../src/hooks/useScreenData';
+import { useKeyboardVisible } from '../../../src/hooks/useKeyboardVisible';
 import { settings } from '../../../src/lib/settings';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
@@ -78,7 +79,7 @@ export default function BudgetEditorScreen() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
-  const [kbVisible, setKbVisible] = useState(false);
+  const kbVisible = useKeyboardVisible();
   const scrollRef = useRef<ScrollView>(null);
   const focusRowRef = useRef<View>(null);
   const scrolledToFocus = useRef(false);
@@ -105,12 +106,6 @@ export default function BudgetEditorScreen() {
 
   const allCategories = data?.cats ?? [];
   const defaultCadence = data?.defaultCadence ?? 'monthly';
-
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
-    return () => { show.remove(); hide.remove(); };
-  }, []);
 
   // Seed editable form state (amounts/cadences/collapsed) from the loaded data
   // whenever it (re)arrives — mirrors what the old `load()` did inline.

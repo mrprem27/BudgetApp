@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
 import { format, isSameDay } from 'date-fns';
+import { Chip } from '../../ui/Chip';
+import { IconCircle } from '../../ui/IconCircle';
 import { colors, space } from '../../tokens';
 import { asFeather } from '../../../constants/palette';
 import { categoryVisual } from '../../../constants/categories';
 import type { Category } from '../../../db/queries/categories';
-import type { AddKind } from './KindToggle';
-import { alpha } from '../../../theme';
+import type { AddKind } from '../../../constants/enums';
 
 type Props = {
   kind: AddKind;
@@ -15,47 +15,55 @@ type Props = {
   onCategory: () => void;
   txnDate: number;
   onDate: () => void;
+  /** The screen's kind colour, used when no category colour applies. */
+  accent?: string;
 };
 
-/** The Category (or "Reason" for transfers) + Date pill row shared across kinds. */
-export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate, onDate }: Props) {
+/**
+ * The Category (or "Reason" for transfers) + Date chip row shared across kinds.
+ *
+ * Both are `Chip`s with a trailing chevron, so they're the same component as the
+ * "Other details" chips below them — differing only by the one prop that says
+ * "this opens a picker". They used to be a private stylesheet of hand-rolled pills
+ * (`borderRadius: 100`, `paddingHorizontal: 14`, raw `fontSize: 13`, a hand-drawn
+ * 22px icon disc) sitting directly above chips built from the real primitive, which
+ * is why one screen had two subtly different versions of the same shape.
+ *
+ * Each chip carries its own icon — a tag/message glyph for the category and a
+ * calendar for the date — because a row of identically-shaped pills is only
+ * scannable if the glyphs distinguish them.
+ */
+export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate, onDate, accent = colors.accent }: Props) {
   const catWord = kind === 'transfer' ? 'Reason' : 'Category';
+  const catColor = selectedCategory?.color ?? accent;
+  const isToday = isSameDay(new Date(txnDate), new Date());
+
   return (
-    <View style={styles.pillsRow}>
-      <TouchableOpacity
-        style={styles.catPill}
+    <View style={styles.row}>
+      <Chip
+        grow
+        chevron
+        label={selectedCategory?.name ?? catWord}
+        // A chosen category shows its own colour+glyph in a disc; an empty one shows
+        // the neutral glyph for what's being asked for.
+        leading={selectedCategory
+          ? <IconCircle icon={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={22} color={catColor} iconSize={13} />
+          : undefined}
+        icon={selectedCategory ? undefined : kind === 'transfer' ? 'message-circle' : 'tag'}
         onPress={onCategory}
-        accessibilityRole="button"
         accessibilityLabel={selectedCategory ? `${catWord}: ${selectedCategory.name}` : `Choose ${catWord.toLowerCase()}`}
-      >
-        {selectedCategory ? (
-          <>
-            <View style={[styles.catPillDot, { backgroundColor: alpha(selectedCategory.color ?? colors.accent, 13) }]}>
-              <Feather name={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={13} color={selectedCategory.color ?? colors.accent} />
-            </View>
-            <Text style={styles.catPillText}>{selectedCategory.name}</Text>
-          </>
-        ) : (
-          <Text style={styles.catPillPlaceholder}>{catWord}</Text>
-        )}
-        <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.datePill} onPress={onDate} accessibilityRole="button" accessibilityLabel="Date">
-        <Text style={styles.datePillText}>
-          {isSameDay(new Date(txnDate), new Date()) ? 'Today' : format(new Date(txnDate), 'dd MMM')}
-        </Text>
-        <Feather name="chevron-down" size={12} color={colors.textMuted} />
-      </TouchableOpacity>
+      />
+      <Chip
+        chevron
+        icon="calendar"
+        label={isToday ? 'Today' : format(new Date(txnDate), 'd MMM')}
+        onPress={onDate}
+        accessibilityLabel={`Date: ${isToday ? 'today' : format(new Date(txnDate), 'd MMMM yyyy')}`}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pillsRow: { flexDirection: 'row', gap: space.sm },
-  catPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
-  catPillDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  catPillText: { fontSize: 13, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  catPillPlaceholder: { fontSize: 13, color: colors.textMuted, flex: 1 },
-  datePill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
-  datePillText: { fontSize: 13, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
+  row: { flexDirection: 'row', gap: space.sm },
 });

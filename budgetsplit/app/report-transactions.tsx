@@ -11,6 +11,7 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { FilterBar, type ChipGroup } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
+import { TxnCell } from '../src/components/finance/TxnCell';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories } from '../src/db/queries/categories';
@@ -163,18 +164,15 @@ export default function ReportTransactionsScreen() {
           const isLast = index === rows.length - 1;
           const isPersonalTxn = item.group_id === personalId;
           return (
-            <View style={[styles.cell, isFirst && styles.cellFirst, isLast && styles.cellLast]}>
-              <View style={styles.cellInner}>
-                <TransactionRow
-                  txn={item}
-                  myId={myId}
-                  showDate
-                  groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
-                  onPress={() => router.push(`/txn/${item.id}`)}
-                />
-              </View>
-              {!isLast && <View style={styles.rowDivider} />}
-            </View>
+            <TxnCell first={isFirst} last={isLast}>
+              <TransactionRow
+                txn={item}
+                myId={myId}
+                showDate
+                groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
+                onPress={() => router.push(`/txn/${item.id}`)}
+              />
+            </TxnCell>
           );
         }}
         ListEmptyComponent={
@@ -201,9 +199,4 @@ const styles = StyleSheet.create({
   filters: { marginBottom: space.md },
   // A single card for the month's rows: side borders always; first row rounds the
   // top, last rounds the bottom; hairline dividers (indented past the icon) between.
-  cell: { backgroundColor: colors.bgCard, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
-  cellFirst: { borderTopWidth: 1, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
-  cellLast: { borderBottomWidth: 1, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
-  cellInner: { paddingHorizontal: space.md },
-  rowDivider: { height: 1, backgroundColor: colors.border, marginLeft: 64, marginRight: space.md },
 });

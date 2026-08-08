@@ -16,6 +16,8 @@ type Fixture = {
   is_deleted: 0 | 1;
   recur_freq: string | null;
   date: number;
+  /** null = not recorded (treated as non-card, i.e. real cash out). */
+  pay_method?: string | null;
   payments: Split[];
   shares: Split[];
 };
@@ -25,29 +27,32 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
   db.exec(`
     CREATE TABLE txn (
       id TEXT PRIMARY KEY, group_id TEXT, kind TEXT, is_deleted INTEGER,
-      recur_freq TEXT, date INTEGER
+      recur_freq TEXT, date INTEGER, pay_method TEXT
     );
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
   `);
-  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date) VALUES (?,?,?,?,?,?)');
+  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method) VALUES (?,?,?,?,?,?,?)');
   const insPay = db.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?,?,?)');
   const insShare = db.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?,?,?)');
   for (const f of fixtures) {
-    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date);
+    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date, f.pay_method ?? null);
     for (const p of f.payments) insPay.run(f.id, p.person, p.amount);
     for (const s of f.shares) insShare.run(f.id, s.person, s.amount);
   }
   return db;
 }
 
-function sqlTotals(db: DatabaseSync, meId: string, cutoff: number): CashTotals {
-  const row = db.prepare(CASH_TOTALS_SQL).get(meId, meId, cutoff) as Record<string, number>;
+function sqlTotals(db: DatabaseSync, meId: string, cutoff: number, cardBaseline = 0): CashTotals {
+  // Bind order follows the `?` positions in the SQL text: the card-baseline filter
+  // lives in the SELECT, so it binds first.
+  const row = db.prepare(CASH_TOTALS_SQL).get(cardBaseline, meId, meId, cutoff) as Record<string, number>;
   return {
     income: Number(row.income),
     paidExpenses: Number(row.paidExpenses),
     settledOut: Number(row.settledOut),
     settledIn: Number(row.settledIn),
+    cardSpend: Number(row.cardSpend),
   };
 }
 
@@ -59,16 +64,20 @@ function toCashTxns(fixtures: Fixture[], cutoff: number): CashTxn[] {
     .map(f => ({
       kind: f.kind,
       is_deleted: 0,
+      pay_method: f.pay_method ?? null,
+      date: f.date,
       payments: f.payments.map(p => ({ personId: p.person, amount: p.amount })),
       shares: f.shares.map(s => ({ personId: s.person, amount: s.amount })),
     }));
 }
 
-function assertParity(fixtures: Fixture[], savings: number, opening: number) {
+function assertParity(fixtures: Fixture[], savings: number, opening: number, cardBaseline = 0) {
   const db = makeDb(fixtures);
   try {
-    const viaSql = cashPositionFromTotals(sqlTotals(db, ME, CUTOFF), savings, opening);
-    const viaJs = computeCash(toCashTxns(fixtures, CUTOFF), ME, savings, opening);
+    const viaSql = cashPositionFromTotals(sqlTotals(db, ME, CUTOFF, cardBaseline), savings, opening);
+    // `computeCash` takes the baseline as `null` for "count everything", which is what
+    // 0 means on the SQL side (`date > 0` matches every real timestamp).
+    const viaJs = computeCash(toCashTxns(fixtures, CUTOFF), ME, savings, opening, cardBaseline || null);
     expect(viaSql).toEqual(viaJs);
   } finally {
     db.close();
@@ -95,6 +104,25 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
       { id: 'ok', kind: 'expense',    is_deleted: 0, recur_freq: null,      date: CUTOFF, payments: [{ person: ME, amount: 1500 }], shares: [{ person: ME, amount: 1500 }] },
     ];
     assertParity(fixtures, 0, 0);
+  });
+
+  it('splits card spend out of cash, and honours the baseline cutoff', () => {
+    const fx: Fixture[] = [
+      { id: 'e1', kind: 'expense', is_deleted: 0, recur_freq: null, date: 500, pay_method: 'card', payments: [{ person: ME, amount: 10000 }], shares: [{ person: ME, amount: 10000 }] },
+      { id: 'e2', kind: 'expense', is_deleted: 0, recur_freq: null, date: 900, pay_method: 'card', payments: [{ person: ME, amount: 3000 }], shares: [{ person: ME, amount: 3000 }] },
+      { id: 'e3', kind: 'expense', is_deleted: 0, recur_freq: null, date: 900, pay_method: 'cash', payments: [{ person: ME, amount: 700 }], shares: [{ person: ME, amount: 700 }] },
+    ];
+    // No baseline: every card txn counts as debt, and cash only loses the cash one.
+    assertParity(fx, 0, 0);
+    const all = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 0), 0, 0);
+    expect(all.cardSpend).toBe(13000);
+    expect(all.paidExpenses).toBe(700);
+    expect(all.available).toBe(-700); // card spend did NOT move cash
+
+    // Baseline at 500: the ₹100 purchase is already inside the stated balance.
+    assertParity(fx, 0, 0, 500);
+    const after = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 500), 0, 0);
+    expect(after.cardSpend).toBe(3000);
   });
 
   it('handles empty data', () => {

@@ -2,85 +2,149 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
-import { formatRupees } from '../../src/lib/money';
+import { colors, type, space, radius, layout } from '../../src/theme';
+import { formatRupees, formatCompact } from '../../src/lib/money';
+import { kindAccent } from '../../src/lib/kindTheme';
+import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL } from '../../src/constants/enums';
+import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
+import { Screen } from '../../src/components/ui/Screen';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
-import { MoreOptions } from '../../src/components/ui/MoreOptions';
+import { TabPills } from '../../src/components/ui/TabPills';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
-import { DatePickerSheet } from '../../src/components/ui/DatePickerSheet';
-import { GroupSelector } from '../../src/components/finance/GroupSelector';
 import { TransferBody } from '../../src/components/finance/TransferBody';
-import { PayMethodSelector } from '../../src/components/finance/PayMethodSelector';
-import { KindToggle } from '../../src/components/finance/add/KindToggle';
 import { AmountField } from '../../src/components/finance/add/AmountField';
 import { CategoryDatePills } from '../../src/components/finance/add/CategoryDatePills';
-import { NoteField } from '../../src/components/finance/add/NoteField';
+import { Input } from '../../src/components/ui/Input';
 import { BudgetNudge } from '../../src/components/finance/add/BudgetNudge';
-import { AttachmentRow } from '../../src/components/finance/add/AttachmentRow';
-import { LocationRow } from '../../src/components/finance/add/LocationRow';
+import { ContextPill } from '../../src/components/finance/add/ContextPill';
+import { DetailChips } from '../../src/components/finance/add/DetailChips';
 import { SplitSummary } from '../../src/components/finance/add/SplitSummary';
-import { SplitSheet } from '../../src/components/finance/add/SplitSheet';
-import { RecurringControls } from '../../src/components/finance/add/RecurringControls';
-import { PayersSheet } from '../../src/components/finance/add/PayersSheet';
-import { TransferSlotSheet } from '../../src/components/finance/add/TransferSlotSheet';
+import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance/add/QuickAddSheets';
+import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
+
+const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
 export default function QuickAddScreen() {
-  const insets = useSafeAreaInsets();
   const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string }>();
   const f = useAddTxnForm(params);
 
-  // Sheet/picker visibility — pure UI state, kept in the screen.
-  const [showSplit, setShowSplit] = useState(false);
-  const [showPayers, setShowPayers] = useState(false);
-  const [showDate, setShowDate] = useState(false);
-  const [showEndDate, setShowEndDate] = useState(false);
-  const [showCatPicker, setShowCatPicker] = useState(false);
+  // One overlay at a time — see QuickAddSheets.
+  const [sheet, setSheet] = useState<QuickAddSheet>(null);
   const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null);
+  const [showCatPicker, setShowCatPicker] = useState(false);
 
   const { kind, flags, isEditing, isRecurEdit } = f;
+  const accent = kindAccent(kind);
   const nudgeColor = f.nudgePct == null ? null : f.nudgePct > 0.2 ? colors.income : f.nudgePct > 0 ? colors.healthAmber : colors.expense;
+
+  const open = (s: QuickAddSheet) => { Keyboard.dismiss(); setSheet(s); };
+  const pickReceipt = useAttachmentPicker({
+    onPicked: f.setAttachmentUri,
+    onOpenStorageSettings: () => router.push('/storage'),
+  });
 
   const title = isRecurEdit ? 'Edit recurring'
     : isEditing ? (kind === 'income' ? 'Edit income' : kind === 'transfer' ? 'Edit settlement' : 'Edit expense')
     : (kind === 'income' ? 'Add income' : kind === 'transfer' ? 'Settle up' : 'Add expense');
 
+  // Transfer is hidden when splitting is off — a settlement needs someone to settle
+  // with — but stays visible while editing one, or the pill would vanish from a row
+  // that already is a transfer.
+  const tabs = flags.splitting || kind === 'transfer'
+    ? KIND_TABS
+    : KIND_TABS.filter(t => t.key !== 'transfer');
+
   return (
-    <View style={styles.container}>
-      <ModalHeader
-        title={title}
-        onClose={() => router.back()}
-        right={
-          <TouchableOpacity onPress={f.handleSave} disabled={!f.canSave || f.saving} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save">
-            <Feather name="check" size={24} color={(!f.canSave || f.saving) ? colors.textMuted : colors.accent} />
-          </TouchableOpacity>
-        }
-      />
+    <Screen
+      header={
+        <ModalHeader
+          title={title}
+          onClose={() => router.back()}
+          right={
+            /* Save lives top-right, next to ✕ — the two ends of the same bar mean
+               "leave without saving" and "save". A footer button reads as a page
+               CTA and pushes the form up; this is a modal, not a page.
+               Note this is a deliberate exception to AGENTS §5's PrimaryButton
+               rule, which §5 now records. */
+            <TouchableOpacity
+              onPress={f.handleSave}
+              disabled={!f.canSave || f.saving}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Save"
+              accessibilityState={{ disabled: !f.canSave || f.saving }}
+            >
+              <Text style={[styles.save, { color: !f.canSave || f.saving ? colors.textMuted : accent }]}>
+                Save
+              </Text>
+            </TouchableOpacity>
+          }
+        />
+      }
+    >
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-      {/* `|| kind === 'transfer'` so an existing settlement stays editable even after
-          the user switches splitting off. */}
-      {!isEditing && !isRecurEdit && (
-        <KindToggle kind={kind} onSelect={f.onSelectKind} showTransfer={flags.splitting || kind === 'transfer'} />
-      )}
+          {!isEditing && !isRecurEdit && (
+            <TabPills
+              tabs={tabs}
+              active={kind}
+              onChange={(k) => f.onSelectKind(k as typeof kind)}
+              activeColor={accent}
+              size="lg"
+            />
+          )}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+          {/* One context pill for both kinds — an expense's destination and a
+              settlement's scope answer the same question ("what is this about?") and
+              belong in the same place. Transfer used to ask it again further down the
+              form with its own chip row. */}
+          {kind === 'expense' && (
+            <ContextPill
+              icon={asFeather(f.selectedGroup?.icon, 'layers')}
+              label={f.selectedGroup?.name ?? 'Personal'}
+              detail={
+                f.members.length > 1
+                  ? `${f.members.length} people · ${SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase()}`
+                  : 'just you'
+              }
+              tint={f.selectedGroup?.color ?? accent}
+              onPress={() => open('destination')}
+              accessibilityLabel={`Goes to ${f.selectedGroup?.name ?? 'Personal'}. Change`}
+            />
+          )}
+
+          {kind === 'transfer' && (f.transferScopes?.groups.length ?? 0) > 0 && (
+            <ContextPill
+              icon={f.transferScope === 'all' ? 'layers' : 'users'}
+              label={f.transferScope === 'all'
+                ? 'All groups'
+                : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.name ?? 'Group'}
+              detail={formatCompact(
+                (f.transferScope === 'all'
+                  ? f.transferScopes?.all?.amount
+                  : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.amount) ?? 0,
+              )}
+              tint={accent}
+              onPress={() => open('scope')}
+              accessibilityLabel="Choose what you're settling"
+            />
+          )}
 
           <AmountField amountText={f.amountText} onChangeText={f.setAmountText} kind={kind} autoFocus={!isEditing} transferScopeBal={f.transferScopeBal} />
 
           <CategoryDatePills
             kind={kind}
+            accent={accent}
             selectedCategory={f.selectedCategory}
             onCategory={() => { Keyboard.dismiss(); setShowCatPicker(true); }}
             txnDate={f.txnDate}
-            onDate={() => { Keyboard.dismiss(); setShowDate(true); }}
+            onDate={() => open('date')}
           />
 
           <CategoryPicker
@@ -112,7 +176,6 @@ export default function QuickAddScreen() {
               onSwap={() => { f.setTransferFromId(f.transferToId); f.setTransferToId(f.transferFromId); }}
               scopes={f.transferScopes}
               scope={f.transferScope}
-              onScope={f.setTransferScope}
               payMethod={f.payMethod}
               onPayMethod={f.setPayMethod}
               note={f.transferNote}
@@ -123,23 +186,19 @@ export default function QuickAddScreen() {
 
           {kind !== 'transfer' && (
             <>
-              {kind === 'expense' && f.groups.length > 1 && (
-                <GroupSelector
-                  groups={f.groups}
-                  selectedId={f.selectedGroupId}
-                  onSelect={async (gid) => { Keyboard.dismiss(); await f.selectGroup(gid); }}
-                  label="In"
-                />
-              )}
-
-              {/* Top field: Title (drives category) when smart-category is on, else the Note. */}
-              <NoteField
+              {/* Top field: Title (drives category) when smart-category is on, else the
+                  Note. `ui/Input` rather than a bespoke card input, so this field and the
+                  Note sheet share one surface — they used to be `bgCard` here and
+                  `bgInput` there, two looks for one value — and so it gets a focus ring. */}
+              <Input
                 value={flags.smartCategory ? f.title : f.note}
                 onChangeText={flags.smartCategory ? f.onTitleChange : f.setNote}
+                icon="edit-3"
                 placeholder={flags.smartCategory
                   ? (kind === 'income' ? 'e.g. Salary, Freelance, Dividend' : 'e.g. Uber, Groceries, Netflix')
                   : (kind === 'income' ? 'Source (optional)' : 'Note (optional)')}
                 maxLength={80}
+                autoCapitalize="sentences"
                 accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
               />
 
@@ -147,50 +206,9 @@ export default function QuickAddScreen() {
                 <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} afford={f.affordResult} />
               )}
 
-              <MoreOptions hint="Split · Attach" forceOpen={isEditing}>
-                {flags.smartCategory && (
-                  <NoteField value={f.note} onChangeText={f.setNote} placeholder="Note (optional)" maxLength={120} accessibilityLabel="Note" />
-                )}
-
-                {!isEditing && kind !== 'income' && flags.itemized && (
-                  <TouchableOpacity
-                    style={styles.byItemsRow}
-                    onPress={() => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })}
-                    accessibilityRole="button"
-                    accessibilityLabel="Split by items"
-                  >
-                    <Feather name="list" size={16} color={colors.accent} />
-                    <Text style={styles.byItemsText}>Split by items</Text>
-                    <Feather name="chevron-right" size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
-                  </TouchableOpacity>
-                )}
-
-                <AttachmentRow attachmentUri={f.attachmentUri} onChange={f.setAttachmentUri} onOpenStorageSettings={() => router.push('/storage')} />
-
-                {f.locEnabled && !isEditing && (
-                  <LocationRow place={f.place} capturing={f.capturingLoc} onRecapture={f.captureLocation} onClear={() => f.setPlace(null)} />
-                )}
-
-                {/* How was it paid? — expense & income (transfer has its own selector). */}
-                <View style={styles.payBlock}>
-                  <Text style={styles.payBlockLabel}>HOW WAS IT PAID?</Text>
-                  <PayMethodSelector value={f.payMethod} onChange={f.setPayMethod} accent={kind === 'income' ? colors.income : colors.accent} />
-                </View>
-
-                {!isEditing && flags.recurring && (
-                  <RecurringControls
-                    enabled={f.recurEnabled} setEnabled={f.setRecurEnabled}
-                    freq={f.recurFreq} setFreq={f.setRecurFreq}
-                    interval={f.recurInterval} setInterval={f.setRecurInterval}
-                    endMode={f.recurEndMode} setEndMode={f.setRecurEndMode}
-                    endMs={f.recurEndMs} setEndMs={f.setRecurEndMs}
-                    count={f.recurCount} setCount={f.setRecurCount}
-                    txnDate={f.txnDate}
-                    onPickEndDate={() => setShowEndDate(true)}
-                  />
-                )}
-              </MoreOptions>
-
+              {/* Split is core to a shared expense, so it sits above the optional
+                  details — it used to render below the "More options" accordion,
+                  which pushed it off-screen the moment that was expanded. */}
               {kind === 'expense' && f.members.length > 1 && f.total > 0 && (
                 <SplitSummary
                   members={f.members}
@@ -199,8 +217,9 @@ export default function QuickAddScreen() {
                   total={f.total}
                   payments={f.payments}
                   meId={f.me?.id}
-                  onOpenSplit={() => { Keyboard.dismiss(); setShowSplit(true); }}
-                  onOpenPayers={() => { Keyboard.dismiss(); setShowPayers(true); }}
+                  accent={accent}
+                  onOpenSplit={() => open('split')}
+                  onOpenPayers={() => open('payers')}
                 />
               )}
 
@@ -211,77 +230,62 @@ export default function QuickAddScreen() {
                     : f.remainder > 0 ? `${formatRupees(f.remainder)} unassigned` : `${formatRupees(-f.remainder)} over-assigned`}
                 </Text>
               )}
+
+              {/* Itemized split stays visible — it's the app's most differentiated
+                  feature — but as a chip beside the other details rather than a
+                  full-width card row competing with the form itself. */}
+              <DetailChips
+                accent={accent}
+                onSplitByItems={!isEditing && kind !== 'income' && flags.itemized
+                  ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
+                  : undefined}
+                note={flags.smartCategory ? f.note : ''}
+                onOpenNote={() => open('note')}
+                onClearNote={() => f.setNote('')}
+                attachmentUri={f.attachmentUri}
+                onOpenAttachment={pickReceipt}
+                onClearAttachment={() => f.setAttachmentUri(null)}
+                place={f.locEnabled && !isEditing ? f.place : undefined}
+                capturingLoc={f.capturingLoc}
+                onCaptureLocation={f.locEnabled && !isEditing ? f.captureLocation : undefined}
+                onClearLocation={() => f.setPlace(null)}
+                payMethod={f.payMethod}
+                onOpenPayMethod={() => open('payMethod')}
+                isIncome={kind === 'income'}
+                recurEnabled={f.recurEnabled}
+                recurFreq={f.recurFreq}
+                recurInterval={f.recurInterval}
+                // Deliberately does NOT pre-enable recurrence. The sheet's own
+                // switch turns it on, so closing the sheet without touching it
+                // can't leave a transaction silently armed to repeat.
+                onOpenRecurring={!isEditing && flags.recurring ? () => open('recurring') : undefined}
+                onClearRecurring={() => f.setRecurEnabled(false)}
+              />
             </>
           )}
         </ScrollView>
+
+        {/* Sticky CTA. The save action used to be a 24px ✓ glyph in the header —
+            AGENTS.md §5 requires PrimaryButton for a primary action, and a footer
+            button is also where the thumb already is. */}
       </KeyboardAvoidingView>
 
-      <SplitSheet
-        visible={showSplit}
-        onClose={() => setShowSplit(false)}
-        members={f.members}
-        splitMembers={f.splitMembers}
-        setSplitMembers={f.setSplitMembers}
-        splitType={f.splitType}
-        setSplitType={f.setSplitType}
-        exactAmounts={f.exactAmounts}
-        setExactAmounts={f.setExactAmounts}
-        percentages={f.percentages}
-        setPercentages={f.setPercentages}
-        ratios={f.ratios}
-        setRatios={f.setRatios}
-        total={f.total}
-        remainder={f.remainder}
+      <QuickAddSheets
+        form={f}
+        open={sheet}
+        onOpen={setSheet}
+        onClose={() => setSheet(null)}
+        transferSlot={transferSlot}
+        onCloseTransferSlot={() => setTransferSlot(null)}
+        accent={accent}
       />
-
-      <DatePickerSheet visible={showDate} value={f.txnDate} onClose={() => setShowDate(false)} onChange={f.setTxnDate} />
-      <DatePickerSheet
-        visible={showEndDate}
-        value={f.recurEndMs ?? (f.txnDate + 30 * 24 * 60 * 60 * 1000)}
-        onClose={() => setShowEndDate(false)}
-        onChange={f.setRecurEndMs}
-      />
-
-      <TransferSlotSheet
-        slot={transferSlot}
-        persons={f.allPersons}
-        me={f.me}
-        fromId={f.transferFromId}
-        toId={f.transferToId}
-        personNet={f.personNet}
-        onClose={() => setTransferSlot(null)}
-        onPick={(pid) => {
-          if (transferSlot === 'from') {
-            if (pid === f.transferToId) f.setTransferToId(f.transferFromId);
-            f.setTransferFromId(pid);
-          } else if (transferSlot === 'to') {
-            if (pid === f.transferFromId) f.setTransferFromId(f.transferToId);
-            f.setTransferToId(pid);
-          }
-          setTransferSlot(null);
-        }}
-      />
-
-      <PayersSheet
-        visible={showPayers}
-        onClose={() => setShowPayers(false)}
-        members={f.members}
-        me={f.me}
-        payerAmounts={f.payerAmounts}
-        setPayerAmounts={f.setPayerAmounts}
-        total={f.total}
-        paymentRemainder={f.paymentRemainder}
-      />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md },
-  byItemsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
-  byItemsText: { ...type.body, color: colors.textPrimary },
-  payBlock: { gap: space.xs },
-  payBlockLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold' },
+  fill: { flex: 1 },
+  save: { ...type.button },
+  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.md },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
 });

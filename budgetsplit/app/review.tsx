@@ -1,34 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
-import { categoryVisual } from '../src/constants/categories';
+import { space, layout } from '../src/constants/layout';
 import { asFeather } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SheetModal } from '../src/components/ui/SheetModal';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
+import { SecondaryButton } from '../src/components/ui/SecondaryButton';
+import { Banner } from '../src/components/ui/Banner';
+import { Chip } from '../src/components/ui/Chip';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
-import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { CategoryPicker } from '../src/components/finance/CategoryPicker';
-import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import type { ParsedDirection } from '../src/lib/importParse';
-import { SplitEditor } from '../src/components/finance/add/SplitEditor';
 import {
   effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
   type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
 } from '../src/lib/reviewCommit';
 import { FilterForm } from '../src/components/finance/review/FilterForm';
 import { SaveViewForm } from '../src/components/finance/review/SaveViewForm';
-import { DestOption } from '../src/components/finance/review/DestOption';
+import { ReviewRowCard } from '../src/components/finance/review/ReviewRowCard';
+import { ReviewDestSheet } from '../src/components/finance/review/ReviewDestSheet';
+import { CounterpartySheet } from '../src/components/finance/review/CounterpartySheet';
+import { BulkGroupSheet } from '../src/components/finance/review/BulkGroupSheet';
+import { ReviewOverflowSheet } from '../src/components/finance/review/ReviewOverflowSheet';
+import { SavedViewsSheet } from '../src/components/finance/review/SavedViewsSheet';
+import { PayMethodSheet } from '../src/components/finance/add/PayMethodSheet';
 import {
   getPending, deletePending, clearPending, updatePendingDraft, restorePending,
   type PendingTxn, type PendingDraft,
@@ -39,7 +43,7 @@ import { convertToRecurring } from '../src/db/queries/recurring';
 import { getMe, getGroupMembers, type Person } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories, type Category } from '../src/db/queries/categories';
-import { parseToPaise, formatRupees, splitByMode } from '../src/lib/money';
+import { parseToPaise } from '../src/lib/money';
 import { recordCorrection } from '../src/lib/smartCategoryLearn';
 import { detectRecurringCandidates, toRecurRows, type RecurringCandidate } from '../src/lib/recurringSuggest';
 import { RecurringSuggestionBanner } from '../src/components/finance/review/RecurringSuggestionBanner';
@@ -51,13 +55,12 @@ import {
 } from '../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../src/lib/reviewViews';
 import { useScreenData } from '../src/hooks/useScreenData';
+import { useContentInset } from '../src/hooks/useContentInset';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useUndo } from '../src/components/system/UndoToast';
 import { haptic } from '../src/lib/haptics';
 import {
-  type TxnKind, type SplitMode, type PayMethod, type TxnSource,
-  PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, TXN_KIND_LABEL,
-  TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
+  type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
 } from '../src/constants/enums';
 import { alpha } from '../src/theme';
 
@@ -65,14 +68,6 @@ import { alpha } from '../src/theme';
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
 // pending_txn; only Confirm/Save commits a row into a real transaction.
 // payMethod: '' = none/unset (row need not have one).
-/** Kind chips on each row. "Transfer" is the UI name for a `settlement` — money
- *  moving between accounts or people, which is neither spend nor earnings. */
-const KIND_CHIPS: { kind: TxnKind; label: string }[] = [
-  { kind: 'expense', label: 'Exp' },
-  { kind: 'income', label: 'Inc' },
-  { kind: 'settlement', label: 'Txfr' },
-];
-
 const BATCH = '__batch__';
 
 export default function ReviewScreen() {
@@ -106,6 +101,10 @@ export default function ReviewScreen() {
   const [activeView, setActiveView] = useState<SavedView | null>(null);
   const [viewsSheet, setViewsSheet] = useState(false);
   const [saveViewSheet, setSaveViewSheet] = useState(false);
+  // Measured, not guessed: the footer swaps between one CTA and a three-button bulk
+  // bar, so a literal bottom inset (this was `insets.bottom + 96`) is wrong in one
+  // mode or the other.
+  const [footerH, setFooterH] = useState(0);
 
   useEffect(() => { loadViews().then(setSavedViews).catch(() => {}); }, []);
 
@@ -130,6 +129,9 @@ export default function ReviewScreen() {
       groupMembers, expenseCats, incomeCats, transferCats,
     };
   }, []);
+
+  // Footer height is measured (see `footerH`), so the last row always clears it.
+  const listPad = useContentInset({ footer: footerH });
 
   const pending = data?.pending ?? [];
   const hasGroups = (data?.sharedGroups.length ?? 0) > 0;
@@ -416,192 +418,21 @@ export default function ReviewScreen() {
   }
 
   // ---- row renderer --------------------------------------------------------
-  // A plain render function (NOT a nested component): rendering <RowCard/> as a
-  // component defined inside ReviewScreen remounts it on every keystroke, which
-  // drops focus and closes the keyboard while typing the amount. Inlining keeps
-  // the TextInput mounted across re-renders.
-  const renderRow = (row: PendingTxn) => {
-    const v = eff(row);
-    const vis = categoryVisual(v.category);
-    const isGroup = v.dest !== 'personal';
-    const isTransfer = v.kind === 'settlement';
-    const groupName = isGroup ? (data?.sharedGroups.find(g => g.id === v.dest)?.name ?? 'Group') : 'Personal';
-    const gm = isGroup ? (data?.groupMembers[v.dest] ?? []) : [];
-    // A transfer into a group settles with one member instead of splitting.
-    const splitting = isGroup && !isTransfer;
-    const total = parseToPaise(v.amount);
-    const st = splitState(row);
-    const shares = splitting ? splitByMode(total, st.included, st.mode, st.values) : {};
-    const assigned = splitting ? st.included.reduce((s, id) => s + (shares[id] ?? 0), 0) : total;
-    const balanced = !splitting || (st.included.length > 0 && assigned === total);
-    // A group transfer can't be saved until you say who it was with.
-    const other = gm.find(m => m.id === v.counterparty) ?? null;
-    const inbound = v.direction === 'credit';
-    const ready = balanced && (!isGroup || !isTransfer || other !== null);
-    const saving = savingId === row.id;
-    const checked = selected.has(row.id);
+  // `ReviewRowCard` lives at MODULE scope in components/finance/review. Declaring it
+  // inside this component would create a new component *type* every render, which
+  // remounts the subtree and drops keyboard focus mid-digit while typing an amount.
+  // See the note in that file before moving it.
 
-    return (
-      <View style={[styles.card, selectMode && checked && styles.cardChecked]}>
-        <View style={styles.rowTop}>
-          {selectMode && (
-            <TouchableOpacity onPress={() => toggleSelect(row.id)} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`Select ${row.description}`} style={styles.checkbox}>
-              <Feather name={checked ? 'check-circle' : 'circle'} size={20} color={checked ? colors.accent : colors.textMuted} />
-            </TouchableOpacity>
-          )}
-          <Text style={styles.desc} numberOfLines={1}>{row.description}</Text>
-          <Text style={styles.date}>{format(row.date, 'd MMM · h:mm a')}</Text>
-        </View>
-
-        <View style={styles.controls}>
-          <View style={styles.amtWrap}>
-            <Text style={styles.rupee}>₹</Text>
-            <TextInput
-              style={styles.amtInput}
-              value={v.amount}
-              onChangeText={(t) => patchAmountLocal(row.id, t.replace(/[^0-9.]/g, ''))}
-              onEndEditing={(e) => flushAmount(row.id, e.nativeEvent.text)}
-              keyboardType="decimal-pad"
-              accessibilityLabel="Amount"
-            />
-          </View>
-          <View style={styles.kindToggle}>
-            {KIND_CHIPS.map(({ kind: k, label }) => (
-              <TouchableOpacity
-                key={k}
-                style={[styles.kindBtn, v.kind === k && KIND_ON_STYLE[k]]}
-                // Switching kind clears the category — the picker's list changes
-                // with it, so keeping the old name would show a stale chip.
-                onPress={() => { haptic.selection(); patch(row.id, k === 'expense' ? { kind: k, category: '' } : { kind: k, category: '', dest: 'personal' }); }}
-                accessibilityRole="button"
-                accessibilityLabel={TXN_KIND_LABEL[k]}
-                accessibilityState={{ selected: v.kind === k }}
-              >
-                <Text style={[styles.kindText, v.kind === k && styles.kindTextOn]}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.discardBtn} onPress={() => deleteRow(row)} accessibilityRole="button" accessibilityLabel="Remove">
-            <Feather name="trash-2" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.controls}>
-          <TouchableOpacity style={styles.pill} onPress={() => setCatPickerFor(row.id)} accessibilityRole="button" accessibilityLabel="Category">
-            <View style={[styles.pillDot, { backgroundColor: alpha(vis.color ?? colors.accent, 13) }]}>
-              <Feather name={asFeather(vis.icon, 'tag')} size={12} color={vis.color ?? colors.accent} />
-            </View>
-            <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
-            <Feather name="chevron-down" size={12} color={colors.textMuted} />
-          </TouchableOpacity>
-          {hasGroups && v.kind !== 'income' && (
-            <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} accessibilityState={{ selected: isGroup }} onPress={() => setDestSheetFor(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
-              <Feather name={isGroup ? 'users' : 'user'} size={12} color={isGroup ? colors.settle : colors.textSecondary} />
-              <Text style={[styles.pillText, isGroup && { color: colors.settle }]} numberOfLines={1}>{groupName}</Text>
-              <Feather name="chevron-down" size={12} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Transfer specifics: which way the money went, and (in a group) who
-            with. Direction is seeded from the statement, but not every export
-            signs its amounts — and money arriving can be a transfer TO you
-            rather than income — so it's a tap to flip. */}
-        {isTransfer && (
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={styles.pill}
-              onPress={() => { haptic.selection(); patch(row.id, { direction: inbound ? 'debit' : 'credit' }); }}
-              accessibilityRole="button"
-              accessibilityLabel={inbound ? 'Money in — tap to change to money out' : 'Money out — tap to change to money in'}
-            >
-              <Feather
-                name={inbound ? 'arrow-down-left' : 'arrow-up-right'}
-                size={12}
-                color={inbound ? colors.income : colors.expense}
-              />
-              <Text style={[styles.pillText, { color: inbound ? colors.income : colors.expense }]} numberOfLines={1}>
-                {inbound ? 'Money in' : 'Money out'}
-              </Text>
-              <Feather name="repeat" size={11} color={colors.textMuted} />
-            </TouchableOpacity>
-            {isGroup ? (
-              <TouchableOpacity
-                style={[styles.pill, other ? styles.pillGroup : styles.pillNeeded]}
-                onPress={() => setWhoSheetFor(row.id)}
-                accessibilityRole="button"
-                accessibilityLabel={inbound ? 'Who paid you' : 'Who you paid'}
-              >
-                <Feather name="user" size={12} color={other ? colors.settle : colors.expense} />
-                <Text style={[styles.pillText, { color: other ? colors.settle : colors.expense }]} numberOfLines={1}>
-                  {other ? `${inbound ? 'From' : 'To'} ${other.name}` : (inbound ? 'From whom?' : 'To whom?')}
-                </Text>
-                <Feather name="chevron-down" size={12} color={colors.textMuted} />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
-          </View>
-        )}
-
-        {/* Pay method — pre-filled from detection when the source carried a cue. */}
-        <View style={styles.controls}>
-          <TouchableOpacity
-            style={[styles.payPill, v.payMethod !== '' && styles.payPillSet]}
-            onPress={() => setPaySheetFor(row.id)}
-            accessibilityRole="button"
-            accessibilityLabel={v.payMethod ? `Paid via ${PAY_METHOD_LABEL[v.payMethod]}` : 'Set payment method'}
-          >
-            <Text style={styles.payEmoji}>{v.payMethod ? PAY_METHOD_EMOJI[v.payMethod] : '💳'}</Text>
-            <Text style={[styles.pillText, v.payMethod !== '' && { color: colors.textPrimary }]} numberOfLines={1}>
-              {v.payMethod ? PAY_METHOD_LABEL[v.payMethod] : 'Pay method'}
-            </Text>
-            <Feather name="chevron-down" size={12} color={colors.textMuted} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-        </View>
-
-        {/* Inline split — group expenses only; a group transfer settles instead. */}
-        {splitting && (
-          <View style={{ gap: space.sm }}>
-            <SplitEditor
-              members={gm}
-              included={st.included}
-              onToggle={(id) => patchSplit(row, { included: st.included.includes(id) ? st.included.filter(x => x !== id) : [...st.included, id] })}
-              mode={st.mode}
-              onMode={(m) => patchSplit(row, { mode: m })}
-              rawValue={(id) => st.values[id] ?? ''}
-              onValue={(id, val) => patchSplit(row, { values: { ...st.values, [id]: val } })}
-              result={(id) => shares[id] ?? 0}
-            />
-            <Text style={[styles.splitMeta, { color: balanced ? colors.income : colors.expense, textAlign: 'right' }]}>
-              {st.included.length === 0 ? 'Pick who shares this'
-                : assigned === total ? 'Balanced'
-                : assigned < total ? `${formatRupees(total - assigned)} unassigned`
-                : `${formatRupees(assigned - total)} over`}
-            </Text>
-          </View>
-        )}
-
-        {/* Per-row Confirm — hidden in selection mode (batch Save is the action there). */}
-        {!selectMode && (
-          <View style={styles.controls}>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={[styles.confirmBtn, (!ready || saving || batchSaving) && { opacity: 0.5 }]}
-              onPress={() => confirmRow(row)}
-              disabled={!ready || saving || batchSaving}
-              accessibilityRole="button"
-              accessibilityLabel="Save this transaction"
-            >
-              <Feather name="check" size={14} color={colors.bg} />
-              <Text style={styles.confirmBtnText}>{saving ? 'Saving…' : 'Confirm'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  }
+  // The row each per-row sheet is editing. Resolved here rather than inside the
+  // sheet's JSX so a sheet never has to re-find its own row (the old inline
+  // versions did `pending.find(...)!` up to three times in one element).
+  const rowById = (id: string | null) => (id ? pending.find(r => r.id === id) ?? null : null);
+  const destRow = rowById(destSheetFor);
+  const payRow = rowById(paySheetFor);
+  const whoRow = rowById(whoSheetFor);
+  const whoMembers = whoRow
+    ? (data?.groupMembers[eff(whoRow).dest] ?? []).filter(m => m.id !== data?.meId)
+    : [];
 
   const catPickerRow = catPickerFor ? pending.find(r => r.id === catPickerFor) ?? null : null;
   const catPickerKind = catPickerRow ? eff(catPickerRow).kind : 'expense';
@@ -651,17 +482,12 @@ export default function ReviewScreen() {
 
       {/* Focus / filter / view banner — the working set. */}
       {!loading && (narrowed || activeView) && pending.length > 0 && (
-        <View style={styles.banner}>
-          <Feather name={activeView ? 'bookmark' : focusActive ? 'crosshair' : 'filter'} size={14} color={colors.accent} />
-          <Text style={styles.bannerText} numberOfLines={1}>
-            {activeView ? activeView.name : focusActive ? 'Focus' : 'Filtered'}
-            {' · '}{visibleRows.length} of {pending.length}
-            {activePayerName ? ` · paid by ${activePayerName}` : ''}
-          </Text>
-          <TouchableOpacity onPress={exitFocus} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.bannerReset}>Show all</Text>
-          </TouchableOpacity>
-        </View>
+        <Banner
+          icon={activeView ? 'bookmark' : focusActive ? 'crosshair' : 'filter'}
+          text={`${activeView ? activeView.name : focusActive ? 'Focus' : 'Filtered'} · ${visibleRows.length} of ${pending.length}${activePayerName ? ` · paid by ${activePayerName}` : ''}`}
+          actionLabel="Show all"
+          onAction={exitFocus}
+        />
       )}
 
       {error ? (
@@ -690,7 +516,31 @@ export default function ReviewScreen() {
         <SectionList
           sections={sections}
           keyExtractor={r => r.id}
-          renderItem={({ item }) => renderRow(item)}
+          renderItem={({ item }) => (
+            <ReviewRowCard
+              row={item}
+              v={eff(item)}
+              st={splitState(item)}
+              sharedGroups={data?.sharedGroups ?? []}
+              groupMembers={data?.groupMembers ?? {}}
+              hasGroups={hasGroups}
+              selectMode={selectMode}
+              checked={selected.has(item.id)}
+              saving={savingId === item.id}
+              batchSaving={batchSaving}
+              onToggleSelect={toggleSelect}
+              onAmountChange={patchAmountLocal}
+              onAmountBlur={flushAmount}
+              onPatch={patch}
+              onSplitChange={patchSplit}
+              onOpenCategory={setCatPickerFor}
+              onOpenDest={setDestSheetFor}
+              onOpenCounterparty={setWhoSheetFor}
+              onOpenPay={setPaySheetFor}
+              onConfirm={confirmRow}
+              onDiscard={deleteRow}
+            />
+          )}
           renderSectionHeader={({ section }) => multiSource ? (
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
@@ -702,7 +552,7 @@ export default function ReviewScreen() {
           ) : null}
           stickySectionHeadersEnabled={false}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 96 }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={12}
           windowSize={8}
@@ -722,9 +572,9 @@ export default function ReviewScreen() {
                   {hasGroups && (
                     <View style={styles.assignAll}>
                       <Text style={styles.assignAllLabel}>All to:</Text>
-                      <TouchableOpacity style={styles.assignChip} onPress={() => setAllDest('personal')}><Text style={styles.assignChipText}>Personal</Text></TouchableOpacity>
+                      <Chip label="Personal" icon="user" onPress={() => setAllDest('personal')} />
                       {data!.sharedGroups.slice(0, 3).map(g => (
-                        <TouchableOpacity key={g.id} style={styles.assignChip} onPress={() => setAllDest(g.id)}><Text style={styles.assignChipText} numberOfLines={1}>{g.name}</Text></TouchableOpacity>
+                        <Chip key={g.id} label={g.name} icon="users" maxWidth={140} onPress={() => setAllDest(g.id)} />
                       ))}
                     </View>
                   )}
@@ -737,37 +587,23 @@ export default function ReviewScreen() {
 
       {/* Sticky footer — Save all (normal) or bulk actions (selection). */}
       {!loading && pending.length > 0 && !emptyFiltered && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]} onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
           {selectMode ? (
+            /* Real buttons at PrimaryButton's 52pt, so the footer no longer grows
+               4px when you leave selection mode (these were hand-rolled at 48). */
             <View style={styles.bulkBar}>
-              <TouchableOpacity
-                style={[styles.bulkBtn, selected.size === 0 && { opacity: 0.4 }]}
-                onPress={focusSelected}
-                disabled={selected.size === 0}
-                accessibilityRole="button"
-              >
-                <Feather name="crosshair" size={15} color={colors.textPrimary} />
-                <Text style={styles.bulkBtnText}>Focus</Text>
-              </TouchableOpacity>
+              <SecondaryButton label="Focus" icon="crosshair" onPress={focusSelected} disabled={selected.size === 0} style={styles.bulkBtn} />
               {hasGroups && (
-                <TouchableOpacity
-                  style={[styles.bulkBtn, selected.size === 0 && { opacity: 0.4 }]}
-                  onPress={() => selected.size > 0 && setBulkGroupSheet(true)}
-                  disabled={selected.size === 0}
-                  accessibilityRole="button"
-                >
-                  <Feather name="users" size={15} color={colors.textPrimary} />
-                  <Text style={styles.bulkBtnText}>Group</Text>
-                </TouchableOpacity>
+                <SecondaryButton label="Group" icon="users" onPress={() => setBulkGroupSheet(true)} disabled={selected.size === 0} style={styles.bulkBtn} />
               )}
-              <TouchableOpacity
-                style={[styles.bulkSaveBtn, (selected.size === 0 || batchSaving) && { opacity: 0.5 }]}
-                onPress={() => saveMany(pending.filter(r => selected.has(r.id)), 'Save selected?')}
-                disabled={selected.size === 0 || batchSaving}
-                accessibilityRole="button"
-              >
-                <Text style={styles.bulkSaveText}>{batchSaving ? 'Saving…' : `Save ${selected.size}`}</Text>
-              </TouchableOpacity>
+              <View style={styles.bulkSaveWrap}>
+                <PrimaryButton
+                  label={batchSaving ? 'Saving…' : `Save ${selected.size}`}
+                  onPress={() => saveMany(pending.filter(r => selected.has(r.id)), 'Save selected?')}
+                  disabled={selected.size === 0 || batchSaving}
+                  loading={batchSaving}
+                />
+              </View>
             </View>
           ) : (
             <PrimaryButton
@@ -791,81 +627,46 @@ export default function ReviewScreen() {
         />
       )}
 
-      {/* Per-row destination sheet. */}
-      <SheetModal visible={destSheetFor !== null} onClose={() => setDestSheetFor(null)} title="Personal or group" scroll={false}>
-        {destSheetFor && (
-          <>
-            <DestOption label="Personal" icon="user" active={eff(pending.find(r => r.id === destSheetFor)!).dest === 'personal'} onPress={() => { patch(destSheetFor, { dest: 'personal', counterparty: '' }); setDestSheetFor(null); }} />
-            {data?.sharedGroups.map(g => (
-              <DestOption key={g.id} label={g.name} icon="users" active={eff(pending.find(r => r.id === destSheetFor)!).dest === g.id} onPress={() => { patch(destSheetFor, { dest: g.id, counterparty: '' }); setDestSheetFor(null); }} />
-            ))}
-          </>
-        )}
-      </SheetModal>
+      {/* Per-row destination. */}
+      <ReviewDestSheet
+        visible={destSheetFor !== null}
+        onClose={() => setDestSheetFor(null)}
+        groups={data?.sharedGroups ?? []}
+        dest={destRow ? eff(destRow).dest : 'personal'}
+        onSelect={(dest) => {
+          // Drop the counterparty too: it belonged to the group being left.
+          if (destSheetFor) patch(destSheetFor, { dest, counterparty: '' });
+          setDestSheetFor(null);
+        }}
+      />
 
-      {/* Per-row transfer counterparty. Lists the chosen group's other members —
-          settling with yourself isn't a thing, so you're excluded. */}
-      <SheetModal
+      {/* Per-row transfer counterparty. */}
+      <CounterpartySheet
         visible={whoSheetFor !== null}
         onClose={() => setWhoSheetFor(null)}
-        title={whoSheetFor && pending.find(r => r.id === whoSheetFor)?.direction === 'credit' ? 'Who paid you?' : 'Who did you pay?'}
-        scroll={false}
-      >
-        {whoSheetFor && (() => {
-          const r = pending.find(x => x.id === whoSheetFor);
-          if (!r) return null;
-          const v = eff(r);
-          const members = (data?.groupMembers[v.dest] ?? []).filter(m => m.id !== data?.meId);
-          if (members.length === 0) {
-            return <Text style={styles.whoEmpty}>This group has no other members yet. Add someone to it first, or keep this transfer personal.</Text>;
-          }
-          return members.map(m => (
-            <DestOption
-              key={m.id}
-              label={m.name}
-              leading={<MemberAvatar name={m.name} color={m.avatar_color} size={28} imageUri={m.image_uri} />}
-              active={v.counterparty === m.id}
-              onPress={() => { patch(whoSheetFor, { counterparty: m.id }); setWhoSheetFor(null); }}
-            />
-          ));
-        })()}
-      </SheetModal>
+        members={whoMembers}
+        counterparty={whoRow ? eff(whoRow).counterparty : ''}
+        inbound={whoRow ? eff(whoRow).direction === 'credit' : false}
+        onSelect={(pid) => { if (whoSheetFor) patch(whoSheetFor, { counterparty: pid }); setWhoSheetFor(null); }}
+      />
 
-      {/* Per-row pay-method sheet. */}
-      <SheetModal visible={paySheetFor !== null} onClose={() => setPaySheetFor(null)} title="How was it paid?" scroll={false}>
-        {paySheetFor && (() => {
-          const current = eff(pending.find(r => r.id === paySheetFor)!).payMethod;
-          const choose = (m: PayMethod | '') => { patch(paySheetFor, { payMethod: m }); setPaySheetFor(null); };
-          return (
-            <>
-              {PAY_METHOD.map(m => (
-                <TouchableOpacity key={m} style={[styles.payOption, current === m && styles.payOptionOn]} onPress={() => choose(m)} accessibilityRole="button" accessibilityState={{ selected: current === m }}>
-                  <Text style={styles.payOptionEmoji}>{PAY_METHOD_EMOJI[m]}</Text>
-                  <Text style={[styles.payOptionText, current === m && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{PAY_METHOD_LABEL[m]}</Text>
-                  {current === m && <Feather name="check" size={16} color={colors.accent} style={{ marginLeft: 'auto' }} />}
-                </TouchableOpacity>
-              ))}
-              {current !== '' && (
-                <TouchableOpacity style={styles.payClear} onPress={() => choose('')} accessibilityRole="button">
-                  <Feather name="x" size={15} color={colors.textMuted} />
-                  <Text style={styles.payClearText}>Clear</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          );
-        })()}
-      </SheetModal>
+      {/* Per-row pay method — the SAME sheet Add uses, so the two can't drift. */}
+      <PayMethodSheet
+        visible={paySheetFor !== null}
+        onClose={() => setPaySheetFor(null)}
+        value={payRow ? eff(payRow).payMethod : ''}
+        onChange={(m) => { if (paySheetFor) patch(paySheetFor, { payMethod: m }); }}
+        onClear={() => { if (paySheetFor) patch(paySheetFor, { payMethod: '' }); }}
+      />
 
-      {/* Bulk group assign sheet — shared, non-archived groups only (no Personal). */}
-      <SheetModal visible={bulkGroupSheet} onClose={() => setBulkGroupSheet(false)} title={`Assign ${selected.size} to a group`} scroll={false}>
-        {(data?.sharedGroups.length ?? 0) === 0 ? (
-          <Text style={styles.emptySheet}>No shared groups to assign to.</Text>
-        ) : (
-          data!.sharedGroups.map(g => (
-            <DestOption key={g.id} label={g.name} icon="users" active={false} onPress={() => assignBulkGroup(g.id)} />
-          ))
-        )}
-      </SheetModal>
+      {/* Bulk group assign — shared, non-archived groups only (no Personal). */}
+      <BulkGroupSheet
+        visible={bulkGroupSheet}
+        onClose={() => setBulkGroupSheet(false)}
+        groups={data?.sharedGroups ?? []}
+        count={selected.size}
+        onSelect={assignBulkGroup}
+      />
 
       {/* Filter sheet — narrows the working set (ephemeral). */}
       <SheetModal visible={filterSheet} onClose={() => setFilterSheet(false)} title="Filter" scroll={false}>
@@ -879,45 +680,28 @@ export default function ReviewScreen() {
       </SheetModal>
 
       {/* Overflow menu. */}
-      <SheetModal visible={menuOpen} onClose={() => setMenuOpen(false)} title="Review options" scroll={false}>
-        <View style={styles.menuCard}>
-          <SettingsRow icon="filter" label="Filter" value={hasFilters ? 'On' : undefined} onPress={() => { setMenuOpen(false); setFilterSheet(true); }} />
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="check-square" label="Select" onPress={() => { setMenuOpen(false); setSelectMode(true); }} />
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="bookmark" label="Saved views" value={savedViews.length ? String(savedViews.length) : undefined} onPress={() => { setMenuOpen(false); setViewsSheet(true); }} />
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="save" label="Save current view" onPress={() => { setMenuOpen(false); setSaveViewSheet(true); }} />
-        </View>
-        <TouchableOpacity style={styles.menuDanger} onPress={() => { setMenuOpen(false); handleClearAll(); }} accessibilityRole="button">
-          <Feather name="trash-2" size={16} color={colors.expense} />
-          <Text style={styles.menuDangerText}>Clear all</Text>
-        </TouchableOpacity>
-      </SheetModal>
+      <ReviewOverflowSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        filtersActive={hasFilters}
+        savedViewCount={savedViews.length}
+        onFilter={() => setFilterSheet(true)}
+        onSelect={() => setSelectMode(true)}
+        onSavedViews={() => setViewsSheet(true)}
+        onSaveView={() => setSaveViewSheet(true)}
+        onClearAll={handleClearAll}
+      />
 
       {/* Saved views list. */}
-      <SheetModal visible={viewsSheet} onClose={() => setViewsSheet(false)} title="Saved views" scroll={false}>
-        {savedViews.length === 0 ? (
-          <Text style={styles.emptySheet}>No saved views yet. Set a filter, group and payer, then “Save current view”.</Text>
-        ) : (
-          savedViews.map(v => {
-            const gname = v.groupId ? (data?.sharedGroups.find(g => g.id === v.groupId)?.name ?? 'group') : null;
-            const pname = v.paidBy ? (data?.groupMembers[v.groupId ?? '']?.find(m => m.id === v.paidBy)?.name ?? null) : null;
-            const sub = [gname, pname ? `paid by ${pname}` : null].filter(Boolean).join(' · ');
-            return (
-              <View key={v.id} style={styles.viewRow}>
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => applyView(v)} accessibilityRole="button">
-                  <Text style={styles.viewName} numberOfLines={1}>{v.name}</Text>
-                  {!!sub && <Text style={styles.viewSub} numberOfLines={1}>{sub}</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => removeView(v.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete ${v.name}`}>
-                  <Feather name="trash-2" size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            );
-          })
-        )}
-      </SheetModal>
+      <SavedViewsSheet
+        visible={viewsSheet}
+        onClose={() => setViewsSheet(false)}
+        views={savedViews}
+        groups={data?.sharedGroups ?? []}
+        membersByGroup={data?.groupMembers ?? {}}
+        onApply={applyView}
+        onDelete={removeView}
+      />
 
       {/* Save current filter + group + payer as a named view. */}
       <SheetModal visible={saveViewSheet} onClose={() => setSaveViewSheet(false)} title="Save view" scroll={false}>
@@ -944,77 +728,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
   headerBlock: { gap: space.xs, marginBottom: space.xs },
-  headerAction: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  headerAction: { ...type.labelSemi, color: colors.accent },
   selectHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  selectAll: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  stepLabel: { ...type.caption, color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
+  selectAll: { ...type.labelSemi, color: colors.accent },
+  stepLabel: { ...type.sectionLabel, color: colors.accent },
   intro: { ...type.label, color: colors.textMuted },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: layout.screenPaddingH, marginBottom: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: alpha(colors.accent, 33) },
-  bannerText: { ...type.label, color: colors.textPrimary, flex: 1, fontFamily: 'Inter_600SemiBold' },
-  bannerReset: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignAll: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: space.xs },
   assignAllLabel: { ...type.caption, color: colors.textMuted },
-  assignChip: { paddingHorizontal: space.sm + 2, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border, maxWidth: 120 },
-  assignChipText: { ...type.caption, color: colors.textSecondary },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm, ...shadow.sm },
-  cardChecked: { borderColor: colors.accent },
-  checkbox: { marginRight: space.xs },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  desc: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  date: { ...type.caption, color: colors.textMuted },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  amtWrap: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, flex: 1 },
-  rupee: { ...type.body, color: colors.textMuted },
-  amtInput: { flex: 1, ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', paddingVertical: space.sm },
-  kindToggle: { flexDirection: 'row', backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 2 },
-  kindBtn: { paddingHorizontal: space.sm, paddingVertical: 6, borderRadius: radius.sm },
-  kindExpense: { backgroundColor: colors.expense },
-  kindIncome: { backgroundColor: colors.income },
-  kindSettle: { backgroundColor: colors.settle },
-  pillNeeded: { borderColor: colors.expense, backgroundColor: alpha(colors.expense, 9) },
-  whoEmpty: { ...type.body, color: colors.textSecondary, padding: space.md, lineHeight: 20 },
-  kindText: { ...type.label, color: colors.textSecondary },
-  kindTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
-  pillGroup: { borderColor: alpha(colors.settle, 33) },
-  pillDot: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  pillText: { ...type.label, color: colors.textSecondary, flex: 1 },
-  payPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, alignSelf: 'flex-start', maxWidth: '60%' },
-  payPillSet: { borderColor: alpha(colors.accent, 33) },
-  payEmoji: { fontSize: 14 },
-  payOption: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.md },
-  payOptionOn: { backgroundColor: colors.bgMuted },
-  payOptionEmoji: { fontSize: 18 },
-  payOptionText: { ...type.body, color: colors.textPrimary },
-  payClear: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  payClearText: { ...type.label, color: colors.textMuted, fontFamily: 'Inter_600SemiBold' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.md, paddingBottom: space.xs },
   sectionIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  sectionHeaderText: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  sectionHeaderText: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
   sectionHeaderCount: { ...type.caption, color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
-  discardBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgMuted },
-  splitMeta: { ...type.label, color: colors.textSecondary, flexShrink: 1 },
-  confirmBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.accent },
-  confirmBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.border },
   bulkBar: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  bulkBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: space.md, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
-  bulkBtnText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  bulkSaveBtn: { flex: 1, height: 48, borderRadius: radius.md, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  bulkSaveText: { ...type.button, color: colors.bg },
-  emptySheet: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.lg },
-  menuCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  menuDanger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  menuDangerText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
-  viewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  viewName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  viewSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  // Filter form
+  // SecondaryButton is width:100% by default; these shrink to their labels so the
+  // Save button takes the remaining room.
+  bulkBtn: { width: undefined, paddingHorizontal: space.md },
+  bulkSaveWrap: { flex: 1 },
 });
 
-/** Fill for the selected kind chip. Declared after `styles` so it can reference it. */
-const KIND_ON_STYLE: Record<TxnKind, object> = {
-  expense: styles.kindExpense,
-  income: styles.kindIncome,
-  settlement: styles.kindSettle,
-};

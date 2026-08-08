@@ -1,8 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space } from '../tokens';
-import { alpha } from '../../theme';
+import { ListRow } from './ListRow';
+import { colors, layout } from '../tokens';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;
@@ -20,41 +19,37 @@ type Props = {
 
 /**
  * One row inside a settings-style card: icon circle + label + value/chevron.
- * Group several inside a bgCard with hairline dividers (marginLeft 32+16+16).
+ * Group several inside a `Card` with `<Divider indent="text" />` between them.
+ *
+ * Now a thin adapter over `ListRow`, which is the general row primitive. The
+ * props and geometry here are unchanged — `ListRow`'s inline variant was built
+ * to match this component's metrics exactly — so the ~30 screens using it are
+ * untouched. Prefer `ListRow` directly in new code; it also does the stacked
+ * label-above-value form that this shape can't.
  */
 export function SettingsRow({ icon, label, value, tint = colors.accent, onPress, chevron, right, danger }: Props) {
-  const showChevron = chevron ?? !!onPress;
-  // Same props on both branches; React.ElementType keeps it typed without `any`.
-  const Wrapper: React.ElementType = onPress ? TouchableOpacity : View;
   return (
-    <Wrapper
-      style={styles.row}
+    <ListRow
+      icon={icon}
+      iconColor={tint}
+      title={label}
+      // `right` takes the value slot when given — ListRow renders nodes as-is
+      // and styles bare strings, which is the same precedence this had before.
+      value={right ?? value}
       onPress={onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
+      chevron={chevron}
+      danger={danger}
       accessibilityLabel={label}
-    >
-      <View style={[styles.iconDot, { backgroundColor: alpha(danger ? colors.expense : tint, 13) }]}>
-        <Feather name={icon} size={16} color={danger ? colors.expense : tint} />
-      </View>
-      <Text style={[styles.label, danger && { color: colors.expense }]} numberOfLines={1}>{label}</Text>
-      <View style={styles.right}>
-        {right ?? (value ? <Text style={styles.value} numberOfLines={1}>{value}</Text> : null)}
-        {showChevron && <Feather name="chevron-right" size={16} color={colors.textMuted} />}
-      </View>
-    </Wrapper>
+    />
   );
 }
 
+/**
+ * @deprecated Use `<Divider indent="text" />`. Kept so existing callers keep
+ * working; it resolves to the same 64px indent.
+ */
 export const settingsRowDivider = {
   height: 1,
   backgroundColor: colors.border,
-  marginLeft: space.xl + space.md + space.md,
+  marginLeft: layout.dividerIndent,
 };
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52 },
-  iconDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  label: { ...type.body, color: colors.textPrimary, flex: 1 },
-  right: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1, maxWidth: '45%' },
-  value: { ...type.body, color: colors.textSecondary, flexShrink: 1 },
-});

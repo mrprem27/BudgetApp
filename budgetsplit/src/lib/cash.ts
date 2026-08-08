@@ -3,9 +3,15 @@
 // pocket, settlements in/out, income, minus money set aside in Savings.
 // Budgets/"spending" still use your share; this is the cash-timing view.
 
+import { PayMethod } from '../constants/enums';
+
 export type CashTxn = {
   kind: string;
   is_deleted?: number | boolean;
+  /** How it was paid. Card spend is debt, not cash out — see `computeCash`. */
+  pay_method?: string | null;
+  /** Epoch ms. Only used to date card spend against the money profile's baseline. */
+  date?: number;
   payments: { personId: string; amount: number }[];
   shares: { personId: string; amount: number }[];
 };
@@ -14,40 +20,76 @@ export type CashPosition = {
   available: number;     // real money you can spend right now
   openingCash: number;   // starting cash balance the user entered at setup
   income: number;        // personal income received
-  paidExpenses: number;  // what you actually paid out of pocket (any group)
+  paidExpenses: number;  // what you actually paid *in cash* (any group)
   settledOut: number;    // settlements you paid
   settledIn: number;     // settlements paid to you (cash received)
   savings: number;       // currently set aside in goals
+  /** Card spend since the money profile was last confirmed — debt, not cash out.
+   *  Optional so an older/partial CashPosition still type-checks. */
+  cardSpend?: number;
 };
 
 /** The four running sums computeCash accumulates — also what the aggregated SQL
  *  path (getCashPosition) computes directly in the DB. */
 export type CashTotals = {
   income: number;        // my payments on income txns
-  paidExpenses: number;  // my payments on expense txns (cash out the moment you paid)
+  /** My payments on expense txns **excluding card** — cash out the moment you paid. */
+  paidExpenses: number;
   settledOut: number;    // my payments on settlement txns
   settledIn: number;     // my shares on settlement txns (cash received)
+  /**
+   * My payments on **card** expense txns dated after the money profile was last
+   * confirmed. Raises used credit instead of lowering cash.
+   */
+  cardSpend: number;
 };
 
 /** Final cash math, shared by the JS reducer (computeCash) and the SQL-aggregated
  *  path so both produce byte-identical CashPositions. */
 export function cashPositionFromTotals(t: CashTotals, savings: number, openingCash = 0): CashPosition {
   const s = Math.max(0, savings);
+  // `cardSpend` is deliberately absent from this sum: putting a purchase on a card
+  // doesn't move cash, it creates debt. It lands on `creditUsed` in
+  // `computeTotalMoney` instead. Counting it here as well as there would be the
+  // double-count this fixes.
   const available = openingCash + t.income - t.paidExpenses - t.settledOut + t.settledIn - s;
-  return { available, openingCash, income: t.income, paidExpenses: t.paidExpenses, settledOut: t.settledOut, settledIn: t.settledIn, savings: s };
+  return {
+    available, openingCash,
+    income: t.income, paidExpenses: t.paidExpenses,
+    settledOut: t.settledOut, settledIn: t.settledIn,
+    savings: s, cardSpend: t.cardSpend,
+  };
 }
 
-export function computeCash(txns: CashTxn[], myId: string, savings: number, openingCash = 0): CashPosition {
-  let income = 0, paidExpenses = 0, settledOut = 0, settledIn = 0;
+/**
+ * @param cardBaselineMs Card spend is only counted from here — the moment the user
+ *   last confirmed their card balance. `null` counts all of history (they've never
+ *   confirmed one). Anything at or before it is already inside `profile.creditUsed`.
+ */
+export function computeCash(
+  txns: CashTxn[],
+  myId: string,
+  savings: number,
+  openingCash = 0,
+  cardBaselineMs: number | null = null,
+): CashPosition {
+  let income = 0, paidExpenses = 0, settledOut = 0, settledIn = 0, cardSpend = 0;
   for (const t of txns) {
     if (t.is_deleted) continue;
     const pay = t.payments.find(p => p.personId === myId)?.amount ?? 0;
     const share = t.shares.find(s => s.personId === myId)?.amount ?? 0;
     if (t.kind === 'income') income += pay;
-    else if (t.kind === 'expense') paidExpenses += pay;       // cash out the moment you paid
+    else if (t.kind === 'expense') {
+      if (t.pay_method === PayMethod.Card) {
+        // Debt, not cash out — and only the part not already in the stated balance.
+        if (cardBaselineMs == null || (t.date ?? 0) > cardBaselineMs) cardSpend += pay;
+      } else {
+        paidExpenses += pay;                                   // cash out the moment you paid
+      }
+    }
     else if (t.kind === 'settlement') { settledOut += pay; settledIn += share; }
   }
-  return cashPositionFromTotals({ income, paidExpenses, settledOut, settledIn }, savings, openingCash);
+  return cashPositionFromTotals({ income, paidExpenses, settledOut, settledIn, cardSpend }, savings, openingCash);
 }
 
 // --- Total Money -----------------------------------------------------------
@@ -84,7 +126,17 @@ export function computeTotalMoney(cash: CashPosition, profile: MoneyProfile): To
   const cashAvailable = cash.available;
   const investments = Math.max(0, profile.investments);
   const creditLimit = Math.max(0, profile.creditLimit);
-  const creditUsed = Math.max(0, profile.creditUsed);
+  // The stated balance is a *baseline*, exactly like `openingCash`: card spend since
+  // the user last confirmed it is added on read, so edits and deletes self-correct
+  // and nothing has to be mutated on every write. Clamped to the limit because a
+  // stale baseline plus new spend could otherwise exceed it.
+  //
+  // Repayment is NOT modelled: the app has no concept of paying a card bill, so this
+  // figure only grows between Plan edits. Re-entering the balance is the reset.
+  const creditUsed = Math.min(
+    creditLimit > 0 ? creditLimit : Number.MAX_SAFE_INTEGER,
+    Math.max(0, profile.creditUsed) + Math.max(0, cash.cardSpend ?? 0),
+  );
   const creditAvailable = Math.max(0, creditLimit - creditUsed);
   const yourMoney = cashAvailable + investments;
   return {

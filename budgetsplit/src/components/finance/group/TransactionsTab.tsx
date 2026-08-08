@@ -1,11 +1,13 @@
 import React, { useMemo, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, SectionList } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, type, space, layout } from '../../tokens';
+import { View, StyleSheet, SectionList } from 'react-native';
+import { colors, space, layout } from '../../tokens';
+import { useContentInset } from '../../../hooks/useContentInset';
 import { groupByDate } from '../../../lib/txnGrouping';
 import { TransactionRow } from '../TransactionRow';
+import { TxnCell } from '../TxnCell';
 import { FilterBar } from '../../ui/FilterBar';
 import { EmptyState } from '../../ui/EmptyState';
+import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 import type { Person } from '../../../db/queries/persons';
@@ -24,7 +26,7 @@ type Props = {
 /** Group ledger: collapsible filter bar + date-sectioned transaction list. Owns its
  *  own search/kind filter (tab-local UI state). */
 export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, refreshing, onRefresh }: Props) {
-  const insets = useSafeAreaInsets();
+  const bottomPad = useContentInset({ fab: true });
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -42,25 +44,31 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
   // Stable renderItem so TransactionRow's React.memo holds; handlers read via refs.
   const delRef = useRef(onDeleteTxn); delRef.current = onDeleteTxn;
   const editRef = useRef(onEditTxn); editRef.current = onEditTxn;
-  const renderTxn = useCallback(({ item }: { item: TxnWithSplits }) => (
-    <TransactionRow
-      txn={item}
-      myId={meId}
-      onDelete={() => delRef.current(item.id)}
-      onPress={() => editRef.current(item)}
-      members={members}
-      isPersonal={false}
-    />
+  const renderTxn = useCallback(({ item, index, section }: { item: TxnWithSplits; index: number; section: { data: TxnWithSplits[] } }) => (
+    <TxnCell first={index === 0} last={index === section.data.length - 1}>
+      <TransactionRow
+        txn={item}
+        myId={meId}
+        onDelete={() => delRef.current(item.id)}
+        onPress={() => editRef.current(item)}
+        members={members}
+        isPersonal={false}
+      />
+    </TxnCell>
   ), [meId, members]);
 
   return (
     <SectionList
       sections={sections}
       keyExtractor={t => t.id}
-      contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + space.sm + layout.fabHeight + space.md }]}
+      contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       initialNumToRender={12}
       maxToRenderPerBatch={10}
       windowSize={11}
+      // The default is sticky, and these headers have no background — so a stuck
+      // header sat transparently on top of the rows scrolling under it. Search and
+      // Review both already disable it; this was the last list that didn't.
+      stickySectionHeadersEnabled={false}
       refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       ListHeaderComponent={
         txns.length > 0 ? (
@@ -86,10 +94,9 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
         ) : null
       }
       renderSectionHeader={({ section }) =>
-        section.data.length ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
+        section.data.length ? <SectionHeader title={section.title} /> : null
       }
       renderItem={renderTxn}
-      ItemSeparatorComponent={() => <View style={styles.sep} />}
       ListEmptyComponent={
         txns.length === 0 ? (
           <EmptyState icon="list" title="No expenses yet" body={`Tap + to log your first expense in ${groupName}.`} />
@@ -102,7 +109,9 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, gap: space.sm },
-  sectionHeader: { ...type.caption, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
-  sep: { height: 1, backgroundColor: colors.border },
+  // No `gap` here on purpose: `SectionHeader` owns its own vertical margins, and a
+  // container gap stacked on top of them was producing 24px above every date
+  // header plus a stray 8px between a header and its first row. It also would have
+  // split the section card apart, since its rows must sit flush.
+  listContent: { padding: layout.screenPaddingH },
 });

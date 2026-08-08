@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Alert, ActionSheetIOS } from 'react-native';
-import { buildUpiUri, newUpiRef, type UpiApp, type UpiAppSpec, type UpiRequest } from '../lib/upiIntent';
+import { upiLaunchUrl, newUpiRef, type UpiApp, type UpiAppSpec, type UpiRequest, type UpiLaunchOpts } from '../lib/upiIntent';
 import { useUpiApps } from './useUpiApps';
 import { settings } from '../lib/settings';
 import { formatRupees } from '../lib/money';
@@ -29,24 +29,16 @@ export type PayHooks = {
   onCancel?: () => Promise<void>;
 };
 
-/** What the caller knows about this payment that changes where the app should land. */
-export type PayOpts = {
-  /**
-   * Send no payment parameters to *any* app, however well it behaves.
-   *
-   * For a signed merchant QR: it cannot be re-emitted to anybody, so pre-filling is not
-   * on offer and the honest thing is to open the app for the user to scan the code again.
-   */
-  bare?: boolean;
-  /**
-   * The user has a physical QR code in front of them.
-   *
-   * The only thing that makes opening an app on its *scanner* better than its home screen.
-   * Scan & Pay sets it; settling up with a friend must not, because there would be nothing
-   * to point the camera at and a camera is a worse landing than a home screen.
-   */
-  hasCode?: boolean;
-};
+/**
+ * What the caller knows about this payment that changes where the app should land.
+ *
+ * Defined alongside `upiLaunchUrl`, which consumes it, so the hook and the preview sheet
+ * describe the same hand-off. `bare` is a signed merchant QR that cannot be re-emitted to
+ * anybody; `hasCode` is a physical code in front of the user, which is the only thing that
+ * makes an app's scanner a better landing than its home screen — Scan & Pay sets it,
+ * settling up with a friend must not.
+ */
+export type PayOpts = UpiLaunchOpts;
 
 export type UpiHandoff = {
   /**
@@ -96,6 +88,17 @@ export type UpiHandoff = {
   forget: () => void;
 };
 
+/**
+ * What the user does once a blocked app opens, in three words.
+ *
+ * Exported so the picker row and the destination line under the Pay button cannot say
+ * different things about the same hand-off — they did, and the sheet was the one that
+ * was wrong.
+ */
+export function handoffVerb(opts?: PayOpts): string {
+  return opts?.hasCode ? 'scan it there' : 'enter it there';
+}
+
 export function useUpiHandoff(noAppMessage: string): UpiHandoff {
   const installed = useUpiApps();
   const [preferredKey, setPreferredKey] = useState<string | null>(null);
@@ -143,13 +146,11 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     // rather than at the call sites so a retry never reuses the previous reference —
     // PSPs read a repeated `tr` as a duplicate of the earlier transaction.
     //
-    // `scanPath` only when there is genuinely a code in front of the user. Dropping
-    // someone into a camera to settle up with a friend would be worse than the home
-    // screen, not better — there is nothing there to point it at.
-    const url = opts?.bare || spec?.blocked
-      ? ((opts?.hasCode ? spec?.scanPath : undefined) ?? spec?.probe ?? null)
-      : buildUpiUri({ ...req, ref: req.ref ?? newUpiRef() }, spec?.key);
-    if (!url) return false;
+    // Where it lands is `upiLaunchUrl`'s decision, shared with the preview sheet so the
+    // two cannot disagree about what an app receives.
+    const launch = upiLaunchUrl({ ...req, ref: req.ref ?? newUpiRef() }, spec, opts);
+    if (!launch) return false;
+    const { url } = launch;
     try { await hooks?.before?.(); } catch { /* record failed; paying is still the point */ }
     try {
       await Linking.openURL(url);
@@ -174,9 +175,13 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     ActionSheetIOS.showActionSheetWithOptions(
       {
         // Every installed app, with a word on the ones that won't arrive pre-filled.
-        // Not a warning — it opens and the payment still works, you just type it there —
-        // so it reads as a description rather than a reason to avoid the row.
-        options: ['Cancel', ...list.map(a => (opts?.bare || a.blocked ? `${a.label} — enter it there` : a.label))],
+        // Not a warning — it opens and the payment still works — so it reads as a
+        // description rather than a reason to avoid the row.
+        //
+        // *What* you do there depends on why we sent no payment. With a code in front of
+        // you the app opens on its camera and you scan; saying "enter it" there was simply
+        // wrong, and it described the harder of the two jobs.
+        options: ['Cancel', ...list.map(a => (opts?.bare || a.blocked ? `${a.label} — ${handoffVerb(opts)}` : a.label))],
         cancelButtonIndex: 0,
         title: `Pay ${formatRupees(req.amountPaise)}`,
         message: 'We’ll save the expense either way, and use this app next time.',

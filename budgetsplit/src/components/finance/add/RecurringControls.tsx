@@ -2,17 +2,36 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Switch, Keyboard } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { colors, type, space, radius } from '../../tokens';
+import { Chip } from '../../ui/Chip';
+import { TabPills } from '../../ui/TabPills';
+import { IconCircle } from '../../ui/IconCircle';
+import { colors, type, space, radius, layout } from '../../tokens';
 import { nthOccurrenceMs } from '../../../lib/recurrence';
-import type { RecurFreq } from '../../../constants/enums';
+import {
+  RECUR_FREQ_ADD_CHOICES, RECUR_FREQ_LABEL, RECUR_END_MODE, RECUR_END_MODE_LABEL,
+  RecurEndMode, type RecurFreq,
+} from '../../../constants/enums';
 import { alpha } from '../../../theme';
 
-type EndMode = 'never' | 'date' | 'count';
+const FREQ_TABS = RECUR_FREQ_ADD_CHOICES.map(f => ({ key: f, label: RECUR_FREQ_LABEL[f] }));
+const END_TABS = RECUR_END_MODE.map(m => ({ key: m, label: RECUR_END_MODE_LABEL[m] }));
 
 /**
  * The "Recurring" controls for the Add screen — collapsed toggle, or the expanded
  * card (frequency, next charge, ends never/on-date/after-N). Extracted from
  * app/add/quick.tsx; purely presentational (parent owns the state).
+ *
+ * Frequency and Ends are `TabPills`, not chip rows: both are mutually exclusive
+ * choices, and a segmented control says "pick exactly one of these" where a row of
+ * chips says "toggle any of these". They used to be three hand-rolled pill styles
+ * (`recurPill`, `recurChip`, `recurDateChip`) that differed only in padding and
+ * radius, all on the §9-banned `space.sm + 2` — the same drift `ui/Chip` was built
+ * to end, one layer below the form.
+ *
+ * The section eyebrows deliberately don't use `ui/SectionHeader`: that component owns
+ * `space.lg` vertical margins tuned for a scroll container's list sections, which is
+ * too airy inside a dense sheet card. They do use its `type.sectionLabel` token, which
+ * is where the actual duplication was (this file had improvised `letterSpacing: 0.8`).
  */
 export function RecurringControls({
   enabled, setEnabled,
@@ -27,7 +46,7 @@ export function RecurringControls({
   enabled: boolean; setEnabled: (b: boolean) => void;
   freq: RecurFreq; setFreq: (f: RecurFreq) => void;
   interval: string; setInterval: (s: string) => void;
-  endMode: EndMode; setEndMode: (m: EndMode) => void;
+  endMode: RecurEndMode; setEndMode: (m: RecurEndMode) => void;
   endMs: number | null; setEndMs: (n: number | null) => void;
   count: string; setCount: (s: string) => void;
   txnDate: number;
@@ -50,10 +69,18 @@ export function RecurringControls({
 
   const intervalN = freq === 'custom' ? (parseInt(interval, 10) || 1) : 1;
 
+  /** Pick the end mode. `never` also clears any date already chosen, so a stale
+   *  end date can't survive switching away from "On date" and back. */
+  const chooseEndMode = (m: RecurEndMode) => {
+    setEndMode(m);
+    if (m === RecurEndMode.Never) setEndMs(null);
+    if (m === RecurEndMode.Date) { Keyboard.dismiss(); onPickEndDate(); }
+  };
+
   return (
     <View style={styles.recurCard}>
       <View style={styles.recurHeader}>
-        <View style={styles.recurDot} />
+        <IconCircle icon="repeat" size={22} color={colors.settle} iconSize={12} />
         <Text style={styles.recurTitle}>Recurring</Text>
         <TouchableOpacity onPress={() => setEnabled(false)} hitSlop={10} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel="Turn off recurring">
           <Feather name="chevron-up" size={18} color={colors.settle} />
@@ -63,23 +90,14 @@ export function RecurringControls({
       {/* Frequency */}
       <View style={styles.recurSection}>
         <Text style={styles.recurSectionLabel}>FREQUENCY</Text>
-        <View style={styles.recurPills}>
-          {(['monthly', 'weekly', 'yearly', 'custom'] as const).map(f => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.recurPill, freq === f && styles.recurPillActive]}
-              onPress={() => setFreq(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: freq === f }}
-            >
-              <Text style={[styles.recurPillText, freq === f && styles.recurPillTextActive]}>
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <TabPills
+          tabs={FREQ_TABS}
+          active={freq}
+          onChange={(f) => setFreq(f as RecurFreq)}
+          activeColor={colors.settle}
+        />
         {freq === 'custom' && (
-          <View style={[styles.recurIntervalRow, { marginTop: space.sm }]}>
+          <View style={styles.recurIntervalRow}>
             <Text style={styles.recurRowLabel}>Every</Text>
             <TextInput
               style={styles.recurIntervalInput}
@@ -98,64 +116,40 @@ export function RecurringControls({
       {/* Next charge — the occurrence after the start date */}
       <View style={styles.recurRow}>
         <Text style={styles.recurRowLabel}>Next charge</Text>
-        <View style={styles.recurDateChip}>
-          <Text style={styles.recurDateChipText}>
-            {format(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)), 'dd MMM yyyy')}
-          </Text>
-        </View>
+        <Chip label={format(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)), 'd MMM yyyy')} />
       </View>
 
       {/* Ends — Never / On date / After N */}
-      <View style={styles.recurRow}>
-        <Text style={styles.recurRowLabel}>Ends</Text>
-        <View style={styles.recurEndPills}>
-          <TouchableOpacity
-            style={[styles.recurChip, endMode === 'never' && styles.recurPillActive]}
-            onPress={() => { setEndMode('never'); setEndMs(null); }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: endMode === 'never' }}
-          >
-            <Text style={[styles.recurChipText, endMode === 'never' && styles.recurPillTextActive]}>Never</Text>
+      <View style={styles.recurSectionBordered}>
+        <Text style={styles.recurSectionLabel}>ENDS</Text>
+        <TabPills
+          tabs={END_TABS}
+          active={endMode}
+          onChange={(m) => chooseEndMode(m as RecurEndMode)}
+          activeColor={colors.settle}
+        />
+        {endMode === RecurEndMode.Date && endMs != null && (
+          <TouchableOpacity style={styles.recurEndDate} onPress={() => { Keyboard.dismiss(); onPickEndDate(); }} accessibilityRole="button" accessibilityLabel="Change end date">
+            <Feather name="calendar" size={13} color={colors.settle} />
+            <Text style={styles.recurEndDateText}>Ends {format(new Date(endMs), 'd MMM yyyy')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.recurChip, endMode === 'date' && styles.recurPillActive]}
-            onPress={() => { setEndMode('date'); Keyboard.dismiss(); onPickEndDate(); }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: endMode === 'date' }}
-          >
-            <Text style={[styles.recurChipText, endMode === 'date' && styles.recurPillTextActive]}>On date</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.recurChip, endMode === 'count' && styles.recurPillActive]}
-            onPress={() => setEndMode('count')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: endMode === 'count' }}
-          >
-            <Text style={[styles.recurChipText, endMode === 'count' && styles.recurPillTextActive]}>After N</Text>
-          </TouchableOpacity>
-        </View>
+        )}
+        {endMode === RecurEndMode.Count && (
+          <View style={styles.recurIntervalRow}>
+            <Text style={styles.recurRowLabel}>After</Text>
+            <TextInput
+              style={styles.recurIntervalInput}
+              value={count}
+              onChangeText={setCount}
+              keyboardType="number-pad"
+              placeholder="12"
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel="Number of occurrences"
+            />
+            <Text style={styles.recurRowLabel}>times</Text>
+          </View>
+        )}
       </View>
-      {endMode === 'date' && endMs != null && (
-        <TouchableOpacity style={styles.recurEndDate} onPress={() => { Keyboard.dismiss(); onPickEndDate(); }} accessibilityRole="button" accessibilityLabel="Change end date">
-          <Feather name="calendar" size={13} color={colors.settle} />
-          <Text style={styles.recurEndDateText}>Ends {format(new Date(endMs), 'dd MMM yyyy')}</Text>
-        </TouchableOpacity>
-      )}
-      {endMode === 'count' && (
-        <View style={styles.recurCountRow}>
-          <Text style={styles.recurRowLabel}>After</Text>
-          <TextInput
-            style={styles.recurIntervalInput}
-            value={count}
-            onChangeText={setCount}
-            keyboardType="number-pad"
-            placeholder="12"
-            placeholderTextColor={colors.textMuted}
-            accessibilityLabel="Number of occurrences"
-          />
-          <Text style={styles.recurRowLabel}>times</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -163,27 +157,16 @@ export function RecurringControls({
 const styles = StyleSheet.create({
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingLeft: space.md, paddingRight: space.sm, paddingVertical: space.xs },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  recurCard: { backgroundColor: alpha(colors.settle, 8), borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.settle, overflow: 'hidden' },
+  recurCard: { backgroundColor: alpha(colors.settle, 8), borderRadius: radius.lg, borderWidth: 1, borderColor: colors.settle, overflow: 'hidden' },
   recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: alpha(colors.settle, 20) },
-  recurDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.settle },
-  recurTitle: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
-  recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
+  recurTitle: { ...type.bodySemi, color: colors.settle },
+  recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.smd, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurRowLabel: { ...type.body, color: colors.textSecondary },
-  recurSection: { paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  recurSectionLabel: { ...type.caption, color: colors.settle, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
-  recurPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  recurPill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: alpha(colors.settle, 27) },
-  recurPillActive: { backgroundColor: colors.settle, borderColor: colors.settle },
-  recurPillText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  recurPillTextActive: { color: colors.onAccent },
-  recurDateChip: { backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: alpha(colors.settle, 27), paddingHorizontal: space.sm + 2, paddingVertical: 6 },
-  recurDateChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  recurCountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },
-  recurChip: { paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.bg, borderWidth: 1, borderColor: alpha(colors.settle, 27) },
-  recurChipText: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  recurEndPills: { flexDirection: 'row', gap: 6 },
-  recurEndDate: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.sm + 2 },
-  recurEndDateText: { ...type.label, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
-  recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: 44, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
+  recurSection: { paddingHorizontal: space.md, paddingVertical: space.smd },
+  recurSectionBordered: { paddingHorizontal: space.md, paddingVertical: space.smd, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
+  recurSectionLabel: { ...type.sectionLabel, color: colors.settle, marginBottom: space.sm },
+  recurEndDate: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
+  recurEndDateText: { ...type.labelSemi, color: colors.settle },
+  recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
+  recurIntervalInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, height: layout.touchMin, minWidth: 64, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
 });

@@ -6,10 +6,17 @@ import { PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, type PayMethod } from '
 import { alpha } from '../../theme';
 
 type Props = {
-  value: PayMethod;
+  /** `''` selects nothing — an imported Review row may carry no pay-method cue. */
+  value: PayMethod | '';
   onChange: (m: PayMethod) => void;
   /** Accent colour for the selected tile (defaults to the app accent). */
   accent?: string;
+  /**
+   * Restrict which methods are offered. Income uses this to ask "where did it
+   * land?" — money arrives in cash, a bank account or a wallet; it doesn't arrive
+   * "by autopay". Defaults to the whole `PAY_METHOD` set.
+   */
+  options?: readonly PayMethod[];
 };
 
 /**
@@ -17,7 +24,7 @@ type Props = {
  * expense/income/transfer). Horizontal scroll of emoji tiles driven entirely by
  * the `PAY_METHOD` enum, so the set + labels + glyphs live in exactly one place.
  */
-export function PayMethodSelector({ value, onChange, accent = colors.accent }: Props) {
+export function PayMethodSelector({ value, onChange, accent = colors.accent, options = PAY_METHOD }: Props) {
   return (
     <ScrollView
       horizontal
@@ -25,7 +32,7 @@ export function PayMethodSelector({ value, onChange, accent = colors.accent }: P
       contentContainerStyle={styles.row}
       keyboardShouldPersistTaps="handled"
     >
-      {PAY_METHOD.map(m => {
+      {options.map(m => {
         const on = value === m;
         return (
           <TouchableOpacity

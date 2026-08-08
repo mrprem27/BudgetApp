@@ -7,7 +7,7 @@ import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { Input } from '../ui/Input';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
-import { useUpiHandoff } from '../../hooks/useUpiHandoff';
+import { useUpiHandoff, handoffVerb } from '../../hooks/useUpiHandoff';
 import { UpiUriSheet } from './UpiUriSheet';
 import { formatRupees, parseToPaise } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
@@ -301,14 +301,14 @@ export function ScanPaySheet({
             row can. Absent when nothing is remembered, because the picker is about to ask.
 
             A remembered app that won't take a pre-filled payment says so here, in the same
-            words the picker uses. Not a warning: it opens, and the payment still works — you
-            just enter it there.
+            words the picker uses — literally the same, via `handoffVerb`, because these two
+            drifted apart once already. Not a warning: it opens, and the payment still works.
           */}
           {soleApp && !noApps && (
             <View style={styles.destRow}>
               <Text style={styles.destText} numberOfLines={1}>
                 {bare || soleApp.blocked
-                  ? `Opens ${soleApp.label} — enter it there`
+                  ? `Opens ${soleApp.label} — ${handoffVerb(opts)}`
                   : `Opens ${soleApp.label}`}
               </Text>
               {handoff.canChoose && (
@@ -333,6 +333,9 @@ export function ScanPaySheet({
         onClose={() => setShowUris(false)}
         request={payee}
         apps={handoff.apps}
+        // The same options the Pay button hands off with, or the preview would resolve
+        // blocked apps differently from the launch — which is the drift this fixed.
+        opts={opts}
       />
     </SheetModal>
   );

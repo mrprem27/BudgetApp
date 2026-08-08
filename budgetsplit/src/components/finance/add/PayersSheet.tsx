@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   payerRupee: { ...type.body, color: colors.textMuted },
   payerSheetInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
   payerQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted },
-  payerQuickText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  payerQuickText: { ...type.labelSemi, color: colors.accent },
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
-  remainderText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
+  remainderText: { ...type.labelSemi },
 });

@@ -1,6 +1,6 @@
 import { parseToPaise } from './money';
 import { splitCsvLine, type ParsedRow, type ParseResult, type ParsedDirection } from './importParse';
-import type { TxnKind, PayMethod } from '../constants/enums';
+import { TxnKind, PayMethod } from '../constants/enums';
 import type { Sheet } from './xlsx';
 
 /**
@@ -142,10 +142,10 @@ function counterparty(details: string): string {
 /** How the money actually moved. A Rupay credit card funding a UPI payment is
  *  spending on credit, which matters more for budgeting than the UPI rail. */
 function payMethodFor(account: string, details: string): PayMethod {
-  if (/automatic payment|autopay|mandate/i.test(details)) return 'autopay';
-  if (/credit card|debit card|\bcard\b/i.test(account)) return 'card';
-  if (/wallet/i.test(account)) return 'wallet';
-  return 'upi';
+  if (/automatic payment|autopay|mandate/i.test(details)) return PayMethod.Autopay;
+  if (/credit card|debit card|\bcard\b/i.test(account)) return PayMethod.Card;
+  if (/wallet/i.test(account)) return PayMethod.Wallet;
+  return PayMethod.Upi;
 }
 
 /** Resolve kind/direction/category for a row, given its tag and sign. */

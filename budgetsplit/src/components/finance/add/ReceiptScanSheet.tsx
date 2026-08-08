@@ -104,15 +104,15 @@ export function ReceiptScanSheet({
 }
 
 const styles = StyleSheet.create({
-  label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
+  label: { ...type.sectionLabel, color: colors.textMuted, marginBottom: space.xs },
   hint: { ...type.caption, color: colors.textSecondary, lineHeight: 16, marginBottom: space.sm },
   rawBox: { maxHeight: 180, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.sm },
   rawText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
   fallbackNote: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, backgroundColor: alpha(colors.healthAmber, 13), borderRadius: radius.md, borderWidth: 1, borderColor: alpha(colors.healthAmber, 33), padding: space.sm, marginBottom: space.md },
   fallbackText: { ...type.caption, color: colors.healthAmber, flex: 1, lineHeight: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md, marginBottom: space.xs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, paddingHorizontal: space.sm, borderRadius: radius.md, marginBottom: space.xs },
   rowOn: { backgroundColor: colors.bgMuted },
-  rowName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  rowName: { ...type.bodySemi, color: colors.textPrimary, flex: 1 },
   rowAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   button: { marginTop: space.sm },
 });
