@@ -24,6 +24,7 @@ import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
 import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/money';
+import { budgetMonthlyEquivalent } from '../../../src/lib/budget';
 import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
@@ -52,16 +53,6 @@ const SECTION_ICON: Record<string, FeatherName> = {
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-// Approximate monthly cost of a line, for a single comparable headline number.
-function monthlyEquivalent(cadence: BudgetCadence, paise: number): number {
-  switch (cadence) {
-    case 'daily':   return paise * 30;
-    case 'monthly': return paise;
-    case 'yearly':  return Math.round(paise / 12);
-    case 'once':    return 0; // not periodic
-  }
 }
 
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
@@ -164,7 +155,7 @@ export default function BudgetEditorScreen() {
 
   const cadenceOf = (cat: string): BudgetCadence => cadences[cat] ?? defaultCadence;
   const monthlyApprox = allCategories.reduce(
-    (s, c) => s + monthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0,
+    (s, c) => s + budgetMonthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0,
   );
   const budgetedCount = Object.values(amounts).filter(a => parseToPaise(a) > 0).length;
 
@@ -239,7 +230,7 @@ export default function BudgetEditorScreen() {
 
           {sections.length > 0 ? sections.map(sec => {
             const isCollapsed = collapsed.has(sec.title);
-            const secMonthly = sec.cats.reduce((s, c) => s + monthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0);
+            const secMonthly = sec.cats.reduce((s, c) => s + budgetMonthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0);
             const secCount = sec.cats.filter(c => parseToPaise(amounts[c.name] ?? '') > 0).length;
             return (
               <SectionCard

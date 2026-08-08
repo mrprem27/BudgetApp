@@ -12,6 +12,9 @@ import { BalanceRow } from '../BalanceRow';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
+import { Card } from '../../ui/Card';
+import { AnimatedBar } from '../../ui/anim/AnimatedBar';
+import type { Contributions } from '../../../lib/groupDetail';
 import type { Person } from '../../../db/queries/persons';
 
 type Settle = { from: string; to: string; amount: number };
@@ -30,11 +33,18 @@ type Props = {
   onInvite: () => void;
   onSettlePair: (from: string, to: string, amount: number) => void;
   groupName: string;
+  /**
+   * Who paid what, and each member's distance from a fair share. Moved here from the
+   * Budget tab, where it sat between the budget hero and the category list: it's a
+   * settlement concern, and the people and balances it talks about are on this tab.
+   * Already computed by `computeContributions` in `lib/groupDetail`.
+   */
+  contributions: Contributions;
 };
 
 /** Group Members tab: balances summary, collapsible member list, invite, simplify
  *  toggle, and the settlement (who-owes-whom) list. Owns the expand state. */
-export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, refreshing, onRefresh }: Props) {
+export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, contributions, refreshing, onRefresh }: Props) {
   const [membersExpanded, setMembersExpanded] = useState(false);
   const bottomPad = useContentInset({ fab: true });
   const myNet = net[meId] ?? 0;
@@ -99,6 +109,33 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         </View>
       )}
 
+      {/* WHO PAID WHAT — each member's share of the spend, and their distance from an
+          even split. The bar is `AnimatedBar`; this used to hand-roll a third static
+          progress track while `BudgetBar` and `AnimatedBar` both already existed. */}
+      {contributions.total > 0 && (
+        <>
+          <SectionHeader title="Who paid what" />
+          <Card padded>
+            {contributions.rows.map((r, i) => (
+              <View key={r.member.id} style={i > 0 ? styles.contribRowGap : undefined}>
+                <View style={styles.contribHead}>
+                  <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
+                  <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
+                  <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
+                  <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
+                    {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
+                  </Text>
+                </View>
+                <AnimatedBar progress={r.frac} color={r.member.avatar_color} height={6} />
+              </View>
+            ))}
+            <Text style={styles.contribFoot}>
+              Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group
+            </Text>
+          </Card>
+        </>
+      )}
+
       <TouchableOpacity style={styles.inviteBtn} onPress={onInvite} accessibilityRole="button">
         <Feather name="user-plus" size={16} color={colors.accent} />
         <Text style={styles.inviteBtnText}>Invite someone</Text>
@@ -159,6 +196,12 @@ const styles = StyleSheet.create({
   memberRight: { alignItems: 'flex-end' },
   memberBal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, letterSpacing: -0.5 },
   memberBalLabel: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 1 },
+  contribRowGap: { marginTop: space.md },
+  contribHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xs },
+  contribName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  contribPaid: { ...type.amountSM, color: colors.textPrimary },
+  contribDelta: { ...type.captionSemi, minWidth: 52, textAlign: 'right' },
+  contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.md },
   inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.lg, paddingVertical: space.md, marginBottom: space.md },
   inviteBtnText: { ...type.body, color: colors.accent },
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },

@@ -1,4 +1,4 @@
-import { getPeriodRange } from '../lib/budget';
+import { budgetMonthlyEquivalent, getPeriodRange } from '../lib/budget';
 
 // Local-time ms helper (budget.ts uses date-fns, which works in local time).
 const at = (y: number, m: number, d: number, h = 0, mi = 0, s = 0, ms = 0) =>
@@ -27,3 +27,37 @@ describe('getPeriodRange', () => {
 // getPriorPeriodRange's tests went with it — it existed only to compute the
 // previous period's unused budget for group-level carry-over, which was removed
 // (nothing ever wrote budget_group.limit_*, so it could not run).
+
+/**
+ * `budgetMonthlyEquivalent` and `recurringMonthlyEquivalent` are near-identical in shape and
+ * deliberately disagree: a `once` budget is a cap on a single purchase, so counting it as a
+ * monthly commitment would inflate the headline every month forever. The budget editor used
+ * to define its own private copy while the group Budget tab imported the *recurring* one —
+ * so the same pair of screens could report two different monthly totals for one dataset.
+ */
+describe('budgetMonthlyEquivalent', () => {
+  it('passes monthly through unchanged', () => {
+    expect(budgetMonthlyEquivalent('monthly', 500000)).toBe(500000);
+  });
+
+  it('multiplies daily by 30', () => {
+    expect(budgetMonthlyEquivalent('daily', 10000)).toBe(300000);
+  });
+
+  it('divides yearly by 12, rounded to whole paise', () => {
+    expect(budgetMonthlyEquivalent('yearly', 1200000)).toBe(100000);
+    // 100 paise / 12 = 8.33 → must land on an integer, never a fraction.
+    expect(budgetMonthlyEquivalent('yearly', 100)).toBe(8);
+    expect(Number.isInteger(budgetMonthlyEquivalent('yearly', 99999))).toBe(true);
+  });
+
+  it('returns 0 for a one-time budget — the whole reason this is not the recurring helper', () => {
+    expect(budgetMonthlyEquivalent('once', 999999)).toBe(0);
+  });
+
+  it('handles zero and never returns a negative for a zero input', () => {
+    for (const c of ['once', 'daily', 'monthly', 'yearly'] as const) {
+      expect(budgetMonthlyEquivalent(c, 0)).toBe(0);
+    }
+  });
+});

@@ -230,7 +230,6 @@ export default function GroupDetailScreen() {
           onRefresh={onRefresh}
           analytics={analytics}
           catStatus={catStatus}
-          contributions={contributions}
           onEditBudget={() => router.push(`/group/${id}/budget`)}
           onCreateBudget={() => router.push(`/group/${id}/budget`)}
           onRebalance={(category) => setRebalance(planRebalance(catStatus, category))}
@@ -252,6 +251,7 @@ export default function GroupDetailScreen() {
           onInvite={() => router.push(`/group/${id}/members`)}
           onSettlePair={(from, to, amount) => router.push(`/add/quick?kind=transfer&from=${from}&to=${to}&amount=${amount}&groupId=${id}`)}
           groupName={group.name}
+          contributions={contributions}
         />
       )}
 

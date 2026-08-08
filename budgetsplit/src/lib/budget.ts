@@ -17,6 +17,36 @@ export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
  * The single source for the 80% / 100% thresholds — was duplicated inline in
  * group detail, reports, and analytics.
  */
+/**
+ * Approximate monthly cost of one **budget line**, for a single comparable headline.
+ *
+ * Deliberately separate from `recurringMonthlyEquivalent` (`lib/recurrence.ts`) despite the
+ * near-identical shape, because the two disagree on purpose:
+ *
+ * | cadence | recurring charge | budget line |
+ * |---|---|---|
+ * | `once`  | n/a              | **0** — a one-time cap isn't a monthly commitment |
+ * | `daily` | ×30              | ×30 |
+ * | `weekly`| ×52/12           | n/a — not a budget cadence |
+ *
+ * `app/group/[id]/budget.tsx` used to define its own local copy of this while the group
+ * Budget tab imported the *recurring* one, so the same screen pair could produce two
+ * different monthly totals for the same data. One function per meaning, both named for
+ * what they measure.
+ *
+ * Amounts are integer paise; `yearly` rounds, so a total never drifts by a fraction.
+ */
+export function budgetMonthlyEquivalent(cadence: BudgetCadence, paise: number): number {
+  switch (cadence) {
+    case 'daily':   return Math.round(paise * 30);
+    case 'monthly': return paise;
+    case 'yearly':  return Math.round(paise / 12);
+    // A one-time budget is a cap on a single purchase, not a recurring commitment —
+    // counting it monthly would inflate the headline every month forever.
+    case 'once':    return 0;
+  }
+}
+
 export function budgetHealth(pct: number | null): BudgetHealth {
   if (pct === null) return 'none';
   return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';

@@ -1,41 +1,53 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { colors, type, space, radius, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { healthColor } from './helpers';
 import { budgetHealth, utilLabel } from '../../../lib/budget';
 import type { CategoryBudgetStatus } from '../../../lib/budget';
 import type { BudgetAnalytics } from '../../../lib/analytics';
-import type { Contributions } from '../../../lib/groupDetail';
 import { formatCompact } from '../../../lib/money';
-import { categoryVisual, categorySection, SECTION_ORDER } from '../../../constants/categories';
+import { categorySection, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
-import { MemberAvatar } from '../MemberAvatar';
-import { FilterBar } from '../../ui/FilterBar';
+import { Card } from '../../ui/Card';
+import { Chip } from '../../ui/Chip';
+import { Divider } from '../../ui/Divider';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { planRebalance } from '../../../lib/rebalance';
+import { haptic } from '../../../lib/haptics';
 import { alpha } from '../../../theme';
+
+/** `'all'` = no filter. The other three mirror `CategoryBudgetStatus.health`. */
+type StatusFilter = 'all' | 'over' | 'near' | 'ontrack';
 
 type Props = {
   refreshing: boolean;
   onRefresh: () => void;
   analytics: BudgetAnalytics | null;
   catStatus: CategoryBudgetStatus[];
-  contributions: Contributions;
   onEditBudget: () => void;
   onCreateBudget: () => void;
   /** Open the re-plan sheet for an over-budget category (`V2-07`). */
   onRebalance?: (category: string) => void;
 };
 
-/** Group Budget tab: overview + recommendations + driving-overspend + who-paid-what
- *  + per-category sectioned list. Owns its own status filter (tab-local). */
-export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, onCreateBudget, onRebalance, refreshing, onRefresh }: Props) {
-  const [budgetFilter, setBudgetFilter] = useState('all');
+/**
+ * Group Budget tab: one overview card, then the per-category list by section.
+ *
+ * **The overview's three counts *are* the filter.** They used to be inert numbers sitting
+ * directly above a `FilterBar` offering the same four choices — two controls for one job,
+ * so seeing "2 over" and then acting on it took a second tap on a different widget. Now
+ * the number is the control, and the separate filter row is gone.
+ *
+ * "Who paid what" used to live here, between the hero and the categories. It moved to the
+ * Members tab: it's a settlement concern, and the people and balances are already there.
+ */
+export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, onRebalance, refreshing, onRefresh }: Props) {
+  const [filter, setFilter] = useState<StatusFilter>('all');
   const bottomPad = useContentInset({ fab: true });
 
   if (catStatus.length === 0) {
@@ -56,117 +68,95 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
   }
 
   const matches = (c: CategoryBudgetStatus) =>
-    budgetFilter === 'all' ? true
-    : budgetFilter === 'over' ? c.health === 'red'
-    : budgetFilter === 'near' ? c.health === 'amber'
+    filter === 'all' ? true
+    : filter === 'over' ? c.health === 'red'
+    : filter === 'near' ? c.health === 'amber'
     : c.health === 'green';
   const visible = catStatus.filter(matches);
 
+  /** Tapping the active count clears the filter, so the row is its own escape hatch. */
+  const toggle = (next: StatusFilter) => {
+    haptic.selection();
+    setFilter(prev => (prev === next ? 'all' : next));
+  };
+
   return (
     <ScrollView
-        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-      {/* The tab is already labelled "Budget" in the strip above; repeating it
-          here just pushed the real content down. */}
-      <View style={styles.budgetHeadingRow}>
-        <TouchableOpacity style={styles.editPill} onPress={onEditBudget} accessibilityRole="button" accessibilityLabel="Edit budget">
-          <Feather name="edit-2" size={13} color={colors.accent} />
-          <Text style={styles.editPillText}>Edit</Text>
-        </TouchableOpacity>
-      </View>
-
+      contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+      refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       {analytics && analytics.totalAllocated > 0 && (
-        <View style={styles.ovCard}>
-          <View style={styles.ovTopRow}>
-            <View>
-              <Text style={styles.ovLabel}>Budget used</Text>
-              <Text style={[styles.ovSpent, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>{formatCompact(analytics.totalSpent)}</Text>
-              <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
-            </View>
-            <Text style={[styles.ovPct, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>{utilLabel(analytics.utilizationPct ?? 0)}</Text>
+        <Card padded style={styles.ovCard}>
+          {/* Edit sits with the thing it edits. It used to be a lone unlabelled pill in a
+              `space-between` row that had lost its heading — so the tab opened with an
+              action above the number the action changes. */}
+          <View style={styles.ovHead}>
+            <Text style={styles.ovLabel}>Budget used</Text>
+            <Chip label="Edit" icon="edit-2" onPress={onEditBudget} accessibilityLabel="Edit budget" />
           </View>
-          <View style={{ marginTop: space.md }}>
+
+          <View style={styles.ovAmountRow}>
+            <Text style={[styles.ovSpent, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>
+              {formatCompact(analytics.totalSpent)}
+            </Text>
+            <Text style={[styles.ovPct, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>
+              {utilLabel(analytics.utilizationPct ?? 0)}
+            </Text>
+          </View>
+          <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
+
+          <View style={styles.ovBar}>
             <BudgetBar pct={analytics.utilizationPct} health={budgetHealth(analytics.utilizationPct)} height={10} />
           </View>
-          <View style={styles.ovStatsRow}>
-            <View style={styles.ovStat}>
-              <Text style={[styles.ovStatVal, { color: colors.expense }]}>{analytics.overBudget.length}</Text>
-              <Text style={styles.ovStatLabel}>over</Text>
-            </View>
-            <View style={styles.ovStatDivider} />
-            <View style={styles.ovStat}>
-              <Text style={[styles.ovStatVal, { color: colors.healthAmber }]}>{analytics.nearLimit.length}</Text>
-              <Text style={styles.ovStatLabel}>near limit</Text>
-            </View>
-            <View style={styles.ovStatDivider} />
-            <View style={styles.ovStat}>
-              <Text style={[styles.ovStatVal, { color: colors.income }]}>{analytics.onTrackCount}</Text>
-              <Text style={styles.ovStatLabel}>on track</Text>
-            </View>
+
+          <Divider indent="none" />
+
+          <View style={styles.statsRow}>
+            <StatFilter
+              count={analytics.overBudget.length} label="over" tint={colors.expense}
+              active={filter === 'over'} onPress={() => toggle('over')}
+            />
+            <StatFilter
+              count={analytics.nearLimit.length} label="near limit" tint={colors.healthAmber}
+              active={filter === 'near'} onPress={() => toggle('near')}
+            />
+            <StatFilter
+              count={analytics.onTrackCount} label="on track" tint={colors.income}
+              active={filter === 'ontrack'} onPress={() => toggle('ontrack')}
+            />
           </View>
-        </View>
+        </Card>
       )}
-
-      {/* Budget recommendations and the "driving overspend" breakdown are Insights —
-          they live on the global Insights screen (aggregated across groups), not here. */}
-
-      {contributions.total > 0 && (
-        <View style={styles.contribCard}>
-          <Text style={styles.contribTitle}>Who paid what</Text>
-          {contributions.rows.map((r, i) => (
-            <View key={r.member.id} style={[styles.contribRow, i < contributions.rows.length - 1 && styles.contribRowGap]}>
-              <View style={styles.contribHead}>
-                <MemberAvatar name={r.member.name} color={r.member.avatar_color} size={28} imageUri={r.member.image_uri} />
-                <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
-                <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
-                <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
-                  {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
-                </Text>
-              </View>
-              <View style={styles.contribTrack}>
-                <View style={[styles.contribFill, { width: `${Math.round(r.frac * 100)}%`, backgroundColor: r.member.avatar_color }]} />
-              </View>
-            </View>
-          ))}
-          <Text style={styles.contribFoot}>Fair share is {formatCompact(contributions.fairShare)} each · + ahead, − owes the group</Text>
-        </View>
-      )}
-
-      <View>
-        <FilterBar
-          selected={{ status: budgetFilter }}
-          onSelect={(_, v) => setBudgetFilter(v)}
-          groups={[{ key: 'status', options: [
-            { label: 'All', value: 'all' },
-            { label: 'Over', value: 'over' },
-            { label: 'Near limit', value: 'near' },
-            { label: 'On track', value: 'ontrack' },
-          ] }]}
-        />
-      </View>
 
       {visible.length === 0 ? (
-        <EmptyState icon="filter" title="Nothing here" body="No categories match this filter." tint={colors.textSecondary} />
+        <EmptyState
+          icon="filter"
+          title="Nothing here"
+          body="No categories match this filter. Tap the highlighted count above to clear it."
+          tint={colors.textSecondary}
+        />
       ) : (
         SECTION_ORDER.map(section => {
           const lines = visible.filter(c => categorySection(c.category) === section);
           if (lines.length === 0) return null;
           return (
-            <View key={section} style={{ marginBottom: space.md }}>
+            // No `marginBottom` here and no `gap` on the container: SectionHeader owns
+            // its own vertical margins, and stacking all three put 32px above every
+            // header (AGENTS §12).
+            <View key={section}>
               <SectionHeader title={section} />
-              <View style={styles.catCard}>
-                {lines.map((c, i) => {
-                  return (
-                    <View key={c.category} style={i < lines.length - 1 ? styles.catRowBorder : undefined}>
-                      <BudgetCategoryRow
-                        category={c.category}
-                        cadence={c.cadence}
-                        spent={c.spent}
-                        allocated={c.allocated}
-                        pct={c.pct}
-                        health={c.health}
-                      >
+              <Card clip>
+                {lines.map((c, i) => (
+                  <View key={c.category}>
+                    {i > 0 && <Divider indent="text" />}
+                    <BudgetCategoryRow
+                      category={c.category}
+                      cadence={c.cadence}
+                      spent={c.spent}
+                      allocated={c.allocated}
+                      pct={c.pct}
+                      health={c.health}
+                    >
                       {/* V2-07: a red bar used to be the whole response to an overrun.
                           Only offered when a re-plan is actually possible. */}
                       {c.remaining < 0 && onRebalance && planRebalance(catStatus, c.category) && (
@@ -180,11 +170,10 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
                           <Text style={styles.replanText}>Re-plan the rest of this month</Text>
                         </TouchableOpacity>
                       )}
-                      </BudgetCategoryRow>
-                    </View>
-                  );
-                })}
-              </View>
+                    </BudgetCategoryRow>
+                  </View>
+                ))}
+              </Card>
             </View>
           );
         })
@@ -193,35 +182,49 @@ export function BudgetTab({ analytics, catStatus, contributions, onEditBudget, o
   );
 }
 
+/** One tappable count in the overview — the filter control for that health band. */
+function StatFilter({ count, label, tint, active, onPress }: {
+  count: number; label: string; tint: string; active: boolean; onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.stat, active && { backgroundColor: alpha(tint, 13), borderColor: tint }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${count} ${label}${active ? ', filtering. Tap to clear' : '. Tap to filter'}`}
+    >
+      <Text style={[styles.statVal, { color: tint }]}>{count}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, gap: space.sm },
+  listContent: { padding: layout.screenPaddingH },
   replanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, alignSelf: 'flex-start', paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: alpha(colors.accent, 13) },
-  replanText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  budgetHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, marginBottom: space.sm },
-  editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
-  editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  ovCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, marginBottom: space.md, ...shadow.md },
-  ovTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  ovLabel: { ...type.label, color: colors.textSecondary },
-  ovSpent: { ...type.amountLG, color: colors.textPrimary, marginTop: 2 },
+  replanText: { ...type.captionSemi, color: colors.accent },
+
+  ovCard: { marginBottom: space.sm },
+  ovHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
+  ovLabel: { ...type.sectionLabel, color: colors.textMuted },
+  ovAmountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  ovSpent: { ...type.amountXL },
+  ovPct: { ...type.amountSM },
   ovOf: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  ovPct: { ...type.amountLG },
-  ovStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
-  ovStat: { flex: 1, alignItems: 'center', gap: 2 },
-  ovStatDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  ovStatVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  ovStatLabel: { ...type.caption, color: colors.textMuted },
-  contribCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
-  contribTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.md },
-  contribRow: { gap: space.xs },
-  contribRowGap: { marginBottom: space.md },
-  contribHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  contribName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  contribPaid: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary },
-  contribDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold', minWidth: 52, textAlign: 'right' },
-  contribTrack: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted, overflow: 'hidden' },
-  contribFill: { height: 6, borderRadius: 3 },
-  contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  catCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
-  catRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  ovBar: { marginTop: space.md, marginBottom: space.md },
+
+  statsRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    minHeight: layout.touchMin,
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  statVal: { ...type.amountMD },
+  statLabel: { ...type.caption, color: colors.textMuted },
 });
