@@ -220,21 +220,11 @@ export default function SavingsScreen() {
             charge. Titled by its window so it can't read as the inventory, with an
             explicit link to the place that manages them. */}
         {upcoming.length > 0 && (
-          <ComingUpList
-            items={upcoming}
-            title="Due this month"
-            showIcon
-            headerRight={
-              <TouchableOpacity
-                onPress={() => router.push('/plan/recurring' as Href)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Manage recurring"
-              >
-                <Text style={styles.seeAll}>Manage</Text>
-              </TouchableOpacity>
-            }
-          />
+          // No "Manage" link: this screen's header already has a Recurring shortcut, so a
+          // second entry point was pure clutter on a block whose job is to be glanced at.
+          // The title does the work the link was hedging — "Due this month" is a window,
+          // "Recurring" is the inventory.
+          <ComingUpList items={upcoming} title="Due this month" showIcon />
         )}
 
         {/* Month-end spend forecast */}
@@ -357,7 +347,6 @@ const styles = StyleSheet.create({
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
-  seeAll: { ...type.labelSemi, color: colors.accent },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   headerIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
