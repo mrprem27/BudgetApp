@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, type StyleProp, type ViewStyl
 import { Feather } from '@expo/vector-icons';
 import { Card } from './Card';
 import { IconCircle } from './IconCircle';
+import { Collapse } from './anim/Collapse';
 import { colors, type, space, layout } from '../tokens';
 
 /**
@@ -18,6 +19,13 @@ import { colors, type, space, layout } from '../tokens';
  * The two screens differ only in what sits in the header, so that's a slot:
  * pass `icon` for a leading disc, and `subtitle` or `right` for the trailing
  * detail (a count badge, a total, …).
+ *
+ * The body animates via `Collapse`, which is why **both** call sites could drop their
+ * `LayoutAnimation.configureNext` and the `UIManager.setLayoutAnimationEnabledExperimental`
+ * Android shim. AGENTS §11 bans `LayoutAnimation`: it's a legacy *global* API, so a
+ * section toggle here also animated every unrelated layout change landing in the same
+ * commit — and it's unreliable under the New Architecture. `Collapse` is scoped to this
+ * subtree and honours Reduce Motion.
  */
 export function SectionCard({
   title,
@@ -63,7 +71,7 @@ export function SectionCard({
         <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {expanded && children}
+      <Collapse visible={expanded}>{children}</Collapse>
     </Card>
   );
 }

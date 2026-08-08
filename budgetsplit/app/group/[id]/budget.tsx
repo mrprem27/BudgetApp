@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, LayoutAnimation, UIManager, findNodeHandle,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -50,10 +50,6 @@ const SECTION_ICON: Record<string, FeatherName> = {
   'Money & Growth': 'trending-up',
   Other: 'grid',
 };
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
 
@@ -181,8 +177,9 @@ export default function BudgetEditorScreen() {
     haptic.selection();
     setCadences(prev => ({ ...prev, [category]: cadence }));
   }
+  // No LayoutAnimation call: `SectionCard` animates its own body via `Collapse`, so the
+  // motion is scoped to the card instead of every layout change in the same commit.
   function toggleSection(title: string) {
-    LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
     setCollapsed(prev => {
       const next = new Set(prev);
       next.has(title) ? next.delete(title) : next.add(title);

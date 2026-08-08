@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
-  KeyboardAvoidingView, Platform, LayoutAnimation, UIManager,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -33,9 +33,6 @@ import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { alpha } from '../src/theme';
 import { SectionCard } from '../src/components/ui/SectionCard';
 
-if (Platform.OS === 'android') {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
 
 
 export default function CategoriesScreen() {
@@ -88,7 +85,6 @@ export default function CategoriesScreen() {
   }
 
   function toggleSection(title: string) {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedSection(prev => prev === title ? null : title);
     setAddingToSection(null);
   }
