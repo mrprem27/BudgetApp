@@ -16,7 +16,7 @@ import type { MoneyProfile } from '../lib/cash';
 import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { getRecurringForGroup } from '../db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { forecastMonthEnd as computeForecastMonthEnd } from '../lib/forecast';
 import { buildUpcoming, type UpcomingItem } from '../lib/upcoming';
@@ -96,7 +96,9 @@ export function useSavingsTab() {
     const me2 = await getMe(db);
     if (me2) {
       const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-      upcoming = buildUpcoming(recurringByGroup.flat(), me2.id, Date.now(), 5);
+      const rules = recurringByGroup.flat();
+      const skips = await getSkipsMap(db, rules.map(r => r.id));
+      upcoming = buildUpcoming(rules, me2.id, Date.now(), 5, undefined, skips);
     }
 
     return { goals: g, saved: s, money: tm, profile: mp, forecastMonthEnd, forecastBudget: bTotal, upcoming };

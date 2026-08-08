@@ -15,7 +15,7 @@ import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { getAllGroups } from '../src/db/queries/groups';
-import { getRecurringForGroup } from '../src/db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../src/db/queries/recurring';
 import { getGlobalNet } from '../src/db/queries/balances';
 import { getMe, getAllPersons, type Person } from '../src/db/queries/persons';
 import { simplify } from '../src/lib/settle';
@@ -44,7 +44,9 @@ export default function RemindersScreen() {
 
     // Bills coming up in the next ~2 weeks (from recurring expense rules).
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const bills = buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 8, 14);
+    const billRules = recurringByGroup.flat();
+    const billSkips = await getSkipsMap(db, billRules.map(r => r.id));
+    const bills = buildUpcoming(billRules, me.id, Date.now(), 8, 14, billSkips);
 
     // Pending settle-ups that involve me.
     const persons = await getAllPersons(db);

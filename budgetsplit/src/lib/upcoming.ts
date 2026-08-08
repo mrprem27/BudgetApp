@@ -1,4 +1,4 @@
-import { nextOccurrenceOnOrAfter } from './recurrence';
+import { nextUnskippedOccurrence } from './recurrence';
 import type { TxnWithSplits } from '../db/queries/transactions';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,6 +37,12 @@ export function buildUpcoming(
   limit = 3,
   /** Only include occurrences due within this many days (e.g. 4 = "coming up soon"). */
   withinDays?: number,
+  /**
+   * Skipped occurrence dates per series (`getSkipsMap`). Without this a bill the user
+   * explicitly skipped still projects on its skipped date — which is what "Skip next
+   * doesn't update Next" was.
+   */
+  skipsBySeries?: Map<string, Set<number>>,
 ): UpcomingItem[] {
   const items: UpcomingItem[] = [];
   for (const txn of recurring) {
@@ -45,7 +51,7 @@ export function buildUpcoming(
     if (!txn.recur_freq) continue;
     if (txn.recur_state && txn.recur_state !== 'active') continue;
 
-    const next = nextOccurrenceOnOrAfter(txn, nowMs);
+    const next = nextUnskippedOccurrence(txn, nowMs, skipsBySeries?.get(txn.id));
     if (next === null) continue;
 
     items.push({

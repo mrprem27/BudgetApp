@@ -1,4 +1,4 @@
-import { materializeInstances, nextOccurrenceOnOrAfter, occurrenceDatesUpTo, recurringMonthlyEquivalent } from '../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, nextUnskippedOccurrence, occurrenceDatesUpTo, recurringMonthlyEquivalent } from '../lib/recurrence';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -109,5 +109,61 @@ describe('recurringMonthlyEquivalent', () => {
     expect(recurringMonthlyEquivalent(7777, 'custom')).toBe(7777);
     expect(recurringMonthlyEquivalent(7777, null)).toBe(7777);
     expect(recurringMonthlyEquivalent(7777, undefined)).toBe(7777);
+  });
+});
+
+/**
+ * "Skip next" wrote a `recur_skip` row, but every *display* of the next date used the
+ * raw projection — so Plan, Home's "Coming up", `/plan/recurring` and Reminders all
+ * kept showing the skipped date. The skip only took effect much later, when
+ * materialization declined to create the row. The feature looked broken while the
+ * stored data was correct, which is the worst shape for a bug: nothing to fix in the DB.
+ */
+describe('nextUnskippedOccurrence', () => {
+  const monthly = { ...base, recur_freq: 'monthly' as const, date: ms(2026, 0, 10) };
+
+  it('matches the raw projection when nothing is skipped', () => {
+    const from = ms(2026, 0, 1);
+    expect(nextUnskippedOccurrence(monthly as any, from))
+      .toBe(nextOccurrenceOnOrAfter(monthly as any, from));
+  });
+
+  it('walks past a single skipped occurrence', () => {
+    const from = ms(2026, 0, 1);
+    const first = nextOccurrenceOnOrAfter(monthly as any, from)!;
+    const next = nextUnskippedOccurrence(monthly as any, from, new Set([first]));
+    expect(next).not.toBe(first);
+    expect(next).toBe(ms(2026, 1, 10)); // February
+  });
+
+  it('walks past several consecutive skips', () => {
+    const from = ms(2026, 0, 1);
+    const skips = new Set([ms(2026, 0, 10), ms(2026, 1, 10), ms(2026, 2, 10)]);
+    expect(nextUnskippedOccurrence(monthly as any, from, skips)).toBe(ms(2026, 3, 10));
+  });
+
+  it('ignores skips that are not on real occurrence dates', () => {
+    const from = ms(2026, 0, 1);
+    // A stale skip row (e.g. the series was edited) must not shift the answer.
+    const skips = new Set([ms(2026, 0, 11), ms(2026, 0, 9)]);
+    expect(nextUnskippedOccurrence(monthly as any, from, skips)).toBe(ms(2026, 0, 10));
+  });
+
+  it('returns null when every remaining occurrence is skipped', () => {
+    // A series ending in March, with all three of its remaining dates skipped.
+    const bounded = { ...monthly, recur_end: ms(2026, 2, 31) };
+    const skips = new Set([ms(2026, 0, 10), ms(2026, 1, 10), ms(2026, 2, 10)]);
+    expect(nextUnskippedOccurrence(bounded as any, ms(2026, 0, 1), skips)).toBeNull();
+  });
+
+  it('treats an empty skip set as no skips', () => {
+    const from = ms(2026, 0, 1);
+    expect(nextUnskippedOccurrence(monthly as any, from, new Set()))
+      .toBe(nextOccurrenceOnOrAfter(monthly as any, from));
+  });
+
+  it('terminates on a series with no future occurrence at all', () => {
+    const ended = { ...monthly, recur_end: ms(2025, 11, 31) };
+    expect(nextUnskippedOccurrence(ended as any, ms(2026, 5, 1), new Set([ms(2026, 0, 10)]))).toBeNull();
   });
 });

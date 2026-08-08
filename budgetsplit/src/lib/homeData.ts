@@ -9,7 +9,7 @@ import { getMyExposure } from '../db/queries/balances';
 import { getPendingCount } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { getRecurringForGroup } from '../db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
 import { getBudgetAnalytics } from './analytics';
 import { getMyGlobalBudgetStatus } from './budget';
@@ -190,7 +190,9 @@ export async function loadHomeData(
     // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
     // Drives the bell badge only (the list moved to the Reminders screen). Count
     // all bills due within the next 14 days — same window the Reminders screen uses.
-    const upcoming = buildUpcoming(recurringByGroup.flat(), me.id, Date.now(), 99, 14);
+    const upcomingRules = recurringByGroup.flat();
+    const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
+    const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
 
     // Month-end forecast + biggest category shift vs last month (Month view only).
     let forecast: Forecast | null = null;

@@ -16,8 +16,8 @@ import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useRecurringActions } from '../../src/hooks/useRecurringActions';
 import { getAllGroups } from '../../src/db/queries/groups';
-import { getRecurringForGroup } from '../../src/db/queries/recurring';
-import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
+import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
+import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatCompact } from '../../src/lib/money';
 import { alpha } from '../../src/theme';
 
@@ -38,6 +38,9 @@ export default function RecurringScreen() {
     const grps = await getAllGroups(db);
     const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
     const rules = byGroup.flat().filter(t => t.kind === 'expense' && t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
+    // Skips have to be loaded, not inferred: "next" must be the next date that
+    // actually happens, not the next one the schedule would produce.
+    const skips = await getSkipsMap(db, rules.map(r => r.id));
     const list: Sub[] = rules.map(t => ({
       id: t.id,
       groupId: t.group_id,
@@ -45,7 +48,7 @@ export default function RecurringScreen() {
       category: t.category,
       amount: t.shares.reduce((s, sh) => s + sh.amount, 0),
       freq: t.recur_freq as string,
-      nextMs: nextOccurrenceOnOrAfter(t, now),
+      nextMs: nextUnskippedOccurrence(t, now, skips.get(t.id)),
     }));
     list.sort((a, b) => (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
     return list;

@@ -56,6 +56,38 @@ export function nextOccurrenceOnOrAfter(txn: TxnWithSplits, fromMs: number): num
 }
 
 /**
+ * The next occurrence that is **not skipped** — the date any UI should show as
+ * "next", and the one thing `nextOccurrenceOnOrAfter` alone cannot tell you.
+ *
+ * "Skip next" writes a `recur_skip` row, but every *display* of the next date used
+ * the raw projection above, so a skipped bill kept showing its skipped date on Plan,
+ * Home's "Coming up", `/plan/recurring` and Reminders. The skip only took effect much
+ * later, when `materializeDueOccurrences` declined to create the row — so the feature
+ * looked broken even though the data was correct.
+ *
+ * `skips` is the set of skipped occurrence timestamps for **this** series (see
+ * `getSkipsMap`). Walks forward past every skipped date; returns null if the series
+ * ends first. Pure, so the walk is unit-testable without a database.
+ */
+export function nextUnskippedOccurrence(
+  txn: TxnWithSplits,
+  fromMs: number,
+  skips?: ReadonlySet<number>,
+): number | null {
+  let from = fromMs;
+  let date = nextOccurrenceOnOrAfter(txn, from);
+  if (!skips || skips.size === 0) return date;
+  // Bounded by the skip count: each iteration consumes one skipped date, so this
+  // can't spin even on a pathological series.
+  let guard = skips.size + 1;
+  while (date !== null && skips.has(date) && guard-- > 0) {
+    from = date + 1;
+    date = nextOccurrenceOnOrAfter(txn, from);
+  }
+  return date !== null && skips.has(date) ? null : date;
+}
+
+/**
  * All occurrence dates (ms) of a series from its start up to and including
  * `untilMs` (clamped to `recur_end`). Used by the materialize job to turn due
  * occurrences into real, editable transactions. Pure — easy to test.
