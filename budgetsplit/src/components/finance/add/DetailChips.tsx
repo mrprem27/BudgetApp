@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { format } from 'date-fns';
 import { Chip } from '../../ui/Chip';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';
@@ -27,6 +28,10 @@ type Props = {
   /** Tags on this transaction. Orthogonal to category — one category, many tags. */
   tags: string[];
   onOpenTags: () => void;
+
+  /** The transaction's time-of-day. Always set (it defaults to now), like pay method. */
+  txnDate: number;
+  onOpenTime: () => void;
 
   /** Omitted entirely when location is off in settings, or while editing. */
   place?: CapturedPlace | null;
@@ -82,6 +87,7 @@ export function DetailChips({
   note, onOpenNote, onClearNote,
   attachmentUri, onOpenAttachment, onClearAttachment,
   tags, onOpenTags,
+  txnDate, onOpenTime,
   place, capturingLoc, onCaptureLocation, onClearLocation,
   payMethod, onOpenPayMethod, isIncome,
   onSplitByItems,
@@ -128,6 +134,17 @@ export function DetailChips({
           maxWidth={180}
           onPress={onOpenTags}
           accessibilityLabel={tags.length === 0 ? 'Add tags' : `Tags: ${tags.join(', ')}`}
+        />
+
+        {/* Always filled — the time is real whether or not it was chosen, so there is no
+            "unset" state to offer. Same shape as the pay-method chip. */}
+        <Chip
+          label={format(txnDate, 'h:mm a')}
+          icon="clock"
+          selected
+          accent={accent}
+          onPress={onOpenTime}
+          accessibilityLabel={`Time: ${format(txnDate, 'h:mm a')}. Change`}
         />
 
         {onCaptureLocation && (

@@ -8,13 +8,15 @@ import { PayMethodSheet } from './PayMethodSheet';
 import { RecurringSheet } from './RecurringSheet';
 import { NoteSheet } from './NoteSheet';
 import { TagSheet } from './TagSheet';
+import { AmountCalculatorSheet } from './AmountCalculatorSheet';
 import { DatePickerSheet } from '../../ui/DatePickerSheet';
+import { TimePickerSheet } from '../../ui/TimePickerSheet';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 
 /** Which overlay is open. One at a time — they're all modal. */
 export type QuickAddSheet =
   | 'split' | 'payers' | 'date' | 'endDate' | 'destination'
-  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | null;
+  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | null;
 
 type Form = ReturnType<typeof useAddTxnForm>;
 
@@ -110,6 +112,14 @@ export function QuickAddSheets({
         onChangeText={f.setNote}
       />
 
+      <AmountCalculatorSheet
+        visible={open === 'calc'}
+        onClose={onClose}
+        amountText={f.amountText}
+        onApply={f.setAmountText}
+        accent={accent}
+      />
+
       <TagSheet
         visible={open === 'tags'}
         onClose={onClose}
@@ -133,6 +143,14 @@ export function QuickAddSheets({
         // one inside another breaks keyboard handling (see SheetModal's own note).
         // Closing the date picker returns here, so it reads as one flow.
         onPickEndDate={() => onOpen('endDate')}
+      />
+
+      <TimePickerSheet
+        visible={open === 'time'}
+        value={{ hour: new Date(f.txnDate).getHours(), minute: new Date(f.txnDate).getMinutes() }}
+        title="What time?"
+        onClose={onClose}
+        onSave={({ hour, minute }) => { f.setTxnTime(hour, minute); onClose(); }}
       />
 
       <DatePickerSheet

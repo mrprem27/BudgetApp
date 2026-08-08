@@ -290,6 +290,21 @@ export function useAddTxnForm(params: AddTxnParams) {
     }
   }
 
+  /**
+   * Change only the time-of-day of `txnDate`, preserving the calendar date.
+   *
+   * `txn.date` has always been epoch ms and Review already renders `d MMM · h:mm a`, so
+   * the time was being *stored* accurately and simply never editable — Add was the one
+   * place that discarded the information. Seconds and ms are zeroed: the picker works in
+   * 5-minute steps, so carrying a stray 37.412s through would be noise that only ever
+   * showed up in sort order.
+   */
+  function setTxnTime(hour: number, minute: number) {
+    const d = new Date(txnDate);
+    d.setHours(hour, minute, 0, 0);
+    setTxnDate(d.getTime());
+  }
+
   async function selectGroup(gid: string) {
     if (gid === selectedGroupId) return;
     setSelectedGroupId(gid);
@@ -482,7 +497,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,
     recurEndMs, setRecurEndMs, recurEndMode, setRecurEndMode, recurCount, setRecurCount,
     // attachment / location
-    attachmentUri, setAttachmentUri, tags, setTags, place, setPlace, locEnabled, capturingLoc, captureLocation,
+    attachmentUri, setAttachmentUri, tags, setTags, setTxnTime, place, setPlace, locEnabled, capturingLoc, captureLocation,
     // currency / nudge / derived
     currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
     // actions

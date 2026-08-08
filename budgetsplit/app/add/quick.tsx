@@ -141,7 +141,7 @@ export default function QuickAddScreen() {
             />
           )}
 
-          <AmountField amountText={f.amountText} onChangeText={f.setAmountText} kind={kind} autoFocus={!isEditing} transferScopeBal={f.transferScopeBal} />
+          <AmountField amountText={f.amountText} onChangeText={f.setAmountText} kind={kind} autoFocus={!isEditing} transferScopeBal={f.transferScopeBal} onOpenCalculator={() => open('calc')} />
 
           <CategoryDatePills
             kind={kind}
@@ -249,6 +249,8 @@ export default function QuickAddScreen() {
                 onClearNote={() => f.setNote('')}
                 tags={f.tags}
                 onOpenTags={() => open('tags')}
+                txnDate={f.txnDate}
+                onOpenTime={() => open('time')}
                 attachmentUri={f.attachmentUri}
                 onOpenAttachment={pickReceipt}
                 onClearAttachment={() => f.setAttachmentUri(null)}
