@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -10,7 +9,7 @@ import {
 } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { space, radius, layout } from '../../src/constants/layout';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -28,6 +27,10 @@ import { formatRupees, formatCompact } from '../../src/lib/money';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { Card } from '../../src/components/ui/Card';
+import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { TabPills } from '../../src/components/ui/TabPills';
+import { useContentInset } from '../../src/hooks/useContentInset';
 import { alpha } from '../../src/theme';
 
 type Period = 'day' | 'month' | 'year';
@@ -52,7 +55,7 @@ const sumMyShare = (arr: TxnWithSplits[], myId: string) =>
 export default function CategoryDetailScreen() {
   const { name, period: periodParam } = useLocalSearchParams<{ name?: string; period?: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const listPad = useContentInset();
   const categoryName = name ? decodeURIComponent(name) : '';
 
   // Pre-select whatever was active on the Dashboard when a category bar was tapped.
@@ -195,21 +198,7 @@ export default function CategoryDetailScreen() {
         </Text>
 
         {/* Period selector — Today / Month / Year, mirroring the Dashboard */}
-        <View style={styles.periodRow}>
-          <View style={styles.segment}>
-            {PERIODS.map(p => (
-              <TouchableOpacity
-                key={p.key}
-                style={[styles.segmentBtn, period === p.key && styles.segmentBtnActive]}
-                onPress={() => setPeriod(p.key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: period === p.key }}
-              >
-                <Text style={[styles.segmentText, period === p.key && styles.segmentTextActive]}>{p.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        <TabPills tabs={PERIODS.map(p => ({ key: p.key, label: p.label }))} active={period} onChange={(k) => setPeriod(k as Period)} />
 
         {loading ? (
           <>
@@ -220,9 +209,9 @@ export default function CategoryDetailScreen() {
           <>
             {/* Summary: Budget card if a budget exists, else amount (+ set-budget prompt on Month) */}
             {showBudgetCard ? (
-              <View style={styles.card}>
+              <Card padded>
                 <View style={styles.budgetTop}>
-                  <Text style={styles.cardLabel}>BUDGET</Text>
+                  <Text style={styles.cardLabel}>Budget</Text>
                   <Text style={[styles.budgetPct, { color: view.spent > view.budget ? colors.expense : colors.healthAmber }]}>
                     {Math.round((view.spent / view.budget) * 100)}% used
                   </Text>
@@ -238,24 +227,22 @@ export default function CategoryDetailScreen() {
                     <Text style={styles.budgetCaption}>budget</Text>
                   </View>
                 </View>
-              </View>
+              </Card>
             ) : (
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>SPENT {PERIOD_NOUN[period].toUpperCase()}</Text>
+              <Card padded>
+                <Text style={styles.cardLabel}>Spent {PERIOD_NOUN[period]}</Text>
                 <Text style={styles.amount}>{formatRupees(view.spent)}</Text>
                 <Text style={styles.amountSub}>
                   {view.totalAll > 0 ? `${Math.round((view.spent / view.totalAll) * 100)}% of all spending` : 'No spending yet'}
                   {view.count > 0 ? ` · avg ${formatCompact(Math.round(view.spent / view.count))}` : ''}
                 </Text>
-              </View>
+              </Card>
             )}
 
             {/* Set-budget prompt — shown prominently when no monthly budget is set */}
             {showSetBudget && (
               <TouchableOpacity style={styles.setBudget} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget?category=${encodeURIComponent(categoryName)}`)} accessibilityRole="button">
-                <View style={styles.setBudgetIcon}>
-                  <Feather name="target" size={18} color={colors.accent} />
-                </View>
+                <IconCircle icon="target" size={36} color={colors.accent} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.setBudgetTitle}>Set a budget for {categoryName}</Text>
                   <Text style={styles.setBudgetSub}>Track spending against a limit you set</Text>
@@ -266,8 +253,8 @@ export default function CategoryDetailScreen() {
 
             {/* Where it goes — my spend split across personal + groups */}
             {view.perGroup.length > 1 && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>WHERE IT GOES</Text>
+              <Card padded>
+                <Text style={styles.cardLabel}>Where it goes</Text>
                 {view.perGroup.map(g => {
                   const pct = view.spent > 0 ? Math.round((g.amt / view.spent) * 100) : 0;
                   return (
@@ -278,13 +265,13 @@ export default function CategoryDetailScreen() {
                     </View>
                   );
                 })}
-              </View>
+              </Card>
             )}
 
             {/* Top places */}
             {view.places.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>TOP PLACES</Text>
+              <Card padded>
+                <Text style={styles.cardLabel}>Top places</Text>
                 {view.places.map(p => (
                   <View key={p.label} style={styles.insRow}>
                     <Feather name="map-pin" size={13} color={colors.textMuted} />
@@ -293,13 +280,13 @@ export default function CategoryDetailScreen() {
                     <Text style={styles.insAmt}>{formatCompact(p.amt)}</Text>
                   </View>
                 ))}
-              </View>
+              </Card>
             )}
 
             {/* Recurring in this category */}
             {recurRules.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>RECURRING</Text>
+              <Card padded>
+                <Text style={styles.cardLabel}>Recurring</Text>
                 {recurRules.map(r => {
                   const mine = myShareOf(r, myId) || r.shares.reduce((s, x) => s + x.amount, 0);
                   const name = (r.note && r.note.trim()) || r.category;
@@ -312,13 +299,13 @@ export default function CategoryDetailScreen() {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
+              </Card>
             )}
 
             {/* Savings goals tagged to this category */}
             {goals.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>GOALS</Text>
+              <Card padded>
+                <Text style={styles.cardLabel}>Goals</Text>
                 {goals.map(g => (
                   <TouchableOpacity key={g.id} style={styles.insRow} onPress={() => router.push(`/savings/${g.id}`)} accessibilityRole="button">
                     <Feather name="target" size={13} color={g.color ?? colors.accent} />
@@ -327,11 +314,11 @@ export default function CategoryDetailScreen() {
                     <Feather name="chevron-right" size={14} color={colors.textMuted} />
                   </TouchableOpacity>
                 ))}
-              </View>
+              </Card>
             )}
 
             {/* Transactions header — the rows themselves are the FlatList data below */}
-            {view.txns.length > 0 && <Text style={styles.txnLabel}>Transactions</Text>}
+            {view.txns.length > 0 && <SectionHeader title="Transactions" right={<Text style={styles.txnCount}>{view.count}</Text>} />}
           </>
         )}
     </View>
@@ -347,7 +334,7 @@ export default function CategoryDetailScreen() {
       <FlatList
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + space.xs }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: listPad }]}
         showsVerticalScrollIndicator={false}
         data={loading || loadError ? [] : view.txns}
         keyExtractor={(txn) => txn.id}
@@ -373,44 +360,42 @@ export default function CategoryDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: layout.screenPaddingH, gap: space.md, paddingBottom: space.xl },
-  // The FlatList content `gap` only separates the header block from the rows — it
-  // can't space the cards *inside* this fragment. Give the header its own gap so
-  // every summary card is evenly separated.
-  headerBlocks: { gap: space.md },
+  /**
+   * NO `gap` here. A FlatList's contentContainerStyle gap applies between *every*
+   * child — which includes every transaction row — and `TxnCell` rows are meant to
+   * be one contiguous card with dividers between them. A 16px gap sliced that card
+   * into separate slabs, which is the spacing that looked wrong on this screen.
+   * (The identical bug was fixed on `personal.tsx`; this was the other instance.)
+   * The summary cards get their spacing from `headerBlocks` instead.
+   */
+  scrollContent: { paddingHorizontal: layout.screenPaddingH },
+  headerBlocks: { gap: space.md, paddingTop: space.sm },
 
+  headerSub: { ...type.caption, color: colors.textMuted },
 
-  headerSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
-  cardLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold' },
+  /** One eyebrow style for every card title. There were three on this screen —
+   *  `cardLabel` and `sectionLabel` at letterSpacing 1, and `txnLabel` at 0.5 with
+   *  no SemiBold — none of them matching `type.sectionLabel` (AGENTS §12). */
+  cardLabel: { ...type.sectionLabel, color: colors.textMuted, marginBottom: space.xs },
+  txnCount: { ...type.amountSM, color: colors.textSecondary },
 
   budgetTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: space.sm },
-  budgetPct: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+  budgetPct: { ...type.captionSemi },
   budgetFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.sm },
-  budgetAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, letterSpacing: -0.5, color: colors.textPrimary },
+  budgetAmt: { ...type.amountLG, color: colors.textPrimary },
   budgetCaption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
-  amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 30, letterSpacing: -0.6, color: colors.textPrimary, marginTop: space.xs },
+  amount: { ...type.amountXL, color: colors.textPrimary, marginTop: space.xs },
   amountSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
   setBudget: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.accentMuted, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
-  setBudgetIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: alpha(colors.accent, 13), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  setBudgetTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  setBudgetTitle: { ...type.bodySemi, color: colors.textPrimary },
   setBudgetSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
 
-  periodRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  segment: { flex: 1, flexDirection: 'row', backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  segmentBtn: { flex: 1, paddingVertical: 7, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  segmentBtnActive: { backgroundColor: colors.accent },
-  segmentText: { ...type.label, color: colors.textSecondary },
-  segmentTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-
-  txnLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
-
-  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
-  insRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 7 },
+  /** `layout.touchMin` because three of these row types are tappable (recurring,
+   *  goals) — they were 27pt tall, well under AGENTS §6. */
+  insRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: layout.touchMin },
   insName: { ...type.body, color: colors.textPrimary },
   insMeta: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
-  insAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary, minWidth: 52, textAlign: 'right' },
+  insAmt: { ...type.amountSM, color: colors.textSecondary, minWidth: 52, textAlign: 'right' },
 });

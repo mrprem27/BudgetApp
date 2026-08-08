@@ -329,6 +329,14 @@ Rules:
 - Transaction rows: min `layout.txnRowHeight` (64; §12's floor is 60)
 - Section headers: **use `SectionHeader`**. It owns its vertical margins — do not also
   put a `gap` on the scroll container, or the two add up.
+- ⛔ **Never put `gap` on the `contentContainerStyle` of a list that renders
+  card-grouped rows.** The gap applies between *every* child, including each row, which
+  slices a `TxnCell` card into separate slabs — the card's whole point is that its rows
+  are contiguous. This shipped twice (`personal.tsx`, then `category/[name].tsx`) and
+  was reported both times as "the rows have spacing left". Space the *header blocks*
+  instead, or give individual items margins.
+- ⛔ **`ScreenHeader` already applies `insets.top`.** Don't add it again on the list
+  below it — `category/[name].tsx` did, for ~47pt of dead space on a notched phone.
 - Row separators: **`Divider`**. `indent="text"` (64px, clears the icon) or `"none"`.
 - Date section headers come from **`dateSectionLabel`** (`lib/txnGrouping`):
   "Today" / "Yesterday" / "14 Jun" / "14 Jun 2025" outside the current year.

@@ -16,6 +16,18 @@ import {
 import { GROUP_COLORS } from '../../constants/palette';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { FadeIn } from '../ui/FadeIn';
+import { Card } from '../ui/Card';
+import { Chip } from '../ui/Chip';
+import { Divider } from '../ui/Divider';
+import { IconCircle } from '../ui/IconCircle';
+import { OptionRow } from '../ui/OptionRow';
+import { SectionHeader } from '../ui/SectionHeader';
+import { StepScaffold } from './onboarding/StepScaffold';
+import { StepFooter } from './onboarding/StepFooter';
+import { StepProgress } from './onboarding/StepProgress';
+import { StepBack } from './onboarding/StepBack';
+import { StepAmountField } from './onboarding/StepAmountField';
+import { MoneyRow } from './onboarding/MoneyRow';
 import { haptic } from '../../lib/haptics';
 import { LogoAssembly } from './LogoAssembly';
 import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
@@ -95,17 +107,20 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-/** Progress dots across the setup steps (income → money → budget → [people] → permissions). */
-function SetupDots({ step, intent }: { step: Stage; intent: IntentKey }) {
+/**
+ * Where a setup step sits in the flow, 1-based, for `StepProgress`.
+ *
+ * Derived from `setupSteps(intent)` so the `personal` persona — which skips `people` —
+ * reports "3 of 4" rather than a gap. Returns null for stages outside the numbered
+ * flow (hero, intent, features), which show no progress at all.
+ */
+function stepPosition(stage: Stage, intent: IntentKey): { step: number; total: number } | null {
   const steps = setupSteps(intent);
-  const idx = steps.indexOf(step);
-  return (
-    <View style={styles.budgetDots}>
-      {steps.map((s, i) => (
-        <View key={s} style={[styles.budgetDot, { backgroundColor: i === idx ? colors.accent : colors.bgMuted, width: i === idx ? 20 : 8 }]} />
-      ))}
-    </View>
-  );
+  const idx = steps.indexOf(stage);
+  // `name` precedes the setup steps and is part of the same count.
+  if (stage === 'name') return { step: 1, total: steps.length + 1 };
+  if (idx < 0) return null;
+  return { step: idx + 2, total: steps.length + 1 };
 }
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
@@ -156,60 +171,49 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
       {/* INTENT — "What brings you here?" */}
       {stage === 'intent' && (
-        <FadeIn key="intent" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('hero')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.intentScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View style={styles.intentLogoWrap}>
-              <LinearGradient colors={[colors.accent, colors.accentDeep]} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <Text style={styles.intentRupee}>₹</Text>
-              </LinearGradient>
-            </View>
-            <Text style={[styles.slideTitle, { marginBottom: space.xs }]}>What brings you here?</Text>
-            <Text style={[styles.slideBody, { marginBottom: space.xl }]}>We'll set things up to match.{'\n'}You can change this any time.</Text>
-            <View style={styles.intentCards}>
-              {INTENT_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[styles.intentCard, intent === opt.key && styles.intentCardActive]}
-                  onPress={() => { haptic.selection(); setIntent(opt.key); }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: intent === opt.key }}
-                >
-                  <View style={[styles.intentEmoji, intent === opt.key && styles.intentEmojiActive]}>
-                    <Text style={{ fontSize: 20 }}>{opt.emoji}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.intentLabel}>{opt.label}</Text>
-                    <Text style={styles.intentDesc}>{opt.desc}</Text>
-                  </View>
-                  {intent === opt.key && (
-                    <View style={styles.intentCheck}>
-                      <Feather name="check" size={12} color={colors.bg} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.intentNote}>This is a soft preference, not a lock. All features always available.</Text>
-          </ScrollView>
-          <View style={[styles.footer, { paddingHorizontal: layout.screenPaddingH }]}>
-            <PrimaryButton label="Get started" onPress={() => { haptic.selection(); enterFeatures(); }} />
+        <StepScaffold
+          stageKey="intent"
+          onBack={() => setStage('hero')}
+          title="What brings you here?"
+          subtitle={"We'll set things up to match. You can change this any time."}
+          art={
+            <LinearGradient colors={[colors.accent, colors.accentDeep]} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={styles.intentRupee}>₹</Text>
+            </LinearGradient>
+          }
+          footer={<StepFooter primaryLabel="Get started" onPrimary={() => { haptic.selection(); enterFeatures(); }} />}
+        >
+          <View style={styles.intentCards}>
+            {INTENT_OPTIONS.map(opt => (
+              <OptionRow
+                key={opt.key}
+                label={opt.label}
+                description={opt.desc}
+                selected={intent === opt.key}
+                onPress={() => { haptic.selection(); setIntent(opt.key); }}
+                leading={<Text style={styles.intentEmoji}>{opt.emoji}</Text>}
+              />
+            ))}
           </View>
-        </FadeIn>
+          <Text style={styles.intentNote}>This is a soft preference, not a lock. All features stay available.</Text>
+        </StepScaffold>
       )}
 
       {/* FEATURE CAROUSEL (swipeable, animated) */}
       {stage === 'features' && (
         <View style={{ flex: 1 }}>
+          {/* Same top row as every other step: back + one progress bar. The fill is
+              driven by the carousel's own Animated value so it tracks mid-swipe,
+              rather than snapping per page. No count — "3 of 4" on a browsable
+              carousel implies a required sequence it doesn't have. */}
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={backFromFeatures} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-              <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.progressTrack}>
-              <Animated.View style={[styles.progressFill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
-            </View>
+            <StepBack onPress={backFromFeatures} />
+            <StepProgress
+              step={page + 1}
+              total={SLIDES.length}
+              showCount={false}
+              animated={progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })}
+            />
             <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} accessibilityRole="button">
               <Text style={styles.skip}>Skip</Text>
             </TouchableOpacity>
@@ -266,292 +270,268 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </View>
       )}
 
-      {/* NAME ENTRY */}
+      {/* NAME ENTRY — the only step that needs the keyboard. */}
       {stage === 'name' && (
-        <FadeIn key="name" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={enterFeatures} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.nameScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={[bigDiscStyle, { backgroundColor: colors.accentMuted, borderColor: alpha(colors.accent, 27) }]}>
-              <Feather name="user" size={34} color={colors.accent} />
-            </View>
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>First, your name</Text>
-            <Text style={styles.slideBody}>It’s shown when you split bills with others.</Text>
-            <TextInput
-              style={styles.nameInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="done"
-              maxLength={30}
-              onSubmitEditing={() => name.trim() && (addFirstRef.current = true, setStage('income'))}
-              accessibilityLabel="Your name"
+        <StepScaffold
+          stageKey="name"
+          onBack={enterFeatures}
+          {...(stepPosition('name', intent) ?? {})}
+          title="First, your name"
+          subtitle="It's shown when you split bills with others. You can change any of this later in Settings."
+          art={<IconCircle icon="user" size={72} color={colors.accent} bg={colors.accentMuted} iconSize={32} />}
+          footer={
+            <StepFooter
+              primaryLabel="Continue"
+              onPrimary={() => { addFirstRef.current = true; setStage('income'); }}
+              loading={saving}
+              skipLabel="Skip — just explore"
+              onSkip={() => { addFirstRef.current = false; setStage('income'); }}
+              skipDisabled={saving}
             />
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => { addFirstRef.current = true; setStage('income'); }} disabled={!name.trim()} loading={saving} />
-            <TouchableOpacity onPress={() => { addFirstRef.current = false; setStage('income'); }} disabled={!name.trim() || saving} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={[styles.skipText, !name.trim() && { opacity: 0.4 }]}>Skip — just explore</Text>
-            </TouchableOpacity>
-          </View>
-        </FadeIn>
+          }
+        >
+          <TextInput
+            style={styles.nameInput}
+            value={name}
+            onChangeText={setName}
+            placeholder="Your name"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="done"
+            maxLength={30}
+            autoFocus
+            onSubmitEditing={() => { addFirstRef.current = true; setStage('income'); }}
+            accessibilityLabel="Your name"
+          />
+        </StepScaffold>
       )}
+
       {/* INCOME + PAY-DAY STEP */}
       {stage === 'income' && (
-        <FadeIn key="income" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="income" intent={intent} />
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>What's your monthly take-home?</Text>
-            <Text style={styles.slideBody}>A rough number is fine — it just sets up your income. You can change it any time.</Text>
-
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput
-                style={styles.amtInput}
-                value={incomeText}
-                onChangeText={(t) => setIncomeText(t.replace(/[^0-9]/g, ''))}
-                placeholder="45,000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="number-pad"
-                maxLength={9}
-                accessibilityLabel="Monthly take-home"
+        <StepScaffold
+          stageKey="income"
+          onBack={() => setStage('name')}
+          {...(stepPosition('income', intent) ?? {})}
+          title="What's your monthly take-home?"
+          subtitle="A rough number is fine — tap a preset or type your own. It only sets up your income."
+          footer={
+            <StepFooter
+              primaryLabel="Continue"
+              onPrimary={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(incomeNum) : ''); setStage('money'); }}
+              skipLabel="Skip"
+              onSkip={() => setStage('money')}
+            />
+          }
+        >
+          <StepAmountField
+            value={incomeText}
+            onChangeText={(t) => setIncomeText(t.replace(/[^0-9]/g, ''))}
+            placeholder="45,000"
+            accessibilityLabel="Monthly take-home"
+            maxLength={9}
+          />
+          <View style={styles.chipRow}>
+            {INCOME_PRESETS.map(pr => (
+              <Chip
+                key={pr.label}
+                label={pr.label}
+                selected={incomeNum === pr.value}
+                onPress={() => { haptic.selection(); setIncomeText(String(pr.value)); }}
               />
-            </View>
-            <View style={styles.budgetPresets}>
-              {INCOME_PRESETS.map(p => (
-                <TouchableOpacity key={p.label} style={[styles.budgetPresetChip, incomeNum === p.value && styles.budgetPresetChipActive]} accessibilityState={{ selected: incomeNum === p.value }} onPress={() => { haptic.selection(); setIncomeText(String(p.value)); }} accessibilityRole="button">
-                  <Text style={[styles.budgetPresetText, incomeNum === p.value && styles.budgetPresetTextActive]}>{p.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldHeading}>WHEN DO YOU GET PAID?</Text>
-            <Text style={styles.slideBodyTight}>We'll add it as a recurring income each month.</Text>
-            <View style={styles.dayWrap}>
-              {PAYDAY_OPTIONS.map(d => (
-                <TouchableOpacity key={d} style={[styles.dayChip, payday === d && styles.dayChipActive]} onPress={() => { haptic.selection(); setPayday(d); }} accessibilityRole="button" accessibilityState={{ selected: payday === d }}>
-                  <Text style={[styles.dayChipText, payday === d && styles.dayChipTextActive]}>{d}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.daySub}>Salary lands on the {ordinal(payday)} of each month.</Text>
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(incomeNum) : ''); setStage('money'); }} />
-            <TouchableOpacity onPress={() => setStage('money')} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
+            ))}
           </View>
-        </FadeIn>
+
+          <SectionHeader title="When do you get paid?" />
+          <Text style={styles.helpLine}>We'll add it as a recurring income each month.</Text>
+          <View style={styles.chipRowLeft}>
+            {PAYDAY_OPTIONS.map(d => (
+              <Chip
+                key={d}
+                label={String(d)}
+                selected={payday === d}
+                onPress={() => { haptic.selection(); setPayday(d); }}
+                accessibilityLabel={`Paid on the ${ordinal(d)}`}
+              />
+            ))}
+          </View>
+          <Text style={styles.helpLine}>Salary lands on the {ordinal(payday)} of each month.</Text>
+        </StepScaffold>
       )}
 
-      {/* MONEY STEP — what you have right now: cash, investments, credit */}
+      {/* MONEY STEP — one hero figure, then three quiet rows. Was four 40px
+          heroes stacked down the page (V2_PRODUCT_REVIEW §150-153). */}
       {stage === 'money' && (
-        <FadeIn key="money" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('income')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="money" intent={intent} />
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>What do you have right now?</Text>
-            <Text style={styles.slideBody}>Sets up your “Total Money”. Rough numbers are fine — you can edit anytime on the Plan screen.</Text>
+        <StepScaffold
+          stageKey="money"
+          onBack={() => setStage('income')}
+          {...(stepPosition('money', intent) ?? {})}
+          title="What do you have right now?"
+          subtitle="This sets up your Total Money. Rough numbers are fine — edit them any time on the Plan screen."
+          footer={
+            <StepFooter
+              primaryLabel="Continue"
+              onPrimary={() => setStage('budget')}
+              skipLabel="Skip"
+              onSkip={() => setStage('budget')}
+            />
+          }
+        >
+          <SectionHeader title="Cash available" first />
+          <StepAmountField
+            value={cashText}
+            onChangeText={(t) => setCashText(t.replace(/[^0-9]/g, ''))}
+            placeholder="50,000"
+            accessibilityLabel="Cash available"
+          />
 
-            <Text style={styles.fieldHeading}>CASH AVAILABLE</Text>
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput style={styles.amtInput} value={cashText} onChangeText={(t) => setCashText(t.replace(/[^0-9]/g, ''))} placeholder="50,000" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Cash available" />
-            </View>
-
-            <Text style={styles.fieldHeading}>INVESTMENTS</Text>
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput style={styles.amtInput} value={investText} onChangeText={(t) => setInvestText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Investments" />
-            </View>
-
-            <Text style={styles.fieldHeading}>CREDIT CARD LIMIT</Text>
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput style={styles.amtInput} value={creditLimitText} onChangeText={(t) => setCreditLimitText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Credit card limit" />
-            </View>
-
-            <Text style={styles.fieldHeading}>CREDIT ALREADY USED</Text>
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput style={styles.amtInput} value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={colors.textMuted} keyboardType="number-pad" maxLength={10} accessibilityLabel="Credit already used" />
-            </View>
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => setStage('budget')} />
-            <TouchableOpacity onPress={() => setStage('budget')} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-        </FadeIn>
+          <SectionHeader title="Anything else?" />
+          <Card clip>
+            <MoneyRow icon="trending-up" label="Investments" value={investText} onChangeText={(t) => setInvestText(t.replace(/[^0-9]/g, ''))} tint={colors.income} accessibilityLabel="Investments" />
+            <Divider indent="text" />
+            <MoneyRow icon="credit-card" label="Credit limit" value={creditLimitText} onChangeText={(t) => setCreditLimitText(t.replace(/[^0-9]/g, ''))} tint={colors.settle} accessibilityLabel="Credit card limit" />
+            <Divider indent="text" />
+            <MoneyRow icon="activity" label="Credit used" value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} tint={colors.expense} accessibilityLabel="Credit already used" />
+          </Card>
+          <Text style={styles.helpLine}>Leave any of these at zero if they don't apply.</Text>
+        </StepScaffold>
       )}
 
       {/* BUDGET STEP — whole amount, the user's own number (no % of income) */}
       {stage === 'budget' && (
-        <FadeIn key="budget" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('money')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="budget" intent={intent} />
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Set your monthly budget</Text>
-            <Text style={styles.slideBody}>How much do you want to cap your spending at each month? Enter whatever works for you.</Text>
-
-            <View style={styles.amtField}>
-              <Text style={styles.amtRupee}>₹</Text>
-              <TextInput
-                style={styles.amtInput}
-                value={budgetText}
-                onChangeText={(t) => setBudgetText(t.replace(/[^0-9]/g, ''))}
-                placeholder="30,000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="number-pad"
-                maxLength={9}
-                accessibilityLabel="Monthly budget"
+        <StepScaffold
+          stageKey="budget"
+          onBack={() => setStage('money')}
+          {...(stepPosition('budget', intent) ?? {})}
+          title="Set your monthly budget"
+          subtitle="What do you want to cap your spending at each month? Whatever works for you."
+          footer={
+            <StepFooter
+              primaryLabel="Continue"
+              onPrimary={() => setStage(afterBudget)}
+              skipLabel="Skip — I'll set it later"
+              onSkip={() => { setBudgetText(''); setStage(afterBudget); }}
+            />
+          }
+        >
+          <StepAmountField
+            value={budgetText}
+            onChangeText={(t) => setBudgetText(t.replace(/[^0-9]/g, ''))}
+            placeholder="30,000"
+            accessibilityLabel="Monthly budget"
+            maxLength={9}
+          />
+          <View style={styles.chipRow}>
+            {BUDGET_PRESETS.map(v => (
+              <Chip
+                key={v}
+                label={`₹${v >= 100000 ? '1L' : `${Math.round(v / 1000)}k`}`}
+                selected={budgetNum === v}
+                onPress={() => { haptic.selection(); setBudgetText(String(v)); }}
               />
-            </View>
-            <View style={styles.budgetPresets}>
-              {BUDGET_PRESETS.map(v => (
-                <TouchableOpacity key={v} style={[styles.budgetPresetChip, budgetNum === v && styles.budgetPresetChipActive]} accessibilityState={{ selected: budgetNum === v }} onPress={() => { haptic.selection(); setBudgetText(String(v)); }} accessibilityRole="button">
-                  <Text style={[styles.budgetPresetText, budgetNum === v && styles.budgetPresetTextActive]}>₹{v >= 100000 ? '1L' : `${Math.round(v / 1000)}k`}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {/* Both operands: with budget 0 this rendered "that's — of your take-home". */}
-            {incomeNum > 0 && budgetNum > 0 && (
-              <View style={styles.budgetSuggest}>
-                <View style={styles.budgetSuggestDot} />
-                <Text style={styles.budgetSuggestText}>
-                  Heads-up: that's{' '}
-                  <Text style={styles.budgetSuggestAmt}>{Math.round((budgetNum / incomeNum) * 100)}%</Text>
-                  {' '}of your take-home.
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label="Continue" onPress={() => setStage(afterBudget)} />
-            <TouchableOpacity onPress={() => { setBudgetText(''); setStage(afterBudget); }} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip — I'll set it later</Text>
-            </TouchableOpacity>
+            ))}
           </View>
-        </FadeIn>
+          {/* Both operands guarded: with budget 0 this rendered "that's — of your take-home". */}
+          {incomeNum > 0 && budgetNum > 0 && (
+            <Text style={styles.budgetPct}>
+              That's {Math.round((budgetNum / incomeNum) * 100)}% of your take-home.
+            </Text>
+          )}
+        </StepScaffold>
       )}
 
       {/* PEOPLE STEP — add contacts you split with */}
       {stage === 'people' && (
-        <FadeIn key="people" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage('budget')} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="people" intent={intent} />
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Anyone you split with?</Text>
-            <Text style={styles.slideBody}>Add flatmates, friends or family now — or skip and add them later.</Text>
+        <StepScaffold
+          stageKey="people"
+          onBack={() => setStage('budget')}
+          {...(stepPosition('people', intent) ?? {})}
+          title="Anyone you split with?"
+          subtitle="Add flatmates, friends or family now — or skip and add them later."
+          footer={
+            <StepFooter
+              primaryLabel={people.length > 0 ? `Continue with ${people.length}` : 'Continue'}
+              onPrimary={() => setStage('permissions')}
+              skipLabel="Skip"
+              onSkip={() => setStage('permissions')}
+            />
+          }
+        >
+          <View style={styles.personAddRow}>
+            <TextInput
+              style={styles.personInput}
+              value={personDraft}
+              onChangeText={setPersonDraft}
+              placeholder="Name"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="words"
+              maxLength={30}
+              returnKeyType="done"
+              onSubmitEditing={addPerson}
+              accessibilityLabel="Person name"
+            />
+            <TouchableOpacity style={[styles.personAddBtn, !personDraft.trim() && styles.personAddOff]} onPress={addPerson} disabled={!personDraft.trim()} accessibilityRole="button" accessibilityLabel="Add person">
+              <Feather name="plus" size={20} color={colors.bg} />
+            </TouchableOpacity>
+          </View>
 
-            <View style={styles.personAddRow}>
-              <TextInput
-                style={styles.personInput}
-                value={personDraft}
-                onChangeText={setPersonDraft}
-                placeholder="Name"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="words"
-                maxLength={30}
-                returnKeyType="done"
-                onSubmitEditing={addPerson}
-                accessibilityLabel="Person name"
-              />
-              <TouchableOpacity style={[styles.personAddBtn, !personDraft.trim() && { opacity: 0.4 }]} onPress={addPerson} disabled={!personDraft.trim()} accessibilityRole="button" accessibilityLabel="Add person">
-                <Feather name="plus" size={20} color={colors.bg} />
-              </TouchableOpacity>
-            </View>
-
-            {people.length > 0 && (
-              <View style={styles.peopleList}>
-                {people.map((p, i) => (
-                  <View key={`${p}-${i}`} style={[styles.personRow, i < people.length - 1 && styles.personRowBorder]}>
-                    <View style={[styles.personAvatar, { backgroundColor: GROUP_COLORS[i % GROUP_COLORS.length] }]}>
-                      <Text style={styles.personAvatarText}>{p.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <Text style={styles.personName} numberOfLines={1}>{p}</Text>
-                    <TouchableOpacity onPress={() => { haptic.selection(); setPeople(prev => prev.filter((_, j) => j !== i)); }} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${p}`}>
+          {people.length > 0 && (
+            <Card clip style={styles.peopleCard}>
+              {people.map((pn, i) => (
+                <View key={`${pn}-${i}`}>
+                  {i > 0 && <Divider indent="text" />}
+                  <View style={styles.personRow}>
+                    <IconCircle icon="user" size={layout.avatarSize} color={GROUP_COLORS[i % GROUP_COLORS.length]} />
+                    <Text style={styles.personName} numberOfLines={1}>{pn}</Text>
+                    <TouchableOpacity onPress={() => { haptic.selection(); setPeople(prev => prev.filter((_, j) => j !== i)); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${pn}`}>
                       <Feather name="x" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label={people.length > 0 ? `Continue with ${people.length}` : 'Continue'} onPress={() => setStage('permissions')} />
-            <TouchableOpacity onPress={() => setStage('permissions')} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-        </FadeIn>
+                </View>
+              ))}
+            </Card>
+          )}
+        </StepScaffold>
       )}
 
       {/* PERMISSIONS STEP — notifications + location priming */}
       {stage === 'permissions' && (
-        <FadeIn key="permissions" style={[styles.page, { paddingBottom: bottomPad }]}>
-          <TouchableOpacity onPress={() => setStage(beforePermissions)} hitSlop={10} style={styles.nameBack} accessibilityRole="button" accessibilityLabel="Back">
-            <Feather name="chevron-left" size={26} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nameScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <SetupDots step="permissions" intent={intent} />
-            <Text style={[styles.slideTitle, { marginTop: space.lg }]}>Stay on top of things</Text>
-            <Text style={styles.slideBody}>Both are optional and fully on-device. You can change them in Settings any time.</Text>
-
-            <TouchableOpacity
-              style={[styles.permCard, notifPerm && styles.permCardOn]} accessibilityState={{ selected: notifPerm }}
+        <StepScaffold
+          stageKey="permissions"
+          onBack={() => setStage(beforePermissions)}
+          {...(stepPosition('permissions', intent) ?? {})}
+          title="Stay on top of things"
+          subtitle="Both are optional and fully on-device. You can change them in Settings any time."
+          footer={
+            <StepFooter
+              primaryLabel="Finish setup"
+              onPrimary={finalize}
+              loading={saving}
+              skipLabel="Not now"
+              onSkip={finalize}
+              skipDisabled={saving}
+            />
+          }
+        >
+          <View style={styles.permList}>
+            <OptionRow
+              label="Bill & renewal reminders"
+              description="A heads-up before a recurring charge, or before a budget runs out."
+              selected={notifPerm}
               onPress={allowNotifications}
-              disabled={notifPerm}
-              accessibilityRole="button"
-            >
-              <View style={[styles.permIcon, { backgroundColor: alpha(colors.accent, 13) }]}><Feather name="bell" size={18} color={colors.accent} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.permTitle}>Bill & renewal reminders</Text>
-                <Text style={styles.permBody}>A heads-up before a recurring charge or a budget runs out.</Text>
-              </View>
-              {notifPerm ? <Feather name="check-circle" size={20} color={colors.income} /> : <Text style={styles.permAllow}>Allow</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.permCard, locPerm && styles.permCardOn]} accessibilityState={{ selected: locPerm }}
+              accent={colors.income}
+              leading={<IconCircle icon="bell" size={layout.avatarSize} color={colors.accent} />}
+            />
+            <OptionRow
+              label="Tag where you spend"
+              description="Save each expense's location so you can see it on a map later."
+              selected={locPerm}
               onPress={allowLocation}
-              disabled={locPerm}
-              accessibilityRole="button"
-            >
-              <View style={[styles.permIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="map-pin" size={18} color={colors.settle} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.permTitle}>Tag where you spend</Text>
-                <Text style={styles.permBody}>Save each expense's location so you can see it on a map later.</Text>
-              </View>
-              {locPerm ? <Feather name="check-circle" size={20} color={colors.income} /> : <Text style={styles.permAllow}>Allow</Text>}
-            </TouchableOpacity>
-          </ScrollView>
-          <View style={styles.footer}>
-            <PrimaryButton label="Finish setup" onPress={finalize} loading={saving} />
-            <TouchableOpacity onPress={finalize} disabled={saving} hitSlop={8} accessibilityRole="button" style={styles.skipBtn}>
-              <Text style={styles.skipText}>Not now</Text>
-            </TouchableOpacity>
+              accent={colors.income}
+              leading={<IconCircle icon="map-pin" size={layout.avatarSize} color={colors.settle} />}
+            />
           </View>
-        </FadeIn>
+        </StepScaffold>
       )}
+
     </KeyboardAvoidingView>
   );
 }
@@ -560,17 +540,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: space.md,
     paddingHorizontal: layout.screenPaddingH,
-    height: 40,
+    height: layout.touchMin,
   },
   skip: { ...type.label, color: colors.textSecondary, width: 36, textAlign: 'right' },
-  progressTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.bgMuted, marginHorizontal: space.md, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 2, backgroundColor: colors.accent },
 
   page: { flex: 1, paddingHorizontal: layout.screenPaddingH },
 
+  // ⛔ HERO ONLY — do not touch. The FadeIn delays in the hero block are tuned to
+  // LogoAssembly's ~3.7s physics run; `footer` and `bottomPad` are shared with it,
+  // which is why the step components fork their own rather than reusing these.
   heroRoot: { flex: 1 },
   heroBottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: layout.screenPaddingH, gap: space.md },
   brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center' },
@@ -581,8 +562,6 @@ const styles = StyleSheet.create({
   slideTop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: layout.screenPaddingH },
   slideTitle: { ...type.title, color: colors.textPrimary, textAlign: 'center' },
   slideBody: { ...type.body, fontSize: 16, color: colors.textSecondary, marginTop: space.xs, marginBottom: space.xl, lineHeight: 23, textAlign: 'center', paddingHorizontal: space.md },
-
-  // Animated illustration
 
   pointsCard: {
     alignSelf: 'stretch',
@@ -602,87 +581,43 @@ const styles = StyleSheet.create({
 
   footer: { gap: space.md, paddingTop: space.md },
   footNote: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
-  skipBtn: { alignSelf: 'center', paddingVertical: space.xs },
-  skipText: { ...type.body, color: colors.textSecondary },
 
-  nameBack: { height: 40, justifyContent: 'center', marginLeft: -6 },
-  nameScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: space.xl },
+  // ---- step content (chrome itself lives in onboarding/Step*) ----------------
+  /** One shared help//caption line, replacing `slideBodyTight`, `daySub` and `intentNote`. */
+  helpLine: { ...type.caption, color: colors.textMuted, alignSelf: 'stretch', marginTop: space.sm, lineHeight: 16 },
+  chipRow: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', justifyContent: 'center' },
+  chipRowLeft: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
+
   nameInput: {
-    ...type.body,
-    fontSize: 20,
+    ...type.heading,
     color: colors.textPrimary,
     backgroundColor: colors.bgInput,
     borderRadius: radius.md,
-    paddingHorizontal: space.md, paddingVertical: space.md + 2,
+    paddingHorizontal: space.md, paddingVertical: space.md,
     borderWidth: 1, borderColor: colors.border,
-    marginTop: space.lg,
     alignSelf: 'stretch',
     textAlign: 'center',
   },
+
   // Intent stage
-  intentScroll: { flexGrow: 1, paddingVertical: space.xl, alignItems: 'stretch' },
-  intentLogoWrap: { alignItems: 'center', marginBottom: space.lg },
-  intentLogo: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  intentRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, fontWeight: '700', color: colors.bg, letterSpacing: -1 },
-  intentCards: { gap: space.sm, marginBottom: space.md },
-  intentCard: {
-    flexDirection: 'row', alignItems: 'center', gap: space.md,
-    backgroundColor: colors.bgCard, borderRadius: radius.lg,
-    borderWidth: 1.5, borderColor: colors.border,
-    padding: space.md,
-  },
-  intentCardActive: { backgroundColor: colors.bgMuted, borderColor: colors.accent },
-  intentEmoji: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  intentEmojiActive: { backgroundColor: colors.accent },
-  intentLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
-  intentDesc: { ...type.caption, color: colors.textSecondary },
-  intentCheck: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  intentNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingHorizontal: space.md, marginTop: space.sm },
+  intentLogo: { width: 64, height: 64, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  intentRupee: { ...type.amountLG, color: colors.bg },
+  intentCards: { gap: space.sm },
+  intentEmoji: { fontSize: 22 },
+  intentNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingHorizontal: space.md, marginTop: space.md },
 
   // Budget stage
-  budgetDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 28 },
-  budgetDot: { height: 6, borderRadius: 3, backgroundColor: colors.bgMuted },
-  budgetPresets: { flexDirection: 'row', gap: space.sm, marginBottom: 20, justifyContent: 'center', flexWrap: 'wrap' },
-  budgetPresetChip: { paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.bgCard, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
-  budgetPresetChipActive: { backgroundColor: colors.accent },
-  budgetPresetText: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  budgetPresetTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  budgetSuggest: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.incomeTint, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.incomeTintStrong, alignSelf: 'stretch' },
-  budgetSuggestDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.income, flexShrink: 0 },
-  budgetSuggestText: { fontSize: 12, color: colors.income, fontFamily: 'Inter_400Regular', flex: 1 },
-  budgetSuggestAmt: { fontFamily: 'SpaceMono_400Regular', fontWeight: '700' },
-
-  // Amount entry (income / budget)
-  amtField: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: 20, borderWidth: 1.5, borderColor: colors.accent, paddingVertical: 18, paddingHorizontal: 20, marginBottom: space.md },
-  amtRupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textSecondary, letterSpacing: -1 },
-  amtInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, letterSpacing: -2, padding: 0, minWidth: 80, textAlign: 'center' },
-  fieldHeading: { alignSelf: 'stretch', textAlign: 'left', fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginTop: space.lg, marginBottom: 6 },
-  slideBodyTight: { ...type.body, fontSize: 13, color: colors.textSecondary, alignSelf: 'stretch', textAlign: 'left', marginBottom: space.sm, lineHeight: 18 },
-
-  // Pay-day chips
-  dayWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignSelf: 'stretch' },
-  dayChip: { minWidth: 44, paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  dayChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dayChipText: { ...type.body, color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
-  dayChipTextActive: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  daySub: { ...type.caption, color: colors.textMuted, alignSelf: 'stretch', textAlign: 'left', marginTop: space.sm },
+  budgetPct: { ...type.label, color: colors.income, textAlign: 'center', marginTop: space.md },
 
   // People step
-  personAddRow: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch', marginTop: space.md },
+  personAddRow: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch' },
   personInput: { flex: 1, ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.md, borderWidth: 1, borderColor: colors.border },
   personAddBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  peopleList: { alignSelf: 'stretch', marginTop: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm + 2 },
-  personRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  personAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  personAvatarText: { fontFamily: 'Inter_600SemiBold', color: colors.onAccent, fontSize: 14 },
+  personAddOff: { opacity: 0.4 },
+  peopleCard: { marginTop: space.md },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.smd },
   personName: { ...type.body, color: colors.textPrimary, flex: 1 },
 
   // Permissions step
-  permCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.sm },
-  permCardOn: { borderColor: colors.income, backgroundColor: alpha(colors.income, 7) },
-  permIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  permTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
-  permBody: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
-  permAllow: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  permList: { gap: space.sm },
 });
