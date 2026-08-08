@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
+import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
 import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind } from '../../constants/enums';
 
 export type Txn = {
@@ -196,6 +197,24 @@ function localTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; }
 }
 
+/**
+ * Every tag in use, most-used first — the vocabulary for the tag picker.
+ *
+ * No `tag` table on purpose: tags are derived from the rows that use them, so there is
+ * nothing to keep in sync, no orphan cleanup, and renaming is just editing the rows.
+ * Mirrors `getCategoriesByFrequency`.
+ *
+ * The counting happens in JS because `tags` is a JSON array inside one TEXT column and
+ * SQLite can't split it without `json_each`; the SELECT is narrowed to non-null values so
+ * only rows that actually carry tags are read.
+ */
+export async function getTagsByFrequency(db: SQLite.SQLiteDatabase): Promise<string[]> {
+  const rows = await db.getAllAsync<{ tags: string | null }>(
+    `SELECT tags FROM txn WHERE tags IS NOT NULL AND is_deleted = 0`,
+  );
+  return rankTagsByFrequency(rows.map(r => r.tags));
+}
+
 export async function insertTxn(
   db: SQLite.SQLiteDatabase,
   input: InsertTxnInput,
@@ -229,7 +248,7 @@ export async function insertTxnRows(
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
-        input.tags ? JSON.stringify(input.tags) : null,
+        serializeTags(input.tags ?? []),
         input.recurFreq ?? null, input.recurInterval ?? null, input.recurEnd ?? null,
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
@@ -334,7 +353,7 @@ export async function insertItemizedTxn(
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
-        input.tags ? JSON.stringify(input.tags) : null,
+        serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null, now, now,
       ],
@@ -382,7 +401,7 @@ export async function updateItemizedTxn(
       `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, updated_at=? WHERE id=?`,
       [
         input.category, input.note ?? null, input.attachmentUri ?? null,
-        input.tags ? JSON.stringify(input.tags) : null,
+        serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         input.date, now, id,
       ],
@@ -546,6 +565,8 @@ export type UpdateTxnInput = {
   category: string;
   note?: string;
   payMethod?: PayMethod;
+  /** Full replacement set — omit to clear. Normalized by `serializeTags`. */
+  tags?: string[];
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
@@ -558,8 +579,8 @@ export async function updateTxn(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?, updated_at=? WHERE id=?`,
-      [input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, now, input.id],
+      `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
+      [input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, input.id],
     );
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);

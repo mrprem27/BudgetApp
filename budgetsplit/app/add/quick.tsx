@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { kindAccent } from '../../src/lib/kindTheme';
 import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL } from '../../src/constants/enums';
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
+import { getTagsByFrequency } from '../../src/db/queries/transactions';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { Screen } from '../../src/components/ui/Screen';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
@@ -37,6 +38,10 @@ export default function QuickAddScreen() {
   const [sheet, setSheet] = useState<QuickAddSheet>(null);
   const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null);
   const [showCatPicker, setShowCatPicker] = useState(false);
+  // The tag vocabulary is derived from existing transactions, so it's read once per mount
+  // rather than kept in the form hook — nothing here writes to it mid-edit.
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
 
   const { kind, flags, isEditing, isRecurEdit } = f;
   const accent = kindAccent(kind);
@@ -242,6 +247,8 @@ export default function QuickAddScreen() {
                 note={flags.smartCategory ? f.note : ''}
                 onOpenNote={() => open('note')}
                 onClearNote={() => f.setNote('')}
+                tags={f.tags}
+                onOpenTags={() => open('tags')}
                 attachmentUri={f.attachmentUri}
                 onOpenAttachment={pickReceipt}
                 onClearAttachment={() => f.setAttachmentUri(null)}
@@ -278,6 +285,7 @@ export default function QuickAddScreen() {
         transferSlot={transferSlot}
         onCloseTransferSlot={() => setTransferSlot(null)}
         accent={accent}
+        tagSuggestions={tagSuggestions}
       />
     </Screen>
   );

@@ -16,6 +16,7 @@ import { SectionHeader } from '../src/components/ui/SectionHeader';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getMe } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
+import { parseTags } from '../src/lib/tags';
 import { formatRupees, formatCompact } from '../src/lib/money';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL, SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type TxnKind, type SearchSource } from '../src/constants/enums';
@@ -78,7 +79,12 @@ export default function SearchScreen() {
       if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;
       if (!q) return true;
       const total = txnTotal(t);
-      const hay = `${t.category} ${t.note ?? ''} ${formatRupees(total)} ${Math.round(total / 100)}`.toLowerCase().replace(/,/g, '');
+      // Tags join the haystack rather than getting a filter row of their own. Someone
+      // looking for a trip types its name — they don't reach for a tag picker first —
+      // and a chip row here would be a fourth control on a screen whose entire point is
+      // the text field.
+      const tags = parseTags(t.tags).join(' ');
+      const hay = `${t.category} ${t.note ?? ''} ${tags} ${formatRupees(total)} ${Math.round(total / 100)}`.toLowerCase().replace(/,/g, '');
       return hay.includes(q);
     });
 

@@ -22,6 +22,8 @@ import type { Person } from '../../src/db/queries/persons';
 import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../src/hooks/useTxnDetail';
+import { Chip } from '../../src/components/ui/Chip';
+import { parseTags } from '../../src/lib/tags';
 import { alpha } from '../../src/theme';
 
 const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
@@ -83,6 +85,7 @@ export default function TxnDetailScreen() {
   const imageOf = (pid: string) => members.find(m => m.id === pid)?.image_uri ?? null;
   const vis = categoryVisual(txn.category);
   const total = txn.payments.reduce((s, p) => s + p.amount, 0);
+  const tags = parseTags(txn.tags);
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
   const isItemized = txn.entry_mode === 'itemized';
@@ -124,6 +127,16 @@ export default function TxnDetailScreen() {
             <Text style={styles.heroCat}>{txn.category}</Text>
           </View>
           {!!txn.note && <Text style={styles.heroNote}>{txn.note}</Text>}
+          {/* Read-only here: tags are edited on the Add/Edit screen, and this is a detail
+              view. Shown at all because storing something the user typed and never
+              displaying it back is the same as not storing it. */}
+          {tags.length > 0 && (
+            <View style={styles.tagRow}>
+              {tags.map(t => (
+                <Chip key={t} label={t} icon="hash" maxWidth={160} />
+              ))}
+            </View>
+          )}
           {/* Cash vs consumption: what you paid out of pocket vs your share. */}
           {!isPersonal && !isIncome && !isSettlement && (() => {
             const myPaid = txn.payments.find(p => p.personId === me?.id)?.amount ?? 0;
@@ -378,6 +391,7 @@ const styles = StyleSheet.create({
   kindText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   heroCat: { ...type.body, color: colors.textSecondary },
   heroNote: { ...type.body, color: colors.textPrimary, textAlign: 'center', marginTop: space.xs },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md, justifyContent: 'center' },
   heroCashLine: { ...type.caption, color: colors.textSecondary, textAlign: 'center', marginTop: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   divider: { borderBottomWidth: 1, borderBottomColor: colors.border },

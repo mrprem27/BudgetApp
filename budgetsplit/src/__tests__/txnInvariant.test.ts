@@ -33,6 +33,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     contains: 'attachment_uri',
     why: 'Collecting receipt files before deleting a group — a rule row can own an attachment too, and the file must still be unlinked.',
   },
+  {
+    file: 'transactions.ts',
+    contains: 'SELECT tags FROM txn',
+    why: 'Building the tag vocabulary (getTagsByFrequency). A tag applied to a recurring RULE is a tag genuinely in use, so it belongs in the picker — excluding templates would hide a tag the user typed and then never offer it back. This counts tag names, not money or dates, so the usual reason to exclude rules (double-counting a template as a transaction) does not apply.',
+  },
 ];
 
 /** SQL string literals (template or single-quoted) that select FROM txn. */

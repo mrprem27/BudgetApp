@@ -7,13 +7,14 @@ import { ScopeSheet } from './ScopeSheet';
 import { PayMethodSheet } from './PayMethodSheet';
 import { RecurringSheet } from './RecurringSheet';
 import { NoteSheet } from './NoteSheet';
+import { TagSheet } from './TagSheet';
 import { DatePickerSheet } from '../../ui/DatePickerSheet';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 
 /** Which overlay is open. One at a time — they're all modal. */
 export type QuickAddSheet =
   | 'split' | 'payers' | 'date' | 'endDate' | 'destination'
-  | 'payMethod' | 'recurring' | 'note' | 'scope' | null;
+  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | null;
 
 type Form = ReturnType<typeof useAddTxnForm>;
 
@@ -28,6 +29,8 @@ type Props = {
   onCloseTransferSlot: () => void;
   /** Kind colour, so a sheet's selected state matches the form behind it. */
   accent: string;
+  /** Tag vocabulary from existing transactions (`getTagsByFrequency`). */
+  tagSuggestions: string[];
 };
 
 /**
@@ -40,7 +43,7 @@ type Props = {
  * sheets open at once.
  */
 export function QuickAddSheets({
-  form: f, open, onOpen, onClose, transferSlot, onCloseTransferSlot, accent,
+  form: f, open, onOpen, onClose, transferSlot, onCloseTransferSlot, accent, tagSuggestions,
 }: Props) {
   return (
     <>
@@ -105,6 +108,15 @@ export function QuickAddSheets({
         onClose={onClose}
         value={f.note}
         onChangeText={f.setNote}
+      />
+
+      <TagSheet
+        visible={open === 'tags'}
+        onClose={onClose}
+        value={f.tags}
+        onChange={f.setTags}
+        suggestions={tagSuggestions}
+        accent={accent}
       />
 
       <RecurringSheet

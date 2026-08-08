@@ -14,6 +14,7 @@ import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } f
 import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categories';
 import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement } from '../db/queries/transactions';
 import { splitRecurringSeries } from '../db/queries/recurring';
+import { parseTags } from '../lib/tags';
 import { parseToPaise, formatRupees } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
@@ -90,6 +91,9 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
+  /** Free-form tags — the axis categories can't express (needs/wants, a trip name).
+   *  Orthogonal to category: one category, any number of tags. */
+  const [tags, setTags] = useState<string[]>([]);
   const [recurEnabled, setRecurEnabled] = useState(false);
   const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
   const [recurInterval, setRecurInterval] = useState('1');
@@ -173,6 +177,7 @@ export function useAddTxnForm(params: AddTxnParams) {
             setRecurFreq(txn.recur_freq);
             setRecurInterval(String(txn.recur_interval ?? 1));
             if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode(RecurEndMode.Date); }
+            setTags(parseTags(txn.tags));
           }
         }
         return;
@@ -307,7 +312,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         await updateTxn(db, {
           id: editId!, groupId: transferScope === TRANSFER_SCOPE_ALL ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: transferCategory,
-          note: transferFullNote, payMethod,
+          note: transferFullNote, payMethod, tags,
           payments: [{ personId: transferFromId, amount: total }],
           shares: [{ personId: transferToId, amount: total }],
         });
@@ -373,7 +378,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       if (isEditing) {
         await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind, date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod,
+          category: selectedCategory!.name, note: composedNote, payMethod, tags,
           payments: finalPayments, shares: finalShares,
         });
         haptic.success();
@@ -409,7 +414,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const commit = async () => {
         await insertTxn(db, {
           groupId: selectedGroupId, kind, entryMode: 'quick', date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod,
+          category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurFreq : undefined,
           recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
@@ -477,7 +482,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,
     recurEndMs, setRecurEndMs, recurEndMode, setRecurEndMode, recurCount, setRecurCount,
     // attachment / location
-    attachmentUri, setAttachmentUri, place, setPlace, locEnabled, capturingLoc, captureLocation,
+    attachmentUri, setAttachmentUri, tags, setTags, place, setPlace, locEnabled, capturingLoc, captureLocation,
     // currency / nudge / derived
     currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
     // actions

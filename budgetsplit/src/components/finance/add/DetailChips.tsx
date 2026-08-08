@@ -24,6 +24,10 @@ type Props = {
   onOpenAttachment: () => void;
   onClearAttachment: () => void;
 
+  /** Tags on this transaction. Orthogonal to category — one category, many tags. */
+  tags: string[];
+  onOpenTags: () => void;
+
   /** Omitted entirely when location is off in settings, or while editing. */
   place?: CapturedPlace | null;
   capturingLoc?: boolean;
@@ -77,6 +81,7 @@ export function DetailChips({
   accent,
   note, onOpenNote, onClearNote,
   attachmentUri, onOpenAttachment, onClearAttachment,
+  tags, onOpenTags,
   place, capturingLoc, onCaptureLocation, onClearLocation,
   payMethod, onOpenPayMethod, isIncome,
   onSplitByItems,
@@ -111,6 +116,18 @@ export function DetailChips({
           onPress={onOpenAttachment}
           onRemove={attachmentUri ? onClearAttachment : undefined}
           accessibilityLabel={attachmentUri ? 'Receipt attached' : 'Attach a receipt'}
+        />
+
+        {/* One chip whatever the count: listing each tag here would let a well-tagged
+            transaction push every other detail off the row. The count is the state. */}
+        <Chip
+          label={tags.length === 0 ? 'Tags' : tags.length === 1 ? tags[0] : `${tags.length} tags`}
+          icon="hash"
+          selected={tags.length > 0}
+          accent={accent}
+          maxWidth={180}
+          onPress={onOpenTags}
+          accessibilityLabel={tags.length === 0 ? 'Add tags' : `Tags: ${tags.join(', ')}`}
         />
 
         {onCaptureLocation && (
