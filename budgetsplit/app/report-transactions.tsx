@@ -1,25 +1,36 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { Feather } from '@expo/vector-icons';
+import { startOfMonth, endOfMonth, addMonths, subMonths, format } from 'date-fns';
 import { colors } from '../src/constants/colors';
 import { type } from '../src/constants/typography';
-import { space, radius, layout } from '../src/constants/layout';
+import { space, layout } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
-import { FilterBar, type ChipGroup } from '../src/components/ui/FilterBar';
+import { Card } from '../src/components/ui/Card';
+import { Chip } from '../src/components/ui/Chip';
+import { TabPills } from '../src/components/ui/TabPills';
+import { AmountText } from '../src/components/ui/AmountText';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { useScreenData } from '../src/hooks/useScreenData';
+import { useContentInset } from '../src/hooks/useContentInset';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories } from '../src/db/queries/categories';
 import { getMe } from '../src/db/queries/persons';
 import { getTransactionsInRange, type TxnWithSplits } from '../src/db/queries/transactions';
-import { foldUncategorized, OTHERS_LABEL } from '../src/lib/categoryFold';
-import { formatCompact } from '../src/lib/money';
+import { OTHERS_LABEL } from '../src/lib/categoryFold';
+import { haptic } from '../src/lib/haptics';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
+
+type SortKey = 'date' | 'amount';
+const TYPE_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'expense', label: 'Expenses' },
+  { key: 'income', label: 'Income' },
+];
 
 // Full transaction magnitude (all shares/payments), used for the "Largest" sort
 // and the header total — matches how Reports totals categories.
@@ -39,105 +50,114 @@ function parseMonth(m?: string): Date {
 }
 
 /**
- * Month-scoped transaction list — the drill-down opened from Reports when a
- * category is selected. Shows every transaction in the selected month, filterable
- * by category, type, group, and sort order.
+ * Month-scoped transaction list — the drill-down opened from a Reports pie segment.
+ *
+ * Rebuilt around three things it was missing:
+ *
+ * 1. **The total is the hero.** It used to be the tail of one 11px muted caption line
+ *    ("MARCH 2026 · 14 transactions · ₹12.4k"), i.e. the most important number on the
+ *    screen was also the smallest text on it (AGENTS §1).
+ * 2. **The month is navigable.** Reports has ‹ › arrows; this screen inherited a month
+ *    and couldn't move, so changing month meant going back and drilling in again.
+ * 3. **It respects where you came from.** Arriving from a pie segment the category is
+ *    already applied, yet the old screen rendered the whole category list as chips — so
+ *    its first offer was to undo the tap that opened it — *and* repeated the category as
+ *    the screen title. It's now one removable chip. Sort moved to the header, because
+ *    sorting isn't filtering and putting it in the filter bar made neither legible.
+ *
+ * That takes the chrome above the list from up to four chip rows down to at most two.
  */
 export default function ReportTransactionsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { month, category } = useLocalSearchParams<{ month?: string; category?: string }>();
-  const monthDate = useMemo(() => parseMonth(month), [month]);
-  const monthKey = format(monthDate, 'yyyy-MM');
+  const { month: monthParam, category } = useLocalSearchParams<{ month?: string; category?: string }>();
 
-  const [filters, setFilters] = useState<Record<string, string>>({
-    cat: category ?? 'all',
-    type: 'all',
-    group: 'all',
-    sort: 'date',
-  });
+  // Local, so the ‹ › arrows work; seeded from the deep link.
+  const [month, setMonth] = useState<Date>(() => parseMonth(monthParam));
+  const monthKey = format(month, 'yyyy-MM');
+  const isCurrentMonth = monthKey === format(new Date(), 'yyyy-MM');
+
+  const [cat, setCat] = useState<string>(category ?? 'all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [group, setGroup] = useState<string>('all');
+  const [sort, setSort] = useState<SortKey>('date');
+  const listPad = useContentInset();
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const grps = await getAllGroups(db);
     const me = await getMe(db);
-    const from = startOfMonth(monthDate).getTime();
-    const to = endOfMonth(monthDate).getTime();
+    const from = startOfMonth(month).getTime();
+    const to = endOfMonth(month).getTime();
     const [txns, knownCats] = await Promise.all([
       getTransactionsInRange(db, null, from, to),
       getCategories(db, 'expense'),
     ]);
+    // Only needed to resolve the folded "Others" filter — the category *list* is gone,
+    // because the pie chart you arrived from is the category picker. Offering every
+    // alternative here was what made the screen's first action "undo your last tap".
     const known = new Set(knownCats.map(c => c.name));
-
-    // Category chips = the folded expense categories present this month (so the
-    // picker mirrors what Reports shows, "Others" included).
-    const catAmount: Record<string, number> = {};
-    for (const t of txns) if (t.kind === 'expense') {
-      catAmount[t.category] = (catAmount[t.category] ?? 0) + txnAmount(t);
-    }
-    const catOptions = Object.entries(foldUncategorized(catAmount, known))
-      .sort((a, b) => b[1] - a[1])
-      .map(([name]) => name);
 
     return {
       myId: me?.id ?? '',
       personalId: grps.find(g => g.is_personal === 1)?.id ?? null,
-      groups: grps,
       groupNames: Object.fromEntries(grps.map(g => [g.id, g.name])) as Record<string, string>,
       known,
       txns,
-      catOptions,
     };
   }, [monthKey]);
 
   const myId = data?.myId ?? '';
   const personalId = data?.personalId ?? null;
-  const groups = data?.groups ?? [];
   const groupNames = data?.groupNames ?? {};
   const known = data?.known ?? new Set<string>();
   const txns = data?.txns ?? [];
-  const catOptions = data?.catOptions ?? [];
 
   // A folded-name filter ("Others") matches any category not in the catalog.
-  const matchesCat = (t: TxnWithSplits, cat: string): boolean => {
-    if (cat === 'all') return true;
-    if (cat === OTHERS_LABEL && !known.has(OTHERS_LABEL)) return !known.has(t.category);
-    return t.category === cat;
+  const matchesCat = (t: TxnWithSplits, c: string): boolean => {
+    if (c === 'all') return true;
+    if (c === OTHERS_LABEL && !known.has(OTHERS_LABEL)) return !known.has(t.category);
+    return t.category === c;
   };
 
   const { rows, total } = useMemo(() => {
     const filtered = txns.filter(t => {
       if (t.kind !== 'expense' && t.kind !== 'income') return false;
-      if (filters.type !== 'all' && t.kind !== filters.type) return false;
-      if (filters.group !== 'all' && t.group_id !== filters.group) return false;
-      if (!matchesCat(t, filters.cat)) return false;
+      if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
+      if (group !== 'all' && t.group_id !== group) return false;
+      if (!matchesCat(t, cat)) return false;
       return true;
     });
-    filtered.sort((a, b) => filters.sort === 'amount' ? txnAmount(b) - txnAmount(a) : b.date - a.date);
-    const tot = filtered.reduce((s, t) => s + txnAmount(t), 0);
-    return { rows: filtered, total: tot };
+    filtered.sort((a, b) => sort === 'amount' ? txnAmount(b) - txnAmount(a) : b.date - a.date);
+    return { rows: filtered, total: filtered.reduce((s, t) => s + txnAmount(t), 0) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, filters, known]);
+  }, [txns, cat, typeFilter, group, sort, known]);
 
-  const groupChips: ChipGroup | null = groups.length > 1 ? {
-    key: 'group',
-    options: [
-      { label: 'All', value: 'all' },
-      ...groups.map(g => ({ label: g.is_personal === 1 ? 'Personal' : g.name, value: g.id })),
-    ],
-  } : null;
+  const groupName = group === 'all' ? null : (group === personalId ? 'Personal' : groupNames[group]);
+  const hasActiveChips = cat !== 'all' || group !== 'all';
 
-  const filterGroups: ChipGroup[] = [
-    ...(catOptions.length > 1 ? [{ key: 'cat', options: [{ label: 'All', value: 'all' }, ...catOptions.map(c => ({ label: c, value: c }))] }] : []),
-    { key: 'type', options: [{ label: 'All', value: 'all' }, { label: 'Expenses', value: 'expense' }, { label: 'Income', value: 'income' }] },
-    ...(groupChips ? [groupChips] : []),
-    { key: 'sort', options: [{ label: 'Newest', value: 'date' }, { label: 'Largest', value: 'amount' }] },
-  ];
-
-  const headerTitle = filters.cat !== 'all' ? filters.cat : 'Transactions';
+  const shiftMonth = (delta: number) => {
+    haptic.selection();
+    setMonth(m => (delta > 0 ? addMonths(m, 1) : subMonths(m, 1)));
+  };
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title={headerTitle} onBack={() => router.back()} />
+      <ScreenHeader
+        title={cat !== 'all' ? cat : 'Transactions'}
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity
+            onPress={() => { haptic.selection(); setSort(s => (s === 'date' ? 'amount' : 'date')); }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={sort === 'date' ? 'Sorted by newest. Switch to largest' : 'Sorted by largest. Switch to newest'}
+          >
+            <View style={styles.sortBtn}>
+              <Feather name={sort === 'date' ? 'clock' : 'bar-chart-2'} size={14} color={colors.accent} />
+              <Text style={styles.sortText}>{sort === 'date' ? 'Newest' : 'Largest'}</Text>
+            </View>
+          </TouchableOpacity>
+        }
+      />
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
@@ -145,42 +165,72 @@ export default function ReportTransactionsScreen() {
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         data={rows}
         keyExtractor={(t) => t.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
+        style={styles.fill}
+        contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.head}>
-            <Text style={styles.eyebrow}>
-              {format(monthDate, 'MMMM yyyy')} · {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}
-              {total > 0 ? ` · ${formatCompact(total)}` : ''}
-            </Text>
-            <View style={styles.filters}>
-              <FilterBar groups={filterGroups} selected={filters} onSelect={(k, v) => setFilters(f => ({ ...f, [k]: v }))} />
+            <Card padded>
+              <View style={styles.monthNav}>
+                <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
+                  <Feather name="chevron-left" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={styles.monthLabel}>{format(month, 'MMMM yyyy')}</Text>
+                <TouchableOpacity
+                  onPress={() => !isCurrentMonth && shiftMonth(1)}
+                  disabled={isCurrentMonth}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next month"
+                  accessibilityState={{ disabled: isCurrentMonth }}
+                >
+                  <Feather name="chevron-right" size={20} color={isCurrentMonth ? colors.border : colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              {/* The hero: what these transactions add up to. */}
+              <AmountText paise={total} size="xl" forceColor={colors.textPrimary} />
+              <Text style={styles.countLine}>
+                {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}
+              </Text>
+            </Card>
+
+            {/* Whatever you arrived with, as removable chips — not a list of every
+                alternative, which would offer to undo the tap that opened this. */}
+            {hasActiveChips && (
+              <View style={styles.chipRow}>
+                {cat !== 'all' && (
+                  <Chip label={cat} icon="tag" selected onRemove={() => setCat('all')} maxWidth={180} />
+                )}
+                {groupName && (
+                  <Chip label={groupName} icon="users" selected onRemove={() => setGroup('all')} maxWidth={160} />
+                )}
+              </View>
+            )}
+
+            <View style={styles.typeRow}>
+              <TabPills tabs={TYPE_TABS} active={typeFilter} onChange={setTypeFilter} />
             </View>
           </View>
         }
-        renderItem={({ item, index }) => {
-          const isFirst = index === 0;
-          const isLast = index === rows.length - 1;
-          const isPersonalTxn = item.group_id === personalId;
-          return (
-            <TxnCell first={isFirst} last={isLast}>
-              <TransactionRow
-                txn={item}
-                myId={myId}
-                showDate
-                groupName={isPersonalTxn ? 'Personal' : groupNames[item.group_id]}
-                onPress={() => router.push(`/txn/${item.id}`)}
-              />
-            </TxnCell>
-          );
-        }}
+        renderItem={({ item, index }) => (
+          <TxnCell first={index === 0} last={index === rows.length - 1}>
+            <TransactionRow
+              txn={item}
+              myId={myId}
+              showDate
+              groupName={item.group_id === personalId ? 'Personal' : groupNames[item.group_id]}
+              onPress={() => router.push(`/txn/${item.id}`)}
+            />
+          </TxnCell>
+        )}
         ListEmptyComponent={
           loading ? null : (
             <EmptyState
               icon="inbox"
               title="No transactions"
-              body="No transactions match these filters this month."
+              body={hasActiveChips || typeFilter !== 'all'
+                ? 'Nothing matches these filters this month. Clear one, or try another month.'
+                : `Nothing recorded in ${format(month, 'MMMM')}.`}
               tint={colors.textSecondary}
             />
           )
@@ -193,10 +243,14 @@ export default function ReportTransactionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.lg },
-  head: { paddingTop: space.xs },
-  eyebrow: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm },
-  filters: { marginBottom: space.md },
-  // A single card for the month's rows: side borders always; first row rounds the
-  // top, last rounds the bottom; hairline dividers (indented past the icon) between.
+  fill: { flex: 1 },
+  scroll: { paddingHorizontal: layout.screenPaddingH },
+  head: { paddingTop: space.sm },
+  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
+  monthLabel: { ...type.bodySemi, color: colors.textPrimary },
+  countLine: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
+  typeRow: { marginTop: space.md, marginBottom: space.md },
+  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  sortText: { ...type.labelSemi, color: colors.accent },
 });

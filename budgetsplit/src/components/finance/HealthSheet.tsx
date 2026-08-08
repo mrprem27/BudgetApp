@@ -1,8 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type, space, layout } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
+import { Card } from '../ui/Card';
+import { Divider } from '../ui/Divider';
+import { SectionHeader } from '../ui/SectionHeader';
+import { AnimatedBar } from '../ui/anim/AnimatedBar';
 import { SampleNote } from './SampleNote';
 import { suggestImprovement, type HealthResult, type HealthInputs } from '../../lib/financialHealth';
 import { healthBandColor, healthBandLabel, sevColor } from './home/helpers';
@@ -24,15 +29,22 @@ const CIRC = 2 * Math.PI * R;
 
 /**
  * Money-health detail sheet: score ring + per-dimension bars + factor list.
- * Built entirely from the HealthResult already computed on Home.
+ * Built entirely from the `HealthResult` already computed on Home.
+ *
+ * The dimensions are **full-width rows**, not a three-across grid. They were three
+ * `flex: 1` cards each holding an 11px uppercase label with extra letter-spacing over a
+ * **3px** track — at that width the labels are cramped and a 3px bar is below the visual
+ * floor for a meter, which is what made this sheet feel tight. As rows the label sits
+ * beside its bar, the bar gets the full width, and the score reads at the end.
  */
 export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, periodLabel = 'this month' }: Props) {
   const improvement = result && inputs ? suggestImprovement(inputs, result) : null;
+
   return (
     <SheetModal visible={visible} onClose={onClose} title="Money Health">
       {result && (
         <>
-          {/* Score ring */}
+          {/* The one hero figure (AGENTS §1). */}
           <View style={styles.ringWrap}>
             <Svg width={120} height={120} viewBox="0 0 120 120">
               <Circle cx={60} cy={60} r={R} stroke={colors.bgElevated} strokeWidth={8} fill="none" />
@@ -54,56 +66,67 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
 
           <SampleNote txnCount={txnCount} periodLabel={periodLabel} style={styles.sampleNote} />
 
-          {/* Dimension bars */}
-          <View style={styles.dimRow}>
-            {result.dimensions.map(dim => {
+          <Card clip>
+            {result.dimensions.map((dim, i) => {
               const dc = sevColor(dim.severity);
               return (
-                <View key={dim.label} style={styles.dim}>
-                  <Text style={styles.dimLabel}>{dim.label}</Text>
-                  <View style={styles.dimTrack}>
-                    <View style={[styles.dimFill, { width: `${dim.pct}%`, backgroundColor: dc }]} />
+                <View key={dim.label}>
+                  {i > 0 && <Divider indent="none" />}
+                  <View style={styles.dimRow}>
+                    <Text style={styles.dimLabel} numberOfLines={1}>{dim.label}</Text>
+                    <View style={styles.dimBar}>
+                      <AnimatedBar
+                        progress={dim.pct / 100}
+                        color={dc}
+                        height={6}
+                        accessibilityLabel={`${dim.label}: ${dim.score} of ${dim.max}`}
+                      />
+                    </View>
+                    <Text style={[styles.dimScore, { color: dc }]}>
+                      {dim.score}<Text style={styles.dimMax}>/{dim.max}</Text>
+                    </Text>
                   </View>
-                  <Text style={[styles.dimScore, { color: dc }]}>
-                    {dim.score}<Text style={styles.dimMax}>/{dim.max}</Text>
-                  </Text>
                 </View>
               );
             })}
-          </View>
+          </Card>
 
-          {/* Factors */}
-          <Text style={styles.factorsLabel}>WHAT'S DRIVING THIS</Text>
-          <View style={styles.factorCard}>
+          <SectionHeader title="What's driving this" />
+          <Card clip>
             {result.factors.map((f, i) => {
               const fc = sevColor(f.severity);
               return (
-                <View key={f.label} style={[styles.factorRow, i < result.factors.length - 1 && styles.factorBorder]}>
-                  <View style={[styles.factorDot, { backgroundColor: fc }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.factorLabel}>{f.label}</Text>
-                    <Text style={styles.factorDetail}>{f.detail}</Text>
+                <View key={f.label}>
+                  {i > 0 && <Divider indent="none" />}
+                  <View style={styles.factorRow}>
+                    <View style={[styles.dot, { backgroundColor: fc }]} />
+                    <View style={styles.factorMid}>
+                      <Text style={styles.factorLabel}>{f.label}</Text>
+                      <Text style={styles.factorDetail}>{f.detail}</Text>
+                    </View>
+                    <Text style={[styles.factorPts, { color: fc }]}>{f.points}/{f.max}</Text>
                   </View>
-                  <Text style={[styles.factorPts, { color: fc }]}>{f.points}/{f.max}</Text>
                 </View>
               );
             })}
-          </View>
+          </Card>
 
           {/* Biggest improvement — projection recomputed from the real formula */}
           {improvement && (
-            <View style={styles.improveCard}>
-              <View style={styles.improveDot} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.improveTitle}>{improvement.title}</Text>
-                <Text style={styles.improveDetail}>{improvement.detail}</Text>
-                <View style={styles.improveScoreRow}>
-                  <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
-                  <Text style={styles.improveArrow}>→</Text>
-                  <Text style={styles.improveTo}>{improvement.toScore}</Text>
+            <Card padded style={styles.improveCard}>
+              <View style={styles.improveRow}>
+                <View style={[styles.dot, { backgroundColor: colors.income }]} />
+                <View style={styles.factorMid}>
+                  <Text style={styles.improveTitle}>{improvement.title}</Text>
+                  <Text style={styles.factorDetail}>{improvement.detail}</Text>
+                  <View style={styles.improveScoreRow}>
+                    <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
+                    <Feather name="arrow-right" size={14} color={colors.income} />
+                    <Text style={styles.improveTo}>{improvement.toScore}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            </Card>
           )}
         </>
       )}
@@ -111,35 +134,35 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
   );
 }
 
+const DOT = 8;
+
 const styles = StyleSheet.create({
   ringWrap: { width: 120, height: 120, alignSelf: 'center', marginBottom: space.lg },
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
-  ringScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, color: colors.textPrimary, letterSpacing: -1 },
-  ringBand: { ...type.caption, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
+  ringScore: { ...type.amountXL, color: colors.textPrimary },
+  ringBand: { ...type.captionSemi, marginTop: 2 },
   // Position only — SampleNote owns the type, colour and low-sample tone.
   sampleNote: { marginTop: -space.sm, marginBottom: space.lg },
-  dimRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
-  dim: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, padding: space.sm + 2, alignItems: 'center', borderWidth: 1, borderColor: colors.border, gap: space.sm },
-  dimLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: 'Inter_600SemiBold' },
-  dimTrack: { width: '100%', height: 3, backgroundColor: colors.bgElevated, borderRadius: 2 },
-  dimFill: { height: 3, borderRadius: 2 },
-  dimScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 14 },
-  dimMax: { ...type.caption, color: colors.textMuted, fontFamily: 'Inter_400Regular' },
-  factorsLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
-  factorCard: { backgroundColor: colors.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  factorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, padding: space.md },
-  factorBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  factorDot: { width: 7, height: 7, borderRadius: 4, marginTop: 5 },
-  factorLabel: { ...type.label, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
-  factorDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
-  factorPts: { fontFamily: 'SpaceMono_400Regular', fontSize: 11 },
 
-  improveCard: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, backgroundColor: colors.incomeTint, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.incomeTintStrong, padding: space.md },
-  improveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.income, marginTop: 5 },
-  improveTitle: { ...type.label, color: colors.income, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
-  improveDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
-  improveScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm },
-  improveFrom: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textMuted },
-  improveArrow: { color: colors.income, fontSize: 13 },
-  improveTo: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.income },
+  dimRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
+  dimLabel: { ...type.body, color: colors.textPrimary, width: 76 },
+  dimBar: { flex: 1 },
+  dimScore: { ...type.amountSM, minWidth: 46, textAlign: 'right' },
+  dimMax: { ...type.caption, color: colors.textMuted },
+
+  factorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.smd, padding: space.md },
+  factorMid: { flex: 1 },
+  factorLabel: { ...type.labelSemi, color: colors.textPrimary, marginBottom: 2 },
+  factorDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
+  factorPts: { ...type.amountSM },
+  // One dot shape. Both copies of this were 7×7 with `borderRadius: 4` — half of 7 is
+  // 3.5, so they rendered very slightly squared.
+  dot: { width: DOT, height: DOT, borderRadius: DOT / 2, marginTop: 5 },
+
+  improveCard: { marginTop: space.md, backgroundColor: colors.incomeTint, borderColor: colors.incomeTintStrong },
+  improveRow: { flexDirection: 'row', gap: space.smd },
+  improveTitle: { ...type.labelSemi, color: colors.income, marginBottom: 3 },
+  improveScoreRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
+  improveFrom: { ...type.amountSM, color: colors.textMuted },
+  improveTo: { ...type.amountMD, color: colors.income },
 });
