@@ -214,9 +214,27 @@ export default function SavingsScreen() {
           />
         ))}
 
-        {/* Upcoming this month — recurring bills (design Screen 3) */}
+        {/* Recurring CHARGES due soon — one row per occurrence. Deliberately not the
+            same list as /plan/recurring, which shows one row per rule: a yearly rule
+            due in 11 months, or a paused/fully-skipped one, is a rule with no upcoming
+            charge. Titled by its window so it can't read as the inventory, with an
+            explicit link to the place that manages them. */}
         {upcoming.length > 0 && (
-          <ComingUpList items={upcoming} title="UPCOMING THIS MONTH" showIcon />
+          <ComingUpList
+            items={upcoming}
+            title="Due this month"
+            showIcon
+            headerRight={
+              <TouchableOpacity
+                onPress={() => router.push('/plan/recurring' as Href)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Manage recurring"
+              >
+                <Text style={styles.seeAll}>Manage</Text>
+              </TouchableOpacity>
+            }
+          />
         )}
 
         {/* Month-end spend forecast */}
@@ -339,6 +357,7 @@ const styles = StyleSheet.create({
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
+  seeAll: { ...type.labelSemi, color: colors.accent },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   headerIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },

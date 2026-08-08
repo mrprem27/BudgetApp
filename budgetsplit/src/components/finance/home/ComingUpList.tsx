@@ -1,19 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from '../../tokens';
-import { formatCompact } from '../../../lib/money';
+import { View } from 'react-native';
+import { Card } from '../../ui/Card';
+import { ListRow } from '../../ui/ListRow';
+import { Divider } from '../../ui/Divider';
+import { IconCircle } from '../../ui/IconCircle';
+import { AmountText } from '../../ui/AmountText';
+import { SectionHeader } from '../../ui/SectionHeader';
+import { colors, layout } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { asFeather } from '../../../constants/palette';
 import type { UpcomingItem } from '../../../lib/upcoming';
-import { alpha } from '../../../theme';
 
 type Props = {
   items: UpcomingItem[];
   /** Section label — defaults to the Home wording. */
   title?: string;
-  /** Show a category icon square per row (Plan's "Upcoming this month"). */
+  /** Show a category icon per row (Plan's due-this-month list). */
   showIcon?: boolean;
+  /** Right-hand slot on the header — Plan passes a link into the manager. */
+  headerRight?: React.ReactNode;
 };
 
 function whenLabel(daysUntil: number): string {
@@ -22,41 +27,50 @@ function whenLabel(daysUntil: number): string {
   return `in ${daysUntil} days`;
 }
 
-/** Next few recurring bills. Caller hides the section when the list is empty. */
-export function ComingUpList({ items, title = 'COMING UP', showIcon = false }: Props) {
+/**
+ * The next few recurring **charges** — one row per upcoming occurrence.
+ *
+ * Deliberately not the same list as `/plan/recurring`, which shows one row per
+ * *rule*. The two genuinely differ at the edges: a yearly rule due in eleven months
+ * is a rule with no upcoming charge, a paused or fully-skipped rule likewise, and one
+ * rule can produce several rows here but only ever one there. What made them read as
+ * duplicates was that both were labelled with generic "recurring" wording and neither
+ * said which question it answered — so the caller supplies a title naming the *window*
+ * ("Due this month"), and this list never claims to be the inventory.
+ *
+ * Now built from `Card`/`ListRow`/`IconCircle` like every other list, so the preview
+ * and the manager read as one feature. It previously hand-rolled its own card, a 36px
+ * icon disc, and a bold `SpaceMono` amount in `colors.settle` that appeared nowhere
+ * else in the app.
+ */
+export function ComingUpList({ items, title = 'Coming up', showIcon = false, headerRight }: Props) {
   return (
     <View>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      <View style={styles.card}>
+      <SectionHeader title={title} right={headerRight} />
+      <Card clip>
         {items.map((it, i) => {
           const vis = showIcon ? categoryVisual(it.category) : null;
           return (
-            <View key={it.id} style={[styles.row, i < items.length - 1 && styles.rowBorder]}>
-              {vis && (
-                <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
-                  <Feather name={asFeather(vis.icon, 'calendar')} size={16} color={vis.color} />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
-                <Text style={styles.sub}>Recurring · {whenLabel(it.daysUntil)}</Text>
-              </View>
-              <Text style={styles.amount}>{formatCompact(it.amount)}</Text>
+            <View key={`${it.id}-${it.dateMs}`}>
+              {i > 0 && <Divider indent={showIcon ? 'text' : 'none'} />}
+              <ListRow
+                leading={vis ? (
+                  <IconCircle
+                    icon={asFeather(vis.icon, 'calendar')}
+                    size={layout.iconCircle}
+                    color={vis.color ?? colors.accent}
+                  />
+                ) : undefined}
+                title={it.name}
+                subtitle={`Recurring · ${whenLabel(it.daysUntil)}`}
+                value={<AmountText paise={it.amount} size="sm" forceColor={colors.textPrimary} rounded />}
+                chevron={false}
+                accessibilityLabel={`${it.name}, due ${whenLabel(it.daysUntil)}`}
+              />
             </View>
           );
         })}
-      </View>
+      </Card>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm + 4 },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
-  sub: { ...type.caption, color: colors.textMuted },
-  amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.settle, fontWeight: '700' },
-});
