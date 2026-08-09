@@ -99,6 +99,18 @@ describe('drainVoiceInbox — posting to the ledger', () => {
     expect(new Date(txnRows(db)[0].date).getDate()).toBe(10);
   });
 
+  it('accepts the yyyyMMddHHmmss filename the shortcut actually writes', async () => {
+    const { db } = seed();
+    // Shortcuts cannot emit an epoch, so this is the real-world filename shape.
+    fsState.entries.push({ name: '20260811233000.txt', content: '450 groceries yesterday' });
+
+    const out = await drainVoiceInbox(db as never);
+
+    expect(out.saved).toBe(1);
+    // Spoken 23:30 on the 11th, so "yesterday" is the 10th.
+    expect(new Date(txnRows(db)[0].date).getDate()).toBe(10);
+  });
+
   it('clears the inbox once everything has committed', async () => {
     const { db } = seed();
     capture('four fifty groceries');

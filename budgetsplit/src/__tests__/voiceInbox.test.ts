@@ -87,6 +87,36 @@ describe('captureTimeFromName — anchoring the parse to when you spoke', () => 
     expect(captureTimeFromName('99999999999999999.txt', NOW)).toBe(NOW);
   });
 
+  it('reads the yyyyMMddHHmmss form Shortcuts can actually produce', () => {
+    // Shortcuts' Format Date has NO Unix-timestamp option — only a Custom pattern — so this
+    // is the shape a hand-built shortcut emits. Parsed as local time, matching how Shortcuts
+    // formats it.
+    expect(captureTimeFromName('20260812153000.txt', 0)).toBe(NOW);
+    // Minute and day precision too.
+    expect(captureTimeFromName('202608121530.txt', 0)).toBe(NOW);
+    expect(captureTimeFromName('20260812.txt', 0)).toBe(new Date(2026, 7, 12).getTime());
+  });
+
+  it('does not confuse a calendar stamp with an epoch', () => {
+    // 14 digits as an epoch would be the year 2286+; 12 would be 2001. Neither is a capture,
+    // so length alone separates them with no overlap.
+    expect(captureTimeFromName('20260812153000.txt', 0)).toBe(NOW);
+    expect(captureTimeFromName(`${NOW}.txt`, 0)).toBe(NOW);   // 13-digit ms still works
+  });
+
+  it('rejects a calendar stamp that is not a real date', () => {
+    for (const bad of [
+      '20260230120000',   // 30 February
+      '20261332120000',   // month 13, day 32
+      '20260812250000',   // hour 25
+      '20260812156100',   // minute 61
+      '19990101120000',   // before the app could plausibly exist
+      '21010101120000',   // after
+    ]) {
+      expect(captureTimeFromName(`${bad}.txt`, NOW)).toBe(NOW);
+    }
+  });
+
   it('is the reason a late-night "yesterday" survives a morning drain', () => {
     // Spoken 23:30 on the 11th; drained 09:00 on the 12th.
     const spokeAt = new Date(2026, 7, 11, 23, 30).getTime();
@@ -101,6 +131,12 @@ describe('captureTimeFromName — anchoring the parse to when you spoke', () => 
     // What it would have been if we had anchored on the drain instead — a day out.
     const naive = parseVoice('450 groceries yesterday', { categories: CATS, nowMs: drainAt });
     expect(new Date(naive.dateMs!).getDate()).toBe(11);
+
+    // And the same guarantee via the calendar filename, which is what the shortcut writes.
+    const viaCalendar = parseVoice('450 groceries yesterday', {
+      categories: CATS, nowMs: captureTimeFromName('20260811233000.txt', drainAt),
+    });
+    expect(new Date(viaCalendar.dateMs!).getDate()).toBe(10);
   });
 });
 

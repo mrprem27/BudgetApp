@@ -99,8 +99,11 @@ export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
     body: 'Set the language to English (India) if it is offered. This is the step that listens; iOS does it on the device.',
   },
   {
-    title: 'Add "Current Date", then "Format Date" set to Unix Time Stamp',
-    body: 'This records when you spoke. Without it, saying "yesterday" late at night would be filed against the wrong day. Seconds or milliseconds both work.',
+    title: 'Add "Current Date", then "Format Date"',
+    body: 'Set Date Format to Custom and put  yyyyMMddHHmmss  in the Format String field. '
+      + 'This records when you spoke — without it, saying "yesterday" late at night would be '
+      + 'filed against the wrong day. (Shortcuts has no Unix-timestamp option; this is the '
+      + 'format it can produce, and the app understands it.)',
   },
   {
     title: `Add "Save File" into ${VOICE_FILES_LOCATION}`,
