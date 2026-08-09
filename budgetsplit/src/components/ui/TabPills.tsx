@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable, type LayoutChangeEvent } from 'react-native';
 import Animated, {
-  useAnimatedStyle, withSpring, interpolateColor, ReduceMotion,
+  useAnimatedStyle, useSharedValue, withSpring, interpolateColor, ReduceMotion,
 } from 'react-native-reanimated';
 import { colors, type, radius } from '../tokens';
 
@@ -61,6 +61,13 @@ const SPRING = { damping: 20, stiffness: 220, mass: 0.6, reduceMotion: ReduceMot
  * Labels cross-fade between muted and on-fill rather than switching at the tap, which would
  * otherwise recolour the text before the pill had travelled under it. Colour is animated by
  * Reanimated on the UI thread — not a layout property, so the §11 constraint is satisfied.
+ *
+ * ⚠️ **`withSpring` returns an animation, not a number.** It is only valid where a *style value*
+ * is expected, or assigned to a shared value. Passing one as an argument to `interpolateColor`
+ * type-checks, since both are `number` to TypeScript, and then crashes the app at runtime with
+ * `Invalid color value: "rgba(NaN, NaN, NaN, NaN)"` — the helper's return value is an object, so
+ * the interpolation reads NaN out of it. Both animations here therefore drive a shared value and
+ * the animated style only reads it.
  */
 export function TabPills({ tabs, active, onChange, activeColor = colors.accent, size = 'sm' }: Props) {
   const [trackW, setTrackW] = useState(0);
@@ -109,10 +116,12 @@ export function TabPills({ tabs, active, onChange, activeColor = colors.accent, 
 const Indicator = React.memo(function Indicator({ x, width, color, pad }: {
   x: number; width: number; color: string; pad: number;
 }) {
-  const style = useAnimatedStyle(
-    () => ({ transform: [{ translateX: withSpring(x, SPRING) }] }),
-    [x],
-  );
+  // The spring drives a shared value, and the style only *reads* it. See the note on
+  // `withSpring` in this file's header: an animation helper is not a number.
+  const tx = useSharedValue(x);
+  useEffect(() => { tx.value = withSpring(x, SPRING); }, [x, tx]);
+
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
 
   return (
     <Animated.View
@@ -126,12 +135,12 @@ const Indicator = React.memo(function Indicator({ x, width, color, pad }: {
 const PillLabel = React.memo(function PillLabel({ label, on, lg }: {
   label: string; on: boolean; lg: boolean;
 }) {
-  const style = useAnimatedStyle(
-    () => ({
-      color: interpolateColor(withSpring(on ? 1 : 0, SPRING), [0, 1], [colors.textSecondary, colors.bg]),
-    }),
-    [on],
-  );
+  const progress = useSharedValue(on ? 1 : 0);
+  useEffect(() => { progress.value = withSpring(on ? 1 : 0, SPRING); }, [on, progress]);
+
+  const style = useAnimatedStyle(() => ({
+    color: interpolateColor(progress.value, [0, 1], [colors.textSecondary, colors.bg]),
+  }));
 
   return (
     <Animated.Text style={[styles.label, lg && styles.labelLg, style]} numberOfLines={1}>

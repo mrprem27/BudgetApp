@@ -300,7 +300,23 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 Rules:
 - **Native driver, opacity and transform only.** `height` and `width` are not
   native-drivable — animating them interpolates on the JS thread. Animate `scaleX`
-  or use Reanimated's `layout` prop instead.
+  or use Reanimated's `layout` prop instead. A percentage `left`/`top` is a *layout*
+  property too — it re-runs layout every frame. Measure once with `onLayout` and
+  `translateX` instead.
+- ⛔ **`withSpring` / `withTiming` return an animation, not a number.** They are valid
+  **only** as a style property's value, or assigned to a shared value. Passing one as an
+  *argument* — `interpolateColor(withSpring(x), …)`, or `` `${withSpring(x)}deg` `` —
+  **typechecks** (both are `number` to TypeScript) and then crashes the app on the UI
+  thread: `Invalid color value: "rgba(NaN, NaN, NaN, NaN)"`, or a silent
+  `"[object Object]deg"`. Nothing in the toolchain catches it — not tsc, and not the test
+  suite, which never renders a component. **Drive a shared value and let the animated
+  style only read it:**
+  ```tsx
+  const p = useSharedValue(0);
+  useEffect(() => { p.value = withSpring(on ? 1 : 0, SPRING); }, [on]);
+  const style = useAnimatedStyle(() => ({ color: interpolateColor(p.value, [0, 1], [a, b]) }));
+  ```
+  This shipped twice in one change (`TabPills`, `TransferBody`) and crashed on launch.
 - **Reanimated is already a dependency** (required by `expo-router`, used by
   `DraggableList`/`DraggableSheet`, worklets plugin configured in `babel.config.js`).
   Use it where layout itself must animate. Do **not** use `LayoutAnimation` — it's a

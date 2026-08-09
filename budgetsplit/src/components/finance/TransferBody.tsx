@@ -261,14 +261,21 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 function DirectionArrow({ onSwap }: { onSwap: () => void }) {
   // Accumulates rather than toggling between 0 and 180, so consecutive taps keep turning the
   // same way instead of rocking back and forth.
-  const turns = useSharedValue(0);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${withSpring(turns.value * 180, ARROW_SPRING)}deg` }],
-  }));
+  //
+  // The spring is applied when the value CHANGES, not inside the style. `withSpring` returns an
+  // animation object, so interpolating one into a template string yields "[object Object]deg" —
+  // it type-checks (both are `number` to TypeScript) and fails at runtime. Same trap as
+  // `interpolateColor`; see the note in `ui/TabPills`.
+  const deg = useSharedValue(0);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${deg.value}deg` }] }));
 
   return (
     <PressableScale
-      onPress={() => { haptic.selection(); turns.value += 1; onSwap(); }}
+      onPress={() => {
+        haptic.selection();
+        deg.value = withSpring(deg.value + 180, ARROW_SPRING);
+        onSwap();
+      }}
       hitSlop={12}
       accessibilityLabel="Reverse the direction — swap who paid and who received"
       style={styles.arrowBtn}
