@@ -6,7 +6,8 @@ import {
   captureTimeFromName,
   routeVoiceDraft,
   reviewReason,
-  sortCaptureNames,
+  sortCaptures,
+  resolveCaptureTime,
   voiceFields,
   resolveVoiceCategory,
   VOICE_TITLE_MAX_WORDS,
@@ -214,33 +215,55 @@ describe('reviewReason', () => {
   });
 });
 
-describe('sortCaptureNames', () => {
-  it('orders captures oldest-first', () => {
-    expect(sortCaptureNames(['1754870400000.txt', '1754870000000.txt', '1754870900000.txt']))
-      .toEqual(['1754870000000.txt', '1754870400000.txt', '1754870900000.txt']);
+describe('resolveCaptureTime — the Shortcut needs no date actions', () => {
+  const CREATED = new Date(2026, 7, 12, 9, 15).getTime();
+  const DRAINED = new Date(2026, 7, 13, 8, 0).getTime();
+
+  it('uses the filesystem creation time when the name says nothing', () => {
+    // This is what makes a two-action shortcut possible: iOS records when the file was
+    // written, which IS when the dictation finished.
+    expect(resolveCaptureTime('Dictated Text.txt', CREATED, DRAINED)).toBe(CREATED);
   });
 
-  it('compares seconds- and millisecond-precision names on one scale', () => {
-    // A hand-built Shortcut can plausibly emit either. 1754870400s is one minute BEFORE
-    // 1754870460000ms, so real-time order must win over precision.
-    expect(sortCaptureNames(['1754870460000.txt', '1754870400.txt']))
-      .toEqual(['1754870400.txt', '1754870460000.txt']);
+  it('prefers a timestamped name when there is one', () => {
+    // An explicit statement of intent, and it survives a file being copied.
+    expect(resolveCaptureTime('20260811233000.txt', CREATED, DRAINED))
+      .toBe(new Date(2026, 7, 11, 23, 30).getTime());
   });
 
-  it('puts names it cannot read last, keeping the good ones in order', () => {
-    const out = sortCaptureNames(['junk.txt', '1754870400000.txt', 'other.txt', '1754870000000.txt']);
-    expect(out.slice(0, 2)).toEqual(['1754870000000.txt', '1754870400000.txt']);
-    expect(out.slice(2).sort()).toEqual(['junk.txt', 'other.txt']);
+  it('falls back to the drain time when neither source is usable', () => {
+    for (const ct of [null, undefined, 0, -1, NaN, 999, 99_999_999_999_999]) {
+      expect(resolveCaptureTime('Dictated Text.txt', ct as number | null, DRAINED)).toBe(DRAINED);
+    }
+  });
+});
+
+describe('sortCaptures — oldest first, by resolved time', () => {
+  const at = (name: string, capturedAt: number) => ({ name, capturedAt });
+
+  it('orders by time, not by name', () => {
+    // Shortcuts' own naming sorts lexicographically, which puts 10 before 2.
+    const out = sortCaptures([
+      at('Dictated Text 10.txt', 300),
+      at('Dictated Text 2.txt', 200),
+      at('Dictated Text.txt', 100),
+    ]);
+    expect(out.map(o => o.capturedAt)).toEqual([100, 200, 300]);
+  });
+
+  it('breaks an exact tie by name, so the order is never arbitrary', () => {
+    const out = sortCaptures([at('b.txt', 100), at('a.txt', 100)]);
+    expect(out.map(o => o.name)).toEqual(['a.txt', 'b.txt']);
   });
 
   it('does not mutate its input', () => {
-    const input = ['b.txt', 'a.txt'];
-    sortCaptureNames(input);
-    expect(input).toEqual(['b.txt', 'a.txt']);
+    const input = [at('b.txt', 200), at('a.txt', 100)];
+    sortCaptures(input);
+    expect(input.map(i => i.name)).toEqual(['b.txt', 'a.txt']);
   });
 
-  it('handles empty input', () => {
-    expect(sortCaptureNames([])).toEqual([]);
+  it('handles an empty list', () => {
+    expect(sortCaptures([])).toEqual([]);
   });
 });
 

@@ -3,10 +3,12 @@ import type { VoiceDraft } from './voiceParse';
 /**
  * Where a phrase captured *outside* the app should end up.
  *
- * The capture path is an iOS Shortcut: you dictate to Siri, the Shortcut drops the phrase
- * into `Documents/voice-inbox/<epoch-ms>.txt`, and the app turns it into something real the
- * next time it opens or comes to the foreground (`voiceDrain.ts`). The app never launches to
- * record it.
+ * The capture path is an iOS Shortcut: you dictate to Siri, the Shortcut drops the phrase into
+ * a file in `Documents/voice-inbox/`, and the app turns it into something real the next time it
+ * opens or comes to the foreground (`voiceDrain.ts`). The app never launches to record it.
+ *
+ * The filename does not have to carry anything — `resolveCaptureTime` prefers a timestamp in it
+ * but falls back to the file's own creation time, which is why the Shortcut is two actions.
  *
  * This module is the decision layer, and it is pure: no filesystem, no database, no React.
  * Everything about *whether a spoken phrase is trustworthy enough to post to the ledger*
@@ -53,8 +55,9 @@ export function isGroupish(phrase: string): boolean {
  * back. The Shortcut names each file with the capture timestamp precisely so the parse can
  * be anchored to when you spoke.
  *
- * A name that isn't a timestamp falls back rather than throwing: a mis-named capture should
- * still become a transaction, just with a less precise date.
+ * Naming the file this way is **optional** — `resolveCaptureTime` falls back to the file's own
+ * creation time — so a name that isn't a timestamp returns the caller's fallback rather than
+ * throwing. A mis-named capture should still become a transaction.
  */
 export function captureTimeFromName(fileName: string, fallbackMs: number): number {
   const stem = fileName.replace(/\.[a-z0-9]+$/i, '');
@@ -73,6 +76,40 @@ export function captureTimeFromName(fileName: string, fallbackMs: number): numbe
   // where 10-digit epochs begin; the upper bound is ~2286.
   if (ms < 1_000_000_000_000 || ms > 9_999_999_999_999) return fallbackMs;
   return ms;
+}
+
+/**
+ * When the phrase was spoken, from whichever source actually knows.
+ *
+ * **The filesystem's own creation time is the primary answer**, because the Shortcut writes the
+ * file at the moment you finish dictating — so iOS records the capture time for free, and the
+ * shortcut needs no date actions at all. That removes two of its four steps and the entire
+ * class of "Shortcuts couldn't convert from Text to Date" errors that comes with wiring
+ * `Format Date` by hand.
+ *
+ * A timestamped filename still wins when there is one: it is an explicit statement of intent,
+ * it keeps shortcuts built the older way working unchanged, and it survives a file being copied
+ * (which resets `creationTime`).
+ *
+ * `creationTime` is `number | null` — not every platform reports it — which is why the drain
+ * time remains the floor.
+ */
+export function resolveCaptureTime(
+  fileName: string,
+  creationTimeMs: number | null | undefined,
+  fallbackMs: number,
+): number {
+  // A sentinel the filename parser can't return, so "no timestamp in the name" is detectable.
+  const NONE = -1;
+  const fromName = captureTimeFromName(fileName, NONE);
+  if (fromName !== NONE) return fromName;
+
+  if (typeof creationTimeMs === 'number' && Number.isFinite(creationTimeMs)
+      && creationTimeMs >= 1_000_000_000_000 && creationTimeMs <= 9_999_999_999_999) {
+    return creationTimeMs;
+  }
+
+  return fallbackMs;
 }
 
 /**
@@ -259,19 +296,16 @@ export function resolveVoiceCategory(
 }
 
 /**
- * Sort capture filenames oldest-first, so the ledger receives them in the order they were
- * spoken.
+ * Oldest capture first, by resolved time rather than by name.
  *
- * Sorts on the *parsed instant* rather than the raw name for two reasons that a plain
- * `names.sort()` gets wrong: a seconds-precision name and a millisecond-precision name must
- * be compared on one scale, and a name that carries no timestamp has to sort **last** rather
- * than wherever its letters happen to fall — otherwise one mis-named capture jumps the queue
- * and its "yesterday" resolves against the wrong neighbour's drain.
+ * Sorting on the filename alone stopped being enough once the timestamp became optional: left
+ * to itself, Shortcuts names files things like `Dictated Text.txt` and `Dictated Text 2.txt`,
+ * which sort lexicographically — and `Dictated Text 10.txt` would come before
+ * `Dictated Text 2.txt`. Order matters because two spends said seconds apart must be filed in
+ * the order they happened, so this sorts on the time each capture actually resolved to and
+ * uses the name only to break exact ties.
  */
-export function sortCaptureNames(names: string[]): string[] {
-  return [...names].sort((a, b) => {
-    const ta = captureTimeFromName(a, Number.MAX_SAFE_INTEGER);
-    const tb = captureTimeFromName(b, Number.MAX_SAFE_INTEGER);
-    return ta === tb ? a.localeCompare(b) : ta - tb;
-  });
+export function sortCaptures<T extends { name: string; capturedAt: number }>(items: T[]): T[] {
+  return [...items].sort((a, b) =>
+    a.capturedAt === b.capturedAt ? a.name.localeCompare(b.name) : a.capturedAt - b.capturedAt);
 }

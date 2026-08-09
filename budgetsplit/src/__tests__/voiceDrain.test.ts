@@ -99,6 +99,37 @@ describe('drainVoiceInbox — posting to the ledger', () => {
     expect(new Date(txnRows(db)[0].date).getDate()).toBe(10);
   });
 
+  it('reads the capture time off the file when the name carries none', async () => {
+    const { db } = seed();
+    // The two-action shortcut: Shortcuts names the file, iOS records when it was written.
+    fsState.entries.push({
+      name: 'Dictated Text.txt',
+      content: '450 groceries yesterday',
+      creationTime: new Date(2026, 7, 11, 23, 30).getTime(),
+    });
+
+    const out = await drainVoiceInbox(db as never);
+
+    expect(out.saved).toBe(1);
+    // Spoken 23:30 on the 11th, so "yesterday" is the 10th — not the day the drain ran.
+    expect(new Date(txnRows(db)[0].date).getDate()).toBe(10);
+  });
+
+  it('orders by when each phrase was spoken, not by filename', async () => {
+    const { db } = seed();
+    // Shortcuts' default naming sorts 10 before 2, so only the creation times can order these.
+    fsState.entries.push({ name: 'Dictated Text 10.txt', content: '300 transport', creationTime: SPOKE_AT + 2000 });
+    fsState.entries.push({ name: 'Dictated Text 2.txt', content: '200 food', creationTime: SPOKE_AT + 1000 });
+    fsState.entries.push({ name: 'Dictated Text.txt', content: '100 groceries', creationTime: SPOKE_AT });
+
+    await drainVoiceInbox(db as never);
+
+    const amounts = db.raw.prepare(
+      'SELECT p.amount FROM txn t JOIN txn_payment p ON p.txn_id = t.id ORDER BY t.date',
+    ).all() as any[];
+    expect(amounts.map(a => a.amount)).toEqual([10000, 20000, 30000]);
+  });
+
   it('accepts the yyyyMMddHHmmss filename the shortcut actually writes', async () => {
     const { db } = seed();
     // Shortcuts cannot emit an epoch, so this is the real-world filename shape.

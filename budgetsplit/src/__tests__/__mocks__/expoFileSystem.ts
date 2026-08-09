@@ -13,7 +13,7 @@
  * one should fail loudly rather than quietly return nothing.
  */
 
-type Entry = { name: string; content: string };
+type Entry = { name: string; content: string; creationTime?: number | null };
 
 export const state = {
   dirExists: true,
@@ -37,6 +37,15 @@ export class File {
 
   get size(): number {
     return state.entries.find(e => e.name === this.name)?.content.length ?? 0;
+  }
+
+  /**
+   * When the file was written. Real on device — the drain uses it as the capture time when the
+   * filename carries no timestamp, which is what lets the Shortcut skip its date actions.
+   * `null` is a valid answer from the real API, so the fake can return it too.
+   */
+  get creationTime(): number | null {
+    return state.entries.find(e => e.name === this.name)?.creationTime ?? null;
   }
 
   async text(): Promise<string> {

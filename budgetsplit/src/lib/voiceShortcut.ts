@@ -96,19 +96,14 @@ export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
   },
   {
     title: 'Add "Dictate Text"',
-    body: 'Set the language to English (India) if it is offered. This is the step that listens; iOS does it on the device.',
-  },
-  {
-    title: 'Add "Current Date", then "Format Date"',
-    body: 'Set Date Format to Custom and put  yyyyMMddHHmmss  in the Format String field. '
-      + 'This records when you spoke — without it, saying "yesterday" late at night would be '
-      + 'filed against the wrong day. (Shortcuts has no Unix-timestamp option; this is the '
-      + 'format it can produce, and the app understands it.)',
+    body: 'Set the language to English (India) if it is offered, and leave Stop Listening on After Pause. This is the step that listens; iOS does it on the device.',
   },
   {
     title: `Add "Save File" into ${VOICE_FILES_LOCATION}`,
-    body: 'Set the file to the Dictated Text, turn OFF "Ask Where to Save", and pick the BudgetSplit folder once. In the Subpath field put  '
-      + `${VOICE_INBOX_FOLDER}/  followed by the timestamp and .txt — the trailing slash is what makes it a folder rather than a filename.`,
+    body: 'Set the file to the Dictated Text, turn OFF "Ask Where to Save", and pick the '
+      + `BudgetSplit folder once. In the Subpath field put  ${VOICE_INBOX_FOLDER}/  — the `
+      + 'trailing slash is what makes it a folder rather than a filename. Leave "Overwrite If '
+      + 'File Exists" OFF so two spends said in a row cannot replace each other.',
   },
 ];
 

@@ -49,16 +49,27 @@ describe('what we tell the user matches what we do', () => {
 });
 
 describe('the setup instructions are complete', () => {
-  it('covers all four actions, in an order that works', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(4);
+  it('is three steps: name it, dictate, save', () => {
+    expect(VOICE_SHORTCUT_STEPS).toHaveLength(3);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
-    // The timestamp must be captured BEFORE the file is named with it — that ordering is
-    // what anchors "yesterday" to when the phrase was spoken.
-    const dateAt = titles.findIndex(t => t.includes('current date'));
+    const dictateAt = titles.findIndex(t => t.includes('dictate text'));
     const saveAt = titles.findIndex(t => t.includes('save file'));
-    expect(dateAt).toBeGreaterThanOrEqual(0);
-    expect(saveAt).toBeGreaterThan(dateAt);
-    expect(titles.some(t => t.includes('dictate text'))).toBe(true);
+    expect(dictateAt).toBeGreaterThanOrEqual(0);
+    // Nothing can be saved before it has been dictated.
+    expect(saveAt).toBeGreaterThan(dictateAt);
+  });
+
+  it('asks for no date actions at all', () => {
+    // `resolveCaptureTime` reads the file's own creation time, so the two date steps this
+    // used to require are gone — along with the "couldn't convert from Text to Date" error
+    // that wiring Format Date by hand produces.
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ').toLowerCase();
+    expect(all).not.toMatch(/format date|current date|unix|timestamp/);
+  });
+
+  it('warns against overwriting, so two quick spends cannot collide', () => {
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toMatch(/overwrite/i);
   });
 
   it('tells the user to turn off "Ask Where to Save"', () => {

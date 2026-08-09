@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { parseVoice } from './voiceParse';
 import { loadLearned } from './smartCategoryLearn';
 import {
-  VoiceDestination, routeVoiceDraft, captureTimeFromName, sortCaptureNames, reviewReason,
+  VoiceDestination, routeVoiceDraft, resolveCaptureTime, sortCaptures, reviewReason,
   voiceFields, resolveVoiceCategory,
 } from './voiceInbox';
 import { loadFlags } from './featureFlags';
@@ -19,9 +19,10 @@ import { getMe } from '../db/queries/persons';
 /**
  * Turn phrases captured while the app was closed into real rows.
  *
- * The capture side is an iOS Shortcut: *"Hey Siri, log expense"* → you dictate → the
- * Shortcut writes the phrase to `Documents/voice-inbox/<epoch-ms>.txt` and Siri confirms.
- * **The app never launches.** This function is the other half — it runs at launch and on
+ * The capture side is an iOS Shortcut — two actions: *"Hey Siri, log expense"* → you dictate →
+ * the Shortcut writes the phrase into `Documents/voice-inbox/` and Siri confirms.
+ * **The app never launches.** The filename is whatever Shortcuts chose; the capture time comes
+ * from the file itself (`resolveCaptureTime`). This function is the other half — it runs at launch and on
  * every foreground, reads whatever is waiting, and files it.
  *
  * All the judgement lives in `voiceInbox.ts`, which is pure and tested. This module is the
@@ -104,8 +105,12 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
 
   if (files.length === 0) return NOTHING;
 
-  const byName = new Map(files.map(f => [f.name, f]));
-  const ordered = sortCaptureNames([...byName.keys()]).slice(0, MAX_PER_DRAIN);
+  // Resolve each capture's time before ordering: with no timestamp in the name, the
+  // filesystem's creation time is what says when the phrase was spoken.
+  const drainedAt = Date.now();
+  const ordered = sortCaptures(
+    files.map(f => ({ name: f.name, file: f, capturedAt: resolveCaptureTime(f.name, f.creationTime, drainedAt) })),
+  ).slice(0, MAX_PER_DRAIN);
 
   // Loaded once for the whole batch: the category catalog, who "I" am, and the
   // merchant→category corrections the user has already made by hand. Voice inherits those
@@ -144,8 +149,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
 
   const out = { saved: 0, queued: 0, deferred: 0 };
 
-  for (const name of ordered) {
-    const file = byName.get(name)!;
+  for (const { name, file, capturedAt } of ordered) {
 
     // A capture we can't read is a capture we can't file. Drop it rather than retrying
     // forever — leaving it would block every later drain on the same unreadable byte.
@@ -161,8 +165,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
       continue;
     }
 
-    // Anchored to when the phrase was SPOKEN, not to now — see `captureTimeFromName`.
-    const capturedAt = captureTimeFromName(name, Date.now());
+    // Anchored to when the phrase was SPOKEN, not to now — see `resolveCaptureTime`.
     const draft = parseVoice(phrase, { categories, learned, nowMs: capturedAt });
     const dest = routeVoiceDraft(draft, phrase, groupNames);
 
