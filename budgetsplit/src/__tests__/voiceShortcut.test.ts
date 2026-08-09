@@ -12,7 +12,7 @@ import {
 import { CAPTURE_PREFIX } from '../lib/voiceInbox';
 import { ADD_KIND, AddKind } from '../constants/enums';
 import { GROUP_HINTS, isGroupish } from '../lib/voiceInbox';
-import { parseVoice } from '../lib/voiceParse';
+import { parseVoice, detectVoiceKind } from '../lib/voiceParse';
 
 const CATS = [{ name: 'Groceries' }, { name: 'Food' }, { name: 'Transport' }, { name: 'Other' }];
 const NOW = new Date(2026, 7, 12, 15, 30).getTime();
@@ -116,17 +116,12 @@ describe('the setup instructions are complete', () => {
     }
   });
 
-  it('asks a question the kind can actually answer', () => {
-    // "What did you spend?" answered with a salary is a question contradicting its own answer.
-    // The two expense commands share one prompt; income and transfer must not borrow it.
-    const byKind = (k: string) => VOICE_COMMANDS.filter(c => c.kind === k).map(c => c.prompt);
-    expect(new Set(byKind('expense')).size).toBe(1);
-    for (const p of [...byKind('income'), ...byKind('transfer')]) {
-      expect(p).not.toBe(VOICE_ASK_PROMPT);
-      expect(p.toLowerCase()).not.toMatch(/spend|spent/);
-    }
-    // A transfer needs a person as well as an amount, so its prompt has to ask for one.
-    expect(byKind('transfer')[0].toLowerCase()).toMatch(/who/);
+  it('asks a question that fits every kind', () => {
+    // One command means one prompt, so it cannot say "spend" — that would contradict its own
+    // answer when the answer is a salary. It must still cue the amount, which is the one field
+    // everything else depends on.
+    expect(VOICE_ASK_PROMPT.toLowerCase()).not.toMatch(/spend|spent/);
+    expect(VOICE_ASK_PROMPT.toLowerCase()).toMatch(/how much/);
   });
 
   it('consumes the variable Ask for Input actually produces', () => {
@@ -176,22 +171,24 @@ describe('every command opens the app with the phrase', () => {
 describe('the install links', () => {
   it('gives every command its own one-tap install and its own fallback steps', () => {
     // One button for two shortcuts left it ambiguous which one you were installing.
-    // Three, not four: the two expense commands collapsed into one. `routeVoiceDraft` already
-    // separates "yours alone" from "sounded shared" better than a second wake phrase did, so
-    // the split command was a word to remember in exchange for nothing.
-    expect(VOICE_COMMANDS).toHaveLength(3);
-    // One command per kind, so a name can never map to two behaviours.
-    expect(VOICE_COMMANDS.map(c => c.kind)).toHaveLength(new Set(VOICE_COMMANDS.map(c => c.kind)).size);
+    // One. Three per-kind commands existed because a mis-detected kind booked money the wrong
+    // way while capture was silent; the form opens now, so the guess is visible and one tap
+    // from being fixed — which is cheaper than remembering three wake phrases.
+    expect(VOICE_COMMANDS).toHaveLength(1);
     for (const c of VOICE_COMMANDS) {
       expect(c.steps.length).toBeGreaterThan(0);
       expect(c.name.length).toBeGreaterThan(3);
     }
   });
 
-  it('covers all three kinds', () => {
-    // A kind with no command is a kind you cannot speak.
-    expect(new Set(VOICE_COMMANDS.map(c => c.kind))).toEqual(new Set(ADD_KIND));
-    expect(VOICE_COMMANDS.find(c => c.kind === AddKind.Expense)!.steps).toBe(VOICE_SHORTCUT_STEPS);
+  it('reaches every kind through detection rather than through a command each', () => {
+    // The command is expense-shaped because that is the default and the majority; the other
+    // two are reached by what you say. `voiceParse.test.ts` pins the detection itself.
+    expect(VOICE_COMMANDS[0].kind).toBe(AddKind.Expense);
+    expect(VOICE_COMMANDS[0].steps).toBe(VOICE_SHORTCUT_STEPS);
+    expect(detectVoiceKind('fifty thousand salary')).toBe('income');
+    expect(detectVoiceKind('paid Riya five hundred', { people: [{ id: 'r', name: 'Riya' }] })).toBe('transfer');
+    expect(new Set([AddKind.Expense, 'income', 'transfer'])).toEqual(new Set(ADD_KIND));
   });
 
   it('keeps the names short enough to say every day', () => {

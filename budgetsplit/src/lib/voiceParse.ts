@@ -1,4 +1,7 @@
 import { parseToPaise } from './money';
+// The same list the router and the setup instructions use. `voiceInbox`'s import of this
+// module is type-only, so there is no runtime cycle — and one copy cannot drift from another.
+import { GROUP_HINTS } from './voiceInbox';
 import { matchCategory } from './smartCategory';
 import { learnedMatch, type LearnedMap } from './smartCategoryLearn';
 
@@ -432,6 +435,60 @@ export function parseVoice(
   const personId = opts.people ? matchPerson(tokens, opts.people) : null;
 
   return { transcript: transcript.trim(), amountPaise: paise, category, dateMs, note, personId };
+}
+
+/**
+ * Words that mean money came IN. Checked first, because they are unambiguous in a way the
+ * transfer verbs are not — "salary" is never a spend.
+ *
+ * `aayi`/`aaya`/`mila` are the Hinglish equivalents ("salary aayi", "refund mila").
+ */
+const INCOME_HINTS = new Set([
+  'salary', 'tankhwah', 'refund', 'refunded', 'bonus', 'cashback', 'credited', 'dividend',
+  'interest', 'freelance', 'payout', 'stipend', 'reimbursement', 'reimbursed', 'commission',
+  'aayi', 'aaya', 'mila', 'mile', 'incentive',
+]);
+
+/**
+ * Verbs that mean money moved between two named people.
+ *
+ * `owe`/`owed` are deliberately absent: they are in `GROUP_HINTS`, so they mean a *split* that
+ * needs shares chosen, not a settlement between two people.
+ */
+const SETTLE_VERBS = new Set([
+  'paid', 'pay', 'gave', 'give', 'sent', 'send', 'settle', 'settled', 'repaid', 'returned',
+  'got', 'received', 'diye', 'diya', 'bheja', 'bheje', 'lautaye', 'lauta',
+]);
+
+/**
+ * Which kind of transaction a spoken phrase is about.
+ *
+ * Exists because there is **one** voice command rather than three. Guessing the kind used to
+ * be unacceptable: capture was silent, and a mis-detected kind booked real money in the wrong
+ * direction with nothing on screen admitting it. Now the phrase opens the Add form and the
+ * kind switcher is right there, so a wrong guess costs one visible tap and nothing is written
+ * until Save.
+ *
+ * Deliberately ordered and conservative:
+ *  1. an income word — unambiguous, and income is never about another person;
+ *  2. a settle verb **and** a person we actually know **and** no split wording — all three,
+ *     because "paid 450 for groceries" has the verb but no person, and "dinner with Rohan"
+ *     has the person but is a shared cost;
+ *  3. otherwise an expense, which is what most phrases are.
+ */
+export function detectVoiceKind(
+  transcript: string,
+  opts: { people?: { id: string; name: string }[] } = {},
+): 'expense' | 'income' | 'transfer' {
+  const tokens = tokenize(transcript);
+  if (tokens.some(t => INCOME_HINTS.has(t))) return 'income';
+
+  const namedSomeone = opts.people ? matchPerson(tokens, opts.people) !== null : false;
+  const hasSettleVerb = tokens.some(t => SETTLE_VERBS.has(t));
+  const sharedWording = tokens.some(t => (GROUP_HINTS as readonly string[]).includes(t));
+  if (namedSomeone && hasSettleVerb && !sharedWording) return 'transfer';
+
+  return 'expense';
 }
 
 /**

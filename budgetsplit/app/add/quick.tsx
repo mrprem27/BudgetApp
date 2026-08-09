@@ -10,7 +10,7 @@ import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
-import { parseVoice } from '../../src/lib/voiceParse';
+import { parseVoice, detectVoiceKind } from '../../src/lib/voiceParse';
 import { isGroupish } from '../../src/lib/voiceInbox';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { Screen } from '../../src/components/ui/Screen';
@@ -46,24 +46,33 @@ export default function QuickAddScreen() {
   useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
 
   // A dictated phrase handed in by a deep link — `budgetsplit:///add/quick?q=four+fifty+groceries`.
-  // Applied ONCE, and only after the category catalog has loaded (the parser matches against
-  // it), so an external trigger lands on a filled form rather than an empty one. Nothing is
-  // saved: the user still reviews and taps Save, exactly as with the in-app sheet.
+  // This is how ALL voice entry arrives: one Siri shortcut, no kind in the URL, everything
+  // inferred here. Applied ONCE and only once the catalogs have loaded, so the trigger lands
+  // on a filled form rather than an empty one. Nothing is saved — the user still taps Save,
+  // which is exactly what makes guessing the kind affordable.
   //
-  // The Siri shortcut only sends someone here when the phrase sounded like a shared cost —
-  // a personal one is filed without the app ever opening. So when it *is* group-ish, the
-  // group list is the first thing that should be on screen: that is the decision the user
-  // came here to make. `learned` is passed so voice inherits the category corrections the
-  // user has already made by hand.
+  // A group-ish phrase opens the destination picker straight away, because who shares a cost
+  // is the one thing that cannot be inferred. `learned` is passed so voice inherits every
+  // category correction the user has already made by hand.
   const voiceApplied = useRef(false);
   useEffect(() => {
     if (voiceApplied.current || !params.q || f.categories.length === 0) return;
-    // `people` is what makes "paid Riya five hundred" preselect Riya. Without it `personId` is
-    // always null and `applyVoiceDraft`'s transfer branch never fires, so the Settle command
-    // would open with an empty recipient every time. People load asynchronously like the
-    // categories do, so a transfer waits for them rather than applying a draft that cannot
-    // carry a person — this runs once, and there is no second pass to fix it up.
-    if (f.kind === AddKind.Transfer && f.allPersons.length === 0) return;
+    // People must be loaded before anything else happens: they decide the *kind* ("paid Riya"
+    // is a transfer only because Riya is someone we know) and they carry the counterparty.
+    // Everything below would be wrong without them, and this effect only applies once.
+    if (f.allPersons.length === 0) return;
+
+    // One command now, so the kind is inferred rather than said. An explicit `?kind=` still
+    // wins — the route is a public entry point and a caller that states the kind means it.
+    const detected = params.kind ? f.kind : (detectVoiceKind(params.q, { people: f.allPersons }) as AddKind);
+    if (detected !== f.kind) {
+      // Switching kind swaps the category catalog *asynchronously*, so the draft cannot be
+      // applied in the same pass — it would match against the outgoing catalog. Bail without
+      // marking applied; the effect re-runs on the new kind and takes the branch below.
+      f.onSelectKind(detected);
+      return;
+    }
+
     voiceApplied.current = true;
     f.applyVoiceDraft(parseVoice(params.q, {
       categories: f.categories, learned: f.learned, nowMs: Date.now(), people: f.allPersons,

@@ -1,4 +1,4 @@
-import { parseVoice, wordsToNumber } from '../lib/voiceParse';
+import { parseVoice, wordsToNumber, detectVoiceKind } from '../lib/voiceParse';
 
 const CATS = [
   { name: 'Groceries' }, { name: 'Food' }, { name: 'Transport' },
@@ -406,5 +406,60 @@ describe('parseVoice — Hinglish', () => {
     // NOISE is applied only to the leftover text, never inside a numeric run.
     expect(h('do hazaar ka shopping').amountPaise).toBe(R(2000));
     expect(h('kirana ke liye paanch sau').amountPaise).toBe(R(500));
+  });
+});
+
+
+/**
+ * Kind detection, which is what lets there be ONE voice command instead of three.
+ *
+ * It is allowed to be wrong: the phrase opens the Add form with the kind switcher on screen,
+ * so a bad guess costs one tap and nothing is written until Save. What it must not do is be
+ * wrong in the *cheap* cases — the shapes below are the ones people actually say.
+ */
+describe('detectVoiceKind', () => {
+  const PEOPLE = [{ id: 'r', name: 'Riya Sharma' }, { id: 'k', name: 'Karan' }];
+  const d = (t: string) => detectVoiceKind(t, { people: PEOPLE });
+
+  it('reads money coming in', () => {
+    for (const p of ['fifty thousand salary', 'refund of 400', '2000 cashback',
+                     'bonus fifty thousand', 'salary aayi pachas hazaar']) {
+      expect(d(p)).toBe('income');
+    }
+  });
+
+  it('reads a settlement only when a verb AND a known person are both there', () => {
+    expect(d('paid Riya five hundred')).toBe('transfer');
+    expect(d('gave Karan two thousand')).toBe('transfer');
+    expect(d('got 2000 from Riya')).toBe('transfer');
+    expect(d('mummy ko do hazaar diye')).toBe('expense'); // "mummy" is not in the people list
+  });
+
+  it('does not turn an ordinary spend into a settlement', () => {
+    // "paid" is how half of all spending is described. Without a person it means nothing.
+    expect(d('paid 450 for groceries')).toBe('expense');
+    expect(d('paid the electricity bill 1500')).toBe('expense');
+  });
+
+  it('leaves a shared cost as an expense even when it names someone', () => {
+    // "dinner with Rohan" is a split to be divided, not money handed over — the Add screen
+    // opens its group picker for it. Treating it as a transfer would book the whole amount
+    // against one person.
+    expect(d('twelve hundred dinner with Riya')).toBe('expense');
+    expect(d('split 900 with Karan')).toBe('expense');
+    expect(d('Riya owes me 300')).toBe('expense');
+  });
+
+  it('falls back to expense, which is what most phrases are', () => {
+    for (const p of ['four fifty groceries', 'chai dus rupaye', '1200 rent yesterday', '']) {
+      expect(d(p)).toBe('expense');
+    }
+  });
+
+  it('needs no people list to still be useful', () => {
+    // Detection runs before contacts are known in some callers; income must still work, and a
+    // transfer must degrade to expense rather than being guessed from the verb alone.
+    expect(detectVoiceKind('fifty thousand salary')).toBe('income');
+    expect(detectVoiceKind('paid Riya five hundred')).toBe('expense');
   });
 });

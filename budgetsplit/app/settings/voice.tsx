@@ -73,9 +73,9 @@ export default function VoiceSetupScreen() {
           <IconCircle icon="mic" size={56} iconSize={22} color={colors.accent} bg={colors.accentMuted} />
           <Text style={styles.heroTitle}>{`“Hey Siri, ${VOICE_ONE_WAY_NAME}”`}</Text>
           <Text style={styles.heroBody}>
-            Three commands — expense, income, transfer. Siri asks, you answer, and BudgetSplit
-            opens with everything already filled in. Nothing to set up beyond tapping Add
-            Shortcut, and you always see what was heard before it saves.
+            One command for spending, money in and paying someone back. Siri asks, you answer,
+            and BudgetSplit opens with everything filled in — including which of the three it
+            worked out you meant. Nothing to set up beyond tapping Add Shortcut.
           </Text>
         </Card>
 
@@ -95,11 +95,9 @@ export default function VoiceSetupScreen() {
           ))}
         </View>
 
-        {/* One command per kind rather than one clever one: the kind is chosen by what you SAY,
-            so it is never inferred wrongly from your wording, and the name costs no extra words
-            because you have to say something anyway. Each owns its install button, its flow and
-            its fallback steps. */}
-        <SectionHeader title={`Set up the ${VOICE_COMMANDS.length} commands`} />
+        {/* One command, one install button. The kind is inferred rather than said, which is
+            only safe because the form opens and shows what was inferred. */}
+        <SectionHeader title="Set it up" />
         {VOICE_COMMANDS.map(c => {
           const accent = kindAccent(c.kind);
           return (

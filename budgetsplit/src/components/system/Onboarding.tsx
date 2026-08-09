@@ -558,7 +558,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             {flags.voiceEntry && (
               <OptionRow
                 label="Log spends by talking to Siri"
-                description={`Say "Hey Siri, ${VOICE_ONE_WAY_NAME}" and it's recorded without opening the app. Set up now or later in Settings.`}
+                description={`Say "Hey Siri, ${VOICE_ONE_WAY_NAME}", then how much and what for — it opens here with everything filled in. Set up now or later in Settings.`}
                 selected={false}
                 onPress={openVoiceSetup}
                 accent={colors.income}

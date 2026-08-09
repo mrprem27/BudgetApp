@@ -38,8 +38,6 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * old links no longer match anything documented here. Re-author, re-share, paste back.
  */
 export const VOICE_SHORTCUT_URL: string | null = null;
-export const VOICE_INCOME_URL: string | null = null;
-export const VOICE_SETTLE_URL: string | null = null;
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
@@ -73,16 +71,6 @@ export const SHORTCUTS_APP_URL = 'shortcuts://create-shortcut';
  */
 export const VOICE_DEEP_LINK = 'budgetsplit:///add/quick?q=';
 
-/**
- * The same link aimed at another kind. `useAddTxnForm` has always seeded its state from a
- * `kind` param, so income and settlement entry need no new screen.
- *
- * ⚠️ **`q` must stay last.** The phrase is inserted unencoded and a query value ends at the
- * next `&`, so `?kind=income&q=fifty thousand salary` parses, while the reverse order would
- * swallow `kind` into the phrase and open income as an expense.
- */
-export const VOICE_DEEP_LINK_INCOME = 'budgetsplit:///add/quick?kind=income&q=';
-export const VOICE_DEEP_LINK_SETTLE = 'budgetsplit:///add/quick?kind=transfer&q=';
 
 /** Worth saying out loud, given the app's "nothing leaves your device" promise. */
 export const VOICE_SHORTCUT_PRIVACY =
@@ -98,49 +86,29 @@ export const VOICE_SHORTCUT_PRIVACY =
  * expense" was answered with **"What's the text?"** — which asks about the *mechanism* rather
  * than the spend, and reads as a form field talking back at you.
  *
- * Deliberately not "How much, and on what?". Teaching the amount-then-category shape is the
- * job of {@link VOICE_PHRASE_EXAMPLES}; spending those syllables on every capture forever to
- * solve a first-run problem is the wrong trade.
- *
- * Per-kind, not global — "What did you spend?" contradicts its own answer when the answer is a
- * salary.
+ * It has to fit all three kinds now that there is one command, so it cannot say "spend" — that
+ * would contradict its own answer when the answer is a salary. It does cue the amount, which
+ * is the one field that has to be there for anything else to be worth parsing.
  */
-export const VOICE_ASK_PROMPT = 'What did you spend?';
+export const VOICE_ASK_PROMPT = 'How much, and what for?';
 
-export const VOICE_ASK_PROMPT_INCOME = 'What came in?';
-
-/**
- * Names both things it needs: a transfer is the only kind with a required field beyond the
- * amount, and `parseVoice` can only match a person the phrase actually named.
- */
-export const VOICE_ASK_PROMPT_SETTLE = 'Who did you pay, and how much?';
-
-/**
- * The variable `Ask for Input` produces. Has to be picked from Shortcuts' variable list, and
- * picking `Dictated Text` — the older build's name, still offered — silently yields an
- * empty file.
- */
 export const VOICE_ASK_OUTPUT = 'Provided Input';
 
 export type VoiceStep = { title: string; body: string };
 
 /**
- * One command per KIND, and nothing finer.
+ * One command. One phrase to remember, one shortcut to install, one link to re-share.
  *
- * The line is drawn where guessing stops being reliable. Whether other people are involved is
- * something the app can read off the phrase — "split", "with", "owe", a group name, a person's
- * name — and the Add screen acts on it, opening the group picker. Which *kind* it is cannot be
- * read that way: "salary" and "paid Riya" are ordinary words, and a mis-detected kind books
- * real money in the wrong direction. So the kind is the one thing you say, and the rest is
- * inferred.
+ * There were three — one per kind — because a mis-detected kind books real money in the wrong
+ * direction. That was true while capture was **silent**. It stopped being true when the phrase
+ * started opening the Add form: `detectVoiceKind` guesses, the kind switcher sits at the top of
+ * the screen showing what it guessed, and nothing is written until you tap Save. A wrong guess
+ * now costs one visible tap, which is cheaper than remembering three wake phrases.
  *
- * Bare nouns, deliberately. Anything longer is a phrase to remember, and these are said aloud
- * dozens of times a week. ⚠️ Single words are more collision-prone with Siri's own intents
- * than two-word phrases; if one starts getting misheard, the fix is to make that one longer.
+ * ⚠️ A single common word is more collision-prone with Siri's own intents than a two-word
+ * phrase. If "budget" starts getting misheard, making it longer is the fix.
  */
-export const VOICE_ONE_WAY_NAME = 'expense';
-export const VOICE_INCOME_NAME = 'income';
-export const VOICE_SETTLE_NAME = 'transfer';
+export const VOICE_ONE_WAY_NAME = 'budget';
 
 /** Who acts in a beat, so the Voice screen can show the exchange as turns rather than bullets. */
 export type FlowActor = 'you' | 'siri' | 'app';
@@ -206,14 +174,12 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
 }
 
 export const VOICE_SHORTCUT_STEPS = captureSteps(VOICE_ONE_WAY_NAME, VOICE_ASK_PROMPT, VOICE_DEEP_LINK);
-export const VOICE_INCOME_STEPS = captureSteps(VOICE_INCOME_NAME, VOICE_ASK_PROMPT_INCOME, VOICE_DEEP_LINK_INCOME);
-export const VOICE_SETTLE_STEPS = captureSteps(VOICE_SETTLE_NAME, VOICE_ASK_PROMPT_SETTLE, VOICE_DEEP_LINK_SETTLE);
 
 export const VOICE_COMMANDS: VoiceCommand[] = [
   {
     name: VOICE_ONE_WAY_NAME,
     summary: 'Opens Add, filled in',
-    detail: 'The everyday one. Say the amount and what it was for; the form opens with everything already entered and the group picker up if it sounded shared.',
+    detail: 'Spending, money in, or paying someone back — one phrase covers all three. BudgetSplit works out which from what you said, opens with everything entered, and you check it before saving.',
     kind: AddKind.Expense,
     icon: 'zap',
     prompt: VOICE_ASK_PROMPT,
@@ -223,51 +189,13 @@ export const VOICE_COMMANDS: VoiceCommand[] = [
       { actor: 'you', text: `“Hey Siri, ${VOICE_ONE_WAY_NAME}”` },
       { actor: 'siri', text: `“${VOICE_ASK_PROMPT}”` },
       { actor: 'you', text: '“four fifty groceries”' },
-      { actor: 'app', text: 'BudgetSplit opens on Add — ₹450, Groceries, today. Check it and Save.' },
-      { actor: 'app', text: 'Say “twelve hundred dinner with Rohan” and the group picker is already open, because that is the decision you came to make.' },
+      { actor: 'app', text: 'Add opens — ₹450, Groceries, today. Check it and Save.' },
+      { actor: 'app', text: '“fifty thousand salary” lands on Income instead; “paid Riya five hundred” lands on Transfer with Riya already on the other side.' },
+      { actor: 'you', text: 'Guessed wrong? The kind pills are at the top — one tap, before anything is saved.' },
     ],
-    why: 'Nothing to set up: the shortcut carries the phrase in a link, so there is no folder to pick and no way for it to fail silently. The cost is that the app comes to the front — you always see what was heard before anything is saved.',
+    why: 'One phrase rather than three, because the app can now afford to guess: the form opens showing what it decided, and nothing is written until you tap Save. Income is spotted from words like salary or refund; a transfer needs a settle verb AND someone you actually know AND no split wording, so “paid 450 for groceries” stays an expense and “dinner with Rohan” stays a shared one.',
     installUrl: VOICE_SHORTCUT_URL,
     steps: VOICE_SHORTCUT_STEPS,
-  },
-  {
-    name: VOICE_INCOME_NAME,
-    summary: 'Opens Add, on Income',
-    detail: 'Salary, a refund, freelance money in. Lands on the Income form against your personal group.',
-    kind: AddKind.Income,
-    icon: 'trending-up',
-    prompt: VOICE_ASK_PROMPT_INCOME,
-    opensApp: true,
-    example: 'fifty thousand salary',
-    flow: [
-      { actor: 'you', text: `“Hey Siri, ${VOICE_INCOME_NAME}”` },
-      { actor: 'siri', text: `“${VOICE_ASK_PROMPT_INCOME}”` },
-      { actor: 'you', text: '“fifty thousand salary”' },
-      { actor: 'app', text: 'Add opens on Income — ₹50,000, matched against your income categories, Personal.' },
-    ],
-    why: 'Income is matched against the income catalog, never the expense one, so a salary cannot land under Groceries. It is always personal, so there is no group to choose.',
-    installUrl: VOICE_INCOME_URL,
-    steps: VOICE_INCOME_STEPS,
-  },
-  {
-    name: VOICE_SETTLE_NAME,
-    summary: 'Opens Add, on Transfer',
-    detail: 'Money moved between you and someone else — paying a friend back, or being paid. Names the person if the phrase did.',
-    kind: AddKind.Transfer,
-    icon: 'repeat',
-    prompt: VOICE_ASK_PROMPT_SETTLE,
-    opensApp: true,
-    example: 'paid Riya five hundred',
-    flow: [
-      { actor: 'you', text: `“Hey Siri, ${VOICE_SETTLE_NAME}”` },
-      { actor: 'siri', text: `“${VOICE_ASK_PROMPT_SETTLE}”` },
-      { actor: 'you', text: '“paid Riya five hundred”' },
-      { actor: 'app', text: 'Add opens on Transfer — ₹500, with Riya on the other side. Tap the arrow if it went the other way.' },
-      { actor: 'app', text: 'Two people sharing a first name leaves the person blank rather than guessing — a settlement aimed at the wrong one moves a real balance twice.' },
-    ],
-    why: 'Direction is never inferred from the verb: “paid” and “got” are one mis-hearing apart. The form opens with both sides shown so reversing it is one tap before anything is saved.',
-    installUrl: VOICE_SETTLE_URL,
-    steps: VOICE_SETTLE_STEPS,
   },
 ];
 

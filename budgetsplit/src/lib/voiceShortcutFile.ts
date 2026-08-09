@@ -1,8 +1,5 @@
 import { AddKind } from '../constants/enums';
-import {
-  VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_DEEP_LINK_INCOME, VOICE_DEEP_LINK_SETTLE,
-  type VoiceCommand,
-} from './voiceShortcut';
+import { VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, type VoiceCommand } from './voiceShortcut';
 
 /**
  * Builds a `.shortcut` file for a {@link VoiceCommand}, as Shortcuts' own plist format.
@@ -139,17 +136,10 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
       UUID: askUuid,
     }),
     action('is.workflow.actions.url', {
-      WFURLActionURL: tokenString(deepLinkFor(cmd.kind), askUuid, VOICE_ASK_OUTPUT),
+      WFURLActionURL: tokenString(VOICE_DEEP_LINK, askUuid, VOICE_ASK_OUTPUT),
     }),
     action('is.workflow.actions.openurl', {}),
   ];
-}
-
-/** ⚠️ `q` must stay last — the phrase goes in unencoded and a query value ends at the next `&`. */
-function deepLinkFor(kind: AddKind): string {
-  return kind === AddKind.Income ? VOICE_DEEP_LINK_INCOME
-    : kind === AddKind.Transfer ? VOICE_DEEP_LINK_SETTLE
-    : VOICE_DEEP_LINK;
 }
 
 /** The complete unsigned `.shortcut` document for one command. */
