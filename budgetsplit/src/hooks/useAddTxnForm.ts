@@ -21,6 +21,7 @@ import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { evaluateAfford } from '../lib/afford';
 import { haptic } from '../lib/haptics';
 import { saveFailureMessage } from '../lib/dbErrors';
+import { composeTitleNote } from '../lib/txnNote';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useStore } from '../store';
@@ -216,9 +217,9 @@ export function useAddTxnForm(params: AddTxnParams) {
     ? (transferScopes?.all.amount ?? 0)
     : (transferScopes?.groups.find(g => g.groupId === transferScope)?.amount ?? 0);
 
-  const composedNote = (flags.smartCategory
-    ? [title.trim(), note.trim()].filter(Boolean).join(' — ')
-    : note.trim()) || undefined;
+  // Shared with voice capture (`lib/voiceDrain`) so a dictated transaction and a typed one
+  // compose the same stored note.
+  const composedNote = composeTitleNote(title, note, flags.smartCategory);
 
   const shares = kind === 'income'
     ? []

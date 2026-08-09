@@ -11,8 +11,9 @@ import { Chip } from '../../src/components/ui/Chip';
 import { Banner } from '../../src/components/ui/Banner';
 import { pendingCaptureCount, ensureVoiceInbox } from '../../src/lib/voiceDrain';
 import {
-  VOICE_SHORTCUT_URL, VOICE_SHORTCUT_STEPS, VOICE_FILES_LOCATION, VOICE_PHRASE_EXAMPLES,
-  VOICE_ROUTING_SUMMARY, VOICE_SHORTCUT_PRIVACY,
+  VOICE_SHORTCUT_URL, VOICE_SHORTCUT_STEPS, VOICE_TWO_WAY_STEPS, VOICE_FILES_LOCATION,
+  VOICE_PHRASE_EXAMPLES, VOICE_SHORTCUT_PRIVACY, VOICE_COMMANDS, VOICE_ONE_WAY_NAME,
+  VOICE_FIELD_RULES, SHORTCUTS_APP_URL,
 } from '../../src/lib/voiceShortcut';
 
 /**
@@ -33,12 +34,13 @@ export default function VoiceSetupScreen() {
     setWaiting(pendingCaptureCount());
   }, []);
 
+  // With an install link this is one tap and done; without one it still opens Shortcuts, so
+  // the manual path starts with a tap rather than "go and find another app".
   async function install() {
-    if (!VOICE_SHORTCUT_URL) return;
     try {
-      await Linking.openURL(VOICE_SHORTCUT_URL);
+      await Linking.openURL(VOICE_SHORTCUT_URL ?? SHORTCUTS_APP_URL);
     } catch {
-      Alert.alert('Couldn\'t open Shortcuts', 'Open the Shortcuts app and follow the steps below instead.');
+      Alert.alert('Couldn\'t open Shortcuts', 'Open the Shortcuts app manually and follow the steps below.');
     }
   }
 
@@ -48,7 +50,7 @@ export default function VoiceSetupScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Card padded style={styles.hero}>
           <IconCircle icon="mic" size={56} iconSize={22} color={colors.accent} bg={colors.accentMuted} />
-          <Text style={styles.heroTitle}>“Hey Siri, log expense”</Text>
+          <Text style={styles.heroTitle}>{`“Hey Siri, ${VOICE_ONE_WAY_NAME}”`}</Text>
           <Text style={styles.heroBody}>
             Say what you spent without unlocking or opening anything. Siri repeats it back so
             you know it heard you, and BudgetSplit files it the next time you open the app.
@@ -71,17 +73,42 @@ export default function VoiceSetupScreen() {
           ))}
         </View>
 
-        <SectionHeader title="When it opens the app instead" />
-        <Text style={styles.body}>{VOICE_ROUTING_SUMMARY}</Text>
-        <Text style={styles.note}>
-          A split needs to know who shares it and how, and nothing can guess that — so those
-          go to Review or straight to the Add screen rather than being filed as yours alone.
-        </Text>
+        {/* Two phrases rather than one clever one: the mode is chosen by what you SAY, so it
+            is never inferred wrongly from your wording. */}
+        <SectionHeader title="Two commands" />
+        <Card clip>
+          {VOICE_COMMANDS.map((c, i) => (
+            <View key={c.name} style={[styles.step, i > 0 && styles.stepBorder]}>
+              <IconCircle icon={i === 0 ? 'zap' : 'external-link'} size={32} iconSize={14} color={colors.accent} />
+              <View style={styles.stepText}>
+                <Text style={styles.stepTitle}>{`“Hey Siri, ${c.name}”`}</Text>
+                <Text style={styles.cmdSummary}>{c.summary}</Text>
+                <Text style={styles.stepBody}>{c.detail}</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+
+        <SectionHeader title="Where your words end up" />
+        <Card clip>
+          {VOICE_FIELD_RULES.map((r, i) => (
+            <View key={r.title} style={[styles.step, i > 0 && styles.stepBorder]}>
+              <Text style={styles.stepNum}>{i + 1}</Text>
+              <View style={styles.stepText}>
+                <Text style={styles.stepTitle}>{r.title}</Text>
+                <Text style={styles.stepBody}>{r.body}</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
 
         <SectionHeader title="One-time setup" />
+        <PrimaryButton
+          label={VOICE_SHORTCUT_URL ? 'Set up the shortcut' : 'Open Shortcuts'}
+          onPress={install}
+        />
         {VOICE_SHORTCUT_URL ? (
           <>
-            <PrimaryButton label="Set up the shortcut" onPress={install} />
             <Text style={styles.note}>
               Tap <Text style={styles.strong}>Add Shortcut</Text>, then choose the{' '}
               <Text style={styles.strong}>{VOICE_FILES_LOCATION}</Text> folder once when asked
@@ -91,10 +118,12 @@ export default function VoiceSetupScreen() {
           </>
         ) : (
           <>
-            <Text style={styles.body}>
-              Build it once in the Shortcuts app — four actions, about two minutes. After
-              that you never touch it again.
+            <Text style={styles.note}>
+              Build them once — four actions for the one-way command, three for the two-way.
+              After that you never touch them again.
             </Text>
+
+            <Text style={styles.stepsHeading}>{`One-way — “${VOICE_COMMANDS[0].name}”`}</Text>
             <Card clip>
               {VOICE_SHORTCUT_STEPS.map((s, i) => (
                 <View key={s.title} style={[styles.step, i > 0 && styles.stepBorder]}>
@@ -109,6 +138,22 @@ export default function VoiceSetupScreen() {
             <Text style={styles.note}>
               The folder must exist before Shortcuts can pick it — opening this screen has
               already created it, so it will be there.
+            </Text>
+
+            <Text style={styles.stepsHeading}>{`Two-way — “${VOICE_COMMANDS[1].name}”`}</Text>
+            <Card clip>
+              {VOICE_TWO_WAY_STEPS.map((s, i) => (
+                <View key={s.title} style={[styles.step, i > 0 && styles.stepBorder]}>
+                  <Text style={styles.stepNum}>{i + 1}</Text>
+                  <View style={styles.stepText}>
+                    <Text style={styles.stepTitle}>{s.title}</Text>
+                    <Text style={styles.stepBody}>{s.body}</Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+            <Text style={styles.note}>
+              No folder needed for this one — it hands the phrase straight to the app.
             </Text>
           </>
         )}
@@ -139,4 +184,6 @@ const styles = StyleSheet.create({
   stepText: { flex: 1, gap: 2 },
   stepTitle: { ...type.bodySemi, color: colors.textPrimary },
   stepBody: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  cmdSummary: { ...type.captionSemi, color: colors.accent },
+  stepsHeading: { ...type.labelSemi, color: colors.textSecondary, marginTop: space.md, marginBottom: space.sm },
 });

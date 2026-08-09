@@ -2,10 +2,15 @@ import {
   VoiceDestination,
   GROUP_HINTS,
   isGroupish,
+  mentionsGroupName,
   captureTimeFromName,
   routeVoiceDraft,
   reviewReason,
   sortCaptureNames,
+  voiceFields,
+  resolveVoiceCategory,
+  VOICE_TITLE_MAX_WORDS,
+  VOICE_TITLE_MAX_CHARS,
 } from '../lib/voiceInbox';
 import { parseVoice, type VoiceDraft } from '../lib/voiceParse';
 
@@ -111,11 +116,12 @@ describe('routeVoiceDraft — what is allowed to post itself', () => {
     expect(routeVoiceDraft(draft({ amountPaise: -1 }), 'x')).toBe(VoiceDestination.Review);
   });
 
-  it('holds back a phrase whose category did not match', () => {
-    // Filing this under a fallback heading would skew reports with nothing ever prompting
-    // a correction — the whole reason this bar exists.
+  it('POSTS a phrase whose category did not match — voice is not stricter than typing', () => {
+    // Type "blorptastic" into Add and smart-category falls back to Other; it does not refuse
+    // the expense. Dictating the same words gets the same treatment, and the words survive in
+    // the title, so an unmatched category is visible and correctable rather than a blocker.
     expect(routeVoiceDraft(draft({ category: null }), 'four fifty blorptastic'))
-      .toBe(VoiceDestination.Review);
+      .toBe(VoiceDestination.Ledger);
   });
 
   it('holds back a group-ish phrase EVEN when the parse is perfect', () => {
@@ -126,13 +132,15 @@ describe('routeVoiceDraft — what is allowed to post itself', () => {
     expect(d.category).not.toBeNull();
   });
 
-  it('means a Shortcut that missed the keyword still lands somewhere correct', () => {
-    // "Goa trip" names a group but contains no hint word, so the Shortcut wrote a file
-    // instead of opening the app. It must not silently post to Personal — but it does have
-    // a home: an unmatched category sends it to Review anyway.
+  it('holds back a phrase that names a real group, keyword or not', () => {
+    // "Goa trip" names a shared group but contains no hint word, so the Shortcut wrote a file
+    // rather than opening the app. Posting it to Personal would be silently wrong, so the
+    // group names are what catch it.
     const phrase = 'two thousand Goa trip';
     expect(isGroupish(phrase)).toBe(false);
-    expect(routeVoiceDraft(parse(phrase), phrase)).toBe(VoiceDestination.Review);
+    expect(routeVoiceDraft(parse(phrase), phrase, ['Goa trip'])).toBe(VoiceDestination.Review);
+    // Without that group it is an ordinary personal spend and should not be held back.
+    expect(routeVoiceDraft(parse(phrase), phrase, ['Flatmates'])).toBe(VoiceDestination.Ledger);
   });
 
   it('routes every draft to exactly one of the two destinations', () => {
@@ -147,7 +155,7 @@ describe('reviewReason', () => {
   it('explains each way a capture can end up waiting', () => {
     expect(reviewReason(draft({ amountPaise: 0 }), 'groceries')).toMatch(/amount/i);
     expect(reviewReason(draft(), '1200 dinner split with Sam')).toMatch(/split/i);
-    expect(reviewReason(draft({ category: null }), '450 blorptastic')).toMatch(/categor/i);
+    expect(reviewReason(draft(), '2000 Goa trip', ['Goa trip'])).toMatch(/group/i);
   });
 
   it('says nothing about a capture that posted itself', () => {
@@ -155,15 +163,17 @@ describe('reviewReason', () => {
   });
 
   it('agrees with the router — a reason exists exactly when the row waits', () => {
+    const GROUPS = ['Goa trip'];
     const cases: [VoiceDraft, string][] = [
       [draft(), 'four fifty groceries'],
       [draft({ amountPaise: 0 }), 'groceries'],
       [draft({ category: null }), '450 nonsense'],
       [draft(), '1200 split with Sam'],
+      [draft(), '2000 Goa trip'],
     ];
     for (const [d, p] of cases) {
-      const waits = routeVoiceDraft(d, p) === VoiceDestination.Review;
-      expect(reviewReason(d, p) !== null).toBe(waits);
+      const waits = routeVoiceDraft(d, p, GROUPS) === VoiceDestination.Review;
+      expect(reviewReason(d, p, GROUPS) !== null).toBe(waits);
     }
   });
 });
@@ -195,5 +205,95 @@ describe('sortCaptureNames', () => {
 
   it('handles empty input', () => {
     expect(sortCaptureNames([])).toEqual([]);
+  });
+});
+
+describe('mentionsGroupName', () => {
+  it('matches a group whose every word is present', () => {
+    expect(mentionsGroupName('two thousand Goa trip', ['Goa trip'])).toBe(true);
+    expect(mentionsGroupName('1200 dinner flatmates', ['Flatmates'])).toBe(true);
+  });
+
+  it('needs ALL of a multi-word name, not just one word', () => {
+    // Otherwise a group called "Trip to Goa" diverts every phrase containing "trip".
+    expect(mentionsGroupName('450 trip snacks', ['Goa trip'])).toBe(false);
+    expect(mentionsGroupName('450 goa snacks', ['Goa trip'])).toBe(false);
+  });
+
+  it('is case- and punctuation-insensitive', () => {
+    expect(mentionsGroupName('2000 GOA-TRIP dinner', ['Goa trip'])).toBe(true);
+  });
+
+  it('ignores one-character name fragments', () => {
+    // A group literally called "A" must not divert every phrase containing that word.
+    expect(mentionsGroupName('450 a coffee', ['A'])).toBe(false);
+  });
+
+  it('handles no groups and empty phrases', () => {
+    expect(mentionsGroupName('450 groceries', [])).toBe(false);
+    expect(mentionsGroupName('', ['Goa trip'])).toBe(false);
+    expect(mentionsGroupName('   ', ['Goa trip'])).toBe(false);
+  });
+});
+
+describe('voiceFields — where the words go', () => {
+  it('stores nothing extra when the phrase was only an amount and a category', () => {
+    // "450 groceries" → the leftover IS the category, so repeating it as a title would read
+    // "Groceries · groceries".
+    expect(voiceFields(parse('four fifty groceries'))).toEqual({ title: '', note: '' });
+  });
+
+  it('makes the descriptive words the title', () => {
+    const d = parse('450 zomato biryani');
+    const { title, note } = voiceFields(d);
+    expect(title).toBe('zomato biryani');
+    expect(note).toBe('');
+  });
+
+  it('spills a long phrase into the note, losing nothing', () => {
+    const phrase = '450 dinner at that new place near the office with extra dessert afterwards';
+    const { title, note } = voiceFields(parse(phrase));
+    expect(title.split(/\s+/).length).toBeLessThanOrEqual(VOICE_TITLE_MAX_WORDS);
+    expect(title.length).toBeLessThanOrEqual(VOICE_TITLE_MAX_CHARS + 1);
+    expect(note.length).toBeGreaterThan(0);
+    // Every leftover word survives across the two fields.
+    const rejoined = `${title} ${note}`.trim().split(/\s+/);
+    expect(rejoined).toEqual(parse(phrase).note.split(/\s+/));
+  });
+
+  it('always titles with at least one word, however long that word is', () => {
+    const d = { ...draft({ category: null }), note: 'supercalifragilisticexpialidociousreceipt' };
+    const { title } = voiceFields(d);
+    expect(title.length).toBeGreaterThan(0);
+  });
+
+  it('survives an empty leftover', () => {
+    expect(voiceFields(draft({ note: '' }))).toEqual({ title: '', note: '' });
+    expect(voiceFields(draft({ note: '   ' }))).toEqual({ title: '', note: '' });
+  });
+});
+
+describe('resolveVoiceCategory — always a category that exists', () => {
+  it('keeps the inferred category when it is real', () => {
+    expect(resolveVoiceCategory(draft({ category: 'Groceries' }), CATS)).toBe('Groceries');
+  });
+
+  it('falls back to Other, the same floor a typed title gets', () => {
+    expect(resolveVoiceCategory(draft({ category: null }), CATS)).toBe('Other');
+  });
+
+  it('never returns a category the catalog does not have', () => {
+    // A stale `learned` entry could name a category the user has since deleted.
+    expect(resolveVoiceCategory(draft({ category: 'Deleted Category' }), CATS)).toBe('Other');
+    const noOther = [{ name: 'Food' }];
+    expect(resolveVoiceCategory(draft({ category: null }), noOther)).toBe('Food');
+  });
+
+  it('ignores the inference when smart-category is switched off', () => {
+    expect(resolveVoiceCategory(draft({ category: 'Groceries' }), CATS, false)).toBe('Other');
+  });
+
+  it('returns null only when there are no categories at all', () => {
+    expect(resolveVoiceCategory(draft(), [])).toBeNull();
   });
 });

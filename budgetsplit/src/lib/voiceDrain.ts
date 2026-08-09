@@ -6,7 +6,10 @@ import { parseVoice } from './voiceParse';
 import { loadLearned } from './smartCategoryLearn';
 import {
   VoiceDestination, routeVoiceDraft, captureTimeFromName, sortCaptureNames, reviewReason,
+  voiceFields, resolveVoiceCategory,
 } from './voiceInbox';
+import { loadFlags } from './featureFlags';
+import { composeTitleNote } from './txnNote';
 import { insertTxnRows } from '../db/queries/transactions';
 import { insertPending } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
@@ -112,10 +115,19 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
   let learned: Awaited<ReturnType<typeof loadLearned>>;
   let meId: string;
   let personalGroupId: string;
+  let smartCategoryOn: boolean;
+  let groupNames: string[];
   try {
-    const [cats, lrn, me, groups] = await Promise.all([
-      getCategories(db, 'expense'), loadLearned(), getMe(db), getAllGroups(db),
+    const [cats, lrn, me, groups, flags] = await Promise.all([
+      getCategories(db, 'expense'), loadLearned(), getMe(db), getAllGroups(db), loadFlags(),
     ]);
+    // Turning the feature off has to stop it acting, not just hide its buttons — otherwise
+    // captures keep posting from a switch the user believes is off. The files are left
+    // untouched, so nothing is lost if it is switched back on.
+    if (!flags.voiceEntry) return NOTHING;
+    // Smart-category off means "don't guess a category from what I write". Dictating is
+    // writing, so voice honours it too and files under the fallback instead.
+    smartCategoryOn = flags.smartCategory;
     const personal = groups.find(g => g.is_personal === 1) ?? groups[0];
     // Without a person and a destination there is nothing to attribute a spend to. Leave
     // every file untouched rather than inventing either — this is reachable during
@@ -125,6 +137,9 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
     learned = lrn;
     meId = me.id;
     personalGroupId = personal.id;
+    // Shared groups only: "Personal" appearing in a phrase means nothing, and matching it
+    // would divert every capture to Review.
+    groupNames = groups.filter(g => g.is_personal !== 1).map(g => g.name);
   } catch { return NOTHING; }
 
   const out = { saved: 0, queued: 0, deferred: 0 };
@@ -149,10 +164,16 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
     // Anchored to when the phrase was SPOKEN, not to now — see `captureTimeFromName`.
     const capturedAt = captureTimeFromName(name, Date.now());
     const draft = parseVoice(phrase, { categories, learned, nowMs: capturedAt });
-    const dest = routeVoiceDraft(draft, phrase);
+    const dest = routeVoiceDraft(draft, phrase, groupNames);
+
+    // Exactly the field mapping a typed entry gets: the descriptive words become the title
+    // (which is what smart-category read), anything longer spills into the note, and the two
+    // are joined by the same helper the Add screen uses.
+    const { title, note } = voiceFields(draft);
+    const category = resolveVoiceCategory(draft, categories, smartCategoryOn);
 
     try {
-      if (dest === VoiceDestination.Ledger) {
+      if (dest === VoiceDestination.Ledger && category) {
         const amount = draft.amountPaise;
         await db.withTransactionAsync(async () => {
           await insertTxnRows(db, {
@@ -160,10 +181,10 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
             kind: 'expense',
             entryMode: 'quick',
             date: draft.dateMs ?? capturedAt,
-            category: draft.category!,   // routeVoiceDraft guarantees this for Ledger
-            // The verbatim phrase, so an auto-saved row is always explainable. This is the
-            // only record of what was actually heard.
-            note: draft.transcript,
+            category,
+            // Falls back to the raw transcript when the phrase was nothing but an amount and
+            // a category word — an auto-saved row must always be able to say what was heard.
+            note: composeTitleNote(title, note, smartCategoryOn) ?? draft.transcript,
             source: 'voice',
             payments: [{ personId: meId, amount }],
             shares: [{ personId: meId, amount }],
@@ -174,15 +195,15 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
         await insertPending(db, [{
           date: draft.dateMs ?? capturedAt,
           amount: Math.max(0, draft.amountPaise),
-          description: draft.note || draft.transcript,
+          description: title || draft.note || draft.transcript,
           kind: 'expense',
-          category: draft.category,
+          category: smartCategoryOn ? draft.category : null,
           direction: 'debit',
           source: 'voice',
           pay_method: null,
           // Why it's here rather than in the ledger, plus what was said, so the Review row
           // can explain itself without the user having to guess.
-          raw: [reviewReason(draft, phrase), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
+          raw: [reviewReason(draft, phrase, groupNames), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
         }]);
         out.queued++;
       }

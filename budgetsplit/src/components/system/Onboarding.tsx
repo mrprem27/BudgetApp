@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity,
-  Animated, ScrollView, useWindowDimensions,
+  Animated, ScrollView, useWindowDimensions, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -36,6 +36,9 @@ import { formatRupees } from '../../lib/money';
 import { LogoAssembly } from './LogoAssembly';
 import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
 import { alpha } from '../../theme';
+import { VOICE_ONE_WAY_NAME, VOICE_SHORTCUT_URL, SHORTCUTS_APP_URL } from '../../lib/voiceShortcut';
+import { ensureVoiceInbox } from '../../lib/voiceDrain';
+import { useFeatureFlags } from './FeatureFlagsProvider';
 
 
 type Slide = {
@@ -129,6 +132,21 @@ function stepPosition(stage: Stage, intent: IntentKey): { step: number; total: n
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
+  const { flags } = useFeatureFlags();
+
+  /**
+   * Hand off to Shortcuts so the user can install the voice command.
+   *
+   * Creates the capture folder first — Shortcuts' folder picker can only choose a folder that
+   * already exists, so without this the install appears to work and then silently never
+   * files anything. Falls back to opening the Shortcuts app when there is no install link
+   * yet; either way onboarding is left exactly as it was and "Finish setup" still commits.
+   */
+  function openVoiceSetup() {
+    ensureVoiceInbox();
+    haptic.light();
+    Linking.openURL(VOICE_SHORTCUT_URL ?? SHORTCUTS_APP_URL).catch(() => {});
+  }
   const { width, height } = useWindowDimensions();
   const bottomPad = insets.bottom + space.xl;
 
@@ -503,7 +521,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           onBack={() => setStage(beforePermissions)}
           {...(stepPosition('permissions', intent) ?? {})}
           title="Stay on top of things"
-          subtitle="Both are optional and fully on-device. You can change them in Settings any time."
+          subtitle="All optional and fully on-device. You can change any of them in Settings any time."
           footer={
             <StepFooter
               primaryLabel="Finish setup"
@@ -532,6 +550,21 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               accent={colors.income}
               leading={<IconCircle icon="map-pin" size={layout.avatarSize} color={colors.settle} />}
             />
+            {/* Voice sits with the other OS-level set-up rather than in a stage of its own:
+                it needs no answer from the user, and installing the shortcut hands off to
+                Apple's Shortcuts app — so it must be trivially skippable and must come after
+                the flow has already shown its value. Tapping it leaves the app; onboarding
+                state survives the trip because nothing is committed until "Finish setup". */}
+            {flags.voiceEntry && (
+              <OptionRow
+                label="Log spends by talking to Siri"
+                description={`Say "Hey Siri, ${VOICE_ONE_WAY_NAME}" and it's recorded without opening the app. Set up now or later in Settings.`}
+                selected={false}
+                onPress={openVoiceSetup}
+                accent={colors.income}
+                leading={<IconCircle icon="mic" size={layout.avatarSize} color={colors.accent} />}
+              />
+            )}
           </View>
         </StepScaffold>
       )}
