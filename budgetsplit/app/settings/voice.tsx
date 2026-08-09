@@ -10,10 +10,11 @@ import { IconCircle } from '../../src/components/ui/IconCircle';
 import { Chip } from '../../src/components/ui/Chip';
 import { Banner } from '../../src/components/ui/Banner';
 import { pendingCaptureCount, ensureVoiceInbox } from '../../src/lib/voiceDrain';
+import { SectionCard } from '../../src/components/ui/SectionCard';
+import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import {
-  VOICE_SHORTCUT_URL, VOICE_SHORTCUT_STEPS, VOICE_TWO_WAY_STEPS, VOICE_FILES_LOCATION,
   VOICE_PHRASE_EXAMPLES, VOICE_SHORTCUT_PRIVACY, VOICE_COMMANDS, VOICE_ONE_WAY_NAME,
-  VOICE_FIELD_RULES, SHORTCUTS_APP_URL,
+  VOICE_FIELD_RULES, VOICE_FIRST_RUN_NOTE, SHORTCUTS_APP_URL, type VoiceCommand,
 } from '../../src/lib/voiceShortcut';
 
 /**
@@ -26,6 +27,9 @@ import {
 export default function VoiceSetupScreen() {
   const router = useRouter();
   const [waiting, setWaiting] = useState(0);
+  // Which command's manual steps are open. Collapsed by default: the steps are the fallback,
+  // not the thing to read first.
+  const [openSteps, setOpenSteps] = useState<string | null>(null);
 
   // Creating the folder is the one thing the app must do before setup can succeed: the
   // Shortcuts folder picker can only choose a folder that already exists.
@@ -34,13 +38,16 @@ export default function VoiceSetupScreen() {
     setWaiting(pendingCaptureCount());
   }, []);
 
-  // With an install link this is one tap and done; without one it still opens Shortcuts, so
-  // the manual path starts with a tap rather than "go and find another app".
-  async function install() {
+  // One tap per command. Falls back to opening Shortcuts on a new shortcut, so even the
+  // manual path starts with a tap rather than "go and find another app".
+  async function install(cmd: VoiceCommand) {
     try {
-      await Linking.openURL(VOICE_SHORTCUT_URL ?? SHORTCUTS_APP_URL);
+      await Linking.openURL(cmd.installUrl ?? SHORTCUTS_APP_URL);
     } catch {
-      Alert.alert('Couldn\'t open Shortcuts', 'Open the Shortcuts app manually and follow the steps below.');
+      Alert.alert(
+        'Couldn\'t open Shortcuts',
+        'Open the Shortcuts app yourself, then follow "Build it by hand" below.',
+      );
     }
   }
 
@@ -74,89 +81,57 @@ export default function VoiceSetupScreen() {
         </View>
 
         {/* Two phrases rather than one clever one: the mode is chosen by what you SAY, so it
-            is never inferred wrongly from your wording. */}
-        <SectionHeader title="Two commands" />
-        <Card clip>
-          {VOICE_COMMANDS.map((c, i) => (
-            <View key={c.name} style={[styles.step, i > 0 && styles.stepBorder]}>
-              <IconCircle icon={i === 0 ? 'zap' : 'external-link'} size={32} iconSize={14} color={colors.accent} />
-              <View style={styles.stepText}>
-                <Text style={styles.stepTitle}>{`“Hey Siri, ${c.name}”`}</Text>
-                <Text style={styles.cmdSummary}>{c.summary}</Text>
-                <Text style={styles.stepBody}>{c.detail}</Text>
+            is never inferred wrongly from your wording. Each command owns its own install
+            button and its own fallback steps — a single button for two shortcuts left it
+            ambiguous which one you were getting. */}
+        <SectionHeader title="Set up the two commands" />
+        {VOICE_COMMANDS.map(c => (
+          <View key={c.name} style={styles.cmdBlock}>
+            <Card padded>
+              <View style={styles.cmdHead}>
+                <IconCircle icon={c.icon} size={32} iconSize={14} color={colors.accent} />
+                <View style={styles.stepText}>
+                  <Text style={styles.stepTitle}>{`“Hey Siri, ${c.name}”`}</Text>
+                  <Text style={styles.cmdSummary}>{c.summary}</Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </Card>
+              <Text style={styles.stepBody}>{c.detail}</Text>
+              <PrimaryButton
+                label={c.installUrl ? `Add “${c.name}”` : 'Open Shortcuts'}
+                onPress={() => install(c)}
+                style={styles.cmdCta}
+              />
+              {c.installUrl != null && (
+                <Text style={styles.note}>
+                  Tap <Text style={styles.strong}>Add Shortcut</Text> on the sheet Apple shows.
+                  That's the whole setup.
+                </Text>
+              )}
+            </Card>
 
-        <SectionHeader title="Where your words end up" />
-        <Card clip>
-          {VOICE_FIELD_RULES.map((r, i) => (
-            <View key={r.title} style={[styles.step, i > 0 && styles.stepBorder]}>
-              <Text style={styles.stepNum}>{i + 1}</Text>
-              <View style={styles.stepText}>
-                <Text style={styles.stepTitle}>{r.title}</Text>
-                <Text style={styles.stepBody}>{r.body}</Text>
-              </View>
-            </View>
-          ))}
-        </Card>
-
-        <SectionHeader title="One-time setup" />
-        <PrimaryButton
-          label={VOICE_SHORTCUT_URL ? 'Set up the shortcut' : 'Open Shortcuts'}
-          onPress={install}
-        />
-        {VOICE_SHORTCUT_URL ? (
-          <>
-            <Text style={styles.note}>
-              Tap <Text style={styles.strong}>Add Shortcut</Text>, then choose the{' '}
-              <Text style={styles.strong}>{VOICE_FILES_LOCATION}</Text> folder once when asked
-              where to save. That's it — after this you only ever talk to Siri.
-            </Text>
-            <Text style={styles.note}>{VOICE_SHORTCUT_PRIVACY}</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.note}>
-              Build them once — four actions for the one-way command, three for the two-way.
-              After that you never touch them again.
-            </Text>
-
-            <Text style={styles.stepsHeading}>{`One-way — “${VOICE_COMMANDS[0].name}”`}</Text>
-            <Card clip>
-              {VOICE_SHORTCUT_STEPS.map((s, i) => (
-                <View key={s.title} style={[styles.step, i > 0 && styles.stepBorder]}>
+            {/* The manual build stays available but collapsed: it is the fallback if the
+                link ever stops resolving, not the thing to read first. */}
+            <SectionCard
+              title="Build it by hand instead"
+              subtitle={`${c.steps.length} steps`}
+              expanded={openSteps === c.name}
+              onToggle={() => setOpenSteps(openSteps === c.name ? null : c.name)}
+            >
+              {c.steps.map((st, i) => (
+                <View key={st.title} style={[styles.step, i > 0 && styles.stepBorder]}>
                   <Text style={styles.stepNum}>{i + 1}</Text>
                   <View style={styles.stepText}>
-                    <Text style={styles.stepTitle}>{s.title}</Text>
-                    <Text style={styles.stepBody}>{s.body}</Text>
+                    <Text style={styles.stepTitle}>{st.title}</Text>
+                    <Text style={styles.stepBody}>{st.body}</Text>
                   </View>
                 </View>
               ))}
-            </Card>
-            <Text style={styles.note}>
-              The folder must exist before Shortcuts can pick it — opening this screen has
-              already created it, so it will be there.
-            </Text>
+            </SectionCard>
+          </View>
+        ))}
 
-            <Text style={styles.stepsHeading}>{`Two-way — “${VOICE_COMMANDS[1].name}”`}</Text>
-            <Card clip>
-              {VOICE_TWO_WAY_STEPS.map((s, i) => (
-                <View key={s.title} style={[styles.step, i > 0 && styles.stepBorder]}>
-                  <Text style={styles.stepNum}>{i + 1}</Text>
-                  <View style={styles.stepText}>
-                    <Text style={styles.stepTitle}>{s.title}</Text>
-                    <Text style={styles.stepBody}>{s.body}</Text>
-                  </View>
-                </View>
-              ))}
-            </Card>
-            <Text style={styles.note}>
-              No folder needed for this one — it hands the phrase straight to the app.
-            </Text>
-          </>
-        )}
+        <Text style={styles.note}>{VOICE_FIRST_RUN_NOTE}</Text>
+        <Text style={styles.note}>{VOICE_SHORTCUT_PRIVACY}</Text>
 
         <SectionHeader title="Inside the app" />
         <Text style={styles.body}>
@@ -185,5 +160,8 @@ const styles = StyleSheet.create({
   stepTitle: { ...type.bodySemi, color: colors.textPrimary },
   stepBody: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
   cmdSummary: { ...type.captionSemi, color: colors.accent },
+  cmdBlock: { gap: space.sm, marginBottom: space.md },
+  cmdHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
+  cmdCta: { marginTop: space.md },
   stepsHeading: { ...type.labelSemi, color: colors.textSecondary, marginTop: space.md, marginBottom: space.sm },
 });

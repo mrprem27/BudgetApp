@@ -18,19 +18,37 @@ export const VOICE_INBOX_FOLDER = 'voice-inbox';
 export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_INBOX_FOLDER}`;
 
 /**
- * The iCloud link that installs the ready-made shortcut in one tap.
+ * The iCloud links that install the ready-made shortcuts in one tap.
  *
- * `null` until the shortcut has been authored in the Shortcuts app and shared — that
- * produces an `icloud.com/shortcuts/…` URL, and only the person with the Shortcuts app and
- * an iCloud account can create it. Apple mints and signs that link; there is no way to
- * generate one from here, and an invented URL would 404, which is strictly worse than
- * showing the steps.
+ * Apple mints and signs these; there is no way to generate one from code, so they had to be
+ * authored in the Shortcuts app and shared by hand. That is also why they are constants
+ * rather than anything derived — an invented URL 404s, which is strictly worse than showing
+ * the manual steps.
  *
- * **To turn the one-tap button on:** Shortcuts app → long-press the shortcut → Share →
- * Copy iCloud Link → paste it here. Nothing else changes; the screen swaps its own content.
- * A JS-only edit, so a Metro reload picks it up with no native rebuild.
+ * ⚠️ **Editing a shortcut invalidates its link.** Apple serves the version that was shared,
+ * so a re-share produces a new URL and the old one keeps handing out the stale build. If you
+ * change a shortcut, re-share it and replace the constant here.
+ *
+ * Set to `null` to fall back to the manual steps — the screens key off that, so removing a
+ * broken link degrades cleanly rather than sending people to a dead page.
  */
-export const VOICE_SHORTCUT_URL: string | null = null;
+export const VOICE_SHORTCUT_URL: string | null =
+  'https://www.icloud.com/shortcuts/ca2dde1249b54e909d049b415023d5f9';
+
+/** The two-way command's install link. See the caveats on {@link VOICE_SHORTCUT_URL}. */
+export const VOICE_TWO_WAY_URL: string | null =
+  'https://www.icloud.com/shortcuts/e14ac98829434565b8db80291f31b4df';
+
+/**
+ * What iOS asks for the first time a capture is saved, and why it is not a fault.
+ *
+ * The Shortcut writes into another app's folder, so iOS asks once for permission. It arrives
+ * unexplained and mid-dictation, which reads as something having gone wrong — saying so up
+ * front is the whole fix.
+ */
+export const VOICE_FIRST_RUN_NOTE =
+  'The first time you use it, iOS asks permission to save into BudgetSplit. Allow it once and '
+  + 'it never asks again — that prompt is iOS checking, not something going wrong.';
 
 /**
  * Opens the Shortcuts app on a new, empty shortcut.
@@ -80,20 +98,14 @@ export type VoiceCommand = {
   name: string;
   summary: string;
   detail: string;
+  /** Feather glyph for the command's row. */
+  icon: 'zap' | 'external-link';
+  /** One-tap install, or null to fall back to this command's manual steps. */
+  installUrl: string | null;
+  /** The manual build, shown behind a disclosure when the link is unavailable or refused. */
+  steps: VoiceStep[];
 };
 
-export const VOICE_COMMANDS: VoiceCommand[] = [
-  {
-    name: VOICE_ONE_WAY_NAME,
-    summary: 'One-way — the app never opens',
-    detail: 'Siri takes what you said, repeats it back, and you carry on. It is filed the next time you open BudgetSplit. Best for the everyday case: you are walking, paying, in a queue.',
-  },
-  {
-    name: VOICE_TWO_WAY_NAME,
-    summary: 'Two-way — opens the app, filled in',
-    detail: 'Same dictation, but BudgetSplit opens straight away with everything already entered, so you can split it, change the category or add a photo before saving. Use this when the spend needs a decision.',
-  },
-];
 
 /**
  * Building the one-way shortcut by hand, in the order the Shortcuts app presents the actions.
@@ -166,6 +178,25 @@ export const VOICE_TWO_WAY_STEPS: VoiceStep[] = [
     body: 'It takes the URL from the step above as its input, which is why the URL action has '
       + 'to come first. Beware the similar-looking "Open URL" rows carrying an app\'s icon '
       + '(Zomato, Chrome) — those are that app\'s own action and will open the wrong thing.',
+  },
+];
+
+export const VOICE_COMMANDS: VoiceCommand[] = [
+  {
+    name: VOICE_ONE_WAY_NAME,
+    summary: 'One-way — the app never opens',
+    detail: 'Siri takes what you said, repeats it back, and you carry on. It is filed the next time you open BudgetSplit. Best for the everyday case: you are walking, paying, in a queue.',
+    icon: 'zap',
+    installUrl: VOICE_SHORTCUT_URL,
+    steps: VOICE_SHORTCUT_STEPS,
+  },
+  {
+    name: VOICE_TWO_WAY_NAME,
+    summary: 'Two-way — opens the app, filled in',
+    detail: 'Same dictation, but BudgetSplit opens straight away with everything already entered, so you can split it, change the category or add a photo before saving. Use this when the spend needs a decision.',
+    icon: 'external-link',
+    installUrl: VOICE_TWO_WAY_URL,
+    steps: VOICE_TWO_WAY_STEPS,
   },
 ];
 

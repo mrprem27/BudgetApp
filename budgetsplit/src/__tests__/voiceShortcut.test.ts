@@ -3,6 +3,8 @@ import {
   VOICE_PHRASE_EXAMPLES, VOICE_GROUP_KEYWORDS, VOICE_ROUTING_SUMMARY,
   VOICE_TWO_WAY_STEPS,
   VOICE_DEEP_LINK,
+  VOICE_COMMANDS,
+  VOICE_FIRST_RUN_NOTE,
 } from '../lib/voiceShortcut';
 import { GROUP_HINTS, isGroupish } from '../lib/voiceInbox';
 import { parseVoice } from '../lib/voiceParse';
@@ -155,5 +157,48 @@ describe('the two-way command', () => {
     const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
     expect(all.toLowerCase()).not.toContain('subpath');
     expect(all).not.toContain(VOICE_INBOX_FOLDER);
+  });
+});
+
+describe('the install links', () => {
+  it('gives every command its own one-tap install and its own fallback steps', () => {
+    // One button for two shortcuts left it ambiguous which one you were installing.
+    expect(VOICE_COMMANDS).toHaveLength(2);
+    for (const c of VOICE_COMMANDS) {
+      expect(c.steps.length).toBeGreaterThan(0);
+      expect(c.name.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('points at real Apple-minted shortcut links, or at nothing', () => {
+    // A malformed or invented URL 404s, which is strictly worse than showing the steps —
+    // so the only two acceptable states are "a genuine iCloud shortcut link" and null.
+    for (const c of VOICE_COMMANDS) {
+      if (c.installUrl === null) continue;
+      expect(c.installUrl).toMatch(/^https:\/\/www\.icloud\.com\/shortcuts\/[0-9a-f]{32}$/);
+    }
+  });
+
+  it('gives the two commands different links', () => {
+    // Re-sharing one shortcut and pasting the link into both slots would silently install
+    // the same command twice.
+    const urls = VOICE_COMMANDS.map(c => c.installUrl).filter(Boolean);
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it('warns about the permission prompt before it appears', () => {
+    // It arrives unexplained, mid-dictation, and reads as a failure. Saying so is the fix.
+    expect(VOICE_FIRST_RUN_NOTE).toMatch(/permission/i);
+    expect(VOICE_FIRST_RUN_NOTE).toMatch(/once/i);
+  });
+
+  it('pairs each command with the steps that actually build it', () => {
+    // The one-way command needs the folder; the two-way must not mention it, or the
+    // fallback instructions send you to configure something that does not exist.
+    const [oneWay, twoWay] = VOICE_COMMANDS;
+    expect(oneWay.steps).toBe(VOICE_SHORTCUT_STEPS);
+    expect(twoWay.steps).toBe(VOICE_TWO_WAY_STEPS);
+    expect(twoWay.steps.map(s => `${s.title} ${s.body}`).join(' ')).toContain(VOICE_DEEP_LINK);
+    expect(oneWay.steps.map(s => `${s.title} ${s.body}`).join(' ')).toContain('Save File');
   });
 });
