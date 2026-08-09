@@ -42,21 +42,34 @@ describe('what we tell the user matches what we do', () => {
 
   it('points the setup steps at the folder the app actually creates', () => {
     expect(VOICE_FILES_LOCATION).toContain(VOICE_INBOX_FOLDER);
-    const saveStep = VOICE_SHORTCUT_STEPS.find(s => /save file/i.test(s.title));
-    expect(saveStep).toBeDefined();
-    expect(saveStep!.title).toContain(VOICE_INBOX_FOLDER);
+    // Which step names it does not matter; that the instructions name the real folder does.
+    // `voiceDrain.INBOX_DIR_NAME` must equal `VOICE_INBOX_FOLDER`, or the user is told to
+    // point the Shortcut at a folder the drain never reads.
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toContain(VOICE_INBOX_FOLDER);
   });
 });
 
 describe('the setup instructions are complete', () => {
-  it('is three steps: name it, dictate, save', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(3);
+  it('names it, dictates, saves, then sets the destination', () => {
+    expect(VOICE_SHORTCUT_STEPS).toHaveLength(4);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
     const dictateAt = titles.findIndex(t => t.includes('dictate text'));
     const saveAt = titles.findIndex(t => t.includes('save file'));
+    const destAt = titles.findIndex(t => t.includes('destination'));
     expect(dictateAt).toBeGreaterThanOrEqual(0);
-    // Nothing can be saved before it has been dictated.
+    // Nothing can be saved before it has been dictated, and there is no destination to
+    // change until the Save File action exists.
     expect(saveAt).toBeGreaterThan(dictateAt);
+    expect(destAt).toBeGreaterThan(saveAt);
+  });
+
+  it('says Subpath cannot be used to reach the folder', () => {
+    // The mistake this cost: Subpath is relative to the chosen destination, so a path typed
+    // there silently creates a folder of that name inside iCloud Drive's Shortcuts folder.
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toMatch(/subpath/i);
+    expect(all).toMatch(/relative to/i);
   });
 
   it('asks for no date actions at all', () => {

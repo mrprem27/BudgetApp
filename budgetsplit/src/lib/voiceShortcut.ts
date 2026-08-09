@@ -99,11 +99,17 @@ export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
     body: 'Set the language to English (India) if it is offered, and leave Stop Listening on After Pause. This is the step that listens; iOS does it on the device.',
   },
   {
-    title: `Add "Save File" into ${VOICE_FILES_LOCATION}`,
-    body: 'Set the file to the Dictated Text, turn OFF "Ask Where to Save", and pick the '
-      + `BudgetSplit folder once. In the Subpath field put  ${VOICE_INBOX_FOLDER}/  — the `
-      + 'trailing slash is what makes it a folder rather than a filename. Leave "Overwrite If '
-      + 'File Exists" OFF so two spends said in a row cannot replace each other.',
+    title: 'Add "Save File", with Dictated Text as the file',
+    body: 'Turn OFF "Ask Where to Save". Leave "Overwrite If File Exists" OFF too, or the '
+      + 'second of two spends said in a row replaces the first. Leave Subpath empty.',
+  },
+  {
+    title: `Change the destination to ${VOICE_FILES_LOCATION}`,
+    body: 'This is the step that matters, and the only one that can go wrong. Tap the blue '
+      + 'folder name in the Save File action — it starts as "Shortcuts" — then browse to '
+      + `On My iPhone › BudgetSplit › ${VOICE_INBOX_FOLDER} and choose it. Subpath cannot do `
+      + 'this: it is relative to whatever folder is picked here, so typing a path there just '
+      + 'creates a folder with that name inside the wrong place.',
   },
 ];
 
