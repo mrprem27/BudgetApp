@@ -99,9 +99,16 @@ export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
     body: 'Set the language to English (India) if it is offered, and leave Stop Listening on After Pause. This is the step that listens; iOS does it on the device.',
   },
   {
+    title: 'Add "Random Number", 1 to 999999',
+    body: 'This gives each capture its own filename. Without it every file is called '
+      + '"Dictated Text", so two spends said before the app next opens would collide — and '
+      + 'the app cannot recover a capture that was never written.',
+  },
+  {
     title: 'Add "Save File", with Dictated Text as the file',
-    body: 'Turn OFF "Ask Where to Save". Leave "Overwrite If File Exists" OFF too, or the '
-      + 'second of two spends said in a row replaces the first. Leave Subpath empty.',
+    body: 'Turn OFF "Ask Where to Save", and leave "Overwrite If File Exists" OFF. In the '
+      + 'Subpath field put the Random Number variable followed by  .txt  — Subpath names the '
+      + 'file inside the folder you choose next.',
   },
   {
     title: `Change the destination to ${VOICE_FILES_LOCATION}`,

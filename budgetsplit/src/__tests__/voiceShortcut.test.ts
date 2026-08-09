@@ -51,17 +51,31 @@ describe('what we tell the user matches what we do', () => {
 });
 
 describe('the setup instructions are complete', () => {
-  it('names it, dictates, saves, then sets the destination', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(4);
+  it('orders the actions so each one has what it needs', () => {
+    expect(VOICE_SHORTCUT_STEPS).toHaveLength(5);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
     const dictateAt = titles.findIndex(t => t.includes('dictate text'));
+    const randomAt = titles.findIndex(t => t.includes('random number'));
     const saveAt = titles.findIndex(t => t.includes('save file'));
     const destAt = titles.findIndex(t => t.includes('destination'));
+
+    // Nothing can be saved before it has been dictated; the filename must exist before the
+    // action that uses it; and there is no destination to change until Save File is there.
     expect(dictateAt).toBeGreaterThanOrEqual(0);
-    // Nothing can be saved before it has been dictated, and there is no destination to
-    // change until the Save File action exists.
+    expect(randomAt).toBeGreaterThanOrEqual(0);
     expect(saveAt).toBeGreaterThan(dictateAt);
+    expect(saveAt).toBeGreaterThan(randomAt);
     expect(destAt).toBeGreaterThan(saveAt);
+  });
+
+  it('gives every capture its own filename', () => {
+    // Shortcuts names every file after its input, so without this two spends said before the
+    // next drain would collide. Whether "Overwrite off" then renames or errors is undocumented
+    // — and the app cannot recover a capture that was never written, so the collision is
+    // removed rather than relied on to fail safely.
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toMatch(/random number/i);
+    expect(all).toMatch(/overwrite/i);
   });
 
   it('says Subpath cannot be used to reach the folder', () => {
