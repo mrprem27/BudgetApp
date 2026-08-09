@@ -14,6 +14,8 @@ import { colors, type, space, radius, shadow } from '../tokens';
 const SCREEN_H = Dimensions.get('window').height;
 const DISMISS_DY = 90;   // px dragged past which we dismiss
 const DISMISS_VY = 800;  // px/s flick velocity past which we dismiss
+/** Must match the close timing below — {@link SheetModal} waits this long before unmounting. */
+export const SHEET_EXIT_MS = 200;
 
 type Props = {
   /** Called once the close animation finishes (e.g. router.back / setVisible(false)). */
@@ -24,6 +26,12 @@ type Props = {
   scroll?: boolean;
   /** Optional control rendered at the right of the title row (e.g. a segmented toggle). */
   headerRight?: React.ReactNode;
+  /**
+   * Set by {@link SheetModal} when the parent has closed the sheet but is still rendering it,
+   * so the slide-out plays instead of the sheet vanishing. `onClose` is NOT called again in
+   * that case — the parent already knows.
+   */
+  exiting?: boolean;
 };
 
 /**
@@ -34,8 +42,13 @@ type Props = {
  * inline sheet over a normal screen, use {@link SheetModal}, which wraps this in
  * a Modal. Drag is powered by react-native-gesture-handler + Reanimated, so the
  * gesture and the sheet transform stay on the UI thread (no JS-thread stutter).
+ *
+ * Three ways it can close, and all three animate: a drag past the threshold, a backdrop tap,
+ * and the parent clearing `visible` (which arrives here as `exiting`). That last one used to
+ * skip the animation entirely — the sheet was simply unmounted — which is what made a Done
+ * button feel like a glitch rather than a dismissal.
  */
-export function DraggableSheet({ onClose, title, children, scroll = true, headerRight }: Props) {
+export function DraggableSheet({ onClose, title, children, scroll = true, headerRight, exiting = false }: Props) {
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(SCREEN_H);
   // Scroll offset as a shared value so the pan worklet can read it on the UI thread
@@ -60,16 +73,32 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
     translateY.value = withSpring(0, { damping: 16, stiffness: 170, mass: 0.7 });
   }, [translateY]);
 
+  // Reopened while still sliding out (SheetModal keeps us mounted for that window): cancel the
+  // exit and come back from wherever we got to, rather than snapping off-screen first.
+  useEffect(() => {
+    if (exiting) return;
+    closingRef.current = false;
+    translateY.value = withSpring(0, { damping: 16, stiffness: 170, mass: 0.7 });
+  }, [exiting, translateY]);
+
   const finishClose = () => { if (mountedRef.current) onClose(); };
 
-  const animateClose = () => {
+  const animateClose = React.useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
-    translateY.value = withTiming(SCREEN_H, { duration: 200 }, (finished) => {
+    translateY.value = withTiming(SCREEN_H, { duration: SHEET_EXIT_MS }, (finished) => {
       'worklet';
       if (finished) runOnJS(finishClose)();
     });
-  };
+  }, [translateY]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A parent-initiated close: play the exit, but don't call back — the parent already flipped
+  // its own state, and calling `onClose` again would re-enter whatever handler closed us.
+  useEffect(() => {
+    if (!exiting || closingRef.current) return;
+    closingRef.current = true;
+    translateY.value = withTiming(SCREEN_H, { duration: SHEET_EXIT_MS });
+  }, [exiting, translateY]);
 
   const nativeGesture = useMemo(() => Gesture.Native(), []);
   const pan = useMemo(

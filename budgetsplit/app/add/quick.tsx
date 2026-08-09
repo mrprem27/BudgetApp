@@ -165,22 +165,20 @@ export default function QuickAddScreen() {
             />
           )}
 
-          {/* "Say it instead" — one phrase fills amount, category and date. Placed here
-              rather than on the tab-bar FAB long-press, which `(tabs)/_layout.tsx:135`
-              already binds to ScanPaySheet. */}
-          {!isEditing && !isRecurEdit && flags.voiceEntry && kind !== 'transfer' && (
-            <TouchableOpacity
-              style={styles.voiceRow}
-              onPress={() => open('voice')}
-              accessibilityRole="button"
-              accessibilityLabel={`Say it instead — dictate this ${kind === 'income' ? 'income' : 'expense'}`}
-            >
-              <Feather name="mic" size={14} color={accent} />
-              <Text style={[styles.voiceText, { color: accent }]}>Say it instead</Text>
-            </TouchableOpacity>
-          )}
-
-          <AmountField amountText={f.amountText} onChangeText={f.setAmountText} kind={kind} autoFocus={!isEditing} transferScopeBal={f.transferScopeBal} onOpenCalculator={() => open('calc')} />
+          {/* Dictate and adjust live as icon discs under the amount (`AmountField`), not as
+              text rows around it — see that component's docblock. Dictation is offered for
+              every kind including transfer; it is withheld only while editing, where
+              re-dictating would silently overwrite fields you came here to change. Not on the
+              tab-bar FAB long-press either: `(tabs)/_layout.tsx:135` already binds that. */}
+          <AmountField
+            amountText={f.amountText}
+            onChangeText={f.setAmountText}
+            kind={kind}
+            autoFocus={!isEditing}
+            transferScopeBal={f.transferScopeBal}
+            onOpenCalculator={() => open('calc')}
+            onOpenVoice={!isEditing && !isRecurEdit && flags.voiceEntry ? () => open('voice') : undefined}
+          />
 
           <CategoryDatePills
             kind={kind}
@@ -337,6 +335,4 @@ const styles = StyleSheet.create({
   save: { ...type.button },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.md },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
-  voiceRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: space.xs, paddingVertical: space.xs },
-  voiceText: { ...type.labelSemi },
 });

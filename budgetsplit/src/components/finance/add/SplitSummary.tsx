@@ -56,7 +56,9 @@ const styles = StyleSheet.create({
   splitWithLabel: { ...type.body, color: colors.textSecondary },
   splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   splitWithValue: { ...type.labelSemi, color: colors.accent },
-  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingTop: space.smd },
+  // Symmetric padding: with only `paddingTop` the row's tap target ran to the block's very
+  // edge, and the 44pt target (AGENTS §6) was made up entirely of space above the text.
+  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm },
   paidByLabel: { ...type.body, color: colors.textSecondary },
   paidByValue: { ...type.bodySemi, color: colors.textPrimary },
 });

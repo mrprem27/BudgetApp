@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SheetModal } from '../../ui/SheetModal';
@@ -19,6 +19,15 @@ type Props = {
   accent?: string;
 };
 
+/**
+ * What a freshly opened calculator is set to.
+ *
+ * Divide, because splitting a bill N ways is overwhelmingly the reason to open this at all —
+ * and because it must be a constant rather than the last-used operator, which is what it
+ * silently was before.
+ */
+const DEFAULT_OP: CalcOp = '/';
+
 const OPS: { op: CalcOp; icon: keyof typeof Feather.glyphMap; label: string }[] = [
   { op: '+', icon: 'plus', label: 'Add' },
   { op: '-', icon: 'minus', label: 'Subtract' },
@@ -38,12 +47,22 @@ const OPS: { op: CalcOp; icon: keyof typeof Feather.glyphMap; label: string }[] 
  */
 export function AmountCalculatorSheet({ visible, onClose, amountText, onApply, accent = colors.accent }: Props) {
   const [acc, setAcc] = useState(0);
-  const [op, setOp] = useState<CalcOp>('/');
+  const [op, setOp] = useState<CalcOp>(DEFAULT_OP);
   const [operand, setOperand] = useState('');
 
-  // Re-seed from the form each time it opens — the amount may have been edited since.
+  // Re-seed from the form on each OPEN — the amount may have been edited since. Keyed off the
+  // closed→open transition, not off `visible` alone: the effect used to re-run whenever
+  // `amountText` changed, so a parent edit while the sheet was open wiped the operand you were
+  // halfway through typing. `op` is reset too; it was the one piece of state that survived a
+  // close, so reopening arrived pre-set to whatever you last chose.
+  const wasVisible = useRef(false);
   useEffect(() => {
-    if (visible) { setAcc(parseToPaise(amountText)); setOperand(''); }
+    if (visible && !wasVisible.current) {
+      setAcc(parseToPaise(amountText));
+      setOperand('');
+      setOp(DEFAULT_OP);
+    }
+    wasVisible.current = visible;
   }, [visible, amountText]);
 
   const preview = applyStep(acc, op, operand);

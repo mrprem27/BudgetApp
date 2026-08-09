@@ -97,7 +97,10 @@ export function DetailChips({
 
   return (
     <View>
-      <SectionHeader title="Other details" />
+      {/* `first`: the ScrollView above already puts `space.md` between blocks, and
+          SectionHeader owns another `space.lg` on top — 40px between Split's last line
+          and this eyebrow, which read as a gap rather than a section break. */}
+      <SectionHeader title="Other details" first />
       <View style={styles.row}>
         {onOpenNote && (
           <Chip
