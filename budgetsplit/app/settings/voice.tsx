@@ -73,9 +73,9 @@ export default function VoiceSetupScreen() {
           <IconCircle icon="mic" size={56} iconSize={22} color={colors.accent} bg={colors.accentMuted} />
           <Text style={styles.heroTitle}>{`“Hey Siri, ${VOICE_ONE_WAY_NAME}”`}</Text>
           <Text style={styles.heroBody}>
-            One command for spending, money in and paying someone back. Siri asks, you answer,
-            and BudgetSplit opens with everything filled in — including which of the three it
-            worked out you meant. Nothing to set up beyond tapping Add Shortcut.
+            One command for spending, money in and paying someone back. A clear phrase saves
+            itself and shows you the transaction; anything with a decision left in it opens the
+            form. Nothing to set up beyond tapping Add Shortcut.
           </Text>
         </Card>
 

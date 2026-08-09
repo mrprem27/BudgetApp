@@ -419,7 +419,15 @@ export function useAddTxnForm(params: AddTxnParams) {
     }
   }
 
-  async function handleSave() {
+  /**
+   * Save, then leave — unless the caller wants to decide where to go.
+   *
+   * `onSaved` exists for voice auto-save: a confident phrase posts itself and lands on the new
+   * transaction rather than dismissing, so a mis-hearing is in front of you instead of buried
+   * in a list. Passing it replaces the `router.back()` this otherwise ends with; the duplicate
+   * prompt still fires either way, which is exactly the guard auto-save wants.
+   */
+  async function handleSave(opts?: { onSaved?: (txnId: string) => void }) {
     if (kind === 'transfer') return handleSaveTransfer();
     if (!canSave || saving) return;
     setSaving(true);
@@ -482,7 +490,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       }
 
       const commit = async () => {
-        await insertTxn(db, {
+        const newId = await insertTxn(db, {
           groupId: selectedGroupId, kind, entryMode: 'quick', date: txnDate,
           category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri: attachmentUri ?? undefined,
@@ -495,7 +503,8 @@ export function useAddTxnForm(params: AddTxnParams) {
         });
         haptic.success();
         refresh();
-        router.back();
+        if (opts?.onSaved) opts.onSaved(newId);
+        else router.back();
       };
 
       if (kind === 'expense' && !recurEnabled) {

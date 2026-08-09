@@ -9,9 +9,9 @@ import { kindAccent } from '../../src/lib/kindTheme';
 import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind } from '../../src/constants/enums';
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
-import { getTagsByFrequency } from '../../src/db/queries/transactions';
+import { getTagsByFrequency, softDeleteTxn } from '../../src/db/queries/transactions';
 import { parseVoice, detectVoiceKind } from '../../src/lib/voiceParse';
-import { isGroupish } from '../../src/lib/voiceInbox';
+import { isGroupish, routeVoiceDraft, VoiceDestination } from '../../src/lib/voiceInbox';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { Screen } from '../../src/components/ui/Screen';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
@@ -27,6 +27,8 @@ import { DetailChips } from '../../src/components/finance/add/DetailChips';
 import { SplitSummary } from '../../src/components/finance/add/SplitSummary';
 import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance/add/QuickAddSheets';
 import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
+import { useUndo } from '../../src/components/system/UndoToast';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
@@ -55,6 +57,15 @@ export default function QuickAddScreen() {
   // is the one thing that cannot be inferred. `learned` is passed so voice inherits every
   // category correction the user has already made by hand.
   const voiceApplied = useRef(false);
+  // Set once the draft is in and the phrase looked confident; consumed by the auto-save pass.
+  const autoSaveWanted = useRef(false);
+  const autoSaved = useRef(false);
+  const { showUndo } = useUndo();
+  const { refresh } = useDataRefresh();
+  // Group and person names are what `routeVoiceDraft` checks a phrase against — naming either
+  // means the entry needs a decision, so it stays on the form instead of posting itself.
+  const groupNames = f.groups.filter(g => g.is_personal !== 1).map(g => g.name);
+  const personNames = f.allPersons.filter(p => p.id !== f.me?.id).map(p => p.name.trim().split(/\s+/)[0]).filter(Boolean);
   useEffect(() => {
     if (voiceApplied.current || !params.q || f.categories.length === 0) return;
     // People must be loaded before anything else happens: they decide the *kind* ("paid Riya"
@@ -74,15 +85,53 @@ export default function QuickAddScreen() {
     }
 
     voiceApplied.current = true;
-    f.applyVoiceDraft(parseVoice(params.q, {
+    const draft = parseVoice(params.q, {
       categories: f.categories, learned: f.learned, nowMs: Date.now(), people: f.allPersons,
-    }));
+    });
+    f.applyVoiceDraft(draft);
+
+    // Is this confident enough to post without a human? `routeVoiceDraft` already answers
+    // exactly that — an amount above zero, nothing group-ish, no group or person named — so
+    // the rule is reused rather than a second one invented beside it. A transfer never
+    // qualifies: which way the money went is a decision, not a confidence problem.
+    autoSaveWanted.current = detected !== AddKind.Transfer
+      && routeVoiceDraft(draft, params.q, groupNames, personNames, detected === AddKind.Income ? 'income' : 'expense')
+        === VoiceDestination.Ledger;
+
     // Deliberately after the draft is applied, and only for a shared-sounding phrase. Groups
     // load asynchronously, so a phrase that arrives before them opens the sheet on the next
     // pass rather than not at all.
     if (isGroupish(params.q) && f.pickerGroups.length > 0) setSheet('destination');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.q, f.categories.length, f.pickerGroups.length, f.allPersons.length, f.kind]);
+
+  /**
+   * Post a confident phrase and show what it wrote.
+   *
+   * A separate pass because `applyVoiceDraft` sets state the save depends on — `canSave` is
+   * false until the amount and category have actually landed, so saving in the same tick would
+   * either no-op or save an empty form. Waiting for `canSave` is the honest signal that the
+   * form is ready.
+   *
+   * `router.replace` rather than push: going back from the transaction should return you to
+   * wherever you were, not to a spent Add screen that would re-run this.
+   */
+  useEffect(() => {
+    if (!autoSaveWanted.current || autoSaved.current || !f.canSave || f.saving) return;
+    autoSaved.current = true;
+    void f.handleSave({
+      onSaved: (txnId) => {
+        router.replace(`/txn/${txnId}`);
+        // The one guard auto-save needs. Nothing else on this path asks "are you sure", so a
+        // misheard "four fifty" as "four fifteen" has to be one tap from gone.
+        showUndo({
+          message: 'Saved from voice',
+          onUndo: async () => { await softDeleteTxn(db, txnId); refresh(); router.back(); },
+        });
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.canSave, f.saving]);
 
   const { kind, flags, isEditing, isRecurEdit } = f;
   const accent = kindAccent(kind);
@@ -126,7 +175,7 @@ export default function QuickAddScreen() {
                Note this is a deliberate exception to AGENTS §5's PrimaryButton
                rule, which §5 now records. */
             <TouchableOpacity
-              onPress={f.handleSave}
+              onPress={() => f.handleSave()}
               disabled={!f.canSave || f.saving}
               hitSlop={10}
               accessibilityRole="button"
