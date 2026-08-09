@@ -15,6 +15,8 @@ import type { TransferScopes } from '../../lib/settleScope';
 import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../constants/enums';
 import type { PayMethod } from '../../constants/enums';
 import { alpha } from '../../theme';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, ReduceMotion } from 'react-native-reanimated';
+import { PressableScale } from '../ui/PressableScale';
 import { useFeatureFlags } from '../system/FeatureFlagsProvider';
 
 type Props = {
@@ -52,7 +54,9 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
   // the app. The amount renders right-aligned beside it.
   let balLabel: string | null = null;
   let balColor: string = colors.settle;
-  let plainHint = 'Pick who paid and who received';
+  // Distinct from "nobody picked yet": once both people are chosen, a zero balance is a fact
+  // worth stating, because it tells you this is a fresh transfer and not a settlement.
+  let noBalance = false;
   if (fromId && toId) {
     if (bal > 0 && entry) {
       const owerName = nameOf(persons.find(p => p.id === entry.from) ?? null, 'Someone');
@@ -61,7 +65,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
       else if (entry.to === me?.id) { balLabel = `${owerName} owes you`; balColor = colors.income; }
       else { balLabel = `${owerName} owes ${oweeName}`; balColor = colors.settle; }
     } else {
-      plainHint = 'No balance between them — enter any amount';
+      noBalance = true;
     }
   }
 
@@ -109,13 +113,18 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 
   return (
     <View style={styles.wrap}>
-      {balLabel ? (
+      {/* Only the *balance* line, and only when there is one. The old fallback prose ("Pick who
+          paid and who received") restated what the two labelled tiles and the arrow below
+          already say — and it occupied the same slot as a real balance, so the one line worth
+          reading looked like a hint. */}
+      {balLabel && (
         <View style={styles.balRow}>
           <Text style={[styles.balRowLabel, { color: balColor }]} numberOfLines={1}>{balLabel}</Text>
           <Text style={[styles.balRowAmt, { color: balColor }]}>{formatRupees(bal)}</Text>
         </View>
-      ) : (
-        <Text style={styles.hint}>{plainHint}</Text>
+      )}
+      {noBalance && (
+        <Text style={styles.hint}>No balance between them — enter any amount</Text>
       )}
 
       {/* FROM → TO direction */}
@@ -126,9 +135,10 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
           <Text style={styles.dirName} numberOfLines={1}>{nameOf(from, 'Pick')}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.swapBtn} hitSlop={10} onPress={() => { haptic.selection(); onSwap(); }} accessibilityRole="button" accessibilityLabel="Swap from and to">
-          <Feather name="repeat" size={16} color={colors.settle} />
-        </TouchableOpacity>
+        {/* The centre states the direction and reverses it — one control, because "which way
+            does the money go" and "send it the other way" are the same question asked twice.
+            A `repeat` glyph sat here before and said neither. */}
+        <DirectionArrow onSwap={onSwap} />
 
         <TouchableOpacity style={styles.dirTile} onPress={() => onPickSlot('to')} accessibilityRole="button" accessibilityLabel="Choose who received">
           <Text style={styles.dirLabel}>TO</Text>
@@ -237,6 +247,41 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
   );
 }
 
+/**
+ * The direction indicator, which is also the swap control.
+ *
+ * Tapping it reverses the transfer, and the arrow **flips to match** — the animation is the
+ * acknowledgement. Without it the only feedback is two avatars exchanging places, which is easy
+ * to miss and impossible to distinguish from having mis-tapped a tile.
+ *
+ * A half-turn rather than a mirror: rotating through 180° shows the movement, where swapping the
+ * glyph for its mirror image would just be a different static picture. Rotation is
+ * native-driver-safe (AGENTS §11) and honours Reduce Motion.
+ */
+function DirectionArrow({ onSwap }: { onSwap: () => void }) {
+  // Accumulates rather than toggling between 0 and 180, so consecutive taps keep turning the
+  // same way instead of rocking back and forth.
+  const turns = useSharedValue(0);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${withSpring(turns.value * 180, ARROW_SPRING)}deg` }],
+  }));
+
+  return (
+    <PressableScale
+      onPress={() => { haptic.selection(); turns.value += 1; onSwap(); }}
+      hitSlop={12}
+      accessibilityLabel="Reverse the direction — swap who paid and who received"
+      style={styles.arrowBtn}
+    >
+      <Animated.View style={style}>
+        <Feather name="arrow-right" size={18} color={colors.settle} />
+      </Animated.View>
+    </PressableScale>
+  );
+}
+
+const ARROW_SPRING = { damping: 18, stiffness: 200, mass: 0.6, reduceMotion: ReduceMotion.System };
+
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   hint: { ...type.label, color: colors.textMuted, textAlign: 'center', marginBottom: space.xs },
@@ -249,7 +294,7 @@ const styles = StyleSheet.create({
   dirTile: { flex: 1, alignItems: 'center', gap: space.xs },
   dirLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
   dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  swapBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: alpha(colors.settle, 13), alignItems: 'center', justifyContent: 'center', marginHorizontal: space.sm },
+  arrowBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   errText: { ...type.caption, color: colors.expense, textAlign: 'center' },
   upiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.settle, backgroundColor: alpha(colors.settle, 8) },
   upiBtnText: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },

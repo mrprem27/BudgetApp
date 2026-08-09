@@ -69,7 +69,19 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [personNet, setPersonNet] = useState<Record<string, number>>({});
   const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
   const [transferToId, setTransferToId] = useState(paramTo ?? '');
-  const [transferScope, setTransferScope] = useState<TransferScope>(paramGroupId ?? TRANSFER_SCOPE_ALL);
+  /**
+   * A new transfer always starts at **All groups**, even when the screen was opened from inside
+   * a group.
+   *
+   * It used to seed from `paramGroupId`, which quietly narrowed the settlement to the group you
+   * happened to arrive from — so paying someone back cleared only that group's share of what
+   * you owed them, and the rest stayed outstanding with nothing on screen saying so. Settling
+   * up is a debt between two people; which group the debt arose in is a detail.
+   *
+   * Editing an existing settlement still adopts that transaction's group further down — that
+   * is showing a stored fact, not choosing a default.
+   */
+  const [transferScope, setTransferScope] = useState<TransferScope>(TRANSFER_SCOPE_ALL);
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
   const [transferNote, setTransferNote] = useState('');
@@ -315,13 +327,29 @@ export function useAddTxnForm(params: AddTxnParams) {
    * phrase ("groceries", no amount) can't wipe what's already typed. The category is
    * matched against the loaded catalog, so it always resolves to a real one.
    */
-  function applyVoiceDraft(draft: { amountPaise: number; category: string | null; dateMs: number | null; note: string }) {
+  function applyVoiceDraft(draft: {
+    amountPaise: number; category: string | null; dateMs: number | null; note: string;
+    personId?: string | null;
+  }) {
     if (draft.amountPaise > 0) setAmountText((draft.amountPaise / 100).toString());
     if (draft.category) {
       const hit = categories.find(c => c.name === draft.category);
       if (hit) { setSelectedCategory(hit); setCatManual(true); }
     }
     if (draft.dateMs != null) setTxnDate(draft.dateMs);
+
+    if (kind === AddKind.Transfer) {
+      // A transfer's note is a DIFFERENT field. This used to write `note`, which the transfer
+      // form never renders and `handleSaveTransfer` never reads — so a dictated note was
+      // invisible on screen and then silently dropped on save.
+      if (draft.note) setTransferNote(draft.note);
+      // "paid Riya five hundred" — the named person is who received it. Direction is NOT
+      // inferred from the verb: `from` stays you, and reversing it is one tap on the arrow.
+      // Guarded so a phrase naming yourself can't put the same person on both sides.
+      if (draft.personId && draft.personId !== transferFromId) setTransferToId(draft.personId);
+      return;
+    }
+
     if (draft.note) {
       // With smart-category on the top field is the Title (which drives the category);
       // with it off the same field IS the note.

@@ -186,6 +186,29 @@ describe('drainVoiceInbox — what waits in Review instead', () => {
     expect(pendingRows(db)[0].raw).toMatch(/group/i);
   });
 
+  it('queues a phrase naming one of your people', async () => {
+    const { db } = seed();
+    addPerson(db, 'Riya Sharma');
+    capture('paid Riya five hundred');
+
+    const out = await drainVoiceInbox(db as never);
+
+    // Money that moved between people is a transfer, not your own spend. Filing it as an
+    // expense would put real money in the wrong bucket silently.
+    expect(out.saved).toBe(0);
+    expect(out.queued).toBe(1);
+    expect(pendingRows(db)[0].amount).toBe(50000);
+    expect(pendingRows(db)[0].raw).toMatch(/transfer or a split/i);
+  });
+
+  it('does not treat your OWN name as naming someone', async () => {
+    // "me" is seeded as Prem; a capture mentioning yourself is still your own spend.
+    const { db } = seed();
+    capture('four fifty prem groceries');
+    const out = await drainVoiceInbox(db as never);
+    expect(out.saved).toBe(1);
+  });
+
   it('still posts that same phrase when no such group exists', async () => {
     const { db } = seed();
     capture('two thousand Goa trip');

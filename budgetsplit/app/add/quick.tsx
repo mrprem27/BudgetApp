@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../src/theme';
 import { formatRupees, formatCompact } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
-import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL } from '../../src/constants/enums';
+import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL } from '../../src/constants/enums';
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
@@ -88,6 +88,14 @@ export default function QuickAddScreen() {
     ? KIND_TABS
     : KIND_TABS.filter(t => t.key !== 'transfer');
 
+  // Blank until the scopes load rather than "₹0": the pill now renders before
+  // `computeTransferScopes` has run, and a hard zero there would read as "nothing is owed"
+  // when the truth is "not worked out yet".
+  const scopeEntry = f.transferScope === TRANSFER_SCOPE_ALL
+    ? f.transferScopes?.all
+    : f.transferScopes?.groups.find(g => g.groupId === f.transferScope);
+  const scopeDetail = f.transferScopes == null ? undefined : formatCompact(scopeEntry?.amount ?? 0);
+
   return (
     <Screen
       header={
@@ -148,17 +156,18 @@ export default function QuickAddScreen() {
             />
           )}
 
-          {kind === 'transfer' && (f.transferScopes?.groups.length ?? 0) > 0 && (
+          {/* Always rendered, unlike before. `computeTransferScopes` only runs once BOTH people
+              are chosen, so gating this pill on the resulting group list hid the group
+              affordance during the whole period you'd first look for it — and "All groups" is
+              already the default (`useAddTxnForm`), so there was a real value going unshown.
+              The amount fills in once the scopes arrive. */}
+          {kind === 'transfer' && (
             <ContextPill
-              icon={f.transferScope === 'all' ? 'layers' : 'users'}
-              label={f.transferScope === 'all'
+              icon={f.transferScope === TRANSFER_SCOPE_ALL ? 'layers' : 'users'}
+              label={f.transferScope === TRANSFER_SCOPE_ALL
                 ? 'All groups'
                 : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.name ?? 'Group'}
-              detail={formatCompact(
-                (f.transferScope === 'all'
-                  ? f.transferScopes?.all?.amount
-                  : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.amount) ?? 0,
-              )}
+              detail={scopeDetail}
               tint={accent}
               onPress={() => open('scope')}
               accessibilityLabel="Choose what you're settling"

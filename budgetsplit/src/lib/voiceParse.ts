@@ -28,6 +28,15 @@ export type VoiceDraft = {
   dateMs: number | null;
   /** What's left after the amount and date words are removed — the title/note. */
   note: string;
+  /**
+   * A person from the caller's own list, when the phrase named one. Null when nobody was named
+   * or when the name was **ambiguous** — two people called Riya must not silently become one
+   * of them, and a settlement pointed at the wrong person is worse than one that asks.
+   *
+   * Only the Add screen acts on this. The background drain never does: a phrase naming a
+   * person needs a decision, and `voiceInbox.routeVoiceDraft` sends those to Review.
+   */
+  personId: string | null;
 };
 
 /**
@@ -194,7 +203,70 @@ function extractAmount(tokens: string[]): { paise: number; consumed: Set<number>
     }
   }
 
+  // 4. A numeral run anywhere in the phrase — "paid Riya five hundred", which is how a
+  //    transfer is actually spoken: the person comes before the amount and there is no money
+  //    word. Strategies 2 and 3 both miss it, so this phrasing parsed to nothing at all.
+  const run = bestMidPhraseRun(tokens);
+  if (run) {
+    const n = wordsToNumber(tokens.slice(run.start, run.end));
+    if (n !== null && n > 0) {
+      for (let i = run.start; i < run.end; i++) consumed.add(i);
+      return { paise: parseToPaise(String(n)), consumed };
+    }
+  }
+
   return { paise: 0, consumed };
+}
+
+const isNumeral = (t: string) =>
+  t in UNITS || t in TENS || t in SCALES || /^\d+(\.\d+)?$/.test(t);
+
+/**
+ * The longest run of numeral words anywhere in the phrase — but only if it is unambiguous.
+ *
+ * Scanning mid-phrase is what makes "paid Riya five hundred" work, and it is also where
+ * homophones bite: `UNITS` carries transliterated Hindi, so a bare "do" (2) would turn "do you
+ * have" into ₹2, and "one more coffee" into ₹1. Strategies 2 and 3 were safe from that only
+ * because they required a leading position or an adjacent money word.
+ *
+ * So a mid-phrase run must earn it, by being either:
+ *  - **scaled** — contains hundred / thousand / lakh / crore (or `sau` / `hazaar`), which no
+ *    ordinary sentence says by accident; or
+ *  - **multi-token** — "four fifty", "twenty five", where two numerals in a row are already a
+ *    strong signal that a number is being spoken.
+ *
+ * A single bare numeral mid-phrase is rejected. It is the one shape that is far more often a
+ * word than a price, and getting money wrong silently is worse than not filling it in.
+ */
+function bestMidPhraseRun(tokens: string[]): { start: number; end: number } | null {
+  let best: { start: number; end: number; score: number } | null = null;
+
+  let i = 0;
+  while (i < tokens.length) {
+    if (!isNumeral(tokens[i])) { i++; continue; }
+
+    // Extend over numerals, allowing filler ("one thousand and fifty") inside the run.
+    let end = i;
+    let count = 0;
+    let scaled = false;
+    let j = i;
+    while (j < tokens.length && (isNumeral(tokens[j]) || FILLER.has(tokens[j]))) {
+      if (isNumeral(tokens[j])) {
+        count++;
+        if (tokens[j] in SCALES) scaled = true;
+        end = j + 1;   // trailing filler is not part of the run
+      }
+      j++;
+    }
+
+    if (scaled || count >= 2) {
+      const score = count + (scaled ? 10 : 0);
+      if (!best || score > best.score) best = { start: i, end, score };
+    }
+    i = j;
+  }
+
+  return best ? { start: best.start, end: best.end } : null;
 }
 
 /**
@@ -257,7 +329,13 @@ function extractDate(tokens: string[], nowMs: number): { dateMs: number | null; 
  */
 export function parseVoice(
   transcript: string,
-  opts: { categories: { name: string }[]; learned?: LearnedMap; nowMs: number },
+  opts: {
+    categories: { name: string }[];
+    learned?: LearnedMap;
+    nowMs: number;
+    /** The caller's real people, so a matched person always exists. Transfers use this. */
+    people?: { id: string; name: string }[];
+  },
 ): VoiceDraft {
   const tokens = tokenize(transcript);
 
@@ -277,5 +355,33 @@ export function parseVoice(
       ?? matchCategory(note, opts.categories)
     : null;
 
-  return { transcript: transcript.trim(), amountPaise: paise, category, dateMs, note };
+  // Matched against the FULL token list, not the leftover note: "paid Riya five hundred"
+  // puts the name where the amount extractor may already have consumed neighbouring tokens.
+  const personId = opts.people ? matchPerson(tokens, opts.people) : null;
+
+  return { transcript: transcript.trim(), amountPaise: paise, category, dateMs, note, personId };
+}
+
+/**
+ * Find which of the caller's people the phrase named.
+ *
+ * Matches a **first name**, whole-word — that is what people actually say, and matching any
+ * part of a full name would let "Kumar" claim three different contacts. Case-insensitive.
+ *
+ * Ambiguity returns null on purpose. Two people whose first names collide are exactly when a
+ * guess is most likely to be wrong and least likely to be noticed, and the cost of null is one
+ * tap on a form the user is already looking at.
+ */
+function matchPerson(tokens: string[], people: { id: string; name: string }[]): string | null {
+  const words = new Set(tokens);
+  const hits = people.filter(p => {
+    const first = p.name.trim().toLowerCase().split(/\s+/)[0];
+    // One-letter names would match a stray article; a name that IS a number word would fight
+    // the amount parser.
+    if (!first || first.length < 2 || first in UNITS || first in TENS || first in SCALES) return false;
+    return words.has(first);
+  });
+
+  if (hits.length !== 1) return null;
+  return hits[0].id;
 }

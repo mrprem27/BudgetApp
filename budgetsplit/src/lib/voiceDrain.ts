@@ -14,7 +14,7 @@ import { insertTxnRows } from '../db/queries/transactions';
 import { insertPending } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
 import { getAllGroups } from '../db/queries/groups';
-import { getMe } from '../db/queries/persons';
+import { getMe, getAllPersons } from '../db/queries/persons';
 
 /**
  * Turn phrases captured while the app was closed into real rows.
@@ -122,10 +122,12 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
   let personalGroupId: string;
   let smartCategoryOn: boolean;
   let groupNames: string[];
+  let personNames: string[];
   try {
     const [cats, lrn, me, groups, flags] = await Promise.all([
       getCategories(db, 'expense'), loadLearned(), getMe(db), getAllGroups(db), loadFlags(),
     ]);
+    const persons = await getAllPersons(db);
     // Turning the feature off has to stop it acting, not just hide its buttons — otherwise
     // captures keep posting from a switch the user believes is off. The files are left
     // untouched, so nothing is lost if it is switched back on.
@@ -145,6 +147,12 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
     // Shared groups only: "Personal" appearing in a phrase means nothing, and matching it
     // would divert every capture to Review.
     groupNames = groups.filter(g => g.is_personal !== 1).map(g => g.name);
+    // First names only, and never your own: "paid Prem" said by Prem is not a transfer, and
+    // matching yourself would divert every capture that happens to contain your name.
+    personNames = persons
+      .filter(pp => pp.id !== me.id)
+      .map(pp => pp.name.trim().split(/\s+/)[0])
+      .filter(Boolean);
   } catch { return NOTHING; }
 
   const out = { saved: 0, queued: 0, deferred: 0 };
@@ -167,7 +175,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
 
     // Anchored to when the phrase was SPOKEN, not to now — see `resolveCaptureTime`.
     const draft = parseVoice(phrase, { categories, learned, nowMs: capturedAt });
-    const dest = routeVoiceDraft(draft, phrase, groupNames);
+    const dest = routeVoiceDraft(draft, phrase, groupNames, personNames);
 
     // Exactly the field mapping a typed entry gets: the descriptive words become the title
     // (which is what smart-category read), anything longer spills into the note, and the two
@@ -206,7 +214,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
           pay_method: null,
           // Why it's here rather than in the ledger, plus what was said, so the Review row
           // can explain itself without the user having to guess.
-          raw: [reviewReason(draft, phrase, groupNames), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
+          raw: [reviewReason(draft, phrase, groupNames, personNames), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
         }]);
         out.queued++;
       }

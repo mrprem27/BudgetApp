@@ -189,3 +189,113 @@ describe('parseVoice — it is a draft, never a transaction', () => {
     expect(d.note).toBe('groceries');
   });
 });
+
+describe('parseVoice — naming a person (transfers)', () => {
+  const PEOPLE = [
+    { id: 'p1', name: 'Riya Sharma' },
+    { id: 'p2', name: 'Sam Mehta' },
+    { id: 'p3', name: 'Prem Bhati' },
+  ];
+  const p = (t: string, people = PEOPLE) =>
+    parseVoice(t, { categories: CATS, nowMs: NOW, people });
+
+  it('matches a first name', () => {
+    expect(p('paid Riya five hundred').personId).toBe('p1');
+    expect(p('two thousand to Sam yesterday').personId).toBe('p2');
+  });
+
+  it('is case-insensitive and survives punctuation', () => {
+    expect(p('PAID RIYA 500!').personId).toBe('p1');
+  });
+
+  it('matches only whole words, and only the first name', () => {
+    // "Sharma" is a surname — matching any part of a full name would let one word claim
+    // several contacts.
+    expect(p('500 sharma').personId).toBeNull();
+    // A first name embedded in another word is not a mention.
+    expect(p('500 riyaz music').personId).toBeNull();
+  });
+
+  it('returns null when the name is ambiguous, rather than guessing', () => {
+    // The case where a guess is most likely wrong and least likely to be noticed. Cost of
+    // null is one tap on a form already on screen; cost of a guess is paying the wrong person.
+    const twoRiyas = [{ id: 'a', name: 'Riya Sharma' }, { id: 'b', name: 'Riya Kapoor' }];
+    expect(p('paid Riya five hundred', twoRiyas).personId).toBeNull();
+  });
+
+  it('ignores a name that would fight the amount parser', () => {
+    // Someone called "Do" (2 in Hindi) or "Ek" must not be matched out of a numeral.
+    const odd = [{ id: 'x', name: 'Do Kumar' }, { id: 'y', name: 'Char Singh' }];
+    expect(p('do sau chai', odd).personId).toBeNull();
+    // …and the amount still parses.
+    expect(p('do sau chai', odd).amountPaise).toBe(R(200));
+  });
+
+  it('ignores single-letter names', () => {
+    expect(p('500 a coffee', [{ id: 'z', name: 'A' }]).personId).toBeNull();
+  });
+
+  it('is null when no people are supplied at all', () => {
+    // Expense and income never pass `people`; the field must simply be absent, not throw.
+    expect(parseVoice('paid Riya 500', { categories: CATS, nowMs: NOW }).personId).toBeNull();
+  });
+
+  it('finds the person even when the amount sits between the words', () => {
+    expect(p('Riya 500 dinner').personId).toBe('p1');
+  });
+
+  it('still parses everything else alongside the person', () => {
+    const d = p('paid Riya five hundred yesterday');
+    expect(d.amountPaise).toBe(R(500));
+    expect(d.personId).toBe('p1');
+    expect(new Date(d.dateMs!).getDate()).toBe(11);
+  });
+});
+
+describe('parseVoice — an amount in the middle of the phrase', () => {
+  it('reads a scaled amount after the subject', () => {
+    // How a transfer is actually spoken: person first, amount last, no money word. Strategies
+    // 1-3 all miss this shape, so it used to parse to nothing.
+    expect(parse('paid Riya five hundred').amountPaise).toBe(R(500));
+    expect(parse('settled dus hazaar').amountPaise).toBe(R(10000));
+    expect(parse('dinner for two hundred').amountPaise).toBe(R(200));
+  });
+
+  it('reads a multi-token amount after the subject', () => {
+    expect(parse('lunch four fifty').amountPaise).toBe(R(450));
+    expect(parse('cab twenty five').amountPaise).toBe(R(25));
+  });
+
+  it('REFUSES a single bare numeral mid-phrase', () => {
+    // The homophone trap: UNITS carries transliterated Hindi, so "do" is 2 and "char" is 4.
+    // A lone numeral mid-sentence is far more often a word than a price, and a wrong amount
+    // filled in silently is worse than an empty field.
+    expect(parse('paid Riya three').amountPaise).toBe(0);
+    expect(parse('coffee with do people').amountPaise).toBe(0);
+    expect(parse('lunch one more').amountPaise).toBe(0);
+  });
+
+  it('does NOT extend that protection to a phrase that STARTS with a numeral', () => {
+    // Documenting a real limit rather than asserting it away. A leading numeral has always been
+    // read as the amount (that is the whole point of "450 groceries"), so "do you have change"
+    // becomes ₹2. Accepted: nobody dictates that sentence into an amount field, and tightening
+    // the leading rule would break the most common phrasing there is.
+    expect(parse('do you have change').amountPaise).toBe(R(2));
+    expect(parse('one more coffee').amountPaise).toBe(R(1));
+  });
+
+  it('still prefers a digit, and a leading run, over a mid-phrase one', () => {
+    // Order matters: an explicit digit is the most reliable signal available.
+    expect(parse('450 dinner two hundred people').amountPaise).toBe(R(450));
+    expect(parse('four fifty groceries').amountPaise).toBe(R(450));
+  });
+
+  it('takes the strongest run when there is more than one', () => {
+    // "two hundred" is scaled, "twenty five" is not — the scaled one wins regardless of order.
+    expect(parse('table twenty five bill two hundred').amountPaise).toBe(R(200));
+  });
+
+  it('keeps the amount words out of the note', () => {
+    expect(parse('paid Riya five hundred').note).toBe('paid riya');
+  });
+});

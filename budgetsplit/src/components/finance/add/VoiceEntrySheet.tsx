@@ -12,6 +12,7 @@ import { colors, type, space, radius, layout } from '../../tokens';
 import { formatRupees } from '../../../lib/money';
 import { parseVoice, type VoiceDraft } from '../../../lib/voiceParse';
 import type { LearnedMap } from '../../../lib/smartCategoryLearn';
+import { AddKind } from '../../../constants/enums';
 
 type Props = {
   visible: boolean;
@@ -23,9 +24,27 @@ type Props = {
   /** Applies the draft to the Add form. Never saves — the user still taps Save. */
   onApply: (draft: VoiceDraft) => void;
   accent?: string;
+  /** Which kind the form is on, so the copy and the understood-card match it. */
+  kind: AddKind;
+  /** The caller's real people. A transfer can name one; the other kinds ignore this. */
+  people?: { id: string; name: string }[];
 };
 
-const EXAMPLES = ['four fifty groceries', 'twelve hundred rent yesterday', 'chai dus rupaye'];
+/**
+ * Examples per kind. A transfer's shape is genuinely different — a person and a direction, not
+ * a merchant — so showing expense examples there taught the wrong phrasing.
+ */
+const EXAMPLES: Record<AddKind, string[]> = {
+  [AddKind.Expense]: ['four fifty groceries', 'twelve hundred rent yesterday', 'chai dus rupaye'],
+  [AddKind.Income]: ['fifty thousand salary', 'two thousand refund yesterday', 'paanch sau cashback'],
+  [AddKind.Transfer]: ['paid Riya five hundred', 'two thousand to Sam yesterday', 'settled dus hazaar'],
+};
+
+const PROMPT: Record<AddKind, string> = {
+  [AddKind.Expense]: 'say the amount and what it was for',
+  [AddKind.Income]: 'say the amount and where it came from',
+  [AddKind.Transfer]: 'say the amount and who you paid',
+};
 
 /**
  * Say a whole expense in one phrase and have it filled in for you.
@@ -47,16 +66,18 @@ const EXAMPLES = ['four fifty groceries', 'twelve hundred rent yesterday', 'chai
  * trigger differs.
  */
 export function VoiceEntrySheet({
-  visible, onClose, categories, learned, onApply, accent = colors.accent,
+  visible, onClose, categories, learned, onApply, accent = colors.accent, kind, people,
 }: Props) {
   const [text, setText] = useState('');
+  const isTransfer = kind === AddKind.Transfer;
 
   // `nowMs` is captured per keystroke on purpose: a relative date ("yesterday") should
   // resolve against when you *said* it, and the sheet is open for seconds.
   const draft = useMemo(
-    () => parseVoice(text, { categories, learned, nowMs: Date.now() }),
-    [text, categories, learned],
+    () => parseVoice(text, { categories, learned, nowMs: Date.now(), people }),
+    [text, categories, learned, people],
   );
+  const person = draft.personId ? people?.find(p => p.id === draft.personId) ?? null : null;
 
   const heardSomething = text.trim().length > 0;
   const usable = draft.amountPaise > 0;
@@ -70,7 +91,7 @@ export function VoiceEntrySheet({
         <IconCircle icon="mic" size={layout.avatarSize} color={accent} />
         <Text style={styles.prompt}>
           Tap the field, then the <Text style={styles.bold}>microphone on your keyboard</Text> —
-          say the amount and what it was for.
+          {PROMPT[kind]}.
         </Text>
       </View>
 
@@ -78,7 +99,7 @@ export function VoiceEntrySheet({
         style={styles.input}
         value={text}
         onChangeText={setText}
-        placeholder="four fifty groceries"
+        placeholder={EXAMPLES[kind][0]}
         placeholderTextColor={colors.textMuted}
         autoFocus
         multiline
@@ -91,7 +112,7 @@ export function VoiceEntrySheet({
         <>
           <SectionHeader title="Try saying" />
           <View style={styles.examples}>
-            {EXAMPLES.map(e => (
+            {EXAMPLES[kind].map(e => (
               <Chip key={e} label={e} icon="message-circle" maxWidth={260} onPress={() => setText(e)} />
             ))}
           </View>
@@ -109,9 +130,17 @@ export function VoiceEntrySheet({
               tint={usable ? accent : colors.expense}
               strong
             />
+            {isTransfer && (
+              <Row
+                icon="user"
+                label="Paid to"
+                value={person?.name ?? 'you pick'}
+                tint={person ? accent : colors.textMuted}
+              />
+            )}
             <Row
               icon="tag"
-              label="Category"
+              label={isTransfer ? 'Reason' : 'Category'}
               value={draft.category ?? 'you pick'}
               tint={draft.category ? accent : colors.textMuted}
             />

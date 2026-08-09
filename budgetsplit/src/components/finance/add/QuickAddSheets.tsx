@@ -120,6 +120,8 @@ export function QuickAddSheets({
         learned={f.learned}
         onApply={f.applyVoiceDraft}
         accent={accent}
+        kind={f.kind}
+        people={f.allPersons}
       />
 
       <AmountCalculatorSheet

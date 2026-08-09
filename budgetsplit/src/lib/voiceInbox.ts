@@ -200,9 +200,18 @@ export function routeVoiceDraft(
   phrase: string,
   /** The user's real group names, so a phrase naming one is never filed as personal. */
   groupNames: string[] = [],
+  /**
+   * The user's people, by first name. A phrase naming one is money that moved *between people*
+   * — "paid Riya five hundred" is a transfer, not a personal expense — and which direction, and
+   * against which balance, is a decision. Filing it as your own spend would put real money in
+   * the wrong bucket with nothing on screen admitting it.
+   */
+  personNames: string[] = [],
 ): VoiceDestination {
   if (draft.amountPaise <= 0) return VoiceDestination.Review;
-  if (isGroupish(phrase) || mentionsGroupName(phrase, groupNames)) return VoiceDestination.Review;
+  if (isGroupish(phrase)) return VoiceDestination.Review;
+  if (mentionsGroupName(phrase, groupNames)) return VoiceDestination.Review;
+  if (mentionsGroupName(phrase, personNames)) return VoiceDestination.Review;
   return VoiceDestination.Ledger;
 }
 
@@ -216,10 +225,12 @@ export function reviewReason(
   draft: VoiceDraft,
   phrase: string,
   groupNames: string[] = [],
+  personNames: string[] = [],
 ): string | null {
   if (draft.amountPaise <= 0) return 'No amount heard';
   if (isGroupish(phrase)) return 'Sounded like a split — pick who shares it';
   if (mentionsGroupName(phrase, groupNames)) return 'Named a group — confirm who shares it';
+  if (mentionsGroupName(phrase, personNames)) return 'Named someone — is this a transfer or a split?';
   return null;
 }
 
