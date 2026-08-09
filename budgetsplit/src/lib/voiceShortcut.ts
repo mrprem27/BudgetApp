@@ -33,11 +33,8 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * Set to `null` to fall back to the manual steps — the screens key off that, so removing a
  * broken link degrades cleanly rather than sending people to a dead page.
  */
-/**
- * All null: every shortcut was rebuilt as a deep link, so the file-capture versions behind the
- * old links no longer match anything documented here. Re-author, re-share, paste back.
- */
-export const VOICE_SHORTCUT_URL: string | null = null;
+export const VOICE_SHORTCUT_URL: string | null =
+  'https://www.icloud.com/shortcuts/7205ee25308f463583f63e8feabf104d';
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
