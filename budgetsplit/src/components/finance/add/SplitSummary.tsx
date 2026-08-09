@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from '../../tokens';
+import { colors, type, space, radius, layout } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
 import { AvatarStack } from '../AvatarStack';
 import type { Person } from '../../../db/queries/persons';
@@ -52,7 +52,10 @@ export function SplitSummary({ members, splitMembers, splitType, total, payments
 }
 
 const styles = StyleSheet.create({
-  splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  // Height matched to `ui/Input`, not padded to whatever the 24pt avatars happened to make
+  // (which came out 56 against the title field's 48). Two heights in one column read as two
+  // different kinds of control.
+  splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: layout.fieldHeight, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   splitWithLabel: { ...type.body, color: colors.textSecondary },
   splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   splitWithValue: { ...type.labelSemi, color: colors.accent },

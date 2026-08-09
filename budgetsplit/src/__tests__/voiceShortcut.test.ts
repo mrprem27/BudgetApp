@@ -5,7 +5,11 @@ import {
   VOICE_DEEP_LINK,
   VOICE_COMMANDS,
   VOICE_FIRST_RUN_NOTE,
+  VOICE_ASK_PROMPT,
+  VOICE_ASK_OUTPUT,
 } from '../lib/voiceShortcut';
+import { CAPTURE_PREFIX } from '../lib/voiceInbox';
+import { ADD_KIND, AddKind } from '../constants/enums';
 import { GROUP_HINTS, isGroupish } from '../lib/voiceInbox';
 import { parseVoice } from '../lib/voiceParse';
 
@@ -56,20 +60,24 @@ describe('what we tell the user matches what we do', () => {
 
 describe('the setup instructions are complete', () => {
   it('orders the actions so each one has what it needs', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(5);
+    expect(VOICE_SHORTCUT_STEPS).toHaveLength(6);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
-    const dictateAt = titles.findIndex(t => t.includes('dictate text'));
+    const askAt = titles.findIndex(t => t.includes('ask for input'));
     const randomAt = titles.findIndex(t => t.includes('random number'));
     const saveAt = titles.findIndex(t => t.includes('save file'));
     const destAt = titles.findIndex(t => t.includes('destination'));
 
-    // Nothing can be saved before it has been dictated; the filename must exist before the
+    // Nothing can be saved before it has been spoken; the filename must exist before the
     // action that uses it; and there is no destination to change until Save File is there.
-    expect(dictateAt).toBeGreaterThanOrEqual(0);
+    expect(askAt).toBeGreaterThanOrEqual(0);
     expect(randomAt).toBeGreaterThanOrEqual(0);
-    expect(saveAt).toBeGreaterThan(dictateAt);
+    expect(saveAt).toBeGreaterThan(askAt);
     expect(saveAt).toBeGreaterThan(randomAt);
     expect(destAt).toBeGreaterThan(saveAt);
+    // The confirmation comes last: it claims the capture was written, so it must not run
+    // before the action that writes it.
+    const speakAt = titles.findIndex(t => t.includes('speak text'));
+    expect(speakAt).toBeGreaterThan(destAt);
   });
 
   it('gives every capture its own filename', () => {
@@ -109,6 +117,44 @@ describe('the setup instructions are complete', () => {
     expect(all).toMatch(/ask where to save/i);
   });
 
+  it('makes every command ask a question about money, not about text', () => {
+    // Left blank, `Ask for Input`'s Prompt makes Siri fall back to "What's the text?" — a
+    // question about the mechanism, asked at the one moment the feature is meant to feel like
+    // talking to a person. The Prompt field is the entire fix, so each command's is pinned as
+    // present, as a real question, and as appearing in the steps that build it.
+    for (const c of VOICE_COMMANDS) {
+      expect(c.prompt.length).toBeGreaterThan(8);
+      expect(c.prompt).toMatch(/\?$/);
+      expect(c.prompt.toLowerCase()).not.toMatch(/\btext\b/);
+
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+      expect(all).toContain(c.prompt);
+      expect(all).toMatch(/prompt/i);
+    }
+  });
+
+  it('asks a question the kind can actually answer', () => {
+    // "What did you spend?" answered with a salary is a question contradicting its own answer.
+    // The two expense commands share one prompt; income and transfer must not borrow it.
+    const byKind = (k: string) => VOICE_COMMANDS.filter(c => c.kind === k).map(c => c.prompt);
+    expect(new Set(byKind('expense')).size).toBe(1);
+    for (const p of [...byKind('income'), ...byKind('transfer')]) {
+      expect(p).not.toBe(VOICE_ASK_PROMPT);
+      expect(p.toLowerCase()).not.toMatch(/spend|spent/);
+    }
+    // A transfer needs a person as well as an amount, so its prompt has to ask for one.
+    expect(byKind('transfer')[0].toLowerCase()).toMatch(/who/);
+  });
+
+  it('consumes the variable Ask for Input actually produces', () => {
+    // `Ask for Input` outputs "Provided Input"; the older build's "Dictated Text" is still
+    // offered in the variable list and picking it yields an empty file with no error.
+    const all = VOICE_COMMANDS.flatMap(c => c.steps)
+      .map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toContain(VOICE_ASK_OUTPUT);
+    expect(all).not.toMatch(/Dictated Text/);
+  });
+
   it('has real prose in every step', () => {
     for (const s of VOICE_SHORTCUT_STEPS) {
       expect(s.title.length).toBeGreaterThan(8);
@@ -125,48 +171,114 @@ describe('the setup instructions are complete', () => {
   });
 });
 
-describe('the two-way command', () => {
-  it('builds the URL before opening it', () => {
-    // "Open URLs" consumes its input rather than offering a field to type in, so the URL
-    // action must come first — Apple's own documented pattern.
-    const titles = VOICE_TWO_WAY_STEPS.map(s => s.title.toLowerCase());
-    const urlAt = titles.findIndex(t => t.includes('"url"'));
-    const openAt = titles.findIndex(t => t.includes('open urls'));
-    expect(urlAt).toBeGreaterThanOrEqual(0);
-    expect(openAt).toBeGreaterThan(urlAt);
+describe('every command captures to a file', () => {
+  const textOf = (c: { steps: { title: string; body: string }[] }) =>
+    c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+
+  it('saves into the folder the drain actually reads', () => {
+    for (const c of VOICE_COMMANDS) {
+      expect(textOf(c)).toContain(VOICE_INBOX_FOLDER);
+      expect(textOf(c)).toMatch(/save file/i);
+      // Nothing builds a URL any more; a command that did would open the app.
+      expect(textOf(c).toLowerCase()).not.toContain('open urls');
+    }
   });
 
-  it('warns about the app-provided lookalikes', () => {
-    // The action list shows several "Open URL" rows carrying an app's icon; picking one opens
-    // that app instead. This cost a round trip, so the warning is pinned.
-    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toMatch(/open urls/i);
-    expect(all.toLowerCase()).toContain('zomato');
+  it('tells the user the filename prefix its kind is read from', () => {
+    // Get this wrong and the capture files as an expense, silently — the prefix is the only
+    // thing carrying the kind.
+    for (const c of VOICE_COMMANDS) {
+      const kind = c.kind === AddKind.Transfer ? 'settlement' : c.kind;
+      expect(textOf(c)).toContain(`${CAPTURE_PREFIX[kind as keyof typeof CAPTURE_PREFIX]}-`);
+      expect(textOf(c)).toContain('.txt');
+    }
   });
 
-  it('tells the user the same link the Add screen reads', () => {
-    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toContain(VOICE_DEEP_LINK);
-    // The route and the param name the screen actually uses.
-    expect(VOICE_DEEP_LINK).toContain('/add/quick');
-    expect(VOICE_DEEP_LINK).toMatch(/[?&]q=$/);
-  });
-
-  it('needs no folder, unlike the one-way command', () => {
-    // Which is why it is the portable one: nothing to re-pick on someone else's device.
-    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all.toLowerCase()).not.toContain('subpath');
-    expect(all).not.toContain(VOICE_INBOX_FOLDER);
+  it('warns off the wide random range that reads as a date', () => {
+    for (const c of VOICE_COMMANDS) {
+      expect(textOf(c)).toContain('999999');
+      expect(textOf(c)).toMatch(/six digits/i);
+    }
   });
 });
 
 describe('the install links', () => {
   it('gives every command its own one-tap install and its own fallback steps', () => {
     // One button for two shortcuts left it ambiguous which one you were installing.
-    expect(VOICE_COMMANDS).toHaveLength(2);
+    // Three, not four: the two expense commands collapsed into one. `routeVoiceDraft` already
+    // separates "yours alone" from "sounded shared" better than a second wake phrase did, so
+    // the split command was a word to remember in exchange for nothing.
+    expect(VOICE_COMMANDS).toHaveLength(3);
+    // One command per kind, so a name can never map to two behaviours.
+    expect(VOICE_COMMANDS.map(c => c.kind)).toHaveLength(new Set(VOICE_COMMANDS.map(c => c.kind)).size);
     for (const c of VOICE_COMMANDS) {
       expect(c.steps.length).toBeGreaterThan(0);
       expect(c.name.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('covers all three kinds, and none of them opens the app', () => {
+    // A kind with no command is a kind you cannot speak. Nothing opens the app to record —
+    // that is the whole point of the capture pipeline, and a command that did would be the
+    // one place friction crept back in.
+    expect(new Set(VOICE_COMMANDS.map(c => c.kind))).toEqual(new Set(ADD_KIND));
+    expect(VOICE_COMMANDS.every(c => !c.opensApp)).toBe(true);
+    expect(VOICE_COMMANDS.find(c => c.kind === AddKind.Expense)!.steps).toBe(VOICE_SHORTCUT_STEPS);
+  });
+
+  it('gives every command a spoken confirmation', () => {
+    // Speaking into silence is indistinguishable from Siri having missed the phrase, and it
+    // is the only feedback there is now that nothing opens.
+    for (const c of VOICE_COMMANDS) {
+      expect(c.speak.length).toBeGreaterThan(4);
+      expect(c.steps.map(st => `${st.title} ${st.body}`).join(' ')).toContain(c.speak);
+    }
+  });
+
+  it('gives the commands names Siri can tell apart', () => {
+    // Confusing two commands means a spend you believed was filed silently is sitting on an
+    // Add screen behind a locked phone. How *phonetically* distinct two names are is a
+    // judgment call and not worth a fake assertion — `Log expense` vs `Add expense` was too
+    // close, `Log expense` vs `Split expense` is fine, and no string metric separates those
+    // cleanly. What is mechanical, and is a real ambiguity for Siri's matching, is one name
+    // containing another.
+    const names = VOICE_COMMANDS.map(c => c.name.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+    for (const a of names) {
+      for (const b of names) {
+        if (a === b) continue;
+        expect(a.includes(b)).toBe(false);
+      }
+    }
+  });
+
+  it('shows a flow whose spoken beats match the command', () => {
+    // The Voice screen renders these verbatim as the "what happens when you say it" timeline,
+    // so a flow quoting the wrong wake phrase or the wrong prompt teaches a command that
+    // does not exist.
+    for (const c of VOICE_COMMANDS) {
+      expect(c.flow.length).toBeGreaterThanOrEqual(4);
+      const all = c.flow.map(b => b.text).join(' ');
+      expect(all).toContain(c.name);
+      expect(all).toContain(c.prompt);
+      // The app can only act in a flow whose command actually opens it — except the one-way
+      // one, where the app acting *later* is the whole point.
+      expect(c.flow.some(b => b.actor === 'app')).toBe(true);
+      expect(c.why.length).toBeGreaterThan(40);
+    }
+  });
+
+  it('sends every kind to a deep link that sets that kind', () => {
+    // `q` last, always: the phrase is unencoded, so a `kind` after it would be swallowed into
+    // the phrase and income would post as an expense.
+    for (const c of VOICE_COMMANDS) {
+      if (!c.opensApp) continue;
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+      const link = c.kind === AddKind.Expense ? VOICE_DEEP_LINK
+        : c.kind === AddKind.Income ? VOICE_DEEP_LINK_INCOME : VOICE_DEEP_LINK_SETTLE;
+      expect(all).toContain(link);
+      expect(link).toMatch(/[?&]q=$/);
+      if (c.kind !== AddKind.Expense) expect(link).toContain(`kind=${c.kind}`);
     }
   });
 
@@ -193,12 +305,18 @@ describe('the install links', () => {
   });
 
   it('pairs each command with the steps that actually build it', () => {
-    // The one-way command needs the folder; the two-way must not mention it, or the
-    // fallback instructions send you to configure something that does not exist.
-    const [oneWay, twoWay] = VOICE_COMMANDS;
-    expect(oneWay.steps).toBe(VOICE_SHORTCUT_STEPS);
-    expect(twoWay.steps).toBe(VOICE_TWO_WAY_STEPS);
-    expect(twoWay.steps.map(s => `${s.title} ${s.body}`).join(' ')).toContain(VOICE_DEEP_LINK);
-    expect(oneWay.steps.map(s => `${s.title} ${s.body}`).join(' ')).toContain('Save File');
+    // Only the one-way command needs the folder; the app-opening ones must not mention it, or
+    // the fallback instructions send you to configure something that does not exist.
+    for (const c of VOICE_COMMANDS) {
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+      expect(all).toContain(`named "${c.name}"`);
+      if (c.opensApp) {
+        expect(all).toContain('Open URLs');
+        expect(all).not.toContain(VOICE_INBOX_FOLDER);
+      } else {
+        expect(all).toContain('Save File');
+        expect(all).toContain(VOICE_INBOX_FOLDER);
+      }
+    }
   });
 });

@@ -7,6 +7,7 @@ import { haptic } from '../../lib/haptics';
 import type { Category } from '../../db/queries/categories';
 import { IconCircle } from '../ui/IconCircle';
 import { SheetModal } from '../ui/SheetModal';
+import { SHEET_PADDING_H } from '../ui/DraggableSheet';
 import { alpha } from '../../theme';
 
 type Props = {
@@ -99,7 +100,6 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
           previously hand-rolled around a raw <Modal>. */}
       <SheetModal visible={isOpen} onClose={close} title="Category" scroll={false}>
         <>
-
             <View style={styles.searchRow}>
               <Feather name="search" size={16} color={colors.textMuted} />
               <TextInput
@@ -123,8 +123,10 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
               keyExtractor={c => c.id}
               numColumns={3}
               columnWrapperStyle={styles.gridRow}
+              style={styles.list}
               contentContainerStyle={styles.grid}
               keyboardShouldPersistTaps="handled"
+              indicatorStyle="white"
               ListHeaderComponent={
                 canCreate ? (
                   <TouchableOpacity style={styles.createRow} onPress={create} accessibilityRole="button">
@@ -192,7 +194,11 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   searchInput: { flex: 1, ...type.body, color: colors.textPrimary, padding: 0 },
-  grid: { paddingBottom: space.md },
+  // Full-bleed to the sheet edge, with the inset moved onto the content. Inheriting the
+  // sheet's padding put the scroll indicator 24pt in, hard against the tiles; now it rides
+  // the edge and `paddingRight` keeps the tiles clear of it.
+  list: { marginHorizontal: -SHEET_PADDING_H },
+  grid: { paddingHorizontal: SHEET_PADDING_H, paddingBottom: space.md },
   gridRow: { gap: space.sm, marginBottom: space.sm },
   tile: {
     flex: 1,

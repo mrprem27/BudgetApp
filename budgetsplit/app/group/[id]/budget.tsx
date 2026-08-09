@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, findNodeHandle,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, findNodeHandle,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../../src/hooks/useScreenData';
-import { useKeyboardVisible } from '../../../src/hooks/useKeyboardVisible';
 import { settings } from '../../../src/lib/settings';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
@@ -31,7 +30,6 @@ import type { FeatherName } from '../../../src/constants/palette';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { SectionCard } from '../../../src/components/ui/SectionCard';
 import { Card } from '../../../src/components/ui/Card';
-import { Chip } from '../../../src/components/ui/Chip';
 import { Divider } from '../../../src/components/ui/Divider';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { ListRow } from '../../../src/components/ui/ListRow';
@@ -58,13 +56,6 @@ const SECTION_ICON: Record<string, FeatherName> = {
 
 type SectionGroup = { title: string; icon: FeatherName; cats: Category[] };
 
-/**
- * One-tap amounts, offered only while a row is empty. Typing 40-odd numbers is the actual
- * friction on this screen; once a value exists the chips would just be clutter competing
- * with it, so they disappear. Same pattern as onboarding's budget step.
- */
-const PRESETS = [1000, 2000, 5000];
-
 export default function BudgetEditorScreen() {
   const { id, category: focusCategoryRaw } = useLocalSearchParams<{ id: string; category?: string }>();
   // Deep-linked from a category's "Set budget" CTA → jump straight to its field.
@@ -78,10 +69,9 @@ export default function BudgetEditorScreen() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
-  // Measured, not guessed: the footer is a fixed CTA over a scroll view, and the old
-  // `height: kbVisible ? space.lg : 100` spacer was a literal 100pt.
+  // Measured, not guessed: the footer is a fixed CTA over a scroll view, and the spacer it
+  // replaced was a literal 100pt.
   const [footerH, setFooterH] = useState(0);
-  const kbVisible = useKeyboardVisible();
   const listPad = useContentInset({ footer: footerH });
   const scrollRef = useRef<ScrollView>(null);
   const focusRowRef = useRef<View>(null);
@@ -227,8 +217,21 @@ export default function BudgetEditorScreen() {
       {error ? (
         <ErrorState onRetry={() => { void reload(); }} />
       ) : (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <>
+        {/* No KeyboardAvoidingView. It padded the whole stack, so the footer rode the keyboard
+            up on every field focus — on a screen with 40-odd inputs that is 40-odd jumps of a
+            button nobody is trying to reach mid-typing. The ScrollView insets itself instead,
+            which keeps the focused row visible and leaves the CTA where it was put. */}
+        <ScrollView
+          ref={scrollRef}
+          // The KeyboardAvoidingView this replaced was the thing bounding the list against the
+          // footer; without a flex here the content grows unbounded and pushes the CTA off.
+          style={styles.list}
+          contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
             <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
@@ -296,18 +299,6 @@ export default function BudgetEditorScreen() {
                           />
                         </View>
                       </View>
-                      {!hasAmt && (
-                        <View style={styles.presetRow}>
-                          {PRESETS.map(v => (
-                            <Chip
-                              key={v}
-                              label={`₹${v >= 1000 ? `${v / 1000}k` : v}`}
-                              onPress={() => setAmount(c.name, String(v))}
-                              accessibilityLabel={`Set ${c.name} to ${formatRupees(v * 100)}`}
-                            />
-                          ))}
-                        </View>
-                      )}
                     </View>
                   );
                 })}
@@ -320,12 +311,12 @@ export default function BudgetEditorScreen() {
         </ScrollView>
 
         <View
-          style={[styles.footer, { paddingBottom: (kbVisible ? space.sm : insets.bottom) + space.md }]}
+          style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
           onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}
         >
           <PrimaryButton label="Save Budget" onPress={handleSave} loading={saving} />
         </View>
-      </KeyboardAvoidingView>
+      </>
       )}
 
       <SheetModal visible={!!cadenceSheetFor} onClose={() => setCadenceSheetFor(null)} title="How often?" scroll={false}>
@@ -355,6 +346,7 @@ export default function BudgetEditorScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  list: { flex: 1 },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
   totalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md },
   totalLabel: { ...type.label, color: colors.textSecondary },
@@ -364,7 +356,6 @@ const styles = StyleSheet.create({
 
 
   rowItem: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: layout.rowMinHeight },
-  presetRow: { flexDirection: 'row', gap: space.sm, paddingLeft: layout.dividerIndent, paddingRight: space.md, paddingBottom: space.smd },
   rowMid: { flex: 1, gap: space.xs },
   rowName: { ...type.body, color: colors.textPrimary },
   amountWrap: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 88 },

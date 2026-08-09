@@ -296,6 +296,57 @@ describe('parseVoice — an amount in the middle of the phrase', () => {
   });
 
   it('keeps the amount words out of the note', () => {
-    expect(parse('paid Riya five hundred').note).toBe('paid riya');
+    // "paid" is stripped as noise: the verb says money moved, which the kind already records.
+    expect(parse('paid Riya five hundred').note).toBe('riya');
+  });
+});
+
+/**
+ * Dictation is speech, and speech is untidy. Every one of these landed verbatim in the title
+ * before `denoise` existed — the ledger filled up with rows called "ok so i paid like dinner".
+ */
+describe('parseVoice — scattered, hesitant speech', () => {
+  const cases: [string, number, string][] = [
+    ['umm four fifty groceries',            45000, 'groceries'],
+    ['uh 250 coffee',                       25000, 'coffee'],
+    ['I spent 450 on groceries',            45000, 'groceries'],
+    ['like 450 for groceries',              45000, 'groceries'],
+    ['about 450 groceries',                 45000, 'groceries'],
+    ['roughly two fifty coffee',            25000, 'coffee'],
+    ['so um coffee 250',                    25000, 'coffee'],
+    ['that was 450 groceries thanks',       45000, 'groceries'],
+    ['ok so I paid like 1200 for dinner',  120000, 'dinner'],
+    ['coffee for 250 rupees please',        25000, 'coffee'],
+    ['received 50000 salary',             5000000, 'salary'],
+    ['gave Karan two thousand',             200000, 'karan'],
+  ];
+
+  for (const [phrase, paise, note] of cases) {
+    it(`reads "${phrase}"`, () => {
+      const d = parse(phrase);
+      expect(d.amountPaise).toBe(paise);
+      expect(d.note).toBe(note);
+    });
+  }
+
+  it('never strips the phrase down to nothing', () => {
+    // A phrase that is ALL noise must still say what was heard — an empty title is worse than
+    // an untidy one, because the row can no longer explain itself.
+    for (const phrase of ['umm I paid', 'ok so yeah', 'uh']) {
+      expect(parse(phrase).note.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('leaves words that carry meaning alone', () => {
+    // Only disfluencies and framing verbs are noise. A real brand can contain one of those
+    // words, and stripping meaning is worse than leaving a stray filler.
+    expect(parse('450 just herbs shampoo').note).toContain('herbs');
+    expect(parse('1200 blue tokai coffee').note).toContain('tokai');
+  });
+
+  it('does not let noise removal disturb the amount', () => {
+    // `NOISE` is deliberately separate from `FILLER`, which participates in number parsing.
+    expect(parse('about twelve hundred rent').amountPaise).toBe(120000);
+    expect(parse('I spent like two lakh fifty thousand on rent').amountPaise).toBe(25000000);
   });
 });

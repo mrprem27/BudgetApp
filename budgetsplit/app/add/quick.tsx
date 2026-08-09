@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../src/theme';
 import { formatRupees, formatCompact } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
-import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL } from '../../src/constants/enums';
+import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind } from '../../src/constants/enums';
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
@@ -58,14 +58,22 @@ export default function QuickAddScreen() {
   const voiceApplied = useRef(false);
   useEffect(() => {
     if (voiceApplied.current || !params.q || f.categories.length === 0) return;
+    // `people` is what makes "paid Riya five hundred" preselect Riya. Without it `personId` is
+    // always null and `applyVoiceDraft`'s transfer branch never fires, so the Settle command
+    // would open with an empty recipient every time. People load asynchronously like the
+    // categories do, so a transfer waits for them rather than applying a draft that cannot
+    // carry a person — this runs once, and there is no second pass to fix it up.
+    if (f.kind === AddKind.Transfer && f.allPersons.length === 0) return;
     voiceApplied.current = true;
-    f.applyVoiceDraft(parseVoice(params.q, { categories: f.categories, learned: f.learned, nowMs: Date.now() }));
+    f.applyVoiceDraft(parseVoice(params.q, {
+      categories: f.categories, learned: f.learned, nowMs: Date.now(), people: f.allPersons,
+    }));
     // Deliberately after the draft is applied, and only for a shared-sounding phrase. Groups
     // load asynchronously, so a phrase that arrives before them opens the sheet on the next
     // pass rather than not at all.
     if (isGroupish(params.q) && f.pickerGroups.length > 0) setSheet('destination');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.q, f.categories.length, f.pickerGroups.length]);
+  }, [params.q, f.categories.length, f.pickerGroups.length, f.allPersons.length, f.kind]);
 
   const { kind, flags, isEditing, isRecurEdit } = f;
   const accent = kindAccent(kind);

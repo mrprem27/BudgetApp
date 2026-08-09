@@ -10,6 +10,8 @@ import {
   resolveCaptureTime,
   voiceFields,
   resolveVoiceCategory,
+  kindFromCaptureName,
+  CAPTURE_PREFIX,
   VOICE_TITLE_MAX_WORDS,
   VOICE_TITLE_MAX_CHARS,
 } from '../lib/voiceInbox';
@@ -354,5 +356,120 @@ describe('resolveVoiceCategory — always a category that exists', () => {
 
   it('returns null only when there are no categories at all', () => {
     expect(resolveVoiceCategory(draft(), [])).toBeNull();
+  });
+});
+
+
+/**
+ * The capture pipeline, kind by kind. Every row of the routing matrix in the plan has a case
+ * here, because "silent" only earns trust if the thing it does silently is right.
+ */
+describe('kindFromCaptureName — which command wrote this file', () => {
+  it('reads the prefix each command writes', () => {
+    expect(kindFromCaptureName('expense-421887.txt')).toBe('expense');
+    expect(kindFromCaptureName('income-90210.txt')).toBe('income');
+    expect(kindFromCaptureName('settle-30514.txt')).toBe('settlement');
+  });
+
+  it('treats an unprefixed capture as an expense', () => {
+    // The shortcut that shipped before prefixes existed writes bare filenames. Dropping those
+    // would silently lose captures already sitting on someone's phone.
+    expect(kindFromCaptureName('421887.txt')).toBe('expense');
+    expect(kindFromCaptureName('Dictated Text.txt')).toBe('expense');
+    expect(kindFromCaptureName('20260809153000.txt')).toBe('expense');
+  });
+
+  it('requires the delimiter, so a lookalike name cannot claim a kind', () => {
+    expect(kindFromCaptureName('incomes-1.txt')).toBe('expense');
+    expect(kindFromCaptureName('expenses-1.txt')).toBe('expense');
+    expect(kindFromCaptureName('settled.txt')).toBe('expense');
+  });
+
+  it('is case-insensitive and survives a missing extension', () => {
+    expect(kindFromCaptureName('INCOME-5.TXT')).toBe('income');
+    expect(kindFromCaptureName('settle-5')).toBe('settlement');
+  });
+
+  it('round-trips every prefix the generator writes', () => {
+    for (const [kind, prefix] of Object.entries(CAPTURE_PREFIX)) {
+      expect(kindFromCaptureName(`${prefix}-1.txt`)).toBe(kind);
+    }
+  });
+});
+
+describe('routeVoiceDraft — per kind', () => {
+  const clean = parse('four fifty groceries');
+  const salary = parse('fifty thousand salary');
+
+  it('posts a clean personal expense', () => {
+    expect(routeVoiceDraft(clean, 'four fifty groceries', [], [], 'expense'))
+      .toBe(VoiceDestination.Ledger);
+  });
+
+  it('posts a clean income', () => {
+    // Income has no shares to apportion and is always personal, so there is no decision to
+    // ask about — it earns the same silent path an expense gets.
+    expect(routeVoiceDraft(salary, 'fifty thousand salary', [], [], 'income'))
+      .toBe(VoiceDestination.Ledger);
+  });
+
+  it('holds income that named a group or a person', () => {
+    // Income is personal-only, so a named party means it was misheard rather than that it
+    // needs splitting.
+    expect(routeVoiceDraft(salary, 'fifty thousand salary with Riya', [], [], 'income'))
+      .toBe(VoiceDestination.Review);
+    expect(routeVoiceDraft(salary, 'fifty thousand salary Goa', ['Goa'], [], 'income'))
+      .toBe(VoiceDestination.Review);
+  });
+
+  it('never posts a settlement, however clean the parse', () => {
+    // Direction is not recoverable from the words, and a settlement pointed the wrong way
+    // moves a real balance twice — once in each direction.
+    const settle = parse('paid Riya five hundred');
+    expect(settle.amountPaise).toBeGreaterThan(0);
+    expect(routeVoiceDraft(settle, 'paid Riya five hundred', [], ['Riya'], 'settlement'))
+      .toBe(VoiceDestination.Review);
+  });
+
+  it('holds anything with no amount, whatever the kind', () => {
+    for (const kind of ['expense', 'income', 'settlement'] as const) {
+      expect(routeVoiceDraft(draft({ amountPaise: 0 }), 'x', [], [], kind))
+        .toBe(VoiceDestination.Review);
+    }
+  });
+
+  it('defaults to expense rules when no kind is given', () => {
+    // Older callers and unprefixed captures both land here.
+    expect(routeVoiceDraft(clean, 'four fifty groceries')).toBe(VoiceDestination.Ledger);
+  });
+});
+
+describe('reviewReason — per kind', () => {
+  it('distinguishes a settlement that knows the person from one that does not', () => {
+    // They need different next actions: one is something to confirm, the other something to
+    // supply, so collapsing them into one line would misdirect half the rows.
+    const known = { ...parse('paid Riya five hundred'), personId: 'r' };
+    const unknown = { ...parse('paid five hundred'), personId: null };
+    expect(reviewReason(known, 'paid Riya five hundred', [], [], 'settlement'))
+      .toMatch(/direction/i);
+    expect(reviewReason(unknown, 'paid five hundred', [], [], 'settlement'))
+      .toMatch(/who/i);
+  });
+
+  it('says nothing for an income that posted itself', () => {
+    expect(reviewReason(parse('fifty thousand salary'), 'fifty thousand salary', [], [], 'income'))
+      .toBeNull();
+  });
+
+  it('explains a held income in terms of income, not splitting', () => {
+    const r = reviewReason(parse('fifty thousand salary'), 'salary split with Riya', [], [], 'income');
+    expect(r).toMatch(/personal/i);
+    expect(r).not.toMatch(/who shares/i);
+  });
+
+  it('still reports a missing amount first, for every kind', () => {
+    for (const kind of ['expense', 'income', 'settlement'] as const) {
+      expect(reviewReason(draft({ amountPaise: 0 }), 'x', [], [], kind)).toBe('No amount heard');
+    }
   });
 });

@@ -35,6 +35,10 @@ export const layout = {
   /** Transaction rows sit taller than list rows — AGENTS.md §12 sets the floor at
    *  60; this is the height they've actually used. */
   txnRowHeight:   64,
+  /** A single-line form field, and anything sitting in a stack beside one — `ui/Input`,
+   *  and the tappable summary rows that share its column. Two different heights in one
+   *  column read as two different kinds of control. */
+  fieldHeight:    48,
   /** The icon disc inside a form row (AGENTS.md §4). */
   iconCircle:     32,
   /** Member/person avatar. Settles a 36-vs-44 split across member rows. */

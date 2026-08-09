@@ -180,6 +180,16 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   );
 }
 
+/**
+ * The sheet's horizontal inset, exported so a full-bleed child can cancel it.
+ *
+ * A list inside the sheet inherits this padding, which puts its scroll indicator 24pt in from
+ * the edge — hard against the content instead of beside it. Such a child sets
+ * `marginHorizontal: -SHEET_PADDING_H` and re-applies the padding to its own content
+ * container, so the indicator rides the real edge and the content keeps its inset.
+ */
+export const SHEET_PADDING_H = space.lg;
+
 const styles = StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
   wrap: { flex: 1, justifyContent: 'flex-end' },
@@ -187,7 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: SHEET_PADDING_H,
     paddingTop: space.sm,
     maxHeight: '88%',
     ...shadow.lg,

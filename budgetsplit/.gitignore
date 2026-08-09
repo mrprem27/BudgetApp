@@ -7,6 +7,8 @@ node_modules/
 .expo/
 dist/
 web-build/
+# Generated + Apple-signed Siri shortcuts (npm run build:shortcuts).
+build/shortcuts/
 expo-env.d.ts
 .claude/
 

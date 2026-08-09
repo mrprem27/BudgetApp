@@ -14,8 +14,19 @@ import { SectionCard } from '../../src/components/ui/SectionCard';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import {
   VOICE_PHRASE_EXAMPLES, VOICE_SHORTCUT_PRIVACY, VOICE_COMMANDS, VOICE_ONE_WAY_NAME,
-  VOICE_FIELD_RULES, VOICE_FIRST_RUN_NOTE, SHORTCUTS_APP_URL, type VoiceCommand,
+  VOICE_FIRST_RUN_NOTE, SHORTCUTS_APP_URL, VOICE_FIELD_RULES, VOICE_ROUTING_SUMMARY, VOICE_FILES_LOCATION,
+  type VoiceCommand, type FlowActor,
 } from '../../src/lib/voiceShortcut';
+import { kindAccent, kindGradient } from '../../src/lib/kindTheme';
+import { ADD_KIND_LABEL } from '../../src/constants/enums';
+
+/** Who is speaking in a flow beat. `app` is the only one that isn't a person. */
+const ACTOR_ICON: Record<FlowActor, 'user' | 'mic' | 'smartphone'> = {
+  you: 'user', siri: 'mic', app: 'smartphone',
+};
+const ACTOR_LABEL: Record<FlowActor, string> = {
+  you: 'You', siri: 'Siri', app: 'BudgetSplit',
+};
 
 /**
  * Setting up "Hey Siri, log expense" — the capture path that never opens the app.
@@ -30,6 +41,9 @@ export default function VoiceSetupScreen() {
   // Which command's manual steps are open. Collapsed by default: the steps are the fallback,
   // not the thing to read first.
   const [openSteps, setOpenSteps] = useState<string | null>(null);
+  // The flow is the thing worth reading before installing, so it opens on the first command
+  // rather than starting collapsed like the steps do.
+  const [openFlow, setOpenFlow] = useState<string | null>(VOICE_COMMANDS[0]?.name ?? null);
 
   // Creating the folder is the one thing the app must do before setup can succeed: the
   // Shortcuts folder picker can only choose a folder that already exists.
@@ -59,8 +73,9 @@ export default function VoiceSetupScreen() {
           <IconCircle icon="mic" size={56} iconSize={22} color={colors.accent} bg={colors.accentMuted} />
           <Text style={styles.heroTitle}>{`“Hey Siri, ${VOICE_ONE_WAY_NAME}”`}</Text>
           <Text style={styles.heroBody}>
-            Say what you spent without unlocking or opening anything. Siri repeats it back so
-            you know it heard you, and BudgetSplit files it the next time you open the app.
+            Three commands — spending, income, settling up — and none of them opens the app.
+            Siri asks, you answer, it tells you what it did. BudgetSplit files everything the
+            next time you happen to open it.
           </Text>
         </Card>
 
@@ -80,58 +95,122 @@ export default function VoiceSetupScreen() {
           ))}
         </View>
 
-        {/* Two phrases rather than one clever one: the mode is chosen by what you SAY, so it
-            is never inferred wrongly from your wording. Each command owns its own install
-            button and its own fallback steps — a single button for two shortcuts left it
-            ambiguous which one you were getting. */}
-        <SectionHeader title="Set up the two commands" />
-        {VOICE_COMMANDS.map(c => (
-          <View key={c.name} style={styles.cmdBlock}>
-            <Card padded>
-              <View style={styles.cmdHead}>
-                <IconCircle icon={c.icon} size={32} iconSize={14} color={colors.accent} />
-                <View style={styles.stepText}>
-                  <Text style={styles.stepTitle}>{`“Hey Siri, ${c.name}”`}</Text>
-                  <Text style={styles.cmdSummary}>{c.summary}</Text>
-                </View>
-              </View>
-              <Text style={styles.stepBody}>{c.detail}</Text>
-              <PrimaryButton
-                label={c.installUrl ? `Add “${c.name}”` : 'Open Shortcuts'}
-                onPress={() => install(c)}
-                style={styles.cmdCta}
-              />
-              {c.installUrl != null && (
-                <Text style={styles.note}>
-                  Tap <Text style={styles.strong}>Add Shortcut</Text> on the sheet Apple shows.
-                  That's the whole setup.
-                </Text>
-              )}
-            </Card>
-
-            {/* The manual build stays available but collapsed: it is the fallback if the
-                link ever stops resolving, not the thing to read first. */}
-            <SectionCard
-              title="Build it by hand instead"
-              subtitle={`${c.steps.length} steps`}
-              expanded={openSteps === c.name}
-              onToggle={() => setOpenSteps(openSteps === c.name ? null : c.name)}
-            >
-              {c.steps.map((st, i) => (
-                <View key={st.title} style={[styles.step, i > 0 && styles.stepBorder]}>
-                  <Text style={styles.stepNum}>{i + 1}</Text>
+        {/* One command per kind rather than one clever one: the kind is chosen by what you SAY,
+            so it is never inferred wrongly from your wording, and the name costs no extra words
+            because you have to say something anyway. Each owns its install button, its flow and
+            its fallback steps. */}
+        <SectionHeader title={`Set up the ${VOICE_COMMANDS.length} commands`} />
+        {VOICE_COMMANDS.map(c => {
+          const accent = kindAccent(c.kind);
+          return (
+            <View key={c.name} style={styles.cmdBlock}>
+              <Card padded>
+                <View style={styles.cmdHead}>
+                  <IconCircle icon={c.icon} size={32} iconSize={14} color={accent} />
                   <View style={styles.stepText}>
-                    <Text style={styles.stepTitle}>{st.title}</Text>
-                    <Text style={styles.stepBody}>{st.body}</Text>
+                    <Text style={styles.stepTitle}>{`“Hey Siri, ${c.name}”`}</Text>
+                    <Text style={[styles.cmdSummary, { color: accent }]}>{c.summary}</Text>
                   </View>
+                  <Chip label={ADD_KIND_LABEL[c.kind]} accent={accent} selected />
                 </View>
-              ))}
-            </SectionCard>
-          </View>
-        ))}
+                <Text style={styles.stepBody}>{c.detail}</Text>
+                <PrimaryButton
+                  label={c.installUrl ? `Add “${c.name}”` : 'Open Shortcuts'}
+                  onPress={() => install(c)}
+                  style={styles.cmdCta}
+                  gradient={kindGradient(c.kind)}
+                />
+                {/* The folder is the one thing a shared shortcut cannot carry: its destination
+                    is a bookmark to a folder on the device that made it. Saying so here, at the
+                    install button, is the difference between "one more tap" and "it silently
+                    saved nothing and I never found out". */}
+                <Text style={styles.note}>
+                  {c.installUrl != null
+                    ? <>Tap <Text style={styles.strong}>Add Shortcut</Text>, then open it once and set <Text style={styles.strong}>Save File</Text> to {VOICE_FILES_LOCATION}. That folder already exists, and it is the only step — without it the capture saves somewhere BudgetSplit can't see.</>
+                    : <>No ready-made link for this one yet — build it from the {c.steps.length} steps below.</>}
+                </Text>
+              </Card>
+
+              {/* The flow, as turns — who speaks when, and whether the phone leaves your
+                  pocket. Collapsed, because with a working install link the button above is
+                  the whole setup and this is reassurance, not instruction. */}
+              <SectionCard
+                title="What happens when you say it"
+                subtitle={c.opensApp ? 'Opens the app' : 'Never opens the app'}
+                icon="message-square"
+                iconColor={accent}
+                expanded={openFlow === c.name}
+                onToggle={() => setOpenFlow(openFlow === c.name ? null : c.name)}
+              >
+                <View style={styles.flow}>
+                  {c.flow.map((b, i) => (
+                    <View key={i} style={styles.beat}>
+                      <View style={styles.beatRail}>
+                        <IconCircle
+                          icon={ACTOR_ICON[b.actor]}
+                          size={26}
+                          iconSize={12}
+                          color={b.actor === 'app' ? accent : colors.textSecondary}
+                        />
+                        {i < c.flow.length - 1 && <View style={styles.beatLine} />}
+                      </View>
+                      <View style={styles.beatText}>
+                        <Text style={styles.beatWho}>{ACTOR_LABEL[b.actor]}</Text>
+                        <Text style={styles.stepBody}>{b.text}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <View style={[styles.why, { borderLeftColor: accent }]}>
+                  <Text style={styles.stepBody}>{c.why}</Text>
+                </View>
+              </SectionCard>
+
+              {/* The hand-build only appears when there is no link to tap. The shortcuts are
+                  generated and signed from these same constants now (`npm run build:shortcuts`),
+                  so a missing link means one has not been shared yet — not that anyone is
+                  expected to assemble actions by hand as a matter of course. */}
+              {c.installUrl == null && (
+                <SectionCard
+                  title="Build it by hand instead"
+                  subtitle={`${c.steps.length} steps`}
+                  icon="tool"
+                  iconColor={accent}
+                  expanded={openSteps === c.name}
+                  onToggle={() => setOpenSteps(openSteps === c.name ? null : c.name)}
+                >
+                  {c.steps.map((st, i) => (
+                    <View key={st.title} style={[styles.step, i > 0 && styles.stepBorder]}>
+                      <Text style={[styles.stepNum, { color: accent }]}>{i + 1}</Text>
+                      <View style={styles.stepText}>
+                        <Text style={styles.stepTitle}>{st.title}</Text>
+                        <Text style={styles.stepBody}>{st.body}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </SectionCard>
+              )}
+            </View>
+          );
+        })}
 
         <Text style={styles.note}>{VOICE_FIRST_RUN_NOTE}</Text>
         <Text style={styles.note}>{VOICE_SHORTCUT_PRIVACY}</Text>
+
+        {/* "Where did my sentence go" is the first question a voice feature has to answer, and
+            these rules were sitting exported-but-unrendered. */}
+        <SectionHeader title="What happens to your words" />
+        <Card>
+          {VOICE_FIELD_RULES.map((r, i) => (
+            <View key={r.title} style={[styles.step, i > 0 && styles.stepBorder]}>
+              <View style={styles.stepText}>
+                <Text style={styles.stepTitle}>{r.title}</Text>
+                <Text style={styles.stepBody}>{r.body}</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+        <Text style={styles.note}>{VOICE_ROUTING_SUMMARY}</Text>
 
         <SectionHeader title="Inside the app" />
         <Text style={styles.body}>
@@ -160,8 +239,22 @@ const styles = StyleSheet.create({
   stepTitle: { ...type.bodySemi, color: colors.textPrimary },
   stepBody: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
   cmdSummary: { ...type.captionSemi, color: colors.accent },
-  cmdBlock: { gap: space.sm, marginBottom: space.md },
+  cmdBlock: { gap: space.sm, marginBottom: space.lg },
   cmdHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
   cmdCta: { marginTop: space.md },
-  stepsHeading: { ...type.labelSemi, color: colors.textSecondary, marginTop: space.md, marginBottom: space.sm },
+
+  flow: { padding: space.md, paddingBottom: 0 },
+  beat: { flexDirection: 'row', gap: space.md },
+  // The rail holds the disc and the connector, so the line runs between discs rather than
+  // beside the text — the text blocks are uneven heights and the line would wander.
+  beatRail: { alignItems: 'center', width: layout.iconCircle },
+  beatLine: { flex: 1, width: 1, backgroundColor: colors.border, marginVertical: space.xs },
+  beatText: { flex: 1, gap: 2, paddingBottom: space.md },
+  beatWho: { ...type.labelSemi, color: colors.textSecondary },
+  why: {
+    borderLeftWidth: 2,
+    paddingLeft: space.smd,
+    marginHorizontal: space.md,
+    marginBottom: space.md,
+  },
 });

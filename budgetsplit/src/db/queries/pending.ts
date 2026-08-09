@@ -46,7 +46,9 @@ export type PendingTxn = {
 // route that does.
 export type NewPending =
   Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label'>
-  & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label'>>;
+  // `counterparty_id` is settable at ingest, not only in Review: a voice settlement already
+  // knows who was named, and re-asking for it would be asking twice.
+  & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label' | 'counterparty_id'>>;
 
 /** The subset of a pending row the Review screen auto-saves as you edit it. */
 export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method' | 'counterparty_id' | 'direction'>>;
@@ -57,10 +59,10 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
   await db.withTransactionAsync(async () => {
     for (const r of rows) {
       await db.runAsync(
-        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, lat, lng, place_label)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, lat, lng, place_label, counterparty_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
-          r.lat ?? null, r.lng ?? null, r.place_label ?? null],
+          r.lat ?? null, r.lng ?? null, r.place_label ?? null, r.counterparty_id ?? null],
       );
     }
   });

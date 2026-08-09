@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, Alert, ActionSheetIOS } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type, space, radius, layout } from '../tokens';
 import { MemberAvatar } from './MemberAvatar';
 import { PayMethodSelector } from './PayMethodSelector';
 import { formatRupees } from '../../lib/money';
@@ -46,6 +46,29 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
+
+  /**
+   * Which *side* each role is on. Purely visual — `fromId`/`toId` remain the truth.
+   *
+   * Reversing flips this at the same moment it swaps from/to upstream, and the two changes
+   * cancel: the same person stays on the same side, and only the arrow turns.
+   */
+  const [reversed, setReversed] = React.useState(false);
+  const leftRole: 'from' | 'to' = reversed ? 'to' : 'from';
+  const rightRole: 'from' | 'to' = reversed ? 'from' : 'to';
+  const leftPerson = reversed ? to : from;
+  const rightPerson = reversed ? from : to;
+
+  function reverse() {
+    setReversed(r => !r);
+    onSwap();
+  }
+
+  // "You paid Riya" / "Riya paid you" — the payer is always `from`, whichever side it sits on.
+  // Null until both are picked, so the card doesn't assert a direction it doesn't have yet.
+  const directionLabel = from && to && fromId !== toId
+    ? `${nameOf(from, '')} paid ${to.id === me?.id ? 'you' : nameOf(to, '')}`
+    : null;
 
   const entry = scope === TRANSFER_SCOPE_ALL ? scopes?.all : scopes?.groups.find(g => g.groupId === scope);
   const bal = entry?.amount ?? 0;
@@ -127,24 +150,47 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
         <Text style={styles.hint}>No balance between them — enter any amount</Text>
       )}
 
-      {/* FROM → TO direction */}
+      {/* Two people and an arrow between them. No FROM/TO labels: with an arrow already
+          stating the direction they were a third and fourth statement of the same fact, and
+          the labels and the arrow disagreed about which metaphor the card was using.
+
+          The slots are POSITIONS, not roles. Reversing turns the arrow and leaves the avatars
+          where they are, so exactly one thing changes and you can see which — swapping the
+          avatars instead (what this did before) is, by its own admission, indistinguishable
+          from having mis-tapped a tile. */}
       <View style={[styles.dirCard, !!fromId && !!toId && fromId === toId && styles.dirCardError]}>
-        <TouchableOpacity style={styles.dirTile} onPress={() => onPickSlot('from')} accessibilityRole="button" accessibilityLabel="Choose who paid">
-          <Text style={styles.dirLabel}>FROM</Text>
-          <MemberAvatar name={from?.name ?? '?'} color={from?.avatar_color ?? colors.accent} size={52} imageUri={from?.image_uri} />
-          <Text style={styles.dirName} numberOfLines={1}>{nameOf(from, 'Pick')}</Text>
-        </TouchableOpacity>
+        <View style={styles.dirRow}>
+          <TouchableOpacity
+            style={styles.dirTile}
+            onPress={() => onPickSlot(leftRole)}
+            accessibilityRole="button"
+            accessibilityLabel={leftRole === 'from' ? 'Choose who paid' : 'Choose who received'}
+          >
+            <MemberAvatar name={leftPerson?.name ?? '?'} color={leftPerson?.avatar_color ?? colors.accent} size={52} imageUri={leftPerson?.image_uri} />
+            <Text style={styles.dirName} numberOfLines={1}>{nameOf(leftPerson, 'Pick')}</Text>
+          </TouchableOpacity>
 
-        {/* The centre states the direction and reverses it — one control, because "which way
-            does the money go" and "send it the other way" are the same question asked twice.
-            A `repeat` glyph sat here before and said neither. */}
-        <DirectionArrow onSwap={onSwap} />
+          <DirectionArrow reversed={reversed} onPress={reverse} label={directionLabel} />
 
-        <TouchableOpacity style={styles.dirTile} onPress={() => onPickSlot('to')} accessibilityRole="button" accessibilityLabel="Choose who received">
-          <Text style={styles.dirLabel}>TO</Text>
-          <MemberAvatar name={to?.name ?? '?'} color={to?.avatar_color ?? colors.accent} size={52} imageUri={to?.image_uri} />
-          <Text style={styles.dirName} numberOfLines={1}>{nameOf(to, 'Pick')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dirTile}
+            onPress={() => onPickSlot(rightRole)}
+            accessibilityRole="button"
+            accessibilityLabel={rightRole === 'from' ? 'Choose who paid' : 'Choose who received'}
+          >
+            <MemberAvatar name={rightPerson?.name ?? '?'} color={rightPerson?.avatar_color ?? colors.accent} size={52} imageUri={rightPerson?.image_uri} />
+            <Text style={styles.dirName} numberOfLines={1}>{nameOf(rightPerson, 'Pick')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* The arrow is a glyph, and a glyph is the one thing a person can misread here. This
+            says it in words, and it is the only line that changes when you reverse. */}
+        {directionLabel && (
+          <>
+            <View style={styles.dirDivider} />
+            <Text style={styles.dirSentence}>{directionLabel}</Text>
+          </>
+        )}
       </View>
       {!!fromId && !!toId && fromId === toId && (
         <Text style={styles.errText}>From and To must be different people.</Text>
@@ -248,40 +294,48 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
 }
 
 /**
- * The direction indicator, which is also the swap control.
+ * The direction indicator, which is also the control that changes it.
  *
- * Tapping it reverses the transfer, and the arrow **flips to match** — the animation is the
- * acknowledgement. Without it the only feedback is two avatars exchanging places, which is easy
- * to miss and impossible to distinguish from having mis-tapped a tile.
+ * One job now: it points the way the money goes, and tapping it points it the other way. That
+ * is coherent in a way the old behaviour was not — there, tapping the arrow shuffled the two
+ * avatars, so the glyph was a statement about direction wired to an action about position.
  *
- * A half-turn rather than a mirror: rotating through 180° shows the movement, where swapping the
- * glyph for its mirror image would just be a different static picture. Rotation is
+ * A half-turn rather than a mirrored glyph: rotating through 180° shows the movement, where
+ * swapping in the mirror image would just be a different static picture. Rotation is
  * native-driver-safe (AGENTS §11) and honours Reduce Motion.
  */
-function DirectionArrow({ onSwap }: { onSwap: () => void }) {
+function DirectionArrow({ reversed, onPress, label }: {
+  reversed: boolean;
+  onPress: () => void;
+  label: string | null;
+}) {
   // Accumulates rather than toggling between 0 and 180, so consecutive taps keep turning the
-  // same way instead of rocking back and forth.
-  //
-  // The spring is applied when the value CHANGES, not inside the style. `withSpring` returns an
-  // animation object, so interpolating one into a template string yields "[object Object]deg" —
-  // it type-checks (both are `number` to TypeScript) and fails at runtime. Same trap as
-  // `interpolateColor`; see the note in `ui/TabPills`.
+  // same way instead of rocking back and forth. Driven by `reversed` so the glyph can never
+  // disagree with the data — a half-turn per flip lands it on the correct heading either way.
   const deg = useSharedValue(0);
+  const turns = React.useRef(0);
+  const mounted = React.useRef(false);
+  React.useEffect(() => {
+    // Mount must not animate: the effect runs once before any flip, and spinning there would
+    // land the arrow pointing left on a card nobody has touched.
+    if (!mounted.current) { mounted.current = true; return; }
+    turns.current += 1;
+    deg.value = withSpring(turns.current * 180, ARROW_SPRING);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reversed]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${deg.value}deg` }] }));
 
   return (
     <PressableScale
-      onPress={() => {
-        haptic.selection();
-        deg.value = withSpring(deg.value + 180, ARROW_SPRING);
-        onSwap();
-      }}
+      onPress={() => { haptic.selection(); onPress(); }}
       hitSlop={12}
-      accessibilityLabel="Reverse the direction — swap who paid and who received"
+      // The glyph's heading is invisible to a screen reader, so the state it encodes has to be
+      // spoken. Falls back to the action alone before anyone is picked.
+      accessibilityLabel={label ? `${label}. Tap to reverse.` : 'Reverse who pays whom'}
       style={styles.arrowBtn}
     >
-      <Animated.View style={style}>
-        <Feather name="arrow-right" size={18} color={colors.settle} />
+      <Animated.View style={[styles.arrowDisc, style]}>
+        <Feather name="arrow-right" size={20} color={colors.settle} />
       </Animated.View>
     </PressableScale>
   );
@@ -296,12 +350,28 @@ const styles = StyleSheet.create({
   balRowLabel: { ...type.label, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   balRowAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, flexShrink: 0 },
   label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginTop: space.sm },
-  dirCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md },
+  dirCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md },
   dirCardError: { borderColor: colors.expense, borderWidth: 1.5 },
+  dirRow: { flexDirection: 'row', alignItems: 'center' },
   dirTile: { flex: 1, alignItems: 'center', gap: space.xs },
-  dirLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
+  dirDivider: { height: 1, backgroundColor: colors.border, marginTop: space.md, marginBottom: space.sm },
+  dirSentence: { ...type.label, color: colors.textSecondary, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
   dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  arrowBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  arrowBtn: { width: layout.touchMin, height: layout.touchMin, alignItems: 'center', justifyContent: 'center' },
+  // A bare glyph between two 52pt avatars read as a separator rather than a control, so the
+  // one thing on this card you can tap looked like the one thing you couldn't. The disc is
+  // what makes it a button; it stays tinted rather than filled so it doesn't outrank the
+  // avatars it sits between.
+  arrowDisc: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: alpha(colors.settle, 15),
+    borderWidth: 1,
+    borderColor: alpha(colors.settle, 33),
+  },
   errText: { ...type.caption, color: colors.expense, textAlign: 'center' },
   upiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.settle, backgroundColor: alpha(colors.settle, 8) },
   upiBtnText: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },

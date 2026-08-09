@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, Text, StyleSheet, ViewStyle, ReturnKeyTypeOptions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type, space, radius, layout } from '../tokens';
 
 type Props = {
   value: string;
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    height: 48,
+    height: layout.fieldHeight,
     paddingHorizontal: 14,
   },
   wrapMultiline: {
     height: undefined,
-    minHeight: 48,
+    minHeight: layout.fieldHeight,
     alignItems: 'flex-start',
     paddingVertical: 12,
   },

@@ -1,4 +1,5 @@
 import type { VoiceDraft } from './voiceParse';
+import type { TxnKind } from '../constants/enums';
 
 /**
  * Where a phrase captured *outside* the app should end up.
@@ -44,6 +45,36 @@ export const GROUP_HINTS = ['split', 'splitting', 'group', 'with', 'owe', 'owes'
 export function isGroupish(phrase: string): boolean {
   const words = phrase.toLowerCase().split(/[^a-z]+/).filter(Boolean);
   return words.some(w => (GROUP_HINTS as readonly string[]).includes(w));
+}
+
+/**
+ * The filename prefix each kind is captured under.
+ *
+ * The kind comes from *which shortcut you said*, not from the words — that is the one signal
+ * that is never wrong, and it is why saying "salary" into the expense command cannot silently
+ * book income. The shortcut carries it in the filename because a plain text file has nowhere
+ * else to put it.
+ */
+export const CAPTURE_PREFIX: Record<TxnKind, string> = {
+  expense: 'expense',
+  income: 'income',
+  settlement: 'settle',
+};
+
+/**
+ * Which kind a capture file holds.
+ *
+ * **Unprefixed means expense**, so captures written by the shortcut that shipped before this
+ * existed keep filing correctly rather than being dropped or misread.
+ */
+export function kindFromCaptureName(fileName: string): TxnKind {
+  const stem = fileName.replace(/\.[a-z0-9]+$/i, '').toLowerCase();
+  for (const kind of Object.keys(CAPTURE_PREFIX) as TxnKind[]) {
+    // `-` delimited so a capture named "expenses-12" can't claim the expense prefix by
+    // accident, and so the random suffix is never read as part of the name.
+    if (stem.startsWith(`${CAPTURE_PREFIX[kind]}-`)) return kind;
+  }
+  return 'expense';
 }
 
 /**
@@ -207,8 +238,19 @@ export function routeVoiceDraft(
    * the wrong bucket with nothing on screen admitting it.
    */
   personNames: string[] = [],
+  /** Which command captured it. See {@link kindFromCaptureName}. */
+  kind: TxnKind = 'expense',
 ): VoiceDestination {
   if (draft.amountPaise <= 0) return VoiceDestination.Review;
+
+  // A settlement never posts itself, however clean the parse. Direction is not recoverable
+  // from the words — "paid" and "got" are one mis-hearing apart — and a settlement pointed
+  // the wrong way moves a real balance twice over, once in each direction. The row waits in
+  // Review with the amount, the person and the kind already filled, so confirming it is a tap.
+  if (kind === 'settlement') return VoiceDestination.Review;
+
+  // Income is personal-only (`useAddTxnForm` forces the personal group for it), so a named
+  // group or person means the phrase was misheard rather than that it needs splitting.
   if (isGroupish(phrase)) return VoiceDestination.Review;
   if (mentionsGroupName(phrase, groupNames)) return VoiceDestination.Review;
   if (mentionsGroupName(phrase, personNames)) return VoiceDestination.Review;
@@ -226,8 +268,25 @@ export function reviewReason(
   phrase: string,
   groupNames: string[] = [],
   personNames: string[] = [],
+  kind: TxnKind = 'expense',
 ): string | null {
   if (draft.amountPaise <= 0) return 'No amount heard';
+
+  if (kind === 'settlement') {
+    // Two reasons a settlement waits, and they need different next actions, so they are not
+    // collapsed: a missing person is something to supply, a known one is something to confirm.
+    return draft.personId
+      ? 'Confirm the direction — tap to reverse if they paid you'
+      : 'Who did you pay? — say a name next time, or pick one here';
+  }
+
+  if (kind === 'income') {
+    if (isGroupish(phrase) || mentionsGroupName(phrase, groupNames) || mentionsGroupName(phrase, personNames)) {
+      return 'Income is always personal — check this was heard right';
+    }
+    return null;
+  }
+
   if (isGroupish(phrase)) return 'Sounded like a split — pick who shares it';
   if (mentionsGroupName(phrase, groupNames)) return 'Named a group — confirm who shares it';
   if (mentionsGroupName(phrase, personNames)) return 'Named someone — is this a transfer or a split?';

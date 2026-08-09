@@ -6,7 +6,7 @@ import { parseVoice } from './voiceParse';
 import { loadLearned } from './smartCategoryLearn';
 import {
   VoiceDestination, routeVoiceDraft, resolveCaptureTime, sortCaptures, reviewReason,
-  voiceFields, resolveVoiceCategory,
+  voiceFields, resolveVoiceCategory, kindFromCaptureName,
 } from './voiceInbox';
 import { loadFlags } from './featureFlags';
 import { composeTitleNote } from './txnNote';
@@ -117,15 +117,21 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
   // corrections here exactly as the Add screen does — the parser supports it, and until now
   // nothing passed them in.
   let categories: { name: string }[];
+  // Income has its own catalog, and matching a salary against the expense list would file it
+  // under whatever happened to look similar. Loaded up front because the batch can mix kinds.
+  let incomeCategories: { name: string }[];
   let learned: Awaited<ReturnType<typeof loadLearned>>;
   let meId: string;
   let personalGroupId: string;
   let smartCategoryOn: boolean;
   let groupNames: string[];
   let personNames: string[];
+  /** Full records, not just names — a settlement needs the matched person's id. */
+  let people: { id: string; name: string }[];
   try {
-    const [cats, lrn, me, groups, flags] = await Promise.all([
-      getCategories(db, 'expense'), loadLearned(), getMe(db), getAllGroups(db), loadFlags(),
+    const [cats, incomeCats, lrn, me, groups, flags] = await Promise.all([
+      getCategories(db, 'expense'), getCategories(db, 'income'),
+      loadLearned(), getMe(db), getAllGroups(db), loadFlags(),
     ]);
     const persons = await getAllPersons(db);
     // Turning the feature off has to stop it acting, not just hide its buttons — otherwise
@@ -141,9 +147,11 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
     // first-run, before onboarding has committed.
     if (!me || !personal) return NOTHING;
     categories = cats;
+    incomeCategories = incomeCats;
     learned = lrn;
     meId = me.id;
     personalGroupId = personal.id;
+    people = persons.filter(pp => pp.id !== me.id).map(pp => ({ id: pp.id, name: pp.name }));
     // Shared groups only: "Personal" appearing in a phrase means nothing, and matching it
     // would divert every capture to Review.
     groupNames = groups.filter(g => g.is_personal !== 1).map(g => g.name);
@@ -173,15 +181,23 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
       continue;
     }
 
+    // Which command wrote this file. Carried in the name because the kind is decided by what
+    // you SAID, not by the words — inferring it would let "salary" book income from the
+    // expense command.
+    const kind = kindFromCaptureName(name);
+    const catalog = kind === 'income' ? incomeCategories : categories;
+
     // Anchored to when the phrase was SPOKEN, not to now — see `resolveCaptureTime`.
-    const draft = parseVoice(phrase, { categories, learned, nowMs: capturedAt });
-    const dest = routeVoiceDraft(draft, phrase, groupNames, personNames);
+    // `people` only matters to a settlement, where it supplies the counterparty; passing it
+    // for every kind is harmless because nothing else reads `personId`.
+    const draft = parseVoice(phrase, { categories: catalog, learned, nowMs: capturedAt, people });
+    const dest = routeVoiceDraft(draft, phrase, groupNames, personNames, kind);
 
     // Exactly the field mapping a typed entry gets: the descriptive words become the title
     // (which is what smart-category read), anything longer spills into the note, and the two
     // are joined by the same helper the Add screen uses.
     const { title, note } = voiceFields(draft);
-    const category = resolveVoiceCategory(draft, categories, smartCategoryOn);
+    const category = resolveVoiceCategory(draft, catalog, smartCategoryOn);
 
     try {
       if (dest === VoiceDestination.Ledger && category) {
@@ -189,7 +205,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
         await db.withTransactionAsync(async () => {
           await insertTxnRows(db, {
             groupId: personalGroupId,
-            kind: 'expense',
+            kind,
             entryMode: 'quick',
             date: draft.dateMs ?? capturedAt,
             category,
@@ -198,7 +214,10 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
             note: composeTitleNote(title, note, smartCategoryOn) ?? draft.transcript,
             source: 'voice',
             payments: [{ personId: meId, amount }],
-            shares: [{ personId: meId, amount }],
+            // Income carries NO shares — money arriving is not apportioned to anyone, and
+            // `useAddTxnForm` saves it the same way. Writing a share row here would make the
+            // voice copy of an income differ from a typed one in the split tables.
+            shares: kind === 'income' ? [] : [{ personId: meId, amount }],
           }, uuid(), Date.now());
         });
         out.saved++;
@@ -207,14 +226,22 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
           date: draft.dateMs ?? capturedAt,
           amount: Math.max(0, draft.amountPaise),
           description: title || draft.note || draft.transcript,
-          kind: 'expense',
+          kind,
           category: smartCategoryOn ? draft.category : null,
-          direction: 'debit',
+          // Which way the money went, as far as the kind alone can say. Income arrives; a
+          // settlement's direction is the thing Review exists to confirm, so it stays unknown
+          // rather than asserting one.
+          direction: kind === 'income' ? 'credit' : kind === 'settlement' ? 'unknown' : 'debit',
           source: 'voice',
           pay_method: null,
+          // Pre-filled so confirming a settlement is a tap rather than a form. Null whenever
+          // nobody was named, or when two people share a first name — `parseVoice` refuses to
+          // pick between them, and a settlement aimed at the wrong person is worse than one
+          // that asks.
+          counterparty_id: kind === 'settlement' ? draft.personId : null,
           // Why it's here rather than in the ledger, plus what was said, so the Review row
           // can explain itself without the user having to guess.
-          raw: [reviewReason(draft, phrase, groupNames, personNames), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
+          raw: [reviewReason(draft, phrase, groupNames, personNames, kind), `Said: "${draft.transcript}"`].filter(Boolean).join(' · '),
         }]);
         out.queued++;
       }

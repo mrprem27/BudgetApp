@@ -80,6 +80,52 @@ const MONEY_WORDS = new Set([
 
 const FILLER = new Set(['and', 'aur', 'for', 'ka', 'ki', 'ke', 'on', 'at', 'to', 'of', 'a', 'an', 'the']);
 
+/**
+ * Speech noise that must never become a transaction's title.
+ *
+ * People do not dictate in headlines. They say *"umm four fifty for groceries"*, *"ok so I paid
+ * like twelve hundred for dinner"* — and every one of those words was landing in the title,
+ * because the parser only ever removed what it had consumed as an amount or a date. The ledger
+ * ended up full of rows called "ok so i paid like dinner".
+ *
+ * Kept **separate from {@link FILLER}**, which participates in number parsing: `numericRunLength`
+ * treats filler as continuing a numeric run, so adding "paid" there would let the run swallow
+ * words either side of it and change which digits are read as the amount. This set is applied
+ * only when building the leftover text, where it cannot affect any number.
+ *
+ * Two deliberate limits:
+ *  - **Disfluencies and framing verbs only.** No ordinary adjectives or nouns — a brand really
+ *    can be called "Just Herbs", and stripping words that carry meaning is worse than leaving a
+ *    stray "so".
+ *  - **Never empties the title.** See `denoise`.
+ */
+const NOISE = new Set([
+  // Disfluencies and discourse markers.
+  'um', 'umm', 'uh', 'uhh', 'err', 'erm', 'hmm', 'ah', 'oh', 'ok', 'okay', 'so', 'well',
+  'like', 'actually', 'basically', 'yeah', 'yep', 'please', 'thanks', 'thank',
+  // Hedges — "about 450", "roughly two fifty".
+  'about', 'around', 'roughly', 'approx', 'approximately', 'nearly', 'almost',
+  // Framing the sentence rather than naming the spend.
+  'i', 'im', 'ive', 'id', 'me', 'my', 'we', 'it', 'that', 'this', 'there', 'here',
+  'was', 'were', 'is', 'am', 'be', 'been', 'did', 'do', 'done', 'have', 'has', 'had',
+  // Verbs that say an amount moved, which the kind already records.
+  'spent', 'spend', 'paid', 'pay', 'bought', 'buy', 'got', 'get', 'gave', 'give',
+  'sent', 'send', 'add', 'added', 'log', 'logged', 'record', 'put', 'made', 'make',
+  'received', 'receive', 'earned', 'earn', 'credited', 'deposited',
+]);
+
+/**
+ * Drop speech noise, but never everything.
+ *
+ * A phrase that is *only* noise ("umm, I paid") would otherwise produce an empty title and a
+ * row that cannot say what it was — strictly worse than an untidy one. In that case the
+ * original words are kept, and the row still shows what was heard.
+ */
+export function denoise(tokens: string[]): string[] {
+  const kept = tokens.filter(t => !NOISE.has(t));
+  return kept.length > 0 ? kept : tokens;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -342,12 +388,13 @@ export function parseVoice(
   const { paise, consumed: amtIdx } = extractAmount(tokens);
   const { dateMs, consumed: dateIdx } = extractDate(tokens, opts.nowMs);
 
-  // Whatever wasn't an amount or a date is what the transaction is *about*.
-  const note = tokens
-    .filter((_, i) => !amtIdx.has(i) && !dateIdx.has(i))
-    .filter(t => !FILLER.has(t))
-    .join(' ')
-    .trim();
+  // Whatever wasn't an amount or a date is what the transaction is *about* — once the words
+  // that were only holding the sentence together are gone.
+  const note = denoise(
+    tokens
+      .filter((_, i) => !amtIdx.has(i) && !dateIdx.has(i))
+      .filter(t => !FILLER.has(t)),
+  ).join(' ').trim();
 
   // Same two-step the Add screen uses: what the user taught us first, then the rules.
   const category = note
