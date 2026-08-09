@@ -205,6 +205,7 @@ export default function FeaturesScreen() {
     {
       title: 'Smart capture',
       items: [
+        { icon: 'mic', label: 'Voice Entry', caption: 'Say "four fifty groceries" and have it filled in — uses your keyboard\'s dictation, nothing leaves the device', value: flags.voiceEntry, onChange: v => setFlag('voiceEntry', v) },
         { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
         { icon: 'repeat', label: 'Recurring Suggestions', caption: 'Flag imported transactions that look like a recurring bill', value: flags.recurringSuggest, onChange: v => setFlag('recurringSuggest', v) },
         { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },

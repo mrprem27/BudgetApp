@@ -27,6 +27,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
+import { freeBytes } from '../../src/lib/deviceStorage';
+import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/storage';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
@@ -74,6 +76,16 @@ export default function SettingsScreen() {
   // `null` = never. Shown on the row because the only other prompt is a local
   // notification, which needs flags.reminders + an OS grant + a dev build.
   const [backupAt, setBackupAt] = useState<number | null>(null);
+
+  // Free space, shown on the row itself so a filling device is visible from Settings without
+  // having to open the screen. Tinted only when it has become worth acting on.
+  const storageVerdictNow = storageVerdict(freeBytes());
+  const storageLabel = storageVerdictNow === StorageVerdict.Ample
+    ? undefined
+    : `${formatBytes(freeBytes())} free`;
+  const storageTint = storageVerdictNow === StorageVerdict.Full ? colors.expense
+    : storageVerdictNow === StorageVerdict.Critical ? colors.healthAmber
+    : undefined;
   const [exportingAll, setExportingAll] = useState(false);
 
   async function handleExportAll() {
@@ -261,6 +273,10 @@ export default function SettingsScreen() {
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { router.push('/features'); }} />
+        {flags.voiceEntry && (<>
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="mic" label="Voice entry" value="Hands-free with Siri" onPress={() => { router.push('/settings/voice'); }} />
+        </>)}
       </View>
 
       {/* SECURITY */}
@@ -299,6 +315,14 @@ export default function SettingsScreen() {
           value={exportingAll ? undefined : 'CSV'}
           onPress={exportingAll ? undefined : handleExportAll}
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow
+          icon="hard-drive"
+          label="Storage"
+          value={storageLabel}
+          tint={storageTint}
+          onPress={() => { router.push('/settings/storage'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow

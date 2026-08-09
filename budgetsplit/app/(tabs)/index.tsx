@@ -18,6 +18,9 @@ import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TabPills } from '../../src/components/ui/TabPills';
+import { Banner } from '../../src/components/ui/Banner';
+import { useStorageWarning } from '../../src/hooks/useStorageWarning';
+import { StorageVerdict } from '../../src/lib/storage';
 
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -45,6 +48,7 @@ export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const storage = useStorageWarning();
   const groups = useStore(s => s.groups);
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<TabKey>('month');
@@ -171,6 +175,22 @@ export default function DashboardScreen() {
             />
           </View>
         </View>
+
+        {/* Device storage. Deliberately ABOVE the loading/error ternary: nothing renders
+            while `loading`, and a full disk is precisely the condition in which the
+            dashboard may be the thing that fails to load. `inset={false}` because this
+            ScrollView is already padded to screenPaddingH. */}
+        {storage.advice && (
+          <Banner
+            icon={storage.verdict === StorageVerdict.Low ? 'hard-drive' : 'alert-triangle'}
+            text={storage.advice.headline}
+            tone={storage.advice.tone === 'neutral' ? colors.textSecondary : storage.advice.tone === 'warn' ? colors.healthAmber : colors.expense}
+            actionLabel="Manage"
+            onAction={() => router.push('/settings/storage')}
+            onDismiss={storage.dismiss}
+            inset={false}
+          />
+        )}
 
         {/* No loading skeleton — local data loads instantly; render nothing until
             ready so we never flash the empty-home at a user who has data. */}

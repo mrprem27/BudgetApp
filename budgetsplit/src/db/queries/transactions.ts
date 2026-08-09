@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
-import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind } from '../../constants/enums';
+import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource } from '../../constants/enums';
 
 export type Txn = {
   id: string;
@@ -29,6 +29,7 @@ export type Txn = {
   lng: number | null;
   place_label: string | null;
   pay_method: PayMethod | null;
+  source: TxnSource | null;
   currency: string | null;
   is_deleted: number;
   created_at: number;
@@ -189,6 +190,8 @@ export type InsertTxnInput = {
   placeLabel?: string;
   payMethod?: PayMethod;
   currency?: string;
+  /** Where this came from. Omit for hand-typed — null is what every pre-existing row is. */
+  source?: TxnSource;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
@@ -243,8 +246,8 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
@@ -253,6 +256,7 @@ export async function insertTxnRows(
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
         input.currency ?? null,
+        input.source ?? null,
         now, now,
       ],
     );

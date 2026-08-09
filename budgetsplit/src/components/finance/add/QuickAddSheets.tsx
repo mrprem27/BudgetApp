@@ -9,6 +9,7 @@ import { RecurringSheet } from './RecurringSheet';
 import { NoteSheet } from './NoteSheet';
 import { TagSheet } from './TagSheet';
 import { AmountCalculatorSheet } from './AmountCalculatorSheet';
+import { VoiceEntrySheet } from './VoiceEntrySheet';
 import { DatePickerSheet } from '../../ui/DatePickerSheet';
 import { TimePickerSheet } from '../../ui/TimePickerSheet';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
@@ -16,7 +17,7 @@ import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 /** Which overlay is open. One at a time — they're all modal. */
 export type QuickAddSheet =
   | 'split' | 'payers' | 'date' | 'endDate' | 'destination'
-  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | null;
+  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | 'voice' | null;
 
 type Form = ReturnType<typeof useAddTxnForm>;
 
@@ -110,6 +111,15 @@ export function QuickAddSheets({
         onClose={onClose}
         value={f.note}
         onChangeText={f.setNote}
+      />
+
+      <VoiceEntrySheet
+        visible={open === 'voice'}
+        onClose={onClose}
+        categories={f.categories}
+        learned={f.learned}
+        onApply={f.applyVoiceDraft}
+        accent={accent}
       />
 
       <AmountCalculatorSheet

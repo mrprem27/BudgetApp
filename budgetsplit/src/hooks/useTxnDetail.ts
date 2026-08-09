@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Alert, Platform, ActionSheetIOS } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
+import { freeBytes } from '../lib/deviceStorage';
+import { storageVerdict, storageAdvice, allowsAttachments } from '../lib/storage';
 import { haptic } from '../lib/haptics';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../lib/attachment';
 import {
@@ -62,6 +64,20 @@ export function useTxnDetail(id: string) {
   const parentRule = data?.parentRule ?? null;
 
   async function attachReceipt(source: 'camera' | 'gallery') {
+    // Same pre-flight as the Add screen's receipt chip, and read from the same rule
+    // (`allowsAttachments`) so the two paths can never disagree about when photos stop.
+    const verdict = storageVerdict(freeBytes());
+    if (!allowsAttachments(verdict)) {
+      Alert.alert(
+        'Photo couldn\u2019t be saved',
+        storageAdvice(verdict)?.body ?? 'Your device is out of storage.',
+        [
+          { text: 'Storage settings', onPress: () => router.push('/settings/storage') },
+          { text: 'OK', style: 'cancel' },
+        ],
+      );
+      return;
+    }
     try {
       const uri = await pickAttachment(source);
       if (!uri) return;
@@ -72,7 +88,16 @@ export function useTxnDetail(id: string) {
       await reload();
     } catch (e) {
       if (e instanceof AttachmentStorageError) {
-        Alert.alert('Low on storage', 'Your device is low on storage. Free up space and try again.');
+        // Reachable even after the pre-flight: space can vanish between the check and the
+        // copy. Offers the same way out the Add screen does.
+        Alert.alert(
+          'Low on storage',
+          'Your device ran out of room while saving the photo. The transaction itself is unchanged.',
+          [
+            { text: 'Storage settings', onPress: () => router.push('/settings/storage') },
+            { text: 'OK', style: 'cancel' },
+          ],
+        );
       } else {
         Alert.alert('Something went wrong', 'Could not attach the receipt.');
       }

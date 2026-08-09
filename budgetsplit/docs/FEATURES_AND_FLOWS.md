@@ -220,7 +220,9 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-24 | **Feature management** | `app/features.tsx` | Non-toggleable "Core" pillars + the switchable modules in sections. Every switch here changes something. Location tagging sits in this list but writes to `settings`, not the flag namespace — deliberately, because it must await an OS grant and refuse if denied (§17). |
 | S-25 | **Categories** | `app/categories.tsx` | Global category catalog (expense / income / transfer), sectioned. Create, rename, delete, and **adopt** an uncategorized name. Self-heals an empty catalog. |
 | S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
-| S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden: attachment stats, clear attachments, load demo data, erase all data. Settings → version ×7. |
+| S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |
+| S-27a | **Storage** | `app/settings/storage.tsx` | User-facing: free space on the device (hero), what BudgetSplit uses broken out (receipts / cached exports / pdf.js reader / profile photos), and two safe reclaim actions — **Clear cached exports** and **Delete all receipt photos**. Nothing here can lose a transaction. Reached from Settings → Data & Help, and from the low-storage banner on Home. |
+| S-35 | **Voice entry** | `app/settings/voice.tsx` | Sets up hands-free capture: what to say, which words route to a split, and the one-time Siri-shortcut setup (one-tap iCloud install when `VOICE_SHORTCUT_URL` is set, otherwise the four manual Shortcuts actions). Creates the `voice-inbox` folder the shortcut writes into, and shows how many captures are waiting. Gated on `voiceEntry`. |
 | S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
 | S-29 | **Help** | `app/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
 | S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
@@ -1288,9 +1290,16 @@ which one they hit.
 
 ## 14. Optional modules
 
-`DEFAULTS` in `src/lib/featureFlags.ts` defines **14** flags. All 14 gate a real surface and
-appear in Feature Management; the 15th row below (`save_location`) is a `settings` pref that
-sits in the same list but is not a flag. Seven further keys
+`DEFAULTS` in `src/lib/featureFlags.ts` defines **16** feature flags. All 16 gate a real surface
+and appear in Feature Management; the `save_location` row below is a `settings` pref that
+sits in the same list but is not a flag.
+
+> This paragraph said **14** for two flag additions running, and the count scanner in
+> `sourceCounts.test.ts` never caught it: that test only inspects lines matching
+> `/feature[- ]flag|FeatureKey|flag table|gating/i`, and `featureFlags.ts` contains no space or
+> hyphen so `feature[- ]flag` misses it, while the sentence said "gate" rather than "gating".
+> Rewording it to "feature flags" is what puts the line under the scanner, so it can go stale
+> silently again. Seven further keys
 (`dashboardCash/Budget/Donut/Balances/Savings`, `budgetInsights`, `itemizedOcr`) were **deleted
 on 2026-07-28** — they gated nothing, and five of them rendered as working switches that did
 nothing. `src/__tests__/featureFlags.test.ts` fails if a key stops gating something or stops
@@ -1312,12 +1321,15 @@ being listed in the screen, so this table can't drift back.
 | Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
 | Receipt scanning | `receiptScan` | Itemized **Scan receipt** button (iOS) | ✅ wired — closes DEBT `F7`, which was "no way to hide Scan" |
 | Import & review | `importReview` | Settings → Import transactions → `import.tsx` / `review.tsx` | ✅ wired |
+| Voice entry | `voiceEntry` | Add **Say it instead** → `VoiceEntrySheet`, Settings → **Voice entry** → `settings/voice.tsx`, and the hands-free Siri capture drained by `lib/voiceDrain.ts` | ✅ wired — **on** by default; dictation is the OS keyboard/Siri, never a service |
 | Tracking streak | `streak` (off) | Home `StreakCard` | ✅ wired (self-hides < 3 days) — **the only flag off by default** |
 | Location tagging | `save_location` pref | Add flows + txn detail Maps link | ✅ wired — a `settings` pref, **not** a feature flag, despite sitting in the same list (§17) |
 | Cloud receipt scanning | `ocr_provider` pref | Which provider `getReceiptExtractor()` returns (§7.4) | ✅ wired — also a `settings` pref, not a flag: it selects an implementation, not a surface |
 
-**15 flags, and the count is now guarded.** `sourceCounts.test.ts` fails if any live doc states a
-different number — it had drifted three times (12 → 14 → 15) before anything read it (`V2-14`).
+**16 feature flags, and the count is now guarded.** `sourceCounts.test.ts` fails if any live doc
+states a different number — it had drifted three times (12 → 14 → 15) before anything read it
+(`V2-14`), and then drifted again in the §14 paragraph above, which was phrased in a way the
+scanner's line filter did not match.
 
 **Five chart-fragment flags were deleted** (`reportsDonut`, `reportsTrend`, `dashboardInsights`,
 `forecast`, `savingsInsights`). Each gated a single chart or a sub-section of one card, which is

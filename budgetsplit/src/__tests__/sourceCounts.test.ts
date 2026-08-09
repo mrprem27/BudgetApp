@@ -71,8 +71,11 @@ describe('screen size ceilings', () => {
   const CEILINGS: Record<string, number> = {
     // Lowered from 1021 after Wave 3 decomposed the screen: the row card and five
     // overlays moved into components/finance/review/, and ~22 style rules went with
-    // them. Lower it again when you extract more; never raise it.
-    'app/review.tsx': 750,
+    // them. Lowered again to 746 when the screen's chrome moved to
+    // components/finance/review/reviewStyles.ts — that extraction happened *because*
+    // this ceiling refused to budge for honest error handling, which is the rule
+    // working. Lower it again when you extract more; never raise it.
+    'app/review.tsx': 746,
   };
 
   for (const [rel, ceiling] of Object.entries(CEILINGS)) {

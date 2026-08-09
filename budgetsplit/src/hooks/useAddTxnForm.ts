@@ -20,6 +20,7 @@ import { computeShares as calcShares, computePayments as calcPayments, validateS
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { evaluateAfford } from '../lib/afford';
 import { haptic } from '../lib/haptics';
+import { saveFailureMessage } from '../lib/dbErrors';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useStore } from '../store';
@@ -305,6 +306,28 @@ export function useAddTxnForm(params: AddTxnParams) {
     setTxnDate(d.getTime());
   }
 
+  /**
+   * Apply a dictated draft to the form. **Fills, never saves** — the user still reviews the
+   * whole form and taps Save, because misheard money is the worst kind of silent failure.
+   *
+   * Each field is applied only when the parser actually found something, so a partial
+   * phrase ("groceries", no amount) can't wipe what's already typed. The category is
+   * matched against the loaded catalog, so it always resolves to a real one.
+   */
+  function applyVoiceDraft(draft: { amountPaise: number; category: string | null; dateMs: number | null; note: string }) {
+    if (draft.amountPaise > 0) setAmountText((draft.amountPaise / 100).toString());
+    if (draft.category) {
+      const hit = categories.find(c => c.name === draft.category);
+      if (hit) { setSelectedCategory(hit); setCatManual(true); }
+    }
+    if (draft.dateMs != null) setTxnDate(draft.dateMs);
+    if (draft.note) {
+      // With smart-category on the top field is the Title (which drives the category);
+      // with it off the same field IS the note.
+      if (flags.smartCategory) setTitle(draft.note); else setNote(draft.note);
+    }
+  }
+
   async function selectGroup(gid: string) {
     if (gid === selectedGroupId) return;
     setSelectedGroupId(gid);
@@ -356,9 +379,12 @@ export function useAddTxnForm(params: AddTxnParams) {
       haptic.success();
       refresh();
       router.back();
-    } catch {
+    } catch (e) {
       haptic.error();
-      Alert.alert('Error', 'Could not save the transfer.');
+      // A full disk fails a transfer exactly like it fails an expense, and "try again"
+      // is just as wrong here.
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.title === 'Error' ? 'Could not save the transfer.' : m.body);
     } finally {
       setSaving(false);
     }
@@ -452,7 +478,7 @@ export function useAddTxnForm(params: AddTxnParams) {
             `You already logged ${formatRupees(total)} on ${selectedCategory!.name} recently. Add it anyway?`,
             [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Add anyway', onPress: () => { setSaving(true); commit().catch(() => Alert.alert('Error', 'Could not save. Try again.')).finally(() => setSaving(false)); } },
+              { text: 'Add anyway', onPress: () => { setSaving(true); commit().catch(e => { const m = saveFailureMessage(e); Alert.alert(m.title, m.body); }).finally(() => setSaving(false)); } },
             ],
           );
           return;
@@ -461,7 +487,8 @@ export function useAddTxnForm(params: AddTxnParams) {
 
       await commit();
     } catch (e) {
-      Alert.alert('Error', 'Could not save. Try again.');
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.body);
     } finally {
       setSaving(false);
     }
@@ -482,6 +509,10 @@ export function useAddTxnForm(params: AddTxnParams) {
     pickerGroups: pickerGroups.length ? pickerGroups : groups,
     selectedGroup: groups.find(g => g.id === selectedGroupId) ?? null,
     categories, setCategories, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
+    /** Merchant→category corrections the user has made. Exposed so voice entry inherits
+     *  them too — `parseVoice` has always accepted them, but nothing passed them in, so
+     *  that branch was dead in the app while two docblocks claimed otherwise. */
+    learned,
     title, note, setNote, setTitle,
     txnDate, setTxnDate,
     members,
@@ -497,7 +528,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,
     recurEndMs, setRecurEndMs, recurEndMode, setRecurEndMode, recurCount, setRecurCount,
     // attachment / location
-    attachmentUri, setAttachmentUri, tags, setTags, setTxnTime, place, setPlace, locEnabled, capturingLoc, captureLocation,
+    attachmentUri, setAttachmentUri, tags, setTags, setTxnTime, applyVoiceDraft, place, setPlace, locEnabled, capturingLoc, captureLocation,
     // currency / nudge / derived
     currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
     // actions

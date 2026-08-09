@@ -2,6 +2,7 @@ import { Paths, File, Directory } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
+import { dirUsage, type DirUsage } from './deviceStorage';
 
 const ATTACHMENT_DIR = new Directory(Paths.document, 'attachments');
 
@@ -58,16 +59,13 @@ export async function deleteAttachment(uri: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-/** Total on-device storage used by attachment files. */
-export function getAttachmentStorage(): { count: number; bytes: number } {
-  try {
-    if (!ATTACHMENT_DIR.exists) return { count: 0, bytes: 0 };
-    let count = 0, bytes = 0;
-    for (const entry of ATTACHMENT_DIR.list()) {
-      if (entry instanceof File) { count++; bytes += entry.size ?? 0; }
-    }
-    return { count, bytes };
-  } catch { return { count: 0, bytes: 0 }; }
+/**
+ * Total on-device storage used by attachment files. Measured by `dirUsage`, which the
+ * Storage screen also uses for the cache, pdf.js and avatars — one directory walk, so the
+ * receipts figure and every other figure can't be computed two different ways.
+ */
+export function getAttachmentStorage(): DirUsage {
+  return dirUsage(ATTACHMENT_DIR);
 }
 
 /** Delete every attachment file from disk (the DB columns are cleared separately). */

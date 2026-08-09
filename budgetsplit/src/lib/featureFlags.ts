@@ -35,7 +35,8 @@ export type FeatureKey =
   | 'receiptScan'
   | 'importReview'
   // Fun
-  | 'streak';
+  | 'streak'
+  | 'voiceEntry';
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
@@ -58,6 +59,10 @@ export const DEFAULTS: FeatureFlags = {
   receiptScan: true,      // closes DEBT_TRACKER F7 — there was no way to hide Scan
   importReview: true,
   streak: false,          // opt-in, and self-hides under 3 days
+  // Say a whole expense in one phrase. ON by default: the recognition is the keyboard's own
+  // dictation, so there's no new permission, no native dependency and nothing to fail — it's
+  // an extra way into a form that already exists, not a risky surface.
+  voiceEntry: true,
 };
 
 export const FEATURE_KEYS = Object.keys(DEFAULTS) as FeatureKey[];

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
 import { space, layout } from '../src/constants/layout';
 import { asFeather } from '../src/constants/palette';
+import { reviewStyles as styles } from '../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -59,6 +59,7 @@ import { useContentInset } from '../src/hooks/useContentInset';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useUndo } from '../src/components/system/UndoToast';
 import { haptic } from '../src/lib/haptics';
+import { saveFailureMessage } from '../src/lib/dbErrors';
 import {
   type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
 } from '../src/constants/enums';
@@ -280,6 +281,12 @@ export default function ReviewScreen() {
         message: `Saved to ${plan.destName}`,
         onUndo: async () => { await softDeleteTxn(db, done.txnId); await restorePending(db, done.snap); refresh(); reload(); },
       });
+    } catch (e) {
+      // Previously a bare try/finally: a failed commit became an unhandled rejection and
+      // the row just sat there, indistinguishable from a button that does nothing.
+      haptic.error();
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.body);
     } finally {
       setSavingId(null);
     }
@@ -305,17 +312,30 @@ export default function ReviewScreen() {
           text: 'Save', onPress: async () => {
             setSavingId(BATCH);
             const done: { txnId: string; snap: PendingTxn }[] = [];
+            // A mid-batch failure (a full disk is the realistic one) used to abort the whole
+            // block: rows 1..n-1 were already committed, but nothing refreshed, nothing was
+            // said, and no Undo was offered for the ones that DID save. Keep the partial
+            // success, then report what stopped it.
+            let failure: unknown = null;
             try { for (const { row, plan } of ready) done.push(await insertCommit(row, plan)); }
+            catch (e) { failure = e; }
             finally { setSavingId(null); }
-            haptic.success();
-            exitSelect();
-            refresh();
-            reload();
-            checkRecurringSuggestions(done);
-            showUndo({
-              message: `Saved ${done.length} transaction${done.length === 1 ? '' : 's'}`,
-              onUndo: async () => { for (const d of done) { await softDeleteTxn(db, d.txnId); await restorePending(db, d.snap); } refresh(); reload(); },
-            });
+            if (done.length > 0) {
+              haptic.success();
+              exitSelect();
+              refresh();
+              reload();
+              checkRecurringSuggestions(done);
+              showUndo({
+                message: `Saved ${done.length} transaction${done.length === 1 ? '' : 's'}`,
+                onUndo: async () => { for (const d of done) { await softDeleteTxn(db, d.txnId); await restorePending(db, d.snap); } refresh(); reload(); },
+              });
+            }
+            if (failure) {
+              haptic.error();
+              const m = saveFailureMessage(failure);
+              Alert.alert(m.title, done.length > 0 ? `${done.length} saved before this stopped. ${m.body}` : m.body);
+            }
           },
         },
       ],
@@ -723,27 +743,3 @@ export default function ReviewScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.sm },
-  headerBlock: { gap: space.xs, marginBottom: space.xs },
-  headerAction: { ...type.labelSemi, color: colors.accent },
-  selectHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  selectAll: { ...type.labelSemi, color: colors.accent },
-  stepLabel: { ...type.sectionLabel, color: colors.accent },
-  intro: { ...type.label, color: colors.textMuted },
-  assignAll: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: space.xs },
-  assignAllLabel: { ...type.caption, color: colors.textMuted },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.md, paddingBottom: space.xs },
-  sectionIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
-  sectionHeaderText: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
-  sectionHeaderCount: { ...type.caption, color: colors.textSecondary, fontFamily: 'SpaceMono_400Regular' },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: layout.screenPaddingH, paddingTop: space.sm, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.border },
-  bulkBar: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  // SecondaryButton is width:100% by default; these shrink to their labels so the
-  // Save button takes the remaining room.
-  bulkBtn: { width: undefined, paddingHorizontal: space.md },
-  bulkSaveWrap: { flex: 1 },
-});
-

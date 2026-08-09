@@ -30,6 +30,7 @@ const K = {
   preferredUpiApp: 'preferred_upi_app',
   backupAnchorAt: 'backup_anchor_at',
   ocrProvider: 'ocr_provider',
+  storageWarnDismissed: 'storage_warn_dismissed',
 } as const;
 
 export const SETTINGS_KEYS = K;
@@ -118,4 +119,10 @@ export const settings = {
   // for the full comparison. Defaults to 'gemini' when unset.
   ocrProvider: () => getString(K.ocrProvider),
   setOcrProvider: (v: 'device' | 'gemini') => setString(K.ocrProvider, v),
+
+  // The worst low-storage tier the user has already dismissed. Stored as the tier rather
+  // than a boolean so the warning comes back when things actually get worse — dismissing
+  // "running low" should not silence "saving may fail".
+  storageWarnDismissed: () => getString(K.storageWarnDismissed),
+  setStorageWarnDismissed: (v: string) => setString(K.storageWarnDismissed, v),
 };

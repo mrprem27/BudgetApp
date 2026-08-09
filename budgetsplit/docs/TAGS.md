@@ -30,7 +30,7 @@ F-29: KEEP
 F-30: KEEP — by design: permission-gated pref, not an optimistic flag
 F-31: DEFER — blocked on real line-item extraction; Android side missing
 F-32: KEEP
-F-33: KEEP — ✓ 15 keys, all gating, invariant tested (count guarded by sourceCounts.test.ts)
+F-33: KEEP — ✓ 16 keys, all gating, invariant tested (count guarded by sourceCounts.test.ts)
 F-34: KEEP
 
 S-01: KEEP

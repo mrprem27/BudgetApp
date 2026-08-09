@@ -17,6 +17,14 @@ type Props = {
   onPress?: () => void;
   /** Tint for the icon, border and action. Defaults to `colors.accent`. */
   tone?: string;
+  /**
+   * Whether the banner adds its own horizontal margin (default `true`).
+   *
+   * Pass `false` inside a container that is already padded to `layout.screenPaddingH` —
+   * Home's ScrollView is — or the padding doubles and the strip sits visibly narrower than
+   * everything around it.
+   */
+  inset?: boolean;
 };
 
 /**
@@ -28,7 +36,7 @@ type Props = {
  * to be the same number, so the two strips stacked on one screen only *looked*
  * consistent by coincidence.
  */
-export function Banner({ icon, text, actionLabel, onAction, onDismiss, onPress, tone = colors.accent }: Props) {
+export function Banner({ icon, text, actionLabel, onAction, onDismiss, onPress, tone = colors.accent, inset = true }: Props) {
   const body = (
     <>
       <Feather name={icon} size={14} color={tone} />
@@ -37,7 +45,7 @@ export function Banner({ icon, text, actionLabel, onAction, onDismiss, onPress, 
   );
 
   return (
-    <View style={[styles.banner, { borderColor: alpha(tone, 33) }]}>
+    <View style={[styles.banner, !inset && styles.flush, { borderColor: alpha(tone, 33) }]}>
       {onPress ? (
         <TouchableOpacity style={styles.pressBody} onPress={onPress} accessibilityRole="button" accessibilityLabel={text}>
           {body}
@@ -71,6 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentMuted,
     borderWidth: 1,
   },
+  flush: { marginHorizontal: 0 },
   pressBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm },
   text: { ...type.labelSemi, color: colors.textPrimary, flex: 1 },
   action: { ...type.labelSemi },

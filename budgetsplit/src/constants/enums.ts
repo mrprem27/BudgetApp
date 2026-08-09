@@ -108,12 +108,18 @@ export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
 export const TRANSFER_SCOPE_ALL = 'all' as const;
 export type TransferScope = typeof TRANSFER_SCOPE_ALL | string;
 
-/** `pending_txn.source` — where an imported/pending row came from. Drives the
+/** `pending_txn.source` and `txn.source` — where a row came from. Drives the
  *  sectioned Review inbox ("From email", "From Google Pay"…). `sms`/`notification`
- *  are reserved for future ingestion paths (currently de-scoped). */
-export const TXN_SOURCE = ['email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'upi_qr', 'manual'] as const;
+ *  are reserved for future ingestion paths (currently de-scoped).
+ *
+ *  **Order is the Review section order** (`app/review.tsx` maps this tuple directly), so
+ *  `voice` sits first: a phrase you said out loud minutes ago deserves to be the thing you
+ *  see before a statement you imported. */
+export const TXN_SOURCE = ['voice', 'email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'upi_qr', 'manual'] as const;
 export type TxnSource = typeof TXN_SOURCE[number];
 export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
+  // Captured by the Siri shortcut while the app was closed, or dictated inside it.
+  voice: 'Said out loud',
   email: 'Email alert', gpay: 'Google Pay', paytm: 'Paytm', bank_csv: 'Bank / CSV',
   sms: 'SMS', notification: 'Notifications',
   // Paid through the app: scanned a QR, handed off to a UPI app, confirmed on return.
@@ -122,6 +128,7 @@ export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
 };
 /** Feather icon per source — used by the Review section headers. */
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
+  voice: 'mic',
   email: 'mail', gpay: 'smartphone', paytm: 'credit-card', bank_csv: 'file-text',
   sms: 'message-square', notification: 'bell', upi_qr: 'maximize', manual: 'inbox',
 };

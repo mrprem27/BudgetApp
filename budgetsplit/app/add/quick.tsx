@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,6 +10,8 @@ import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL } from '../../src/constants/
 import { asFeather } from '../../src/constants/palette';
 import { insertCategory } from '../../src/db/queries/categories';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
+import { parseVoice } from '../../src/lib/voiceParse';
+import { isGroupish } from '../../src/lib/voiceInbox';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { Screen } from '../../src/components/ui/Screen';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
@@ -31,7 +33,7 @@ const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 export default function QuickAddScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string }>();
+  const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string; q?: string }>();
   const f = useAddTxnForm(params);
 
   // One overlay at a time — see QuickAddSheets.
@@ -43,6 +45,28 @@ export default function QuickAddScreen() {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
 
+  // A dictated phrase handed in by a deep link — `budgetsplit:///add/quick?q=four+fifty+groceries`.
+  // Applied ONCE, and only after the category catalog has loaded (the parser matches against
+  // it), so an external trigger lands on a filled form rather than an empty one. Nothing is
+  // saved: the user still reviews and taps Save, exactly as with the in-app sheet.
+  //
+  // The Siri shortcut only sends someone here when the phrase sounded like a shared cost —
+  // a personal one is filed without the app ever opening. So when it *is* group-ish, the
+  // group list is the first thing that should be on screen: that is the decision the user
+  // came here to make. `learned` is passed so voice inherits the category corrections the
+  // user has already made by hand.
+  const voiceApplied = useRef(false);
+  useEffect(() => {
+    if (voiceApplied.current || !params.q || f.categories.length === 0) return;
+    voiceApplied.current = true;
+    f.applyVoiceDraft(parseVoice(params.q, { categories: f.categories, learned: f.learned, nowMs: Date.now() }));
+    // Deliberately after the draft is applied, and only for a shared-sounding phrase. Groups
+    // load asynchronously, so a phrase that arrives before them opens the sheet on the next
+    // pass rather than not at all.
+    if (isGroupish(params.q) && f.pickerGroups.length > 0) setSheet('destination');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.q, f.categories.length, f.pickerGroups.length]);
+
   const { kind, flags, isEditing, isRecurEdit } = f;
   const accent = kindAccent(kind);
   const nudgeColor = f.nudgePct == null ? null : f.nudgePct > 0.2 ? colors.income : f.nudgePct > 0 ? colors.healthAmber : colors.expense;
@@ -50,7 +74,7 @@ export default function QuickAddScreen() {
   const open = (s: QuickAddSheet) => { Keyboard.dismiss(); setSheet(s); };
   const pickReceipt = useAttachmentPicker({
     onPicked: f.setAttachmentUri,
-    onOpenStorageSettings: () => router.push('/storage'),
+    onOpenStorageSettings: () => router.push('/settings/storage'),
   });
 
   const title = isRecurEdit ? 'Edit recurring'
@@ -139,6 +163,21 @@ export default function QuickAddScreen() {
               onPress={() => open('scope')}
               accessibilityLabel="Choose what you're settling"
             />
+          )}
+
+          {/* "Say it instead" — one phrase fills amount, category and date. Placed here
+              rather than on the tab-bar FAB long-press, which `(tabs)/_layout.tsx:135`
+              already binds to ScanPaySheet. */}
+          {!isEditing && !isRecurEdit && flags.voiceEntry && kind !== 'transfer' && (
+            <TouchableOpacity
+              style={styles.voiceRow}
+              onPress={() => open('voice')}
+              accessibilityRole="button"
+              accessibilityLabel={`Say it instead — dictate this ${kind === 'income' ? 'income' : 'expense'}`}
+            >
+              <Feather name="mic" size={14} color={accent} />
+              <Text style={[styles.voiceText, { color: accent }]}>Say it instead</Text>
+            </TouchableOpacity>
           )}
 
           <AmountField amountText={f.amountText} onChangeText={f.setAmountText} kind={kind} autoFocus={!isEditing} transferScopeBal={f.transferScopeBal} onOpenCalculator={() => open('calc')} />
@@ -298,4 +337,6 @@ const styles = StyleSheet.create({
   save: { ...type.button },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.md },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: space.xs, paddingVertical: space.xs },
+  voiceText: { ...type.labelSemi },
 });

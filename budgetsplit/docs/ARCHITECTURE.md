@@ -301,7 +301,7 @@ Read these instead — each is generated from the code, not from another doc:
 **Sections 1–6 above were re-verified against the code and are accurate.** They are the reason
 this file still exists.
 
-> Note on §10 specifically: the dead flags it documented are gone. `FeatureKey` now holds 15
+> Note on §10 specifically: the dead flags it documented are gone. `FeatureKey` now holds 16
 > keys, every one of which gates a real surface and appears in the Feature Management screen —
 > an invariant asserted by `src/__tests__/featureFlags.test.ts`, so this section cannot silently
 > drift again. The *number* had still drifted three times on its own (12 → 14 → 15) because no

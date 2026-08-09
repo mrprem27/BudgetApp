@@ -9,6 +9,7 @@ import { ScanPaySheet } from '../../src/components/finance/ScanPaySheet';
 import { setPendingPayment } from '../../src/lib/pendingPayment';
 import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
 import { settings } from '../../src/lib/settings';
+import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients } from '../../src/constants/colors';
@@ -51,10 +52,15 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // Back from a UPI app after a Scan & Pay hand-off: ask once, then file it.
   // Lives here rather than in the root layout because that sits ABOVE
   // DataRefreshProvider and so cannot signal the screens to reload.
+  //
+  // The voice inbox is drained on the same signal and for the same reason. The root layout
+  // already drains at launch, but that only covers a cold start — this is what makes a
+  // phrase you said thirty seconds ago appear when you flick back from the app switcher.
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
       if (state !== 'active') return;
       askAboutPendingPayment(db).then(filed => { if (filed) refresh(); }).catch(() => {});
+      drainVoiceInbox(db).then(r => { if (r.saved + r.queued > 0) refresh(); }).catch(() => {});
     });
     return () => sub.remove();
   }, [db, refresh]);

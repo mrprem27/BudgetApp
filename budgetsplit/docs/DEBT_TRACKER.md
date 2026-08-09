@@ -260,10 +260,15 @@ central `src/theme` module · Phase 0–3 screen migrations to `useScreenData`.
 
 ## Known intermittent: chained `test:calendar` suite-load flake
 
-`npm run test:calendar` spawns `jest` seven times in a row (one per `FAKE_TODAY`). Twice now,
-one **randomly chosen** suite has failed at *load* time in the middle of that loop —
-`txnInvariant.test.ts` once, `financialHealth.test.ts` once — reporting a suite failure while
-the remaining 62 suites pass and the test count drops by exactly that suite's size.
+`npm run test:calendar` spawns `jest` seven times in a row (one per `FAKE_TODAY`). **Three times
+now**, one **randomly chosen** suite has failed at *load* time in the middle of that loop —
+`txnInvariant.test.ts` twice, `financialHealth.test.ts` once — reporting a suite failure while
+the remaining suites pass and the test count drops by exactly that suite's size.
+
+The third occurrence (2026-08-09) added the missing detail: the worker was killed by
+**`SIGSEGV`**, reported as *"A jest worker process was terminated by another process"*, with
+**0 tests failing**. That is a native crash in the runner, not a failed assertion — which
+confirms the diagnosis below rather than pointing at app code.
 
 Neither has ever reproduced: the same date runs 884/884 in isolation, three times consecutively,
 and a repeat of the full seven-date matrix comes back green on all seven. Different suite each
@@ -273,3 +278,18 @@ points at the runner (worker/haste-map reuse across back-to-back spawns), not at
 **If you hit it:** re-run the single date directly before believing it. It is recorded here so
 the third occurrence isn't mistaken for a new regression — and so that if it ever *does*
 reproduce, this is the note to delete.
+
+---
+
+## Deferred by the voice-capture + storage change (2026-08-09)
+
+Found while building hands-free voice capture and the storage safeguards. Recorded rather than
+fixed, each for a stated reason.
+
+| Item | Why it's deferred, not forgotten |
+|---|---|
+| **Attachment files orphan on delete** | `softDeleteTxn` ([transactions.ts](../src/db/queries/transactions.ts)) and `updateItemizedTxn` never unlink the receipt file, and `avatar.ts` writes a new timestamped image on every pick without removing the old one. **Unlinking on delete would be wrong**: a soft-deleted transaction is restorable through the Undo toast, so deleting its photo would silently break restore. The correct fix is a reaper over rows deleted more than N days ago — its own change, with its own tests. Mitigated meanwhile by **Delete all receipt photos** and **Clear cached exports** on `settings/storage.tsx`. |
+| **`expo-file-system/legacy` may already be broken** | `avatar.ts` and `ocrProviders/gemini.ts` still call the legacy API, while [pdfjsCache.ts](../src/lib/pdfjsCache.ts)'s own comment states *"the legacy readAsStringAsync/downloadAsync throw at runtime in SDK 56."* Either that comment is wrong or those two paths are dead. Untested either way — jest stubs the module. Worth a device check. |
+| **No background drain** | Voice captures are filed at launch and on every foreground, which covers the realistic cases without a native dependency. `expo-background-task` would make it opportunistically sooner, at the cost of a new native module and an OS-scheduled path that fails silently. Not worth it until the file capture is proven in daily use. |
+| **`VOICE_SHORTCUT_URL` is null** | The one-tap shortcut install needs an `icloud.com/shortcuts/…` link, which can only be produced by authoring the shortcut in the Shortcuts app and sharing it. Until then `settings/voice.tsx` shows the four manual steps, which work. Setting the constant turns the button on with no other change. |
+| **Shortcuts→Documents write is unverified** | `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` are set in `app.json`, and they are plain Info.plist keys rather than entitlements (so no paid Apple team). But that Shortcuts' *Save File* can actually write into the app's container has **not** been confirmed on a device. Everything else in the change is independent of the answer, and the deep-link path (`?q=`) already works as a fallback. |

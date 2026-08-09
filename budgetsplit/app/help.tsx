@@ -31,6 +31,25 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: 'Voice Entry',
+    illustration: { icons: [
+      { name: 'mic', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'zap', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'inbox', bg: alpha(colors.settle, 13), color: colors.settle },
+    ] },
+    items: [
+      { icon: 'mic', color: colors.accent, title: 'Two ways to talk to it', body: 'Inside the app: on the Add screen tap \u201cSay it instead\u201d, then use the microphone on your keyboard. Without opening the app at all: set up the Siri shortcut once (Settings \u2192 Voice entry) and afterwards just say \u201cHey Siri, log expense\u201d. Both use the dictation built into your phone \u2014 there is no AI service and nothing to pay for.' },
+      { icon: 'message-circle', color: colors.accent, title: 'What to say', body: 'Say the amount and what it was for, in any order: \u201cfour fifty groceries\u201d, \u201ctwelve hundred rent yesterday\u201d, \u201cchai dus rupaye\u201d. Numbers work spoken or as digits, and \u201clakh\u201d/\u201cthousand\u201d are understood. You can add a relative date \u2014 today, yesterday, last Friday, three days ago \u2014 but not a spoken calendar date; use the date picker for those.' },
+      { icon: 'zap', color: colors.income, title: 'What happens when the app is closed', body: 'Siri repeats back what it heard, so you catch a mishearing on the spot, and then you carry on with whatever you were doing \u2014 the app never opens. The phrase waits on your phone and is filed the next time you open BudgetSplit, including just switching back to it. Your balance does not move until then.' },
+      { icon: 'check-circle', color: colors.income, title: 'What gets saved on its own', body: 'A phrase only becomes a transaction by itself when both the amount and the category were understood, and it was clearly yours alone. That expense is added to Personal, with the exact words you said kept on it so you can always see what was heard.' },
+      { icon: 'inbox', color: colors.settle, title: 'What waits for you in Review', body: 'Anything less certain goes to your Review inbox under \u201cSaid out loud\u201d, with a line saying why \u2014 no amount heard, not sure which category, or it sounded like a split. Nothing is lost and nothing is guessed; you confirm it in one tap.' },
+      { icon: 'users', color: colors.coral, title: 'Splitting by voice', body: 'Say \u201csplit\u201d, \u201cgroup\u201d, \u201cwith\u201d or \u201cowe\u201d and BudgetSplit opens on the Add screen with the group list already showing, because who shares a cost and how is a decision only you can make. If you name a group without one of those words it simply lands in Review instead, where you can assign it.' },
+      { icon: 'lock', color: colors.textSecondary, title: 'Where your words go', body: 'Nowhere. Your phone turns speech into text on the device, and the parsing \u2014 pulling out the amount, the category and the date \u2014 happens inside BudgetSplit with no network call. You can put the phone in airplane mode and it still works, which is the simplest proof.' },
+      { icon: 'alert-circle', color: colors.healthAmber, title: 'What it will get wrong', body: 'Indian English handles words like chai and rupaye well, but a full Hinglish sentence will misfire sometimes \u2014 that is why the amount and category are always shown before anything is trusted. Only expenses are supported by voice; income, transfers and itemized bills need the normal screens.' },
+      { icon: 'smartphone', color: colors.textSecondary, title: 'iPhone only, for now', body: 'The hands-free shortcut uses Apple\u2019s Shortcuts app, so it is iPhone-only. On Android the in-app keyboard microphone works exactly the same way.' },
+    ],
+  },
+  {
     title: 'Your Home Screen',
     illustration: { icons: [
       { name: 'home', bg: alpha(colors.accent, 13), color: colors.accent },

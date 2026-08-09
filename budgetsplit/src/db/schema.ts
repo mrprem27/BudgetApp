@@ -281,6 +281,13 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE pending_txn ADD COLUMN lat REAL",
   "ALTER TABLE pending_txn ADD COLUMN lng REAL",
   "ALTER TABLE pending_txn ADD COLUMN place_label TEXT",
+  // Where a *saved* transaction came from. `pending_txn` has carried this since P4.1, but
+  // `txn` never has — so provenance was destroyed the moment any import was confirmed, and
+  // an email alert, a Paytm statement row and a hand-typed expense became indistinguishable.
+  // Voice capture is what forced the issue (an auto-saved row must be able to say it was
+  // spoken, not typed), but the gap was never voice-specific.
+  // Nullable with no default: null means "typed by hand", which is what every existing row is.
+  "ALTER TABLE txn ADD COLUMN source TEXT",
 ];
 
 /**
@@ -392,9 +399,13 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='txn'",
     );
     if (txnDef && !txnDef.sql.includes("'yearly'")) {
+      // Every column added by COLUMN_MIGRATIONS must appear here too, or the rebuild silently
+      // drops it for the rest of the session (the ALTER only re-runs on the NEXT launch).
+      // That is why `currency` and `source` are in this list despite not being in the base
+      // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'tz,lat,lng,place_label,pay_method,currency,is_deleted,created_at,updated_at';
+        + 'tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at';
       await db.execAsync(`
         PRAGMA foreign_keys=OFF;
         BEGIN TRANSACTION;
@@ -421,6 +432,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           place_label    TEXT,
           pay_method     TEXT,
           currency       TEXT,
+          source         TEXT,
           is_deleted     INTEGER NOT NULL DEFAULT 0,
           created_at     INTEGER NOT NULL,
           updated_at     INTEGER NOT NULL
