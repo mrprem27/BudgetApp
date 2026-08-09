@@ -1,7 +1,7 @@
-import { AddKind, type TxnKind } from '../constants/enums';
-import { CAPTURE_PREFIX } from './voiceInbox';
+import { AddKind } from '../constants/enums';
 import {
-  VOICE_ASK_OUTPUT, VOICE_FILES_LOCATION, VOICE_INBOX_FOLDER, type VoiceCommand,
+  VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_DEEP_LINK_INCOME, VOICE_DEEP_LINK_SETTLE,
+  type VoiceCommand,
 } from './voiceShortcut';
 
 /**
@@ -118,52 +118,38 @@ const GLYPH: Record<AddKind, number> = {
   [AddKind.Transfer]: 59461,
 };
 
-/** The actions for a command, in the order Shortcuts runs them. */
+/**
+ * The actions for a command: ask, build a deep link, open it.
+ *
+ * **Three actions and no folder** — which is the whole point. The file-capture version this
+ * replaced never opened the app, but its `Save File` destination is a security-scoped bookmark
+ * to a folder on the authoring device, so it could not survive being shared: every installer
+ * had to find the action and re-pick the folder, and when they got it wrong nothing happened
+ * ever again, silently. A setup step that fails invisibly is worse than a visible extra tap.
+ *
+ * `Open URLs` (plural) consumes its input rather than offering a field, so the URL action has
+ * to build the address first.
+ */
 export function shortcutActions(cmd: VoiceCommand): Plist[] {
   const askUuid = seededUuid(`${cmd.name}:ask`);
-  const ask = action('is.workflow.actions.ask', {
-    WFAskActionPrompt: cmd.prompt,
-    WFInputType: 'Text',
-    UUID: askUuid,
-  });
-
-  // Every command files. Nothing opens the app, so nothing interrupts you — the kind is
-  // carried in the filename rather than in a deep link.
-  const randUuid = seededUuid(`${cmd.name}:rand`);
   return [
-    ask,
-    action('is.workflow.actions.number.random', {
-      // Capped at six digits deliberately. `captureTimeFromName` reads an all-digit stem of
-      // 8/12/14 digits as a calendar stamp, so a wider range would occasionally produce a
-      // filename that parses as a date and file the spend on a day it did not happen.
-      WFRandomNumberMinimum: 1,
-      WFRandomNumberMaximum: 999999,
-      UUID: randUuid,
+    action('is.workflow.actions.ask', {
+      WFAskActionPrompt: cmd.prompt,
+      WFInputType: 'Text',
+      UUID: askUuid,
     }),
-    action('is.workflow.actions.documentpicker.save', {
-      // ⚠️ The destination folder is NOT set here and cannot be: it is a security-scoped
-      // bookmark to a folder on the device that authored the shortcut, so it does not survive
-      // sharing. Left unset, Shortcuts saves into its own iCloud folder and the app never sees
-      // the capture — which is why `postImportStep` makes picking it the one required step.
-      WFAskWhereToSave: false,
-      WFFileDestinationPath: tokenString(`${CAPTURE_PREFIX[txnKind(cmd.kind)]}-`, randUuid, 'Random Number', '.txt'),
-      WFInput: {
-        Value: { OutputUUID: askUuid, OutputName: VOICE_ASK_OUTPUT, Type: 'ActionOutput' },
-        WFSerializationType: 'WFTextTokenAttachment',
-      },
+    action('is.workflow.actions.url', {
+      WFURLActionURL: tokenString(deepLinkFor(cmd.kind), askUuid, VOICE_ASK_OUTPUT),
     }),
-    // The only signal the capture worked. Without it you speak into silence and cannot tell a
-    // success from Siri having missed the phrase entirely.
-    action('is.workflow.actions.speaktext', {
-      WFText: cmd.speak,
-      WFSpeakTextWait: true,
-    }),
+    action('is.workflow.actions.openurl', {}),
   ];
 }
 
-/** `AddKind.Transfer` is stored as a `settlement`; everything else maps straight across. */
-function txnKind(kind: AddKind): TxnKind {
-  return kind === AddKind.Transfer ? 'settlement' : kind;
+/** ⚠️ `q` must stay last — the phrase goes in unencoded and a query value ends at the next `&`. */
+function deepLinkFor(kind: AddKind): string {
+  return kind === AddKind.Income ? VOICE_DEEP_LINK_INCOME
+    : kind === AddKind.Transfer ? VOICE_DEEP_LINK_SETTLE
+    : VOICE_DEEP_LINK;
 }
 
 /** The complete unsigned `.shortcut` document for one command. */
@@ -190,16 +176,12 @@ export function buildShortcutPlist(cmd: VoiceCommand): string {
 }
 
 /**
- * What a generated file still cannot carry, per command.
+ * Anything the installer has to do by hand after importing. Nothing — which is the entire
+ * reason for the deep-link shape.
  *
- * `Save File`'s destination is a security-scoped bookmark to a folder on the phone that
- * authored it. There is no way to express "the BudgetSplit container on *your* device" in a
- * portable file, so the filing command needs its destination picked once after import. The
- * app-opening commands have no folder and import complete.
+ * Kept as a function rather than deleted so the build script keeps surfacing a step if one is
+ * ever reintroduced; returning null is a claim worth making explicitly.
  */
 export function postImportStep(cmd: VoiceCommand): string | null {
-  if (cmd.opensApp) return null;
-  return `Open the shortcut once and set Save File's destination to ${VOICE_FILES_LOCATION}. `
-    + `A folder bookmark is specific to your device, so it cannot travel in the file — this is `
-    + `the only step left, and the "${VOICE_INBOX_FOLDER}" folder already exists.`;
+  return cmd.opensApp ? null : 'Set the Save File destination before first use.';
 }

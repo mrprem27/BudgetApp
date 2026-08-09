@@ -1,7 +1,8 @@
 import { buildShortcutPlist, shortcutActions, seededUuid, toPlist, postImportStep } from '../lib/voiceShortcutFile';
-import { VOICE_COMMANDS, VOICE_ASK_OUTPUT } from '../lib/voiceShortcut';
-import { CAPTURE_PREFIX, kindFromCaptureName } from '../lib/voiceInbox';
-import { AddKind, type TxnKind } from '../constants/enums';
+import {
+  VOICE_COMMANDS, VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_DEEP_LINK_INCOME, VOICE_DEEP_LINK_SETTLE,
+} from '../lib/voiceShortcut';
+import { AddKind } from '../constants/enums';
 
 /**
  * The generated shortcut must say what the app says. That is the entire reason it is generated
@@ -17,41 +18,27 @@ describe('the generated shortcut matches the command it came from', () => {
     }
   });
 
-  it('captures to a file and never opens the app', () => {
-    // Opening the app is the friction this pipeline exists to remove, so no command may
-    // contain a URL action at all.
+  it('asks, builds a link, opens it — and touches no file', () => {
+    // A Save File action is what needed a folder re-picked per device, and got it wrong
+    // silently. No command may contain one.
     for (const cmd of VOICE_COMMANDS) {
       const ids = shortcutActions(cmd).map(a => (a as Record<string, string>).WFWorkflowActionIdentifier);
       expect(ids).toEqual([
         'is.workflow.actions.ask',
-        'is.workflow.actions.number.random',
-        'is.workflow.actions.documentpicker.save',
-        'is.workflow.actions.speaktext',
+        'is.workflow.actions.url',
+        'is.workflow.actions.openurl',
       ]);
     }
   });
 
-  it('names the file so the drain can read the kind off it', () => {
-    // The prefix is the ONLY thing carrying the kind — a text file has nowhere else to put
-    // it. Get it wrong and a salary files silently as an expense.
+  it('embeds the link that sets the kind, with q last', () => {
+    // The kind rides in the URL now. `&` is escaped in the plist, so compare the escaped form.
     for (const cmd of VOICE_COMMANDS) {
       const xml = buildShortcutPlist(cmd);
-      const kind: TxnKind = cmd.kind === AddKind.Transfer ? 'settlement' : cmd.kind;
-      expect(xml).toContain(`${CAPTURE_PREFIX[kind]}-`);
-      expect(xml).toContain('.txt');
-    }
-    // And the prefixes must round-trip through the reader.
-    for (const kind of Object.keys(CAPTURE_PREFIX) as TxnKind[]) {
-      expect(kindFromCaptureName(`${CAPTURE_PREFIX[kind]}-421887.txt`)).toBe(kind);
-    }
-  });
-
-  it('speaks a confirmation last', () => {
-    // Nothing opens the app any more, so this is the only evidence the capture happened.
-    for (const cmd of VOICE_COMMANDS) {
-      const ids = shortcutActions(cmd).map(a => (a as Record<string, string>).WFWorkflowActionIdentifier);
-      expect(ids[ids.length - 1]).toBe('is.workflow.actions.speaktext');
-      expect(buildShortcutPlist(cmd)).toContain(`<string>${cmd.speak}</string>`);
+      const link = cmd.kind === AddKind.Income ? VOICE_DEEP_LINK_INCOME
+        : cmd.kind === AddKind.Transfer ? VOICE_DEEP_LINK_SETTLE : VOICE_DEEP_LINK;
+      expect(xml).toContain(link.replace(/&/g, '&amp;'));
+      expect(link).toMatch(/[?&]q=$/);
     }
   });
 
@@ -67,15 +54,6 @@ describe('the generated shortcut matches the command it came from', () => {
     }
   });
 
-  it('gives each capture its own filename', () => {
-    // Without Random Number every file is named after the action that fed it, so two spends
-    // said before the next launch collide and one is unrecoverable.
-    const filing = VOICE_COMMANDS.find(c => !c.opensApp)!;
-    const xml = buildShortcutPlist(filing);
-    expect(xml).toMatch(/<key>WFRandomNumberMaximum<\/key>\s*<integer>999999<\/integer>/);
-    expect(xml).toMatch(/<key>WFAskWhereToSave<\/key>\s*<false\/>/);
-  });
-
   it('is stable across builds', () => {
     // Random UUIDs would make every rebuild a diff, so a real change could never be spotted.
     for (const cmd of VOICE_COMMANDS) {
@@ -85,15 +63,9 @@ describe('the generated shortcut matches the command it came from', () => {
     expect(seededUuid('a')).toMatch(/^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
   });
 
-  it('admits the one thing a file cannot carry', () => {
-    // The Save File destination is a security-scoped bookmark to a folder on the device that
-    // authored it. Silently shipping a shortcut that saves to the wrong place would look like
-    // the app losing captures.
-    for (const cmd of VOICE_COMMANDS) {
-      const step = postImportStep(cmd);
-      if (cmd.opensApp) expect(step).toBeNull();
-      else expect(step).toMatch(/destination/i);
-    }
+  it('leaves nothing for the installer to configure', () => {
+    // The claim the whole design rests on. A non-null step here means setup can fail again.
+    for (const cmd of VOICE_COMMANDS) expect(postImportStep(cmd)).toBeNull();
   });
 
   it('escapes plist-hostile characters', () => {

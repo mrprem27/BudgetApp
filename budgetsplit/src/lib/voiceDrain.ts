@@ -17,6 +17,15 @@ import { getAllGroups } from '../db/queries/groups';
 import { getMe, getAllPersons } from '../db/queries/persons';
 
 /**
+ * ⚠️ **Legacy capture path.** The shortcuts no longer write files — they hand the phrase to
+ * `add/quick.tsx` as a deep link, because a `Save File` destination is a per-device bookmark
+ * that cannot survive being shared, and getting it wrong failed silently forever.
+ *
+ * This is kept, not dead code: captures written by the older shortcuts may still be sitting in
+ * `voice-inbox` on someone's phone, and dropping the drain would lose them. It is also the only
+ * path that never opens the app, so it is what App Intents would replace rather than something
+ * to delete first.
+ *
  * Turn phrases captured while the app was closed into real rows.
  *
  * The capture side is an iOS Shortcut — two actions: *"Hey Siri, log expense"* → you dictate →

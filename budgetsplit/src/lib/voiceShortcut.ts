@@ -33,14 +33,13 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * Set to `null` to fall back to the manual steps — the screens key off that, so removing a
  * broken link degrades cleanly rather than sending people to a dead page.
  */
-export const VOICE_SHORTCUT_URL: string | null =
-  'https://www.icloud.com/shortcuts/bc398eac16334420a10a899f8494579c';
-
-export const VOICE_INCOME_URL: string | null =
-  'https://www.icloud.com/shortcuts/99555340c4f34f47aea9fe2b64d887d8';
-
-export const VOICE_SETTLE_URL: string | null =
-  'https://www.icloud.com/shortcuts/6bf45d5e698e4fb4b4a53340f7bc90b7';
+/**
+ * All null: every shortcut was rebuilt as a deep link, so the file-capture versions behind the
+ * old links no longer match anything documented here. Re-author, re-share, paste back.
+ */
+export const VOICE_SHORTCUT_URL: string | null = null;
+export const VOICE_INCOME_URL: string | null = null;
+export const VOICE_SETTLE_URL: string | null = null;
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
@@ -73,6 +72,17 @@ export const SHORTCUTS_APP_URL = 'shortcuts://create-shortcut';
  * is only delimited by those.
  */
 export const VOICE_DEEP_LINK = 'budgetsplit:///add/quick?q=';
+
+/**
+ * The same link aimed at another kind. `useAddTxnForm` has always seeded its state from a
+ * `kind` param, so income and settlement entry need no new screen.
+ *
+ * ⚠️ **`q` must stay last.** The phrase is inserted unencoded and a query value ends at the
+ * next `&`, so `?kind=income&q=fifty thousand salary` parses, while the reverse order would
+ * swallow `kind` into the phrase and open income as an expense.
+ */
+export const VOICE_DEEP_LINK_INCOME = 'budgetsplit:///add/quick?kind=income&q=';
+export const VOICE_DEEP_LINK_SETTLE = 'budgetsplit:///add/quick?kind=transfer&q=';
 
 /** Worth saying out loud, given the app's "nothing leaves your device" promise. */
 export const VOICE_SHORTCUT_PRIVACY =
@@ -119,22 +129,18 @@ export type VoiceStep = { title: string; body: string };
  *
  * The line is drawn where guessing stops being reliable. Whether other people are involved is
  * something the app can read off the phrase — "split", "with", "owe", a group name, a person's
- * name — and `routeVoiceDraft` already does, sending those to Review instead of the ledger.
- * Which *kind* it is cannot be read that way: "salary" and "paid Riya" are ordinary words, and
- * a mis-detected kind books real money in the wrong direction.
+ * name — and the Add screen acts on it, opening the group picker. Which *kind* it is cannot be
+ * read that way: "salary" and "paid Riya" are ordinary words, and a mis-detected kind books
+ * real money in the wrong direction. So the kind is the one thing you say, and the rest is
+ * inferred.
  *
- * So the kind is chosen by which phrase you say, and everything else is inferred. That
- * retired a fourth command ("Split expense"), which asked you to remember a second wake phrase
- * to tell the app something it could already work out.
- *
- * The name is a free signal: you have to say *something*, so the kind costs no extra words.
- * They must not rhyme, though — `Log expense` / `Add expense` differed only in the verb, the
- * pair Siri is likeliest to confuse, and the failure mode there was a spend you believed was
- * filed silently actually sitting on an Add screen behind a locked phone.
+ * Bare nouns, deliberately. Anything longer is a phrase to remember, and these are said aloud
+ * dozens of times a week. ⚠️ Single words are more collision-prone with Siri's own intents
+ * than two-word phrases; if one starts getting misheard, the fix is to make that one longer.
  */
-export const VOICE_ONE_WAY_NAME = 'Log expense';
-export const VOICE_INCOME_NAME = 'Log income';
-export const VOICE_SETTLE_NAME = 'Settle up';
+export const VOICE_ONE_WAY_NAME = 'expense';
+export const VOICE_INCOME_NAME = 'income';
+export const VOICE_SETTLE_NAME = 'transfer';
 
 /** Who acts in a beat, so the Voice screen can show the exchange as turns rather than bullets. */
 export type FlowActor = 'you' | 'siri' | 'app';
@@ -150,10 +156,7 @@ export type VoiceCommand = {
   kind: AddKind;
   icon: 'zap' | 'users' | 'trending-up' | 'repeat';
   prompt: string;
-  /** What the shortcut says back once the capture is written. */
-  speak: string;
-  /** False for all three now — nothing opens the app to record. Kept because the flow
-   *  rendering and the tests both key off it, and a future command may want it. */
+  /** True for all three: the app opening IS the confirmation, so nothing is spoken back. */
   opensApp: boolean;
   /** A phrase that really parses to this kind — the worked example in the flow. */
   example: string;
@@ -167,24 +170,16 @@ export type VoiceCommand = {
 
 
 /**
- * Building a capture command by hand, in the order the Shortcuts app presents the actions.
+ * Building a command by hand, in the order the Shortcuts app presents the actions.
  *
- * All three commands are the same five actions — only the name, the prompt, the filename
- * prefix and the spoken line differ — so there is one factory rather than three near-copies.
+ * All three are the same three actions — only the name, the prompt and the link differ — so
+ * there is one factory rather than three near-copies. These are the fallback;
+ * `npm run build:shortcuts` generates and signs the same actions from the same constants.
  *
- * The order is a dependency chain, not a preference: nothing can be saved before it has been
- * spoken, the filename has to exist before the action that uses it, and there is no
- * destination to change until the Save File action is there.
- *
- * No date actions — the capture time comes from the file itself (`resolveCaptureTime`), which
- * removed the two steps that reliably went wrong.
- *
- * These are the fallback. `npm run build:shortcuts` generates and signs the same five actions
- * from the same constants, so nobody should normally be typing them in.
+ * `Open URLs` (plural) consumes its input rather than offering a field, which is why the URL
+ * action has to come first.
  */
-export function captureSteps(
-  name: string, prompt: string, prefix: string, speak: string,
-): VoiceStep[] {
+export function captureSteps(name: string, prompt: string, link: string): VoiceStep[] {
   return [
     {
       title: `New shortcut, named "${name}"`,
@@ -192,109 +187,85 @@ export function captureSteps(
     },
     {
       title: 'Add "Ask for Input"',
-      body: `Set Input Type to Text, and put  ${prompt}  in the Prompt field. This is the step `
-        + 'that listens, and the Prompt is what Siri says first — left blank it asks '
-        + '"What\'s the text?", which is a question about the shortcut rather than your money.',
+      body: `Set Input Type to Text and put  ${prompt}  in the Prompt field. Left blank, Siri `
+        + 'asks "What\'s the text?" — a question about the shortcut rather than your money.',
     },
     {
-      title: 'Add "Random Number", 1 to 999999',
-      body: 'This gives each capture its own filename, so two things said before the app next '
-        + 'opens cannot collide. Keep the maximum at six digits: a longer number can look like '
-        + 'a date to the app and file the entry on a day it did not happen.',
+      title: `Add "URL" and type  ${link}`,
+      body: `Type it in one go — the order of the parts matters — then insert the `
+        + `${VOICE_ASK_OUTPUT} variable straight after the = with no space. This only builds `
+        + 'the address; it does not open anything yet.',
     },
     {
-      title: `Add "Save File", with ${VOICE_ASK_OUTPUT} as the file`,
-      body: 'Turn OFF "Ask Where to Save", and leave "Overwrite If File Exists" OFF. In the '
-        + `Subpath field type  ${prefix}-  then insert the Random Number variable, then  .txt  `
-        + `— the  ${prefix}-  part is how the app knows which kind this capture is.`,
-    },
-    {
-      title: `Change the destination to ${VOICE_FILES_LOCATION}`,
-      body: 'The step that matters, and the only one that can go wrong. Tap the blue folder '
-        + 'name in the Save File action — it starts as "Shortcuts" — then browse to '
-        + `On My iPhone › BudgetSplit › ${VOICE_INBOX_FOLDER} and choose it. Subpath cannot do `
-        + 'this: it is relative to whatever folder is picked here, so typing a path there just '
-        + 'creates a folder of that name in the wrong place.',
-    },
-    {
-      title: `Add "Speak Text" saying  ${speak}`,
-      body: 'The only signal the capture worked. Without it you talk into silence and cannot '
-        + 'tell a saved entry from Siri having missed the phrase entirely.',
+      title: 'Add "Open URLs" — the plural one, with the blue arrow',
+      body: 'It takes the URL from the step above as its input, which is why the URL action '
+        + 'has to come first. Beware the similar-looking "Open URL" rows carrying an app\'s '
+        + 'icon (Zomato, Chrome) — those are that app\'s own action and open the wrong thing.',
     },
   ];
 }
 
-export const VOICE_SHORTCUT_STEPS = captureSteps(
-  VOICE_ONE_WAY_NAME, VOICE_ASK_PROMPT, CAPTURE_PREFIX.expense, 'Saved in BudgetSplit');
-export const VOICE_INCOME_STEPS = captureSteps(
-  VOICE_INCOME_NAME, VOICE_ASK_PROMPT_INCOME, CAPTURE_PREFIX.income, 'Income saved in BudgetSplit');
-export const VOICE_SETTLE_STEPS = captureSteps(
-  VOICE_SETTLE_NAME, VOICE_ASK_PROMPT_SETTLE, CAPTURE_PREFIX.settlement, 'Waiting in Review');
+export const VOICE_SHORTCUT_STEPS = captureSteps(VOICE_ONE_WAY_NAME, VOICE_ASK_PROMPT, VOICE_DEEP_LINK);
+export const VOICE_INCOME_STEPS = captureSteps(VOICE_INCOME_NAME, VOICE_ASK_PROMPT_INCOME, VOICE_DEEP_LINK_INCOME);
+export const VOICE_SETTLE_STEPS = captureSteps(VOICE_SETTLE_NAME, VOICE_ASK_PROMPT_SETTLE, VOICE_DEEP_LINK_SETTLE);
 
 export const VOICE_COMMANDS: VoiceCommand[] = [
   {
     name: VOICE_ONE_WAY_NAME,
-    summary: 'Files itself — splits wait in Review',
-    detail: 'Every expense, shared or not. Say it and carry on: yours alone goes straight to the ledger, anything that sounded shared waits in Review for you to pick who shares it.',
+    summary: 'Opens Add, filled in',
+    detail: 'The everyday one. Say the amount and what it was for; the form opens with everything already entered and the group picker up if it sounded shared.',
     kind: AddKind.Expense,
     icon: 'zap',
     prompt: VOICE_ASK_PROMPT,
-    speak: 'Saved in BudgetSplit',
-    opensApp: false,
+    opensApp: true,
     example: 'four fifty groceries',
     flow: [
       { actor: 'you', text: `“Hey Siri, ${VOICE_ONE_WAY_NAME}”` },
       { actor: 'siri', text: `“${VOICE_ASK_PROMPT}”` },
       { actor: 'you', text: '“four fifty groceries”' },
-      { actor: 'siri', text: 'Repeats it back and lets you go. The app never comes to the front.' },
-      { actor: 'app', text: 'Next time you open BudgetSplit: ₹450, Groceries, Personal — already saved.' },
-      { actor: 'app', text: 'Say “twelve hundred dinner with Rohan” instead and the same command holds it in Review, with a line saying why, so you pick the group when you have a moment.' },
+      { actor: 'app', text: 'BudgetSplit opens on Add — ₹450, Groceries, today. Check it and Save.' },
+      { actor: 'app', text: 'Say “twelve hundred dinner with Rohan” and the group picker is already open, because that is the decision you came to make.' },
     ],
-    why: 'One command for both, because the app can tell them apart — “split”, “with”, “owe”, a group name or a person’s name diverts a phrase to Review. Guessing the *kind* is what is unreliable, not guessing whether other people are involved.',
+    why: 'Nothing to set up: the shortcut carries the phrase in a link, so there is no folder to pick and no way for it to fail silently. The cost is that the app comes to the front — you always see what was heard before anything is saved.',
     installUrl: VOICE_SHORTCUT_URL,
     steps: VOICE_SHORTCUT_STEPS,
   },
   {
     name: VOICE_INCOME_NAME,
-    summary: 'Files itself',
-    detail: 'Salary, a refund, freelance money in. Goes straight to your personal ledger — the app never opens.',
+    summary: 'Opens Add, on Income',
+    detail: 'Salary, a refund, freelance money in. Lands on the Income form against your personal group.',
     kind: AddKind.Income,
     icon: 'trending-up',
     prompt: VOICE_ASK_PROMPT_INCOME,
-    speak: 'Income saved in BudgetSplit',
-    opensApp: false,
+    opensApp: true,
     example: 'fifty thousand salary',
     flow: [
       { actor: 'you', text: `“Hey Siri, ${VOICE_INCOME_NAME}”` },
       { actor: 'siri', text: `“${VOICE_ASK_PROMPT_INCOME}”` },
       { actor: 'you', text: '“fifty thousand salary”' },
-      { actor: 'siri', text: '“Income saved in BudgetSplit.” The app never comes to the front.' },
-      { actor: 'app', text: 'Next time you open it: ₹50,000 under Salary, in Personal, already saved.' },
-      { actor: 'app', text: 'Income is matched against your income categories, never the expense ones — a salary cannot land under Groceries.' },
+      { actor: 'app', text: 'Add opens on Income — ₹50,000, matched against your income categories, Personal.' },
     ],
-    why: 'Posts itself like an expense does. Income is always personal and has no shares to apportion, so there is no decision anyone could be asked to make. A phrase naming a group or a person waits in Review instead, because income never involves one.',
+    why: 'Income is matched against the income catalog, never the expense one, so a salary cannot land under Groceries. It is always personal, so there is no group to choose.',
     installUrl: VOICE_INCOME_URL,
     steps: VOICE_INCOME_STEPS,
   },
   {
     name: VOICE_SETTLE_NAME,
-    summary: 'Files into Review',
-    detail: 'Money moved between you and someone else. Captured without opening the app; the row waits in Review with the amount and the person already filled in.',
+    summary: 'Opens Add, on Transfer',
+    detail: 'Money moved between you and someone else — paying a friend back, or being paid. Names the person if the phrase did.',
     kind: AddKind.Transfer,
     icon: 'repeat',
     prompt: VOICE_ASK_PROMPT_SETTLE,
-    speak: 'Waiting in Review',
-    opensApp: false,
+    opensApp: true,
     example: 'paid Riya five hundred',
     flow: [
       { actor: 'you', text: `“Hey Siri, ${VOICE_SETTLE_NAME}”` },
       { actor: 'siri', text: `“${VOICE_ASK_PROMPT_SETTLE}”` },
       { actor: 'you', text: '“paid Riya five hundred”' },
-      { actor: 'siri', text: '“Waiting in Review.” The app never comes to the front.' },
-      { actor: 'app', text: 'A Review row is waiting: ₹500, Riya, marked as a transfer. Confirming the direction is one tap.' },
+      { actor: 'app', text: 'Add opens on Transfer — ₹500, with Riya on the other side. Tap the arrow if it went the other way.' },
       { actor: 'app', text: 'Two people sharing a first name leaves the person blank rather than guessing — a settlement aimed at the wrong one moves a real balance twice.' },
     ],
-    why: 'Direction is never inferred from the verb — “paid” and “got” are one mis-hearing apart, and a settlement pointed the wrong way moves a real balance twice over.',
+    why: 'Direction is never inferred from the verb: “paid” and “got” are one mis-hearing apart. The form opens with both sides shown so reversing it is one tap before anything is saved.',
     installUrl: VOICE_SETTLE_URL,
     steps: VOICE_SETTLE_STEPS,
   },

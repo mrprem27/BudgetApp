@@ -350,3 +350,61 @@ describe('parseVoice — scattered, hesitant speech', () => {
     expect(parse('I spent like two lakh fifty thousand on rent').amountPaise).toBe(25000000);
   });
 });
+
+
+/**
+ * Hinglish, which is how people in India actually say money out loud.
+ *
+ * The numerals already worked — `dus`, `do sau`, `pandrah sau`, `bees hazaar` have been in
+ * `UNITS`/`TENS`/`SCALES` from the start, because `en-IN` dictation returns Hindi
+ * transliterated. What did not work was everything around them: the category words matched
+ * nothing and the Hindi verbs landed in the title, so "mummy ko do hazaar diye" became a row
+ * called "mummy ko diye" filed under nothing.
+ *
+ * Categories here are the real rule categories, so this fails if a keyword is removed.
+ */
+describe('parseVoice — Hinglish', () => {
+  const HCATS = [
+    { name: 'Chai & Snacks' }, { name: 'Groceries' }, { name: 'Fuel' }, { name: 'Cab & Auto' },
+    { name: 'Rent' }, { name: 'Electricity' }, { name: 'Eating Out' },
+    { name: 'Health & Pharmacy' }, { name: 'Shopping' }, { name: 'Family & Support' },
+    { name: 'Other' },
+  ];
+  const h = (t: string) => parseVoice(t, { categories: HCATS, nowMs: NOW });
+
+  const cases: [string, number, string, string][] = [
+    ['chai dus rupaye',                  R(10),    'Chai & Snacks',     'chai'],
+    ['khana pachas rupaye',              R(50),    'Eating Out',        'khana'],
+    ['nashta saath rupaye',              R(60),    'Chai & Snacks',     'nashta'],
+    ['doodh chalis rupaye',              R(40),    'Groceries',         'doodh'],
+    ['paanch sau kirana',                R(500),   'Groceries',         'kirana'],
+    ['kal sabzi teen sau',               R(300),   'Groceries',         'sabzi'],
+    ['do sau ka petrol',                 R(200),   'Fuel',              'petrol'],
+    ['bijli ka bill pandrah sau',        R(1500),  'Electricity',       'bijli bill'],
+    ['ghar ka kiraya bees hazaar',       R(20000), 'Rent',              'ghar kiraya'],
+    ['dawai ke liye char sau',           R(400),   'Health & Pharmacy', 'dawai'],
+    ['mummy ko do hazaar diye',          R(2000),  'Family & Support',  'mummy'],
+    ['auto ka bhaada sau rupaye',        R(100),   'Cab & Auto',        'auto bhaada'],
+  ];
+
+  for (const [phrase, paise, category, note] of cases) {
+    it(`reads "${phrase}"`, () => {
+      const d = h(phrase);
+      expect(d.amountPaise).toBe(paise);
+      expect(d.category).toBe(category);
+      expect(d.note).toBe(note);
+    });
+  }
+
+  it('reads parso as the day before yesterday', () => {
+    // Like `kal`, it means a day either side of today; a spend is in the past, so past.
+    const d = h('parso chai dus rupaye');
+    expect(new Date(d.dateMs!).getDate()).toBe(new Date(NOW).getDate() - 2);
+  });
+
+  it('does not let Hindi noise words disturb an amount', () => {
+    // NOISE is applied only to the leftover text, never inside a numeric run.
+    expect(h('do hazaar ka shopping').amountPaise).toBe(R(2000));
+    expect(h('kirana ke liye paanch sau').amountPaise).toBe(R(500));
+  });
+});

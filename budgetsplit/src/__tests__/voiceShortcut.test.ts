@@ -1,8 +1,9 @@
 import {
   VOICE_INBOX_FOLDER, VOICE_FILES_LOCATION, VOICE_SHORTCUT_STEPS, VOICE_SHORTCUT_URL,
   VOICE_PHRASE_EXAMPLES, VOICE_GROUP_KEYWORDS, VOICE_ROUTING_SUMMARY,
-  VOICE_TWO_WAY_STEPS,
   VOICE_DEEP_LINK,
+  VOICE_DEEP_LINK_INCOME,
+  VOICE_DEEP_LINK_SETTLE,
   VOICE_COMMANDS,
   VOICE_FIRST_RUN_NOTE,
   VOICE_ASK_PROMPT,
@@ -48,73 +49,55 @@ describe('what we tell the user matches what we do', () => {
     }
   });
 
-  it('points the setup steps at the folder the app actually creates', () => {
-    expect(VOICE_FILES_LOCATION).toContain(VOICE_INBOX_FOLDER);
-    // Which step names it does not matter; that the instructions name the real folder does.
-    // `voiceDrain.INBOX_DIR_NAME` must equal `VOICE_INBOX_FOLDER`, or the user is told to
-    // point the Shortcut at a folder the drain never reads.
+  it('points the setup steps at the route the app actually reads', () => {
+    // The link in the instructions is the same constant `add/quick.tsx` parses `q` from.
     const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toContain(VOICE_INBOX_FOLDER);
+    expect(all).toContain(VOICE_DEEP_LINK);
+    expect(VOICE_DEEP_LINK).toContain('/add/quick');
+  });
+
+  it('asks the installer to configure nothing', () => {
+    // The whole reason for the deep-link shape: the file-capture version needed a Save File
+    // folder re-picked on every device, and when it was wrong nothing happened, silently.
+    for (const c of VOICE_COMMANDS) {
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ').toLowerCase();
+      expect(all).not.toContain('save file');
+      expect(all).not.toContain(VOICE_INBOX_FOLDER);
+      expect(all).not.toContain('subpath');
+    }
   });
 });
 
 describe('the setup instructions are complete', () => {
   it('orders the actions so each one has what it needs', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(6);
+    expect(VOICE_SHORTCUT_STEPS).toHaveLength(4);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
     const askAt = titles.findIndex(t => t.includes('ask for input'));
-    const randomAt = titles.findIndex(t => t.includes('random number'));
-    const saveAt = titles.findIndex(t => t.includes('save file'));
-    const destAt = titles.findIndex(t => t.includes('destination'));
+    const urlAt = titles.findIndex(t => t.includes('"url"'));
+    const openAt = titles.findIndex(t => t.includes('open urls'));
 
-    // Nothing can be saved before it has been spoken; the filename must exist before the
-    // action that uses it; and there is no destination to change until Save File is there.
+    // Nothing can be sent before it has been spoken, and "Open URLs" consumes its input
+    // rather than offering a field — so the URL has to be built before it.
     expect(askAt).toBeGreaterThanOrEqual(0);
-    expect(randomAt).toBeGreaterThanOrEqual(0);
-    expect(saveAt).toBeGreaterThan(askAt);
-    expect(saveAt).toBeGreaterThan(randomAt);
-    expect(destAt).toBeGreaterThan(saveAt);
-    // The confirmation comes last: it claims the capture was written, so it must not run
-    // before the action that writes it.
-    const speakAt = titles.findIndex(t => t.includes('speak text'));
-    expect(speakAt).toBeGreaterThan(destAt);
+    expect(urlAt).toBeGreaterThan(askAt);
+    expect(openAt).toBeGreaterThan(urlAt);
   });
 
-  it('gives every capture its own filename', () => {
-    // Shortcuts names every file after its input, so without this two spends said before the
-    // next drain would collide. Whether "Overwrite off" then renames or errors is undocumented
-    // — and the app cannot recover a capture that was never written, so the collision is
-    // removed rather than relied on to fail safely.
-    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toMatch(/random number/i);
-    expect(all).toMatch(/overwrite/i);
-  });
-
-  it('says Subpath cannot be used to reach the folder', () => {
-    // The mistake this cost: Subpath is relative to the chosen destination, so a path typed
-    // there silently creates a folder of that name inside iCloud Drive's Shortcuts folder.
-    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toMatch(/subpath/i);
-    expect(all).toMatch(/relative to/i);
+  it('warns about the app-provided Open URL lookalikes', () => {
+    // The action list shows several "Open URL" rows carrying an app's icon; picking one opens
+    // that app instead. This cost a round trip, so the warning is pinned.
+    for (const c of VOICE_COMMANDS) {
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+      expect(all).toMatch(/open urls/i);
+      expect(all.toLowerCase()).toContain('zomato');
+    }
   });
 
   it('asks for no date actions at all', () => {
-    // `resolveCaptureTime` reads the file's own creation time, so the two date steps this
-    // used to require are gone — along with the "couldn't convert from Text to Date" error
-    // that wiring Format Date by hand produces.
+    // `parseVoice` resolves relative dates against the phrase itself, so wiring Format Date
+    // by hand only ever produced "couldn't convert from Text to Date".
     const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ').toLowerCase();
     expect(all).not.toMatch(/format date|current date|unix|timestamp/);
-  });
-
-  it('warns against overwriting, so two quick spends cannot collide', () => {
-    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toMatch(/overwrite/i);
-  });
-
-  it('tells the user to turn off "Ask Where to Save"', () => {
-    // Left on, the Shortcut prompts every single time and the whole point is lost.
-    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
-    expect(all).toMatch(/ask where to save/i);
   });
 
   it('makes every command ask a question about money, not about text', () => {
@@ -171,34 +154,22 @@ describe('the setup instructions are complete', () => {
   });
 });
 
-describe('every command captures to a file', () => {
-  const textOf = (c: { steps: { title: string; body: string }[] }) =>
-    c.steps.map(s => `${s.title} ${s.body}`).join(' ');
-
-  it('saves into the folder the drain actually reads', () => {
+describe('every command opens the app with the phrase', () => {
+  it('sends each kind to the link that sets that kind', () => {
+    // `q` last, always: the phrase is unencoded, so a `kind` after it would be swallowed into
+    // the phrase and income would open as an expense.
     for (const c of VOICE_COMMANDS) {
-      expect(textOf(c)).toContain(VOICE_INBOX_FOLDER);
-      expect(textOf(c)).toMatch(/save file/i);
-      // Nothing builds a URL any more; a command that did would open the app.
-      expect(textOf(c).toLowerCase()).not.toContain('open urls');
+      const all = c.steps.map(s => `${s.title} ${s.body}`).join(' ');
+      const link = c.kind === AddKind.Expense ? VOICE_DEEP_LINK
+        : c.kind === AddKind.Income ? VOICE_DEEP_LINK_INCOME : VOICE_DEEP_LINK_SETTLE;
+      expect(all).toContain(link);
+      expect(link).toMatch(/[?&]q=$/);
+      if (c.kind !== AddKind.Expense) expect(link).toContain(`kind=${c.kind}`);
     }
   });
 
-  it('tells the user the filename prefix its kind is read from', () => {
-    // Get this wrong and the capture files as an expense, silently — the prefix is the only
-    // thing carrying the kind.
-    for (const c of VOICE_COMMANDS) {
-      const kind = c.kind === AddKind.Transfer ? 'settlement' : c.kind;
-      expect(textOf(c)).toContain(`${CAPTURE_PREFIX[kind as keyof typeof CAPTURE_PREFIX]}-`);
-      expect(textOf(c)).toContain('.txt');
-    }
-  });
-
-  it('warns off the wide random range that reads as a date', () => {
-    for (const c of VOICE_COMMANDS) {
-      expect(textOf(c)).toContain('999999');
-      expect(textOf(c)).toMatch(/six digits/i);
-    }
+  it('opens the app for every kind', () => {
+    expect(VOICE_COMMANDS.every(c => c.opensApp)).toBe(true);
   });
 });
 
@@ -217,22 +188,15 @@ describe('the install links', () => {
     }
   });
 
-  it('covers all three kinds, and none of them opens the app', () => {
-    // A kind with no command is a kind you cannot speak. Nothing opens the app to record —
-    // that is the whole point of the capture pipeline, and a command that did would be the
-    // one place friction crept back in.
+  it('covers all three kinds', () => {
+    // A kind with no command is a kind you cannot speak.
     expect(new Set(VOICE_COMMANDS.map(c => c.kind))).toEqual(new Set(ADD_KIND));
-    expect(VOICE_COMMANDS.every(c => !c.opensApp)).toBe(true);
     expect(VOICE_COMMANDS.find(c => c.kind === AddKind.Expense)!.steps).toBe(VOICE_SHORTCUT_STEPS);
   });
 
-  it('gives every command a spoken confirmation', () => {
-    // Speaking into silence is indistinguishable from Siri having missed the phrase, and it
-    // is the only feedback there is now that nothing opens.
-    for (const c of VOICE_COMMANDS) {
-      expect(c.speak.length).toBeGreaterThan(4);
-      expect(c.steps.map(st => `${st.title} ${st.body}`).join(' ')).toContain(c.speak);
-    }
+  it('keeps the names short enough to say every day', () => {
+    // Bare nouns. Anything longer is a phrase to remember, said dozens of times a week.
+    for (const c of VOICE_COMMANDS) expect(c.name.split(' ')).toHaveLength(1);
   });
 
   it('gives the commands names Siri can tell apart', () => {

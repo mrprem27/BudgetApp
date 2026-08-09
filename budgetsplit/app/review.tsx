@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
 import { space, layout } from '../src/constants/layout';
-import { asFeather } from '../src/constants/palette';
 import { reviewStyles as styles } from '../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -15,10 +14,11 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { Banner } from '../src/components/ui/Banner';
-import { Chip } from '../src/components/ui/Chip';
+import { ReviewSourceTabs, ReviewSourceHeader } from '../src/components/finance/review/ReviewSourceTabs';
+import { ReviewListHeader } from '../src/components/finance/review/ReviewListHeader';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-import { CategoryPicker } from '../src/components/finance/CategoryPicker';
+import { ReviewRowSheets } from '../src/components/finance/review/ReviewRowSheets';
 import type { ParsedDirection } from '../src/lib/importParse';
 import {
   effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
@@ -27,14 +27,12 @@ import {
 import { FilterForm } from '../src/components/finance/review/FilterForm';
 import { SaveViewForm } from '../src/components/finance/review/SaveViewForm';
 import { ReviewRowCard } from '../src/components/finance/review/ReviewRowCard';
-import { ReviewDestSheet } from '../src/components/finance/review/ReviewDestSheet';
-import { CounterpartySheet } from '../src/components/finance/review/CounterpartySheet';
 import { BulkGroupSheet } from '../src/components/finance/review/BulkGroupSheet';
+import { ReviewBulkSheets } from '../src/components/finance/review/ReviewBulkSheets';
 import { ReviewOverflowSheet } from '../src/components/finance/review/ReviewOverflowSheet';
 import { SavedViewsSheet } from '../src/components/finance/review/SavedViewsSheet';
-import { PayMethodSheet } from '../src/components/finance/add/PayMethodSheet';
 import {
-  getPending, deletePending, clearPending, updatePendingDraft, restorePending,
+  getPending, deletePending, updatePendingDraft, restorePending,
   type PendingTxn, type PendingDraft,
 } from '../src/db/queries/pending';
 import { insertTxn, softDeleteTxn, findDuplicatesAmong } from '../src/db/queries/transactions';
@@ -61,7 +59,7 @@ import { useUndo } from '../src/components/system/UndoToast';
 import { haptic } from '../src/lib/haptics';
 import { saveFailureMessage } from '../src/lib/dbErrors';
 import {
-  type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL, TXN_SOURCE_ICON,
+  type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL,
 } from '../src/constants/enums';
 import { alpha } from '../src/theme';
 
@@ -92,6 +90,10 @@ export default function ReviewScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkGroupSheet, setBulkGroupSheet] = useState(false);
+  // Just "is the action list open" — which picker is showing is `ReviewBulkSheets`' business.
+  const [bulkSheet, setBulkSheet] = useState(false);
+  /** Which source tab is showing. Null = all of them, with headers between. */
+  const [sourceTab, setSourceTab] = useState<TxnSource | null>(null);
   // Focus workspace: an ephemeral subset + filters, all in-Review, no DB group.
   const [focusIds, setFocusIds] = useState<Set<string> | null>(null);
   const [filters, setFilters] = useState<ReviewFilters>(DEFAULT_FILTERS);
@@ -157,6 +159,13 @@ export default function ReviewScreen() {
   const { visibleRows, baseRows, focusActive, hasFilters, narrowed, distinctCats } =
     deriveWorkingSet(pending, focusIds, filters, filterRowOf, row => eff(row).category);
 
+  const sourceOf = (r: PendingTxn): TxnSource => (r.source ?? 'manual') as TxnSource;
+  // Built from the inbox, not the enum, so there is never an empty tab; and a tab whose source
+  // has just been cleared falls back to All rather than stranding you on an empty screen.
+  const presentSources = TXN_SOURCE.filter(src => visibleRows.some(r => sourceOf(r) === src));
+  const activeSource = sourceTab && presentSources.includes(sourceTab) ? sourceTab : null;
+  const tabRows = activeSource ? visibleRows.filter(r => sourceOf(r) === activeSource) : visibleRows;
+
   /** Apply an edit locally (instant UI) and auto-save the matching draft columns. */
   function patch(id: string, p: Partial<RowEdit>) {
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...p } }));
@@ -185,7 +194,14 @@ export default function ReviewScreen() {
     const gid = dest === 'personal' ? null : dest;
     for (const id of ids) updatePendingDraft(db, id, { dest_group_id: gid, counterparty_id: null }).catch(() => {});
   };
-  const setAllDest = (dest: string) => { haptic.selection(); setDestMany(visibleRows.map(r => r.id), dest); };
+
+  /** Loops `patch` rather than duplicating its RowEdit→PendingDraft mapping. */
+  function patchMany(p: Partial<RowEdit>) {
+    const ids = [...selected];
+    for (const id of ids) patch(id, p);
+    haptic.success();
+    return ids.length;
+  }
 
   function patchSplit(row: PendingTxn, p: Partial<SplitState>) {
     const next = { ...splitState(row), ...p };
@@ -193,11 +209,8 @@ export default function ReviewScreen() {
     updatePendingDraft(db, row.id, { split_draft: JSON.stringify(next) }).catch(() => {});
   }
 
-  /**
-   * Set a row's category, remember the merchant→category preference (feeds the
-   * shared learner used by Add-expense), and — if other pending rows look like
-   * the same merchant — offer to apply the category to them too. Never silent.
-   */
+  /** Set a category, teach the shared learner, and offer to apply it to lookalike rows.
+   *  Never silent — the offer is always a prompt. */
   function applyCategory(row: PendingTxn, category: string) {
     patch(row.id, { category });
     // Remember for next time (same learner Add-expense auto-suggests from).
@@ -220,12 +233,8 @@ export default function ReviewScreen() {
     );
   }
 
-  /**
-   * Scoped to the batch just committed (no lifetime history scan) — flags
-   * transactions that look recurring so the user can turn them into a rule.
-   * Never fires for manually-typed rows (nothing to detect a pattern from
-   * beyond what the user already knows they're entering).
-   */
+  /** Scoped to the batch just committed, not a lifetime scan. Never fires for typed rows —
+   *  there is no pattern to spot that the user did not just enter by hand. */
   function checkRecurringSuggestions(done: { txnId: string; snap: PendingTxn }[]) {
     if (!flags.recurringSuggest) return;
     const candidates = detectRecurringCandidates(toRecurRows(done));
@@ -243,7 +252,7 @@ export default function ReviewScreen() {
     reload();
   }
 
-  // ---- commit path (shared by per-row Confirm and batch Save) --------------
+  // ---- commit path (per-row Confirm and batch Save) ----
 
   /** Insert a planned row and drop it from the inbox. Returns undo material. */
   async function insertCommit(row: PendingTxn, plan: Extract<CommitPlan, { ok: true }>): Promise<{ txnId: string; snap: PendingTxn }> {
@@ -342,17 +351,32 @@ export default function ReviewScreen() {
     );
   }
 
-  /** Remove a row from the inbox (not saved anywhere), with Undo. */
-  async function deleteRow(row: PendingTxn) {
-    const snap = snapshotRow(row, eff(row), splitState(row));
-    await deletePending(db, row.id);
+  /**
+   * Take rows out of the inbox — never saved anywhere — with ONE Undo for the whole lot.
+   *
+   * The swipe on a single row, the bulk discard and Clear all are the same operation at three
+   * sizes. They were three copies, which is how their Undo behaviour drifted: the bulk one
+   * would have restored only the last row. Snapshots come from `eff` rather than the DB so
+   * unsaved drafts survive the round trip.
+   */
+  async function discard(rows: PendingTxn[], message: string) {
+    if (rows.length === 0) return;
+    const snaps = rows.map(r => snapshotRow(r, eff(r), splitState(r)));
+    for (const r of rows) await deletePending(db, r.id);
     haptic.warning();
     refresh();
     reload();
     showUndo({
-      message: 'Removed from review',
-      onUndo: async () => { await restorePending(db, snap); refresh(); reload(); },
+      message,
+      onUndo: async () => { for (const snap of snaps) await restorePending(db, snap); refresh(); reload(); },
     });
+  }
+  const deleteRow = (row: PendingTxn) => discard([row], 'Removed from review');
+
+  function deleteSelected() {
+    const rows = pending.filter(r => selected.has(r.id));
+    exitSelect();
+    void discard(rows, `${rows.length} removed from review`);
   }
 
   function handleClearAll() {
@@ -363,32 +387,24 @@ export default function ReviewScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear all', style: 'destructive',
-          onPress: async () => {
-            const snap = await getPending(db); // capture latest drafts for Undo
-            await clearPending(db);
-            haptic.warning();
-            refresh();
-            reload();
-            showUndo({
-              message: `Cleared ${snap.length} transaction${snap.length === 1 ? '' : 's'}`,
-              onUndo: async () => { for (const r of snap) await restorePending(db, r); refresh(); reload(); },
-            });
-          },
+          onPress: () => void discard(pending, `Cleared ${pending.length} transaction${pending.length === 1 ? '' : 's'}`),
         },
       ],
     );
   }
 
-  // ---- selection & focus ---------------------------------------------------
+  // ---- selection & focus ----
   function exitSelect() { setSelectMode(false); setSelected(new Set()); }
   function toggleSelect(id: string) {
     haptic.selection();
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
-  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every(r => selected.has(r.id));
+  // Scoped to the visible tab, not the whole inbox: "Select all" has to mean the rows you can
+  // see, or it silently reaches into sources you are not looking at.
+  const allVisibleSelected = tabRows.length > 0 && tabRows.every(r => selected.has(r.id));
   function toggleSelectAll() {
     haptic.selection();
-    setSelected(allVisibleSelected ? new Set() : new Set(visibleRows.map(r => r.id)));
+    setSelected(allVisibleSelected ? new Set() : new Set(tabRows.map(r => r.id)));
   }
   function assignBulkGroup(dest: string) {
     const ids = [...selected];
@@ -408,8 +424,7 @@ export default function ReviewScreen() {
   }
   function exitFocus() { setFocusIds(null); setFilters(DEFAULT_FILTERS); setActiveView(null); }
 
-  /** Apply a saved view: its filter, bulk-assign its rows to its group, and mark
-   *  its payer active (so commits use that person). */
+  /** Apply a saved view: filter, bulk-assign to its group, mark its payer active. */
   function applyView(view: SavedView) {
     setActiveView(view);
     setFilters(view.filters);
@@ -437,15 +452,12 @@ export default function ReviewScreen() {
     if (activeView?.id === id) setActiveView(null);
   }
 
-  // ---- row renderer --------------------------------------------------------
-  // `ReviewRowCard` lives at MODULE scope in components/finance/review. Declaring it
-  // inside this component would create a new component *type* every render, which
-  // remounts the subtree and drops keyboard focus mid-digit while typing an amount.
-  // See the note in that file before moving it.
+  // `ReviewRowCard` lives at MODULE scope. Declaring it inside this component would create a
+  // new component *type* every render, remounting the subtree and dropping keyboard focus
+  // mid-digit while typing an amount. See the note in that file before moving it.
 
-  // The row each per-row sheet is editing. Resolved here rather than inside the
-  // sheet's JSX so a sheet never has to re-find its own row (the old inline
-  // versions did `pending.find(...)!` up to three times in one element).
+  // Resolved once so a sheet never re-finds its own row (the inline versions did
+  // `pending.find(...)!` up to three times in one element).
   const rowById = (id: string | null) => (id ? pending.find(r => r.id === id) ?? null : null);
   const destRow = rowById(destSheetFor);
   const payRow = rowById(paySheetFor);
@@ -461,7 +473,6 @@ export default function ReviewScreen() {
     : catPickerKind === 'settlement'
     ? (data?.transferCats ?? [])
     : (data?.expenseCats ?? []);
-  const catValue = catPickerRow ? (catList.find(c => c.name === eff(catPickerRow).category) ?? null) : null;
 
   const headerRight = pending.length > 0 ? (
     selectMode ? (
@@ -479,11 +490,9 @@ export default function ReviewScreen() {
 
   const emptyFiltered = pending.length > 0 && visibleRows.length === 0;
 
-  // Group the working set into sections by source, in the canonical source order.
-  // Section headers only appear when more than one source is present (a single
-  // source needs no header — the screen title already says "Review").
+  // Headers only earn their place on the All tab; on a single source they repeat the tab.
   const sections = TXN_SOURCE
-    .map(src => ({ source: src, data: visibleRows.filter(r => (r.source ?? 'manual') === src) }))
+    .map(src => ({ source: src, data: tabRows.filter(r => sourceOf(r) === src) }))
     .filter(s => s.data.length > 0);
   const multiSource = sections.length > 1;
 
@@ -510,6 +519,15 @@ export default function ReviewScreen() {
         />
       )}
 
+      {!loading && !error && (
+        <ReviewSourceTabs
+          sources={presentSources}
+          active={activeSource}
+          onChange={setSourceTab}
+          countOf={(src) => src ? visibleRows.filter(r => sourceOf(r) === src).length : visibleRows.length}
+        />
+      )}
+
       {error ? (
         <ErrorState onRetry={reload} />
       ) : loading ? (
@@ -530,7 +548,7 @@ export default function ReviewScreen() {
           title="No matches"
           body="No transactions match the current filter or focus. Adjust the filter, or show all."
           actionLabel="Show all"
-          onAction={exitFocus}
+          onAction={() => { setSourceTab(null); exitFocus(); }}
         />
       ) : (
         <SectionList
@@ -561,15 +579,9 @@ export default function ReviewScreen() {
               onDiscard={deleteRow}
             />
           )}
-          renderSectionHeader={({ section }) => multiSource ? (
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Feather name={asFeather(TXN_SOURCE_ICON[(section as { source: TxnSource }).source], 'inbox')} size={12} color={colors.accent} />
-              </View>
-              <Text style={styles.sectionHeaderText}>{TXN_SOURCE_LABEL[(section as { source: TxnSource }).source]}</Text>
-              <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
-            </View>
-          ) : null}
+          renderSectionHeader={({ section }) => multiSource
+            ? <ReviewSourceHeader source={(section as { source: TxnSource }).source} count={section.data.length} />
+            : null}
           stickySectionHeadersEnabled={false}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
@@ -577,45 +589,32 @@ export default function ReviewScreen() {
           initialNumToRender={12}
           windowSize={8}
           ListHeaderComponent={
-            <View style={styles.headerBlock}>
-              {selectMode ? (
-                <View style={styles.selectHeader}>
-                  <Text style={styles.stepLabel}>{selected.size} selected</Text>
-                  <TouchableOpacity onPress={toggleSelectAll} hitSlop={6} accessibilityRole="button">
-                    <Text style={styles.selectAll}>{allVisibleSelected ? 'Clear' : 'Select all'}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.stepLabel}>To review</Text>
-                  <Text style={styles.intro}>{visibleRows.length} transaction{visibleRows.length === 1 ? '' : 's'}. Set each one, then Confirm to save. Changes are kept as you go.</Text>
-                  {hasGroups && (
-                    <View style={styles.assignAll}>
-                      <Text style={styles.assignAllLabel}>All to:</Text>
-                      <Chip label="Personal" icon="user" onPress={() => setAllDest('personal')} />
-                      {data!.sharedGroups.slice(0, 3).map(g => (
-                        <Chip key={g.id} label={g.name} icon="users" maxWidth={140} onPress={() => setAllDest(g.id)} />
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
+            <ReviewListHeader
+              selectMode={selectMode}
+              selectedCount={selected.size}
+              allSelected={allVisibleSelected}
+              onToggleSelectAll={toggleSelectAll}
+              rowCount={tabRows.length}
+              hasGroups={hasGroups}
+            />
           }
         />
       )}
 
-      {/* Sticky footer — Save all (normal) or bulk actions (selection). */}
+      {/* Sticky footer — one CTA normally, Actions + Save while selecting. */}
       {!loading && pending.length > 0 && !emptyFiltered && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]} onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
           {selectMode ? (
-            /* Real buttons at PrimaryButton's 52pt, so the footer no longer grows
-               4px when you leave selection mode (these were hand-rolled at 48). */
+            /* Two buttons, not four: every bulk edit moved into the Actions list, so adding
+               one no longer means finding footer room. */
             <View style={styles.bulkBar}>
-              <SecondaryButton label="Focus" icon="crosshair" onPress={focusSelected} disabled={selected.size === 0} style={styles.bulkBtn} />
-              {hasGroups && (
-                <SecondaryButton label="Group" icon="users" onPress={() => setBulkGroupSheet(true)} disabled={selected.size === 0} style={styles.bulkBtn} />
-              )}
+              <SecondaryButton
+                label="Actions"
+                icon="sliders"
+                onPress={() => setBulkSheet(true)}
+                disabled={selected.size === 0}
+                style={styles.bulkBtn}
+              />
               <View style={styles.bulkSaveWrap}>
                 <PrimaryButton
                   label={batchSaving ? 'Saving…' : `Save ${selected.size}`}
@@ -627,56 +626,53 @@ export default function ReviewScreen() {
             </View>
           ) : (
             <PrimaryButton
-              label={batchSaving ? 'Saving…' : `Save all ${visibleRows.length}`}
-              onPress={() => saveMany(visibleRows, narrowed ? 'Save these?' : 'Save all?')}
+              label={batchSaving ? 'Saving…' : `Save ${tabRows.length}${activeSource ? ` ${TXN_SOURCE_LABEL[activeSource].toLowerCase()}` : ''}`}
+              onPress={() => saveMany(tabRows, narrowed || activeSource ? 'Save these?' : 'Save all?')}
               loading={batchSaving}
             />
           )}
         </View>
       )}
 
-      {/* Shared category picker (mounted once). */}
-      {catPickerRow && (
-        <CategoryPicker
-          categories={catList}
-          value={catValue}
-          forceOpen
-          hideTrigger
-          onClose={() => setCatPickerFor(null)}
-          onChange={(c) => { applyCategory(catPickerRow, c.name); setCatPickerFor(null); }}
-        />
-      )}
-
-      {/* Per-row destination. */}
-      <ReviewDestSheet
-        visible={destSheetFor !== null}
-        onClose={() => setDestSheetFor(null)}
-        groups={data?.sharedGroups ?? []}
-        dest={destRow ? eff(destRow).dest : 'personal'}
-        onSelect={(dest) => {
-          // Drop the counterparty too: it belonged to the group being left.
-          if (destSheetFor) patch(destSheetFor, { dest, counterparty: '' });
-          setDestSheetFor(null);
-        }}
+      {/* Bulk actions and their pickers — one unit, so this screen only tracks "open". */}
+      <ReviewBulkSheets
+        visible={bulkSheet}
+        onClose={() => setBulkSheet(false)}
+        count={selected.size}
+        hasGroups={hasGroups}
+        kinds={[...new Set(pending.filter(r => selected.has(r.id)).map(r => eff(r).kind))]}
+        expenseCats={data?.expenseCats ?? []}
+        incomeCats={data?.incomeCats ?? []}
+        transferCats={data?.transferCats ?? []}
+        onGroup={() => setBulkGroupSheet(true)}
+        onFocus={focusSelected}
+        onDelete={deleteSelected}
+        onApply={patchMany}
       />
 
-      {/* Per-row transfer counterparty. */}
-      <CounterpartySheet
-        visible={whoSheetFor !== null}
-        onClose={() => setWhoSheetFor(null)}
-        members={whoMembers}
+      {/* The four per-row editors, mounted once for the list. */}
+      <ReviewRowSheets
+        catRow={catPickerRow ? { category: eff(catPickerRow).category, kind: catPickerKind } : null}
+        categories={catList}
+        onCategory={(name) => { if (catPickerRow) applyCategory(catPickerRow, name); setCatPickerFor(null); }}
+        onCloseCategory={() => setCatPickerFor(null)}
+        destOpen={destSheetFor !== null}
+        dest={destRow ? eff(destRow).dest : 'personal'}
+        groups={data?.sharedGroups ?? []}
+        // Drop the counterparty too: it belonged to the group being left.
+        onDest={(dest) => { if (destSheetFor) patch(destSheetFor, { dest, counterparty: '' }); setDestSheetFor(null); }}
+        onCloseDest={() => setDestSheetFor(null)}
+        whoOpen={whoSheetFor !== null}
+        whoMembers={whoMembers}
         counterparty={whoRow ? eff(whoRow).counterparty : ''}
         inbound={whoRow ? eff(whoRow).direction === 'credit' : false}
-        onSelect={(pid) => { if (whoSheetFor) patch(whoSheetFor, { counterparty: pid }); setWhoSheetFor(null); }}
-      />
-
-      {/* Per-row pay method — the SAME sheet Add uses, so the two can't drift. */}
-      <PayMethodSheet
-        visible={paySheetFor !== null}
-        onClose={() => setPaySheetFor(null)}
-        value={payRow ? eff(payRow).payMethod : ''}
-        onChange={(m) => { if (paySheetFor) patch(paySheetFor, { payMethod: m }); }}
-        onClear={() => { if (paySheetFor) patch(paySheetFor, { payMethod: '' }); }}
+        onCounterparty={(pid) => { if (whoSheetFor) patch(whoSheetFor, { counterparty: pid }); setWhoSheetFor(null); }}
+        onCloseWho={() => setWhoSheetFor(null)}
+        payOpen={paySheetFor !== null}
+        payMethod={payRow ? eff(payRow).payMethod : ''}
+        onPayMethod={(m) => { if (paySheetFor) patch(paySheetFor, { payMethod: m }); }}
+        onClearPay={() => { if (paySheetFor) patch(paySheetFor, { payMethod: '' }); }}
+        onClosePay={() => setPaySheetFor(null)}
       />
 
       {/* Bulk group assign — shared, non-archived groups only (no Personal). */}

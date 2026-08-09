@@ -21,8 +21,9 @@ export const reviewStyles = StyleSheet.create({
   selectAll: { ...type.labelSemi, color: colors.accent },
   stepLabel: { ...type.sectionLabel, color: colors.accent },
   intro: { ...type.label, color: colors.textMuted },
-  assignAll: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: space.xs },
-  assignAllLabel: { ...type.caption, color: colors.textMuted },
+  // Sits between the header and the list, outside the scroll, so switching source never
+  // requires scrolling back up to find the control.
+  sourceTabs: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.md, paddingBottom: space.xs },
   sectionIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   sectionHeaderText: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },

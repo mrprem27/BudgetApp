@@ -6,37 +6,59 @@
  * user can always override it.
  */
 
-// Ordered, most-specific first. Category names mirror DEFAULT_CATEGORIES.
+/**
+ * Ordered, most-specific first. Category names mirror DEFAULT_CATEGORIES.
+ *
+ * Hindi keywords sit in the **same entries** as their English equivalents rather than in a
+ * parallel table: there is one vocabulary and one matcher, so nothing has to detect a language
+ * and the two lists cannot drift apart. Dictation on `en-IN` returns Hinglish transliterated,
+ * so "bijli ka bill" and "electricity bill" arrive through the identical path.
+ *
+ * ⚠️ **No keyword here may be a number word.** `voiceParse` reads `sau`, `do`, `char`, `saath`
+ * and friends as digits, so any of them as a keyword would silently change parsed amounts —
+ * `smartCategory.test.ts` asserts the two sets never overlap.
+ */
 const RULES: { category: string; keywords: string[] }[] = [
-  { category: 'Cab & Auto', keywords: ['uber', 'ola', 'rapido', 'cab', 'auto', 'taxi', 'ride', 'rickshaw', 'autorickshaw', 'drop', 'uber auto'] },
+  { category: 'Cab & Auto', keywords: ['uber', 'ola', 'rapido', 'cab', 'auto', 'taxi', 'ride', 'rickshaw', 'autorickshaw', 'drop', 'uber auto', 'bhaada'] },
   { category: 'Metro & Bus', keywords: ['metro', 'bus', 'train', 'local', 'irctc', 'redbus', 'railway', 'ticket', 'bmtc', 'best', 'dtc', 'tram'] },
   { category: 'Fuel', keywords: ['petrol', 'diesel', 'fuel', 'gas station', 'indian oil', 'bharat petroleum', 'hpcl', 'bpcl', 'iocl', 'shell', 'cng', 'pump', 'petrol pump'] },
   { category: 'Parking & Toll', keywords: ['parking', 'toll', 'fastag', 'valet', 'toll plaza'] },
   { category: 'Food Delivery', keywords: ['swiggy', 'zomato', 'food delivery', 'eatsure', 'box8', 'dominos delivery', 'faasos', 'magicpin', 'ordered food', 'food order'] },
-  { category: 'Groceries', keywords: ['grocery', 'groceries', 'bigbasket', 'blinkit', 'zepto', 'instamart', 'dmart', 'vegetable', 'vegetables', 'milk', 'kirana', 'supermarket', 'fruits', 'eggs', 'bread', 'jiomart', 'reliance fresh', 'sabzi', 'rations'] },
-  { category: 'Chai & Snacks', keywords: ['chai', 'tea', 'coffee', 'cafe', 'starbucks', 'snack', 'snacks', 'samosa', 'ccd', 'chaayos', 'tapri', 'juice', 'shake', 'vada pav', 'pakora', 'cold drink'] },
-  { category: 'Eating Out', keywords: ['restaurant', 'dinner', 'lunch', 'breakfast', 'dine', 'eat out', 'eating out', 'pizza', 'burger', 'biryani', 'kfc', 'mcdonald', 'mcd', 'dominos', 'dosa', 'thali', 'buffet', 'bar', 'pub', 'drinks', 'beer', 'food court', 'dhaba'] },
-  { category: 'Rent', keywords: ['rent', 'landlord', 'house rent', 'flat rent', 'pg rent', 'maintenance', 'society maintenance', 'brokerage', 'deposit'] },
-  { category: 'Household Help', keywords: ['maid', 'cook', 'house help', 'cleaner', 'driver salary', 'bai', 'nanny', 'gardener', 'househelp', 'domestic help'] },
+  { category: 'Groceries', keywords: ['grocery', 'groceries', 'bigbasket', 'blinkit', 'zepto', 'instamart', 'dmart', 'vegetable', 'vegetables', 'milk', 'kirana', 'supermarket', 'fruits', 'eggs', 'bread', 'jiomart', 'reliance fresh', 'sabzi', 'rations', 'doodh', 'sabji', 'atta', 'chawal', 'dal', 'anda', 'tel kirana', 'raashan'] },
+  { category: 'Chai & Snacks', keywords: ['chai', 'tea', 'coffee', 'cafe', 'starbucks', 'snack', 'snacks', 'samosa', 'ccd', 'chaayos', 'tapri', 'juice', 'shake', 'vada pav', 'pakora', 'cold drink', 'nashta', 'biscuit', 'namkeen'] },
+  { category: 'Eating Out', keywords: ['restaurant', 'dinner', 'lunch', 'breakfast', 'dine', 'eat out', 'eating out', 'pizza', 'burger', 'biryani', 'kfc', 'mcdonald', 'mcd', 'dominos', 'dosa', 'thali', 'buffet', 'bar', 'pub', 'drinks', 'beer', 'food court', 'dhaba', 'khana', 'khaana', 'bhojan'] },
+  { category: 'Rent', keywords: ['rent', 'landlord', 'house rent', 'flat rent', 'pg rent', 'maintenance', 'society maintenance', 'brokerage', 'deposit', 'kiraya', 'makan kiraya', 'ghar kiraya'] },
+  { category: 'Household Help', keywords: ['maid', 'cook', 'house help', 'cleaner', 'driver salary', 'bai', 'nanny', 'gardener', 'househelp', 'domestic help', 'kaamwali', 'safai'] },
   { category: 'Home Supplies', keywords: ['home supplies', 'utensil', 'utensils', 'detergent', 'cleaning', 'toiletries', 'soap', 'shampoo', 'tissue', 'mop', 'broom', 'dustbin', 'crockery', 'furniture', 'mattress'] },
-  { category: 'Electricity', keywords: ['electricity', 'power bill', 'current bill', 'eb bill', 'electricity bill', 'bescom', 'tata power', 'adani electricity', 'lpg', 'gas cylinder', 'water bill'] },
+  { category: 'Electricity', keywords: ['electricity', 'power bill', 'current bill', 'eb bill', 'electricity bill', 'bescom', 'tata power', 'adani electricity', 'lpg', 'gas cylinder', 'water bill', 'bijli', 'bijli bill', 'paani bill'] },
   { category: 'Mobile Recharge', keywords: ['recharge', 'jio', 'airtel', 'vi', 'vodafone', 'mobile bill', 'postpaid', 'prepaid', 'phone recharge', 'bsnl', 'sim'] },
   { category: 'WiFi & Broadband', keywords: ['wifi', 'broadband', 'internet', 'fiber', 'fibre', 'act fibernet', 'jio fiber', 'airtel xstream', 'hathway', 'router'] },
   { category: 'Entertainment', keywords: ['netflix', 'spotify', 'prime', 'amazon prime', 'hotstar', 'disney', 'youtube premium', 'sony liv', 'sonyliv', 'zee5', 'jiocinema', 'apple music', 'movie', 'film', 'cinema', 'pvr', 'inox', 'concert', 'game', 'gaming', 'bookmyshow', 'standup', 'stand up', 'comedy', 'show', 'amusement park', 'theme park', 'bowling', 'arcade', 'club', 'play'] },
   { category: 'Gym & Fitness', keywords: ['gym', 'fitness', 'cult', 'cultfit', 'workout', 'yoga', 'zumba', 'protein', 'supplement', 'trainer', 'crossfit', 'membership fee'] },
   { category: 'Salon & Grooming', keywords: ['salon', 'haircut', 'spa', 'grooming', 'barber', 'parlour', 'parlor', 'facial', 'waxing', 'manicure', 'pedicure', 'massage', 'beard'] },
-  { category: 'Shopping', keywords: ['amazon', 'flipkart', 'myntra', 'ajio', 'shopping', 'clothes', 'clothing', 'shoes', 'shoe', 'shirt', 'tshirt', 'pant', 'pants', 'jeans', 'kurta', 'saree', 'dress', 'mall', 'meesho', 'nykaa', 'watch', 'bag', 'wallet', 'sunglasses', 'apparel', 'footwear', 'jacket', 'sneakers'] },
+  { category: 'Shopping', keywords: ['amazon', 'flipkart', 'myntra', 'ajio', 'shopping', 'clothes', 'clothing', 'shoes', 'shoe', 'shirt', 'tshirt', 'pant', 'pants', 'jeans', 'kurta', 'saree', 'dress', 'mall', 'meesho', 'nykaa', 'watch', 'bag', 'wallet', 'sunglasses', 'apparel', 'footwear', 'jacket', 'sneakers', 'kapde', 'kapda', 'jute'] },
   { category: 'Electronics', keywords: ['electronics', 'gadget', 'laptop', 'phone', 'mobile', 'charger', 'headphone', 'headphones', 'earbud', 'earbuds', 'earphone', 'mouse', 'keyboard', 'monitor', 'tv', 'television', 'camera', 'powerbank', 'ssd', 'hard disk', 'tablet', 'ipad', 'speaker', 'smartwatch'] },
-  { category: 'Health & Pharmacy', keywords: ['medicine', 'medicines', 'pharmacy', 'doctor', 'hospital', 'clinic', 'apollo', 'pharmeasy', 'health', 'tablet strip', '1mg', 'netmeds', 'dentist', 'checkup', 'lab test', 'blood test', 'diagnostic', 'consultation', 'vaccine', 'physiotherapy', 'spectacles', 'lenskart'] },
+  { category: 'Health & Pharmacy', keywords: ['medicine', 'medicines', 'pharmacy', 'doctor', 'hospital', 'clinic', 'apollo', 'pharmeasy', 'health', 'tablet strip', '1mg', 'netmeds', 'dentist', 'checkup', 'lab test', 'blood test', 'diagnostic', 'consultation', 'vaccine', 'physiotherapy', 'spectacles', 'lenskart', 'dawai', 'dawa', 'davai', 'ilaj', 'doctor fees'] },
   { category: 'Insurance', keywords: ['insurance', 'premium', 'policy', 'lic', 'health insurance', 'term insurance', 'car insurance', 'bike insurance', 'mediclaim'] },
   { category: 'Investments / SIP', keywords: ['sip', 'investment', 'mutual fund', 'stock', 'stocks', 'zerodha', 'groww', 'shares', 'fd', 'rd', 'ppf', 'nps', 'gold', 'crypto', 'bitcoin', 'etf', 'upstox'] },
   { category: 'EMI & Loans', keywords: ['emi', 'loan', 'credit card bill', 'home loan', 'car loan', 'personal loan', 'bajaj finance', 'installment', 'repayment', 'cc bill'] },
-  { category: 'Education', keywords: ['course', 'class', 'tuition', 'school fee', 'college', 'udemy', 'book', 'books', 'coursera', 'coaching', 'exam fee', 'stationery', 'notebook', 'fees', 'workshop', 'certification', 'byjus', 'unacademy'] },
+  { category: 'Education', keywords: ['course', 'class', 'tuition', 'school fee', 'college', 'udemy', 'book', 'books', 'coursera', 'coaching', 'exam fee', 'stationery', 'notebook', 'fees', 'workshop', 'certification', 'byjus', 'unacademy', 'padhai', 'kitab'] },
   { category: 'Taxes', keywords: ['tax', 'gst', 'income tax', 'advance tax', 'tds', 'property tax', 'professional tax'] },
-  { category: 'Gifts', keywords: ['gift', 'present', 'birthday', 'anniversary', 'wedding gift', 'donation', 'flowers', 'bouquet', 'chocolates'] },
+  { category: 'Gifts', keywords: ['gift', 'present', 'birthday', 'anniversary', 'wedding gift', 'donation', 'flowers', 'bouquet', 'chocolates', 'shaadi', 'tohfa'] },
   { category: 'Travel', keywords: ['flight', 'hotel', 'trip', 'travel', 'airbnb', 'makemytrip', 'goibibo', 'oyo', 'vacation', 'holiday', 'cleartrip', 'ixigo', 'visa', 'resort', 'sightseeing', 'tour', 'booking', 'yatra'] },
-  { category: 'Family & Support', keywords: ['family', 'parents', 'home transfer', 'support', 'mom', 'dad', 'mother', 'father', 'pocket money', 'allowance'] },
+  { category: 'Family & Support', keywords: ['family', 'parents', 'home transfer', 'support', 'mom', 'dad', 'mother', 'father', 'pocket money', 'allowance', 'mummy', 'papa', 'ghar bheje', 'ghar wale', 'bhai', 'behen'] },
 ];
+
+/**
+ * Every keyword the matcher knows, flattened.
+ *
+ * Exported so the invariant above can be *tested* rather than merely asserted in a comment:
+ * no keyword may be a number word, and every keyword must belong to a real category.
+ */
+export const CATEGORY_KEYWORDS: readonly string[] = RULES.flatMap(r => r.keywords);
+
+/** The categories the rules can produce, for the same reason. */
+export const RULE_CATEGORIES: readonly string[] = RULES.map(r => r.category);
 
 /** Lowercase, fold every run of non-alphanumerics to a single space, pad with
  *  spaces so whole-word/phrase tests are just substring checks on " word ". */

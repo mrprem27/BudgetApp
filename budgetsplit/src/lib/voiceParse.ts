@@ -81,6 +81,19 @@ const MONEY_WORDS = new Set([
 const FILLER = new Set(['and', 'aur', 'for', 'ka', 'ki', 'ke', 'on', 'at', 'to', 'of', 'a', 'an', 'the']);
 
 /**
+ * Is this token read as part of a number?
+ *
+ * Exported because it is the boundary another vocabulary must not cross: `smartCategory`'s
+ * keywords are matched against the same words, and a keyword that is also a numeral would
+ * silently change parsed amounts — "sau" as a Shopping keyword would make "sau rupaye" both a
+ * category hit and 100. `smartCategory.test.ts` uses this to assert the two never overlap.
+ */
+export function isNumberWord(token: string): boolean {
+  const t = token.toLowerCase();
+  return t in UNITS || t in TENS || t in SCALES || MONEY_WORDS.has(t);
+}
+
+/**
  * Speech noise that must never become a transaction's title.
  *
  * People do not dictate in headlines. They say *"umm four fifty for groceries"*, *"ok so I paid
@@ -112,6 +125,11 @@ const NOISE = new Set([
   'spent', 'spend', 'paid', 'pay', 'bought', 'buy', 'got', 'get', 'gave', 'give',
   'sent', 'send', 'add', 'added', 'log', 'logged', 'record', 'put', 'made', 'make',
   'received', 'receive', 'earned', 'earn', 'credited', 'deposited',
+  // Hinglish. Postpositions and the verbs that only say money moved — "mummy ko do hazaar
+  // diye" is about mummy, not about "diye". `ko`/`se`/`mein` are the Hindi equivalents of the
+  // `for`/`on`/`to` already in FILLER.
+  'diye', 'diya', 'liye', 'liya', 'kiye', 'kiya', 'kharch', 'kharche', 'hua', 'hue', 'huye',
+  'mein', 'ko', 'se', 'ka', 'ki', 'ke', 'wala', 'wale', 'wali', 'bhi', 'aur', 'tha', 'thi',
 ]);
 
 /**
@@ -334,6 +352,13 @@ function extractDate(tokens: string[], nowMs: number): { dateMs: number | null; 
     const t = tokens[i];
 
     if (t === 'today' || t === 'aaj') { consumed.add(i); return { dateMs: nowMs, consumed }; }
+
+    // "parso" is both the day before yesterday and the day after tomorrow. A spend is in the
+    // past, so it reads as the past — the same call `kal` already makes.
+    if (t === 'parso' || t === 'parson') {
+      consumed.add(i);
+      return { dateMs: keepTime(nowMs - 2 * DAY_MS), consumed };
+    }
 
     if (t === 'yesterday' || t === 'kal') {
       // "kal" is both yesterday and tomorrow in Hindi; a *spend* is in the past, so past.

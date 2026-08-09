@@ -14,7 +14,7 @@ import { SectionCard } from '../../src/components/ui/SectionCard';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import {
   VOICE_PHRASE_EXAMPLES, VOICE_SHORTCUT_PRIVACY, VOICE_COMMANDS, VOICE_ONE_WAY_NAME,
-  VOICE_FIRST_RUN_NOTE, SHORTCUTS_APP_URL, VOICE_FIELD_RULES, VOICE_ROUTING_SUMMARY, VOICE_FILES_LOCATION,
+  SHORTCUTS_APP_URL, VOICE_FIELD_RULES, VOICE_ROUTING_SUMMARY,
   type VoiceCommand, type FlowActor,
 } from '../../src/lib/voiceShortcut';
 import { kindAccent, kindGradient } from '../../src/lib/kindTheme';
@@ -73,9 +73,9 @@ export default function VoiceSetupScreen() {
           <IconCircle icon="mic" size={56} iconSize={22} color={colors.accent} bg={colors.accentMuted} />
           <Text style={styles.heroTitle}>{`“Hey Siri, ${VOICE_ONE_WAY_NAME}”`}</Text>
           <Text style={styles.heroBody}>
-            Three commands — spending, income, settling up — and none of them opens the app.
-            Siri asks, you answer, it tells you what it did. BudgetSplit files everything the
-            next time you happen to open it.
+            Three commands — expense, income, transfer. Siri asks, you answer, and BudgetSplit
+            opens with everything already filled in. Nothing to set up beyond tapping Add
+            Shortcut, and you always see what was heard before it saves.
           </Text>
         </Card>
 
@@ -126,7 +126,7 @@ export default function VoiceSetupScreen() {
                     saved nothing and I never found out". */}
                 <Text style={styles.note}>
                   {c.installUrl != null
-                    ? <>Tap <Text style={styles.strong}>Add Shortcut</Text>, then open it once and set <Text style={styles.strong}>Save File</Text> to {VOICE_FILES_LOCATION}. That folder already exists, and it is the only step — without it the capture saves somewhere BudgetSplit can't see.</>
+                    ? <>Tap <Text style={styles.strong}>Add Shortcut</Text> on the sheet Apple shows. That's the whole setup — there is nothing to configure afterwards.</>
                     : <>No ready-made link for this one yet — build it from the {c.steps.length} steps below.</>}
                 </Text>
               </Card>
@@ -194,7 +194,6 @@ export default function VoiceSetupScreen() {
           );
         })}
 
-        <Text style={styles.note}>{VOICE_FIRST_RUN_NOTE}</Text>
         <Text style={styles.note}>{VOICE_SHORTCUT_PRIVACY}</Text>
 
         {/* "Where did my sentence go" is the first question a voice feature has to answer, and
