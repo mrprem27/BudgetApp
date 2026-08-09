@@ -42,6 +42,19 @@ export const VOICE_SHORTCUT_URL: string | null = null;
  */
 export const SHORTCUTS_APP_URL = 'shortcuts://create-shortcut';
 
+/**
+ * The deep link the two-way command opens.
+ *
+ * Kept here rather than typed into the instructions, so what the user is told to enter is the
+ * same string `app/add/quick.tsx` reads its `q` param from.
+ *
+ * Deliberately not URL-encoded in the instructions: a spoken phrase contains spaces but no `&`
+ * or `#`, and a query value is only delimited by those — so `?q=four fifty groceries` parses
+ * correctly even unencoded. If a phrase ever does arrive truncated, a "URL Encode" text action
+ * before this one is the fix.
+ */
+export const VOICE_DEEP_LINK = 'budgetsplit:///add/quick?q=';
+
 /** Worth saying out loud, given the app's "nothing leaves your device" promise. */
 export const VOICE_SHORTCUT_PRIVACY =
   'The dictation itself is done by iOS on your device. Tapping the one-tap link above fetches '
@@ -85,9 +98,12 @@ export const VOICE_COMMANDS: VoiceCommand[] = [
 /**
  * Building the one-way shortcut by hand, in the order the Shortcuts app presents the actions.
  *
- * Four actions, and the order matters: the timestamp has to be captured *before* the file is
- * named with it, and the file has to be named with it because that timestamp is what anchors
- * "yesterday" to when you spoke rather than to when the app next opened.
+ * The order is a dependency chain, not a preference: nothing can be saved before it has been
+ * dictated, the filename has to exist before the action that uses it, and there is no
+ * destination to change until the Save File action is there. `voiceShortcut.test.ts` pins it.
+ *
+ * No date actions — the capture time comes from the file itself (`resolveCaptureTime`), which
+ * is what took this from six steps to five and removed the one that reliably went wrong.
  */
 export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
   {
@@ -121,10 +137,15 @@ export const VOICE_SHORTCUT_STEPS: VoiceStep[] = [
 ];
 
 /**
- * The two-way command, which is a single action and needs no folder.
+ * The two-way command: dictate, build a deep link, open it. **No folder anywhere.**
  *
- * Kept separate because it is genuinely simpler — anyone who finds the four-step version
- * daunting can set this one up in under a minute and still get voice entry.
+ * That makes it the portable one — a shared copy of it has nothing device-specific to
+ * re-pick, whereas the one-way command's Save File destination is a bookmark to a folder on
+ * the phone that authored it. Worth offering both for that reason alone.
+ *
+ * `Open URLs` (plural) consumes its input rather than offering a field to type into, so the
+ * `URL` action has to build the address first — Apple's own documented pattern, and not
+ * guessable from the action list, where several app-provided `Open URL` lookalikes sit above it.
  */
 export const VOICE_TWO_WAY_STEPS: VoiceStep[] = [
   {
@@ -136,8 +157,15 @@ export const VOICE_TWO_WAY_STEPS: VoiceStep[] = [
     body: 'The same on-device dictation as above.',
   },
   {
-    title: 'Add "Open URL"',
-    body: 'Set it to  budgetsplit:///add/quick?q=  followed by the Dictated Text variable. BudgetSplit opens with the amount, category and date already filled in — nothing is saved until you tap Save.',
+    title: `Add "URL" and type  ${VOICE_DEEP_LINK}`,
+    body: 'Then insert the Dictated Text variable straight after the = with no space. This '
+      + 'action just builds the address; it does not open anything yet.',
+  },
+  {
+    title: 'Add "Open URLs" — the plural one, with the blue arrow',
+    body: 'It takes the URL from the step above as its input, which is why the URL action has '
+      + 'to come first. Beware the similar-looking "Open URL" rows carrying an app\'s icon '
+      + '(Zomato, Chrome) — those are that app\'s own action and will open the wrong thing.',
   },
 ];
 

@@ -1,6 +1,8 @@
 import {
   VOICE_INBOX_FOLDER, VOICE_FILES_LOCATION, VOICE_SHORTCUT_STEPS, VOICE_SHORTCUT_URL,
   VOICE_PHRASE_EXAMPLES, VOICE_GROUP_KEYWORDS, VOICE_ROUTING_SUMMARY,
+  VOICE_TWO_WAY_STEPS,
+  VOICE_DEEP_LINK,
 } from '../lib/voiceShortcut';
 import { GROUP_HINTS, isGroupish } from '../lib/voiceInbox';
 import { parseVoice } from '../lib/voiceParse';
@@ -118,5 +120,40 @@ describe('the setup instructions are complete', () => {
     // iCloud URL. Until then the manual steps are the path, and a placeholder URL that
     // 404s would be worse than none.
     expect(VOICE_SHORTCUT_URL === null || /^https:\/\/(www\.)?icloud\.com\/shortcuts\//.test(VOICE_SHORTCUT_URL)).toBe(true);
+  });
+});
+
+describe('the two-way command', () => {
+  it('builds the URL before opening it', () => {
+    // "Open URLs" consumes its input rather than offering a field to type in, so the URL
+    // action must come first — Apple's own documented pattern.
+    const titles = VOICE_TWO_WAY_STEPS.map(s => s.title.toLowerCase());
+    const urlAt = titles.findIndex(t => t.includes('"url"'));
+    const openAt = titles.findIndex(t => t.includes('open urls'));
+    expect(urlAt).toBeGreaterThanOrEqual(0);
+    expect(openAt).toBeGreaterThan(urlAt);
+  });
+
+  it('warns about the app-provided lookalikes', () => {
+    // The action list shows several "Open URL" rows carrying an app's icon; picking one opens
+    // that app instead. This cost a round trip, so the warning is pinned.
+    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toMatch(/open urls/i);
+    expect(all.toLowerCase()).toContain('zomato');
+  });
+
+  it('tells the user the same link the Add screen reads', () => {
+    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toContain(VOICE_DEEP_LINK);
+    // The route and the param name the screen actually uses.
+    expect(VOICE_DEEP_LINK).toContain('/add/quick');
+    expect(VOICE_DEEP_LINK).toMatch(/[?&]q=$/);
+  });
+
+  it('needs no folder, unlike the one-way command', () => {
+    // Which is why it is the portable one: nothing to re-pick on someone else's device.
+    const all = VOICE_TWO_WAY_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all.toLowerCase()).not.toContain('subpath');
+    expect(all).not.toContain(VOICE_INBOX_FOLDER);
   });
 });
