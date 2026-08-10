@@ -34,17 +34,15 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * broken link degrades cleanly rather than sending people to a dead page.
  */
 /**
- * Verified against what Apple actually serves, not just pasted: the record is named exactly
- * `Please log`, and its 14 actions match `shortcutActions` parameter for parameter — the URL
- * bound to the **encode** output rather than the raw dictation, `WFCondition: 100`, and the
- * two closing actions outside the repeat loop.
+ * Null: every link so far was minted from a build whose `If` had an unresolvable input, so the
+ * condition chip was blank and every phrase fell to the Otherwise branch — the shortcut could
+ * only ever say it didn't catch anything. Comparing the plist against `shortcutActions` could
+ * not see it, because both sides were wrong in the same way; it took a screenshot of the
+ * Shortcuts editor. Rebuild, re-import, re-share, paste.
  *
- * Worth re-checking that way after any re-share. The device re-serializes on import, and the
- * failures that matter here (a URL wired to the un-encoded variable, a Speak that drifted
- * between URL and Open URLs) look identical to a working shortcut from the outside.
+ * Was: `https://www.icloud.com/shortcuts/18a3996e92194482b8064d84cc7fb842`
  */
-export const VOICE_SHORTCUT_URL: string | null =
-  'https://www.icloud.com/shortcuts/18a3996e92194482b8064d84cc7fb842';
+export const VOICE_SHORTCUT_URL: string | null = null;
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
@@ -250,15 +248,11 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
       body: 'The loop then comes back round and asks again, up to three times.',
     },
     {
-      title: `Below the Repeat — outside it — add "Speak Text" saying  ${VOICE_GIVE_UP_LINE}`,
+      title: `Finish below the Repeat — outside it — with "Speak Text" saying  ${VOICE_GIVE_UP_LINE}`,
       body: 'Outside the loop is the whole point: only three silent tries reach here, because '
         + 'success stopped the shortcut already. It has to say nothing was saved — falling '
-        + 'quiet sounds exactly like a capture that worked.',
-    },
-    {
-      title: 'Finish with "Dismiss Siri"',
-      body: 'Closes Siri on the failed path, where no app opens to close it. The success path '
-        + 'needs no equivalent: the app coming to the foreground dismisses Siri itself.',
+        + 'quiet sounds exactly like a capture that worked. Do NOT add "Dismiss Siri" after '
+        + 'it: that action is "Dismiss Siri and Continue", and it talks over this line.',
     },
   ];
 }

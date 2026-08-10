@@ -75,6 +75,25 @@ function action(id: string, params: Record<string, Plist>): Plist {
   return { WFWorkflowActionIdentifier: id, WFWorkflowActionParameters: params };
 }
 
+/**
+ * The thing an `If` compares. **Double-wrapped, and it has to be.**
+ *
+ * A text *field* takes the attachment directly; a conditional's `WFInput` takes
+ * `{Type: Variable, Variable: <attachment>}`. Handing it the bare attachment is not rejected —
+ * it imports, it signs, it survives a device round trip — the If simply renders with an empty
+ * Condition chip and never matches, so every phrase falls to the Otherwise branch. Verified
+ * against real exported shortcuts, which is the only way this shape is knowable.
+ */
+function conditionInput(outputUuid: string, outputName: string): Plist {
+  return {
+    Type: 'Variable',
+    Variable: {
+      Value: { OutputUUID: outputUuid, OutputName: outputName, Type: 'ActionOutput' },
+      WFSerializationType: 'WFTextTokenAttachment',
+    },
+  };
+}
+
 /** A text field carrying one action's output between a literal prefix and suffix. */
 function tokenString(prefix: string, outputUuid: string, outputName: string, suffix = ''): Plist {
   return {
@@ -167,15 +186,12 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
       UUID: askUuid,
     }),
 
-    // `WFCondition: 100` is "has any value". Not something the community references pin down,
-    // and signing validates structure rather than semantics — so after importing, check the
-    // If row in the Shortcuts app actually reads "has any value".
+    // `WFCondition: 100` is "has any value" — confirmed against real exported shortcuts, where
+    // it always appears as an integer alongside a `WFInput` in the shape `conditionInput`
+    // builds. Both halves matter: the code alone, on a bare attachment, renders blank.
     flow('is.workflow.actions.conditional', ifId, 0, {
       WFCondition: 100,
-      WFInput: {
-        Value: { OutputUUID: askUuid, OutputName: VOICE_ASK_OUTPUT, Type: 'ActionOutput' },
-        WFSerializationType: 'WFTextTokenAttachment',
-      },
+      WFInput: conditionInput(askUuid, VOICE_ASK_OUTPUT),
     }),
 
     // Percent-encode before splicing. Inside the If rather than before it: there is nothing to
@@ -209,10 +225,13 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
 
     flow('is.workflow.actions.repeat.count', loopId, 2),
 
-    // Only silence reaches past the loop — success exits above. Nothing opens on this path, so
-    // Siri would otherwise sit there having said nothing about what happened.
+    // Only silence reaches past the loop — success exits above.
+    //
+    // No `Dismiss Siri` after this. It reads as the action that "closes cleanly", but its real
+    // name is *Dismiss Siri and Continue*: it tears the interface down and keeps running, which
+    // cut the line off mid-sentence — the one ending that most needs to be heard. Reaching the
+    // end of a shortcut closes Siri by itself, after the speech has finished.
     action('is.workflow.actions.speaktext', { WFText: VOICE_GIVE_UP_LINE, WFSpeakTextWait: true }),
-    action('is.workflow.actions.dismisssiri', {}),
   ];
 }
 

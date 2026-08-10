@@ -37,7 +37,6 @@ describe('the generated shortcut matches the command it came from', () => {
         'is.workflow.actions.conditional',
         'is.workflow.actions.repeat.count',
         'is.workflow.actions.speaktext',
-        'is.workflow.actions.dismisssiri',
       ]);
 
       // `Open URLs` takes its input implicitly from whatever ran last, so the read-back Speak
@@ -95,7 +94,6 @@ describe('the generated shortcut matches the command it came from', () => {
       // success would announce it too, right after handing the phrase to the app.
       expect(ids.indexOf('is.workflow.actions.exit')).toBeLessThan(loopEnd);
       expect(ids.lastIndexOf('is.workflow.actions.speaktext')).toBeGreaterThan(loopEnd);
-      expect(ids.lastIndexOf('is.workflow.actions.dismisssiri')).toBeGreaterThan(loopEnd);
 
       expect(buildShortcutPlist(cmd)).toContain(VOICE_GIVE_UP_LINE);
     }
@@ -139,6 +137,28 @@ describe('the generated shortcut matches the command it came from', () => {
 
       expect(bound).toEqual([seededUuid(`${cmd.name}:encode`)]);
       expect(bound).not.toContain(seededUuid(`${cmd.name}:ask`));
+    }
+  });
+
+  it('double-wraps the If input, or the condition renders blank', () => {
+    // Shipped once, and nothing caught it: a conditional's WFInput takes
+    // {Type: Variable, Variable: <attachment>}, NOT the bare attachment a text field takes.
+    // The bare form imports, signs, and survives a device round trip with WFCondition intact —
+    // it just leaves the If showing an empty Condition chip, so every phrase falls through to
+    // Otherwise and the shortcut only ever says it didn't catch anything.
+    for (const cmd of VOICE_COMMANDS) {
+      const iff = shortcutActions(cmd)
+        .map(a => a as { WFWorkflowActionIdentifier: string; WFWorkflowActionParameters: Record<string, unknown> })
+        .find(a => a.WFWorkflowActionParameters.WFCondition !== undefined);
+
+      expect(iff?.WFWorkflowActionParameters.WFCondition).toBe(100);
+      expect(iff?.WFWorkflowActionParameters.WFInput).toEqual({
+        Type: 'Variable',
+        Variable: {
+          Value: { OutputUUID: seededUuid(`${cmd.name}:ask`), OutputName: VOICE_ASK_OUTPUT, Type: 'ActionOutput' },
+          WFSerializationType: 'WFTextTokenAttachment',
+        },
+      });
     }
   });
 
