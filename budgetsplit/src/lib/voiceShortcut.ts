@@ -34,11 +34,14 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * broken link degrades cleanly rather than sending people to a dead page.
  */
 /**
- * Null: the shared copy is still named "budget", so "Hey Siri, Please log" reaches nothing.
- * A link that installs a command the app's own instructions cannot invoke is worse than none.
- * Was: `https://www.icloud.com/shortcuts/7205ee25308f463583f63e8feabf104d`
+ * ⚠️ The shared record is named **`please-log`**, not `Please log` — iOS takes a shortcut's
+ * name from the *filename*, and the build script was slugging it. Fixed there, but this link
+ * was minted from the old file, so what installs from it carries the hyphen. Harmless if Siri
+ * hears "please-log" as two words; if it doesn't, rebuild and re-share rather than editing the
+ * app's copy to match, because the hyphen is unsayable.
  */
-export const VOICE_SHORTCUT_URL: string | null = null;
+export const VOICE_SHORTCUT_URL: string | null =
+  'https://www.icloud.com/shortcuts/5c6184b8e5f441cbb0cfde10d867272c';
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.

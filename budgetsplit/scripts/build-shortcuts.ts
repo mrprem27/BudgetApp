@@ -22,8 +22,14 @@ import { buildShortcutPlist, postImportStep } from '../src/lib/voiceShortcutFile
 
 const OUT = join(import.meta.dirname, '..', 'build', 'shortcuts');
 
-function slug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/**
+ * The filename IS the shortcut's name — a `.shortcut` plist carries no name field, so iOS reads
+ * one off the file on import, and that name is what you say after "Hey Siri". This used to slug
+ * it, which is how "Please log" installed as "please-log": a hyphen you cannot pronounce sitting
+ * in the middle of the wake phrase. Only characters a path genuinely cannot hold are replaced.
+ */
+function fileBase(name: string): string {
+  return name.replace(/[/\\:]/g, ' ').trim();
 }
 
 rmSync(OUT, { recursive: true, force: true });
@@ -31,7 +37,7 @@ mkdirSync(OUT, { recursive: true });
 
 let signed = 0;
 for (const cmd of VOICE_COMMANDS) {
-  const base = join(OUT, slug(cmd.name));
+  const base = join(OUT, fileBase(cmd.name));
   const unsigned = `${base}.unsigned.shortcut`;
   const out = `${base}.shortcut`;
 
@@ -56,5 +62,5 @@ for (const cmd of VOICE_COMMANDS) {
 }
 
 console.log(`\n${signed}/${VOICE_COMMANDS.length} signed into ${OUT}`);
-console.log('AirDrop them to your iPhone, then share each from Shortcuts and paste the iCloud');
-console.log('links into VOICE_SHORTCUT_URL / VOICE_INCOME_URL / VOICE_SETTLE_URL.');
+console.log('AirDrop to your iPhone, import, then share from Shortcuts and paste the iCloud link');
+console.log('into VOICE_SHORTCUT_URL. Check the name imported intact — it is the wake phrase.');
