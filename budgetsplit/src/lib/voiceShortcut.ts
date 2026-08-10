@@ -33,8 +33,12 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * Set to `null` to fall back to the manual steps — the screens key off that, so removing a
  * broken link degrades cleanly rather than sending people to a dead page.
  */
-export const VOICE_SHORTCUT_URL: string | null =
-  'https://www.icloud.com/shortcuts/7205ee25308f463583f63e8feabf104d';
+/**
+ * Null: the shared copy is still named "budget", so "Hey Siri, Please log" reaches nothing.
+ * A link that installs a command the app's own instructions cannot invoke is worse than none.
+ * Was: `https://www.icloud.com/shortcuts/7205ee25308f463583f63e8feabf104d`
+ */
+export const VOICE_SHORTCUT_URL: string | null = null;
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
@@ -110,10 +114,10 @@ export type VoiceStep = { title: string; body: string };
  * the screen showing what it guessed, and nothing is written until you tap Save. A wrong guess
  * now costs one visible tap, which is cheaper than remembering three wake phrases.
  *
- * ⚠️ A single common word is more collision-prone with Siri's own intents than a two-word
- * phrase. If "budget" starts getting misheard, making it longer is the fix.
+ * Two words rather than one: a lone common noun competes with Siri's own intents, and the
+ * failure there is silent — Siri does something else and you assume the shortcut is broken.
  */
-export const VOICE_ONE_WAY_NAME = 'budget';
+export const VOICE_ONE_WAY_NAME = 'Please log';
 
 /** Who acts in a beat, so the Voice screen can show the exchange as turns rather than bullets. */
 export type FlowActor = 'you' | 'siri' | 'app';

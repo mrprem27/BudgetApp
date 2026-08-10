@@ -202,9 +202,15 @@ describe('the install links', () => {
     expect(new Set([AddKind.Expense, 'income', 'transfer'])).toEqual(new Set(ADD_KIND));
   });
 
-  it('keeps the names short enough to say every day', () => {
-    // Bare nouns. Anything longer is a phrase to remember, said dozens of times a week.
-    for (const c of VOICE_COMMANDS) expect(c.name.split(' ')).toHaveLength(1);
+  it('keeps the name short, and not a lone common word', () => {
+    // Short enough to say dozens of times a week, but not one bare noun — a lone common word
+    // competes with Siri's own intents, and that failure is silent: Siri does something else
+    // and you conclude the shortcut is broken.
+    for (const c of VOICE_COMMANDS) {
+      const words = c.name.trim().split(/\s+/);
+      expect(words.length).toBeGreaterThan(1);
+      expect(words.length).toBeLessThanOrEqual(3);
+    }
   });
 
   it('gives the commands names Siri can tell apart', () => {
