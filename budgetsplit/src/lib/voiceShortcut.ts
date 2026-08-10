@@ -89,6 +89,14 @@ export const VOICE_SHORTCUT_PRIVACY =
  */
 export const VOICE_ASK_PROMPT = 'How much, and what for?';
 
+/**
+ * What it says when it heard nothing at all, before asking again.
+ *
+ * Only silence reaches this. A *mis*-hearing produces perfectly valid-looking text that the
+ * shortcut cannot judge — that is the app's job, and the app shows you what it heard.
+ */
+export const VOICE_RETRY_LINE = 'Sorry, I didn\'t catch that.';
+
 export const VOICE_ASK_OUTPUT = 'Provided Input';
 
 export type VoiceStep = { title: string; body: string };
@@ -151,9 +159,22 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
       body: 'In the Shortcuts app, tap +. The name is what you say to Siri, so get it exact.',
     },
     {
+      title: 'Add "Repeat", 3 times',
+      body: 'Everything below goes INSIDE it. This is what lets it ask again when it heard '
+        + 'nothing — Shortcuts has no "keep trying" action, so a counted loop with an early '
+        + 'exit is the shape. Three, not endless: a phone that genuinely cannot hear you would '
+        + 'otherwise talk at you forever.',
+    },
+    {
       title: 'Add "Ask for Input"',
       body: `Set Input Type to Text and put  ${prompt}  in the Prompt field. Left blank, Siri `
         + 'asks "What\'s the text?" — a question about the shortcut rather than your money.',
+    },
+    {
+      title: 'Add "If", Provided Input has any value',
+      body: 'The next three actions go in the If branch, and the Speak goes in Otherwise. '
+        + 'Only silence reaches the Otherwise side: a misheard phrase is still text, and '
+        + 'nothing here can tell good text from bad — that is what the app screen is for.',
     },
     {
       title: `Add "URL" and type  ${link}`,
@@ -166,6 +187,16 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
       body: 'It takes the URL from the step above as its input, which is why the URL action '
         + 'has to come first. Beware the similar-looking "Open URL" rows carrying an app\'s '
         + 'icon (Zomato, Chrome) — those are that app\'s own action and open the wrong thing.',
+    },
+    {
+      title: 'Add "Stop This Shortcut", still inside the If',
+      body: 'Without it, a phrase that worked first time would hand off to the app and then '
+        + 'be asked for twice more.',
+    },
+    {
+      title: `Under Otherwise, add "Speak Text" saying  ${VOICE_RETRY_LINE}`,
+      body: 'The loop then comes back round and asks again. After three silent tries it gives '
+        + 'up quietly.',
     },
   ];
 }
@@ -186,6 +217,7 @@ export const VOICE_COMMANDS: VoiceCommand[] = [
       { actor: 'you', text: `“Hey Siri, ${VOICE_ONE_WAY_NAME}”` },
       { actor: 'siri', text: `“${VOICE_ASK_PROMPT}”` },
       { actor: 'you', text: '“four fifty groceries”' },
+      { actor: 'siri', text: 'Heard nothing? “Sorry, I didn’t catch that” — and it asks again, up to three times.' },
       { actor: 'app', text: 'Saved — ₹450, Groceries, Personal — and the transaction opens so you can see it. Undo is right there if it misheard.' },
       { actor: 'app', text: '“twelve hundred dinner with Rohan” does NOT save itself: who shares a cost is a decision, so the form opens with the group picker up.' },
       { actor: 'app', text: '“fifty thousand salary” lands on Income; “paid Riya five hundred” opens Transfer with Riya on the other side, because direction is never guessed.' },

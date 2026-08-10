@@ -1,6 +1,6 @@
 import { buildShortcutPlist, shortcutActions, seededUuid, toPlist, postImportStep } from '../lib/voiceShortcutFile';
 import {
-  VOICE_COMMANDS, VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_DEEP_LINK_INCOME, VOICE_DEEP_LINK_SETTLE,
+  VOICE_COMMANDS, VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_RETRY_LINE,
 } from '../lib/voiceShortcut';
 import { AddKind } from '../constants/enums';
 
@@ -24,10 +24,53 @@ describe('the generated shortcut matches the command it came from', () => {
     for (const cmd of VOICE_COMMANDS) {
       const ids = shortcutActions(cmd).map(a => (a as Record<string, string>).WFWorkflowActionIdentifier);
       expect(ids).toEqual([
+        'is.workflow.actions.repeat.count',
         'is.workflow.actions.ask',
+        'is.workflow.actions.conditional',
         'is.workflow.actions.url',
         'is.workflow.actions.openurl',
+        'is.workflow.actions.exit',
+        'is.workflow.actions.conditional',
+        'is.workflow.actions.speaktext',
+        'is.workflow.actions.conditional',
+        'is.workflow.actions.repeat.count',
       ]);
+      expect(ids).not.toContain('is.workflow.actions.documentpicker.save');
+    }
+  });
+
+  it('nests the retry loop so Shortcuts can parse it', () => {
+    // Control flow is start/else/end sharing one GroupingIdentifier. Mis-order them and the
+    // file still signs — signing checks structure, not that the blocks make sense — so the
+    // shortcut imports and then behaves like something nobody designed.
+    for (const cmd of VOICE_COMMANDS) {
+      const flows = shortcutActions(cmd)
+        .map(a => a as { WFWorkflowActionIdentifier: string; WFWorkflowActionParameters: Record<string, unknown> })
+        .filter(a => a.WFWorkflowActionParameters.WFControlFlowMode !== undefined);
+
+      // Each block: opens (0), may branch (1), closes (2) — in that order, once each.
+      const byGroup = new Map<string, number[]>();
+      for (const f of flows) {
+        const g = String(f.WFWorkflowActionParameters.GroupingIdentifier);
+        byGroup.set(g, [...(byGroup.get(g) ?? []), f.WFWorkflowActionParameters.WFControlFlowMode as number]);
+      }
+      expect([...byGroup.values()]).toEqual(
+        expect.arrayContaining([[0, 2], [0, 1, 2]]),
+      );
+
+      // The If must close before the Repeat does, or the blocks interleave.
+      const ids = shortcutActions(cmd).map(a => (a as Record<string, string>).WFWorkflowActionIdentifier);
+      expect(ids.lastIndexOf('is.workflow.actions.conditional'))
+        .toBeLessThan(ids.lastIndexOf('is.workflow.actions.repeat.count'));
+    }
+  });
+
+  it('says it did not catch, and stops once it did', () => {
+    for (const cmd of VOICE_COMMANDS) {
+      const xml = buildShortcutPlist(cmd);
+      expect(xml).toContain(VOICE_RETRY_LINE.replace(/'/g, '&#39;').replace(/&#39;/g, "'"));
+      // Without the exit, a successful first try would open the app and then ask twice more.
+      expect(xml).toContain('is.workflow.actions.exit');
     }
   });
 

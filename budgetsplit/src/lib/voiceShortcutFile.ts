@@ -1,5 +1,5 @@
 import { AddKind } from '../constants/enums';
-import { VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, type VoiceCommand } from './voiceShortcut';
+import { VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_RETRY_LINE, type VoiceCommand } from './voiceShortcut';
 
 /**
  * Builds a `.shortcut` file for a {@link VoiceCommand}, as Shortcuts' own plist format.
@@ -116,29 +116,74 @@ const GLYPH: Record<AddKind, number> = {
 };
 
 /**
- * The actions for a command: ask, build a deep link, open it.
+ * How many times it will ask before giving up.
  *
- * **Three actions and no folder** — which is the whole point. The file-capture version this
- * replaced never opened the app, but its `Save File` destination is a security-scoped bookmark
- * to a folder on the authoring device, so it could not survive being shared: every installer
- * had to find the action and re-pick the folder, and when they got it wrong nothing happened
- * ever again, silently. A setup step that fails invisibly is worse than a visible extra tap.
+ * Bounded on purpose. Shortcuts has no while-loop, so "keep asking until it hears something"
+ * is a `Repeat` with an early exit — and an *unbounded* one would hang on a phone that simply
+ * cannot hear you (a noisy room, a broken mic), with Siri talking at you forever.
+ */
+const ASK_ATTEMPTS = 3;
+
+/** A control-flow action. Start/else/end share one `GroupingIdentifier`; the mode says which. */
+function flow(id: string, groupId: string, mode: 0 | 1 | 2, extra: Record<string, Plist> = {}): Plist {
+  return action(id, { GroupingIdentifier: groupId, WFControlFlowMode: mode, ...extra });
+}
+
+/**
+ * The actions: ask, and if it heard something, hand it to the app — otherwise say so and ask
+ * again, up to {@link ASK_ATTEMPTS} times.
+ *
+ * No folder anywhere, which is the point. The file-capture version this replaced never opened
+ * the app, but its `Save File` destination is a security-scoped bookmark to a folder on the
+ * authoring device, so it could not survive being shared: every installer had to re-pick the
+ * folder, and when they got it wrong nothing happened ever again, silently.
  *
  * `Open URLs` (plural) consumes its input rather than offering a field, so the URL action has
- * to build the address first.
+ * to build the address first. `Stop This Shortcut` is what breaks the loop on success — the
+ * alternative is a flag variable and a second condition, for the same behaviour.
+ *
+ * ⚠️ **What this cannot catch.** Only *silence* is detectable here. If Siri mishears "four
+ * fifty groceries" as "for fifty grocery" the input is non-empty and looks fine, so the retry
+ * never fires — the app opens with whatever was heard, which is where a mis-hearing becomes
+ * visible and fixable.
  */
 export function shortcutActions(cmd: VoiceCommand): Plist[] {
   const askUuid = seededUuid(`${cmd.name}:ask`);
+  const loopId = seededUuid(`${cmd.name}:loop`);
+  const ifId = seededUuid(`${cmd.name}:if`);
+
   return [
+    flow('is.workflow.actions.repeat.count', loopId, 0, { WFRepeatCount: ASK_ATTEMPTS }),
+
     action('is.workflow.actions.ask', {
       WFAskActionPrompt: cmd.prompt,
       WFInputType: 'Text',
       UUID: askUuid,
     }),
+
+    // `WFCondition: 100` is "has any value". Not something the community references pin down,
+    // and signing validates structure rather than semantics — so after importing, check the
+    // If row in the Shortcuts app actually reads "has any value".
+    flow('is.workflow.actions.conditional', ifId, 0, {
+      WFCondition: 100,
+      WFInput: {
+        Value: { OutputUUID: askUuid, OutputName: VOICE_ASK_OUTPUT, Type: 'ActionOutput' },
+        WFSerializationType: 'WFTextTokenAttachment',
+      },
+    }),
+
     action('is.workflow.actions.url', {
       WFURLActionURL: tokenString(VOICE_DEEP_LINK, askUuid, VOICE_ASK_OUTPUT),
     }),
     action('is.workflow.actions.openurl', {}),
+    // Heard something and handed it over — stop, or the loop would ask twice more.
+    action('is.workflow.actions.exit', {}),
+
+    flow('is.workflow.actions.conditional', ifId, 1),
+    action('is.workflow.actions.speaktext', { WFText: VOICE_RETRY_LINE, WFSpeakTextWait: true }),
+    flow('is.workflow.actions.conditional', ifId, 2),
+
+    flow('is.workflow.actions.repeat.count', loopId, 2),
   ];
 }
 

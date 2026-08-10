@@ -8,6 +8,7 @@ import {
   VOICE_FIRST_RUN_NOTE,
   VOICE_ASK_PROMPT,
   VOICE_ASK_OUTPUT,
+  VOICE_RETRY_LINE,
 } from '../lib/voiceShortcut';
 import { CAPTURE_PREFIX } from '../lib/voiceInbox';
 import { ADD_KIND, AddKind } from '../constants/enums';
@@ -70,17 +71,27 @@ describe('what we tell the user matches what we do', () => {
 
 describe('the setup instructions are complete', () => {
   it('orders the actions so each one has what it needs', () => {
-    expect(VOICE_SHORTCUT_STEPS).toHaveLength(4);
     const titles = VOICE_SHORTCUT_STEPS.map(s => s.title.toLowerCase());
-    const askAt = titles.findIndex(t => t.includes('ask for input'));
-    const urlAt = titles.findIndex(t => t.includes('"url"'));
-    const openAt = titles.findIndex(t => t.includes('open urls'));
+    const at = (needle: string) => titles.findIndex(t => t.includes(needle));
 
-    // Nothing can be sent before it has been spoken, and "Open URLs" consumes its input
-    // rather than offering a field — so the URL has to be built before it.
-    expect(askAt).toBeGreaterThanOrEqual(0);
-    expect(urlAt).toBeGreaterThan(askAt);
-    expect(openAt).toBeGreaterThan(urlAt);
+    // A dependency chain, not a preference: the loop has to exist before anything sits inside
+    // it, nothing can be sent before it has been spoken, "Open URLs" consumes its input rather
+    // than offering a field, and the stop must follow the hand-off it is stopping after.
+    expect(at('repeat')).toBeGreaterThanOrEqual(0);
+    expect(at('ask for input')).toBeGreaterThan(at('repeat'));
+    expect(at('"if"')).toBeGreaterThan(at('ask for input'));
+    expect(at('"url"')).toBeGreaterThan(at('"if"'));
+    expect(at('open urls')).toBeGreaterThan(at('"url"'));
+    expect(at('stop this shortcut')).toBeGreaterThan(at('open urls'));
+    expect(at('otherwise')).toBeGreaterThan(at('stop this shortcut'));
+  });
+
+  it('tells the user what the retry can and cannot catch', () => {
+    // Only silence reaches the Otherwise branch. Promising more would have people believing a
+    // misheard amount gets a second chance, when it is the app screen that catches those.
+    const all = VOICE_SHORTCUT_STEPS.map(s => `${s.title} ${s.body}`).join(' ');
+    expect(all).toContain(VOICE_RETRY_LINE);
+    expect(all.toLowerCase()).toMatch(/silence|silent/);
   });
 
   it('warns about the app-provided Open URL lookalikes', () => {
