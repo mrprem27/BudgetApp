@@ -1,5 +1,7 @@
 import { AddKind } from '../constants/enums';
-import { VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_RETRY_LINE, type VoiceCommand } from './voiceShortcut';
+import {
+  VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_ENCODED_OUTPUT, VOICE_RETRY_LINE, type VoiceCommand,
+} from './voiceShortcut';
 
 /**
  * Builds a `.shortcut` file for a {@link VoiceCommand}, as Shortcuts' own plist format.
@@ -139,8 +141,10 @@ function flow(id: string, groupId: string, mode: 0 | 1 | 2, extra: Record<string
  * folder, and when they got it wrong nothing happened ever again, silently.
  *
  * `Open URLs` (plural) consumes its input rather than offering a field, so the URL action has
- * to build the address first. `Stop This Shortcut` is what breaks the loop on success — the
- * alternative is a flag variable and a second condition, for the same behaviour.
+ * to build the address first, and `URL Encode` has to run before *that* — see
+ * {@link VOICE_DEEP_LINK} for why raw dictation in a query string is not safe. `Stop This
+ * Shortcut` is what breaks the loop on success — the alternative is a flag variable and a
+ * second condition, for the same behaviour.
  *
  * ⚠️ **What this cannot catch.** Only *silence* is detectable here. If Siri mishears "four
  * fifty groceries" as "for fifty grocery" the input is non-empty and looks fine, so the retry
@@ -149,6 +153,7 @@ function flow(id: string, groupId: string, mode: 0 | 1 | 2, extra: Record<string
  */
 export function shortcutActions(cmd: VoiceCommand): Plist[] {
   const askUuid = seededUuid(`${cmd.name}:ask`);
+  const encUuid = seededUuid(`${cmd.name}:encode`);
   const loopId = seededUuid(`${cmd.name}:loop`);
   const ifId = seededUuid(`${cmd.name}:if`);
 
@@ -172,8 +177,16 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
       },
     }),
 
+    // Percent-encode before splicing. Inside the If rather than before it: there is nothing to
+    // encode when the user said nothing, and the condition is about what was *heard*.
+    action('is.workflow.actions.urlencode', {
+      WFInput: tokenString('', askUuid, VOICE_ASK_OUTPUT),
+      WFEncodeMode: 'Encode',
+      UUID: encUuid,
+    }),
+
     action('is.workflow.actions.url', {
-      WFURLActionURL: tokenString(VOICE_DEEP_LINK, askUuid, VOICE_ASK_OUTPUT),
+      WFURLActionURL: tokenString(VOICE_DEEP_LINK, encUuid, VOICE_ENCODED_OUTPUT),
     }),
     action('is.workflow.actions.openurl', {}),
     // Heard something and handed it over — stop, or the loop would ask twice more.

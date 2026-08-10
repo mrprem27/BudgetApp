@@ -65,15 +65,24 @@ export const VOICE_FIRST_RUN_NOTE =
 export const SHORTCUTS_APP_URL = 'shortcuts://create-shortcut';
 
 /**
- * The phrase deep link. **Nothing in the voice pipeline builds this any more** — every command
- * captures to a file so the app never has to open — but `app/add/quick.tsx` still reads `q`,
- * so it stays as the documented contract for anything else that wants to hand the Add screen
- * a spoken phrase.
+ * The phrase deep link, read by `app/add/quick.tsx` as `q`.
  *
- * Deliberately not URL-encoded: a phrase contains spaces but no `&` or `#`, and a query value
- * is only delimited by those.
+ * The dictated text is **percent-encoded** before it is appended. An earlier build spliced it
+ * in raw, reasoning that a spoken phrase has spaces but no `&` or `#`. That reasoning missed
+ * `%`: say "fifty percent off" and dictation writes `50%`, which makes `q=50% off` a malformed
+ * escape rather than a stray character — the kind of input a URL parser rejects outright
+ * instead of passing through. Apple's own guidance is the blunt version: never put unencoded
+ * user text in a URL.
+ *
+ * `useLocalSearchParams` decodes on the way in, so nothing on this side decodes again.
  */
 export const VOICE_DEEP_LINK = 'budgetsplit:///add/quick?q=';
+
+/**
+ * The variable `URL Encode` produces. Display label only — attachments bind by `OutputUUID` —
+ * but a wrong one shows the user a chip naming a variable they never made.
+ */
+export const VOICE_ENCODED_OUTPUT = 'URL Encoded Text';
 
 
 /** Worth saying out loud, given the app's "nothing leaves your device" promise. */
@@ -184,10 +193,16 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
         + 'nothing here can tell good text from bad — that is what the app screen is for.',
     },
     {
+      title: `Add "URL Encode", with ${VOICE_ASK_OUTPUT} as its input`,
+      body: 'Leave the mode on Encode. Skipping this works right up until you say something '
+        + 'with a % or an & in it, and then the address is malformed rather than merely odd.',
+    },
+    {
       title: `Add "URL" and type  ${link}`,
       body: `Type it in one go — the order of the parts matters — then insert the `
-        + `${VOICE_ASK_OUTPUT} variable straight after the = with no space. This only builds `
-        + 'the address; it does not open anything yet.',
+        + `${VOICE_ENCODED_OUTPUT} variable straight after the = with no space. Not `
+        + `${VOICE_ASK_OUTPUT}: that is the un-encoded original, and picking it undoes the `
+        + 'step above. This only builds the address; it does not open anything yet.',
     },
     {
       title: 'Add "Open URLs" — the plural one, with the blue arrow',

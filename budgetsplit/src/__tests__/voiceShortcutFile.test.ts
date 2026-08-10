@@ -27,6 +27,7 @@ describe('the generated shortcut matches the command it came from', () => {
         'is.workflow.actions.repeat.count',
         'is.workflow.actions.ask',
         'is.workflow.actions.conditional',
+        'is.workflow.actions.urlencode',
         'is.workflow.actions.url',
         'is.workflow.actions.openurl',
         'is.workflow.actions.exit',
@@ -94,6 +95,24 @@ describe('the generated shortcut matches the command it came from', () => {
       expect(xml).toContain(`<string>${VOICE_ASK_OUTPUT}</string>`);
       // Referenced somewhere other than its own declaration.
       expect(xml.split(askUuid).length - 1).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('puts the ENCODED text in the URL, not the raw dictation', () => {
+    // The bug this pins: splicing `Provided Input` straight into `?q=` looks fine until the
+    // phrase contains a % ("fifty percent off" dictates as "50%"), which is a malformed escape
+    // rather than an odd character — parsers reject it outright. Both variables are in scope at
+    // that point, so picking the wrong one is a one-word mistake with no visible symptom.
+    for (const cmd of VOICE_COMMANDS) {
+      const url = shortcutActions(cmd)
+        .map(a => a as { WFWorkflowActionIdentifier: string; WFWorkflowActionParameters: Record<string, unknown> })
+        .find(a => a.WFWorkflowActionIdentifier === 'is.workflow.actions.url');
+      const attachments = (url?.WFWorkflowActionParameters.WFURLActionURL as
+        { Value: { attachmentsByRange: Record<string, { OutputUUID: string }> } }).Value.attachmentsByRange;
+      const bound = Object.values(attachments).map(a => a.OutputUUID);
+
+      expect(bound).toEqual([seededUuid(`${cmd.name}:encode`)]);
+      expect(bound).not.toContain(seededUuid(`${cmd.name}:ask`));
     }
   });
 
