@@ -34,14 +34,17 @@ export const VOICE_FILES_LOCATION = `On My iPhone → BudgetSplit → ${VOICE_IN
  * broken link degrades cleanly rather than sending people to a dead page.
  */
 /**
- * ⚠️ The shared record is named **`please-log`**, not `Please log` — iOS takes a shortcut's
- * name from the *filename*, and the build script was slugging it. Fixed there, but this link
- * was minted from the old file, so what installs from it carries the hyphen. Harmless if Siri
- * hears "please-log" as two words; if it doesn't, rebuild and re-share rather than editing the
- * app's copy to match, because the hyphen is unsayable.
+ * Verified against what Apple actually serves, not just pasted: the record is named exactly
+ * `Please log`, and its 14 actions match `shortcutActions` parameter for parameter — the URL
+ * bound to the **encode** output rather than the raw dictation, `WFCondition: 100`, and the
+ * two closing actions outside the repeat loop.
+ *
+ * Worth re-checking that way after any re-share. The device re-serializes on import, and the
+ * failures that matter here (a URL wired to the un-encoded variable, a Speak that drifted
+ * between URL and Open URLs) look identical to a working shortcut from the outside.
  */
 export const VOICE_SHORTCUT_URL: string | null =
-  'https://www.icloud.com/shortcuts/5c6184b8e5f441cbb0cfde10d867272c';
+  'https://www.icloud.com/shortcuts/18a3996e92194482b8064d84cc7fb842';
 
 /**
  * What iOS asks for the first time a capture is saved, and why it is not a fault.
