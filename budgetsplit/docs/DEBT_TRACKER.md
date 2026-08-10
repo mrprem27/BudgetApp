@@ -1,5 +1,9 @@
 # BudgetSplit — Debt Tracker
 
+> **Shipping?** Read [V2_LAUNCH_CHECKLIST.md](./V2_LAUNCH_CHECKLIST.md) instead — it is the
+> pre-launch list, and it links back to the rows here rather than restating them. This file
+> stays the record of *why* something is owed; that one is *what blocks launch*.
+
 > **Single source of truth for open debt.** Replaced four overlapping planning docs
 > (BRUTAL_ANALYSIS, REFACTORING_PLAN, IMPROVEMENT_PLAN, FUTURE_IMPROVEMENTS), which were
 > archived once their items were merged here and deleted once all of them were closed.
