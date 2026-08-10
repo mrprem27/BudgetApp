@@ -1,6 +1,7 @@
 import { AddKind } from '../constants/enums';
 import {
-  VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_ENCODED_OUTPUT, VOICE_RETRY_LINE, type VoiceCommand,
+  VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_ENCODED_OUTPUT, VOICE_GIVE_UP_LINE,
+  VOICE_HEARD_PREFIX, VOICE_RETRY_LINE, type VoiceCommand,
 } from './voiceShortcut';
 
 /**
@@ -185,11 +186,21 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
       UUID: encUuid,
     }),
 
+    // Reads back what it heard, BEFORE the app opens — see `VOICE_HEARD_PREFIX`. It sits above
+    // the URL action rather than below it because `Open URLs` takes its input implicitly from
+    // whatever ran last, so nothing may come between that pair.
+    action('is.workflow.actions.speaktext', {
+      WFText: tokenString(VOICE_HEARD_PREFIX, askUuid, VOICE_ASK_OUTPUT),
+      WFSpeakTextWait: true,
+    }),
+
     action('is.workflow.actions.url', {
       WFURLActionURL: tokenString(VOICE_DEEP_LINK, encUuid, VOICE_ENCODED_OUTPUT),
     }),
     action('is.workflow.actions.openurl', {}),
-    // Heard something and handed it over — stop, or the loop would ask twice more.
+    // Heard something and handed it over — stop, or the loop would ask twice more. No Dismiss
+    // Siri here: the app coming to the foreground is what closes Siri, and inserting an action
+    // between the hand-off and the launch is a risk taken for something already happening.
     action('is.workflow.actions.exit', {}),
 
     flow('is.workflow.actions.conditional', ifId, 1),
@@ -197,6 +208,11 @@ export function shortcutActions(cmd: VoiceCommand): Plist[] {
     flow('is.workflow.actions.conditional', ifId, 2),
 
     flow('is.workflow.actions.repeat.count', loopId, 2),
+
+    // Only silence reaches past the loop — success exits above. Nothing opens on this path, so
+    // Siri would otherwise sit there having said nothing about what happened.
+    action('is.workflow.actions.speaktext', { WFText: VOICE_GIVE_UP_LINE, WFSpeakTextWait: true }),
+    action('is.workflow.actions.dismisssiri', {}),
   ];
 }
 

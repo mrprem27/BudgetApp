@@ -108,10 +108,30 @@ export const VOICE_ASK_PROMPT = 'How much, and what for?';
 /**
  * What it says when it heard nothing at all, before asking again.
  *
- * Only silence reaches this. A *mis*-hearing produces perfectly valid-looking text that the
- * shortcut cannot judge — that is the app's job, and the app shows you what it heard.
+ * Only silence reaches this. A *mis*-hearing produces perfectly valid-looking text that no
+ * condition in the shortcut can judge — which is what {@link VOICE_HEARD_PREFIX} is for.
  */
 export const VOICE_RETRY_LINE = 'Sorry, I didn\'t catch that.';
+
+/**
+ * Spoken on success, with the dictated phrase read back after it.
+ *
+ * The read-back is the point, not politeness. A mis-hearing is the one failure the shortcut is
+ * blind to — "four fifty groceries" heard as "for fifty grocery" is still text, so the retry
+ * never fires and the app opens with the wrong words. Saying them aloud turns that into
+ * something you catch in the second before you look at the screen, which is exactly when your
+ * eyes are elsewhere. Shorten to a bare "Got it." if the echo grates.
+ */
+export const VOICE_HEARD_PREFIX = 'Got it — ';
+
+/**
+ * The last thing it says, after {@link ASK_ATTEMPTS} silent tries.
+ *
+ * It has to state that **nothing was saved**. Falling quiet is what a working capture also
+ * sounds like once the phone is back in your pocket, so silence here is the one ending that
+ * could leave you believing a spend is recorded when it is not.
+ */
+export const VOICE_GIVE_UP_LINE = 'Nothing logged. Try again in a moment.';
 
 export const VOICE_ASK_OUTPUT = 'Provided Input';
 
@@ -205,6 +225,12 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
         + 'step above. This only builds the address; it does not open anything yet.',
     },
     {
+      title: `Add "Speak Text" saying  ${VOICE_HEARD_PREFIX}  then the ${VOICE_ASK_OUTPUT} variable`,
+      body: 'Reading the phrase back is how you catch a mis-hearing without looking. Put it '
+        + 'ABOVE the URL action, never between URL and Open URLs — those two must stay '
+        + 'touching, because Open URLs takes whatever ran last as its input.',
+    },
+    {
       title: 'Add "Open URLs" — the plural one, with the blue arrow',
       body: 'It takes the URL from the step above as its input, which is why the URL action '
         + 'has to come first. Beware the similar-looking "Open URL" rows carrying an app\'s '
@@ -213,12 +239,23 @@ export function captureSteps(name: string, prompt: string, link: string): VoiceS
     {
       title: 'Add "Stop This Shortcut", still inside the If',
       body: 'Without it, a phrase that worked first time would hand off to the app and then '
-        + 'be asked for twice more.',
+        + 'be asked for twice more. It is also what keeps the two closing steps below off the '
+        + 'success path.',
     },
     {
       title: `Under Otherwise, add "Speak Text" saying  ${VOICE_RETRY_LINE}`,
-      body: 'The loop then comes back round and asks again. After three silent tries it gives '
-        + 'up quietly.',
+      body: 'The loop then comes back round and asks again, up to three times.',
+    },
+    {
+      title: `Below the Repeat — outside it — add "Speak Text" saying  ${VOICE_GIVE_UP_LINE}`,
+      body: 'Outside the loop is the whole point: only three silent tries reach here, because '
+        + 'success stopped the shortcut already. It has to say nothing was saved — falling '
+        + 'quiet sounds exactly like a capture that worked.',
+    },
+    {
+      title: 'Finish with "Dismiss Siri"',
+      body: 'Closes Siri on the failed path, where no app opens to close it. The success path '
+        + 'needs no equivalent: the app coming to the foreground dismisses Siri itself.',
     },
   ];
 }

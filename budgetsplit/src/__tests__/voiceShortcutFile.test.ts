@@ -1,6 +1,6 @@
 import { buildShortcutPlist, shortcutActions, seededUuid, toPlist, postImportStep } from '../lib/voiceShortcutFile';
 import {
-  VOICE_COMMANDS, VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_RETRY_LINE,
+  VOICE_COMMANDS, VOICE_ASK_OUTPUT, VOICE_DEEP_LINK, VOICE_RETRY_LINE, VOICE_GIVE_UP_LINE,
 } from '../lib/voiceShortcut';
 import { AddKind } from '../constants/enums';
 
@@ -28,6 +28,7 @@ describe('the generated shortcut matches the command it came from', () => {
         'is.workflow.actions.ask',
         'is.workflow.actions.conditional',
         'is.workflow.actions.urlencode',
+        'is.workflow.actions.speaktext',
         'is.workflow.actions.url',
         'is.workflow.actions.openurl',
         'is.workflow.actions.exit',
@@ -35,7 +36,14 @@ describe('the generated shortcut matches the command it came from', () => {
         'is.workflow.actions.speaktext',
         'is.workflow.actions.conditional',
         'is.workflow.actions.repeat.count',
+        'is.workflow.actions.speaktext',
+        'is.workflow.actions.dismisssiri',
       ]);
+
+      // `Open URLs` takes its input implicitly from whatever ran last, so the read-back Speak
+      // must sit above the URL action. Slipping it between the two is the kind of edit that
+      // looks tidier and hands the launcher a spoken string instead of an address.
+      expect(ids[ids.indexOf('is.workflow.actions.openurl') - 1]).toBe('is.workflow.actions.url');
       expect(ids).not.toContain('is.workflow.actions.documentpicker.save');
     }
   });
@@ -72,6 +80,24 @@ describe('the generated shortcut matches the command it came from', () => {
       expect(xml).toContain(VOICE_RETRY_LINE.replace(/'/g, '&#39;').replace(/&#39;/g, "'"));
       // Without the exit, a successful first try would open the app and then ask twice more.
       expect(xml).toContain('is.workflow.actions.exit');
+    }
+  });
+
+  it('always answers, and never says "nothing logged" after a success', () => {
+    // Both endings speak: silence is what a working capture also sounds like once the phone is
+    // back in a pocket, so an unspoken failure reads as a spend that was saved.
+    for (const cmd of VOICE_COMMANDS) {
+      const ids = shortcutActions(cmd).map(a => (a as Record<string, string>).WFWorkflowActionIdentifier);
+      const loopEnd = ids.lastIndexOf('is.workflow.actions.repeat.count');
+
+      // The give-up line and the dismiss sit OUTSIDE the loop; the success exit is inside it.
+      // Were they inside, every silent attempt would announce that nothing was logged — and a
+      // success would announce it too, right after handing the phrase to the app.
+      expect(ids.indexOf('is.workflow.actions.exit')).toBeLessThan(loopEnd);
+      expect(ids.lastIndexOf('is.workflow.actions.speaktext')).toBeGreaterThan(loopEnd);
+      expect(ids.lastIndexOf('is.workflow.actions.dismisssiri')).toBeGreaterThan(loopEnd);
+
+      expect(buildShortcutPlist(cmd)).toContain(VOICE_GIVE_UP_LINE);
     }
   });
 
