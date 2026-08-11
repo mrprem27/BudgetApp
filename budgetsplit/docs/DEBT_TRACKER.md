@@ -213,6 +213,8 @@ Recorded so they stop being re-raised as bugs.
 
 ### Shipped 2026-08-12 — one budget rollup, one spend window, one Reports basis
 
+`0880152`
+
 Checklist §0 items 0.6 / 0.7 / 0.8, which had been parked on three product decisions. Those
 were made: **a budget rolls up only, never down**; **"spent" is what happened, not what is
 scheduled**; **Reports is my-share**.
@@ -233,6 +235,8 @@ Suite 1255/1255 across 79 files; `tsc` clean. New: `budgetRollup.test.ts` (full 
 matrix), plus window and utilisation cases in `budget.test.ts`.
 
 ### Shipped 2026-08-11 — the zero-decision half of the launch checklist
+
+`e0fdd32` · `a522d77` · `ced6264` · `4f17652`
 
 Everything in `V2_LAUNCH_CHECKLIST.md` §0 and Tier 1 that needed no decision. Suite went
 1237/1237 across 78 files; `tsc` clean. Each fix has a test that reproduces the bug first.

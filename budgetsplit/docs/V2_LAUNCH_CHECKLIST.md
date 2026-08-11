@@ -27,12 +27,12 @@ Not all large, but all *wrong money*. **All nine are done.**
 | ✅ `99601c7` | 0.1 personal settlement leaking into the global net | S | — |
 | ✅ `99601c7` | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS | — |
 | ✅ `14c5fa4` | 0.5 card baseline split from the "last edited" stamp | XS | — |
-| ✅ `pending` | 0.3 pause/resume preserves `recur_end`; the dormant gap is written to `recur_skip` instead of back-posted | S | — |
-| ✅ `pending` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
-| ✅ `pending` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. **`priority` remove-or-revive still open** (#15) | M | — |
-| ✅ `pending` | Tier 1 — 9 of 11. The two left are **backups exclude photos** and **app lock has no failure path**; both are their own piece of work, not leftovers | M | — |
-| ✅ `pending` | 0.6 one `rollUpBudgets`, keyed by target period. **Decided:** a budget rolls *up* only — `daily × real days`, `monthly × 12` into a year; `yearly`/`once` are **pools**, never ÷12 | M | — |
-| ✅ `pending` | 0.7 / 0.8. **Decided:** "spent" is what happened — every window ends at `now`; Reports is **my-share**, like every other surface | M | — |
+| ✅ `e0fdd32` | 0.3 pause/resume preserves `recur_end`; the dormant gap is written to `recur_skip` instead of back-posted | S | — |
+| ✅ `4491769` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
+| ✅ `0880152`+`ced6264` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. **`priority` remove-or-revive still open** (#15) | M | — |
+| ✅ `e0fdd32`+`a522d77` | Tier 1 — 9 of 11. The two left are **backups exclude photos** and **app lock has no failure path**; both are their own piece of work, not leftovers | M | — |
+| ✅ `0880152` | 0.6 one `rollUpBudgets`, keyed by target period. **Decided:** a budget rolls *up* only — `daily × real days`, `monthly × 12` into a year; `yearly`/`once` are **pools**, never ÷12 | M | — |
+| ✅ `0880152` | 0.7 / 0.8. **Decided:** "spent" is what happened — every window ends at `now`; Reports is **my-share**, like every other surface | M | — |
 
 **§0 is closed** (2026-08-12). The two decisions that were blocking 0.6 and 0.7/0.8 were made
 and the work shipped with them.
