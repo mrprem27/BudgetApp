@@ -20,18 +20,27 @@ pilot users, so it jumps its size bucket if you are short on time.
 
 ### First — the correctness bugs (§0)
 
-They are not all large, but they are all *wrong money*. 0.1 and 0.2 come first because every
-balance in the app depends on them.
+Not all large, but all *wrong money*. **Three are done**; the remaining six split into four
+that are pure fixes and two that need a decision from you first.
 
-| | Task | Size |
-|---|---|---|
-| 0 | 0.1 personal settlement leaks into the global net | S |
-| 0 | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS |
-| 0 | 0.3 pause/resume preserves `recur_end`, no back-post | S |
-| 0 | 0.4 materialization column list + a test that asserts on it | S |
-| 0 | 0.5 stamp `updated_at` only when the card balance changes | XS |
-| 0 | 0.6 one monthly-equivalent function | M |
-| 0 | 0.7 / 0.8 one spend basis, one month window | M |
+| Status | Task | Size | Needs a decision? |
+|---|---|---|---|
+| ✅ `99601c7` | 0.1 personal settlement leaking into the global net | S | — |
+| ✅ `99601c7` | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS | — |
+| ✅ `14c5fa4` | 0.5 card baseline split from the "last edited" stamp | XS | — |
+| ⬜ | **0.3** pause/resume must preserve `recur_end` and not back-post the gap | S | no |
+| ⬜ | **0.4** materialization column list, plus a test that asserts on it | S | no |
+| ⬜ | **0.9** one forecast model; goals engine (priority, ties, reorder, completed raids) | M | no |
+| ⬜ | Tier 1 — discarded writes, then the lying indicators | M | no |
+| ⬜ | **0.6** collapse five monthly-budget-equivalent functions into one | M | **yes** — which cadence rule is right (`daily × 30` vs `× daysInMonth`, and what `once` means) |
+| ⬜ | **0.7 / 0.8** one spend basis, one month window | M | **yes** — does "spent this month" include future-dated transactions, and is Reports my-share or group-total? Both change numbers already on screen |
+
+**Suggested order:** 0.3 → 0.4 → 0.9 → Tier 1 while the two decisions settle, then 0.6 →
+0.7/0.8 last, because those two change figures users have already seen.
+
+**Every fix needs a failing test first** — the suite was green with all nine present.
+`balancesSql.test.ts` and `moneyProfile.test.ts` are the two worked examples: run the real
+SQL, or fake only the three db methods the module actually calls.
 
 ### XS — an hour or less
 
@@ -117,11 +126,11 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 
 | # | Bug | Evidence |
 |---|---|---|
-| **0.1** | **A personal transfer invents debts to people you never transacted with.** `reviewCommit.ts:163-165` writes a personal settlement one-sided — correctly, because `computeCash` does `− settledOut + settledIn` and booking both sides would net to zero. But `getGlobalNet` has **no `is_personal` filter** (only the roster query does, `:76`), so that lone share row enters the global net and `simplify()` pairs you as a debtor against whoever has a positive balance. **Reachable on a fresh install:** import a Paytm statement → "Money received from Rahul ₹10,000" is classified `settlement`/`credit` (`paytmParse.ts:158`) → Review defaults to Personal → commit → Home reads *"You owe Priya ₹10,000"*. | `src/db/queries/balances.ts:33-50` |
-| **0.2** | **Every owe/owed figure is inflated by recurring templates.** All four aggregates omit `recur_freq IS NULL`. A rule is a `txn` row carrying its own payment/share rows, so the template is counted *and* every occurrence it spawns is counted. Every other read path has this filter. | `balances.ts:14,22,40,47` |
+| ~~**0.1**~~ ✅ | ~~**A personal transfer invents debts to people you never transacted with.** `reviewCommit.ts:163-165` writes a personal settlement one-sided — correctly, because `computeCash` does `− settledOut + settledIn` and booking both sides would net to zero. But `getGlobalNet` has **no `is_personal` filter** (only the roster query does, `:76`), so that lone share row enters the global net and `simplify()` pairs you as a debtor against whoever has a positive balance. **Reachable on a fresh install:** import a Paytm statement → "Money received from Rahul ₹10,000" is classified `settlement`/`credit` (`paytmParse.ts:158`) → Review defaults to Personal → commit → Home reads *"You owe Priya ₹10,000"*. ~~ **Fixed `99601c7`** — all four aggregates now come from one template; `balancesSql.test.ts` runs the real SQL against in-process SQLite. | `balances.ts` |
+| ~~**0.2**~~ ✅ | ~~**Every owe/owed figure is inflated by recurring templates.** All four aggregates omit `recur_freq IS NULL`. A rule is a `txn` row carrying its own payment/share rows, so the template is counted *and* every occurrence it spawns is counted. Every other read path has this filter. ~~ **Fixed `99601c7`** — same template. The pre-fix SQL returned `{me: -8700, priya: -1300}`, both negative; a cross-group net summing to zero is now an assertion. | `balances.ts` |
 | **0.3** | **Resuming a paused rule destroys its end date and back-posts the gap.** `pause` sets `recur_end = now` — overwriting the user's own end date, of which there is no other copy — and `resume` sets it to `NULL`, so a rule set to "end 31 Dec" recurs **forever**. Nothing is claimed during the pause, so the next foreground materializes the whole window: pause a daily ₹300 rule for 60 days and resuming silently posts **60 rows, ₹18,000**. | `recurring.ts:40-41,57` |
 | **0.4** | **Recurring card spend is booked as cash.** The materializing INSERT drops `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`. A card bill materializes as `pay_method = NULL` and counts as cash out, not debt — and since `computeCash` reads the same bad data, **the SQL/TS parity test cannot see it**. | `recurring.ts:213-221` |
-| **0.5** | **Editing investments wipes accumulated card debt.** `setMoneyProfile` stamps `updated_at` whenever *any* field changes, and that timestamp is `cardBaselineMs`. Update investments only and all prior card spend drops below the new baseline — net worth jumps overnight. `cash.ts:132-137` assumes the baseline moves only on card re-confirmation; the write path does not honour it. | `moneyProfile.ts:51` |
+| ~~**0.5**~~ ✅ | ~~**Editing investments wipes accumulated card debt.** `setMoneyProfile` stamps `updated_at` whenever *any* field changes, and that timestamp is `cardBaselineMs`. Update investments only and all prior card spend drops below the new baseline — net worth jumps overnight. `cash.ts:132-137` assumes the baseline moves only on card re-confirmation; the write path does not honour it. ~~ **Fixed `14c5fa4`** — split into `money.card_baseline_at`, moved only by a write that restates `creditUsed`. Old profiles fall back to `updated_at`, which *is* the old behaviour, so no migration. Also fixed: the editor pre-filled the **stored** `creditUsed` while the card behind it showed the **derived** one. | `moneyProfile.ts` |
 | **0.6** | **Five functions answer "what is my monthly budget."** `budget.ts:39` (canonical, `daily × 30`) · `savings.ts:425` (`daily × daysInMonth`, feeds Afford) · `homeData.ts:155` and `insightsData.ts:121` (raw cross-cadence sums) · `app/category/[name].tsx:123` (a sixth, prorating). A daily ₹500 line is ₹15,000/mo on one screen and ₹15,500 on another. | five sites |
 | **0.7** | **Reports contradicts Home.** `reportsData.ts:128` sums every member's share; `homeData.ts:100` sums mine. `FEATURES_AND_FLOWS.md:1216` pins Insights to Home's basis and is silent on Reports. | two sites |
 | **0.8** | **Future-dated spend gets four different answers.** Home includes the whole month, Insights cuts at `now`, budgets include future, cash excludes it. A ₹50,000 fee dated the 28th, logged on the 2nd, makes Home read ₹50,000 spent and project **₹7.75 lakh** month-end; Insights reads ₹0. | `homeData.ts:39`, `insightsData.ts:44`, `budget.ts:70`, `cashQuery.ts:47` |
