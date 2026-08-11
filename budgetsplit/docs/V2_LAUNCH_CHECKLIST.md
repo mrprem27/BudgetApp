@@ -13,6 +13,71 @@
 
 ---
 
+## Do it in this order — smallest first
+
+Sizes are rough and relative, not estimates. ⛔ = a **§1 launch blocker**: it breaks for real
+pilot users, so it jumps its size bucket if you are short on time.
+
+### XS — an hour or less
+
+| | Task | Detail |
+|---|---|---|
+| 1 | **Buy the Apple Developer Program** | Gate 0. Smallest task here, unlocks the most |
+| 2 | ⛔ Confirm demo/seed data is off for release builds | §1 |
+| 3 | Insights month pill — wire it, or make it a plain label | §4.3 |
+| 4 | Review footer CTA wraps and breaks the 52pt button height | §4.1 |
+| 5 | Filter chips hard-capped at `maxWidth: 160` | §4.1 |
+| 6 | Goals — FAB covers the last card (use `useContentInset`) | §4.4 |
+| 7 | Goals — raid prompt lists names but not ₹ | §4.4 |
+
+### S — a few hours
+
+| | Task | Detail |
+|---|---|---|
+| 8 | ⛔ Deploy the OCR proxy, set `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` | §1 |
+| 9 | ⛔ Device-check `expo-file-system/legacy` | §1 |
+| 10 | Review tab labels — short form, count as a badge | §4.1 |
+| 11 | Insights x-axis — measure via `onLayout`, or bucket weekly | §4.2 |
+| 12 | Insights — one forecast model, not two | §4.3 |
+| 13 | Savings insights — make deterministic | §4.3 |
+| 14 | Goals — exclude completed from the raid; fix the reorder permutation | §4.4 |
+| 15 | Goals — `priority` is dead code; decide remove or revive | §4.4 |
+| 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | §4.5 |
+| 17 | Group budget — relabel to "my share" | D1 |
+| 18 | WhatsApp reminder — composer + share sheet | §3.4 |
+
+### M — a day to a few days
+
+| | Task | Detail |
+|---|---|---|
+| 19 | ⛔ Test `category_global_v1` against a populated DB | §1 |
+| 20 | ⛔ Privacy policy, store listing, icon, splash, screenshots | §1 |
+| 21 | Money model — per-method baselines | §3.2 |
+| 22 | Insights — restructure into three tiers | §4.3 |
+| 23 | Goals — list redesign; split fund order from protect order | §4.4 |
+| 24 | Import — restructure, bundle pdf.js locally | §3.3 |
+| 25 | Push notifications (needs Gate 0) | §3.3 |
+| 26 | Device verification sweep — UPI on Android, Google Pay, Pass 4 | §5 |
+
+### L — a week or more
+
+| | Task | Detail |
+|---|---|---|
+| 27 | Widget | §3.3 |
+| 28 | In-app mic — needs a native module | §3.1 |
+| 29 | App Intents | §3.1 |
+| 30 | Goals — surplus sweep | §4.4 |
+| 31 | Scheduled reminder nudge (after the pilot) | §3.4 |
+
+### XL — months, and not V2
+
+| | Task | Detail |
+|---|---|---|
+| 32 | Server, login and sync — S1 → S2 → S3 | §6b |
+
+
+---
+
 ## Gate 0 — the paid Apple Developer Program ($99/yr)
 
 Not one item among many. **Three of the four newly-scoped features sit behind it**, and so
@@ -400,92 +465,68 @@ Not blockers. Listed so nobody re-discovers them as bugs.
 ## 6b. Server, login and sync — requirements *(raised 2026-08-11)*
 
 **This is not a feature. It changes what the app is** — from local-first with no server, to
-client–server with accounts. It also makes the app's standing promise ("nothing leaves your
-device") false, so that copy has to change wherever it appears.
+client–server with accounts. Financial data leaves the device, so the "nothing leaves your
+device" copy becomes false wherever it appears.
 
 ### What was asked, restated precisely
 
 | | Requirement |
 |---|---|
 | **R1** | Real login + setup against a server |
-| **R2** | Backups **signed/encrypted with the user's own secret**, so no other user can restore them — *stated as the base reason for login* |
+| **R2** | A backup restorable **only by its owner** — *stated as the base reason for login* |
 | **R3** | Server-stored user config |
 | **R4** | **Selective** sync — the user picks what goes up (transactions, person details, …) |
 | **R5** | Manual **pull**, or auto-receive when switched on |
 | **R6** | A group syncs only when **all its members are properly synced** |
 
+### Encryption is out of scope at every level — decided 2026-08-11
+
+**R2 does not need it.** "Only I can restore my backup" is an **authorisation** rule, not a
+cryptographic one: the server checks you are logged in as the owner and refuses everyone
+else. That is ordinary access control and it is what almost every app does.
+
+This also removes what would have been the hardest part of group sync — per-group keys
+wrapped per member, with rotation on every membership change. **Without encryption, S3 gets
+substantially cheaper.**
+
+Two consequences, recorded as fact rather than as an argument to revisit:
+
+- Whoever operates the server can read every user's financial data. That is a normal
+  posture; it just has to be a *stated* one.
+- Adding encryption later is expensive — re-keying cannot run server-side, since the server
+  will not hold keys. Not a reason to do it now; a reason not to promise it.
+
 ### Finding 1 — two different products are conflated here
 
 | | Needs | Size |
 |---|---|---|
-| **Backup & restore** (one user, opaque blobs) | Auth + a blob store | Small |
-| **Multi-user group sync** | Conflict resolution, invitations, presence, key exchange, membership changes | **Large** |
+| **Backup & restore** (one user) | Auth + a blob store | Small |
+| **Multi-user group sync** | Conflict resolution, invitations, identity merging, membership | **Large** |
 
 They share only the login. Backup delivers most of the immediate value — *"I lost my
 phone"* is the real pain today — for a fraction of the work.
 
-### Finding 2 — R2 and R6 are in direct tension ⚠️
-
-This is the important one. If a backup is encrypted with **your** secret so nobody else can
-restore it, then **no other group member can read your group's rows either** — that is the
-same property, working against you.
-
-- **Personal backup, encrypted with your key** — server stores opaque bytes. Simple, and
-  exactly what R2 asks for.
-- **Group sync** — member B must decrypt rows written by A. That needs a **per-group
-  symmetric key, wrapped for each member's public key**, plus rotation when someone leaves
-  and re-wrapping when someone joins. Real key management.
-- **Server-readable group sync** — easy, and contradicts R2 outright.
-
-So R2 is cheap alone and expensive combined with R6. They are not one project.
-
-### Finding 3 — the schema is already well positioned
+### Finding 2 — the schema is already well positioned
 
 - `txn` carries `created_at`, `updated_at` **and** `is_deleted` (`src/db/schema.ts:73-75`) —
   the three fields last-write-wins sync needs, soft deletes included.
 - `person.remote_uid` (`src/db/schema.ts:22`) was reserved for exactly this and is still
   unused (`persons.ts:52` writes `null`). It stops being dead schema.
-- `expo-crypto` and `crypto-js` are already dependencies. **`expo-secure-store` is not** —
-  it is needed to hold the key.
 
-### Finding 4 — sync a transaction as one document, never row-by-row ⚠️
+### Finding 3 — sync a transaction as one document, never row-by-row ⚠️
 
 A txn plus its `txn_payment` and `txn_share` rows is **one atomic fact**. Merging payments
 from one device with shares from another yields a split that does not balance — i.e.
 **silently wrong money**, the worst possible failure for this app. Last-write-wins on the
 whole document; never per row.
 
-### Recommendation — a ladder, because the first two rungs need no group crypto
+### Recommendation — a ladder
 
-| Phase | What | Key management |
-|---|---|---|
-| **S1** | Login + encrypted backup & restore | Your key only |
-| **S2** | Multi-device sync for **one** user | Still your key only — no exchange at all |
-| **S3** | Multi-user group sync | Per-group keys wrapped per member |
-
-S1 and S2 deliver "never lose my data" and "phone + iPad" with **no key exchange
-whatsoever**. S3 is where the hard cryptography starts, and it is the only rung that needs
-R6 answered.
-
-### Decisions still open
-
-- [ ] **Identity.** *Recommendation: Sign in with Apple* — free, no phone-OTP cost (Indian
-      SMS OTP also needs DLT registration), gives a stable ID plus a relay email, and the
-      paid Apple team is already Gate 0. Email magic-link as the Android path.
-- [ ] **Key recovery — decide before writing a line of it.** True E2E means a forgotten
-      secret is **permanently unrecoverable data**. *Recommendation: key in the iOS Keychain
-      (syncs across the user's own devices) plus a one-time written recovery code, and say
-      plainly at setup that losing both loses the backup.* Any softer promise is a lie.
-- [ ] **R6's blocking rule.** As stated — a group syncs only once *every* member has joined
-      — one person who never installs kills the group permanently. *Recommendation: sync
-      among joined members; everyone else stays a local-only participant exactly as they are
-      today, clearly labelled.* That is also a strict superset of current behaviour, so
-      nothing regresses.
-- [ ] **R4 granularity.** "Choose what to sync" is easy per *table*, and near-impossible per
-      *row* once groups are shared — a group cannot sync if you withhold half its
-      transactions.
-- [ ] **Non-engineering cost.** India's DPDP Act obligations once personal data sits on a
-      server, a rewritten privacy policy, hosting, uptime and someone on call.
+| Phase | What |
+|---|---|
+| **S1** | Login + backup & restore |
+| **S2** | Multi-device sync for **one** user |
+| **S3** | Multi-user group sync |
 
 ### Answering "can we just do the group part for V2?" — no, and here is why
 
@@ -498,37 +539,32 @@ And **the group part is the hardest rung, not a shortcut past the others**:
 - **Accounts must exist first.** You cannot share a group with someone who has no identity,
   so S1 is not skippable.
 - **Identity merging.** Your `person` row named "Rohan" must be bound to Rohan's actual
-  account. Today `person` rows are arbitrary local records with `remote_uid` unused. This
-  is why every real split app is accounts-first — it is not an accident.
+  account. Today `person` rows are arbitrary local records. This is why every real split app
+  is accounts-first — it is not an accident.
 - **Multi-writer money.** Two people editing one split concurrently is exactly where
-  wrong-money bugs live. See Finding 4.
+  wrong-money bugs live. See Finding 3.
 
 **A cheaper bridge already exists in the codebase.** A group exports to CSV and
 `src/lib/importParse.ts:148` re-imports its own export — a manual device-to-device
 round-trip. Paired with the §3.4 nudge, one-sided tracking works: you keep the book, you
 remind, they pay. That is how most people use a split app regardless.
 
-*Recommendation: pilot with no server.* Let it tell you how many people actually hit the
-wall. If they do, build **S1 → S2 → S3 in order**, because group sync depends on both.
+### Decisions still open
 
-### Decided 2026-08-11 — plaintext first, with one caveat that must be designed for now
-
-**Decision: no encryption initially; revisit after launch.** Plaintext at rest behind TLS is
-a defensible pilot choice, and E2E would otherwise gate the whole thing on key management.
-
-⚠️ **But encryption is the one item that is dramatically harder to add later**, so two
-things must happen up front even though the encryption itself does not:
-
-- **Re-keying cannot be done server-side** — you will not hold the keys. Every client must
-  download, encrypt and re-upload, which needs every user online *and* updated. Design the
-  schema with a per-group wrapped-key table from day one, even if it is unused.
-- **Plaintext already held is plaintext already exposed.** Retroactive encryption does not
-  undo backups, logs, or the DPDP obligations that attach the moment personal financial
-  data lands on a server.
-
-- [ ] **Change the privacy copy the day a server appears.** "Nothing leaves your device"
-      is currently in `VOICE_SHORTCUT_PRIVACY` and the store listing. Shipping a server
-      without rewording it is not a positioning choice, it is a false statement.
+- [ ] **Identity.** *Recommendation: Sign in with Apple* — free, no phone-OTP cost (Indian
+      SMS OTP also needs DLT registration), gives a stable ID plus a relay email, and the
+      paid Apple team is already Gate 0. Email magic-link as the Android path.
+- [ ] **R6's blocking rule.** As stated — a group syncs only once *every* member has joined
+      — one person who never installs kills the group permanently. *Recommendation: sync
+      among joined members; everyone else stays a local-only participant exactly as they are
+      today, clearly labelled.* That is a strict superset of current behaviour.
+- [ ] **R4 granularity.** "Choose what to sync" is easy per *table*, and near-impossible per
+      *row* once groups are shared — a group cannot sync if you withhold half its
+      transactions.
+- [ ] **Non-engineering cost.** India's DPDP obligations once personal data sits on a
+      server, a rewritten privacy policy, hosting, uptime and someone on call.
+- [ ] **Reword "nothing leaves your device"** the day a server appears — it is in
+      `VOICE_SHORTCUT_PRIVACY` and the store listing.
 
 **Not V2.** Revisit as **V3, starting at S1**.
 
