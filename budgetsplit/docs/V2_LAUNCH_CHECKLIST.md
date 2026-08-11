@@ -487,8 +487,50 @@ R6 answered.
 - [ ] **Non-engineering cost.** India's DPDP Act obligations once personal data sits on a
       server, a rewritten privacy policy, hosting, uptime and someone on call.
 
-**Not V2.** It would delay the pilot indefinitely — and the pilot is what tells you whether
-anyone wants group sync at all. Revisit as **V3, starting at S1**.
+### Answering "can we just do the group part for V2?" — no, and here is why
+
+The premise was *"without sync a user cannot connect with other people for groups."*
+**Groups already work today, entirely locally** — add people, split, track who owes what,
+settle up. What is missing is narrower: *the other person seeing it on their own phone.*
+
+And **the group part is the hardest rung, not a shortcut past the others**:
+
+- **Accounts must exist first.** You cannot share a group with someone who has no identity,
+  so S1 is not skippable.
+- **Identity merging.** Your `person` row named "Rohan" must be bound to Rohan's actual
+  account. Today `person` rows are arbitrary local records with `remote_uid` unused. This
+  is why every real split app is accounts-first — it is not an accident.
+- **Multi-writer money.** Two people editing one split concurrently is exactly where
+  wrong-money bugs live. See Finding 4.
+
+**A cheaper bridge already exists in the codebase.** A group exports to CSV and
+`src/lib/importParse.ts:148` re-imports its own export — a manual device-to-device
+round-trip. Paired with the §3.4 nudge, one-sided tracking works: you keep the book, you
+remind, they pay. That is how most people use a split app regardless.
+
+*Recommendation: pilot with no server.* Let it tell you how many people actually hit the
+wall. If they do, build **S1 → S2 → S3 in order**, because group sync depends on both.
+
+### Decided 2026-08-11 — plaintext first, with one caveat that must be designed for now
+
+**Decision: no encryption initially; revisit after launch.** Plaintext at rest behind TLS is
+a defensible pilot choice, and E2E would otherwise gate the whole thing on key management.
+
+⚠️ **But encryption is the one item that is dramatically harder to add later**, so two
+things must happen up front even though the encryption itself does not:
+
+- **Re-keying cannot be done server-side** — you will not hold the keys. Every client must
+  download, encrypt and re-upload, which needs every user online *and* updated. Design the
+  schema with a per-group wrapped-key table from day one, even if it is unused.
+- **Plaintext already held is plaintext already exposed.** Retroactive encryption does not
+  undo backups, logs, or the DPDP obligations that attach the moment personal financial
+  data lands on a server.
+
+- [ ] **Change the privacy copy the day a server appears.** "Nothing leaves your device"
+      is currently in `VOICE_SHORTCUT_PRIVACY` and the store listing. Shipping a server
+      without rewording it is not a positioning choice, it is a false statement.
+
+**Not V2.** Revisit as **V3, starting at S1**.
 
 ---
 
