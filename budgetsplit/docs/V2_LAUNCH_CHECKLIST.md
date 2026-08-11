@@ -224,6 +224,33 @@ action; the amounts were never the part that needed to travel.
       lands as a **group** thread, so it does not satisfy "bulk, not group".
 - [ ] **A cooldown, and never auto-send.** A reminder feature with no floor becomes a way
       to annoy your friends daily. Record `last_nudged_at`; grey the button inside it.
+
+#### The framing that makes this work — decided 2026-08-11
+
+The stated problem is not typing, it is **that some people are bad at asking for money**.
+Automation was never the fix, and true automation is not available for free anyway (the
+manual tap *is* WhatsApp's anti-spam mechanism). Two cheap moves address it directly:
+
+1. **The app initiates, the user confirms.** *"Rohan has owed ₹450 for 12 days. Remind?"* →
+   one tap → pre-filled. You never decide to chase anyone; you agree with the app. That
+   moves the social burden off the user, which is the actual ask.
+2. **The app is the author, not the user.** *"Sent from BudgetSplit — ₹450 from the Goa
+   trip"* reads as a receipt; *"hey can you send me 450"* reads as a demand. Identical
+   information, completely different social act. Costs nothing.
+
+**Build order — the two halves are not the same size:**
+
+- [ ] **In V2 · the composer + manual tap.** Depersonalised line from `getMyExposure` →
+      `Share.share`, from any balance row. No schema, no numbers, no permission, no new
+      dependency. Small.
+- [ ] **After the pilot · the scheduled nudge.** Needs an overdue scan, a per-person
+      cooldown store, notification routing, and a cadence that nudges without nagging —
+      **and that cadence cannot be guessed from an empty pilot.** Get it wrong and users
+      disable notifications, which loses the channel permanently. The manual composer is a
+      strict prerequisite, so nothing is wasted by waiting.
+
+⚠️ **In V2, but not ahead of §1.** This blocks nobody; the three §1 items break things for
+real pilot users.
 - [ ] `sms:` fallback for people without WhatsApp, and the system share sheet for everyone
       else — same pre-filled string, three transports.
 
