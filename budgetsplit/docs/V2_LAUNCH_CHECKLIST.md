@@ -192,6 +192,20 @@ tracks who has been nudged.
       to annoy your friends daily. Record `last_nudged_at`; grey the button inside it.
 - [ ] `sms:` fallback for people without WhatsApp, and the system share sheet for everyone
       else — same pre-filled string, three transports.
+
+**Who pays what — the whole point is that we never do.** Every transport below is a *deep
+link*: we hand a pre-filled message to an app the user already has, and they send it as
+themselves. There is no server in the path, so there is no per-message bill to us, ever.
+
+| Transport | Cost | Pre-addressed? |
+|---|---|---|
+| **WhatsApp `wa.me`** | **Free** — data only, sent from their own account | ✅ opens that person's chat |
+| `sms:` | **Their carrier's rate.** Usually inside a bundled plan in India, but it is their plan, not free by definition | ✅ opens that person's thread |
+| Share sheet / copy | Free | ❌ they pick the recipient in the other app |
+| ~~WhatsApp Cloud API~~ | ~₹0.115–0.145 per delivered message + a backend | — rejected above |
+
+So **WhatsApp is the free path and the default**; SMS is the fallback for someone without
+it, and worth labelling as "standard SMS rates" rather than implying it is free.
 - [ ] **Say the privacy line out loud.** Nothing leaves the device: the text is handed to
       WhatsApp, and there is no server in the path. That is worth stating given the app's
       standing promise.
