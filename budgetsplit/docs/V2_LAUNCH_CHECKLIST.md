@@ -177,17 +177,35 @@ the one that matters:
    customer-service window, which a debt reminder is not. Meta's policy also prohibits
    unsolicited bulk messaging.
 
-So **"remind everyone" is a guided queue, not a broadcast**: open chat 1 pre-filled → you
-tap send → back to the app → advance to person 2. One tap each, N app switches, and the app
-tracks who has been nudged.
+**One send to everyone IS possible — just not through `wa.me`.** `wa.me` is number-keyed
+and cannot target a group or a broadcast list. But **WhatsApp's own share picker is
+multi-select**: hand it a string via the system share sheet and the user picks the flat's
+existing group — or ticks several chats — and sends **once**.
+
+So there are two shapes, and the choice is a product decision rather than a technical limit:
+
+| | Taps | Cost | What each person sees |
+|---|---|---|---|
+| **One group message** (share sheet → WhatsApp → pick group) | **One send, everyone** | Free | A summary listing **everyone's** amounts |
+| Per-person DM (`wa.me`) | One send **each** | Free | Only their own amount |
+| Multi-recipient SMS | One send, everyone | Carrier rates | The same summary |
+
+*Recommendation: the group message is the default* — for a flat or trip group it is also
+socially better than DMs, because it is transparent and does the nudging for you. Fall back
+to per-person only when there is no group, or when someone asks not to be named publicly.
 
 - [ ] Add a phone field beside the UPI ID in the Friends rename sheet
-      (`app/friends.tsx:81`) — makes the dead `mobile` column live.
-- [ ] Per-person **Remind on WhatsApp** wherever a balance is shown, pre-filled with the
-      amount and your own VPA as payable text. (A `upi://` link is **not** tappable inside
-      WhatsApp — send the handle as text.)
-- [ ] "Remind all" as a queue over `getMyExposure`, owed-most first, skipping anyone with
-      no number.
+      (`app/friends.tsx:81`) — makes the dead `mobile` column live. **Not needed for the
+      group-message path at all**, which is a reason to build that one first.
+- [ ] **Compose a settle-up summary** from `getMyExposure` — "Flat 4B: Rohan ₹450, Anya
+      ₹1,200 · pay me at prem@okhdfc" — and hand it to `Share.share`. One action, no
+      numbers stored, no permissions.
+- [ ] Per-person **Remind on WhatsApp** as the secondary path, pre-filled with the amount
+      and your VPA as payable text. (A `upi://` link is **not** tappable inside WhatsApp —
+      send the handle as text.)
+- [ ] Multi-recipient SMS needs **platform-specific syntax**: iOS
+      `sms://open?addresses=a,b&body=…`, Android `sms:a,b?body=…`. Apple does not implement
+      RFC 5724's comma list, so the obvious form silently fails on iPhone.
 - [ ] **A cooldown, and never auto-send.** A reminder feature with no floor becomes a way
       to annoy your friends daily. Record `last_nudged_at`; grey the button inside it.
 - [ ] `sms:` fallback for people without WhatsApp, and the system share sheet for everyone
@@ -197,15 +215,16 @@ tracks who has been nudged.
 link*: we hand a pre-filled message to an app the user already has, and they send it as
 themselves. There is no server in the path, so there is no per-message bill to us, ever.
 
-| Transport | Cost | Pre-addressed? |
+| Transport | Cost | Reaches everyone in one send? |
 |---|---|---|
-| **WhatsApp `wa.me`** | **Free** — data only, sent from their own account | ✅ opens that person's chat |
-| `sms:` | **Their carrier's rate.** Usually inside a bundled plan in India, but it is their plan, not free by definition | ✅ opens that person's thread |
-| Share sheet / copy | Free | ❌ they pick the recipient in the other app |
+| **Share sheet → WhatsApp group** | **Free** | ✅ **yes** — WhatsApp's picker is multi-select |
+| WhatsApp `wa.me` | **Free** — sent from their own account | ❌ one chat per link |
+| `sms:` multi-recipient | **Their carrier's rate.** Usually inside a bundled Indian plan, but it is their plan, not free by definition | ✅ yes |
+| `mailto:?bcc=` | Free | ✅ yes, but nobody reads email for ₹450 |
 | ~~WhatsApp Cloud API~~ | ~₹0.115–0.145 per delivered message + a backend | — rejected above |
 
-So **WhatsApp is the free path and the default**; SMS is the fallback for someone without
-it, and worth labelling as "standard SMS rates" rather than implying it is free.
+So **WhatsApp is free either way**; SMS is the fallback for someone without it, and is worth
+labelling "standard SMS rates" rather than implying it is free.
 - [ ] **Say the privacy line out loud.** Nothing leaves the device: the text is handed to
       WhatsApp, and there is no server in the path. That is worth stating given the app's
       standing promise.
