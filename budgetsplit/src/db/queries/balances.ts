@@ -3,24 +3,66 @@ import { simplify } from '../../lib/settle';
 
 export type NetBalance = Record<string, number>;
 
+/**
+ * What counts toward a balance between people — written once because it was written four
+ * times and two clauses went missing from all four.
+ *
+ * - `is_deleted = 0` · `kind != 'income'` — money arriving is nobody's debt.
+ * - **`recur_freq IS NULL`** — a recurring *rule* is an ordinary `txn` row that carries its
+ *   own payment and share rows (that is how `materializeDueOccurrences` reads them back), so
+ *   without this the template is counted **and** every occurrence it spawns is counted, for
+ *   as long as the rule exists. Every other read path in the app already has this filter.
+ */
+export const BALANCE_TXN_FILTER = "t.is_deleted = 0 AND t.kind != 'income' AND t.recur_freq IS NULL";
+
+/**
+ * The extra clause a **cross-group** balance needs, and a per-group one must not have.
+ *
+ * A personal settlement is deliberately booked one-sided — `reviewCommit` writes a payment
+ * with no share, or a share with no payment — because `computeCash` does
+ * `− settledOut + settledIn`, and booking both sides would net to zero and hide that money
+ * actually moved. That is correct for cash and catastrophic for a pairwise balance: the
+ * unmatched row lands in the global net as a debt owed by you to nobody in particular, and
+ * `simplify` then pairs you against whichever friend happens to hold a positive balance.
+ *
+ * Reachable from a bank import — "Money received from Rahul" commits to Personal by default —
+ * so Home would announce that you owe someone you have never transacted with.
+ *
+ * `getGroupNet` deliberately omits this: it is scoped to a group the caller named, and the
+ * personal group has exactly one member, so no pair can be formed there anyway.
+ */
+export const CROSS_GROUP_FILTER = 'bg.is_personal = 0';
+
+/**
+ * All four aggregates have the same shape and differ only in the split table and the scope,
+ * so they are built from one template — the drift this fixes came from four hand-written
+ * copies. Exported so `balancesSql.test.ts` can run the real SQL rather than a paraphrase.
+ */
+function netSql(table: 'txn_payment' | 'txn_share', scope: 'group' | 'global'): string {
+  const where = scope === 'group' ? 't.group_id = ?' : CROSS_GROUP_FILTER;
+  return `SELECT s.person_id, SUM(s.amount) as total
+     FROM ${table} s
+     JOIN txn t ON t.id = s.txn_id
+     JOIN budget_group bg ON bg.id = t.group_id
+    WHERE ${BALANCE_TXN_FILTER} AND ${where}
+    GROUP BY s.person_id`;
+}
+
+export const GROUP_PAYMENTS_SQL = netSql('txn_payment', 'group');
+export const GROUP_SHARES_SQL = netSql('txn_share', 'group');
+export const GLOBAL_PAYMENTS_SQL = netSql('txn_payment', 'global');
+export const GLOBAL_SHARES_SQL = netSql('txn_share', 'global');
+
 export async function getGroupNet(
   db: SQLite.SQLiteDatabase,
   groupId: string,
 ): Promise<NetBalance> {
   const payments = await db.getAllAsync<{ person_id: string; total: number }>(
-    `SELECT tp.person_id, SUM(tp.amount) as total
-     FROM txn_payment tp
-     JOIN txn t ON t.id = tp.txn_id
-     WHERE t.group_id = ? AND t.is_deleted = 0 AND t.kind != 'income'
-     GROUP BY tp.person_id`,
+    GROUP_PAYMENTS_SQL,
     [groupId],
   );
   const shares = await db.getAllAsync<{ person_id: string; total: number }>(
-    `SELECT ts.person_id, SUM(ts.amount) as total
-     FROM txn_share ts
-     JOIN txn t ON t.id = ts.txn_id
-     WHERE t.group_id = ? AND t.is_deleted = 0 AND t.kind != 'income'
-     GROUP BY ts.person_id`,
+    GROUP_SHARES_SQL,
     [groupId],
   );
 
@@ -33,20 +75,8 @@ export async function getGroupNet(
 export async function getGlobalNet(
   db: SQLite.SQLiteDatabase,
 ): Promise<NetBalance> {
-  const payments = await db.getAllAsync<{ person_id: string; total: number }>(
-    `SELECT tp.person_id, SUM(tp.amount) as total
-     FROM txn_payment tp
-     JOIN txn t ON t.id = tp.txn_id
-     WHERE t.is_deleted = 0 AND t.kind != 'income'
-     GROUP BY tp.person_id`,
-  );
-  const shares = await db.getAllAsync<{ person_id: string; total: number }>(
-    `SELECT ts.person_id, SUM(ts.amount) as total
-     FROM txn_share ts
-     JOIN txn t ON t.id = ts.txn_id
-     WHERE t.is_deleted = 0 AND t.kind != 'income'
-     GROUP BY ts.person_id`,
-  );
+  const payments = await db.getAllAsync<{ person_id: string; total: number }>(GLOBAL_PAYMENTS_SQL);
+  const shares = await db.getAllAsync<{ person_id: string; total: number }>(GLOBAL_SHARES_SQL);
 
   const net: NetBalance = {};
   for (const p of payments) net[p.person_id] = (net[p.person_id] ?? 0) + p.total;
