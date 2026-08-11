@@ -18,6 +18,21 @@
 Sizes are rough and relative, not estimates. ⛔ = a **§1 launch blocker**: it breaks for real
 pilot users, so it jumps its size bucket if you are short on time.
 
+### First — the correctness bugs (§0)
+
+They are not all large, but they are all *wrong money*. 0.1 and 0.2 come first because every
+balance in the app depends on them.
+
+| | Task | Size |
+|---|---|---|
+| 0 | 0.1 personal settlement leaks into the global net | S |
+| 0 | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS |
+| 0 | 0.3 pause/resume preserves `recur_end`, no back-post | S |
+| 0 | 0.4 materialization column list + a test that asserts on it | S |
+| 0 | 0.5 stamp `updated_at` only when the card balance changes | XS |
+| 0 | 0.6 one monthly-equivalent function | M |
+| 0 | 0.7 / 0.8 one spend basis, one month window | M |
+
 ### XS — an hour or less
 
 | | Task | Detail |
@@ -92,6 +107,66 @@ does the distribution channel itself.
 
 - [ ] **Buy it.** Everything below assumes it. Without it, the voice rework degrades to
       in-app mic only — which still works, and still removes the Shortcuts round trip.
+
+---
+
+## 0. Correctness bugs — found 2026-08-11, verified against source
+
+**These were on no list.** The suite is green *with every one of them present*, which is the
+fact to design against: each fix needs a **failing test written first**. Ordered by damage.
+
+| # | Bug | Evidence |
+|---|---|---|
+| **0.1** | **A personal transfer invents debts to people you never transacted with.** `reviewCommit.ts:163-165` writes a personal settlement one-sided — correctly, because `computeCash` does `− settledOut + settledIn` and booking both sides would net to zero. But `getGlobalNet` has **no `is_personal` filter** (only the roster query does, `:76`), so that lone share row enters the global net and `simplify()` pairs you as a debtor against whoever has a positive balance. **Reachable on a fresh install:** import a Paytm statement → "Money received from Rahul ₹10,000" is classified `settlement`/`credit` (`paytmParse.ts:158`) → Review defaults to Personal → commit → Home reads *"You owe Priya ₹10,000"*. | `src/db/queries/balances.ts:33-50` |
+| **0.2** | **Every owe/owed figure is inflated by recurring templates.** All four aggregates omit `recur_freq IS NULL`. A rule is a `txn` row carrying its own payment/share rows, so the template is counted *and* every occurrence it spawns is counted. Every other read path has this filter. | `balances.ts:14,22,40,47` |
+| **0.3** | **Resuming a paused rule destroys its end date and back-posts the gap.** `pause` sets `recur_end = now` — overwriting the user's own end date, of which there is no other copy — and `resume` sets it to `NULL`, so a rule set to "end 31 Dec" recurs **forever**. Nothing is claimed during the pause, so the next foreground materializes the whole window: pause a daily ₹300 rule for 60 days and resuming silently posts **60 rows, ₹18,000**. | `recurring.ts:40-41,57` |
+| **0.4** | **Recurring card spend is booked as cash.** The materializing INSERT drops `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`. A card bill materializes as `pay_method = NULL` and counts as cash out, not debt — and since `computeCash` reads the same bad data, **the SQL/TS parity test cannot see it**. | `recurring.ts:213-221` |
+| **0.5** | **Editing investments wipes accumulated card debt.** `setMoneyProfile` stamps `updated_at` whenever *any* field changes, and that timestamp is `cardBaselineMs`. Update investments only and all prior card spend drops below the new baseline — net worth jumps overnight. `cash.ts:132-137` assumes the baseline moves only on card re-confirmation; the write path does not honour it. | `moneyProfile.ts:51` |
+| **0.6** | **Five functions answer "what is my monthly budget."** `budget.ts:39` (canonical, `daily × 30`) · `savings.ts:425` (`daily × daysInMonth`, feeds Afford) · `homeData.ts:155` and `insightsData.ts:121` (raw cross-cadence sums) · `app/category/[name].tsx:123` (a sixth, prorating). A daily ₹500 line is ₹15,000/mo on one screen and ₹15,500 on another. | five sites |
+| **0.7** | **Reports contradicts Home.** `reportsData.ts:128` sums every member's share; `homeData.ts:100` sums mine. `FEATURES_AND_FLOWS.md:1216` pins Insights to Home's basis and is silent on Reports. | two sites |
+| **0.8** | **Future-dated spend gets four different answers.** Home includes the whole month, Insights cuts at `now`, budgets include future, cash excludes it. A ₹50,000 fee dated the 28th, logged on the 2nd, makes Home read ₹50,000 spent and project **₹7.75 lakh** month-end; Insights reads ₹0. | `homeData.ts:39`, `insightsData.ts:44`, `budget.ts:70`, `cashQuery.ts:47` |
+
+### Tier 1 — silent data loss and discarded writes
+
+- **Category rename/delete is kind-blind**, and `Rent`/`Other` are seeded as **both** expense
+  and transfer. Renaming transfer-`Rent` relabels every *expense* Rent txn to a name the
+  expense catalog lacks — they fold into Others and **the Rent budget reads ₹0 spent
+  forever**. The UI guard only checks within the current tab. (`categories.ts:125-126,142`)
+- **Deleting a seeded category resurrects it but not its budget** — `schema.ts:557` reseeds on
+  every launch. The delete is undone; only the collateral damage persists.
+- **Editing an itemized bill moves it to today** — `useItemizedForm.ts:355` hardcodes
+  `date: Date.now()` on update. A July bill fixed in August leaves July's totals and charges
+  August. No date field is shown, so nothing hints at it.
+- **"Save" on a recurring edit can write nothing and report success** —
+  `splitRecurringSeries` returns `null`, `useAddTxnForm.ts:467-478` discards it and fires
+  `haptic.success(); router.back()`. Reachable through 0.3. It also drops the series' tags and
+  receipt when it *does* succeed.
+- **"All groups" settlement is direction-blind** — `settleScope.ts:76-91` ranks by amount
+  without reading `from`/`to`, so a settlement can land in the one group where they owed
+  **you**. The global net ends correct, so nothing surfaces it.
+- **`deleteGroup` leaves `pending_txn` dangling** — the row becomes permanently
+  un-committable and sits in Review forever. (`groups.ts:172-195`)
+- **Monthly recurrence on the 29th–31st walks backward permanently** — 31 Jan → 28 Feb →
+  **28 Mar** → forever, because `advance()` steps from the previous cursor and `addMonths`
+  clamps. A yearly 29 Feb rule collapses after one leap year. (`recurrence.ts:169-182`)
+- **A recurrence end date on or before the start silently means "never ends"** —
+  `useAddTxnForm.ts:485` falls through to `undefined`.
+- **The backup indicator lies** — enabling the backup *reminder* sets the same key the
+  Settings row reads, so it shows "Backed up just now" to someone who never has.
+  (`notifications.tsx:58-60` vs `settings.tsx:332`)
+- **Backups exclude every photo**, and a missing receipt renders as **"Receipt attached"**
+  with no `onError`. That is the state every restore lands in.
+- **App lock has no failure path** — `LockGate.tsx:86` has no `else`; cancel or biometric
+  lockout changes nothing on screen. No auth needed to turn the lock *off*.
+
+### What is genuinely solid — do not "fix" these
+
+- **Split rounding is exact**, fuzzed over ~18M cases: zero disagreements between the pairwise
+  view and the ledger net, every share fully allocated (`settle.ts:67-86`).
+- **Unbalanced splits cannot be written** — three independent gates.
+- **Person deletion is clean** — no hard-delete path; member removal is gated on a zero
+  balance, with Undo.
+- **`cashSql.test.ts`** locks the SQL/TS pair with a seeded fuzz. That is the bar for the rest.
 
 ---
 
