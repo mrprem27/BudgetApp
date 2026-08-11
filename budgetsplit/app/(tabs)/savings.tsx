@@ -53,6 +53,7 @@ import type { MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 import { useScreenData } from '../../src/hooks/useScreenData';
+import { useContentInset } from '../../src/hooks/useContentInset';
 import { useSavingsTab } from '../../src/hooks/useSavingsTab';
 import { alpha } from '../../src/theme';
 
@@ -70,6 +71,10 @@ const FREQS: { key: SavingsFrequency; label: string }[] = [
 export default function SavingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // `useContentInset`, not a hand-rolled sum. The previous expression cleared the
+  // tab bar but not the "New" FAB floating above it, so the last goal card sat
+  // underneath the button — the exact failure `useContentInset` was written for.
+  const contentInset = useContentInset({ fab: true, tabBar: true });
   const { flags } = useFeatureFlags();
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
@@ -110,7 +115,7 @@ export default function SavingsScreen() {
       {error ? (
         <ErrorState onRetry={() => reload()} />
       ) : (
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Total Money — cash + investments + available credit, with breakdown */}
         {money && <TotalMoneyCard money={money} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} />}
 
@@ -123,8 +128,11 @@ export default function SavingsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.overspendTitle}>You’re {formatCompact(overspend.total)} short this month</Text>
+              {/* Per-goal ₹, not just names. `withdrawals` has carried `amount`
+                  all along; listing names alone asked the user to approve a raid
+                  on their savings without showing how much came out of which goal. */}
               <Text style={styles.overspendBody}>
-                Cover it from {overspend.withdrawals.map(w => w.name).join(', ')}? Nothing moves unless you say so.
+                Cover it from {overspend.withdrawals.map(w => `${w.name} ${formatCompact(w.amount)}`).join(', ')}? Nothing moves unless you say so.
               </Text>
               <View style={styles.overspendBtnRow}>
                 <TouchableOpacity style={styles.overspendPrimary} onPress={handleApproveOverspend} accessibilityRole="button" accessibilityLabel={`Use savings to cover ${formatCompact(overspend.total)}`}>

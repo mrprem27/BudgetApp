@@ -48,3 +48,41 @@ describe('generateInsights', () => {
     expect(new Set(tones).size).toBe(tones.length); // all distinct tones
   });
 });
+
+/**
+ * Determinism. The jitter used to be `Math.random`, so the same data produced a
+ * different set on every pull-to-refresh.
+ */
+describe('generateInsights is stable across refreshes', () => {
+  const ctx: InsightContext = {
+    goals: [
+      { id: 'a', name: 'Laptop', target: 100000, saved: 75000, remaining: 25000, allocation: 5000, frequency: 'monthly', priority: 'high' },
+      { id: 'b', name: 'Trip', target: 200000, saved: 20000, remaining: 180000, allocation: 4000, frequency: 'monthly', priority: 'medium' },
+      { id: 'c', name: 'Phone', target: 60000, saved: 60000, remaining: 0, allocation: 0, frequency: 'none', priority: 'low' },
+    ] as InsightContext['goals'],
+    spend: [
+      { category: 'Food', amount: 30000 },
+      { category: 'Travel', amount: 22000 },
+      { category: 'Shopping', amount: 9000 },
+    ],
+  };
+
+  it('returns the identical set on repeated calls', () => {
+    const a = generateInsights(ctx);
+    const b = generateInsights(ctx);
+    const c = generateInsights(ctx);
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+  });
+
+  it('is pinned by the seed, so a given day always agrees with itself', () => {
+    expect(generateInsights(ctx, 3, 20000)).toEqual(generateInsights(ctx, 3, 20000));
+  });
+
+  it('still rotates when the day changes', () => {
+    // Not an equality assertion on *which* insights: only that the seed is live,
+    // so freshness is preserved rather than traded away for stability.
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8].map(s => JSON.stringify(generateInsights(ctx, 3, s)));
+    expect(new Set(seeds).size).toBeGreaterThan(1);
+  });
+});

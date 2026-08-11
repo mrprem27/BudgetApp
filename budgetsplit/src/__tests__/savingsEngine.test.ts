@@ -62,7 +62,10 @@ describe('planAutoAllocations', () => {
 });
 
 describe('planOverspendRaid', () => {
-  const g = (id: string, priority: RaidGoal['priority'], locked = 0): RaidGoal => ({ id, priority, locked });
+  // `target` defaults high enough that these goals are never "complete" — the
+  // completed-goal case gets its own describe below.
+  const g = (id: string, priority: RaidGoal['priority'], locked = 0, target = 1_000_000): RaidGoal =>
+    ({ id, priority, locked, target });
   it('raids lowest-priority unlocked goals first, protecting high & locked', () => {
     const goals = [g('hi', 'high'), g('lo', 'low'), g('mid', 'medium'), g('lk', 'low', 1)];
     const saved = { hi: 5000, lo: 3000, mid: 4000, lk: 9999 };
@@ -127,5 +130,56 @@ describe('applyOverspendRaid — consent is the whole point (V2-10)', () => {
     const { db, inserts } = fakeDb();
     expect((await applyOverspendRaid(db, [{ goalId: 'g', name: 'A', amount: 0 }])).total).toBe(0);
     expect(inserts).toHaveLength(0);
+  });
+});
+
+/**
+ * Two defects the suite above could not see: it only ever built goals with
+ * distinct priorities, so the `sort_order = 0` tie never occurred, and it never
+ * gave a goal enough saved to be complete.
+ */
+describe('planOverspendRaid protects finished goals', () => {
+  const goal = (id: string, target: number, sort_order = 0): RaidGoal =>
+    ({ id, priority: 'medium', locked: 0, target, sort_order });
+
+  it('never raids a goal that has reached its target', () => {
+    const goals = [goal('done', 10000), goal('open', 50000)];
+    const out = planOverspendRaid(goals, { done: 10000, open: 20000 }, 30000);
+    expect(out).toEqual([{ goalId: 'open', amount: 20000 }]);
+  });
+
+  it('treats an overfunded goal as finished too', () => {
+    const goals = [goal('over', 10000)];
+    expect(planOverspendRaid(goals, { over: 15000 }, 5000)).toEqual([]);
+  });
+
+  it('still raids a goal that is one rupee short', () => {
+    const goals = [goal('nearly', 10000)];
+    expect(planOverspendRaid(goals, { nearly: 9900 }, 5000)).toEqual([{ goalId: 'nearly', amount: 5000 }]);
+  });
+});
+
+describe('funding and raiding are mirror images before anyone drags', () => {
+  it('raids the goal that would be funded LAST, not first', () => {
+    // Every goal at the schema default sort_order = 0. Pre-fix the stable sort
+    // left both orders identical to the input, so the first goal in the list was
+    // funded first *and* raided first.
+    const goals: RaidGoal[] = [
+      { id: 'first', priority: 'medium', locked: 0, target: 100000, sort_order: 0 },
+      { id: 'second', priority: 'medium', locked: 0, target: 100000, sort_order: 0 },
+      { id: 'third', priority: 'medium', locked: 0, target: 100000, sort_order: 0 },
+    ];
+    const out = planOverspendRaid(goals, { first: 5000, second: 5000, third: 5000 }, 5000);
+    expect(out).toEqual([{ goalId: 'third', amount: 5000 }]);
+  });
+
+  it('an explicit drag order still wins over the tie-break', () => {
+    const goals: RaidGoal[] = [
+      { id: 'a', priority: 'medium', locked: 0, target: 100000, sort_order: 0 },
+      { id: 'b', priority: 'medium', locked: 0, target: 100000, sort_order: 1 },
+      { id: 'c', priority: 'medium', locked: 0, target: 100000, sort_order: 2 },
+    ];
+    const out = planOverspendRaid(goals, { a: 5000, b: 5000, c: 5000 }, 5000);
+    expect(out).toEqual([{ goalId: 'c', amount: 5000 }]); // bottom of the list
   });
 });

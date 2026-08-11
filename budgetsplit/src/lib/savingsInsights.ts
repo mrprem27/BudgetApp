@@ -19,13 +19,44 @@ type Cand = Insight & { score: number };
 const fmt = formatCompact;
 
 /**
+ * A stable 32-bit hash of a string → [0, 1). FNV-1a: tiny, no dependency, and
+ * well-spread enough for tie-breaking jitter.
+ */
+function hash01(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 0) % 100000) / 100000;
+}
+
+/** Days since the epoch — the rotation period for insight freshness. */
+const dayEpoch = (nowMs: number) => Math.floor(nowMs / 86_400_000);
+
+/**
  * Generate psychological savings insights from real spending + goals. Builds a
  * candidate pool (opportunity-cost comparisons, progress, achievement,
  * projection), scores by emotional impact, jitters slightly for freshness, then
- * picks a varied set (diverse tone + goal). Pure — pass a deterministic `rng`
- * in tests. The aim is opportunity-cost awareness, never guilt.
+ * picks a varied set (diverse tone + goal). The aim is opportunity-cost
+ * awareness, never guilt.
+ *
+ * The jitter is **seeded, not random**. It defaulted to `Math.random`, so the
+ * set reshuffled on every pull-to-refresh: an insight you noticed and swiped
+ * past was gone, and an insight you cannot return to is not an insight. Seeding
+ * on the candidate's own text plus the day number keeps the tie-break spread the
+ * jitter was there for, holds the set steady all day, and still rotates
+ * tomorrow. Pass `seed` to pin it in tests.
  */
-export function generateInsights(ctx: InsightContext, maxN = 3, rng: () => number = Math.random): Insight[] {
+export function generateInsights(
+  ctx: InsightContext,
+  maxN = 3,
+  seed: number | (() => number) = dayEpoch(Date.now()),
+): Insight[] {
+  // Callers (and the existing tests) may still hand in an rng function.
+  const jitter = typeof seed === 'function'
+    ? (_text: string) => seed()
+    : (text: string) => hash01(`${text}#${seed}`);
   const goals = ctx.goals.filter(g => g.target > 0);
   const topSpend = ctx.spend.filter(s => s.amount > 0).slice(0, 4);
   const cands: Cand[] = [];
@@ -60,7 +91,7 @@ export function generateInsights(ctx: InsightContext, maxN = 3, rng: () => numbe
     }
   }
 
-  for (const c of cands) c.score += rng() * 6; // freshness / rarity jitter
+  for (const c of cands) c.score += jitter(c.text) * 6; // freshness / rarity jitter
   cands.sort((a, b) => b.score - a.score);
 
   // Pick with diversity: distinct tone + goal, then relax in passes.

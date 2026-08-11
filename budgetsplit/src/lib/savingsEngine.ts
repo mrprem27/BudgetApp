@@ -90,19 +90,34 @@ export function planAutoAllocations(
 
 // --- Overspend raid (protect high-priority goals) ------------------------
 
-export type RaidGoal = { id: string; priority: Priority; locked: number; sort_order?: number };
+export type RaidGoal = {
+  id: string; priority: Priority; locked: number; sort_order?: number;
+  /** What the goal is aiming for — a goal already at its target is never raided. */
+  target: number;
+};
 export type GoalRaid = { goalId: string; amount: number };
 
 /**
  * Cover a cash overspend by pulling money out of the lowest-priority *unlocked*
- * goals first, until the `deficit` is covered (or goals run dry). Locked and
- * higher-priority goals are protected; investments are never touched. Pure.
+ * goals first, until the `deficit` is covered (or goals run dry). Locked,
+ * completed and higher-priority goals are protected; investments are never
+ * touched. Pure.
  */
 export function planOverspendRaid(goals: RaidGoal[], saved: Record<string, number>, deficit: number): GoalRaid[] {
   if (deficit <= 0) return [];
   const order = goals
-    .filter(g => g.locked !== 1 && (saved[g.id] ?? 0) > 0)
-    .sort((a, b) => rankKey(b) - rankKey(a)); // lowest rank (bottom of list) raided first
+    // A finished goal is the one thing a raid must not touch: it is the reward the
+    // whole feature exists to produce, and taking money back out silently un-finishes
+    // it. The filter checked `locked` and `saved > 0` but never `saved >= target`.
+    .filter(g => g.locked !== 1 && (saved[g.id] ?? 0) > 0 && (saved[g.id] ?? 0) < g.target)
+    // Raiding is the mirror of funding, so ties must break the *opposite* way.
+    // Before anyone drags, every goal has `sort_order = 0` (INTEGER NOT NULL
+    // DEFAULT 0), so every comparison tied and a stable sort left both orders
+    // identical to the input — making the newest goal funded first *and* raided
+    // first. Reversing the index on a tie restores the mirror without a drag.
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => (rankKey(b.g) - rankKey(a.g)) || (b.i - a.i))
+    .map(x => x.g);
 
   let left = deficit;
   const out: GoalRaid[] = [];
