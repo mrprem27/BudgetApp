@@ -167,3 +167,44 @@ describe('nextUnskippedOccurrence', () => {
     expect(nextUnskippedOccurrence(ended as any, ms(2026, 5, 1), new Set([ms(2026, 0, 10)]))).toBeNull();
   });
 });
+
+/**
+ * Month-end anchoring. Stepping `addMonths` from the *previous cursor* clamps
+ * 31 Jan → 28 Feb and then never recovers, because the next step reads 28 Feb
+ * as the anchor: 31 Jan → 28 Feb → 28 Mar → 28 Apr, forever. The anchor is the
+ * series start date, so every occurrence must be computed from it.
+ */
+describe('month-end anchoring', () => {
+  const monthEnd = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 31) }; // 31 Jan 2024
+
+  it('recovers the 31st after a short month', () => {
+    // Jan 31 → Feb 29 (leap, clamped) → Mar 31 (recovered) → Apr 30. May 31 is
+    // past the cutoff, so the run stops at April.
+    const out = occurrenceDatesUpTo(ms(2024, 0, 31), 'monthly', 1, ms(2024, 4, 15), null);
+    expect(out.map(d => new Date(d).getDate())).toEqual([31, 29, 31, 30]);
+  });
+
+  it('does not walk backward through a whole year', () => {
+    const out = occurrenceDatesUpTo(ms(2024, 0, 31), 'monthly', 1, ms(2024, 11, 31), null);
+    // Every occurrence is the last day the month has — never an inherited 28th.
+    expect(out.map(d => new Date(d).getDate()))
+      .toEqual([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+  });
+
+  it('materializeInstances anchors on the start date too', () => {
+    const out = materializeInstances(monthEnd as any, ms(2024, 0, 1), ms(2024, 3, 30));
+    expect(out.map(i => new Date(i.date).getDate())).toEqual([31, 29, 31, 30]);
+  });
+
+  it('nextOccurrenceOnOrAfter returns the 31st, not an inherited 28th', () => {
+    // Asking in March must give 31 Mar — the pre-fix walk answered 28 Mar.
+    expect(nextOccurrenceOnOrAfter(monthEnd as any, ms(2024, 2, 1)))
+      .toBe(ms(2024, 2, 31));
+  });
+
+  it('a yearly 29 Feb rule survives the non-leap years', () => {
+    const out = occurrenceDatesUpTo(ms(2024, 1, 29), 'yearly', 1, ms(2028, 5, 1), null);
+    // 2025-27 clamp to the 28th, but 2028 is a leap year and must return to the 29th.
+    expect(out.map(d => new Date(d).getDate())).toEqual([29, 28, 28, 28, 29]);
+  });
+});

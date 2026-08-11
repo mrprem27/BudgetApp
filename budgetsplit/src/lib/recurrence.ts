@@ -16,10 +16,9 @@ export function materializeInstances(
   const rangeEnd = new Date(Math.min(end.getTime(), toMs));
   const rangeStart = new Date(fromMs);
 
-  let safetyMax = 0;
+  let n = 0;
 
-  while (!isAfter(cursor, rangeEnd) && safetyMax < 1000) {
-    safetyMax++;
+  while (!isAfter(cursor, rangeEnd) && n < 1000) {
     const ms = cursor.getTime();
     if (!isBefore(cursor, rangeStart) && !skips?.has(ms)) {
       const virtualId = `${txn.id}_${ms}`;
@@ -30,7 +29,7 @@ export function materializeInstances(
         recur_override_date: null,
       });
     }
-    cursor = advance(cursor, txn.recur_freq, txn.recur_interval ?? 1);
+    cursor = occurrenceAt(txn.date, txn.recur_freq, txn.recur_interval ?? 1, ++n);
   }
 
   return instances;
@@ -43,14 +42,12 @@ export function materializeInstances(
  */
 export function nextOccurrenceOnOrAfter(txn: TxnWithSplits, fromMs: number): number | null {
   if (!txn.recur_freq) return null;
-  let cursor = new Date(txn.date);
   const end = txn.recur_end ? new Date(txn.recur_end) : null;
-  let safetyMax = 0;
-  while (safetyMax < 10000) {
-    safetyMax++;
+  const from = new Date(fromMs);
+  for (let n = 0; n < 10000; n++) {
+    const cursor = occurrenceAt(txn.date, txn.recur_freq, txn.recur_interval ?? 1, n);
     if (end && isAfter(cursor, end)) return null;
-    if (!isBefore(cursor, new Date(fromMs))) return cursor.getTime();
-    cursor = advance(cursor, txn.recur_freq, txn.recur_interval ?? 1);
+    if (!isBefore(cursor, from)) return cursor.getTime();
   }
   return null;
 }
@@ -100,13 +97,11 @@ export function occurrenceDatesUpTo(
   recurEnd: number | null,
 ): number[] {
   const out: number[] = [];
-  const hardEnd = recurEnd !== null ? Math.min(recurEnd, untilMs) : untilMs;
-  let cursor = new Date(startMs);
-  let safetyMax = 0;
-  while (!isAfter(cursor, new Date(hardEnd)) && safetyMax < 10000) {
-    safetyMax++;
+  const hardEnd = new Date(recurEnd !== null ? Math.min(recurEnd, untilMs) : untilMs);
+  for (let n = 0; n < 10000; n++) {
+    const cursor = occurrenceAt(startMs, freq, interval, n);
+    if (isAfter(cursor, hardEnd)) break;
     out.push(cursor.getTime());
-    cursor = advance(cursor, freq, interval);
   }
   return out;
 }
@@ -122,9 +117,7 @@ export function nthOccurrenceMs(
   interval: number,
   n: number,
 ): number {
-  let cursor = new Date(startMs);
-  for (let i = 1; i < Math.max(1, n); i++) cursor = advance(cursor, freq, interval);
-  return cursor.getTime();
+  return occurrenceAt(startMs, freq, interval, Math.max(1, n) - 1).getTime();
 }
 
 /**
@@ -166,17 +159,32 @@ export function freqLabel(freq: string | null | undefined, interval: number | nu
   }
 }
 
-function advance(
-  date: Date,
+/**
+ * The `n`th occurrence (0-based) of a series, computed **from the start date**
+ * rather than by stepping off the previous occurrence.
+ *
+ * The anchor matters. `addMonths` clamps to the length of the target month, so
+ * stepping cursor-to-cursor made the clamp permanent: 31 Jan → 28 Feb → **28
+ * Mar** → 28 Apr, because each step re-anchored on the already-clamped date. A
+ * rent rule set to the 31st silently moved to the 28th after one February and
+ * never came back; a yearly 29 Feb rule collapsed to the 28th after one leap
+ * year. Anchoring on `startMs` clamps only where the month is genuinely short —
+ * 31 Jan → 29 Feb → 31 Mar — which is what every calendar app does.
+ */
+function occurrenceAt(
+  startMs: number,
   freq: NonNullable<Txn['recur_freq']>,
   interval: number,
+  n: number,
 ): Date {
+  const start = new Date(startMs);
+  const step = n * interval;
   switch (freq) {
-    case 'daily':   return addDays(date, interval);
-    case 'weekly':  return addWeeks(date, interval);
-    case 'monthly': return addMonths(date, interval);
-    case 'yearly':  return addYears(date, interval);
-    case 'custom':  return addDays(date, interval);
-    default:        return addMonths(date, 1);
+    case 'daily':   return addDays(start, step);
+    case 'weekly':  return addWeeks(start, step);
+    case 'monthly': return addMonths(start, step);
+    case 'yearly':  return addYears(start, step);
+    case 'custom':  return addDays(start, step);
+    default:        return addMonths(start, n);
   }
 }

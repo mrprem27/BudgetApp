@@ -24,6 +24,8 @@ export type Txn = {
   recur_override_date: number | null;
   parent_recur_id: string | null;
   recur_state: RecurState;
+  /** When the rule was paused — lets resume skip the dormant gap instead of back-posting it. */
+  recur_paused_at: number | null;
   tz: string | null;
   lat: number | null;
   lng: number | null;

@@ -36,8 +36,13 @@ export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): 
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
     // Pause = stop generating new instances from now; past instances remain.
+    // `recur_end` is deliberately untouched: it is the *user's* end date and there
+    // is no second copy of it, so writing `now` here destroyed it — and resume,
+    // having nothing to restore, set it to NULL and made the rule immortal.
+    // `materializeDueOccurrences` filters on `recur_state = 'active'`, so state
+    // alone is a sufficient gate. `recur_paused_at` is what resume needs.
     await db.runAsync(
-      'UPDATE txn SET recur_state=?, recur_end=?, updated_at=? WHERE id=?',
+      'UPDATE txn SET recur_state=?, recur_paused_at=?, updated_at=? WHERE id=?',
       ['paused', now, now, txnId],
     );
     if (row) {
@@ -49,12 +54,36 @@ export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): 
   });
 }
 
+/**
+ * Resume a paused rule from *now*, not from where it was paused.
+ *
+ * Nothing is claimed while a rule is paused, so the next foreground would
+ * materialize the entire gap in one go — pausing a daily ₹300 rule for 60 days
+ * and resuming posted 60 rows and ₹18,000 the user never spent. The dormant
+ * window is written into the existing skip ledger (`recur_skip`, which
+ * materialization already consults), so the gap is recorded as deliberately
+ * missed rather than silently back-posted. `recur_end` is left exactly as the
+ * user set it.
+ */
 export async function resumeRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    if (row?.recur_freq && row.recur_paused_at != null) {
+      const gap = occurrenceDatesUpTo(
+        row.date, row.recur_freq, row.recur_interval ?? 1, now, row.recur_end,
+      ).filter(d => d >= row.recur_paused_at! && d <= now);
+      for (const occ of gap) {
+        // INSERT OR IGNORE: an occurrence the user had already skipped by hand
+        // is in here too, and its row must not be duplicated (PK is the pair).
+        await db.runAsync(
+          'INSERT OR IGNORE INTO recur_skip (series_id, occurrence_date, created_at) VALUES (?,?,?)',
+          [txnId, occ, now],
+        );
+      }
+    }
     await db.runAsync(
-      'UPDATE txn SET recur_state=?, recur_end=NULL, updated_at=? WHERE id=?',
+      'UPDATE txn SET recur_state=?, recur_paused_at=NULL, updated_at=? WHERE id=?',
       ['active', now, txnId],
     );
     if (row) {

@@ -465,14 +465,31 @@ export function useAddTxnForm(params: AddTxnParams) {
       }
 
       if (isRecurEdit) {
-        await splitRecurringSeries(db, recurEditId!, {
+        // `splitRecurringSeries` returns null when there is no future occurrence
+        // left to edit — a finished or fully-skipped series. Discarding that and
+        // firing `haptic.success(); router.back()` told the user their edit was
+        // saved when nothing at all had been written.
+        const splitId = await splitRecurringSeries(db, recurEditId!, {
           groupId: selectedGroupId, kind, entryMode: 'quick',
           date: txnDate, category: selectedCategory!.name, note: composedNote, payMethod,
+          // Tags and the receipt are part of the rule the user is editing; omitting
+          // them here silently stripped both from the series on every "this & future".
+          tags,
+          attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurFreq,
           recurInterval: recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
           payments: finalPayments, shares: finalShares,
         });
+        if (splitId === null) {
+          setSaving(false);
+          haptic.error();
+          Alert.alert(
+            'Nothing left to change',
+            'This series has no upcoming occurrence, so there is nothing to apply the edit to. Edit a past transaction directly, or start a new recurring rule.',
+          );
+          return;
+        }
         haptic.success();
         router.back();
         return;
@@ -482,7 +499,19 @@ export function useAddTxnForm(params: AddTxnParams) {
       let recurEnd: number | undefined;
       if (recurEnabled) {
         if (recurEndMode === RecurEndMode.Date) {
-          recurEnd = recurEndMs && recurEndMs > txnDate ? recurEndMs : undefined;
+          // An end date on or before the start used to fall through to `undefined`,
+          // which does not mean "invalid" — it means **never ends**. The user picked
+          // a bound and got an unbounded rule, with nothing on screen to say so.
+          if (recurEndMs && recurEndMs <= txnDate) {
+            setSaving(false);
+            haptic.error();
+            Alert.alert(
+              'End date is before the start',
+              'The repeat has to end after the first occurrence. Pick a later end date, or choose “Never” to repeat indefinitely.',
+            );
+            return;
+          }
+          recurEnd = recurEndMs ?? undefined;
         } else if (recurEndMode === RecurEndMode.Count) {
           const n = Math.max(1, parseInt(recurCount, 10) || 1);
           recurEnd = nthOccurrenceMs(txnDate, recurFreq, recurIntervalN, n);

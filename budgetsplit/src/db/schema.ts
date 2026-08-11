@@ -120,6 +120,17 @@ CREATE TABLE IF NOT EXISTS category (
   UNIQUE(name, kind)
 );
 
+-- Categories the user deleted. The default catalog is re-seeded on every open
+-- by seedGlobalCategories, so a delete with no record of itself was undone on the
+-- next launch. Keyed on (name, kind) rather than id, because the reseed mints a
+-- fresh uuid each time. Re-creating a category by hand clears its tombstone.
+CREATE TABLE IF NOT EXISTS category_tombstone (
+  name       TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (name, kind)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -288,6 +299,13 @@ export const COLUMN_MIGRATIONS = [
   // spoken, not typed), but the gap was never voice-specific.
   // Nullable with no default: null means "typed by hand", which is what every existing row is.
   "ALTER TABLE txn ADD COLUMN source TEXT",
+  // When a recurring rule was paused. Pause used to stamp `recur_end = now`, which
+  // *overwrote the user's own end date* — of which there is no other copy — and
+  // resume then set it to NULL, so a rule set to "end 31 Dec" recurred forever.
+  // `recur_state` alone already gates materialization, so pause has no reason to
+  // touch `recur_end` at all; this column exists so resume knows which occurrences
+  // fell inside the gap and can skip them instead of back-posting the lot.
+  "ALTER TABLE txn ADD COLUMN recur_paused_at INTEGER",
 ];
 
 /**
