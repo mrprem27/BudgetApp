@@ -88,6 +88,9 @@ export function useSavingsTab() {
 
     // Budget total across all groups for the forecast over/under line.
     const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
+    // `totalAllocated` is now the MONTHLY rollup, which is what this is compared
+    // against (`forecastMonthEnd`). It used to be a raw cross-cadence sum, so a
+    // ₹24k/yr Trips budget made a month's forecast look comfortably funded.
     let bTotal = 0;
     for (const a of analyticsAll) bTotal += a.totalAllocated;
 

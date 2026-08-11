@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
-  startOfYear, endOfYear,
+  startOfYear, endOfYear, getDaysInMonth, getDaysInYear,
 } from 'date-fns';
 import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
@@ -13,40 +13,117 @@ export type Period = 'daily' | 'monthly' | 'yearly';
 export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
 
 /**
+ * A budget line is either a **rate** (a limit that resets at least as often as
+ * the headline you are showing) or a **pool** (a lump sum drawn down over a
+ * longer window than that headline covers).
+ *
+ * This is the distinction the eight disagreeing rollups were missing. ₹24,000/yr
+ * for Trips is not ₹2,000/month: a trip spends the whole pool in one month, and
+ * a rollup that divided by 12 would report "over budget" in precisely the month
+ * the money was meant to be spent. Only rates sum into a headline; pools have to
+ * be shown as pools.
+ */
+export type BudgetKind = 'rate' | 'pool';
+
+/**
+ * Cadences ordered fine → coarse. `once` is coarser than everything: it has no
+ * period at all, so it can never roll up into one.
+ */
+const CADENCE_RANK: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
+const PERIOD_RANK: Record<Period, number> = { daily: 0, monthly: 1, yearly: 2 };
+
+/**
+ * Is this line a rate or a pool **relative to the headline being shown**?
+ *
+ * Rate/pool is not a property of the cadence alone — it depends on what you are
+ * rolling up into. A monthly budget is a rate in a monthly headline and a pool
+ * in a daily one. The rule is one line: a cadence at or finer than the target
+ * rolls up; anything coarser is a pool, because rolling *down* is the error.
+ */
+export function budgetKind(cadence: BudgetCadence, target: Period): BudgetKind {
+  return CADENCE_RANK[cadence] <= PERIOD_RANK[target] ? 'rate' : 'pool';
+}
+
+/**
+ * A rate budget line expressed as its cost over one `target` period, or `null`
+ * for a pool, which has no equivalent at that period at all.
+ *
+ * `null` rather than `0` on purpose: `0` reads as "budgeted nothing" and lets a
+ * caller silently drop an annual budget out of a total it presents as complete.
+ * `null` forces the decision to the surface — see `rollUpBudgets`.
+ *
+ * Every multiplier is a **real calendar count**. The old ×30 vs ×daysInMonth
+ * split was the visible half of this bug (a daily ₹500 line read ₹15,000 on one
+ * screen and ₹15,500 on another); rolling *up* into a concrete month or year
+ * means that period's actual length is simply the right number.
+ *
+ * Deliberately separate from `recurringMonthlyEquivalent` (`lib/recurrence.ts`):
+ * a recurring *charge* is money that will certainly move, a budget line is a cap
+ * that may not be reached, so they normalise differently on purpose.
+ */
+export function budgetEquivalent(
+  cadence: BudgetCadence,
+  paise: number,
+  target: Period,
+  /** Which month/year we are rolling up into — its real length is the multiplier. */
+  on: Date,
+): number | null {
+  if (budgetKind(cadence, target) === 'pool') return null;
+  // `daysInMonth × 12` would be the same mistake as `×30` wearing a different
+  // hat (February → 336 days, January → 372), so the yearly target measures a year.
+  switch (target) {
+    case 'daily':
+      return paise; // only `daily` reaches here
+    case 'monthly':
+      return cadence === 'daily' ? Math.round(paise * getDaysInMonth(on)) : paise;
+    case 'yearly':
+      if (cadence === 'daily') return Math.round(paise * getDaysInYear(on));
+      return cadence === 'monthly' ? paise * 12 : paise;
+  }
+}
+
+export type BudgetRollup = {
+  /** Summed cost of every line that rolls up into `target`. */
+  amount: number;
+  /** Total of the pool lines — NOT in `amount`, and must be shown separately. */
+  pooled: number;
+  /** How many pool lines, so the UI can say "plus 2 yearly budgets". */
+  pooledCount: number;
+};
+
+/**
+ * The single answer to "what do all my budgets add up to over <period>?".
+ *
+ * Eight call sites answered this differently — three of them (`homeData`,
+ * `insightsData`, `analytics`) summed raw line amounts with no conversion at all,
+ * so a daily ₹500 budget contributed ₹500 to a figure labelled "monthly", 30× under.
+ *
+ * `src/lib/rebalance.ts` already worked this way ("a yearly budget's headroom is
+ * not spendable this month"); this is the rest of the app agreeing with it.
+ *
+ * Returns both halves. A caller rendering only `amount` while pool lines exist is
+ * showing an incomplete total, which is why `pooledCount` is here: ₹24,000/yr for
+ * Trips must not silently vanish from a monthly headline — it is a pool spent
+ * when the trip happens, not ₹2,000 every month.
+ */
+export function rollUpBudgets(
+  lines: Array<{ cadence: BudgetCadence; amount: number }>,
+  target: Period,
+  on: Date,
+): BudgetRollup {
+  let amount = 0, pooled = 0, pooledCount = 0;
+  for (const l of lines) {
+    const v = budgetEquivalent(l.cadence, l.amount, target, on);
+    if (v === null) { pooled += l.amount; pooledCount++; } else { amount += v; }
+  }
+  return { amount, pooled, pooledCount };
+}
+
+/**
  * Canonical budget-utilisation band from a percentage (null pct → 'none').
  * The single source for the 80% / 100% thresholds — was duplicated inline in
  * group detail, reports, and analytics.
  */
-/**
- * Approximate monthly cost of one **budget line**, for a single comparable headline.
- *
- * Deliberately separate from `recurringMonthlyEquivalent` (`lib/recurrence.ts`) despite the
- * near-identical shape, because the two disagree on purpose:
- *
- * | cadence | recurring charge | budget line |
- * |---|---|---|
- * | `once`  | n/a              | **0** — a one-time cap isn't a monthly commitment |
- * | `daily` | ×30              | ×30 |
- * | `weekly`| ×52/12           | n/a — not a budget cadence |
- *
- * `app/group/[id]/budget.tsx` used to define its own local copy of this while the group
- * Budget tab imported the *recurring* one, so the same screen pair could produce two
- * different monthly totals for the same data. One function per meaning, both named for
- * what they measure.
- *
- * Amounts are integer paise; `yearly` rounds, so a total never drifts by a fraction.
- */
-export function budgetMonthlyEquivalent(cadence: BudgetCadence, paise: number): number {
-  switch (cadence) {
-    case 'daily':   return Math.round(paise * 30);
-    case 'monthly': return paise;
-    case 'yearly':  return Math.round(paise / 12);
-    // A one-time budget is a cap on a single purchase, not a recurring commitment —
-    // counting it monthly would inflate the headline every month forever.
-    case 'once':    return 0;
-  }
-}
-
 export function budgetHealth(pct: number | null): BudgetHealth {
   if (pct === null) return 'none';
   return pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'green';
@@ -123,13 +200,22 @@ export type CategoryBudgetStatus = {
   health: 'green' | 'amber' | 'red' | 'none';
 };
 
-/** The spend window for a budget line, based on its cadence. */
+/**
+ * The spend window for a budget line, based on its cadence.
+ *
+ * The window **ends at `now`, not at the end of the period**: "spent" means what
+ * has happened, never what is scheduled. A ₹50,000 fee dated the 28th and logged
+ * on the 2nd used to count as already spent, so a budget read as blown four
+ * weeks before the money moved. Future-dated commitments are a separate idea and
+ * already have a home — `upcomingBills` in `getAffordSnapshot`.
+ */
 function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to: number } {
+  const to = now.getTime();
   switch (cadence) {
-    case 'daily':   return getPeriodRange('daily', now);
-    case 'monthly': return getPeriodRange('monthly', now);
-    case 'yearly':  return getPeriodRange('yearly', now);
-    case 'once':    return { from: 0, to: endOfDay(now).getTime() }; // cumulative, all-time
+    case 'daily':   return { from: getPeriodRange('daily', now).from, to };
+    case 'monthly': return { from: getPeriodRange('monthly', now).from, to };
+    case 'yearly':  return { from: getPeriodRange('yearly', now).from, to };
+    case 'once':    return { from: 0, to }; // cumulative, all-time
   }
 }
 

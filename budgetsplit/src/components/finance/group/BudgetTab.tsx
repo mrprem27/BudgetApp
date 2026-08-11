@@ -85,7 +85,7 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {analytics && analytics.totalAllocated > 0 && (
+      {analytics && (analytics.totalAllocated > 0 || analytics.pooledCount > 0) && (
         <Card padded style={styles.ovCard}>
           {/* Edit sits with the thing it edits. It used to be a lone unlabelled pill in a
               `space-between` row that had lost its heading — so the tab opened with an
@@ -103,7 +103,16 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
               {utilLabel(analytics.utilizationPct ?? 0)}
             </Text>
           </View>
-          <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)}</Text>
+          <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)} this month</Text>
+          {/* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
+              budget is spent when the trip happens, so it is excluded from the figures
+              above. Naming it here is what keeps the exclusion honest rather than a
+              silent omission from a total that looks complete. */}
+          {analytics.pooledCount > 0 && (
+            <Text style={styles.ovPooled}>
+              plus {formatCompact(analytics.pooledAllocated)} in {analytics.pooledCount} yearly/one-time {analytics.pooledCount === 1 ? 'budget' : 'budgets'}
+            </Text>
+          )}
 
           <View style={styles.ovBar}>
             <BudgetBar pct={analytics.utilizationPct} health={budgetHealth(analytics.utilizationPct)} height={10} />
@@ -211,6 +220,7 @@ const styles = StyleSheet.create({
   ovAmountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   ovSpent: { ...type.amountXL },
   ovPct: { ...type.amountSM },
+  ovPooled: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   ovOf: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   ovBar: { marginTop: space.md, marginBottom: space.md },
 

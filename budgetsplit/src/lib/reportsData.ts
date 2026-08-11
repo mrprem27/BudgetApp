@@ -8,6 +8,8 @@ import { getBudgetAnalytics, type BudgetAnalytics } from './analytics';
 import { categoryVisual } from '../constants/categories';
 import { CHART_COLORS } from '../constants/palette';
 import type { DonutSeg } from './donut';
+import { getMe } from '../db/queries/persons';
+import { myShareOf, myIncomeOf } from './splitMath';
 
 /**
  * All data assembly for the Reports screen — group summaries, the category pie,
@@ -27,16 +29,25 @@ type GroupSummary = {
 
 type MonthPoint = { label: string; total: number; byCat: Record<string, number> };
 
-function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
+/**
+ * My-share, not group-total.
+ *
+ * Reports summed every member's share while Home, Insights, budgets and Afford
+ * all summed mine, so the same month read (say) ₹95,000 here and ₹40,000 there
+ * with nothing on either screen explaining the gap. Reports answers "where did
+ * MY money go", like every other surface.
+ */
+function buildSummary(group: BudgetGroup, txns: TxnWithSplits[], meId: string): GroupSummary {
   let income = 0;
   let expense = 0;
   const catMap: Record<string, number> = {};
 
   for (const t of txns) {
     if (t.kind === 'income') {
-      income += t.payments.reduce((s, p) => s + p.amount, 0);
+      income += myIncomeOf(t, meId);
     } else if (t.kind === 'expense') {
-      const amt = t.shares.reduce((s, sh) => s + sh.amount, 0);
+      const amt = myShareOf(t, meId);
+      if (amt <= 0) continue;
       expense += amt;
       catMap[t.category] = (catMap[t.category] ?? 0) + amt;
     }
@@ -51,7 +62,9 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[]): GroupSummary {
 }
 
 export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
-      const grps = await getAllGroups(db);
+      const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
+      // Every figure below is my share (see `buildSummary`).
+      const meId = me?.id ?? '';
 
       const fromMs = startOfMonth(month).getTime();
       const toMs = endOfMonth(month).getTime();
@@ -72,7 +85,7 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
               getTransactionsInRange(db, g.id, fromMs, toMs),
               getBudgetAnalytics(db, g, month),
             ]);
-            return { summary: buildSummary(g, gTxns), analytics: an };
+            return { summary: buildSummary(g, gTxns, meId), analytics: an };
           })),
           getTransactionsInRange(db, null, yFrom, yTo),
           getTransactionsInRange(db, null, fromMs, toMs),
@@ -93,9 +106,10 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
 
       for (const t of yearTxns) {
         if (t.kind === 'income') {
-          yIncome += t.payments.reduce((s, p) => s + p.amount, 0);
+          yIncome += myIncomeOf(t, meId);
         } else if (t.kind === 'expense') {
-          const amt = t.shares.reduce((s, sh) => s + sh.amount, 0);
+          const amt = myShareOf(t, meId);
+          if (amt <= 0) continue;
           yExpense += amt;
           yCatMap[t.category] = (yCatMap[t.category] ?? 0) + amt;
           if (amt > biggest) biggest = amt;
@@ -117,22 +131,22 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
       const fullCatMapRaw: Record<string, number> = {};
       for (const t of allMonthTxns) {
         if (t.kind === 'expense') { // getTransactionsInRange already excludes soft-deleted
-          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-          fullCatMapRaw[t.category] = (fullCatMapRaw[t.category] ?? 0) + amt;
+          const amt = myShareOf(t, meId);
+          if (amt > 0) fullCatMapRaw[t.category] = (fullCatMapRaw[t.category] ?? 0) + amt;
         }
       }
       const fullCatMap = foldUncategorized(fullCatMapRaw, knownExpense);
       // Month totals (Spent/Earned) + prior month, for the summary cards.
       let mSpent = 0, mEarned = 0;
       for (const t of allMonthTxns) {
-        if (t.kind === 'expense') mSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-        else if (t.kind === 'income') mEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
+        if (t.kind === 'expense') mSpent += myShareOf(t, meId);
+        else if (t.kind === 'income') mEarned += myIncomeOf(t, meId);
       }
       // prior month (`pTxns`) was already fetched above.
       let pSpent = 0, pEarned = 0;
       for (const t of pTxns) {
-        if (t.kind === 'expense') pSpent += t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
-        else if (t.kind === 'income') pEarned += t.payments.reduce((s2, p) => s2 + p.amount, 0);
+        if (t.kind === 'expense') pSpent += myShareOf(t, meId);
+        else if (t.kind === 'income') pEarned += myIncomeOf(t, meId);
       }
 
       const sortedCats = Object.entries(fullCatMap).sort((a, b) => b[1] - a[1]);
@@ -150,7 +164,8 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
         const byCatRaw: Record<string, number> = {};
         for (const t of trendTxnsByMonth[idx]) {
           if (t.kind !== 'expense') continue;
-          const amt = t.shares.reduce((s2, sh) => s2 + sh.amount, 0);
+          const amt = myShareOf(t, meId);
+          if (amt <= 0) continue;
           mTotal += amt;
           byCatRaw[t.category] = (byCatRaw[t.category] ?? 0) + amt;
         }

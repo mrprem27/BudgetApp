@@ -17,6 +17,7 @@ import { startOfMonth, endOfMonth, getDaysInMonth, getDate, subMonths } from 'da
 import { forecastMonthEnd } from '../../lib/forecast';
 import { monthlyContribution } from '../../lib/savings';
 import { HISTORY_DAYS } from '../../lib/afford';
+import { budgetEquivalent } from '../../lib/budget';
 
 // Domain value sets are defined once in constants/enums.ts; re-exported here for
 // existing importers.
@@ -102,11 +103,36 @@ export async function insertGoal(db: SQLite.SQLiteDatabase, g: NewGoal): Promise
   return row;
 }
 
-/** Persist a manual drag order: each id's array position becomes its sort_order. */
+/**
+ * Persist a manual drag order: each id's array position becomes its `sort_order`.
+ *
+ * `orderedIds` is only the goals the drag list showed — the *active* ones — but
+ * `sort_order` is a single ranking over **every** goal. Writing `0..n-1` for just
+ * that subset left completed goals holding stale values from a previous ordering,
+ * so they interleaved: a completed goal with `sort_order = 1` sat between the two
+ * active goals the user had just placed 1st and 3rd, and both the funding order
+ * and the raid order read that combined ranking. Goals not in `orderedIds` are
+ * therefore pushed below the ones that are, keeping the permutation total.
+ */
 export async function reorderGoals(db: SQLite.SQLiteDatabase, orderedIds: string[]): Promise<void> {
+  if (orderedIds.length === 0) return;
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < orderedIds.length; i++) {
       await db.runAsync('UPDATE savings_goal SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
+    }
+    // Everything the caller did not rank keeps its relative order, but strictly
+    // after the ranked block. Ordered by (sort_order, created_at) so the result is
+    // deterministic even when the untouched rows all still hold the default 0.
+    const placeholders = orderedIds.map(() => '?').join(',');
+    const rest = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM savings_goal WHERE id NOT IN (${placeholders})
+       ORDER BY sort_order ASC, created_at ASC`,
+      orderedIds,
+    );
+    for (let j = 0; j < rest.length; j++) {
+      await db.runAsync(
+        'UPDATE savings_goal SET sort_order = ? WHERE id = ?', [orderedIds.length + j, rest[j].id],
+      );
     }
   });
 }
@@ -280,7 +306,7 @@ export async function proposeOverspendRaid(db: SQLite.SQLiteDatabase): Promise<O
   if (cash.available >= 0) return { withdrawals: [], total: 0 };
   const [goals, saved] = await Promise.all([getGoals(db), getGoalSavedMap(db)]);
   const raids = planOverspendRaid(
-    goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order })),
+    goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order, target: g.target })),
     saved, -cash.available,
   );
   const nameById = new Map(goals.map(g => [g.id, g.name]));
@@ -422,17 +448,6 @@ export type AffordSnapshot = {
 
 const AFFORD_DAY_MS = 86_400_000;
 
-/** Normalize a budget line of any cadence to its monthly-equivalent paise. */
-function monthlyBudgetEquivalent(cadence: BudgetCadence, amount: number, daysInMonth: number): number | undefined {
-  switch (cadence) {
-    case 'monthly': return amount;
-    case 'yearly': return Math.round(amount / 12);
-    case 'daily': return amount * daysInMonth;
-    case 'once': return undefined; // a one-off isn't a recurring monthly cap
-    default: return undefined;
-  }
-}
-
 /**
  * Everything the "Can I afford this?" engine needs, in one round-trip: cash,
  * committed upcoming bills, a monthly-income proxy, the categories you can pick,
@@ -519,10 +534,12 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     upcomingBills += myShare(t);
   }
 
-  // Budgets, normalized to a monthly figure.
+  // Budgets, normalized to a monthly figure. `budgetEquivalent` is the one source
+  // (this file used to carry its own copy that divided yearly lines by 12 — a
+  // ₹24k/yr trip budget is not ₹2k of monthly headroom to spend against).
   const budgetByCat: Record<string, number> = {};
   for (const b of budgets) {
-    const m = monthlyBudgetEquivalent(b.cadence, b.amount, daysInMonth);
+    const m = budgetEquivalent(b.cadence, b.amount, 'monthly', today);
     if (m && m > 0) budgetByCat[b.category] = m;
   }
 

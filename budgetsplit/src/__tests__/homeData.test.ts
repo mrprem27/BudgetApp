@@ -15,8 +15,14 @@ import type * as SQLite from 'expo-sqlite';
 
 const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
 
-/** Midday today, so day/month/year windows all contain it. */
-const today = () => { const d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime(); };
+/**
+ * A moment today that has already happened. Spend windows now END AT `now` rather
+ * than at the end of the period ("spent" is what happened, not what is scheduled),
+ * so a fixture dated midday was in the *future* for any run before noon — the whole
+ * suite passed after lunch and failed before it. `Date.now()` is always in the past
+ * by the time the loader reads the clock.
+ */
+const today = () => Date.now();
 const daysAgo = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return d.getTime(); };
 
 function setup() {
@@ -60,12 +66,12 @@ describe('loadHomeData — period scoping', () => {
     expect((await load(db, 'today')).spending).toBe(10000);
   });
 
-  it('counts the whole month for the month tab', async () => {
+  it('counts the month so far for the month tab', async () => {
     const { db, me, personal } = setup();
     addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: today() });
     // 10 days back can fall in the previous month near month start; use a date
     // that is definitely in this month.
-    const inMonth = new Date(); inMonth.setHours(12, 0, 0, 0); inMonth.setDate(1);
+    const inMonth = new Date(); inMonth.setDate(1); inMonth.setHours(0, 0, 0, 1);
     addSimpleExpense(db, { groupId: personal, personId: me, amount: 50000, date: inMonth.getTime() });
 
     const d = await load(db, 'month');

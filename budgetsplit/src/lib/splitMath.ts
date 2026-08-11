@@ -19,6 +19,15 @@ export function myShareOf(txn: { shares: readonly Share[] }, meId: string): numb
   return txn.shares.find(s => s.personId === meId)?.amount ?? 0;
 }
 
+/**
+ * My paise portion of an **income** transaction — the mirror of `myShareOf`.
+ * Income is attributed by who received it (`payments`), not by who owes a share,
+ * so the two kinds read different tables and must not be collapsed into one call.
+ */
+export function myIncomeOf(txn: { payments: readonly Share[] }, meId: string): number {
+  return txn.payments.find(p => p.personId === meId)?.amount ?? 0;
+}
+
 export type ShareInputs = {
   members: Person[];
   splitMembers: string[];

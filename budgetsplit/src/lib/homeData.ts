@@ -12,7 +12,7 @@ import { getTransactionsInRange } from '../db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
 import { getBudgetAnalytics } from './analytics';
-import { getMyGlobalBudgetStatus } from './budget';
+import { getMyGlobalBudgetStatus, rollUpBudgets } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
@@ -36,7 +36,9 @@ export function getRange(tab: TabKey): { from: number; to: number } {
   const now = new Date();
   switch (tab) {
     case 'today': return { from: startOfDay(now).getTime(), to: endOfDay(now).getTime() };
-    case 'month': return { from: startOfMonth(now).getTime(), to: endOfMonth(now).getTime() };
+    // Ends at `now`: "spent" is what happened, not what is scheduled. A fee dated
+    // the 28th and logged on the 2nd used to count as already spent for the month.
+    case 'month': return { from: startOfMonth(now).getTime(), to: now.getTime() };
     case 'year':  return { from: startOfYear(now).getTime(), to: endOfYear(now).getTime() };
   }
 }
@@ -152,7 +154,11 @@ export async function loadHomeData(
     // Left out of `healthInputsNow` on purpose — that pairs bAlloc with bSpent
     // consistently, and rebasing the score is a product call, not a bug fix.
     const myBudgetRows = me ? await getMyGlobalBudgetStatus(db, me.id) : [];
-    const myBudgetAllocated = myBudgetRows.reduce((s, r) => s + r.allocated, 0);
+    // Monthly rollup, not a raw cross-cadence sum: a daily ₹500 line used to add
+    // ₹500 to a figure labelled "monthly", and a yearly ₹24k line added ₹24k.
+    const myBudgetAllocated = rollUpBudgets(
+      myBudgetRows.map(r => ({ cadence: r.cadence, amount: r.allocated })), 'monthly', new Date(),
+    ).amount;
 
     const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
     allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));

@@ -23,7 +23,7 @@ import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
 import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/money';
-import { budgetMonthlyEquivalent } from '../../../src/lib/budget';
+import { rollUpBudgets } from '../../../src/lib/budget';
 import { haptic } from '../../../src/lib/haptics';
 import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
@@ -156,9 +156,13 @@ export default function BudgetEditorScreen() {
   const sectionOf = (name: string): string => sectionByName.get(name) ?? categorySection(name);
 
   const cadenceOf = (cat: string): BudgetCadence => cadences[cat] ?? defaultCadence;
-  const monthlyApprox = allCategories.reduce(
-    (s, c) => s + budgetMonthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0,
-  );
+  // Yearly/once lines are pools, not rates, so they are NOT in `monthly` — see
+  // `rollUpBudgets`. The subtitle below names them rather than dropping them.
+  const today = new Date();
+  const linesFor = (cats: Category[]) => cats.map(c => ({
+    cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? ''),
+  })).filter(l => l.amount > 0);
+  const rollup = rollUpBudgets(linesFor(allCategories), 'monthly', today);
   const budgetedCount = Object.values(amounts).filter(a => parseToPaise(a) > 0).length;
 
   // Group categories into ordered parent sections.
@@ -234,9 +238,15 @@ export default function BudgetEditorScreen() {
         >
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
-            <Text style={styles.totalAmount}>{formatRupees(monthlyApprox)}</Text>
+            <Text style={styles.totalAmount}>{formatRupees(rollup.amount)}</Text>
             <Text style={styles.totalSub}>
-              {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted · one-time not counted
+              {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted
+              {/* Pools are excluded from the figure above on purpose (a ₹24k/yr trip
+                  budget is not ₹2k/mo), so they have to be named here — otherwise
+                  they simply vanish from a total presented as complete. */}
+              {rollup.pooledCount > 0
+                ? ` · plus ${formatCompact(rollup.pooled)} in ${rollup.pooledCount} yearly/one-time`
+                : ' · one-time not counted'}
             </Text>
           </View>
 
@@ -248,13 +258,17 @@ export default function BudgetEditorScreen() {
 
           {sections.length > 0 ? sections.map(sec => {
             const isCollapsed = collapsed.has(sec.title);
-            const secMonthly = sec.cats.reduce((s, c) => s + budgetMonthlyEquivalent(cadenceOf(c.name), parseToPaise(amounts[c.name] ?? '')), 0);
+            const secRoll = rollUpBudgets(linesFor(sec.cats), 'monthly', today);
             const secCount = sec.cats.filter(c => parseToPaise(amounts[c.name] ?? '') > 0).length;
+            const secLabel = [
+              secRoll.amount > 0 ? `${formatCompact(secRoll.amount)}/mo` : null,
+              secRoll.pooledCount > 0 ? `${formatCompact(secRoll.pooled)} pooled` : null,
+            ].filter(Boolean).join(' + ');
             return (
               <SectionCard
                 key={sec.title}
                 title={sec.title}
-                subtitle={secCount > 0 ? `${secCount} set · ${formatCompact(secMonthly)}/mo` : `${sec.cats.length} categories`}
+                subtitle={secCount > 0 ? `${secCount} set · ${secLabel}` : `${sec.cats.length} categories`}
                 icon={sec.icon}
                 expanded={!isCollapsed}
                 onToggle={() => toggleSection(sec.title)}

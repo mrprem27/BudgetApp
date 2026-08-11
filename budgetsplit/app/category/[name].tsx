@@ -18,6 +18,7 @@ import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
 import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../../src/db/queries/transactions';
 import { getCategoryBudgets, type CategoryBudget } from '../../src/db/queries/categoryBudgets';
+import { budgetEquivalent, type Period as BudgetPeriod } from '../../src/lib/budget';
 import { getMe } from '../../src/db/queries/persons';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getGoals, type SavingsGoal } from '../../src/db/queries/savings';
@@ -117,20 +118,26 @@ export default function CategoryDetailScreen() {
   const recurRules = data?.recurRules ?? [];
   const goals = data?.goals ?? [];
 
-  // The category's recurring budget, normalized to a per-day rate so it can be
-  // prorated onto any period. Prefer monthly, then yearly, then daily; a
-  // one-time ('once') budget isn't a periodic limit, so it's ignored here.
-  const dailyRate = useMemo(() => {
+  /**
+   * This category's budget expressed over the selected period.
+   *
+   * Was a per-day rate that every cadence was flattened onto and then prorated
+   * back out, which is downward proration in both directions: a ₹24,000/yr line
+   * became ₹1,972 of "monthly budget" and the Month tab reported over-spend for a
+   * trip the year's budget comfortably covered. `budgetEquivalent` only rolls
+   * *up*, and returns null when the line is a pool relative to the period shown —
+   * a yearly budget simply has no Day or Month figure, so none is invented.
+   */
+  const periodBudget = useMemo(() => {
+    const target: BudgetPeriod = period === 'day' ? 'daily' : period === 'month' ? 'monthly' : 'yearly';
     const now = new Date();
-    const primary =
-      catBudgets.find(b => b.cadence === 'monthly') ??
-      catBudgets.find(b => b.cadence === 'yearly') ??
-      catBudgets.find(b => b.cadence === 'daily');
-    if (!primary) return 0;
-    if (primary.cadence === 'daily') return primary.amount;
-    if (primary.cadence === 'monthly') return primary.amount / getDaysInMonth(now);
-    return primary.amount / getDaysInYear(now); // yearly
-  }, [catBudgets]);
+    let total = 0, matched = 0;
+    for (const b of catBudgets) {
+      const v = budgetEquivalent(b.cadence, b.amount, target, now);
+      if (v !== null) { total += v; matched++; }
+    }
+    return { amount: total, matched, hasAny: catBudgets.length > 0 };
+  }, [catBudgets, period]);
 
   // Derived view for the selected period — budget is always prorated to it.
   // All money figures are MY share (consistent with the rest of Personal).
@@ -141,8 +148,7 @@ export default function CategoryDetailScreen() {
     const cat = inPeriod.filter(t => t.category === categoryName).sort((a, b) => b.date - a.date);
     const spent = sumMyShare(cat, myId);
     const totalAll = sumMyShare(inPeriod, myId);
-    const daysInPeriod = period === 'day' ? 1 : period === 'month' ? getDaysInMonth(now) : getDaysInYear(now);
-    const budget = Math.round(dailyRate * daysInPeriod);
+    const budget = periodBudget.amount;
 
     // Where my spend in this category goes — personal vs each group.
     const byGroup = new Map<string, number>();
@@ -168,11 +174,12 @@ export default function CategoryDetailScreen() {
       .slice(0, 5);
 
     return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places };
-  }, [ranges, period, yearExpenses, categoryName, dailyRate, myId, personalGroupId, groupNames]);
+  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, personalGroupId, groupNames]);
 
   const showBudgetCard = view.budget > 0;
-  // No recurring budget set at all → prompt to set one (applies to every period).
-  const showSetBudget = dailyRate === 0;
+  // No budget set at all → prompt to set one. A budget that exists but is a pool
+  // at this period is not "unset" — switching to Year will show it.
+  const showSetBudget = !periodBudget.hasAny;
 
   const txnCount = view.txns.length;
   const renderTxn = useCallback(({ item: txn, index }: { item: typeof view.txns[number]; index: number }) => (

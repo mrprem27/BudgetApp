@@ -6,7 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending, utilLabel, budgetHealth } from './budget';
+import { getCategorySpending, utilLabel, budgetHealth, rollUpBudgets, budgetKind, type Period } from './budget';
 import { forecastMonthEnd } from './forecast';
 import { formatCompact, formatComparison } from './money';
 
@@ -40,10 +40,24 @@ export type Recommendation = {
 };
 
 export type BudgetAnalytics = {
+  /**
+   * Allocation of the lines that roll up into `target` (default monthly).
+   * Pool lines — a yearly budget under a monthly headline — are NOT in here;
+   * see `pooledAllocated`.
+   */
   totalAllocated: number;
+  /**
+   * Spend over the **`target` window**, restricted to the same categories that
+   * `totalAllocated` covers. Both halves must share a window or the ratio below
+   * is meaningless: this used to sum each line's spend in its *own* window
+   * (daily → today, yearly → this year) and divide by mixed-cadence allocations.
+   */
   totalSpent: number;
   remaining: number;
   utilizationPct: number | null;
+  /** Pool lines excluded from the figures above — surface them, never drop them. */
+  pooledAllocated: number;
+  pooledCount: number;
   overBudget: CategoryTrend[];
   nearLimit: CategoryTrend[];
   underBudget: CategoryTrend[];
@@ -54,16 +68,33 @@ export type BudgetAnalytics = {
   biggestIncrease: TopCategory | null;
   biggestDecrease: TopCategory | null;
   projectedMonthEnd: number;
-  monthlyBudgetTotal: number;     // sum of monthly-cadence allocations (for projection comparison)
+  monthlyBudgetTotal: number;     // monthly rollup (for projection comparison)
   recommendations: Recommendation[];
 };
 
+/**
+ * The current window ends at **now**, not at the end of the period: "spent" is
+ * what happened, never what is scheduled. A ₹50,000 fee dated the 28th and
+ * logged on the 2nd used to count as already spent. Future-dated commitments
+ * live in `upcomingBills` (`getAffordSnapshot`) instead.
+ */
 function currentWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } {
+  const to = now.getTime();
   switch (cadence) {
-    case 'daily':   return { from: startOfDay(now).getTime(), to: endOfDay(now).getTime() };
-    case 'monthly': return { from: startOfMonth(now).getTime(), to: endOfMonth(now).getTime() };
-    case 'yearly':  return { from: startOfYear(now).getTime(), to: endOfYear(now).getTime() };
-    case 'once':    return { from: 0, to: endOfDay(now).getTime() };
+    case 'daily':   return { from: startOfDay(now).getTime(), to };
+    case 'monthly': return { from: startOfMonth(now).getTime(), to };
+    case 'yearly':  return { from: startOfYear(now).getTime(), to };
+    case 'once':    return { from: 0, to };
+  }
+}
+
+/** Spend window for an aggregate at `target` — same "ends at now" rule. */
+function targetWindow(target: Period, now: Date): { from: number; to: number } {
+  const to = now.getTime();
+  switch (target) {
+    case 'daily':   return { from: startOfDay(now).getTime(), to };
+    case 'monthly': return { from: startOfMonth(now).getTime(), to };
+    case 'yearly':  return { from: startOfYear(now).getTime(), to };
   }
 }
 
@@ -93,6 +124,8 @@ export async function getBudgetAnalytics(
   now = new Date(),
   /** When set, spend counts only this person's share (individual budget). */
   meId?: string,
+  /** Period the aggregate figures are expressed over. Per-category trends keep their own cadence. */
+  target: Period = 'monthly',
 ): Promise<BudgetAnalytics> {
   const budgets = await getCategoryBudgets(db, group.id);
 
@@ -100,6 +133,7 @@ export async function getBudgetAnalytics(
   if (budgets.length === 0) {
     return {
       totalAllocated: 0, totalSpent: 0, remaining: 0, utilizationPct: null,
+      pooledAllocated: 0, pooledCount: 0,
       overBudget: [], nearLimit: [], underBudget: [], onTrackCount: 0,
       topCategories: [], highest: null, lowest: null, biggestIncrease: null, biggestDecrease: null,
       projectedMonthEnd: 0, monthlyBudgetTotal: 0, recommendations: [],
@@ -142,8 +176,28 @@ export async function getBudgetAnalytics(
   const nearLimit = trends.filter(t => t.status === 'near').sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
   const underBudget = trends.filter(t => t.status === 'under');
 
-  const totalAllocated = trends.reduce((s, t) => s + t.allocated, 0);
-  const totalSpent = trends.reduce((s, t) => s + t.spent, 0);
+  /*
+   * Aggregate over ONE window, from rate lines only.
+   *
+   * This block used to be `sum(t.allocated)` over `sum(t.spent)`. Both sides were
+   * mixed: allocations of different cadences added together, and each line's spend
+   * measured in its own window (a daily line's today, a yearly line's whole year).
+   * The quotient was not a percentage of anything. It fed the group Budget tab,
+   * Reports, the Groups list, Home's health engine and the Plan forecast — where a
+   * ₹24k/yr Trips budget made a *monthly* forecast look comfortably funded.
+   *
+   * Pools are excluded from both halves. Excluding the allocation but keeping the
+   * spend would inflate utilisation instead of fixing it.
+   */
+  const roll = rollUpBudgets(budgets, target, now);
+  const rateCategories = new Set(
+    budgets.filter(b => budgetKind(b.cadence, target) === 'rate').map(b => b.category),
+  );
+  const tw = targetWindow(target, now);
+  const targetSpendByCat = await getCategorySpending(db, group.id, tw.from, tw.to, meId);
+  const totalAllocated = roll.amount;
+  const totalSpent = Object.entries(targetSpendByCat)
+    .reduce((s, [cat, amt]) => (rateCategories.has(cat) ? s + amt : s), 0);
   const utilizationPct = totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : null;
 
   // Top categories this month (all expense categories, budgeted or not).
@@ -175,7 +229,11 @@ export async function getBudgetAnalytics(
   // One forecast model everywhere: credibility-weighted blend (lib/forecast),
   // not a raw linear run-rate. Floors at spend-so-far; 0 before day 3.
   const projectedMonthEnd = forecastMonthEnd(totalMonthSpent, dayOfMonth, daysInMonth, priorMonthTotal).projected;
-  const monthlyBudgetTotal = budgets.filter(b => b.cadence === 'monthly').reduce((s, b) => s + b.amount, 0);
+  // Compared against `projectedMonthEnd`, so it must be everything that applies to a
+  // month. Filtering to `cadence === 'monthly'` was half-right: it correctly dropped
+  // yearly pools, but silently dropped *daily* lines too, so a ₹500/day budget
+  // contributed nothing and the projection always looked over.
+  const monthlyBudgetTotal = rollUpBudgets(budgets, 'monthly', now).amount;
 
   // --- Rule-based recommendations ---
   const recommendations: Recommendation[] = [];
@@ -232,6 +290,7 @@ export async function getBudgetAnalytics(
 
   return {
     totalAllocated, totalSpent, remaining: totalAllocated - totalSpent, utilizationPct,
+    pooledAllocated: roll.pooled, pooledCount: roll.pooledCount,
     overBudget, nearLimit, underBudget,
     onTrackCount: underBudget.length,
     topCategories, highest, lowest, biggestIncrease, biggestDecrease,

@@ -7,7 +7,7 @@ import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { buildSavingsInsights } from '../db/queries/savings';
 import { myShareOf } from './splitMath';
-import { getMyGlobalBudgetStatus } from './budget';
+import { getMyGlobalBudgetStatus, rollUpBudgets } from './budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 
 /**
@@ -63,14 +63,27 @@ export async function loadInsightsData(
     const topEntry = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
     const whatIf = topEntry ? { name: topEntry[0], monthly: topEntry[1] } : null;
 
-    // Month-end projection from daily pace.
     const dayOfMonth = getDate(now);
     const daysInMonth = getDaysInMonth(now);
-    const projected = dayOfMonth > 0 ? Math.round((monthSpend / dayOfMonth) * daysInMonth) : 0;
+
+    /**
+     * **One** month-end forecast for the whole screen.
+     *
+     * The hero used a naive run-rate — `(monthSpend / dayOfMonth) * daysInMonth`
+     * — while the chart badge ~100px below used the credibility-weighted model,
+     * so the same screen printed two different month-end totals at the same time.
+     * The blended model is the one to keep: on day 2 a run-rate multiplies a
+     * single rent payment by fifteen, which is exactly the case the prior exists
+     * to damp. `forecastMonthEnd` floors at spent-so-far and reports `ready`, so
+     * an early month degrades honestly instead of shouting a number.
+     */
+    const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
+    const fc = forecastMonthEnd(monthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
+    const projected = Math.round(fc.projected);
 
     // Month-end forecast graph (moved here from Reports): a solid "spent so far"
-    // line and a dashed projection to month-end, using the credibility-weighted
-    // model (src/lib/forecast). Rupee values (÷100) so the chart axis reads in ₹.
+    // line and a dashed projection to month-end. Rupee values (÷100) so the chart
+    // axis reads in ₹.
     let forecastActual: LinePoint[] = [];
     let forecastProjected: LinePoint[] = [];
     let projectedTotal = 0;
@@ -78,14 +91,16 @@ export async function loadInsightsData(
       const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed
       for (const t of monthTxns) {
         if (t.kind !== 'expense') continue;
+        const amt = myShareOf(t, meId);
+        // `> 0` matches how `catMap`/`monthSpend` are built, so the last point of
+        // the actual line is the same number the hero shows.
+        if (amt <= 0) continue;
         const d = getDate(new Date(t.date));
-        if (d >= 1 && d <= daysInMonth) spendByDay[d] += myShareOf(t, meId);
+        if (d >= 1 && d <= daysInMonth) spendByDay[d] += amt;
       }
       const dailyCumulative: number[] = [];
       let running = 0;
       for (let d = 1; d <= dayOfMonth; d++) { running += spendByDay[d]; dailyCumulative.push(Math.round(running / 100)); }
-      const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
-      const fc = forecastMonthEnd(running, dayOfMonth, daysInMonth, priorMonthTotal);
       if (fc.ready) {
         // Every-other-day labels ("1..", "2..") overlapped and got clipped by the
         // chart at typical screen widths — 5-day steps leave each label room to
@@ -118,7 +133,10 @@ export async function loadInsightsData(
     // drivers/recommendations are findings about a group's own budget line, and
     // passing `meId` there would compare my share against the group's allocation.
     const myBudgetRows = meId ? await getMyGlobalBudgetStatus(db, meId, now) : [];
-    const budget = myBudgetRows.reduce((s, r) => s + r.allocated, 0);
+    // Monthly rollup — see `rollUpBudgets`. Yearly lines are pools, not /12.
+    const budget = rollUpBudgets(
+      myBudgetRows.map(r => ({ cadence: r.cadence, amount: r.allocated })), 'monthly', now,
+    ).amount;
 
     const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
       a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),

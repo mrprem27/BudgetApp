@@ -1,4 +1,11 @@
-import { budgetMonthlyEquivalent, getPeriodRange } from '../lib/budget';
+import { getDaysInMonth } from 'date-fns';
+import type * as SQLite from 'expo-sqlite';
+import { getPeriodRange, getCategoryBudgetStatus } from '../lib/budget';
+import { getBudgetAnalytics } from '../lib/analytics';
+import {
+  createTestDb, addPerson, addGroup, addMember, addCategory, addSimpleExpense,
+  setCategoryBudget, type TestDb,
+} from './helpers/testDb';
 
 // Local-time ms helper (budget.ts uses date-fns, which works in local time).
 const at = (y: number, m: number, d: number, h = 0, mi = 0, s = 0, ms = 0) =>
@@ -28,36 +35,101 @@ describe('getPeriodRange', () => {
 // previous period's unused budget for group-level carry-over, which was removed
 // (nothing ever wrote budget_group.limit_*, so it could not run).
 
+
 /**
- * `budgetMonthlyEquivalent` and `recurringMonthlyEquivalent` are near-identical in shape and
- * deliberately disagree: a `once` budget is a cap on a single purchase, so counting it as a
- * monthly commitment would inflate the headline every month forever. The budget editor used
- * to define its own private copy while the group Budget tab imported the *recurring* one —
- * so the same pair of screens could report two different monthly totals for one dataset.
+ * "Spent" is what happened, not what is scheduled, and an aggregate's numerator
+ * and denominator have to share a window. Neither was true before.
  */
-describe('budgetMonthlyEquivalent', () => {
-  it('passes monthly through unchanged', () => {
-    expect(budgetMonthlyEquivalent('monthly', 500000)).toBe(500000);
+describe('spend windows end at now, not at the end of the period', () => {
+  const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
+
+  function setup() {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const g = addGroup(db, 'Personal', true);
+    addMember(db, g, me);
+    addCategory(db, 'Food');
+    return { db, me, g };
+  }
+
+  const group = (id: string) => ({ id, name: 'Personal', is_personal: 1 } as never);
+
+  it('excludes a transaction dated later this month', async () => {
+    const { db, me, g } = setup();
+    setCategoryBudget(db, { groupId: g, category: 'Food', amount: 100000 });
+    // The checklist's example: a ₹50,000 fee dated the 28th, logged on the 2nd.
+    const later = new Date(); later.setDate(later.getDate() + 3);
+    addSimpleExpense(db, { groupId: g, personId: me, amount: 5_000_000, date: later.getTime(), category: 'Food' });
+
+    const rows = await getCategoryBudgetStatus(asDb(db), group(g), new Date(), me);
+    const food = rows.find(r => r.category === 'Food')!;
+    expect(food.spent).toBe(0);
+    // ...and therefore does not blow the budget four weeks before the money moves.
+    expect(food.health).not.toBe('red');
   });
 
-  it('multiplies daily by 30', () => {
-    expect(budgetMonthlyEquivalent('daily', 10000)).toBe(300000);
+  it('still counts a transaction dated earlier today', async () => {
+    const { db, me, g } = setup();
+    setCategoryBudget(db, { groupId: g, category: 'Food', amount: 100000 });
+    addSimpleExpense(db, { groupId: g, personId: me, amount: 40000, date: Date.now() - 60_000, category: 'Food' });
+
+    const rows = await getCategoryBudgetStatus(asDb(db), group(g), new Date(), me);
+    expect(rows.find(r => r.category === 'Food')!.spent).toBe(40000);
+  });
+});
+
+/**
+ * `utilizationPct` used to divide spend measured in each line's OWN window by a
+ * raw sum of mixed-cadence allocations. It fed the group Budget tab, Reports, the
+ * Groups list, Home's health engine and the Plan forecast. This is the assertion
+ * that would have caught it.
+ */
+describe('getBudgetAnalytics aggregates over one window, rate lines only', () => {
+  const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
+  const group = (id: string) => ({ id, name: 'Personal', is_personal: 1 } as never);
+
+  function setup() {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const g = addGroup(db, 'Personal', true);
+    addMember(db, g, me);
+    addCategory(db, 'Food');
+    addCategory(db, 'Trips');
+    return { db, me, g };
+  }
+
+  it('leaves a yearly budget out of the monthly allocation and reports it as pooled', async () => {
+    const { db, g } = setup();
+    setCategoryBudget(db, { groupId: g, category: 'Food', amount: 500000, cadence: 'monthly' });
+    setCategoryBudget(db, { groupId: g, category: 'Trips', amount: 2_400_000, cadence: 'yearly' });
+
+    const a = await getBudgetAnalytics(asDb(db), group(g));
+    expect(a.totalAllocated).toBe(500000);          // was 2,900,000
+    expect(a.pooledAllocated).toBe(2_400_000);
+    expect(a.pooledCount).toBe(1);
   });
 
-  it('divides yearly by 12, rounded to whole paise', () => {
-    expect(budgetMonthlyEquivalent('yearly', 1200000)).toBe(100000);
-    // 100 paise / 12 = 8.33 → must land on an integer, never a fraction.
-    expect(budgetMonthlyEquivalent('yearly', 100)).toBe(8);
-    expect(Number.isInteger(budgetMonthlyEquivalent('yearly', 99999))).toBe(true);
+  it('excludes pooled-category spend from the ratio too, not just the allocation', async () => {
+    const { db, me, g } = setup();
+    setCategoryBudget(db, { groupId: g, category: 'Food', amount: 500000, cadence: 'monthly' });
+    setCategoryBudget(db, { groupId: g, category: 'Trips', amount: 2_400_000, cadence: 'yearly' });
+    addSimpleExpense(db, { groupId: g, personId: me, amount: 250000, date: Date.now() - 60_000, category: 'Food' });
+    addSimpleExpense(db, { groupId: g, personId: me, amount: 2_000_000, date: Date.now() - 60_000, category: 'Trips' });
+
+    const a = await getBudgetAnalytics(asDb(db), group(g));
+    // Dropping the allocation but keeping the spend would read 450% used.
+    expect(a.totalSpent).toBe(250000);
+    expect(a.utilizationPct).toBe(50);
   });
 
-  it('returns 0 for a one-time budget — the whole reason this is not the recurring helper', () => {
-    expect(budgetMonthlyEquivalent('once', 999999)).toBe(0);
-  });
-
-  it('handles zero and never returns a negative for a zero input', () => {
-    for (const c of ['once', 'daily', 'monthly', 'yearly'] as const) {
-      expect(budgetMonthlyEquivalent(c, 0)).toBe(0);
-    }
+  it('rolls a daily line into the monthly allocation rather than ignoring it', async () => {
+    const { db, g } = setup();
+    setCategoryBudget(db, { groupId: g, category: 'Food', amount: 10000, cadence: 'daily' });
+    const now = new Date();
+    const a = await getBudgetAnalytics(asDb(db), group(g), now);
+    expect(a.totalAllocated).toBe(10000 * getDaysInMonth(now));
+    // `monthlyBudgetTotal` drove the projection comparison and used to filter to
+    // `cadence === 'monthly'`, so a daily budget contributed nothing at all.
+    expect(a.monthlyBudgetTotal).toBe(a.totalAllocated);
   });
 });

@@ -156,7 +156,12 @@ export function setCategoryBudget(
   db: TestDb,
   opts: { groupId: string; category: string; amount: number; cadence?: string },
 ): void {
+  // Mirror `setCategoryBudgets`: `cadence` is the real field, while the legacy
+  // `period` column is written as a constant so the table's UNIQUE(group_id,
+  // category, period) yields one row per category. Writing the cadence into
+  // `period` instead — as this helper used to — made a `daily` budget untestable,
+  // because `period` has CHECK(period IN ('monthly','yearly')).
   db.raw.prepare(
-    `INSERT INTO category_budget (id, group_id, category, period, amount) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO category_budget (id, group_id, category, period, cadence, amount) VALUES (?, ?, ?, 'monthly', ?, ?)`,
   ).run(id('cb'), opts.groupId, opts.category, opts.cadence ?? 'monthly', opts.amount);
 }
