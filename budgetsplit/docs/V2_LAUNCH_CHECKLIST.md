@@ -20,23 +20,31 @@ pilot users, so it jumps its size bucket if you are short on time.
 
 ### First — the correctness bugs (§0)
 
-Not all large, but all *wrong money*. **Three are done**; the remaining six split into four
-that are pure fixes and two that need a decision from you first.
+Not all large, but all *wrong money*. **All nine are done.**
 
 | Status | Task | Size | Needs a decision? |
 |---|---|---|---|
 | ✅ `99601c7` | 0.1 personal settlement leaking into the global net | S | — |
 | ✅ `99601c7` | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS | — |
 | ✅ `14c5fa4` | 0.5 card baseline split from the "last edited" stamp | XS | — |
-| ⬜ | **0.3** pause/resume must preserve `recur_end` and not back-post the gap | S | no |
+| ✅ `pending` | 0.3 pause/resume preserves `recur_end`; the dormant gap is written to `recur_skip` instead of back-posted | S | — |
 | ✅ `pending` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
-| ⬜ | **0.9** one forecast model; goals engine (priority, ties, reorder, completed raids) | M | no |
-| ⬜ | Tier 1 — discarded writes, then the lying indicators | M | no |
-| ⬜ | **0.6** collapse five monthly-budget-equivalent functions into one | M | **yes** — which cadence rule is right (`daily × 30` vs `× daysInMonth`, and what `once` means) |
-| ⬜ | **0.7 / 0.8** one spend basis, one month window | M | **yes** — does "spent this month" include future-dated transactions, and is Reports my-share or group-total? Both change numbers already on screen |
+| ✅ `pending` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. **`priority` remove-or-revive still open** (#15) | M | — |
+| ✅ `pending` | Tier 1 — 9 of 11. The two left are **backups exclude photos** and **app lock has no failure path**; both are their own piece of work, not leftovers | M | — |
+| ✅ `pending` | 0.6 one `rollUpBudgets`, keyed by target period. **Decided:** a budget rolls *up* only — `daily × real days`, `monthly × 12` into a year; `yearly`/`once` are **pools**, never ÷12 | M | — |
+| ✅ `pending` | 0.7 / 0.8. **Decided:** "spent" is what happened — every window ends at `now`; Reports is **my-share**, like every other surface | M | — |
 
-**Suggested order:** 0.3 → 0.4 → 0.9 → Tier 1 while the two decisions settle, then 0.6 →
-0.7/0.8 last, because those two change figures users have already seen.
+**§0 is closed** (2026-08-12). The two decisions that were blocking 0.6 and 0.7/0.8 were made
+and the work shipped with them.
+
+**0.6 turned out to be bigger than this list said.** Not five functions but **nine**, and the
+worst was on no list: `analytics.ts` summed raw allocations across cadences *and* summed each
+line's spend from its **own** window (daily → today, yearly → this year), then divided one by
+the other. That quotient was not a wrong percentage, it was not a percentage — and it fed the
+group Budget tab, Reports, the Groups list, Home's health engine and the Plan forecast, where
+a ₹24k/yr budget made a *monthly* forecast look comfortably funded. `rebalance.ts:46` was the
+one module that already had the rule right ("a yearly budget's headroom is not spendable this
+month"); the rest now agrees with it.
 
 **The suite itself was the root cause, and is now fixed.** `jest.config.js` mapped
 `expo-sqlite` to an **empty stub**, which made every module in `src/db/queries/`
@@ -59,10 +67,10 @@ the module calls).
 | 1 | **Buy the Apple Developer Program** | Gate 0. Smallest task here, unlocks the most |
 | 2 | ⛔ Confirm demo/seed data is off for release builds | §1 |
 | 3 | Insights month pill — wire it, or make it a plain label | §4.3 |
-| 4 | Review footer CTA wraps and breaks the 52pt button height | §4.1 |
-| 5 | Filter chips hard-capped at `maxWidth: 160` | §4.1 |
-| 6 | Goals — FAB covers the last card (use `useContentInset`) | §4.4 |
-| 7 | Goals — raid prompt lists names but not ₹ | §4.4 |
+| 4 | Review footer CTA wraps and breaks the 52pt button height | **DONE** — ✅ `PrimaryButton` truncates at one line (fixes every caller, not just Review) |
+| 5 | Filter chips hard-capped at `maxWidth: 160` | **DONE** — ✅ Cap removed; the row already wraps |
+| 6 | Goals — FAB covers the last card (use `useContentInset`) | **DONE** — ✅ `useContentInset({ fab: true, tabBar: true })` |
+| 7 | Goals — raid prompt lists names but not ₹ | **DONE** — ✅ Per-goal ₹ in the prompt |
 
 ### S — a few hours
 
@@ -72,11 +80,11 @@ the module calls).
 | 9 | ⛔ Device-check `expo-file-system/legacy` | §1 |
 | 10 | Review tab labels — short form, count as a badge | §4.1 |
 | 11 | Insights x-axis — measure via `onLayout`, or bucket weekly | §4.2 |
-| 12 | Insights — one forecast model, not two | §4.3 |
-| 13 | Savings insights — make deterministic | §4.3 |
-| 14 | Goals — exclude completed from the raid; fix the reorder permutation | §4.4 |
+| 12 | Insights — one forecast model, not two | **DONE** — ✅ Hero + chart both read `forecastMonthEnd` |
+| 13 | Savings insights — make deterministic | **DONE** — ✅ Seeded on candidate text + day; rotates daily, stable within a day |
+| 14 | Goals — exclude completed from the raid; fix the reorder permutation | **DONE** — ✅ Both, plus the pre-drag tie now mirrors funding |
 | 15 | Goals — `priority` is dead code; decide remove or revive | §4.4 |
-| 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | §4.5 |
+| 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | **DONE** — ✅ `src/lib/qrFromImage.ts`, wired into both scanners |
 | 17 | Group budget — relabel to "my share" | D1 |
 | 18 | WhatsApp reminder — composer + share sheet | §3.4 |
 
@@ -141,38 +149,38 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 | **0.3** | **Resuming a paused rule destroys its end date and back-posts the gap.** `pause` sets `recur_end = now` — overwriting the user's own end date, of which there is no other copy — and `resume` sets it to `NULL`, so a rule set to "end 31 Dec" recurs **forever**. Nothing is claimed during the pause, so the next foreground materializes the whole window: pause a daily ₹300 rule for 60 days and resuming silently posts **60 rows, ₹18,000**. | `recurring.ts:40-41,57` |
 | **0.4** | **Recurring card spend is booked as cash.** The materializing INSERT drops `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`. A card bill materializes as `pay_method = NULL` and counts as cash out, not debt — and since `computeCash` reads the same bad data, **the SQL/TS parity test cannot see it**. | `recurring.ts:213-221` |
 | ~~**0.5**~~ ✅ | ~~**Editing investments wipes accumulated card debt.** `setMoneyProfile` stamps `updated_at` whenever *any* field changes, and that timestamp is `cardBaselineMs`. Update investments only and all prior card spend drops below the new baseline — net worth jumps overnight. `cash.ts:132-137` assumes the baseline moves only on card re-confirmation; the write path does not honour it. ~~ **Fixed `14c5fa4`** — split into `money.card_baseline_at`, moved only by a write that restates `creditUsed`. Old profiles fall back to `updated_at`, which *is* the old behaviour, so no migration. Also fixed: the editor pre-filled the **stored** `creditUsed` while the card behind it showed the **derived** one. | `moneyProfile.ts` |
-| **0.6** | **Five functions answer "what is my monthly budget."** `budget.ts:39` (canonical, `daily × 30`) · `savings.ts:425` (`daily × daysInMonth`, feeds Afford) · `homeData.ts:155` and `insightsData.ts:121` (raw cross-cadence sums) · `app/category/[name].tsx:123` (a sixth, prorating). A daily ₹500 line is ₹15,000/mo on one screen and ₹15,500 on another. | five sites |
-| **0.7** | **Reports contradicts Home.** `reportsData.ts:128` sums every member's share; `homeData.ts:100` sums mine. `FEATURES_AND_FLOWS.md:1216` pins Insights to Home's basis and is silent on Reports. | two sites |
-| **0.8** | **Future-dated spend gets four different answers.** Home includes the whole month, Insights cuts at `now`, budgets include future, cash excludes it. A ₹50,000 fee dated the 28th, logged on the 2nd, makes Home read ₹50,000 spent and project **₹7.75 lakh** month-end; Insights reads ₹0. | `homeData.ts:39`, `insightsData.ts:44`, `budget.ts:70`, `cashQuery.ts:47` |
+| ~~**0.6**~~ ✅ | ~~**Five functions answer "what is my monthly budget."** A daily ₹500 line is ₹15,000/mo on one screen and ₹15,500 on another.~~ **Nine, not five** — and the worst (`analytics.ts`) was on no list; see the §0 note above. Fixed by one `rollUpBudgets(lines, target, on)`: a line at or finer than the target rolls **up** (`daily × real days`, `monthly × 12`), anything coarser is a **pool** reported separately and never divided down. `budgetEquivalent` returns `null`, not `0`, so a pool cannot be silently summed away. `budgetRollup.test.ts` covers the full target × cadence matrix. | `budget.ts`, `analytics.ts` |
+| ~~**0.7**~~ ✅ | ~~**Reports contradicts Home.** `reportsData.ts:128` sums every member's share; `homeData.ts:100` sums mine.~~ Reports is **my-share** now — all six sites, via the shared `myShareOf` / new `myIncomeOf` (`lib/splitMath.ts`). Per-group budget *utilisation* stays group-scoped, which is **D1**, still open and deliberately untouched. | `reportsData.ts` |
+| ~~**0.8**~~ ✅ | ~~**Future-dated spend gets four different answers.** A ₹50,000 fee dated the 28th, logged on the 2nd, makes Home read ₹50,000 spent and project **₹7.75 lakh** month-end; Insights reads ₹0.~~ Every spend window now ends at `now`: "spent" is what happened. Future commitments already had a home — `upcomingBills` in `getAffordSnapshot` — so nothing was lost, it moved to the surface that means it. This also exposed a latent test flake: `homeData.test.ts` seeded fixtures at **midday**, so the suite passed after lunch and failed before it. | `homeData.ts`, `budget.ts`, `analytics.ts` |
 
 ### Tier 1 — silent data loss and discarded writes
 
-- **Category rename/delete is kind-blind**, and `Rent`/`Other` are seeded as **both** expense
+- ~~**Category rename/delete is kind-blind**, and `Rent`/`Other` are seeded as **both** expense
   and transfer. Renaming transfer-`Rent` relabels every *expense* Rent txn to a name the
   expense catalog lacks — they fold into Others and **the Rent budget reads ₹0 spent
-  forever**. The UI guard only checks within the current tab. (`categories.ts:125-126,142`)
-- **Deleting a seeded category resurrects it but not its budget** — `schema.ts:557` reseeds on
-  every launch. The delete is undone; only the collateral damage persists.
-- **Editing an itemized bill moves it to today** — `useItemizedForm.ts:355` hardcodes
+  forever**. The UI guard only checks within the current tab. (`categories.ts:125-126,142`)~~ ✅ Both scoped by kind via `TXN_KIND_FOR_CATEGORY`; budgets are expense-only. `categoryKind.test.ts`.
+- ~~**Deleting a seeded category resurrects it but not its budget** — `schema.ts:557` reseeds on
+  every launch. The delete is undone; only the collateral damage persists.~~ ✅ `category_tombstone` (name, kind); the reseed skips tombstoned names, re-creating clears it.
+- ~~**Editing an itemized bill moves it to today** — `useItemizedForm.ts:355` hardcodes
   `date: Date.now()` on update. A July bill fixed in August leaves July's totals and charges
-  August. No date field is shown, so nothing hints at it.
-- **"Save" on a recurring edit can write nothing and report success** —
+  August. No date field is shown, so nothing hints at it.~~ ✅ `useItemizedForm` now carries `txnDate`, loaded from the row on edit.
+- ~~**"Save" on a recurring edit can write nothing and report success** —
   `splitRecurringSeries` returns `null`, `useAddTxnForm.ts:467-478` discards it and fires
   `haptic.success(); router.back()`. Reachable through 0.3. It also drops the series' tags and
-  receipt when it *does* succeed.
-- **"All groups" settlement is direction-blind** — `settleScope.ts:76-91` ranks by amount
+  receipt when it *does* succeed.~~ ✅ The `null` return is handled with an alert; the split now carries `tags` and `attachmentUri`.
+- ~~**"All groups" settlement is direction-blind** — `settleScope.ts:76-91` ranks by amount
   without reading `from`/`to`, so a settlement can land in the one group where they owed
-  **you**. The global net ends correct, so nothing surfaces it.
-- **`deleteGroup` leaves `pending_txn` dangling** — the row becomes permanently
-  un-committable and sits in Review forever. (`groups.ts:172-195`)
-- **Monthly recurrence on the 29th–31st walks backward permanently** — 31 Jan → 28 Feb →
+  **you**. The global net ends correct, so nothing surfaces it.~~ ✅ Ranks only groups running `from → to`; prepayments fall back to the largest live balance.
+- ~~**`deleteGroup` leaves `pending_txn` dangling** — the row becomes permanently
+  un-committable and sits in Review forever. (`groups.ts:172-195`)~~ ✅ Resets `dest_group_id`/`split_draft`/`counterparty_id` so the row stays reviewable.
+- ~~**Monthly recurrence on the 29th–31st walks backward permanently** — 31 Jan → 28 Feb →
   **28 Mar** → forever, because `advance()` steps from the previous cursor and `addMonths`
-  clamps. A yearly 29 Feb rule collapses after one leap year. (`recurrence.ts:169-182`)
-- **A recurrence end date on or before the start silently means "never ends"** —
-  `useAddTxnForm.ts:485` falls through to `undefined`.
-- **The backup indicator lies** — enabling the backup *reminder* sets the same key the
+  clamps. A yearly 29 Feb rule collapses after one leap year. (`recurrence.ts:169-182`)~~ ✅ `occurrenceAt` computes from the series start; all four steppers share it.
+- ~~**A recurrence end date on or before the start silently means "never ends"** —
+  `useAddTxnForm.ts:485` falls through to `undefined`.~~ ✅ Refused with an alert instead of falling through to `undefined`.
+- ~~**The backup indicator lies** — enabling the backup *reminder* sets the same key the
   Settings row reads, so it shows "Backed up just now" to someone who never has.
-  (`notifications.tsx:58-60` vs `settings.tsx:332`)
+  (`notifications.tsx:58-60` vs `settings.tsx:332`)~~ ✅ Split into `last_backup_at`; only a completed export or restore writes it.
 - **Backups exclude every photo**, and a missing receipt renders as **"Receipt attached"**
   with no `onError`. That is the state every restore lands in.
 - **App lock has no failure path** — `LockGate.tsx:86` has no `else`; cancel or biometric

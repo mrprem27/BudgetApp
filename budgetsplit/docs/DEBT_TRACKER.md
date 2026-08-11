@@ -211,6 +211,53 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Shipped 2026-08-12 — one budget rollup, one spend window, one Reports basis
+
+Checklist §0 items 0.6 / 0.7 / 0.8, which had been parked on three product decisions. Those
+were made: **a budget rolls up only, never down**; **"spent" is what happened, not what is
+scheduled**; **Reports is my-share**.
+
+| Item | Detail |
+|---|---|
+| **The rule** | A budget line is a **rate** or a **pool** *relative to the headline being shown* — not a property of its cadence. At target period T, a cadence at or finer than T rolls up (`daily × real days in that month/year`, `monthly × 12`); anything coarser is a pool, reported separately and never divided down. ₹24,000/yr for Trips is not ₹2,000/month: a trip spends the pool in one month, so ÷12 would report "over budget" in exactly the month the money was meant to be spent. `src/lib/rebalance.ts:46` already worked this way; the rest of the app now agrees with it. |
+| **`analytics.ts` — the one that was on no list** | `totalAllocated` summed raw amounts across cadences while `totalSpent` summed each line's spend **in its own window** (daily → today, monthly → this month, yearly → this year), and `utilizationPct` divided one by the other. Not a wrong percentage — not a percentage. It fed the group Budget tab, Reports, the Groups list, Home's health engine and the Plan forecast, where a large annual budget made a *monthly* forecast look comfortably funded. Both halves now come from one target window, restricted to rate lines: excluding the allocation while keeping the spend would have inflated utilisation instead of fixing it. |
+| **`monthlyBudgetTotal`** | Filtered to `cadence === 'monthly'`, so it correctly dropped yearly pools but silently dropped **daily** lines too — a ₹500/day budget contributed nothing to the figure the month-end projection is compared against. Now the monthly rollup. |
+| **Pools stay visible** | `budgetEquivalent` returns `null`, never `0`, so a caller cannot silently drop a pool into a sum; `rollUpBudgets` returns `pooled` + `pooledCount`. The group Budget tab and its section headers name what they left out ("plus ₹24,000 in 1 yearly budget") rather than presenting an incomplete total as complete. |
+| **Nine sites, not five** | `budget.ts`, `analytics.ts` (×2), `savings.ts` (a private copy that divided yearly by 12), `homeData.ts`, `insightsData.ts`, `useSavingsTab.ts`, `app/group/[id]/budget.tsx`, `app/category/[name].tsx` (flattened every cadence to a per-day rate and prorated back out — downward proration in both directions). |
+| **0.8 — spend windows** | `windowForCadence`, `analytics.currentWindow` and `homeData`'s month window now end at `now`. `cashQuery` (`t.date <= ?`) and `insightsData` were already correct. Future-dated commitments already had a home in `upcomingBills` (`getAffordSnapshot`), so nothing was lost — it moved to the surface that means it. |
+| **0.7 — Reports basis** | Six sites in `reportsData.ts` summed every member's share while every other surface summed mine, so one month read ₹95,000 on Reports and ₹40,000 on Home with nothing explaining the gap. All six now use `myShareOf` / the new `myIncomeOf` (`lib/splitMath.ts`) — income is attributed by who received it, expenses by who owes a share, so the two kinds read different tables and are not collapsed into one call. Per-group budget *utilisation* stays group-scoped: that is **D1**, still open. |
+| **A latent test flake** | `homeData.test.ts` seeded fixtures at **midday today**, which only worked because windows ran to end-of-period. With windows ending at `now`, the suite passed after lunch and failed before it. Fixtures now use a moment already past. |
+| **A test helper that made a bug untestable** | `setCategoryBudget` wrote the cadence into the legacy `period` column, which is `CHECK(period IN ('monthly','yearly'))` — so **no test could ever create a `daily` budget**. It now mirrors `setCategoryBudgets`: `period` constant, `cadence` its own column. |
+
+Suite 1255/1255 across 79 files; `tsc` clean. New: `budgetRollup.test.ts` (full target × cadence
+matrix), plus window and utilisation cases in `budget.test.ts`.
+
+### Shipped 2026-08-11 — the zero-decision half of the launch checklist
+
+Everything in `V2_LAUNCH_CHECKLIST.md` §0 and Tier 1 that needed no decision. Suite went
+1237/1237 across 78 files; `tsc` clean. Each fix has a test that reproduces the bug first.
+
+| Item | Detail |
+|---|---|
+| **Recurring pause/resume (0.3)** | Pause stamped `recur_end = now`, destroying the user's own end date — there is no second copy — and resume set it `NULL`, so a bounded rule became immortal. `recur_state` alone already gates materialization. New `txn.recur_paused_at`; resume writes the dormant window into the existing `recur_skip` ledger instead of back-posting it (a 60-day pause on a daily ₹300 rule posted 60 rows). |
+| **Month-end recurrence walk-back** | `advance()` stepped off the *previous* cursor, so `addMonths`' clamp compounded: 31 Jan → 28 Feb → **28 Mar** → forever, and a yearly 29 Feb rule collapsed after one leap year. Replaced by anchor-based `occurrenceAt(startMs, freq, interval, n)`; all four steppers (`materializeInstances`, `nextOccurrenceOnOrAfter`, `occurrenceDatesUpTo`, `nthOccurrenceMs`) now share it. |
+| **Discarded recurring edit** | `splitRecurringSeries` returning `null` was thrown away and followed by `haptic.success(); router.back()`. Now alerts. The split also silently dropped the series' `tags` and receipt — both are passed through. |
+| **Recurrence end ≤ start** | Fell through to `undefined`, which does not mean invalid — it means *never ends*. Now refused with an alert. |
+| **Itemized edit re-dated the bill** | `useItemizedForm` hardcoded `date: Date.now()` on update as well as insert, so a July bill corrected in August left July's totals and charged August. The form now carries `txnDate`, loaded from the row. |
+| **Category rename/delete kind-blindness** | The catalog is `UNIQUE(name, kind)` and `Rent`/`Other` are seeded as **both** expense and transfer, but both writes propagated by name alone — renaming transfer-`Rent` relabelled every *expense* Rent txn to a name the expense catalog lacked, folding them into Others and leaving that budget reading ₹0 spent forever. Both scoped through a new canonical `TXN_KIND_FOR_CATEGORY`; budgets are expense-only. |
+| **Deleted seeded categories resurrected** | `seedGlobalCategories` runs on every `openDB`, so the category came back while its budget — deleted alongside — stayed gone. New `category_tombstone (name, kind)`; re-creating by hand clears it. |
+| **`deleteGroup` orphaned `pending_txn`** | Rows drafted into a deleted group became permanently un-committable and sat in Review forever. Now reset (`dest_group_id`, `split_draft`, `counterparty_id`) rather than deleted — the row is a real unreviewed import; only its destination died. |
+| **Direction-blind "All groups" settlement** | `planAllGroupsSettlement` ranked purely by amount, so a payment could land in the one group where *they* owed *you*, inflating the balance it was meant to clear. The global net still netted out, which is why nothing surfaced it. Now ranks only groups running `from → to`, with a largest-balance fallback so a genuine prepayment is still recorded. **The suite pinned the bug** — one existing test asserted the old behaviour and was rewritten. |
+| **Backup indicator lied** | Enabling the backup *reminder* stamped `backup_anchor_at`, which is the key the Settings row read as "Backed up just now". Split into `last_backup_at`, written only by a completed export or restore. |
+| **Two forecast models (0.9)** | Contradicts the "one `forecast` model" line under *Shipped earlier* below — that consolidation missed `insightsData.ts`, which kept a naive `(monthSpend / dayOfMonth) * daysInMonth` for the hero while the chart badge ~100px away used the credibility-weighted `forecast.ts`. Both now read `forecastMonthEnd`, computed once. |
+| **Non-deterministic savings insights** | `generateInsights` jittered scores with `Math.random`, reshuffling the set on every pull-to-refresh. Seeded on the candidate's own text plus the day number: stable within a day, still rotates daily. |
+| **Goals engine** | Completed goals were raidable (the filter checked `locked` and `saved > 0`, never `saved >= target`). `reorderGoals` wrote `0..n-1` for only the *active* goals it was handed, leaving completed ones with stale values interleaved in what is a single ranking — now a total permutation. And before any drag every goal sits at `sort_order = 0`, so the stable sort made the newest goal both funded first *and* raided first; ties now break in reverse for the raid, restoring the mirror. |
+| **UI** | Raid prompt shows ₹ per goal (`withdrawals` always carried it) · Goals uses `useContentInset({ fab, tabBar })` so the FAB stops covering the last card · `FChip`'s `maxWidth: 160` cap removed (the row already wraps) · `PrimaryButton` truncates at one line, so a long label can no longer break the fixed 52pt height · QR-from-photo via `scanFromURLAsync` + `expo-image-picker`, both already installed — `src/lib/qrFromImage.ts`, shared `PickQrFromPhotos`, wired into both scanners. |
+
+**Still open in §0, and only these:** 0.6 (monthly-budget cadence) and 0.7/0.8 (spend basis +
+month window). Both need a product decision, not effort. Two Tier-1 items also remain —
+backups exclude photos, and app lock has no failure path.
+
 ### Shipped 2026-07-29 — receipt OCR revival + encrypted backup/restore
 
 | Item | Detail |
@@ -256,7 +303,8 @@ These were carried as open work and are verified fixed. This is why rule 4 exist
 
 Zustand store trimmed · `lib/settings.ts` single prefs store · feature-flag defaults deduped ·
 N+1 split loader batched · atomic `splitRecurringSeries` · `deleteCategory` budget-orphan fix ·
-one `recurringMonthlyEquivalent` · one `forecast` model · one `budgetHealth`/`utilLabel` ·
+one `recurringMonthlyEquivalent` · one `forecast` model (**incomplete — `insightsData.ts` was
+missed; finished 2026-08-11**) · one `budgetHealth`/`utilLabel` ·
 `recordSettlement` single write path · `Card.tsx`/`settle.tsx`/`computeNet` deleted ·
 central `src/theme` module · Phase 0–3 screen migrations to `useScreenData`.
 
