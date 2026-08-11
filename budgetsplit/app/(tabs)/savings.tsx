@@ -240,7 +240,10 @@ export default function SavingsScreen() {
       <MoneyEditorSheet
         visible={showMoneyEditor}
         onClose={() => setShowMoneyEditor(false)}
-        initial={profile}
+        // The DERIVED credit-used, not the stored one: the card behind this sheet shows
+        // stated-balance + card spend since the baseline, and a field that disagreed with
+        // the number above it is how you talk someone into saving a stale figure.
+        initial={{ ...profile, creditUsed: money?.creditUsed ?? profile.creditUsed }}
         onSave={handleSaveMoney}
       />
 

@@ -12,32 +12,58 @@ const KEYS = {
   creditLimit: 'money.credit_limit',
   creditUsed: 'money.credit_used',
   updatedAt: 'money.updated_at',
+  cardBaselineAt: 'money.card_baseline_at',
 } as const;
 
-/** MoneyProfile plus when it was last edited — `updatedAt` is null until the
- *  first `setMoneyProfile` write, and is never coerced to 0 like the paise fields. */
-export type MoneyProfileWithMeta = MoneyProfile & { updatedAt: number | null };
+/**
+ * MoneyProfile plus its two timestamps. Null until the first write, and never coerced to 0
+ * like the paise fields.
+ *
+ * **They are two stamps because they answer two questions**, and one key answering both is
+ * what made editing your investments erase your card debt:
+ *
+ * - `updatedAt` — "how stale are these hand-entered figures?", shown on `TotalMoneyCard`.
+ *   Any write refreshes it.
+ * - `cardBaselineAt` — "from when do we count card spend on top of the stated balance?"
+ *   Only a write that *includes* `creditUsed` may move this. Re-stamping it on an unrelated
+ *   edit silently drops every card transaction since, and `creditUsed` collapses back to the
+ *   stored figure — net worth jumping overnight with nothing to explain it.
+ */
+export type MoneyProfileWithMeta = MoneyProfile & {
+  updatedAt: number | null;
+  cardBaselineAt: number | null;
+};
 
 export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyProfileWithMeta> {
   const rows = await db.getAllAsync<{ key: string; value: string }>(
-    `SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)`,
-    [KEYS.openingCash, KEYS.investments, KEYS.creditLimit, KEYS.creditUsed, KEYS.updatedAt],
+    `SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?)`,
+    [KEYS.openingCash, KEYS.investments, KEYS.creditLimit, KEYS.creditUsed, KEYS.updatedAt, KEYS.cardBaselineAt],
   );
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value;
+  const num = (k: string) => (map[k] !== undefined ? Number(map[k]) : null);
   return {
     openingCash: Number(map[KEYS.openingCash]) || 0,
     investments: Number(map[KEYS.investments]) || 0,
     creditLimit: Number(map[KEYS.creditLimit]) || 0,
     creditUsed: Number(map[KEYS.creditUsed]) || 0,
-    updatedAt: map[KEYS.updatedAt] !== undefined ? Number(map[KEYS.updatedAt]) : null,
+    updatedAt: num(KEYS.updatedAt),
+    // Falls back to `updatedAt` for profiles written before the split, where the one stamp
+    // meant both. No migration needed: the fallback IS the old behaviour, and the first
+    // credit edit after this ships writes the dedicated key.
+    cardBaselineAt: num(KEYS.cardBaselineAt) ?? num(KEYS.updatedAt),
   };
 }
 
-/** Upsert any subset of the money profile (paise). Missing fields are left as-is.
- *  Any write stamps a single shared `updatedAt` for the whole profile — the editor
- *  sheet always saves all 4 fields as one submit, so per-field timestamps would be
- *  unused precision. */
+/**
+ * Upsert any subset of the money profile (paise). Missing fields are left as-is.
+ *
+ * `updatedAt` moves on every write; **`cardBaselineAt` moves only when `creditUsed` is part
+ * of the write** — see {@link MoneyProfileWithMeta}. The previous version stamped one shared
+ * key on any write, justified by "the editor always saves all 4 fields as one submit". It
+ * does, and that was exactly the problem: submitting an unchanged `creditUsed` alongside a
+ * new investments figure re-based the card window and discarded the spend it was measuring.
+ */
 export async function setMoneyProfile(
   db: SQLite.SQLiteDatabase,
   partial: Partial<MoneyProfile>,
@@ -49,6 +75,9 @@ export async function setMoneyProfile(
   if (partial.creditUsed !== undefined) entries.push([KEYS.creditUsed, Math.round(partial.creditUsed)]);
   if (entries.length === 0) return;
   entries.push([KEYS.updatedAt, Date.now()]);
+  // Only a write that restates the card balance may move the window that balance is
+  // measured from.
+  if (partial.creditUsed !== undefined) entries.push([KEYS.cardBaselineAt, Date.now()]);
   await db.withTransactionAsync(async () => {
     for (const [key, value] of entries) {
       await db.runAsync(

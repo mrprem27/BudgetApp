@@ -364,11 +364,12 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
   // Aggregate the four running sums in SQL instead of loading every txn + all its
   // split rows across all history and reducing in JS. Parity with computeCash() is
   // locked by cashSql.test.ts.
-  // The profile's timestamp bounds the card-spend window, so it's read before the
-  // totals query rather than alongside it.
+  // `cardBaselineAt` — NOT `updatedAt` — bounds the card-spend window, so it's read before
+  // the totals query rather than alongside it. Using the general "last edited" stamp meant
+  // any Plan edit re-based the window and erased the card spend it was measuring.
   const profile = await getMoneyProfile(db);
   const [row, savedTotal] = await Promise.all([
-    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.updatedAt ?? 0, me.id, me.id, Date.now()]),
+    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, me.id, me.id, Date.now()]),
     getTotalSaved(db),
   ]);
   const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };
