@@ -6,6 +6,8 @@ import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { parseUpiQr, type ScannedUpi } from '../../lib/upiIntent';
 import { haptic } from '../../lib/haptics';
+import { pickQrFromLibrary, qrPickMessage } from '../../lib/qrFromImage';
+import { PickQrFromPhotos } from './PickQrFromPhotos';
 
 /**
  * Live camera scan of a friend's UPI QR.
@@ -34,6 +36,29 @@ export function UpiQrScanner({
   // The camera fires continuously; without this the same code lands many times
   // while the sheet is still closing.
   const [done, setDone] = useState(false);
+  const [pickHint, setPickHint] = useState<string | null>(null);
+
+  const accept = (raw: string) => {
+    const parsed = parseUpiQr(raw);
+    if (!parsed) return false;
+    setDone(true);
+    haptic.success();
+    onScan(parsed);
+    return true;
+  };
+
+  async function handlePickFromPhotos() {
+    if (done) return;
+    setPickHint(null);
+    const res = await pickQrFromLibrary();
+    if (res.status === 'ok') {
+      if (!accept(res.data)) {
+        setPickHint('That’s not a personal UPI QR — shop/BharatQR codes aren’t supported.');
+      }
+      return;
+    }
+    setPickHint(qrPickMessage(res.status));
+  }
 
   if (!visible) return null;
 
@@ -49,6 +74,9 @@ export function UpiQrScanner({
           {permission?.canAskAgain !== false && (
             <PrimaryButton label="Allow camera" onPress={requestPermission} />
           )}
+          {/* Reading a saved QR needs no camera, so a denied camera must not block it. */}
+          <PickQrFromPhotos onPress={handlePickFromPhotos} />
+          {pickHint && <Text style={[styles.hint, styles.hintBad]}>{pickHint}</Text>}
         </View>
       ) : (
         <>
@@ -59,20 +87,18 @@ export function UpiQrScanner({
               barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
               onBarcodeScanned={({ data }) => {
                 if (done) return;
-                const parsed = parseUpiQr(data);
-                if (!parsed) { setBadCode(true); return; }
-                setDone(true);
-                haptic.success();
-                onScan(parsed);
+                if (!accept(data)) setBadCode(true);
               }}
             />
             <View style={styles.reticle} pointerEvents="none" />
           </View>
-          <Text style={[styles.hint, badCode && styles.hintBad]}>
-            {badCode
+          <Text style={[styles.hint, (badCode || !!pickHint) && styles.hintBad]}>
+            {pickHint ?? (badCode
               ? 'That’s not a personal UPI QR — shop/BharatQR codes aren’t supported. Type the ID instead.'
-              : 'Ask them to open their UPI app’s “Receive money” QR.'}
+              : 'Ask them to open their UPI app’s “Receive money” QR.')}
           </Text>
+          {/* Their QR usually arrives as a screenshot, not a phone held up to yours. */}
+          <PickQrFromPhotos onPress={handlePickFromPhotos} />
         </>
       )}
     </SheetModal>

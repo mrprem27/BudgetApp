@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Animated, Pressable, Text, StyleSheet, ViewStyle, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, type, radius, gradients, shadow } from '../tokens';
+import { colors, type, radius, gradients, shadow, space } from '../tokens';
 import { haptic } from '../../lib/haptics';
 
 type Props = {
@@ -48,7 +48,7 @@ export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, 
         >
           {loading
             ? <ActivityIndicator color={colors.onAccent} />
-            : <Text style={styles.label}>{label}</Text>}
+            : <Text style={styles.label} numberOfLines={1} ellipsizeMode="tail">{label}</Text>}
         </LinearGradient>
       </Animated.View>
     </Pressable>
@@ -66,6 +66,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+    // The height is fixed, so a two-line label does not grow the button — it
+    // overflows it. Review's footer builds labels like "Save 12 said out loud",
+    // which wrapped and broke the 52pt block. Padding + `numberOfLines={1}` above
+    // means a long label truncates inside the button instead.
+    paddingHorizontal: space.md,
   },
   disabled: {
     opacity: 0.4,
@@ -73,5 +78,6 @@ const styles = StyleSheet.create({
   label: {
     ...type.button,
     color: colors.onAccent,
+    textAlign: 'center',
   },
 });

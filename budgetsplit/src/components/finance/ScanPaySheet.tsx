@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { pickQrFromLibrary, qrPickMessage } from '../../lib/qrFromImage';
+import { PickQrFromPhotos } from './PickQrFromPhotos';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
@@ -68,6 +70,25 @@ export function ScanPaySheet({
   onRecordOnly: (p: ScannedPayment) => Promise<void>;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
+  const [pickHint, setPickHint] = useState<string | null>(null);
+
+  const accept = (raw: string) => {
+    const parsed = parseAnyUpiQr(raw);
+    if (!parsed) return false;
+    haptic.selection();
+    setTarget(parsed);
+    return true;
+  };
+
+  async function handlePickFromPhotos() {
+    setPickHint(null);
+    const res = await pickQrFromLibrary();
+    if (res.status === 'ok') {
+      if (!accept(res.data)) setPickHint('That isn’t a UPI payment code.');
+      return;
+    }
+    setPickHint(qrPickMessage(res.status));
+  }
   const [target, setTarget] = useState<ScanTarget | null>(null);
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
@@ -203,6 +224,8 @@ export function ScanPaySheet({
                 : 'BudgetSplit needs the camera to read a payment QR. The code is read on your device and nothing is uploaded.'}
             </Text>
             {permission?.canAskAgain !== false && <PrimaryButton label="Allow camera" onPress={requestPermission} />}
+            <PickQrFromPhotos onPress={handlePickFromPhotos} />
+            {pickHint && <Text style={[styles.hint, styles.hintBad]}>{pickHint}</Text>}
           </View>
         ) : (
           <>
@@ -213,19 +236,17 @@ export function ScanPaySheet({
                 barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                 onBarcodeScanned={({ data }) => {
                   if (target) return;
-                  const parsed = parseAnyUpiQr(data);
-                  if (!parsed) { setBadCode(true); return; }
-                  haptic.selection();
-                  setTarget(parsed);
+                  if (!accept(data)) setBadCode(true);
                 }}
               />
               <View style={styles.reticle} pointerEvents="none" />
             </View>
-            <Text style={[styles.hint, badCode && styles.hintBad]}>
-              {badCode
+            <Text style={[styles.hint, (badCode || !!pickHint) && styles.hintBad]}>
+              {pickHint ?? (badCode
                 ? 'That isn’t a UPI payment code. Try again, or pay in your bank app and add it here.'
-                : 'Point at any UPI QR — a shop’s counter code or a person’s.'}
+                : 'Point at any UPI QR — a shop’s counter code or a person’s.')}
             </Text>
+            <PickQrFromPhotos onPress={handlePickFromPhotos} />
           </>
         )
       ) : (
