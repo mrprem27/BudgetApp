@@ -29,7 +29,7 @@ that are pure fixes and two that need a decision from you first.
 | ✅ `99601c7` | 0.2 `recur_freq IS NULL` on all four balance aggregates | XS | — |
 | ✅ `14c5fa4` | 0.5 card baseline split from the "last edited" stamp | XS | — |
 | ⬜ | **0.3** pause/resume must preserve `recur_end` and not back-post the gap | S | no |
-| ⬜ | **0.4** materialization column list, plus a test that asserts on it | S | no |
+| ✅ `pending` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
 | ⬜ | **0.9** one forecast model; goals engine (priority, ties, reorder, completed raids) | M | no |
 | ⬜ | Tier 1 — discarded writes, then the lying indicators | M | no |
 | ⬜ | **0.6** collapse five monthly-budget-equivalent functions into one | M | **yes** — which cadence rule is right (`daily × 30` vs `× daysInMonth`, and what `once` means) |
@@ -38,9 +38,19 @@ that are pure fixes and two that need a decision from you first.
 **Suggested order:** 0.3 → 0.4 → 0.9 → Tier 1 while the two decisions settle, then 0.6 →
 0.7/0.8 last, because those two change figures users have already seen.
 
-**Every fix needs a failing test first** — the suite was green with all nine present.
-`balancesSql.test.ts` and `moneyProfile.test.ts` are the two worked examples: run the real
-SQL, or fake only the three db methods the module actually calls.
+**The suite itself was the root cause, and is now fixed.** `jest.config.js` mapped
+`expo-sqlite` to an **empty stub**, which made every module in `src/db/queries/`
+*unexecutable* — no assertion about `balances.ts`, `recurring.ts` or `moneyProfile.ts` could
+ever have failed, whatever the SQL said. It is now a real in-memory implementation over
+`node:sqlite` (`__mocks__/expoSqlite.js`), exactly as AsyncStorage already was.
+
+Use **`openTestDb()`** from `src/__tests__/dbHarness.ts` — it applies `SCHEMA` *and*
+`COLUMN_MIGRATIONS`, because `SCHEMA` alone is months out of date (the first attempt died on
+`table txn has no column named currency`).
+
+Worked examples: `recurringMaterialize.test.ts` (real query module, real schema),
+`balancesSql.test.ts` (real SQL, in-process), `moneyProfile.test.ts` (fake only the methods
+the module calls).
 
 ### XS — an hour or less
 

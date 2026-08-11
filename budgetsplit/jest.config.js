@@ -12,7 +12,9 @@ module.exports = {
   // Stub native-only modules that pure-logic code imports transitively but
   // never calls in these tests (they ship ESM that we don't transform).
   moduleNameMapper: {
-    '^expo-sqlite$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    // Real in-memory SQLite (node:sqlite), NOT an empty stub. The stub made every module
+    // in src/db/queries unexecutable, which is how nine wrong-money bugs shipped green.
+    '^expo-sqlite$': '<rootDir>/src/__tests__/__mocks__/expoSqlite.js',
     '^react-native-get-random-values$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo/virtual/env$': '<rootDir>/src/__tests__/__mocks__/expoVirtualEnv.js',

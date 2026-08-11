@@ -209,14 +209,25 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
         if (occ < horizonStart) continue;
         if (skips?.has(occ) || claimed?.has(occ)) continue;
         const newId = uuid();
+        // Every descriptive column the template carries must come across. `pay_method` is
+        // the one that cost money: it is the axis `cash.ts` and `CASH_TOTALS_SQL` split on,
+        // so a recurring CARD bill materializing as NULL was booked as cash out instead of
+        // debt — understating available cash and `creditUsed` by the same amount every
+        // month, compounding. The SQL/TS parity test could not see it, because both sides
+        // read the same corrupted row.
+        //
+        // `recur_*` are deliberately NULL: an occurrence is a real transaction, not a rule.
         await db.runAsync(
           `INSERT INTO txn
              (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
+              pay_method,currency,source,tz,lat,lng,place_label,
               recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
           [
             newId, t.group_id, t.kind, t.entry_mode, occ, t.category, t.note,
-            t.attachment_uri, t.tags, t.adjustments, occ, t.id, now, now,
+            t.attachment_uri, t.tags, t.adjustments,
+            t.pay_method, t.currency, t.source, t.tz, t.lat, t.lng, t.place_label,
+            occ, t.id, now, now,
           ],
         );
         for (const p of rw.payments) {
