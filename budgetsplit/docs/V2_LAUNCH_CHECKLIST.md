@@ -149,6 +149,56 @@ second ledger. This is that same shape, three more times.
       pinned to a **CDN URL fetched on first use**; bundle it locally so import works
       offline and does not depend on someone else's uptime.
 
+### 3.4 WhatsApp payment reminders — feasible, but not the automatic version
+
+**Wanted:** keep people's numbers and nudge everyone who owes you, on WhatsApp, free.
+
+**Half of it already exists.** `person.mobile` is a real column (`src/db/schema.ts:21`,
+migration `:224`) that **nothing reads or writes** — `insertPerson` hard-codes `null`
+(`src/db/queries/persons.ts:52`). It is dead schema today, like `remote_uid`. And
+`getMyExposure` (`src/db/queries/balances.ts:136`) already returns the per-person netted
+balance, so "who owes what" needs no new maths.
+
+**The free path — `wa.me`, and it is genuinely free.** `https://wa.me/<number>?text=<encoded>`
+opens WhatsApp on a chat with the message pre-filled. It is *your* WhatsApp account sending
+your own message; there is no API, no account, no cost, and no backend. Needs no new
+dependency — `expo-linking` is installed.
+
+**⚠️ What is not possible: silent send-to-all.** Two independent walls, and the second is
+the one that matters:
+
+1. A deep link opens **one chat** and always needs a manual tap to send. WhatsApp prevents
+   third-party apps from sending on your behalf, deliberately.
+2. The programmatic route is the **WhatsApp Business Cloud API**, which needs a Meta
+   Business account, a *separate business phone number* (not your personal one),
+   pre-approved message templates, and **a backend server** — this app is local-first and
+   has none. It is also **not free**: since 1 Jul 2025 Meta charges per *delivered template
+   message*, ~₹0.115–0.145 for utility messages in India. Free only inside an already-open
+   customer-service window, which a debt reminder is not. Meta's policy also prohibits
+   unsolicited bulk messaging.
+
+So **"remind everyone" is a guided queue, not a broadcast**: open chat 1 pre-filled → you
+tap send → back to the app → advance to person 2. One tap each, N app switches, and the app
+tracks who has been nudged.
+
+- [ ] Add a phone field beside the UPI ID in the Friends rename sheet
+      (`app/friends.tsx:81`) — makes the dead `mobile` column live.
+- [ ] Per-person **Remind on WhatsApp** wherever a balance is shown, pre-filled with the
+      amount and your own VPA as payable text. (A `upi://` link is **not** tappable inside
+      WhatsApp — send the handle as text.)
+- [ ] "Remind all" as a queue over `getMyExposure`, owed-most first, skipping anyone with
+      no number.
+- [ ] **A cooldown, and never auto-send.** A reminder feature with no floor becomes a way
+      to annoy your friends daily. Record `last_nudged_at`; grey the button inside it.
+- [ ] `sms:` fallback for people without WhatsApp, and the system share sheet for everyone
+      else — same pre-filled string, three transports.
+- [ ] **Say the privacy line out loud.** Nothing leaves the device: the text is handed to
+      WhatsApp, and there is no server in the path. That is worth stating given the app's
+      standing promise.
+- [ ] **Decide: import from Contacts, or type numbers by hand?** `expo-contacts` is not
+      installed, and asking for the whole address book is a heavy permission for a pilot.
+      *Recommendation: manual entry first.*
+
 ---
 
 ## 4. UI/UX rework — with the cause, not just the symptom
