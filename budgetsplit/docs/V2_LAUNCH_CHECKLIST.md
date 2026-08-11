@@ -177,35 +177,51 @@ the one that matters:
    customer-service window, which a debt reminder is not. Meta's policy also prohibits
    unsolicited bulk messaging.
 
-**One send to everyone IS possible — just not through `wa.me`.** `wa.me` is number-keyed
-and cannot target a group or a broadcast list. But **WhatsApp's own share picker is
-multi-select**: hand it a string via the system share sheet and the user picks the flat's
-existing group — or ticks several chats — and sends **once**.
+**Bulk — one send, private 1:1 delivery, no group — is a WhatsApp Broadcast List.** One
+message goes out as **separate one-to-one chats**; each person sees a private message and
+replies only to you. Free, up to **256 per list**, unlimited lists.
 
-So there are two shapes, and the choice is a product decision rather than a technical limit:
+Two constraints, and the first is a silent failure:
 
-| | Taps | Cost | What each person sees |
-|---|---|---|---|
-| **One group message** (share sheet → WhatsApp → pick group) | **One send, everyone** | Free | A summary listing **everyone's** amounts |
-| Per-person DM (`wa.me`) | One send **each** | Free | Only their own amount |
-| Multi-recipient SMS | One send, everyone | Carrier rates | The same summary |
+1. **Recipients must have your number saved in their contacts.** If they haven't, they
+   simply never receive it, with no error on either side. Usually true of flatmates; not
+   guaranteed of a one-off trip group.
+2. **Every recipient gets identical text.** A broadcast cannot say "you owe ₹450" to one
+   person and "₹1,200" to another.
 
-*Recommendation: the group message is the default* — for a flat or trip group it is also
-socially better than DMs, because it is transparent and does the nudging for you. Fall back
-to per-person only when there is no group, or when someone asks not to be named publicly.
+**That second point is the crux: personalisation is the thing that costs money.** Free bulk
+means one message for everyone; per-person amounts mean either N sends or the paid Cloud
+API. There is no free, one-tap, personalised route — that combination does not exist.
 
+| Route | One send? | Private 1:1? | Personalised? | Cost |
+|---|---|---|---|---|
+| **WhatsApp Broadcast List** | ✅ | ✅ | ❌ same text | **Free** |
+| `mailto:?bcc=` | ✅ | ✅ | ❌ same text | Free — but nobody reads email for ₹450 |
+| Per-person `wa.me` | ❌ N sends | ✅ | ✅ | Free |
+| Multi-recipient SMS | ✅ | ⚠️ usually becomes a **group MMS** thread | ❌ | Carrier rates |
+| WhatsApp Cloud API | ✅ | ✅ | ✅ | ~₹0.115–0.145/msg + backend — rejected |
+
+*Recommendation: a generic broadcast nudge carrying your VPA — "Settle up on BudgetSplit,
+pay me at prem@okhdfc" — with the amounts staying in the app.* It is free, private, and one
+action; the amounts were never the part that needed to travel.
+
+- [ ] ⚠️ **Device-check first: can the system share sheet target a Broadcast List?**
+      WhatsApp's picker shows chats and groups; whether broadcast lists appear there is
+      **unverified**, and the whole recommendation rests on it. If not, the user composes in
+      WhatsApp and we only supply the text via copy-to-clipboard.
+- [ ] **Compose the nudge** from `getMyExposure` (`src/db/queries/balances.ts:136`) and hand
+      it to `Share.share`. Needs no stored numbers and no permissions — a reason to build
+      this before the phone field.
 - [ ] Add a phone field beside the UPI ID in the Friends rename sheet
-      (`app/friends.tsx:81`) — makes the dead `mobile` column live. **Not needed for the
-      group-message path at all**, which is a reason to build that one first.
-- [ ] **Compose a settle-up summary** from `getMyExposure` — "Flat 4B: Rohan ₹450, Anya
-      ₹1,200 · pay me at prem@okhdfc" — and hand it to `Share.share`. One action, no
-      numbers stored, no permissions.
-- [ ] Per-person **Remind on WhatsApp** as the secondary path, pre-filled with the amount
-      and your VPA as payable text. (A `upi://` link is **not** tappable inside WhatsApp —
-      send the handle as text.)
+      (`app/friends.tsx:81`) — makes the dead `mobile` column live. Only needed for the
+      **per-person** path.
+- [ ] Per-person **Remind on WhatsApp** as the secondary path, pre-filled with that person's
+      amount and your VPA as payable text. (A `upi://` link is **not** tappable inside
+      WhatsApp — send the handle as text.)
 - [ ] Multi-recipient SMS needs **platform-specific syntax**: iOS
       `sms://open?addresses=a,b&body=…`, Android `sms:a,b?body=…`. Apple does not implement
-      RFC 5724's comma list, so the obvious form silently fails on iPhone.
+      RFC 5724's comma list, so the obvious form silently fails on iPhone. Note it usually
+      lands as a **group** thread, so it does not satisfy "bulk, not group".
 - [ ] **A cooldown, and never auto-send.** A reminder feature with no floor becomes a way
       to annoy your friends daily. Record `last_nudged_at`; grey the button inside it.
 - [ ] `sms:` fallback for people without WhatsApp, and the system share sheet for everyone
@@ -215,16 +231,10 @@ to per-person only when there is no group, or when someone asks not to be named 
 link*: we hand a pre-filled message to an app the user already has, and they send it as
 themselves. There is no server in the path, so there is no per-message bill to us, ever.
 
-| Transport | Cost | Reaches everyone in one send? |
-|---|---|---|
-| **Share sheet → WhatsApp group** | **Free** | ✅ **yes** — WhatsApp's picker is multi-select |
-| WhatsApp `wa.me` | **Free** — sent from their own account | ❌ one chat per link |
-| `sms:` multi-recipient | **Their carrier's rate.** Usually inside a bundled Indian plan, but it is their plan, not free by definition | ✅ yes |
-| `mailto:?bcc=` | Free | ✅ yes, but nobody reads email for ₹450 |
-| ~~WhatsApp Cloud API~~ | ~₹0.115–0.145 per delivered message + a backend | — rejected above |
-
-So **WhatsApp is free either way**; SMS is the fallback for someone without it, and is worth
-labelling "standard SMS rates" rather than implying it is free.
+**WhatsApp is free in every shape** — broadcast or per-person — because it is their own
+account sending. `sms:` is the only transport that costs the *user* anything (their
+carrier's rate, usually inside a bundled Indian plan), so it should be labelled "standard
+SMS rates" rather than implied free. The comparison of routes is in the table above.
 - [ ] **Say the privacy line out loud.** Nothing leaves the device: the text is handed to
       WhatsApp, and there is no server in the path. That is worth stating given the app's
       standing promise.
