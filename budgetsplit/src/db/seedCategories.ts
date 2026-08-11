@@ -10,11 +10,17 @@ import { DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../c
  * created — groups and the demo seeder never make their own copies.
  */
 export async function seedGlobalCategories(db: SQLite.SQLiteDatabase): Promise<void> {
+  // Respect the user's deletions. This runs on **every** `openDB`, so without the
+  // tombstone check a deleted seeded category came back on the next launch — while
+  // its budget, deleted alongside it, stayed gone. The delete looked like it had
+  // failed and only the collateral damage survived.
   const seed = async (defs: { name: string; icon: string; color: string }[], kind: string) => {
     for (const c of defs) {
       await db.runAsync(
-        "INSERT OR IGNORE INTO category (id, group_id, name, icon, color, kind) VALUES (?, NULL, ?, ?, ?, ?)",
-        [uuid(), c.name, c.icon, c.color, kind],
+        `INSERT OR IGNORE INTO category (id, group_id, name, icon, color, kind)
+         SELECT ?, NULL, ?, ?, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM category_tombstone WHERE name = ? AND kind = ?)`,
+        [uuid(), c.name, c.icon, c.color, kind, c.name, kind],
       );
     }
   };

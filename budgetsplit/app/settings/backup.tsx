@@ -36,7 +36,10 @@ export default function BackupScreen() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
 
-  useEffect(() => { settings.backupAnchorAt().then(setLastBackupAt); }, []);
+  // The *backup* timestamp, not the reminder anchor — enabling the reminder
+  // stamps the anchor, which is how this row came to claim a backup that never
+  // happened. Only handleCreateBackup / doRestore below write it.
+  useEffect(() => { settings.lastBackupAt().then(setLastBackupAt); }, []);
 
   async function handleCreateBackup(passphrase: string) {
     setShowCreateSheet(false);
@@ -53,7 +56,10 @@ export default function BackupScreen() {
       } else {
         await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
       }
+      // Both: a real export is genuinely the new reminder anchor *and* the
+      // moment a backup exists.
       await settings.setBackupAnchorAt(Date.now());
+      await settings.setLastBackupAt(Date.now());
       setLastBackupAt(Date.now());
       haptic.success();
     } catch (e) {
@@ -128,7 +134,10 @@ export default function BackupScreen() {
     setRestoring(true);
     try {
       await restoreAllTables(db, payload.tables);
+      // Both: a real export is genuinely the new reminder anchor *and* the
+      // moment a backup exists.
       await settings.setBackupAnchorAt(Date.now());
+      await settings.setLastBackupAt(Date.now());
       setLastBackupAt(Date.now());
       haptic.success();
       refresh();

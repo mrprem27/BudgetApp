@@ -180,6 +180,17 @@ export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): P
       `DELETE FROM recur_skip WHERE series_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
     await db.runAsync('DELETE FROM txn WHERE group_id=?', [groupId]);
     await db.runAsync('DELETE FROM group_member WHERE group_id=?', [groupId]);
+    // Unreviewed imports that were drafted into this group. Left pointing at a
+    // dead group they became permanently un-committable and sat in Review forever.
+    // Reset rather than delete — the row is a real imported transaction the user
+    // has not classified yet, and only its *destination* died with the group. The
+    // split draft and counterparty go too: both name members that no longer exist,
+    // so keeping them would only re-break the commit.
+    await db.runAsync(
+      `UPDATE pending_txn SET dest_group_id = NULL, split_draft = NULL, counterparty_id = NULL
+       WHERE dest_group_id = ?`,
+      [groupId],
+    );
     // Categories are a global catalog now — not owned by the group. Only this
     // group's budget lines go.
     await db.runAsync('DELETE FROM category_budget WHERE group_id=?', [groupId]);

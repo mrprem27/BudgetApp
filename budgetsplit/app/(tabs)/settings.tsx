@@ -118,7 +118,10 @@ export default function SettingsScreen() {
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
-      setBackupAt(await settings.backupAnchorAt());
+      // `lastBackupAt`, not the reminder anchor: turning the backup *reminder* on
+      // writes the anchor, so this row used to read "Backed up just now" to someone
+      // who had never backed up at all.
+      setBackupAt(await settings.lastBackupAt());
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(dc as BudgetCadence);
     })();

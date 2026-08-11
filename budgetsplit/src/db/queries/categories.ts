@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
+import { TXN_KIND_FOR_CATEGORY } from '../../constants/enums';
 
 export type CategoryKind = 'expense' | 'income' | 'transfer';
 
@@ -26,11 +27,16 @@ export async function getCategories(
   );
 }
 
-/** txn.kind values that map to each category kind (settlements → 'transfer'). */
+/**
+ * txn.kind values that map to each category kind (settlements → 'transfer').
+ * Derived from the canonical `TXN_KIND_FOR_CATEGORY` rather than restated, so the
+ * read path here and the rename/delete writes below can never disagree about
+ * which transactions a category owns.
+ */
 const TXN_KINDS_FOR: Record<CategoryKind, string[]> = {
-  expense: ['expense'],
-  income: ['income'],
-  transfer: ['settlement'],
+  expense: [TXN_KIND_FOR_CATEGORY.expense],
+  income: [TXN_KIND_FOR_CATEGORY.income],
+  transfer: [TXN_KIND_FOR_CATEGORY.transfer],
 };
 
 /**
@@ -93,10 +99,16 @@ export async function insertCategory(
   section: string | null = null,
 ): Promise<Category> {
   const id = uuid();
-  await db.runAsync(
-    'INSERT INTO category (id, group_id, name, icon, color, kind, section) VALUES (?, NULL, ?, ?, ?, ?, ?)',
-    [id, name, icon, color, kind, section],
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT INTO category (id, group_id, name, icon, color, kind, section) VALUES (?, NULL, ?, ?, ?, ?, ?)',
+      [id, name, icon, color, kind, section],
+    );
+    // Re-creating a category by hand is an explicit reversal of the delete, so its
+    // tombstone goes — otherwise the seeder would keep refusing to restore it and
+    // this row would be the only copy, silently un-restorable from a backup.
+    await db.runAsync('DELETE FROM category_tombstone WHERE name = ? AND kind = ?', [name, kind]);
+  });
   return { id, group_id: null, name, icon, color, kind, section };
 }
 
@@ -117,13 +129,25 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
   const n = newName.trim();
   if (!n) return;
   await db.withTransactionAsync(async () => {
-    const cat = await db.getFirstAsync<{ name: string }>(
-      'SELECT name FROM category WHERE id = ?', [categoryId],
+    const cat = await db.getFirstAsync<{ name: string; kind: CategoryKind }>(
+      'SELECT name, kind FROM category WHERE id = ?', [categoryId],
     );
     if (!cat || cat.name === n) return;
+    const txnKind = TXN_KIND_FOR_CATEGORY[cat.kind];
     await db.runAsync('UPDATE category SET name = ? WHERE id = ?', [n, categoryId]);
-    await db.runAsync('UPDATE txn SET category = ? WHERE category = ?', [n, cat.name]);
-    await db.runAsync('UPDATE category_budget SET category = ? WHERE category = ?', [n, cat.name]);
+    // Scoped by kind. `Rent` and `Other` are seeded as **both** expense and
+    // transfer, so an unscoped UPDATE renamed the other kind's transactions to a
+    // name its own catalog does not contain: they fell out of every category
+    // match, folded into Others, and the budget for that name read ₹0 spent
+    // forever — with nothing on screen connecting the two.
+    await db.runAsync(
+      'UPDATE txn SET category = ? WHERE category = ? AND kind = ?', [n, cat.name, txnKind],
+    );
+    // Budgets are an expense-side concept — `getCategorySpending` only ever sums
+    // expenses — so a transfer or income rename must leave them alone.
+    if (cat.kind === 'expense') {
+      await db.runAsync('UPDATE category_budget SET category = ? WHERE category = ?', [n, cat.name]);
+    }
   });
 }
 
@@ -134,12 +158,24 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
  */
 export async function deleteCategory(db: SQLite.SQLiteDatabase, categoryId: string): Promise<void> {
   await db.withTransactionAsync(async () => {
-    const cat = await db.getFirstAsync<{ name: string }>(
-      'SELECT name FROM category WHERE id = ?', [categoryId],
+    const cat = await db.getFirstAsync<{ name: string; kind: CategoryKind }>(
+      'SELECT name, kind FROM category WHERE id = ?', [categoryId],
     );
     await db.runAsync('DELETE FROM category WHERE id = ?', [categoryId]);
     if (cat) {
-      await db.runAsync('DELETE FROM category_budget WHERE category = ?', [cat.name]);
+      // Same kind-blindness as the rename: dropping transfer-`Rent` must not take
+      // the *expense* Rent budget with it. Budgets are expense-only.
+      if (cat.kind === 'expense') {
+        await db.runAsync('DELETE FROM category_budget WHERE category = ?', [cat.name]);
+      }
+      // Tombstone, so the launch-time reseed cannot resurrect it. `schema.ts`
+      // re-seeds the default catalog on *every* open, which undid the delete but
+      // kept the collateral damage — the budget stayed deleted while the category
+      // came back. Only seeded names need this; a user-created one is never reseeded.
+      await db.runAsync(
+        'INSERT OR IGNORE INTO category_tombstone (name, kind, created_at) VALUES (?,?,?)',
+        [cat.name, cat.kind, Date.now()],
+      );
     }
   });
 }

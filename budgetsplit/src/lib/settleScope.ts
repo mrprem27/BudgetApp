@@ -73,9 +73,21 @@ export function planAllGroupsSettlement(
   fromId: string,
   toId: string,
 ): SettlementPlan[] {
-  const ranked = scopes.groups
-    .filter(g => g.amount > 0)
+  const live = scopes.groups.filter(g => g.amount > 0);
+  // Direction matters, and ranking by amount alone ignored it. A group where
+  // *they* owe *you* was eligible for a payment *you* were making, so a settle-up
+  // could land in the one group running the other way — increasing the balance it
+  // was meant to clear. The global net still came out right, which is precisely
+  // why nothing surfaced it: only the per-group figures were wrong.
+  const aligned = live
+    .filter(g => g.from === fromId && g.to === toId)
     .sort((a, b) => b.amount - a.amount);
+  // Nothing owed in this direction anywhere — a prepayment. It has to land
+  // somewhere, so it goes to the largest live balance and reads as credit there,
+  // which is what a prepayment is. Better than dropping the row.
+  const ranked = aligned.length > 0
+    ? aligned
+    : live.slice().sort((a, b) => b.amount - a.amount).slice(0, 1);
   if (ranked.length === 0) return [];
 
   const plan: SettlementPlan[] = [];

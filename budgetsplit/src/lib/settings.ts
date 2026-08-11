@@ -29,6 +29,7 @@ const K = {
   scanPayHintPending: 'scan_pay_hint_pending',
   preferredUpiApp: 'preferred_upi_app',
   backupAnchorAt: 'backup_anchor_at',
+  lastBackupAt: 'last_backup_at',
   ocrProvider: 'ocr_provider',
   storageWarnDismissed: 'storage_warn_dismissed',
 } as const;
@@ -110,9 +111,18 @@ export const settings = {
     v === null ? AsyncStorage.removeItem(K.preferredUpiApp) : setString(K.preferredUpiApp, v),
 
   // Backup reminder cadence anchor — last real export, or when the reminder
-  // was first turned on if the user hasn't exported yet.
+  // was first turned on if the user hasn't exported yet. **Not** a record that a
+  // backup happened: turning the reminder on writes it too.
   backupAnchorAt: () => getNumber(K.backupAnchorAt),
   setBackupAnchorAt: (v: number) => setNumber(K.backupAnchorAt, v),
+
+  // When a backup was actually written. Split from the anchor above, which the
+  // Settings row was reading: enabling the *reminder* stamped the anchor, so the
+  // row read "Backed up just now" to someone who had never backed up once — the
+  // one indicator whose entire job is to be trusted when it says you are safe.
+  // Only a completed export writes this.
+  lastBackupAt: () => getNumber(K.lastBackupAt),
+  setLastBackupAt: (v: number) => setNumber(K.lastBackupAt, v),
 
   // Receipt-scan provider: 'device' (free/offline, Apple Vision + regex) or
   // 'gemini' (cloud, free tier, better accuracy) — see lib/ocrProviders/index.ts

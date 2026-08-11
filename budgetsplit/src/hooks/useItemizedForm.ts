@@ -80,6 +80,13 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [note, setNote] = useState('');
+  /**
+   * The bill's own date. `handleSave` used to hardcode `Date.now()` on update as
+   * well as insert, so fixing a July bill in August silently moved it to August:
+   * July's totals lost it and August gained it, with no date field on screen to
+   * hint that anything had changed. An edit must preserve the date it loaded.
+   */
+  const [txnDate, setTxnDate] = useState(() => Date.now());
   const [items, setItems] = useState<LineItemDraft[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -145,6 +152,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
           setMembers(mems);
           setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
           setNote(t.note ?? '');
+          setTxnDate(t.date);
           setAttachmentUri(t.attachment_uri ?? null);
           setItems(lineItems.map(li => ({
             id: li.id,
@@ -352,7 +360,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         groupId: selectedGroupId,
         kind: 'expense' as const,
         entryMode: 'itemized' as const,
-        date: Date.now(),
+        date: txnDate,
         category: selectedCategory?.name ?? 'Other',
         note: note.trim() || undefined,
         attachmentUri: attachmentUri ?? undefined,
@@ -394,6 +402,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
     selectedGroupId, members, categories, setCategories,
     selectedCategory, setSelectedCategory,
     note, setNote,
+    txnDate, setTxnDate,
     // items
     items, editingId, setEditingId,
     newName, setNewName, newQty, setNewQty, newPrice, setNewPrice,

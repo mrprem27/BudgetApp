@@ -91,3 +91,60 @@ describe('planAllGroupsSettlement', () => {
     expect(s.groups.map(g => g.groupId)).toEqual(before);
   });
 });
+
+/**
+ * Mixed directions — the case the suite above never built, and the reason the
+ * bug survived: every scope helper made all groups point the same way, so
+ * ranking by amount alone always happened to pick a correctly-directed group.
+ */
+describe('planAllGroupsSettlement respects per-group direction', () => {
+  /** `[groupId, amount, whoOwes]` — 'me' means I owe you, 'you' means you owe me. */
+  const mixed = (rows: Array<[string, number, 'me' | 'you']>): TransferScopes => ({
+    groups: rows.map(([groupId, amount, debtor]) => ({
+      groupId, name: groupId, amount,
+      from: debtor, to: debtor === 'me' ? 'you' : 'me',
+    })),
+    all: { amount: 0, from: 'me', to: 'you' },
+  });
+
+  it('skips the group where they owe me, even though it is the largest', () => {
+    // 'flat': I owe you ₹200. 'goa': you owe me ₹500 — bigger, and pre-fix it
+    // ranked first, so my ₹200 payment landed there and made it ₹700.
+    const plan = planAllGroupsSettlement(
+      mixed([['flat', 20000, 'me'], ['goa', 50000, 'you']]), 20000, 'me', 'you',
+    );
+    expect(plan).toEqual([{ groupId: 'flat', from: 'me', to: 'you', amount: 20000 }]);
+  });
+
+  it('spreads only across same-direction groups', () => {
+    const plan = planAllGroupsSettlement(
+      mixed([['a', 30000, 'me'], ['b', 90000, 'you'], ['c', 20000, 'me']]), 45000, 'me', 'you',
+    );
+    expect(plan.map(p => p.groupId)).toEqual(['a', 'c']);
+    expect(plan.reduce((s, p) => s + p.amount, 0)).toBe(45000);
+  });
+
+  it('settling the other way picks the other set of groups', () => {
+    const plan = planAllGroupsSettlement(
+      mixed([['flat', 20000, 'me'], ['goa', 50000, 'you']]), 50000, 'you', 'me',
+    );
+    expect(plan).toEqual([{ groupId: 'goa', from: 'you', to: 'me', amount: 50000 }]);
+  });
+
+  it('an overpayment still lands, on the last same-direction group', () => {
+    const plan = planAllGroupsSettlement(
+      mixed([['a', 30000, 'me'], ['b', 10000, 'me'], ['big', 99000, 'you']]), 60000, 'me', 'you',
+    );
+    expect(plan.map(p => p.groupId)).toEqual(['a', 'b']);
+    expect(plan[1].amount).toBe(30000); // 10000 owed + 20000 excess
+    expect(plan.some(p => p.groupId === 'big')).toBe(false);
+  });
+
+  it('falls back to the largest group when nothing is owed in this direction', () => {
+    // A prepayment: nobody owes me, and I pay anyway. It must still be recorded.
+    const plan = planAllGroupsSettlement(
+      mixed([['goa', 50000, 'you'], ['trip', 10000, 'you']]), 15000, 'me', 'you',
+    );
+    expect(plan).toEqual([{ groupId: 'goa', from: 'me', to: 'you', amount: 15000 }]);
+  });
+});

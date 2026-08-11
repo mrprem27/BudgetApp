@@ -184,6 +184,18 @@ export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
 export const CATEGORY_KIND = ['expense', 'income', 'transfer'] as const;
 export type CategoryKind = typeof CATEGORY_KIND[number];
 
+/**
+ * Which `txn.kind` a category of each kind labels. The two vocabularies differ by
+ * exactly one word — the UI's *transfer* is stored as `settlement` — and the
+ * catalog is `UNIQUE(name, kind)`, so the same name legitimately exists twice
+ * (`Rent` and `Other` are seeded as both expense and transfer). Any write that
+ * propagates a category name to `txn` must go through this map, or it edits the
+ * other kind's rows too.
+ */
+export const TXN_KIND_FOR_CATEGORY: Record<CategoryKind, TxnKind> = {
+  expense: 'expense', income: 'income', transfer: 'settlement',
+};
+
 /** Category-budget cadence. */
 export const BUDGET_CADENCE = ['once', 'daily', 'monthly', 'yearly'] as const;
 export type BudgetCadence = typeof BUDGET_CADENCE[number];
