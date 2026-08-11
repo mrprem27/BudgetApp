@@ -397,6 +397,101 @@ Not blockers. Listed so nobody re-discovers them as bugs.
 
 ---
 
+## 6b. Server, login and sync — requirements *(raised 2026-08-11)*
+
+**This is not a feature. It changes what the app is** — from local-first with no server, to
+client–server with accounts. It also makes the app's standing promise ("nothing leaves your
+device") false, so that copy has to change wherever it appears.
+
+### What was asked, restated precisely
+
+| | Requirement |
+|---|---|
+| **R1** | Real login + setup against a server |
+| **R2** | Backups **signed/encrypted with the user's own secret**, so no other user can restore them — *stated as the base reason for login* |
+| **R3** | Server-stored user config |
+| **R4** | **Selective** sync — the user picks what goes up (transactions, person details, …) |
+| **R5** | Manual **pull**, or auto-receive when switched on |
+| **R6** | A group syncs only when **all its members are properly synced** |
+
+### Finding 1 — two different products are conflated here
+
+| | Needs | Size |
+|---|---|---|
+| **Backup & restore** (one user, opaque blobs) | Auth + a blob store | Small |
+| **Multi-user group sync** | Conflict resolution, invitations, presence, key exchange, membership changes | **Large** |
+
+They share only the login. Backup delivers most of the immediate value — *"I lost my
+phone"* is the real pain today — for a fraction of the work.
+
+### Finding 2 — R2 and R6 are in direct tension ⚠️
+
+This is the important one. If a backup is encrypted with **your** secret so nobody else can
+restore it, then **no other group member can read your group's rows either** — that is the
+same property, working against you.
+
+- **Personal backup, encrypted with your key** — server stores opaque bytes. Simple, and
+  exactly what R2 asks for.
+- **Group sync** — member B must decrypt rows written by A. That needs a **per-group
+  symmetric key, wrapped for each member's public key**, plus rotation when someone leaves
+  and re-wrapping when someone joins. Real key management.
+- **Server-readable group sync** — easy, and contradicts R2 outright.
+
+So R2 is cheap alone and expensive combined with R6. They are not one project.
+
+### Finding 3 — the schema is already well positioned
+
+- `txn` carries `created_at`, `updated_at` **and** `is_deleted` (`src/db/schema.ts:73-75`) —
+  the three fields last-write-wins sync needs, soft deletes included.
+- `person.remote_uid` (`src/db/schema.ts:22`) was reserved for exactly this and is still
+  unused (`persons.ts:52` writes `null`). It stops being dead schema.
+- `expo-crypto` and `crypto-js` are already dependencies. **`expo-secure-store` is not** —
+  it is needed to hold the key.
+
+### Finding 4 — sync a transaction as one document, never row-by-row ⚠️
+
+A txn plus its `txn_payment` and `txn_share` rows is **one atomic fact**. Merging payments
+from one device with shares from another yields a split that does not balance — i.e.
+**silently wrong money**, the worst possible failure for this app. Last-write-wins on the
+whole document; never per row.
+
+### Recommendation — a ladder, because the first two rungs need no group crypto
+
+| Phase | What | Key management |
+|---|---|---|
+| **S1** | Login + encrypted backup & restore | Your key only |
+| **S2** | Multi-device sync for **one** user | Still your key only — no exchange at all |
+| **S3** | Multi-user group sync | Per-group keys wrapped per member |
+
+S1 and S2 deliver "never lose my data" and "phone + iPad" with **no key exchange
+whatsoever**. S3 is where the hard cryptography starts, and it is the only rung that needs
+R6 answered.
+
+### Decisions still open
+
+- [ ] **Identity.** *Recommendation: Sign in with Apple* — free, no phone-OTP cost (Indian
+      SMS OTP also needs DLT registration), gives a stable ID plus a relay email, and the
+      paid Apple team is already Gate 0. Email magic-link as the Android path.
+- [ ] **Key recovery — decide before writing a line of it.** True E2E means a forgotten
+      secret is **permanently unrecoverable data**. *Recommendation: key in the iOS Keychain
+      (syncs across the user's own devices) plus a one-time written recovery code, and say
+      plainly at setup that losing both loses the backup.* Any softer promise is a lie.
+- [ ] **R6's blocking rule.** As stated — a group syncs only once *every* member has joined
+      — one person who never installs kills the group permanently. *Recommendation: sync
+      among joined members; everyone else stays a local-only participant exactly as they are
+      today, clearly labelled.* That is also a strict superset of current behaviour, so
+      nothing regresses.
+- [ ] **R4 granularity.** "Choose what to sync" is easy per *table*, and near-impossible per
+      *row* once groups are shared — a group cannot sync if you withhold half its
+      transactions.
+- [ ] **Non-engineering cost.** India's DPDP Act obligations once personal data sits on a
+      server, a rewritten privacy policy, hosting, uptime and someone on call.
+
+**Not V2.** It would delay the pilot indefinitely — and the pilot is what tells you whether
+anyone wants group sync at all. Revisit as **V3, starting at S1**.
+
+---
+
 ## 7. Explicitly out of scope — dropped, not deferred
 
 | Thing | Why |
@@ -406,4 +501,4 @@ Not blockers. Listed so nobody re-discovers them as bugs.
 | GPay auto-import | Blocked on an unknown export format (`F4`). |
 | Android SMS reading | Play-policy dead. |
 | Multi-currency | Needs historical rates; get it right on day one or not at all. |
-| Real multi-user sync | `person.remote_uid` is dead schema; there is no cloud. |
+| Real multi-user sync | Scoped as **V3** — see [§6b](#6b-server-login-and-sync--requirements-raised-2026-08-11). `person.remote_uid` was reserved for it and is still unused. |
