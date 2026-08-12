@@ -16,6 +16,8 @@ type Props = {
   /** Set after a failed restore attempt (e.g. wrong passphrase) — shown inline
    *  so a retry doesn't stack an Alert on top of this sheet. */
   error?: string | null;
+  /** Extra controls for `create` mode, rendered above the fields (e.g. what to include). */
+  extra?: React.ReactNode;
 };
 
 /**
@@ -23,7 +25,7 @@ type Props = {
  * that it's never stored and can't be recovered if forgotten.
  * `mode: 'restore'` — enter the passphrase for a picked backup file.
  */
-export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, error }: Props) {
+export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, error, extra }: Props) {
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
 
@@ -41,6 +43,9 @@ export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, 
     <SheetModal visible={visible} onClose={onClose} title={mode === 'create' ? 'Set a backup passphrase' : 'Enter passphrase'}>
       {mode === 'create' ? (
         <>
+          {/* What goes in the file, decided before the passphrase — it changes the
+              size of the thing being made, so it belongs above the commit step. */}
+          {extra}
           <Text style={styles.warning}>
             This passphrase encrypts your backup. It is never stored anywhere — not on this
             device, not by BudgetSplit. If you forget it, this backup can never be recovered

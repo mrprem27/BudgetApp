@@ -29,7 +29,23 @@ export const state = {
 export const Paths = { document: '/doc', cache: '/cache' };
 
 export class File {
-  constructor(public name: string) {}
+  /** Real name after joining. The app builds files both ways: `new File(uri)` and
+   *  `new File(dir, 'name.jpg')`, so the fake has to accept the same shapes. */
+  public name: string;
+
+  constructor(...parts: unknown[]) {
+    // `file://` is stripped so a name is always a plain path — otherwise collapsing
+    // repeated slashes would mangle the scheme into `file:/`.
+    this.name = parts
+      .map(p => (p instanceof Directory ? p.path : String(p)))
+      .filter(Boolean)
+      .join('/')
+      .replace(/^file:\/\//, '')
+      .replace(/\/+/g, '/');
+  }
+
+  /** Where the file would be on device; restore rewrites rows to this value. */
+  get uri(): string { return `file://${this.name}`; }
 
   get exists(): boolean {
     return state.entries.some(e => e.name === this.name);
@@ -58,8 +74,16 @@ export class File {
     state.entries = state.entries.filter(e => e.name !== this.name);
   }
 
-  write(content: string): void {
+  /** Base64 of the stored content — the app reads photos this way for a backup. */
+  async base64(): Promise<string> {
+    if (state.unreadable.has(this.name)) throw new Error('unreadable');
+    const hit = state.entries.find(e => e.name === this.name);
+    return Buffer.from(hit?.content ?? '', 'utf8').toString('base64');
+  }
+
+  write(content: string, opts?: { encoding?: string }): void {
     if (state.unwritable.has(this.name)) throw new Error('read-only');
+    if (opts?.encoding === 'base64') content = Buffer.from(content, 'base64').toString('utf8');
     const hit = state.entries.find(e => e.name === this.name);
     if (hit) hit.content = content;
     else state.entries.push({ name: this.name, content });
@@ -69,13 +93,17 @@ export class File {
 }
 
 export class Directory {
-  // The app constructs these as `new Directory(Paths.document, 'voice-inbox')`; the fake is
-  // flat, so the path arguments are accepted and ignored.
-  constructor(..._path: unknown[]) {}
+  /** Joined path. Kept (rather than ignored as before) so `new File(dir, name)` can
+   *  produce distinct paths — restore writes receipts and avatars to different dirs. */
+  public path: string;
+
+  constructor(...parts: unknown[]) {
+    this.path = parts.map(p => String(p)).filter(Boolean).join('/').replace(/\/+/g, '/');
+  }
 
   get exists(): boolean { return state.dirExists; }
 
-  create(): void { state.dirExists = true; }
+  create(_opts?: { intermediates?: boolean }): void { state.dirExists = true; }
 
   list(): File[] {
     // Matches the real API, which throws when the parent directory is absent.

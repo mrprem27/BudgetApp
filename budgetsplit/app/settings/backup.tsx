@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -20,7 +21,7 @@ import {
   buildBackupPayload, backupFileName, encryptPayload, decryptEnvelope,
   BackupWrongPassphraseError, type BackupEnvelope, type BackupPayload,
 } from '../../src/lib/backup';
-import { readAllTables, restoreAllTables } from '../../src/db/queries/backup';
+import { readAllTables, restoreAllTables, readPhotoFiles, restorePhotoFiles } from '../../src/db/queries/backup';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
@@ -31,6 +32,7 @@ export default function BackupScreen() {
   const [restoring, setRestoring] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [showCreateSheet, setShowCreateSheet] = useState(false);
+  const [includePhotos, setIncludePhotos] = useState(false);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
   const [pickedEnvelope, setPickedEnvelope] = useState<BackupEnvelope | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -46,7 +48,11 @@ export default function BackupScreen() {
     setCreating(true);
     try {
       const tables = await readAllTables(db);
-      const payload = buildBackupPayload(tables);
+      // Opt-in. Receipt photos dwarf the rows — a few hundred transactions is
+      // tens of KB, one receipt can be a megabyte — so this is the user's call
+      // rather than a default that quietly makes every backup unshareable.
+      const photos = includePhotos ? await readPhotoFiles(tables) : undefined;
+      const payload = buildBackupPayload(tables, photos);
       const envelope = encryptPayload(payload, passphrase);
       const file = new File(Paths.cache, backupFileName());
       file.create({ overwrite: true });
@@ -133,7 +139,12 @@ export default function BackupScreen() {
   async function doRestore(payload: BackupPayload) {
     setRestoring(true);
     try {
-      await restoreAllTables(db, payload.tables);
+      // Photos first: the tables come back with every photo URI repointed at this
+      // install's directories, or nulled where the backup did not carry the file.
+      // Restoring the rows verbatim is what left every restore showing "Receipt
+      // attached" over a path that no longer exists.
+      const tables = await restorePhotoFiles(payload.tables, payload.photos);
+      await restoreAllTables(db, tables);
       // Both: a real export is genuinely the new reminder anchor *and* the
       // moment a backup exists.
       await settings.setBackupAnchorAt(Date.now());
@@ -196,6 +207,29 @@ export default function BackupScreen() {
         onClose={() => setShowCreateSheet(false)}
         mode="create"
         onSubmit={handleCreateBackup}
+        extra={
+          <TouchableOpacity
+            style={styles.includeRow}
+            onPress={() => { haptic.selection(); setIncludePhotos(v => !v); }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: includePhotos }}
+            accessibilityLabel="Include receipt photos"
+          >
+            <Feather
+              name={includePhotos ? 'check-square' : 'square'}
+              size={18}
+              color={includePhotos ? colors.accent : colors.textMuted}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.includeLabel}>Include receipt photos</Text>
+              <Text style={styles.includeHint}>
+                {includePhotos
+                  ? 'Receipts and profile pictures are restored too. The file will be much larger.'
+                  : 'Rows only — small file. Receipts will not come back on restore.'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        }
         submitting={creating}
       />
       <PassphraseSheet
@@ -211,6 +245,9 @@ export default function BackupScreen() {
 }
 
 const styles = StyleSheet.create({
+  includeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.smd, paddingVertical: space.smd, minHeight: layout.touchMin },
+  includeLabel: { ...type.body, color: colors.textPrimary },
+  includeHint: { ...type.caption, color: colors.textMuted, lineHeight: 16, marginTop: 2 },
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: layout.screenPaddingH, gap: space.lg },
   card: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },

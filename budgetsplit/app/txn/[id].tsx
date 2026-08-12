@@ -49,6 +49,14 @@ export default function TxnDetailScreen() {
     chooseReceiptSource, removeReceipt, onDelete,
   } = useTxnDetail(id);
 
+  /**
+   * Set when the OS fails to decode the attachment — the row points at a file
+   * that is no longer on disk. Keyed off the URI so replacing the receipt clears
+   * it rather than leaving the card stuck reporting a photo that now exists.
+   */
+  const [attachmentMissing, setAttachmentMissing] = useState(false);
+  useEffect(() => { setAttachmentMissing(false); }, [txn?.attachment_uri]);
+
   // No id → nothing to show; bounce back (kept as an effect so hooks above still run).
   useEffect(() => { if (!id) router.back(); }, [id, router]);
 
@@ -210,13 +218,39 @@ export default function TxnDetailScreen() {
         <Text style={styles.receiptLabel}>RECEIPT</Text>
         {txn.attachment_uri ? (
           <>
-            <TouchableOpacity style={styles.attachCard} onPress={() => setShowAttachment(true)} accessibilityLabel="View receipt">
-              <Image source={{ uri: txn.attachment_uri }} style={styles.attachThumb} />
+            {/* A photo file can be gone while the row still points at it — a restore
+                from a rows-only backup lands exactly here, and so does a user who
+                cleared photos from Storage. Without `onError` this card announced
+                "Receipt attached" over a blank square, which is the one thing it
+                must not do: it is the only signal that the receipt still exists. */}
+            <TouchableOpacity
+              style={styles.attachCard}
+              onPress={() => { if (!attachmentMissing) setShowAttachment(true); }}
+              disabled={attachmentMissing}
+              accessibilityLabel={attachmentMissing ? 'Receipt file is missing' : 'View receipt'}
+            >
+              {attachmentMissing ? (
+                <View style={[styles.attachThumb, styles.attachThumbGone]}>
+                  <Feather name="image" size={16} color={colors.textMuted} />
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: txn.attachment_uri }}
+                  style={styles.attachThumb}
+                  onError={() => setAttachmentMissing(true)}
+                />
+              )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.attachLabel}>Receipt attached</Text>
-                <Text style={styles.attachHint}>Tap to view full size</Text>
+                <Text style={styles.attachLabel}>
+                  {attachmentMissing ? 'Receipt photo missing' : 'Receipt attached'}
+                </Text>
+                <Text style={styles.attachHint}>
+                  {attachmentMissing
+                    ? 'The file is no longer on this device. Attach it again below.'
+                    : 'Tap to view full size'}
+                </Text>
               </View>
-              <Feather name="maximize-2" size={16} color={colors.textMuted} />
+              {!attachmentMissing && <Feather name="maximize-2" size={16} color={colors.textMuted} />}
             </TouchableOpacity>
             <View style={styles.receiptActions}>
               <TouchableOpacity style={styles.receiptBtn} onPress={chooseReceiptSource} accessibilityRole="button">
@@ -438,6 +472,7 @@ const styles = StyleSheet.create({
   receiptLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.xs },
   attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   attachThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
+  attachThumbGone: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   attachLabel: { ...type.body, color: colors.textPrimary },
   attachHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   attachAddCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', padding: space.md },

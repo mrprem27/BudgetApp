@@ -27,7 +27,16 @@ export const BACKUP_TABLES = [
 
 export type BackupTableName = typeof BACKUP_TABLES[number];
 export type BackupTables = Record<BackupTableName, Record<string, unknown>[]>;
-export type BackupPayload = { v: number; createdAt: number; tables: BackupTables };
+/**
+ * `photos` is optional and opt-in: base64 by `photoKey`. Absent means the user
+ * chose rows only, which keeps the file small — a backup with receipts can be
+ * many times larger. Old backups simply have no key, and restore treats that the
+ * same as "this photo was not included".
+ */
+export type BackupPhotos = Record<string, string>;
+export type BackupPayload = {
+  v: number; createdAt: number; tables: BackupTables; photos?: BackupPhotos;
+};
 export type BackupEnvelope = { v: number; createdAt: number; ciphertext: string };
 
 /** Wrong passphrase (or a corrupted/foreign file) — decryption produced
@@ -39,8 +48,11 @@ export class BackupWrongPassphraseError extends Error {}
  *  an incompatible (future or ancient) app version. */
 export class BackupCorruptError extends Error {}
 
-export function buildBackupPayload(tables: BackupTables): BackupPayload {
-  return { v: BACKUP_VERSION, createdAt: Date.now(), tables };
+export function buildBackupPayload(tables: BackupTables, photos?: BackupPhotos): BackupPayload {
+  // Omitted rather than set to {} when empty, so "no photos" and "photos not
+  // requested" look identical on the wire and restore has one case to handle.
+  const hasPhotos = photos && Object.keys(photos).length > 0;
+  return { v: BACKUP_VERSION, createdAt: Date.now(), tables, ...(hasPhotos ? { photos } : {}) };
 }
 
 /** "budgetsplit-backup-2026-07-28.bsbackup" */
@@ -90,7 +102,16 @@ export function validateBackupPayload(json: unknown): BackupPayload {
   for (const name of BACKUP_TABLES) {
     if (!Array.isArray(tables[name])) throw new BackupCorruptError(`Backup is missing the "${name}" table.`);
   }
-  return { v: obj.v as number, createdAt: obj.createdAt, tables: tables as BackupTables };
+  // `photos` is optional by design — a rows-only backup is valid, and so is one
+  // written before photos existed at all.
+  const photos = obj.photos;
+  if (photos !== undefined && (typeof photos !== 'object' || photos === null || Array.isArray(photos))) {
+    throw new BackupCorruptError('Backup has a malformed photo section.');
+  }
+  return {
+    v: obj.v as number, createdAt: obj.createdAt, tables: tables as BackupTables,
+    ...(photos ? { photos: photos as BackupPhotos } : {}),
+  };
 }
 
 const SAFE_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;

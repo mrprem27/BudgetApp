@@ -73,6 +73,7 @@ export default function BudgetEditorScreen() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [cadenceSheetFor, setCadenceSheetFor] = useState<string | null>(null);
+  const [confirmOwn, setConfirmOwn] = useState(false);
   // Measured, not guessed: the footer is a fixed CTA over a scroll view, and the spacer it
   // replaced was a literal 100pt.
   const [footerH, setFooterH] = useState(0);
@@ -112,10 +113,25 @@ export default function BudgetEditorScreen() {
   const ctx = data?.ctx ?? null;
   // Only an admin may edit the line everyone inherits; anyone may edit their own.
   const mayEditGroup = ctx ? canEditGroupBudget(ctx) : false;
-  const [level, setLevel] = useState<BudgetLevel>('personal');
+  /**
+   * Opens on the **group default**, because until you deliberately opt in that is
+   * the only budget that applies to you. Landing on "Mine" would suggest a personal
+   * budget already exists, and the first keystroke would quietly create one.
+   */
+  const [level, setLevel] = useState<BudgetLevel>('group');
   // How many categories you have already overridden — shown on the "Mine" pill so
   // the override layer is discoverable rather than something you have to remember.
   const overrideCount = (data?.rows ?? []).filter(r => r.person_id === meId && r.amount > 0).length;
+
+  /**
+   * A member cannot edit the group default, and the segment is hidden for them —
+   * so leaving `level` on 'group' would have them typing into a level the write
+   * path refuses. Their only editable level is their own, which is also the only
+   * level the opt-in question could have offered them.
+   */
+  useEffect(() => {
+    if (ctx && !mayEditGroup) setLevel('personal');
+  }, [ctx, mayEditGroup]);
 
   // Seed editable form state (amounts/cadences/collapsed) from the loaded data
   // whenever it (re)arrives — mirrors what the old `load()` did inline.
@@ -274,14 +290,30 @@ export default function BudgetEditorScreen() {
                   { key: 'personal', label: 'Mine', badge: overrideCount > 0 ? overrideCount : undefined },
                 ]}
                 active={level}
-                onChange={(k) => { haptic.selection(); setLevel(k as BudgetLevel); }}
+                onChange={(k) => {
+                  haptic.selection();
+                  // Switching to "Mine" for the first time is an opt-in, not a tab
+                  // change: an override silently coming into existence would then
+                  // diverge from the group default forever, with the group's edits
+                  // no longer reaching you and nothing on screen saying why.
+                  if (k === 'personal' && overrideCount === 0) { setConfirmOwn(true); return; }
+                  setLevel(k as BudgetLevel);
+                }}
               />
               <Text style={styles.levelHint}>
                 {level === 'group'
-                  ? 'The amount every member starts from. Anyone can set their own instead.'
+                  ? overrideCount > 0
+                    ? 'The amount every member starts from. You have your own for some categories.'
+                    : 'The amount every member starts from — including you, until you set your own.'
                   : 'Yours only. Where you leave a value untouched, the group default applies.'}
               </Text>
             </View>
+          )}
+          {ctx && !mayEditGroup && (
+            <Text style={[styles.levelHint, { marginBottom: space.md }]}>
+              Setting your own budget for this group. The group's default applies to every
+              category you leave untouched; only an admin can change that default.
+            </Text>
           )}
 
           <View style={styles.totalCard}>

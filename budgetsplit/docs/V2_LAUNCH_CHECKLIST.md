@@ -30,7 +30,7 @@ Not all large, but all *wrong money*. **All nine are done.**
 | ✅ `e0fdd32` | 0.3 pause/resume preserves `recur_end`; the dormant gap is written to `recur_skip` instead of back-posted | S | — |
 | ✅ `4491769` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
 | ✅ `0880152`+`ced6264` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. **`priority` remove-or-revive still open** (#15) | M | — |
-| ✅ `e0fdd32`+`a522d77` | Tier 1 — 9 of 11. The two left are **backups exclude photos** and **app lock has no failure path**; both are their own piece of work, not leftovers | M | — |
+| ✅ `e0fdd32`+`a522d77`+`pending` | Tier 1 — **all 11**. Backup photos are opt-in with URIs rewritten on restore; the app-lock failure path speaks. One residue, tracked separately: turning the lock *off* still needs no auth (a Settings fix, not a gate fix) | M | — |
 | ✅ `0880152` | 0.6 one `rollUpBudgets`, keyed by target period. **Decided:** a budget rolls *up* only — `daily × real days`, `monthly × 12` into a year; `yearly`/`once` are **pools**, never ÷12 | M | — |
 | ✅ `0880152` | 0.7 / 0.8. **Decided:** "spent" is what happened — every window ends at `now`; Reports is **my-share**, like every other surface | M | — |
 
@@ -181,10 +181,18 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 - ~~**The backup indicator lies** — enabling the backup *reminder* sets the same key the
   Settings row reads, so it shows "Backed up just now" to someone who never has.
   (`notifications.tsx:58-60` vs `settings.tsx:332`)~~ ✅ Split into `last_backup_at`; only a completed export or restore writes it.
-- **Backups exclude every photo**, and a missing receipt renders as **"Receipt attached"**
-  with no `onError`. That is the state every restore lands in.
-- **App lock has no failure path** — `LockGate.tsx:86` has no `else`; cancel or biometric
-  lockout changes nothing on screen. No auth needed to turn the lock *off*.
+- ~~**Backups exclude every photo**, and a missing receipt renders as **"Receipt attached"**
+  with no `onError`. That is the state every restore lands in.~~ ✅ Photos are now an **opt-in**
+  toggle on the create sheet (they dwarf the rows, so it is a choice, not a default). Restore
+  writes them into *this* install's directories and rewrites every URI — the stored paths are
+  absolute container paths and iOS reissues the container on every install, which is the only
+  situation a restore happens in, so carrying them over would have left the same broken state.
+  A photo the backup did not carry has its column **nulled** rather than left dangling, and both
+  receipt surfaces now have `onError`.
+- ~~**App lock has no failure path** — `LockGate.tsx:86` has no `else`; cancel or biometric
+  lockout changes nothing on screen.~~ ✅ Cancelling and failing now say so, and are worded
+  differently because one is a choice and the other is the OS refusing you. **Still open:** no
+  auth is required to turn the lock *off* — a separate fix, in Settings rather than the gate.
 
 ### What is genuinely solid — do not "fix" these
 

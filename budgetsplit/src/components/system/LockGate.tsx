@@ -21,6 +21,8 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [authing, setAuthing] = useState(false);
   const [notEnrolled, setNotEnrolled] = useState(false);
+  /** Why the last attempt failed. Null until one does. */
+  const [authError, setAuthError] = useState<string | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
   // Load the preference on mount; if enabled, start locked.
@@ -63,6 +65,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   const authenticate = useCallback(async () => {
     if (authing) return;
     setAuthing(true);
+    setAuthError(null);
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -82,10 +85,31 @@ export function LockGate({ children }: { children: React.ReactNode }) {
         promptMessage: 'Unlock BudgetSplit',
         fallbackLabel: 'Use passcode',
       });
-      if (result.success) { setLocked(false); setNotEnrolled(false); }
+      if (result.success) {
+        setLocked(false); setNotEnrolled(false); setAuthError(null);
+        return;
+      }
+      /*
+       * The failure path. There was no `else` here at all, so cancelling Face ID or
+       * failing it left the overlay exactly as it was — no message, no change,
+       * nothing to distinguish "you cancelled" from "the app is stuck". The Unlock
+       * button is the only way forward and it looked like it had done nothing.
+       *
+       * Cancelling is separated from failing because they need different words: one
+       * is a choice, the other is the OS refusing you.
+       */
+      const cancelled = result.error === 'user_cancel'
+        || result.error === 'system_cancel'
+        || result.error === 'app_cancel';
+      setAuthError(
+        cancelled
+          ? 'Unlock cancelled. Tap Unlock when you are ready.'
+          : 'Could not verify it is you. Tap Unlock to try again, or use your phone passcode.',
+      );
     } catch {
-      // Auth threw (e.g. too many attempts / OS lockout) — stay locked; the
-      // user can retry with the Unlock button. Never crash on a rejection.
+      // Auth threw rather than resolving — same user-visible outcome, so it gets
+      // the same message instead of the silence it used to get.
+      setAuthError('Could not verify it is you. Tap Unlock to try again.');
     } finally {
       setAuthing(false);
     }
@@ -131,7 +155,12 @@ export function LockGate({ children }: { children: React.ReactNode }) {
                 </View>
               </View>
               <Text style={styles.title}>BudgetSplit Locked</Text>
-              <Text style={styles.subtitle}>Authenticate to continue</Text>
+              {/* The failed attempt has to be visible, or the Unlock button reads as
+                  broken: before this, a cancelled or locked-out attempt changed
+                  nothing on screen at all. */}
+              <Text style={[styles.subtitle, authError && styles.subtitleError]}>
+                {authError ?? 'Authenticate to continue'}
+              </Text>
               <TouchableOpacity
                 style={styles.unlockBtn}
                 onPress={authenticate}
@@ -188,6 +217,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
   },
+  subtitleError: { color: colors.healthAmber },
   notEnrolledTitle: { ...type.heading, color: colors.expense, textAlign: 'center' },
   notEnrolledBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   settingsBtn: {

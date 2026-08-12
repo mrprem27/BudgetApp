@@ -1,3 +1,5 @@
+jest.mock('expo-file-system', () => require('./__mocks__/expoFileSystem'));
+
 import type * as SQLite from 'expo-sqlite';
 import { createTestDb, addPerson, addGroup, addMember, addSimpleExpense, addCategory, type TestDb } from './helpers/testDb';
 import { readAllTables, restoreAllTables } from '../db/queries/backup';

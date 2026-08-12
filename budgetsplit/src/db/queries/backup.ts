@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
+import { File, Directory, Paths } from 'expo-file-system';
 import { seedGlobalCategories } from '../seedCategories';
-import { BACKUP_TABLES, assertSafeColumnNames, type BackupTables } from '../../lib/backup';
+import { BACKUP_TABLES, assertSafeColumnNames, type BackupTables, type BackupPhotos } from '../../lib/backup';
+import { collectPhotoUris, photoKey, rewritePhotoUris } from '../../lib/backupPhotos';
 
 /**
  * The SQL half of backup/restore — `lib/backup.ts` owns the pure shaping,
@@ -60,4 +62,78 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
   }
 
   await seedGlobalCategories(db);
+}
+
+// --- Photo files ---------------------------------------------------------
+//
+// Receipts and avatars are files on disk; the database only holds their paths.
+// Both directories are recreated here on restore because an install that has
+// never attached anything does not have them yet.
+
+const RECEIPT_DIR = new Directory(Paths.document, 'attachments');
+const AVATAR_DIR = new Directory(Paths.document, 'avatars');
+
+/** Which directory a restored photo belongs in, inferred from its source path. */
+function dirFor(uri: string): Directory {
+  return uri.includes('/avatars/') ? AVATAR_DIR : RECEIPT_DIR;
+}
+
+/**
+ * Read every photo the tables reference, as base64 keyed by `photoKey`.
+ *
+ * A file that has already gone missing is skipped rather than failing the whole
+ * backup — the row is stale either way, and refusing to back up 400 transactions
+ * because one receipt was deleted outside the app would be the worse trade.
+ */
+export async function readPhotoFiles(tables: BackupTables): Promise<BackupPhotos> {
+  const photos: BackupPhotos = {};
+  for (const uri of collectPhotoUris(tables)) {
+    try {
+      const file = new File(uri);
+      if (!file.exists) continue;
+      photos[photoKey(uri)] = await file.base64();
+    } catch {
+      // Unreadable for any reason — treated exactly like missing.
+    }
+  }
+  return photos;
+}
+
+/**
+ * Write the backed-up photos into *this* install's directories and return the
+ * tables with every photo URI repointed at them.
+ *
+ * Paths cannot be reused verbatim: they are absolute paths into the app
+ * container, and iOS issues a new container on every install — which is the only
+ * situation a restore happens in. A photo the backup did not carry has its column
+ * nulled, so nothing claims a receipt that is not on disk.
+ */
+export async function restorePhotoFiles(
+  tables: BackupTables,
+  photos: BackupPhotos | undefined,
+): Promise<BackupTables> {
+  if (!photos || Object.keys(photos).length === 0) {
+    // Rows-only backup: every photo path in it is dead on this device.
+    return rewritePhotoUris(tables, () => null);
+  }
+
+  const written = new Map<string, string>();
+  for (const uri of collectPhotoUris(tables)) {
+    const key = photoKey(uri);
+    const b64 = photos[key];
+    if (!b64) continue;
+    try {
+      const dir = dirFor(uri);
+      if (!dir.exists) dir.create({ intermediates: true });
+      const file = new File(dir, key);
+      if (file.exists) file.delete();
+      file.create();
+      await file.write(b64, { encoding: 'base64' });
+      written.set(uri, file.uri);
+    } catch {
+      // Leave it unwritten; the rewrite below nulls it rather than pointing at
+      // a file that failed to land.
+    }
+  }
+  return rewritePhotoUris(tables, uri => written.get(uri) ?? null);
 }
