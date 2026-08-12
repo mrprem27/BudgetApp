@@ -24,7 +24,7 @@ export type BudgetGroup = {
 
 import type { SplitMode, GroupRole } from '../../constants/enums';
 import {
-  canAddMember, canChangeRole, canRemoveMember, PermissionError, type GroupContext,
+  canChangeRole, canDeleteGroup, PermissionError, type GroupContext,
 } from '../../lib/permissions';
 export type { SplitMode } from '../../constants/enums';
 
@@ -169,9 +169,17 @@ export type DeleteGroupResult = {
  * Irreversible — the caller must confirm first, and must unlink the returned
  * attachment files.
  */
-export async function deleteGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<DeleteGroupResult> {
+export async function deleteGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  /** Who is deleting. Creator-only — this destroys every member's history. */
+  actorId: string,
+): Promise<DeleteGroupResult> {
   const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
   if (!g || g.is_personal === 1) return { ok: false, orphanedAttachments: [] };
+  if (!canDeleteGroup(await getGroupContext(db, groupId, actorId))) {
+    throw new PermissionError('delete this group');
+  }
 
   // Read the receipt paths BEFORE the rows go: once the txns are deleted there is
   // no way left to find them, and they'd sit on disk counting toward the storage
@@ -289,29 +297,3 @@ export async function setMemberRole(
   );
 }
 
-export async function addGroupMember(
-  db: SQLite.SQLiteDatabase,
-  groupId: string,
-  actorId: string,
-  personId: string,
-): Promise<void> {
-  const ctx = await getGroupContext(db, groupId, actorId);
-  if (!canAddMember(ctx)) throw new PermissionError('add members to this group');
-  await db.runAsync(
-    "INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, 'member')",
-    [groupId, personId, Date.now()],
-  );
-}
-
-export async function removeGroupMember(
-  db: SQLite.SQLiteDatabase,
-  groupId: string,
-  actorId: string,
-  personId: string,
-): Promise<void> {
-  const ctx = await getGroupContext(db, groupId, actorId);
-  // Refuses the creator for everyone, including the creator themselves.
-  if (!canRemoveMember(ctx, personId)) throw new PermissionError('remove this member');
-  await db.runAsync(
-    'DELETE FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, personId]);
-}

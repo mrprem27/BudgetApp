@@ -28,6 +28,9 @@ import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { PersonNameSheet } from '../../../src/components/finance/PersonNameSheet';
+import { getMe } from '../../../src/db/queries/persons';
+import { getGroupContext, getGroupMembersWithRoles, setMemberRole } from '../../../src/db/queries/groups';
+import { isAdmin, canRemoveMember, canChangeRole } from '../../../src/lib/permissions';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -41,16 +44,24 @@ export default function MembersScreen() {
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [members, allPersons, net] = await Promise.all([
+    const me = await getMe(db);
+    const meId = me?.id ?? '';
+    const [members, allPersons, net, roles, ctx] = await Promise.all([
       getGroupMembers(db, groupId),
       getAllPersons(db),
       getGroupNet(db, groupId),
+      getGroupMembersWithRoles(db, groupId),
+      getGroupContext(db, groupId, meId),
     ]);
-    return { members, allPersons, net };
+    return { members, allPersons, net, roles, ctx, meId };
   }, [groupId]);
   const members = data?.members ?? [];
   const allPersons = data?.allPersons ?? [];
   const net = data?.net ?? {};
+  const meId = data?.meId ?? '';
+  const ctx = data?.ctx ?? null;
+  const roleOf = new Map((data?.roles ?? []).map(r => [r.person_id, r]));
+  const mayManage = ctx ? isAdmin(ctx) : false;
 
   useEffect(() => { if (!groupId) router.back(); }, [groupId]);
   if (!groupId) return null;
@@ -64,7 +75,7 @@ export default function MembersScreen() {
   async function commitAdd() {
     if (pendingIds.length === 0) return;
     try {
-      for (const pid of pendingIds) await addMemberToGroup(db, groupId, pid);
+      for (const pid of pendingIds) await addMemberToGroup(db, groupId, pid, meId);
       haptic.success();
       setShowAdd(false);
       setPendingIds([]);
@@ -94,7 +105,32 @@ export default function MembersScreen() {
     }
   }
 
+  async function toggleAdmin(person: Person) {
+    const next = roleOf.get(person.id)?.role === 'admin' ? 'member' : 'admin';
+    try {
+      await setMemberRole(db, groupId, meId, person.id, next);
+      haptic.success();
+      await reload();
+    } catch {
+      haptic.error();
+      Alert.alert('Something went wrong', 'Please try again.');
+    }
+  }
+
   async function handleRemove(person: Person) {
+    // The creator is un-removable by anyone, including themselves: a group with no
+    // permanent admin cannot be managed again. Said out loud rather than silently
+    // refused by the query.
+    if (!canRemoveMember(ctx ?? { createdBy: null, actorId: meId, actorRole: null }, person.id)) {
+      Alert.alert(
+        `Can't remove ${person.name}`,
+        roleOf.get(person.id)?.is_creator
+          ? 'They created this group. A group always keeps its creator, so there is always someone who can manage it.'
+          : 'Only an admin can remove members.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
     const balance = net[person.id] ?? 0;
     if (balance !== 0) {
       Alert.alert(
@@ -110,11 +146,11 @@ export default function MembersScreen() {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
           try {
-            await removeMemberFromGroup(db, groupId, person.id);
+            await removeMemberFromGroup(db, groupId, person.id, meId);
             await reload();
             showUndo({
               message: `Removed ${person.name}`,
-              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id); await reload(); } catch { /* ignore */ } },
+              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id, meId); await reload(); } catch { /* ignore */ } },
             });
           } catch {
             haptic.error();
@@ -173,7 +209,17 @@ export default function MembersScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Rename ${item.name}`}
                     >
-                      <Text style={styles.name}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
+                        {/* Creator outranks admin as a label: "Admin" is a role that can
+                            be taken away, "Creator" never can, and the difference is the
+                            whole point of the protection. */}
+                        {roleOf.get(item.id)?.is_creator ? (
+                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Creator</Text></View>
+                        ) : roleOf.get(item.id)?.role === 'admin' ? (
+                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Admin</Text></View>
+                        ) : null}
+                      </View>
                       {net[item.id] !== undefined && net[item.id] !== 0 && (() => {
                         const ov = oweView(net[item.id]);
                         return (
@@ -183,6 +229,20 @@ export default function MembersScreen() {
                         );
                       })()}
                     </TouchableOpacity>
+                    {mayManage && canChangeRole(ctx!, item.id) && (
+                      <TouchableOpacity
+                        onPress={() => toggleAdmin(item)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={roleOf.get(item.id)?.role === 'admin' ? `Remove admin from ${item.name}` : `Make ${item.name} an admin`}
+                      >
+                        <Feather
+                          name={roleOf.get(item.id)?.role === 'admin' ? 'shield-off' : 'shield'}
+                          size={15}
+                          color={roleOf.get(item.id)?.role === 'admin' ? colors.accent : colors.textMuted}
+                        />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
                       <Feather name="edit-2" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -253,6 +313,9 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52, backgroundColor: colors.bgCard },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
+  roleBadge: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
+  roleBadgeText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   netText: { ...type.caption, marginTop: 2 },
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },

@@ -4,6 +4,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenData } from '../../../src/hooks/useScreenData';
+import { getGroupContext } from '../../../src/db/queries/groups';
+import { canDeleteGroup } from '../../../src/lib/permissions';
 import { colors } from '../../../src/constants/colors';
 import { type } from '../../../src/constants/typography';
 import { space, radius, layout } from '../../../src/constants/layout';
@@ -35,15 +37,19 @@ export default function EditGroupScreen() {
   // initial-members snapshot (used by handleSave to diff adds/removals).
   const { data, error, reload } = useScreenData(async (db) => {
     const group = id ? await getGroupById(db, id) : null;
-    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[] };
+    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[], meId: '', ctx: null };
     const [mems, persons, me] = await Promise.all([getGroupMembers(db, id), getAllPersons(db), getMe(db)]);
     const meId = me?.id;
     const initialMembers = mems.filter(p => p.id !== meId).map(p => p.id);
-    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers };
+    const ctx = meId ? await getGroupContext(db, id, meId) : null;
+    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers, meId: meId ?? '', ctx };
   }, [id]);
 
   const allPersons = data?.allPersons ?? [];
   const initialMembers = data?.initialMembers ?? [];
+  const meId = data?.meId ?? '';
+  // Deleting takes every member's history with it, so it is the creator's call alone.
+  const mayDelete = data?.ctx ? canDeleteGroup(data.ctx) : false;
 
   // Seed the editable form fields once the read-only data arrives.
   useEffect(() => {
@@ -96,7 +102,7 @@ export default function EditGroupScreen() {
     Alert.alert('Delete this group?', 'This permanently deletes the group and all its expenses, splits and budgets. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const res = await deleteGroup(db, id);
+        const res = await deleteGroup(db, id, meId);
         if (res.ok) {
           // Unlink the receipts the deleted transactions owned; best-effort, and
           // never allowed to block navigation out of a group that is already gone.
@@ -138,9 +144,13 @@ export default function EditGroupScreen() {
             <TouchableOpacity style={styles.dangerBtn} onPress={confirmArchive} accessibilityRole="button">
               <Text style={styles.dangerArchive}>Archive group</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.dangerBtn, styles.deleteBtn]} onPress={confirmDelete} accessibilityRole="button">
-              <Text style={styles.dangerDelete}>Delete group</Text>
-            </TouchableOpacity>
+            {/* Creator only. The query refuses it either way; hiding it means an
+                admin is not offered an action that would then be rejected. */}
+            {mayDelete && (
+              <TouchableOpacity style={[styles.dangerBtn, styles.deleteBtn]} onPress={confirmDelete} accessibilityRole="button">
+                <Text style={styles.dangerDelete}>Delete group</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>

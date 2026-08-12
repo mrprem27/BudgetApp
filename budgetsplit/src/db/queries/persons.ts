@@ -2,6 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
+import { getGroupContext } from './groups';
+import { canAddMember, canRemoveMember, PermissionError } from '../../lib/permissions';
 
 export type Person = {
   id: string;
@@ -79,7 +81,12 @@ export async function addMemberToGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   personId: string,
+  /** Who is acting. Admins only — omit only from setup paths that predate any group. */
+  actorId?: string,
 ): Promise<void> {
+  if (actorId && !canAddMember(await getGroupContext(db, groupId, actorId))) {
+    throw new PermissionError('add members to this group');
+  }
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)',
@@ -97,7 +104,12 @@ export async function removeMemberFromGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   personId: string,
+  actorId?: string,
 ): Promise<void> {
+  // Refuses the creator for everyone, including the creator themselves.
+  if (actorId && !canRemoveMember(await getGroupContext(db, groupId, actorId), personId)) {
+    throw new PermissionError('remove this member');
+  }
   await db.withTransactionAsync(async () => {
     const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
     await db.runAsync(

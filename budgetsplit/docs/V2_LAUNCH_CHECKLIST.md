@@ -221,7 +221,7 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 
 ## 2. Open decisions — these need your call, not more analysis
 
-### D1. What does a group budget mean? *(deferred here deliberately)*
+### D1. What does a group budget mean? *(CLOSED 2026-08-12)*
 
 **The evidence.** `category_budget` is stored **group-wide** — no `person_id` column
 (`src/db/schema.ts:128-135`). But it is measured **against your share only**:
@@ -249,6 +249,23 @@ slice of a ₹10,000 group total, i.e. ₹2,500. The labels now read "per person
 editor says so at the point of entry.
 
 Group-whole remains a possible future mode, not a correction — revisit when multi-user is real.
+
+**Extended 2026-08-12 — two levels, and roles.** A group now carries a **default** every member
+inherits (`category_budget.person_id IS NULL`) and any member can set their own **override**
+(`person_id` set), which wins for them alone. Only an admin edits the default; nobody may write
+another person's override, not even an admin — with no sync yet they could not see it, so it
+would silently drive their over-budget warnings from someone else's opinion.
+
+Roles came with it, because none existed: `budget_group.created_by` (immutable) plus
+`group_member.role` of `admin` | `member`. There is no `owner` role on purpose — creator-ness
+lives in a column that is never updated, so "nobody can remove the creator" is a property of the
+data model rather than a rule someone can edit around. Rules are pure in `src/lib/permissions.ts`
+and enforced in `db/queries`, not in screens.
+
+Two SQLite traps this hit, both found by tests rather than by reading: a four-column `UNIQUE`
+including `person_id` enforces nothing at the default level (NULLs are distinct), and the
+table's original `UNIQUE(group_id, category, period)` made an override impossible outright.
+Fixed with two partial unique indexes and a one-time table rebuild.
 
 ### D2. Do investments/crypto get a pay method?
 
