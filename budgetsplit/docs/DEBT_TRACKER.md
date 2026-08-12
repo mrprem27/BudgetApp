@@ -233,6 +233,15 @@ with the amount intact.
 | **Applied to analytics too** | Those lists supply the counts rendered directly above the rows, so folding one and not the other would print "2 over" above a single Others row. `daysToLimit` is dropped on a folded row — it is a pace estimate for one category and a merged bucket has no single pace. |
 | **`rollUpBudgets` untouched** | Totals are computed from lines, not display rows, so the headline is identical either way. Also pinned. |
 
+**The fold exposed a data-loss path, fixed in the same breath.** `setCategoryBudgets` is a
+whole-level replace and `entries` is built from the caller's catalog — so a line for a category
+that catalog lacks (precisely the case now folded into `Others`) was erased by *any* save. An
+admin opening the group budget and pressing Save silently dropped a default they had never
+seen. Rows are now preserved when their category is neither in the catalog nor in the submitted
+entries: exactly the rows the editor could not have rendered. Clearing a category you *can* see
+still deletes it, because that is your decision. **The full suite passed with the bug present**,
+so the regression test was checked by reverting the fix and watching it fail.
+
 **Mostly forward-looking today.** With no sync, the catalog is device-wide and
 `setCategoryBudgets` writes from your own catalog, so divergence is hard to reach on purpose —
 `deleteCategory` even removes an expense category's budget rows with it. It becomes reachable

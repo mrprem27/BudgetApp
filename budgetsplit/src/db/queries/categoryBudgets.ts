@@ -89,11 +89,39 @@ export async function setCategoryBudgets(
   }
   const personId = opts.level === 'group' ? null : opts.actorId;
 
+  /*
+   * A whole-level replace, but only over the categories the editor could actually
+   * show.
+   *
+   * `entries` is built from the caller's own catalog, and a budget line can name a
+   * category that catalog does not contain — `category_budget.category` is a name,
+   * not a foreign key, which is the whole reason `foldBudgetStatuses` exists. A
+   * blanket DELETE therefore erased any line the editor was unable to render: an
+   * admin opening the group budget and pressing Save would silently drop a Gym
+   * default they had never seen, and nothing would report it.
+   *
+   * So rows are preserved when their category is neither in the catalog nor in the
+   * submitted entries — i.e. exactly the rows that were folded into `Others` and
+   * could not have been edited.
+   */
+  const known = new Set(
+    (await db.getAllAsync<{ name: string }>("SELECT name FROM category WHERE kind = 'expense'"))
+      .map(r => r.name),
+  );
+  const submitted = new Set(entries.map(e => e.category));
+  const existing = await db.getAllAsync<{ id: string; category: string }>(
+    personId === null
+      ? 'SELECT id, category FROM category_budget WHERE group_id = ? AND person_id IS NULL'
+      : 'SELECT id, category FROM category_budget WHERE group_id = ? AND person_id = ?',
+    personId === null ? [groupId] : [groupId, personId],
+  );
+  const doomed = existing
+    .filter(r => known.has(r.category) || submitted.has(r.category))
+    .map(r => r.id);
+
   await db.withTransactionAsync(async () => {
-    if (personId === null) {
-      await db.runAsync('DELETE FROM category_budget WHERE group_id = ? AND person_id IS NULL', [groupId]);
-    } else {
-      await db.runAsync('DELETE FROM category_budget WHERE group_id = ? AND person_id = ?', [groupId, personId]);
+    for (const id of doomed) {
+      await db.runAsync('DELETE FROM category_budget WHERE id = ?', [id]);
     }
     for (const e of entries) {
       if (e.amount > 0) {

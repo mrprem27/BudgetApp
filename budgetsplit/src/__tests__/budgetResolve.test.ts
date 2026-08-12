@@ -1,5 +1,6 @@
 import { getCategoryBudgetStatus, resolveBudgetLines } from '../lib/budget';
 import { openTestDb, seedGroupAndMe } from './dbHarness';
+import { setCategoryBudgets } from '../db/queries/categoryBudgets';
 
 type Line = { category: string; cadence: 'daily' | 'monthly' | 'yearly' | 'once'; amount: number; person_id: string | null };
 const line = (category: string, amount: number, person_id: string | null, cadence: Line['cadence'] = 'monthly'): Line =>
@@ -194,5 +195,78 @@ describe('getCategoryBudgetStatus folds against the catalog', () => {
       rs.reduce((s, r) => s + r.allocated, 0);
     expect(total(before)).toBe(700000);
     expect(total(after)).toBe(total(before));
+  });
+});
+
+/**
+ * Saving must not delete what the editor could not show.
+ *
+ * `setCategoryBudgets` is a whole-level replace and `entries` comes from the
+ * caller's catalog — so a line for a category absent from that catalog (the very
+ * case `foldBudgetStatuses` renders as Others) was erased by any save. An admin
+ * opening the budget and pressing Save silently dropped a default they had never
+ * seen. The suite passed with this present, which is why it is pinned here.
+ */
+describe('setCategoryBudgets preserves lines outside the catalog', () => {
+  async function seed() {
+    const d = await openTestDb();
+    await seedGroupAndMe(d);
+    await d.runAsync(
+      `INSERT INTO category (id, group_id, name, icon, color, kind)
+       VALUES ('c1', NULL, 'Groceries', 'shopping-cart', '#fff', 'expense')`,
+    );
+    await d.runAsync(
+      `INSERT INTO category_budget (id, group_id, category, period, cadence, amount, person_id)
+       VALUES ('b1','g','Groceries','monthly','monthly',500000,NULL),
+              ('b2','g','Gym','monthly','monthly',200000,NULL)`,
+    );
+    // What the creator backfill gives every pre-existing group; without it the
+    // write path correctly refuses, since editing the group default needs admin.
+    await d.runAsync("UPDATE budget_group SET created_by = 'me' WHERE id = 'g'");
+    await d.runAsync("UPDATE group_member SET role = 'admin' WHERE group_id = 'g' AND person_id = 'me'");
+    return d;
+  }
+  const rows = (d: Awaited<ReturnType<typeof openTestDb>>) =>
+    d.getAllAsync<{ category: string; amount: number }>(
+      'SELECT category, amount FROM category_budget ORDER BY category');
+
+  it('keeps the uneditable line when the group budget is saved', async () => {
+    const d = await seed();
+    // What the editor would submit: its catalog only, so Gym is simply absent.
+    await setCategoryBudgets(d, 'g', [{ category: 'Groceries', cadence: 'monthly', amount: 600000 }],
+      { level: 'group', actorId: 'me' });
+    expect(await rows(d)).toEqual([
+      { category: 'Groceries', amount: 600000 },  // updated
+      { category: 'Gym', amount: 200000 },        // preserved, was silently deleted
+    ]);
+  });
+
+  it('still removes a catalog category the user cleared to zero', async () => {
+    const d = await seed();
+    // Groceries omitted = cleared. It IS in the catalog, so it is the user's call.
+    await setCategoryBudgets(d, 'g', [], { level: 'group', actorId: 'me' });
+    expect(await rows(d)).toEqual([{ category: 'Gym', amount: 200000 }]);
+  });
+
+  it('lets an explicit entry overwrite an out-of-catalog line', async () => {
+    const d = await seed();
+    // Adopting Gym and budgeting it should replace, not duplicate.
+    await setCategoryBudgets(d, 'g', [{ category: 'Gym', cadence: 'monthly', amount: 300000 }],
+      { level: 'group', actorId: 'me' });
+    expect(await rows(d)).toEqual([{ category: 'Gym', amount: 300000 }]);
+  });
+
+  it('does not let a personal save touch the group default', async () => {
+    const d = await seed();
+    await setCategoryBudgets(d, 'g', [{ category: 'Groceries', cadence: 'monthly', amount: 100000 }],
+      { level: 'personal', actorId: 'me' });
+    const all = await d.getAllAsync<{ category: string; amount: number; person_id: string | null }>(
+      'SELECT category, amount, person_id FROM category_budget ORDER BY person_id, category');
+    // Both defaults intact, plus the new override.
+    expect(all).toEqual([
+      { category: 'Groceries', amount: 500000, person_id: null },
+      { category: 'Gym', amount: 200000, person_id: null },
+      { category: 'Groceries', amount: 100000, person_id: 'me' },
+    ]);
   });
 });
