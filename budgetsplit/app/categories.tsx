@@ -370,7 +370,14 @@ export default function CategoriesScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowName}>{u.name}</Text>
-                      <Text style={styles.uncatCount}>{u.count} transaction{u.count === 1 ? '' : 's'}</Text>
+                      {/* Says WHY the row is here. A name can be listed because it is
+                          used, because it is budgeted, or both — and a budget-only name
+                          rendered as "0 transactions", which is true and useless. */}
+                      <Text style={styles.uncatCount}>
+                        {u.count > 0
+                          ? `${u.count} transaction${u.count === 1 ? '' : 's'}${u.budgeted ? ' · budgeted' : ''}`
+                          : 'Budgeted here, not used yet'}
+                      </Text>
                     </View>
                     <TouchableOpacity style={styles.adoptBtn} onPress={() => adoptCategory(u.name)} accessibilityRole="button" accessibilityLabel={`Add ${u.name} to catalog`}>
                       <Feather name="plus" size={13} color={colors.accent} />
