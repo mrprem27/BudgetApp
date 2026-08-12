@@ -8,6 +8,16 @@ import { colors, type, radius } from '../tokens';
 type Tab = {
   key: string;
   label: string;
+  /**
+   * A count shown as its own element after the label, rather than baked into it.
+   *
+   * The pills are fixed equal-flex (`pillW = track / tabs.length`), so on a 393pt
+   * screen four pills get ~89pt each while `"Said out loud 12"` needs ~108pt at
+   * 13px SemiBold. Concatenated, the count is *last in the string* — so the count
+   * is what gets cut, and the count is the thing being scanned. Kept separate, the
+   * label truncates and the number survives.
+   */
+  badge?: string | number;
 };
 
 type Props = {
@@ -102,7 +112,7 @@ export function TabPills({ tabs, active, onChange, activeColor = colors.accent, 
           accessibilityRole="tab"
           accessibilityState={{ selected: i === index }}
         >
-          <PillLabel label={t.label} on={i === index} lg={lg} />
+          <PillLabel label={t.label} badge={t.badge} on={i === index} lg={lg} />
         </Pressable>
       ))}
     </View>
@@ -132,8 +142,8 @@ const Indicator = React.memo(function Indicator({ x, width, color, pad }: {
 });
 
 /** Label colour follows the pill rather than the tap, so the two never disagree mid-slide. */
-const PillLabel = React.memo(function PillLabel({ label, on, lg }: {
-  label: string; on: boolean; lg: boolean;
+const PillLabel = React.memo(function PillLabel({ label, badge, on, lg }: {
+  label: string; badge?: string | number; on: boolean; lg: boolean;
 }) {
   const progress = useSharedValue(on ? 1 : 0);
   useEffect(() => { progress.value = withSpring(on ? 1 : 0, SPRING); }, [on, progress]);
@@ -142,14 +152,32 @@ const PillLabel = React.memo(function PillLabel({ label, on, lg }: {
     color: interpolateColor(progress.value, [0, 1], [colors.textSecondary, colors.bg]),
   }));
 
+  if (badge === undefined || badge === '') {
+    return (
+      <Animated.Text style={[styles.label, lg && styles.labelLg, style]} numberOfLines={1}>
+        {label}
+      </Animated.Text>
+    );
+  }
+
+  // `shrink` on the label and not on the badge is the whole point: when the row is
+  // tight the *name* gives way, never the number.
   return (
-    <Animated.Text style={[styles.label, lg && styles.labelLg, style]} numberOfLines={1}>
-      {label}
-    </Animated.Text>
+    <View style={styles.labelRow}>
+      <Animated.Text style={[styles.label, lg && styles.labelLg, styles.labelShrink, style]} numberOfLines={1}>
+        {label}
+      </Animated.Text>
+      <Animated.Text style={[styles.label, lg && styles.labelLg, styles.badge, style]} numberOfLines={1}>
+        {badge}
+      </Animated.Text>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
+  labelShrink: { flexShrink: 1, minWidth: 0 },
+  badge: { flexShrink: 0, opacity: 0.75 },
   track: {
     flexDirection: 'row',
     backgroundColor: colors.bgMuted,

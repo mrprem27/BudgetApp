@@ -7,8 +7,23 @@ import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
  * the cached source into the extractor WebView, so there's no runtime CDN
  * dependency once cached (and no vendored megabyte files in the repo).
  *
- * Uses the new expo-file-system `File`/`Directory` API (the legacy
- * readAsStringAsync/downloadAsync throw at runtime in SDK 56).
+ * Uses the new expo-file-system `File`/`Directory` API because it is the current
+ * one, not because the legacy API is broken.
+ *
+ * This comment used to claim the legacy `readAsStringAsync`/`downloadAsync` throw
+ * at runtime in SDK 56. **That is not supported by the version we ship against.**
+ * `expo-file-system@56.0.8` exports `./legacy` from its package exports map,
+ * `src/legacy/FileSystem.ts` genuinely implements `documentDirectory`,
+ * `readAsStringAsync`, `copyAsync` and `makeDirectoryAsync`, the native
+ * `FileSystemLegacyModule` is registered in `expo-module.config.json`, and the
+ * shim used when that module is absent nulls the directory constants rather than
+ * throwing. `src/lib/avatar.ts` and `ocrProviders/gemini.ts` still use the legacy
+ * API and there is no evidence here that they are broken.
+ *
+ * Left as a note rather than deleted because a false claim of this shape invites
+ * someone to rewrite two working modules. Reading source cannot prove *native*
+ * behaviour, so one device smoke test still closes it out — see §5 of the launch
+ * checklist.
  */
 
 // v3.x ships a real UMD build (global `pdfjsLib`) we can inline into a classic

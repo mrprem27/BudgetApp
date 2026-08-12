@@ -102,21 +102,41 @@ export async function loadInsightsData(
       let running = 0;
       for (let d = 1; d <= dayOfMonth; d++) { running += spendByDay[d]; dailyCumulative.push(Math.round(running / 100)); }
       if (fc.ready) {
-        // Every-other-day labels ("1..", "2..") overlapped and got clipped by the
-        // chart at typical screen widths — 5-day steps leave each label room to
-        // render its full 1-2 digit day number.
-        const labelForDay = (d: number) => (d === 1 || d % 5 === 0 ? `${d}` : '');
+        /*
+         * Weekly points, not daily.
+         *
+         * gifted-charts renders every x-label in a View exactly `spacing` wide at
+         * one line, so `spacing` IS the label's width budget. 31 daily points on a
+         * 393pt screen leave ~10px per label and two digits need ~12 — which is why
+         * the axis read "1…", "2…", "3…". Measuring the container properly (see
+         * `lib/chartAxis`) moved that from 9.7px to 10.5px: real, and not enough.
+         * The library has no per-point label width for line charts, so the only
+         * thing that creates room is fewer points. ~5 weekly points give ~58px each.
+         *
+         * The forecast MATHS is untouched — it runs on daily data above, and this
+         * only samples the curve for drawing. The line is cumulative and monotonic,
+         * so weekly sampling reads the same shape; the month-end value, which is the
+         * point of the chart, is preserved exactly by always including the last day.
+         */
+        const marks: number[] = [];
+        for (let d = 1; d <= daysInMonth; d += 7) marks.push(d);
+        if (marks[marks.length - 1] !== daysInMonth) marks.push(daysInMonth);
+
+        const valueAt = (d: number) => (d <= dayOfMonth
+          ? dailyCumulative[d - 1]
+          : Math.round(projectedAtDay(running, dayOfMonth, daysInMonth, fc.projected, d) / 100));
+
         // Projected series owns the x-axis labels and spans the whole month.
-        forecastProjected = Array.from({ length: daysInMonth }, (_, i) => {
-          const d = i + 1;
-          const value = d <= dayOfMonth
-            ? dailyCumulative[d - 1]
-            : Math.round(projectedAtDay(running, dayOfMonth, daysInMonth, fc.projected, d) / 100);
-          return { value, label: labelForDay(d), hideDataPoint: true };
-        });
-        // Solid "actual" overlay up to today; marks the "today" point only.
-        forecastActual = dailyCumulative.map((value, i) => ({
-          value, label: '', hideDataPoint: i !== dayOfMonth - 1,
+        forecastProjected = marks.map(d => ({ value: valueAt(d), label: `${d}`, hideDataPoint: true }));
+
+        // Solid "actual" overlay stops at today. Sampled on the same marks so the
+        // two lines stay registered, plus today itself so the marker lands on the
+        // real figure rather than the nearest week boundary.
+        const actualMarks = marks.filter(d => d <= dayOfMonth);
+        if (actualMarks[actualMarks.length - 1] !== dayOfMonth) actualMarks.push(dayOfMonth);
+        forecastActual = actualMarks.map((d, i) => ({
+          value: dailyCumulative[d - 1], label: '',
+          hideDataPoint: i !== actualMarks.length - 1,
           dataPointColor: colors.expense, dataPointRadius: 5,
         }));
         projectedTotal = Math.round(fc.projected / 100);

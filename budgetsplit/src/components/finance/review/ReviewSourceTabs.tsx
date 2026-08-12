@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { TabPills } from '../../ui/TabPills';
 import { haptic } from '../../../lib/haptics';
-import { TXN_SOURCE_LABEL, TXN_SOURCE_ICON, type TxnSource } from '../../../constants/enums';
+import { TXN_SOURCE_LABEL, TXN_SOURCE_LABEL_SHORT, TXN_SOURCE_ICON, type TxnSource } from '../../../constants/enums';
 import { asFeather } from '../../../constants/palette';
 import { colors, space, layout } from '../../tokens';
 import { reviewStyles } from './reviewStyles';
@@ -36,8 +36,11 @@ export function ReviewSourceTabs({ sources, active, onChange, countOf }: Props) 
     <View style={styles.wrap}>
       <TabPills
         tabs={[
-          { key: 'all', label: `All ${countOf(null)}` },
-          ...sources.map(src => ({ key: src, label: `${TXN_SOURCE_LABEL[src]} ${countOf(src)}` })),
+          { key: 'all', label: 'All', badge: countOf(null) },
+          // Short label + the count as its own element. Concatenated, the count came
+          // last in the string and was therefore the first thing the fixed-width pill
+          // cut off — the one number being scanned.
+          ...sources.map(src => ({ key: src, label: TXN_SOURCE_LABEL_SHORT[src], badge: countOf(src) })),
         ]}
         active={active ?? 'all'}
         onChange={(k) => { haptic.selection(); onChange(k === 'all' ? null : k as TxnSource); }}

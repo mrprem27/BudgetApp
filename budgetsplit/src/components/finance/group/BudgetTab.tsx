@@ -91,7 +91,7 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
               `space-between` row that had lost its heading — so the tab opened with an
               action above the number the action changes. */}
           <View style={styles.ovHead}>
-            <Text style={styles.ovLabel}>Budget used</Text>
+            <Text style={styles.ovLabel}>My share used</Text>
             <Chip label="Edit" icon="edit-2" onPress={onEditBudget} accessibilityLabel="Edit budget" />
           </View>
 
@@ -103,7 +103,13 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
               {utilLabel(analytics.utilizationPct ?? 0)}
             </Text>
           </View>
-          <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)} this month</Text>
+          {/* "my share", not the group's: `category_budget` is stored group-wide (no
+              person_id) but measured against your share only — `app/group/[id].tsx`
+              passes `meRow?.id` into both engines. So a ₹10,000 Groceries limit in a
+              4-person flat is compared against your quarter. Whatever it was meant to
+              be, that is what ships, and the label now says so. Revisit group-whole
+              when multi-user is real (D1). */}
+          <Text style={styles.ovOf}>of my {formatCompact(analytics.totalAllocated)} share this month</Text>
           {/* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
               budget is spent when the trip happens, so it is excluded from the figures
               above. Naming it here is what keeps the exclusion honest rather than a

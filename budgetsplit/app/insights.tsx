@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { recBg, recColor } from '../src/components/finance/group/helpers';
 import type { Insight } from '../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/money';
 import { loadInsightsData } from '../src/lib/insightsData';
+import { plotWidth, axisSpacing } from '../src/lib/chartAxis';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { alpha } from '../src/theme';
 
@@ -59,6 +60,21 @@ export default function InsightsScreen() {
   const savings = data?.savings ?? [];
   const multiGroup = data?.multiGroup ?? false;
 
+  /**
+   * Measured, not guessed. `spacing` was `Math.max(8, 300 / len)` — 300 being a
+   * magic width the chart never measured — so a 31-day month gave 9.68px per label
+   * container. The library renders each label in a View exactly `spacing` wide at
+   * numberOfLines={1}: one digit fits, two do not, hence "1…", "2…", "3…".
+   *
+   * Same `onLayout` pattern as `TabPills` (`trackW` / `onTrackLayout`), guarded the
+   * same way so an identical re-layout does not re-render the chart.
+   */
+  const [chartW, setChartW] = useState(0);
+  const onChartLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    setChartW(prev => (Math.abs(prev - w) > 0.5 ? w : prev));
+  };
+
   const today = new Date();
   const dayOfMonth = getDate(today);
   const daysInMonth = getDaysInMonth(today);
@@ -68,15 +84,26 @@ export default function InsightsScreen() {
   const dailyAvg = dayOfMonth > 0 ? Math.round(monthSpend / dayOfMonth) : 0;
   const budgetPerDay = daysInMonth > 0 ? Math.round(budget / daysInMonth) : 0;
   const hasForecast = forecastActual.length >= 2 && forecastProjected.length >= 1;
+  // The plot area is the card minus its padding, minus the y-axis labels the chart
+  // reserves on the left. Falls back to the old constant only until the first layout.
+  const plotW = plotWidth(chartW, space.md);
+  // Until the first layout lands there is nothing measured to divide, so hold the
+  // old constant for one frame rather than collapsing every label to the floor.
+  const chartSpacing = plotW > 0 ? axisSpacing(plotW, forecastProjected.length) : 8;
   const nothingYet = !loading && !overspend && shifts.length === 0 && !whatIf
     && recommendations.length === 0 && drivers.length === 0 && savings.length === 0 && !hasForecast;
 
   return (
     <View style={styles.container}>
+      {/* No month control in the header on purpose. The eyebrow below already names
+          the month, and this screen is present-tense — forecast to month-end, "N days
+          in", velocity, what-if — so a past month would render a page of claims about
+          a month that already finished. Month history is Reports' job, and it has a
+          selector capped at the current month. A muted pill sat here with no onPress:
+          a control shape that does nothing, printing the same month twice. */}
       <ScreenHeader
         title="Insights"
         onBack={() => router.back()}
-        right={<View style={styles.monthPill}><Text style={styles.monthPillText}>{format(today, 'MMMM')}</Text></View>}
       />
       {loadError ? (
         <ErrorState onRetry={reload} />
@@ -130,7 +157,7 @@ export default function InsightsScreen() {
         {hasForecast && (
           <>
             <Text style={styles.secLabel}>MONTH-END FORECAST</Text>
-            <View style={styles.chartCard}>
+            <View style={styles.chartCard} onLayout={onChartLayout}>
               <View style={styles.forecastHeader}>
                 <Text style={styles.forecastSub}>Solid = spent so far · dashed = projected to month-end</Text>
                 <Badge label={formatCompactMajor(projectedTotal)} tone="accent" icon="trending-up" />
@@ -145,7 +172,7 @@ export default function InsightsScreen() {
                 strokeDashArray1={[5, 5]}
                 noOfSections={4}
                 maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                spacing={Math.max(8, 300 / Math.max(forecastProjected.length, 1))}
+                spacing={chartSpacing}
                 initialSpacing={8}
                 endSpacing={8}
                 xAxisThickness={0}
@@ -325,8 +352,6 @@ export default function InsightsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
-  monthPill: { backgroundColor: colors.bgMuted, borderRadius: 100, paddingVertical: 7, paddingHorizontal: 14 },
-  monthPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: 'Inter_400Regular' },
   eyebrow: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
 
   velocityCard: { backgroundColor: colors.expenseTintDeep, borderRadius: 18, padding: 18, borderWidth: 1.5, borderColor: colors.expenseTintStrong },

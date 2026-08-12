@@ -66,7 +66,7 @@ the module calls).
 |---|---|---|
 | 1 | **Buy the Apple Developer Program** | Gate 0. Smallest task here, unlocks the most |
 | 2 | ⛔ Confirm demo/seed data is off for release builds | §1 |
-| 3 | Insights month pill — wire it, or make it a plain label | §4.3 |
+| 3 | Insights month pill | **DONE** — ✅ Deleted. Neither option was right: the eyebrow one line below already prints the month, so a plain label would duplicate it |
 | 4 | Review footer CTA wraps and breaks the 52pt button height | **DONE** — ✅ `PrimaryButton` truncates at one line (fixes every caller, not just Review) |
 | 5 | Filter chips hard-capped at `maxWidth: 160` | **DONE** — ✅ Cap removed; the row already wraps |
 | 6 | Goals — FAB covers the last card (use `useContentInset`) | **DONE** — ✅ `useContentInset({ fab: true, tabBar: true })` |
@@ -77,15 +77,15 @@ the module calls).
 | | Task | Detail |
 |---|---|---|
 | 8 | ⛔ Deploy the OCR proxy, set `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` | §1 |
-| 9 | ⛔ Device-check `expo-file-system/legacy` | §1 |
-| 10 | Review tab labels — short form, count as a badge | §4.1 |
-| 11 | Insights x-axis — measure via `onLayout`, or bucket weekly | §4.2 |
+| 9 | Device-check `expo-file-system/legacy` | **NOT A BLOCKER** — ⛔ dropped. The legacy API is fully implemented in `expo-file-system@56.0.8` and the shim does not throw; our own comment claiming otherwise was false and is corrected. One device smoke test still closes it |
+| 10 | Review tab labels | **DONE** — ✅ `TabPills` takes a per-tab `badge`; `TXN_SOURCE_LABEL_SHORT` for the strip. The label shrinks, the count never does |
+| 11 | Insights x-axis | **DONE** — ✅ **Both were needed.** Measuring moved 9.7px → 10.5px against the ~12px two digits require, so the series is also bucketed weekly (~58px). Forecast maths unchanged |
 | 12 | Insights — one forecast model, not two | **DONE** — ✅ Hero + chart both read `forecastMonthEnd` |
 | 13 | Savings insights — make deterministic | **DONE** — ✅ Seeded on candidate text + day; rotates daily, stable within a day |
 | 14 | Goals — exclude completed from the raid; fix the reorder permutation | **DONE** — ✅ Both, plus the pre-drag tie now mirrors funding |
 | 15 | Goals — `priority` is dead code; decide remove or revive | §4.4 |
 | 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | **DONE** — ✅ `src/lib/qrFromImage.ts`, wired into both scanners |
-| 17 | Group budget — relabel to "my share" | D1 |
+| 17 | Group budget — relabel to "my share" | **DONE** — ✅ Label-only, as predicted: the engine already passes `meRow?.id`. **Resolves D1**; D3 (health engine) stays open |
 | 18 | WhatsApp reminder — composer + share sheet | §3.4 |
 
 ### M — a day to a few days

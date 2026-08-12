@@ -237,7 +237,7 @@ export default function BudgetEditorScreen() {
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>≈ Monthly commitment</Text>
+            <Text style={styles.totalLabel}>≈ My monthly share</Text>
             <Text style={styles.totalAmount}>{formatRupees(rollup.amount)}</Text>
             <Text style={styles.totalSub}>
               {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted

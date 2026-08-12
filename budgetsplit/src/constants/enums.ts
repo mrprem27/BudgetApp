@@ -126,6 +126,20 @@ export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
   upi_qr: 'Scanned & paid',
   manual: 'Imported',
 };
+/**
+ * Short form for a segmented control, where the pill width is `track / tabs.length`
+ * and a full label plus its count does not fit. `TXN_SOURCE_LABEL` stays the name
+ * used in prose and in the Review section headers, which have a whole row to
+ * themselves; this is only for the tab strip.
+ */
+export const TXN_SOURCE_LABEL_SHORT: Record<TxnSource, string> = {
+  voice: 'Voice',
+  email: 'Email', gpay: 'GPay', paytm: 'Paytm', bank_csv: 'Bank',
+  sms: 'SMS', notification: 'Notifs',
+  upi_qr: 'Scanned',
+  manual: 'Imported',
+};
+
 /** Feather icon per source — used by the Review section headers. */
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
   voice: 'mic',
