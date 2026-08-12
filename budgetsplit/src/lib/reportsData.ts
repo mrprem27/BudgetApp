@@ -4,6 +4,7 @@ import { getAllGroups, type BudgetGroup } from '../db/queries/groups';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange, type TxnWithSplits } from '../db/queries/transactions';
 import { foldUncategorized } from './categoryFold';
+import { getMyGlobalBudgetSummary, isGlobalBudgetGroup } from './budget';
 import { getBudgetAnalytics, type BudgetAnalytics } from './analytics';
 import { categoryVisual } from '../constants/categories';
 import { CHART_COLORS } from '../constants/palette';
@@ -83,7 +84,12 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
           Promise.all(grps.map(async (g) => {
             const [gTxns, an] = await Promise.all([
               getTransactionsInRange(db, g.id, fromMs, toMs),
-              getBudgetAnalytics(db, g, month),
+              // Income/expense/topCats are per-group facts and every group gets them.
+              // A budget bar is not: the Personal group's lines are My Budget, so it
+              // gets the `myBudget` card below instead of a group-budget bar.
+              isGlobalBudgetGroup(g)
+                ? Promise.resolve(null)
+                : getBudgetAnalytics(db, g, { meId, now: month }),
             ]);
             return { summary: buildSummary(g, gTxns, meId), analytics: an };
           })),
@@ -97,7 +103,10 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
 
       const sums: GroupSummary[] = perGroup.map((r) => r.summary);
       const anMap: Record<string, BudgetAnalytics> = {};
-      grps.forEach((g, i) => { anMap[g.id] = perGroup[i].analytics; });
+      grps.forEach((g, i) => {
+        const an = perGroup[i].analytics;
+        if (an) anMap[g.id] = an;
+      });
 
       let yIncome = 0;
       let yExpense = 0;
@@ -178,6 +187,9 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
         groups: grps,
         summaries: sums,
         analyticsByGroup: anMap,
+        // My Budget for the selected month — the one figure the Personal group's
+        // (absent) bar would otherwise have tried to be.
+        myBudget: await getMyGlobalBudgetSummary(db, meId, { now: month }),
         yearIncome: yIncome,
         yearExpense: yExpense,
         yearTopCat: topCat,

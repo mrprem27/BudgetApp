@@ -6,7 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending, utilLabel, budgetHealth, rollUpBudgets, budgetKind, type Period } from './budget';
+import { getCategorySpending, utilLabel, budgetHealth, rollUpBudgets, budgetKind, windowForCadence, type Period } from './budget';
 import { OTHERS_LABEL } from './categoryFold';
 import { forecastMonthEnd } from './forecast';
 import { formatCompact, formatComparison } from './money';
@@ -73,32 +73,6 @@ export type BudgetAnalytics = {
   recommendations: Recommendation[];
 };
 
-/**
- * The current window ends at **now**, not at the end of the period: "spent" is
- * what happened, never what is scheduled. A ₹50,000 fee dated the 28th and
- * logged on the 2nd used to count as already spent. Future-dated commitments
- * live in `upcomingBills` (`getAffordSnapshot`) instead.
- */
-function currentWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } {
-  const to = now.getTime();
-  switch (cadence) {
-    case 'daily':   return { from: startOfDay(now).getTime(), to };
-    case 'monthly': return { from: startOfMonth(now).getTime(), to };
-    case 'yearly':  return { from: startOfYear(now).getTime(), to };
-    case 'once':    return { from: 0, to };
-  }
-}
-
-/** Spend window for an aggregate at `target` — same "ends at now" rule. */
-function targetWindow(target: Period, now: Date): { from: number; to: number } {
-  const to = now.getTime();
-  switch (target) {
-    case 'daily':   return { from: startOfDay(now).getTime(), to };
-    case 'monthly': return { from: startOfMonth(now).getTime(), to };
-    case 'yearly':  return { from: startOfYear(now).getTime(), to };
-  }
-}
-
 function previousWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } | null {
   switch (cadence) {
     case 'daily':   { const d = subDays(now, 1);   return { from: startOfDay(d).getTime(), to: endOfDay(d).getTime() }; }
@@ -122,14 +96,22 @@ function deltaPctOf(spent: number, prev: number): number | null {
 export async function getBudgetAnalytics(
   db: SQLite.SQLiteDatabase,
   group: BudgetGroup,
-  now = new Date(),
-  /** When set, spend counts only this person's share (individual budget). */
-  meId?: string,
-  /** Period the aggregate figures are expressed over. Per-category trends keep their own cadence. */
-  target: Period = 'monthly',
+  /**
+   * `meId` is **required**, and an options object so it cannot hide behind a `now`
+   * nobody passes. It carries the *basis* of every figure below: omitting it
+   * dropped every personal override and switched spend from my share to the whole
+   * group's bill, which five of six rollups did while reading as a complete call.
+   */
+  opts: {
+    meId: string;
+    now?: Date;
+    /** Period the aggregate figures are expressed over. Per-category trends keep their own cadence. */
+    target?: Period;
+  },
 ): Promise<BudgetAnalytics> {
-  // `meId` matters: without it this reads only the group defaults and silently
-  // ignores every personal override.
+  const { meId } = opts;
+  const now = opts.now ?? new Date();
+  const target: Period = opts.target ?? 'monthly';
   const budgets = await getCategoryBudgets(db, group.id, meId);
 
   // No budgets → nothing to analyse; skip the spending queries entirely (perf).
@@ -148,7 +130,7 @@ export async function getBudgetAnalytics(
   const curByCad: Record<string, Record<string, number>> = {};
   const prevByCad: Record<string, Record<string, number>> = {};
   await Promise.all(cadences.map(async cad => {
-    const cw = currentWindow(cad, now);
+    const cw = windowForCadence(cad, now);
     curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to, meId);
     const pw = previousWindow(cad, now);
     prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to, meId) : {};
@@ -229,7 +211,7 @@ export async function getBudgetAnalytics(
   const rateCategories = new Set(
     budgets.filter(b => budgetKind(b.cadence, target) === 'rate').map(b => b.category),
   );
-  const tw = targetWindow(target, now);
+  const tw = windowForCadence(target, now);
   const targetSpendByCat = await getCategorySpending(db, group.id, tw.from, tw.to, meId);
   const totalAllocated = roll.amount;
   const totalSpent = Object.entries(targetSpendByCat)

@@ -46,13 +46,13 @@ describe('spend windows end at now, not at the end of the period', () => {
   function setup() {
     const db = createTestDb();
     const me = addPerson(db, 'Me', true);
-    const g = addGroup(db, 'Personal', true);
+    const g = addGroup(db, 'Flat', false);
     addMember(db, g, me);
     addCategory(db, 'Food');
     return { db, me, g };
   }
 
-  const group = (id: string) => ({ id, name: 'Personal', is_personal: 1 } as never);
+  const group = (id: string) => ({ id, name: 'Flat', is_personal: 0 } as never);
 
   it('excludes a transaction dated later this month', async () => {
     const { db, me, g } = setup();
@@ -61,7 +61,7 @@ describe('spend windows end at now, not at the end of the period', () => {
     const later = new Date(); later.setDate(later.getDate() + 3);
     addSimpleExpense(db, { groupId: g, personId: me, amount: 5_000_000, date: later.getTime(), category: 'Food' });
 
-    const rows = await getCategoryBudgetStatus(asDb(db), group(g), new Date(), me);
+    const rows = await getCategoryBudgetStatus(asDb(db), group(g), { meId: me });
     const food = rows.find(r => r.category === 'Food')!;
     expect(food.spent).toBe(0);
     // ...and therefore does not blow the budget four weeks before the money moves.
@@ -73,7 +73,7 @@ describe('spend windows end at now, not at the end of the period', () => {
     setCategoryBudget(db, { groupId: g, category: 'Food', amount: 100000 });
     addSimpleExpense(db, { groupId: g, personId: me, amount: 40000, date: Date.now() - 60_000, category: 'Food' });
 
-    const rows = await getCategoryBudgetStatus(asDb(db), group(g), new Date(), me);
+    const rows = await getCategoryBudgetStatus(asDb(db), group(g), { meId: me });
     expect(rows.find(r => r.category === 'Food')!.spent).toBe(40000);
   });
 });
@@ -86,12 +86,12 @@ describe('spend windows end at now, not at the end of the period', () => {
  */
 describe('getBudgetAnalytics aggregates over one window, rate lines only', () => {
   const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
-  const group = (id: string) => ({ id, name: 'Personal', is_personal: 1 } as never);
+  const group = (id: string) => ({ id, name: 'Flat', is_personal: 0 } as never);
 
   function setup() {
     const db = createTestDb();
     const me = addPerson(db, 'Me', true);
-    const g = addGroup(db, 'Personal', true);
+    const g = addGroup(db, 'Flat', false);
     addMember(db, g, me);
     addCategory(db, 'Food');
     addCategory(db, 'Trips');
@@ -99,11 +99,11 @@ describe('getBudgetAnalytics aggregates over one window, rate lines only', () =>
   }
 
   it('leaves a yearly budget out of the monthly allocation and reports it as pooled', async () => {
-    const { db, g } = setup();
+    const { db, me, g } = setup();
     setCategoryBudget(db, { groupId: g, category: 'Food', amount: 500000, cadence: 'monthly' });
     setCategoryBudget(db, { groupId: g, category: 'Trips', amount: 2_400_000, cadence: 'yearly' });
 
-    const a = await getBudgetAnalytics(asDb(db), group(g));
+    const a = await getBudgetAnalytics(asDb(db), group(g), { meId: me });
     expect(a.totalAllocated).toBe(500000);          // was 2,900,000
     expect(a.pooledAllocated).toBe(2_400_000);
     expect(a.pooledCount).toBe(1);
@@ -116,17 +116,17 @@ describe('getBudgetAnalytics aggregates over one window, rate lines only', () =>
     addSimpleExpense(db, { groupId: g, personId: me, amount: 250000, date: Date.now() - 60_000, category: 'Food' });
     addSimpleExpense(db, { groupId: g, personId: me, amount: 2_000_000, date: Date.now() - 60_000, category: 'Trips' });
 
-    const a = await getBudgetAnalytics(asDb(db), group(g));
+    const a = await getBudgetAnalytics(asDb(db), group(g), { meId: me });
     // Dropping the allocation but keeping the spend would read 450% used.
     expect(a.totalSpent).toBe(250000);
     expect(a.utilizationPct).toBe(50);
   });
 
   it('rolls a daily line into the monthly allocation rather than ignoring it', async () => {
-    const { db, g } = setup();
+    const { db, me, g } = setup();
     setCategoryBudget(db, { groupId: g, category: 'Food', amount: 10000, cadence: 'daily' });
     const now = new Date();
-    const a = await getBudgetAnalytics(asDb(db), group(g), now);
+    const a = await getBudgetAnalytics(asDb(db), group(g), { meId: me, now });
     expect(a.totalAllocated).toBe(10000 * getDaysInMonth(now));
     // `monthlyBudgetTotal` drove the projection comparison and used to filter to
     // `cadence === 'monthly'`, so a daily budget contributed nothing at all.

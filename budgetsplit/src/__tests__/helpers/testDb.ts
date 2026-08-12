@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import { SCHEMA, COLUMN_MIGRATIONS } from '../../db/schema';
+import { SCHEMA, COLUMN_MIGRATIONS, INDEXES } from '../../db/schema';
+import { setCategoryBudgets, type BudgetLevel, type BudgetCadence } from '../../db/queries/categoryBudgets';
 
 /**
  * An in-process database that presents the expo-sqlite async surface over
@@ -43,6 +44,12 @@ export function createTestDb(): TestDb {
     try { db.exec(sql); } catch { /* column already exists */ }
   }
 
+  // Indexes too: the two partial UNIQUE indexes on `category_budget` are the only
+  // thing enforcing one budget per level (a plain UNIQUE cannot — SQL treats NULL
+  // person_ids as distinct). Without them this harness accepted two group defaults
+  // for one category, which is data the app can never produce.
+  db.exec(INDEXES);
+
   return {
     async getAllAsync<T>(sql: string, params: unknown[] = []) {
       return db.prepare(sql).all(...clean(params)) as T[];
@@ -82,17 +89,33 @@ export function addPerson(db: TestDb, name: string, isMe = false): string {
   return pid;
 }
 
-export function addGroup(db: TestDb, name: string, isPersonal = false): string {
+/**
+ * `created_by` is recorded, not optional: without it the group has no admin and
+ * every permission-gated write is refused. Defaults to the `is_me` person, which is
+ * what `insertGroup` does, so a fixture cannot drift from the real creation path.
+ */
+export function addGroup(db: TestDb, name: string, isPersonal = false, createdBy?: string): string {
   const gid = id('group');
+  const creator = createdBy
+    ?? (db.raw.prepare('SELECT id FROM person WHERE is_me = 1 LIMIT 1').get() as { id: string } | undefined)?.id
+    ?? null;
   db.raw.prepare(
-    `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, is_personal, simplify_debt, default_split, created_at)
-     VALUES (?, ?, 'home', '#20C4B8', 0, 0, 0, ?, 1, 'equal', ?)`,
-  ).run(gid, name, isPersonal ? 1 : 0, Date.now());
+    `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, is_personal, simplify_debt, default_split, created_at, created_by)
+     VALUES (?, ?, 'home', '#20C4B8', 0, 0, 0, ?, 1, 'equal', ?, ?)`,
+  ).run(gid, name, isPersonal ? 1 : 0, Date.now(), creator);
   return gid;
 }
 
-export function addMember(db: TestDb, groupId: string, personId: string): void {
-  db.raw.prepare('INSERT INTO group_member (group_id, person_id) VALUES (?, ?)').run(groupId, personId);
+/**
+ * The creator's row is an admin and everyone else's a member — derived from the
+ * group's `created_by`, which is `insertGroup`'s own rule, so a fixture cannot
+ * forget it. Pass `role` only to test a promotion the app would have to perform.
+ */
+export function addMember(db: TestDb, groupId: string, personId: string, role?: 'admin' | 'member'): void {
+  const creator = (db.raw.prepare('SELECT created_by FROM budget_group WHERE id = ?').get(groupId) as
+    { created_by: string | null } | undefined)?.created_by ?? null;
+  db.raw.prepare('INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)')
+    .run(groupId, personId, Date.now(), role ?? (personId === creator ? 'admin' : 'member'));
 }
 
 /**
@@ -152,9 +175,14 @@ export function addCategory(db: TestDb, name: string, kind: 'expense' | 'income'
     .run(id('cat'), name, 'circle', '#20C4B8', kind);
 }
 
+/**
+ * A raw budget row. `personId` is the level: omitted/null = the group default,
+ * set = that person's private override. Prefer `budgetVia` when asserting on
+ * behaviour — this states the end state without going through the code that reaches it.
+ */
 export function setCategoryBudget(
   db: TestDb,
-  opts: { groupId: string; category: string; amount: number; cadence?: string },
+  opts: { groupId: string; category: string; amount: number; cadence?: string; personId?: string | null },
 ): void {
   // Mirror `setCategoryBudgets`: `cadence` is the real field, while the legacy
   // `period` column is written as a constant so the table's UNIQUE(group_id,
@@ -162,6 +190,24 @@ export function setCategoryBudget(
   // `period` instead — as this helper used to — made a `daily` budget untestable,
   // because `period` has CHECK(period IN ('monthly','yearly')).
   db.raw.prepare(
-    `INSERT INTO category_budget (id, group_id, category, period, cadence, amount) VALUES (?, ?, ?, 'monthly', ?, ?)`,
-  ).run(id('cb'), opts.groupId, opts.category, opts.cadence ?? 'monthly', opts.amount);
+    `INSERT INTO category_budget (id, group_id, category, period, cadence, amount, person_id) VALUES (?, ?, ?, 'monthly', ?, ?, ?)`,
+  ).run(id('cb'), opts.groupId, opts.category, opts.cadence ?? 'monthly', opts.amount, opts.personId ?? null);
+}
+
+/** The app's own async surface, which every real query function expects. */
+export const asDb = (db: TestDb) => db as unknown as SQLiteLike;
+type SQLiteLike = Parameters<typeof setCategoryBudgets>[0];
+
+/**
+ * Write a budget through the **real** writer — permission gate, level→`person_id`
+ * mapping, scoped replace and all. A test that constructs its own starting state
+ * proves nothing about how that state is reached.
+ */
+export function budgetVia(
+  db: TestDb,
+  groupId: string,
+  entries: Array<{ category: string; cadence: BudgetCadence; amount: number }>,
+  opts: { level: BudgetLevel; actorId: string },
+): Promise<void> {
+  return setCategoryBudgets(asDb(db), groupId, entries, opts);
 }

@@ -183,7 +183,8 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | ID | Screen | File | Purpose |
 |---|---|---|---|
 | S-09 | **Group detail** | `app/group/[id].tsx` | Group hub; tabs differ by kind. `/group/{personalId}` `router.replace`s to `/personal`, so old deep links still resolve. |
-| S-10 | **Budget editor** | `app/group/[id]/budget.tsx` | Per-category amount + cadence, collapsible sections, `?category=` deep-link autofocus. Self-heals an empty catalog. |
+| S-10 | **My Budget** | `app/budget.tsx` | The **global** budget: your limits across personal spending and your share of every group. Stored as the Personal group's `person_id IS NULL` lines. No level control — there are no levels here. Takes **no group id**, which is what removed the `?? groups[0]` fallbacks that let a personal-sounding entry point open a *shared* group's editor. |
+| S-10b | **Group budget editor** | `app/group/[id]/budget.tsx` | A group's **default** (admin-only, what every member inherits) and **Mine** (your private per-category override). Switching to Mine asks first (`OwnBudgetSheet`) and only the categories you fill in become yours; blanks keep following the group. A personal group forwards to `/budget`. Both routes render `components/finance/budget/BudgetEditor`. |
 | S-11 | **Members** | `app/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
 | S-12 | **Group recurring** | `app/group/[id]/recurring.tsx` | Pause / resume / end / skip-next (with undo-skip). `?focus=<id>` highlights a rule for 2.6 s. |
 | S-13 | **Edit group** | `app/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
@@ -1237,7 +1238,7 @@ keeps content from painting under the clock/notch.
 
 1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), and a privacy subtitle.
 2. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
-3. **Manage** — People → `/friends` · Categories → `/categories` · **Budget** ("Personal budget") → `/group/{personal}/budget` (→ `/groups` if none).
+3. **Manage** — People → `/friends` · Categories → `/categories` · **My Budget** (monthly rollup, or "Not set") → `/budget`.
 4. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
 5. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
 6. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
@@ -1457,7 +1458,7 @@ See §4 — the layout list there is this flow's step 6, in order. The load path
 | 3 | Per line: amount + cadence (once / daily / monthly / yearly). `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts | `budget.tsx:104` |
 | 4 | Save → `setCategoryBudgets` upserts `category_budget` rows | `src/db/queries/categoryBudgets.ts:47` |
 | 5 | Tracking: `getCategoryBudgetStatus` compares each line against spend in the window of **its own** cadence, one query per distinct cadence, no rollover | `src/lib/budget.ts:160-179` |
-| 6 | Personal budgets measure **my share across all groups** via `getMyGlobalBudgetStatus` | `src/lib/budget.ts:198` |
+| 6 | My Budget measures **my share across all groups** — one answer for every surface, `getMyGlobalBudgetSummary`; cross-group rollups map over `sharedGroupsOf` so the global cap is never also counted as a group's budget | `src/lib/budget.ts` |
 | 7 | Health band from the single `budgetHealth` threshold source: ≥100 red, ≥80 amber | `src/lib/budget.ts:27` |
 
 ### FLOW-10 — Fund a savings goal

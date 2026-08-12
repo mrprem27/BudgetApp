@@ -32,6 +32,7 @@ const K = {
   lastBackupAt: 'last_backup_at',
   ocrProvider: 'ocr_provider',
   storageWarnDismissed: 'storage_warn_dismissed',
+  budgetTarget: 'budget_target',
 } as const;
 
 export const SETTINGS_KEYS = K;
@@ -72,6 +73,16 @@ export const settings = {
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),
   setDefaultCadence: (v: string) => setString(K.defaultCadence, v),
+  /**
+   * The whole-month figure typed during onboarding, in paise — a *suggestion* the
+   * My Budget editor shows, not a budget.
+   *
+   * It used to be written as a budget line for a category called 'Total', which is
+   * in no catalog, so every reader folded it into `Others` — a phantom "Others
+   * ₹30,000" row on Personal, and "Total" offered in the editor as a category to adopt.
+   */
+  budgetTarget: () => getNumber(K.budgetTarget),
+  setBudgetTarget: (v: number) => setNumber(K.budgetTarget, v),
   defaultCurrency: () => getString(K.defaultCurrency),
   setDefaultCurrency: (v: string) => setString(K.defaultCurrency, v),
 

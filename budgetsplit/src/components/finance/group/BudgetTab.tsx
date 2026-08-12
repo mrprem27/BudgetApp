@@ -33,6 +33,10 @@ type Props = {
   onCreateBudget: () => void;
   /** Open the re-plan sheet for an over-budget category (`V2-07`). */
   onRebalance?: (category: string) => void;
+  /** Whether I may edit the line every member inherits — changes what the copy claims. */
+  canEditGroupDefault?: boolean;
+  /** How many categories I have my own amount for. */
+  overrideCount?: number;
 };
 
 /**
@@ -46,7 +50,10 @@ type Props = {
  * "Who paid what" used to live here, between the hero and the categories. It moved to the
  * Members tab: it's a settlement concern, and the people and balances are already there.
  */
-export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, onRebalance, refreshing, onRefresh }: Props) {
+export function BudgetTab({
+  analytics, catStatus, onEditBudget, onCreateBudget, onRebalance, refreshing, onRefresh,
+  canEditGroupDefault = false, overrideCount = 0,
+}: Props) {
   const [filter, setFilter] = useState<StatusFilter>('all');
   const bottomPad = useContentInset({ fab: true });
 
@@ -56,11 +63,15 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
         contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* An admin sets what everyone inherits; a member can only set their own,
+            and saying so is the difference between an invitation and a dead end. */}
         <EmptyState
           icon="target"
           title="No budget yet"
-          body="Give a category a limit — one-time, daily, monthly or yearly — and track it live. Each period starts fresh: the limit resets and unused amount doesn't carry over."
-          actionLabel="Create budget"
+          body={canEditGroupDefault
+            ? "Give a category a limit — one-time, daily, monthly or yearly — and every member starts from it. Each period starts fresh: the limit resets and unused amount doesn't carry over."
+            : "Set your own limits for this group — only you see them. An admin sets the group's, and yours replaces it for the categories you fill in."}
+          actionLabel={canEditGroupDefault ? 'Set the group\'s budget' : 'Set my budget for this group'}
           onAction={onCreateBudget}
         />
       </ScrollView>
@@ -103,14 +114,15 @@ export function BudgetTab({ analytics, catStatus, onEditBudget, onCreateBudget, 
               {utilLabel(analytics.utilizationPct ?? 0)}
             </Text>
           </View>
-          {/* "per person", not "my share" — the distinction is the whole of D1.
-              `category_budget` is stored group-wide (no person_id) and measured
-              against one person's spend (`app/group/[id].tsx` passes `meRow?.id`
-              into both engines). So the line belongs to the group but the AMOUNT is
-              one person's allowance, not a pot to be divided: ₹10,000 Groceries on a
-              4-person flat is ₹10,000 each. "Share" would imply the opposite — your
-              slice of a ₹10,000 group total. */}
-          <Text style={styles.ovOf}>of {formatCompact(analytics.totalAllocated)} per person this month</Text>
+          {/* "per person", not "my share": the amount is one person's allowance, not
+              a pot to divide — ₹10,000 Groceries in a 4-person flat is ₹10,000 each.
+              Once you have your own amounts the figure is yours rather than the
+              group's, so it stops claiming to be what everyone gets. */}
+          <Text style={styles.ovOf}>
+            {overrideCount > 0
+              ? `of ${formatCompact(analytics.totalAllocated)} for you this month · your own in ${overrideCount} ${overrideCount === 1 ? 'category' : 'categories'}`
+              : `of ${formatCompact(analytics.totalAllocated)} per person this month`}
+          </Text>
           {/* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
               budget is spent when the trip happens, so it is excluded from the figures
               above. Naming it here is what keeps the exclusion honest rather than a

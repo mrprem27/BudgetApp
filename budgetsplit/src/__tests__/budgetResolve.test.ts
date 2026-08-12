@@ -221,10 +221,6 @@ describe('setCategoryBudgets preserves lines outside the catalog', () => {
        VALUES ('b1','g','Groceries','monthly','monthly',500000,NULL),
               ('b2','g','Gym','monthly','monthly',200000,NULL)`,
     );
-    // What the creator backfill gives every pre-existing group; without it the
-    // write path correctly refuses, since editing the group default needs admin.
-    await d.runAsync("UPDATE budget_group SET created_by = 'me' WHERE id = 'g'");
-    await d.runAsync("UPDATE group_member SET role = 'admin' WHERE group_id = 'g' AND person_id = 'me'");
     return d;
   }
   const rows = (d: Awaited<ReturnType<typeof openTestDb>>) =>

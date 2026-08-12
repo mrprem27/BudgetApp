@@ -3,11 +3,11 @@ import { getDate, getDaysInMonth } from 'date-fns';
 import { colors } from '../constants/colors';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getBudgetAnalytics } from '../lib/analytics';
-import { getAllGroups } from '../db/queries/groups';
+import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { buildSavingsInsights } from '../db/queries/savings';
 import { myShareOf } from './splitMath';
-import { getMyGlobalBudgetStatus, rollUpBudgets } from './budget';
+import { getMyGlobalBudgetSummary } from './budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 
 /**
@@ -143,26 +143,34 @@ export async function loadInsightsData(
       }
     }
 
-    // Budget analytics per group — powers the total, plus the recommendations and
-    // "driving overspend" that used to live inside each group's Budget tab. They're
-    // aggregated across every group here and tagged with the group name.
-    const analyticsByGroup = await Promise.all(grps.map(async g => ({ group: g, a: await getBudgetAnalytics(db, g, now) })));
+    /*
+     * Shared groups only: the Personal group's lines are My Budget — the `budget`
+     * figure below — so including it would report the same limit twice.
+     *
+     * `meId` is passed. Without it these drivers measured the whole group's spend
+     * against one person's allowance (a group budget is per-person, `4c7ee45`) and
+     * ignored every override.
+     */
+    const analyticsByGroup = await Promise.all(
+      sharedGroupsOf(grps).map(async g => ({ group: g, a: await getBudgetAnalytics(db, g, { meId, now }) })),
+    );
 
-    // Must share monthSpend's basis: the my-share budget (FLOW-09 step 6), not
-    // every group's allocation. `analyticsByGroup` stays group-scoped on purpose —
-    // drivers/recommendations are findings about a group's own budget line, and
-    // passing `meId` there would compare my share against the group's allocation.
-    const myBudgetRows = meId ? await getMyGlobalBudgetStatus(db, meId, now) : [];
-    // Monthly rollup — see `rollUpBudgets`. Yearly lines are pools, not /12.
-    const budget = rollUpBudgets(
-      myBudgetRows.map(r => ({ cadence: r.cadence, amount: r.allocated })), 'monthly', now,
-    ).amount;
+    // Shares monthSpend's basis: my share, all groups (FLOW-09 step 6). One
+    // function so this cannot drift from Home's or Plan's answer.
+    const mine = meId ? await getMyGlobalBudgetSummary(db, meId, { now }) : null;
+    const budget = mine?.allocated ?? 0;
 
     const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
       a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
     );
-    const drivers: Driver[] = analyticsByGroup
-      .flatMap(({ group, a }) => a.overBudget.map(t => ({ key: `${group.id}:${t.category}`, category: t.category, over: t.spent - t.allocated, group: group.name })))
+    const drivers: Driver[] = [
+      // My Budget's own overspend, labelled as mine rather than as a group's.
+      ...(mine?.rows ?? [])
+        .filter(r => r.remaining < 0)
+        .map(r => ({ key: `me:${r.category}`, category: r.category, over: -r.remaining, group: 'Your budget' })),
+      ...analyticsByGroup
+        .flatMap(({ group, a }) => a.overBudget.map(t => ({ key: `${group.id}:${t.category}`, category: t.category, over: t.spent - t.allocated, group: group.name }))),
+    ]
       .sort((x, y) => y.over - x.over)
       .slice(0, 6);
 

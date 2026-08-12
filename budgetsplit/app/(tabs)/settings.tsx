@@ -18,6 +18,9 @@ import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa
 import { isValidVpa } from '../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
 import { getAllGroups } from '../../src/db/queries/groups';
+import { getMyGlobalBudgetRows } from '../../src/db/queries/categoryBudgets';
+import { rollUpBudgets } from '../../src/lib/budget';
+import { formatCompact } from '../../src/lib/money';
 import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
 import { shareCsv } from '../../src/lib/shareCsv';
 import { getCategories } from '../../src/db/queries/categories';
@@ -55,22 +58,23 @@ export default function SettingsScreen() {
   // The self-heal write is idempotent (only fires on an empty catalog), so it's
   // safe inside a loader that re-runs on focus.
   const { data, error: loadError, reload } = useScreenData(async (database) => {
-    const [meRow, allPersons, grps] = await Promise.all([
-      getMe(database), getAllPersons(database), getAllGroups(database),
-    ]);
+    const [meRow, allPersons] = await Promise.all([getMe(database), getAllPersons(database)]);
     let count = (await getCategories(database, 'expense')).length;
     if (count === 0) { await seedGlobalCategories(database); count = (await getCategories(database, 'expense')).length; }
+    // Just the lines, rolled up — no spend queries: a settings row must not run an
+    // all-groups scan to render its subtitle.
+    const myBudget = meRow ? await getMyGlobalBudgetRows(database, meRow.id) : [];
     return {
       me: meRow,
       contactCount: allPersons.filter(p => !p.is_me).length,
-      personalGroupId: grps.find(g => g.is_personal === 1)?.id ?? null,
+      budgetMonthly: rollUpBudgets(myBudget, 'monthly', new Date()).amount,
       categoryCount: count,
     };
   }, []);
   const me = data?.me ?? null;
   const contactCount = data?.contactCount ?? 0;
   const categoryCount = data?.categoryCount ?? 0;
-  const personalGroupId = data?.personalGroupId ?? null;
+  const budgetMonthly = data?.budgetMonthly ?? 0;
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
@@ -301,12 +305,9 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow
           icon="target"
-          label="Budget"
-          value="Personal budget"
-          onPress={() => {
-            if (personalGroupId) router.push(`/group/${personalGroupId}/budget`);
-            else router.push('/groups');
-          }}
+          label="My Budget"
+          value={budgetMonthly > 0 ? `${formatCompact(budgetMonthly)}/mo` : 'Not set'}
+          onPress={() => router.push('/budget')}
         />
       </View>
 

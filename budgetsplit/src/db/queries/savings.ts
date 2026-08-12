@@ -6,13 +6,13 @@ import { generateInsights, type Insight, type CategorySpend } from '../../lib/sa
 import { cashPositionFromTotals, computeTotalMoney, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
 import { CASH_TOTALS_SQL } from './cashQuery';
 import { getMoneyProfile } from './moneyProfile';
-import { getAllGroups } from './groups';
+import { getAllGroups, personalGroupOf } from './groups';
 import { getMe } from './persons';
 import { getTransactionsInRange, type TxnWithSplits } from './transactions';
 import { getRecurringForGroup } from './recurring';
 import { recurringMonthlyEquivalent } from '../../lib/recurrence';
 import { getCategoriesByFrequency, type Category } from './categories';
-import { getCategoryBudgets, type BudgetCadence } from './categoryBudgets';
+import { getMyGlobalBudgetRows, type BudgetCadence } from './categoryBudgets';
 import { startOfMonth, endOfMonth, getDaysInMonth, getDate, subMonths } from 'date-fns';
 import { forecastMonthEnd } from '../../lib/forecast';
 import { monthlyContribution } from '../../lib/savings';
@@ -467,13 +467,15 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const daysInMonth = getDaysInMonth(today);
 
   const groups = await getAllGroups(db);
-  const personal = groups.find(g => g.is_personal === 1) ?? groups[0] ?? null;
+  // No fallback: a shared group's categories, budget and bills are not my personal
+  // ones, and Afford presenting them as mine is worse than presenting nothing.
+  const personal = personalGroupOf(groups);
 
   const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved] = await Promise.all([
     getCashPosition(db),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
-    // Resolved for me: Afford must respect my override, not the group default.
-    personal ? getCategoryBudgets(db, personal.id, me.id) : Promise.resolve([]),
+    // My Budget — the same rows and the same reader every other surface uses.
+    getMyGlobalBudgetRows(db, me.id),
     getTransactionsInRange(db, null, monthStart, now),
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
     getTransactionsInRange(db, null, now, monthEnd),

@@ -22,7 +22,7 @@ import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/que
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
-import { utilLabel } from '../../src/lib/budget';
+import { utilLabel, budgetHealth, isGlobalBudgetGroup, getMyGlobalBudgetSummary } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
@@ -66,18 +66,28 @@ export default function GroupsScreen() {
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const archived = await getArchivedGroups(db);
     const me = await getMe(db);
+    const meId = me?.id ?? '';
     // Per-group usage + member counts + my net balance, in parallel.
     const health: Record<string, GroupHealth> = {};
     const memberMap: Record<string, Person[]> = {};
     await Promise.all(groups.map(async g => {
-      const [analytics, mems, gnet] = await Promise.all([
-        getBudgetAnalytics(db, g),
+      // The Personal card's bar is My Budget — its lines are the global cap, and
+      // measuring them against Personal-group spend alone overstated headroom for
+      // anyone who also spends in a shared group.
+      const [budget, mems, gnet] = await Promise.all([
+        isGlobalBudgetGroup(g)
+          ? getMyGlobalBudgetSummary(db, meId)
+          : getBudgetAnalytics(db, g, { meId }),
         getGroupMembers(db, g.id),
         getGroupNet(db, g.id),
       ]);
-      const pct = analytics.utilizationPct;
-      const hc = pct === null ? 'none' as const : pct >= 100 ? 'red' as const : pct >= 80 ? 'amber' as const : 'green' as const;
-      health[g.id] = { pct, health: hc, spent: analytics.totalSpent, members: mems.length, over: analytics.overBudget.length, net: me ? (gnet[me.id] ?? 0) : 0 };
+      const pct = 'utilizationPct' in budget ? budget.utilizationPct : budget.pct;
+      const spent = 'totalSpent' in budget ? budget.totalSpent : budget.spent;
+      const over = 'overBudget' in budget ? budget.overBudget.length : budget.rows.filter(r => r.health === 'red').length;
+      health[g.id] = {
+        pct, health: budgetHealth(pct), spent, over,
+        members: mems.length, net: me ? (gnet[me.id] ?? 0) : 0,
+      };
       memberMap[g.id] = mems;
     }));
 

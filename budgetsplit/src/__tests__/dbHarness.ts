@@ -28,22 +28,28 @@ export async function openTestDb(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
-/** The most common fixture: one shared group, and me. */
+/**
+ * The most common fixture: one shared group, and me.
+ *
+ * `created_by` and `role = 'admin'` are included because that is what `insertGroup`
+ * produces. Without them the group has no admin, every permission-gated write is
+ * refused, and the suites that hit it hand-patched the two columns back in.
+ */
 export async function seedGroupAndMe(
   db: SQLite.SQLiteDatabase,
   { groupId = 'g', meId = 'me', isPersonal = 0 } = {},
 ): Promise<void> {
   await db.runAsync(
-    `INSERT INTO budget_group (id,name,icon,color,is_personal,is_archived,created_at)
-     VALUES (?,?,?,?,?,0,0)`,
-    [groupId, 'Flat', 'home', '#ffffff', isPersonal],
+    `INSERT INTO budget_group (id,name,icon,color,is_personal,is_archived,created_at,created_by)
+     VALUES (?,?,?,?,?,0,0,?)`,
+    [groupId, 'Flat', 'home', '#ffffff', isPersonal, meId],
   );
   await db.runAsync(
     `INSERT INTO person (id,name,avatar_color,is_me) VALUES (?,?,?,1)`,
     [meId, 'Me', '#111111'],
   );
   await db.runAsync(
-    `INSERT INTO group_member (group_id,person_id) VALUES (?,?)`,
+    `INSERT INTO group_member (group_id,person_id,joined_at,role) VALUES (?,?,0,'admin')`,
     [groupId, meId],
   );
 }

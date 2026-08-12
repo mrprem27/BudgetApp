@@ -211,6 +211,37 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Fixed 2026-08-12 — three budget concepts, two storage levels, one reading each
+
+Reported as two symptoms: tapping **Mine** in a group's budget asked nothing, and Settings → Budget
+was labelled personal but opened a group-scoped editor on the "Group default" tab.
+
+**The Mine tap was worse than unconfirmed.** `budget.tsx` declared `confirmOwn`, set it, and
+**nothing in the repo ever read it** — `596b194`'s message claims "switching asks first, stating
+that cost"; the guard shipped and the dialog did not. The guard also returned without `setLevel`,
+so an admin with no overrides could never reach the tab at all.
+
+**The root cause was a missing storage level.** My Budget had none of its own: it *was* the
+Personal group's `person_id IS NULL` rows, read as "my global cap" on Home/Insights/Personal/Afford
+and as "one group's budget" on the Groups list/Reports/Savings/Category detail. So the same rows
+were counted twice — a category's hero showed a global ₹8,000 plus a group's ₹6,000 as
+**"₹14,000 your budget"**, and the Plan forecast added them too.
+
+| Item | Detail |
+|---|---|
+| **The model, written down once** | `lib/budget.ts` now states it: My Budget (Personal group, `person_id IS NULL`, vs my share across ALL groups) · a group budget (shared group, `person_id IS NULL`, a per-person allowance) · my override (shared group, `person_id = me`, per category, private). (1) and (2) never share a total. |
+| **One name per question** | `getPersonalGroup` / `personalGroupOf` / `sharedGroupsOf` in `queries/groups.ts`, and `getMyGlobalBudgetRows` / `setMyGlobalBudget` / `getMyGlobalBudgetSummary`. Five hand-copied `rollUpBudgets` calls became one summary; every cross-group rollup maps over `sharedGroupsOf`. |
+| **No `?? groups[0]`, ever, for a budget scope** | It promoted a *shared* group's budget into the global cap, and at another call site labelled that group's transactions "Personal". Only `voiceDrain` keeps the fallback — it needs somewhere to *file* a capture, which is a different question. |
+| **`meId` is required** | `getBudgetAnalytics(db, g, {meId, …})`. Omitting it silently dropped every override AND switched spend from my share to the whole group's bill — five of six rollups did exactly that while reading as a complete call. The `insertGroup.creatorId` shape again, with a worse failure mode: a plausible wrong number instead of a throw. |
+| **Home's basis was wrong both ways** | It summed every group's allocation (the Personal group's included, which IS the cap) against every group's *full bill*: a ₹1,000 expense split 50/50 charged ₹1,000 to my budget. Both halves are now my-share, and the health score is rebased onto them — the `homeData` comment that parked this as "a product call" is retired. |
+| **Mine overlaps per category** | It used to pre-fill from the group default, so one tap plus Save detached you in *every* category. It now holds only your own lines; a blank row shows the group's amount as a placeholder with a "Group default" caption and keeps following it. Clearing an amount deletes your row, so reverting needs no new UI. Save is disabled until something changes. |
+| **`/budget` is its own route** | Addressing a global concept by the personal group's id is *why* callers resolved an id they had no business knowing. The new route takes none; `group/[id]/budget` forwards a personal group to it, mirroring `group/[id].tsx` → `/personal`. CTA copy now names the blast radius: "Save for everyone" vs "Save mine for this group" vs "Save my budget". |
+| **Onboarding's `'Total'` line** | It budgeted a category no catalog has, so it rendered as a phantom "Others ₹30,000" on Personal and offered "Total" for adoption in the editor. The figure is kept as `settings.budgetTarget` and shown as a suggestion in the My Budget editor instead. |
+| **Harness first** | `helpers/testDb` was missing `INDEXES` (so it accepted two group defaults for one category — data the app cannot produce) and had no way to express an override at all, which is why the override-blind rollups had no failing test. It now applies the indexes, records `created_by`/`role` the way `insertGroup` does, and offers `budgetVia` — the real writer. `seedGroupAndMe` does the same, deleting a hand-patch three suites had copied. |
+| **Verified by reverting** | Six reverts, six red suites: Mine pre-filling from the default (6 failures), Home summing group analytics, the category screen summing across groups, Reports dropping `meId`, Plan's spend side summing every member's share, and the global summary losing its my-share basis. The Plan one passed on the first attempt — the spend half was unasserted — so `monthSpend` is returned and pinned. |
+
+91 suites / 1415 tests, tsc clean. Not yet device-tested.
+
 ### Fixed 2026-08-12 — the admin-less groups get repaired, and the two seed paths stop making more
 
 Follow-up to the entry below. That fix stopped *new* groups from being created without an admin;

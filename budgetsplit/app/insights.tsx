@@ -133,13 +133,13 @@ export default function InsightsScreen() {
               At this pace you'll overspend by <Text style={{ color: colors.expense }}>{formatCompact(projected - budget)}</Text> by month-end
             </Text>
             <Text style={styles.velocitySub}>
-              You're averaging {formatCompact(dailyAvg)}/day · budget allows {formatCompact(budgetPerDay)}/day
+              You're averaging {formatCompact(dailyAvg)}/day · your budget allows {formatCompact(budgetPerDay)}/day
             </Text>
             <View style={styles.velocityBarRow}>
               <View style={styles.velocityLegend}>
                 <Text style={styles.velocityLegendMuted}>₹0</Text>
                 <Text style={[styles.velocityLegendMuted, { color: colors.expense }]}>Projected {formatCompact(projected)}</Text>
-                <Text style={styles.velocityLegendMuted}>Budget {formatCompact(budget)}</Text>
+                <Text style={styles.velocityLegendMuted}>Your budget {formatCompact(budget)}</Text>
               </View>
               <View style={styles.velocityBarTrack}>
                 <View style={[styles.velocityBarFill, { width: `${Math.min(100, Math.round((budget / projected) * 100))}%` }]} />

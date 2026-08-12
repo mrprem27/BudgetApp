@@ -68,7 +68,6 @@ export default function DashboardScreen() {
     [groups, tab],
   );
 
-  const personalGroupId = data?.personalGroupId ?? null;
   const meInfo = data?.meInfo ?? null;
   const spending = data?.spending ?? 0;
   const income = data?.income ?? 0;
@@ -239,7 +238,7 @@ export default function DashboardScreen() {
 
                 <Text style={styles.getStartedLabel}>GET STARTED</Text>
                 <View style={{ gap: space.sm }}>
-                  <TouchableOpacity style={styles.startTile} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget`)} accessibilityRole="button">
+                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/budget')} accessibilityRole="button">
                     <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.startTitle}>Set a monthly budget</Text>

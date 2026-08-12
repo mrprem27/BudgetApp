@@ -5,13 +5,32 @@ import {
 } from 'date-fns';
 import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { getCategoryBudgets } from '../db/queries/categoryBudgets';
+import { getCategoryBudgets, getMyGlobalBudgetRows } from '../db/queries/categoryBudgets';
 import { OTHERS_LABEL } from './categoryFold';
 import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudgets';
 
 export type Period = 'daily' | 'monthly' | 'yearly';
 
 export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
+
+/*
+ * THREE BUDGET CONCEPTS, TWO STORAGE LEVELS.
+ *
+ * 1. MY BUDGET (global) — Personal group, `person_id IS NULL`. Measured against my
+ *    share of spend across ALL groups. The Personal group has no separate group
+ *    budget; this row set is always read as global.
+ * 2. GROUP BUDGET — shared group, `person_id IS NULL`. A per-person allowance every
+ *    member inherits (`4c7ee45`), against my share of that group's spend.
+ * 3. MY OVERRIDE — shared group, `person_id = me`. Beats the default per category,
+ *    for me only, and private.
+ *
+ * (1) and (2) must never share a total — the global cap already covers the spend
+ * happening inside every group. So cross-group rollups map over `sharedGroupsOf`,
+ * and "how am I doing against my budget?" has one answer, `getMyGlobalBudgetSummary`.
+ */
+
+/** Whether this group's default lines are My Budget rather than a group budget. */
+export const isGlobalBudgetGroup = (g: Pick<BudgetGroup, 'is_personal'>) => g.is_personal === 1;
 
 /**
  * Collapse two-level budget rows into the one line that applies to `meId`.
@@ -240,8 +259,12 @@ export type CategoryBudgetStatus = {
  * on the 2nd used to count as already spent, so a budget read as blown four
  * weeks before the money moved. Future-dated commitments are a separate idea and
  * already have a home — `upcomingBills` in `getAffordSnapshot`.
+ *
+ * Also serves an *aggregate* at a target `Period`, since `Period` is a subset of
+ * `BudgetCadence` and the rule is the same one. `analytics.ts` had this written out
+ * twice more (`currentWindow`, `targetWindow`) before they were folded in here.
  */
-function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to: number } {
+export function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to: number } {
   const to = now.getTime();
   switch (cadence) {
     case 'daily':   return { from: getPeriodRange('daily', now).from, to };
@@ -261,10 +284,11 @@ function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to
 export async function getCategoryBudgetStatus(
   db: SQLite.SQLiteDatabase,
   group: BudgetGroup,
-  now = new Date(),
-  /** When set, spend counts only this person's share (individual budget). */
-  meId?: string,
+  /** `meId` is required for the reason spelled out on `getBudgetAnalytics`. */
+  opts: { meId: string; now?: Date },
 ): Promise<CategoryBudgetStatus[]> {
+  const { meId } = opts;
+  const now = opts.now ?? new Date();
   const budgets = await getCategoryBudgets(db, group.id, meId);
   if (budgets.length === 0) return [];
 
@@ -348,23 +372,14 @@ function statusRows(budgets: CategoryBudget[], spendByCadence: Record<string, Re
   return sortStatusRows(rows);
 }
 
-/**
- * GLOBAL personal budget status: budgets defined on the personal group, measured
- * against MY share of spending across ALL groups (personal + shared). The unified
- * "my total spend vs my budget" view that powers the Personal → Budget tab.
- */
-export async function getMyGlobalBudgetStatus(
+/** Per-category rows for a set of global lines. Split out so the summary below
+ *  and the status list share one definition of "my spend for this line". */
+async function globalStatusRows(
   db: SQLite.SQLiteDatabase,
   meId: string,
-  now = new Date(),
+  budgets: CategoryBudget[],
+  now: Date,
 ): Promise<CategoryBudgetStatus[]> {
-  const personal = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM budget_group WHERE is_personal = 1 ORDER BY created_at ASC LIMIT 1',
-  );
-  if (!personal) return [];
-  const budgets = await getCategoryBudgets(db, personal.id, meId);
-  if (budgets.length === 0) return [];
-
   const cadences = Array.from(new Set(budgets.map(b => b.cadence)));
   const spendByCadence: Record<string, Record<string, number>> = {};
   await Promise.all(cadences.map(async cad => {
@@ -372,6 +387,86 @@ export async function getMyGlobalBudgetStatus(
     // null group → every group; meId → my share only.
     spendByCadence[cad] = await getCategorySpending(db, null, w.from, w.to, meId);
   }));
-
   return foldBudgetStatuses(statusRows(budgets, spendByCadence), await knownCategoryNames(db));
+}
+
+/**
+ * MY BUDGET, per category: the global lines measured against MY share of spending
+ * across ALL groups (personal + shared). Powers the Personal → Budget tab.
+ */
+export async function getMyGlobalBudgetStatus(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  now = new Date(),
+): Promise<CategoryBudgetStatus[]> {
+  const budgets = await getMyGlobalBudgetRows(db, meId);
+  if (budgets.length === 0) return [];
+  return globalStatusRows(db, meId, budgets, now);
+}
+
+/** My Budget as one figure plus its rows. See `getMyGlobalBudgetSummary`. */
+export type GlobalBudgetSummary = {
+  /** Rate lines rolled up to `target`. */
+  allocated: number;
+  /** Pool lines (longer than `target`) — reported separately, never added in. */
+  pooled: number;
+  pooledCount: number;
+  /** My share, all groups, over `target`'s window, restricted to the rate categories. */
+  spent: number;
+  remaining: number;
+  pct: number | null;
+  health: BudgetHealth;
+  /** How many categories I have budgeted (rate + pool). */
+  categoryCount: number;
+  rows: CategoryBudgetStatus[];
+};
+
+/**
+ * **The** answer to "how am I doing against my budget?".
+ *
+ * Home, Insights, Plan, the Groups list and Reports each rolled their own, and four
+ * summed every group's allocation — including the Personal group's, which IS this
+ * cap — against whole-group bills rather than my share. Here numerator and
+ * denominator share one window and one basis by construction.
+ *
+ * Mirrors the aggregate half of `getBudgetAnalytics`: same rate/pool split, same
+ * "window ends at now", same health bands. Only the scope differs.
+ */
+export async function getMyGlobalBudgetSummary(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  opts: { now?: Date; target?: Period } = {},
+): Promise<GlobalBudgetSummary> {
+  const now = opts.now ?? new Date();
+  const target = opts.target ?? 'monthly';
+  const budgets = await getMyGlobalBudgetRows(db, meId);
+  const empty: GlobalBudgetSummary = {
+    allocated: 0, pooled: 0, pooledCount: 0, spent: 0, remaining: 0,
+    pct: null, health: 'none', categoryCount: 0, rows: [],
+  };
+  if (budgets.length === 0) return empty;
+
+  const roll = rollUpBudgets(budgets, target, now);
+  // Pools are excluded from BOTH halves. Dropping the allocation but keeping the
+  // spend would inflate utilisation rather than fix it (same rule as analytics).
+  const rateCategories = new Set(
+    budgets.filter(b => budgetKind(b.cadence, target) === 'rate').map(b => b.category),
+  );
+  const w = windowForCadence(target, now);
+  const spendByCat = await getCategorySpending(db, null, w.from, w.to, meId);
+  const spent = Object.entries(spendByCat)
+    .reduce((s, [cat, amt]) => (rateCategories.has(cat) ? s + amt : s), 0);
+  const pct = roll.amount > 0 ? Math.round((spent / roll.amount) * 100) : null;
+
+  return {
+    allocated: roll.amount,
+    pooled: roll.pooled,
+    pooledCount: roll.pooledCount,
+    spent,
+    remaining: roll.amount - spent,
+    pct,
+    health: budgetHealth(pct),
+    categoryCount: new Set(budgets.map(b => b.category)).size,
+    rows: await globalStatusRows(db, meId, budgets, now),
+  };
 }

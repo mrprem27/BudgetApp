@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout, radius } from '../../src/constants/layout';
-import { getGroupById, setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
+import { getGroupById, setSimplifyDebt, archiveGroupSafe, getGroupContext } from '../../src/db/queries/groups';
 import { getTransactionsForGroup } from '../../src/db/queries/transactions';
 import { getRecurringForGroup } from '../../src/db/queries/recurring';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -17,6 +17,7 @@ import { getGroupNet } from '../../src/db/queries/balances';
 import { getCategoryBudgetStatus } from '../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../src/lib/budget';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
+import { canEditGroupBudget } from '../../src/lib/permissions';
 import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { simplify, rawDebts } from '../../src/lib/settle';
 import {
@@ -37,7 +38,7 @@ import { TransactionsTab } from '../../src/components/finance/group/Transactions
 import { BudgetTab } from '../../src/components/finance/group/BudgetTab';
 import { RebalanceSheet } from '../../src/components/finance/group/RebalanceSheet';
 import { planRebalance, applyRebalance, type RebalancePlan } from '../../src/lib/rebalance';
-import { setCategoryBudgets } from '../../src/db/queries/categoryBudgets';
+import { setCategoryBudgets, getCategoryBudgetRows } from '../../src/db/queries/categoryBudgets';
 import { MembersTab } from '../../src/components/finance/group/MembersTab';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
@@ -71,20 +72,27 @@ export default function GroupDetailScreen() {
     ]);
     const netMap = await getGroupNet(db, id);
 
+    let ctx: Awaited<ReturnType<typeof getGroupContext>> | null = null;
+    let overrideCount = 0;
     let catStatus: CategoryBudgetStatus[] = [];
     let analytics: BudgetAnalytics | null = null;
     let recurringRules: TxnWithSplits[] = [];
     if (grp) {
-      const [cs, an] = await Promise.all([
-        getCategoryBudgetStatus(db, grp, new Date(), meRow?.id),
-        getBudgetAnalytics(db, grp, new Date(), meRow?.id),
+      const meId = meRow?.id ?? '';
+      const [cs, an, gctx, budgetRows] = await Promise.all([
+        getCategoryBudgetStatus(db, grp, { meId }),
+        getBudgetAnalytics(db, grp, { meId }),
+        getGroupContext(db, id, meId),
+        getCategoryBudgetRows(db, id),
       ]);
+      ctx = gctx;
+      overrideCount = budgetRows.filter(r => r.person_id === meId && r.amount > 0).length;
       catStatus = cs;
       analytics = an;
       const rules = await getRecurringForGroup(db, id);
       recurringRules = rules.filter(r => r.recur_state === 'active');
     }
-    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules };
+    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, ctx, overrideCount };
   }, [id]);
 
   const group = data?.group ?? null;
@@ -233,6 +241,8 @@ export default function GroupDetailScreen() {
           onEditBudget={() => router.push(`/group/${id}/budget`)}
           onCreateBudget={() => router.push(`/group/${id}/budget`)}
           onRebalance={(category) => setRebalance(planRebalance(catStatus, category))}
+          canEditGroupDefault={data?.ctx ? canEditGroupBudget(data.ctx) : false}
+          overrideCount={data?.overrideCount ?? 0}
         />
       )}
 

@@ -11,8 +11,7 @@ import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
-import { getBudgetAnalytics } from './analytics';
-import { getMyGlobalBudgetStatus, rollUpBudgets } from './budget';
+import { getMyGlobalBudgetSummary } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
@@ -70,12 +69,10 @@ export async function loadHomeData(
 ) {
 
     const persons = await getAllPersons(db);
-    const personalGroupId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
 
     const me = persons.find(p => p.is_me === 1);
     if (!me) {
       return {
-        personalGroupId,
         meInfo: null as { name: string; color: string; image: string | null } | null,
         spending: 0, income: 0, prevSpending: 0,
         oweTotal: 0, owedTotal: 0, reviewCount: 0,
@@ -139,41 +136,33 @@ export async function loadHomeData(
     const exp = await getMyExposure(db, me.id);
     const reviewCount = await getPendingCount(db);
 
-    // Budget rollup (monthly) for the hero pace bar + the health engine.
-    const analyticsAll = await Promise.all(groups.map(g => getBudgetAnalytics(db, g)));
-    let bAlloc = 0, bSpent = 0, over = 0, near = 0, totalBudgeted = 0;
-    for (const a of analyticsAll) {
-      bAlloc += a.totalAllocated;
-      bSpent += a.totalSpent;
-      over += a.overBudget.length;
-      near += a.nearLimit.length;
-      totalBudgeted += a.overBudget.length + a.nearLimit.length + a.underBudget.length;
-    }
-    // The pace bar compares my-share spend, so the budget must be my-share too;
-    // `bAlloc` is every group's allocation and overstated headroom (33% vs 40%).
-    // Left out of `healthInputsNow` on purpose — that pairs bAlloc with bSpent
-    // consistently, and rebasing the score is a product call, not a bug fix.
-    const myBudgetRows = me ? await getMyGlobalBudgetStatus(db, me.id) : [];
-    // Monthly rollup, not a raw cross-cadence sum: a daily ₹500 line used to add
-    // ₹500 to a figure labelled "monthly", and a yearly ₹24k line added ₹24k.
-    const myBudgetAllocated = rollUpBudgets(
-      myBudgetRows.map(r => ({ cadence: r.cadence, amount: r.allocated })), 'monthly', new Date(),
-    ).amount;
-
-    const allBudgetedCats = analyticsAll.flatMap(a => [...a.overBudget, ...a.nearLimit]);
-    allBudgetedCats.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
-    const worstCat = allBudgetedCats[0] ?? null;
+    /*
+     * Everything budget-shaped on Home is **My Budget** — one summary, no per-group
+     * loop.
+     *
+     * The loop it replaces summed every group's allocation (the Personal group's
+     * included, which IS this cap) and paired it with every group's *full bill*,
+     * because no `meId` was passed: a ₹1,000 expense split 50/50 charged ₹1,000
+     * against my budget. Both halves now share my-share, all-groups basis, and the
+     * health score is rebased onto them.
+     */
+    const mine = await getMyGlobalBudgetSummary(db, me.id);
+    const over = mine.rows.filter(r => r.health === 'red').length;
+    const near = mine.rows.filter(r => r.health === 'amber').length;
+    const worstCat = mine.rows
+      .filter(r => r.health === 'red' || r.health === 'amber')
+      .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0] ?? null;
 
     const now2 = new Date();
     const healthInputsNow: HealthInputs = {
       spendPaise: sp,
       incomePaise: inc,
       prevSpendPaise: prevSp,
-      budgetAllocated: bAlloc,
-      budgetSpent: bSpent,
+      budgetAllocated: mine.allocated,
+      budgetSpent: mine.spent,
       categoriesOver: over,
       categoriesNear: near,
-      totalBudgeted,
+      totalBudgeted: mine.categoryCount,
       worstCategoryPct: worstCat?.pct ?? null,
       worstCategoryName: worstCat?.category ?? null,
       netOwedPaise: exp.owe - exp.owed,
@@ -226,11 +215,10 @@ export async function loadHomeData(
     }
 
     return {
-      personalGroupId, meInfo,
+      meInfo,
       spending: sp, income: inc, prevSpending: prevSp,
       oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
-      // allocated = my-share (hero pace); spent stays group-total (health engine).
-      budget: { allocated: myBudgetAllocated, spent: bSpent },
+      budget: { allocated: mine.allocated, spent: mine.spent },
       catRows, catTotal, health, healthInputs,
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
       upcoming, forecast, topShift,

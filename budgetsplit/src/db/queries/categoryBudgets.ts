@@ -4,7 +4,7 @@ import { v4 as uuid } from 'uuid';
 
 import type { BudgetCadence } from '../../constants/enums';
 import { resolveBudgetLines } from '../../lib/budget';
-import { getGroupContext } from './groups';
+import { getGroupContext, getPersonalGroup } from './groups';
 import { canEditGroupBudget, canSetOverrideFor, PermissionError } from '../../lib/permissions';
 export type { BudgetCadence } from '../../constants/enums';
 
@@ -58,9 +58,35 @@ export async function getCategoryBudgetRows(
 export async function getCategoryBudgets(
   db: SQLite.SQLiteDatabase,
   groupId: string,
-  meId?: string,
+  /** Required: omitting it silently returned defaults only, dropping every override. */
+  meId: string,
 ): Promise<CategoryBudget[]> {
   return resolveBudgetLines(await getCategoryBudgetRows(db, groupId), meId);
+}
+
+/**
+ * **My Budget** — the global one, resolved for me. The Personal group's lines (see
+ * the model note in `lib/budget`); empty when there is no Personal group, never a
+ * substitute group's lines.
+ */
+export async function getMyGlobalBudgetRows(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+): Promise<CategoryBudget[]> {
+  const personal = await getPersonalGroup(db);
+  return personal ? getCategoryBudgets(db, personal.id, meId) : [];
+}
+
+/** Write My Budget. Throws when there is no Personal group rather than picking one. */
+export async function setMyGlobalBudget(
+  db: SQLite.SQLiteDatabase,
+  entries: Array<{ category: string; cadence: BudgetCadence; amount: number }>,
+  opts: { actorId: string },
+): Promise<void> {
+  const personal = await getPersonalGroup(db);
+  if (!personal) throw new Error('No personal group: cannot save My Budget');
+  // Level 'group' on the Personal group IS the global level — `person_id IS NULL`.
+  await setCategoryBudgets(db, personal.id, entries, { level: 'group', actorId: opts.actorId });
 }
 
 /**

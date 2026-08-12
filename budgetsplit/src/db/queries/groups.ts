@@ -65,6 +65,35 @@ export async function getGroupById(db: SQLite.SQLiteDatabase, id: string): Promi
   return db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id = ?', [id]);
 }
 
+/**
+ * The Personal group. Its budget lines are **My Budget** (`isGlobalBudgetGroup` in
+ * `lib/budget`), so this is the one place that answers "which group is Personal?".
+ *
+ * No `?? groups[0]` fallback, deliberately: substituting the oldest group promotes
+ * a *shared* group's budget into the global cap, and at one call site labelled that
+ * group's transactions "Personal". Absence means a corrupt DB — `null` is the
+ * honest answer.
+ */
+export async function getPersonalGroup(db: SQLite.SQLiteDatabase): Promise<BudgetGroup | null> {
+  return db.getFirstAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE is_personal = 1 ORDER BY created_at ASC LIMIT 1',
+  );
+}
+
+/** Same answer from a list already in hand. Same rule, same no-fallback. */
+export function personalGroupOf(groups: BudgetGroup[]): BudgetGroup | null {
+  return groups.find(g => g.is_personal === 1) ?? null;
+}
+
+/**
+ * Every group whose lines are a **group** budget — all but Personal. Cross-group
+ * budget rollups map over this, never `getAllGroups`: the Personal group's lines
+ * are the global cap, which already covers spend inside each of these groups.
+ */
+export function sharedGroupsOf(groups: BudgetGroup[]): BudgetGroup[] {
+  return groups.filter(g => g.is_personal !== 1);
+}
+
 export async function getArchivedGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
   return db.getAllAsync<BudgetGroup>(
     'SELECT * FROM budget_group WHERE is_archived = 1 ORDER BY created_at ASC',

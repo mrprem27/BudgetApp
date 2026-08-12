@@ -1,7 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { getMe, updatePersonName, insertPerson } from '../db/queries/persons';
-import { getAllGroups } from '../db/queries/groups';
-import { setCategoryBudgets } from '../db/queries/categoryBudgets';
+import { getAllGroups, personalGroupOf } from '../db/queries/groups';
 import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
@@ -72,7 +71,7 @@ export async function finalizeOnboarding(
   try {
     const grps = await getAllGroups(db);
     const me = await getMe(db);
-    const personal = grps.find(g => g.is_personal === 1) ?? null;
+    const personal = personalGroupOf(grps);
 
     const trimmed = data.name.trim();
     if (trimmed && me) await updatePersonName(db, me.id, trimmed);
@@ -95,11 +94,11 @@ export async function finalizeOnboarding(
       // actually happens rather than a number typed once during setup.
     }
 
-    // Whole monthly budget (the user's own number — no % of income).
-    if (data.budgetNum > 0 && personal && me) {
-      await setCategoryBudgets(db, personal.id, [
-        { category: 'Total', cadence: 'monthly', amount: parseToPaise(String(data.budgetNum)) },
-      ], { level: 'group', actorId: me.id });
+    // The whole-month figure is kept as a suggestion, not written as a budget: it
+    // has no category, and inventing one ('Total') put a phantom Others row on
+    // Personal and offered "Total" for adoption in the editor.
+    if (data.budgetNum > 0) {
+      try { await settings.setBudgetTarget(parseToPaise(String(data.budgetNum))); } catch { /* best-effort */ }
     }
 
     // People to split with → contacts.

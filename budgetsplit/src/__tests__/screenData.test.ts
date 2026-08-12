@@ -21,62 +21,68 @@ const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
 const midMonth = () => { const d = new Date(); d.setDate(15); d.setHours(12, 0, 0, 0); return d; };
 const at = (d: Date) => d.getTime();
 
+/**
+ * Personal AND a shared group. Group analytics run on the shared one: the Personal
+ * group's lines are My Budget, so asserting them through `getBudgetAnalytics` was
+ * the fixture encoding the very conflation this suite is meant to catch.
+ */
 function setup() {
   const db = createTestDb();
   const me = addPerson(db, 'Me', true);
   const personal = addGroup(db, 'Personal', true);
   addMember(db, personal, me);
-  return { db, me, personal };
+  const shared = addGroup(db, 'Flat', false);
+  addMember(db, shared, me);
+  return { db, me, personal, shared };
 }
+
+const groupById = async (db: TestDb, id: string) =>
+  (await getAllGroups(asDb(db))).find(g => g.id === id)!;
 
 describe('getBudgetAnalytics', () => {
   it('returns an empty analysis when no budgets exist, without querying spend', async () => {
-    const { db, me, personal } = setup();
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 50000, date: at(midMonth()) });
+    const { db, me, shared } = setup();
+    addSimpleExpense(db, { groupId: shared, personId: me, amount: 50000, date: at(midMonth()) });
 
-    const [grp] = await getAllGroups(asDb(db));
-    const a = await getBudgetAnalytics(asDb(db), grp, midMonth());
+    const a = await getBudgetAnalytics(asDb(db), await groupById(db, shared), { meId: me, now: midMonth() });
     expect(a.totalAllocated).toBe(0);
     expect(a.overBudget).toEqual([]);
     expect(a.nearLimit).toEqual([]);
   });
 
   it('classifies a category as over budget past 100%', async () => {
-    const { db, me, personal } = setup();
+    const { db, me, shared } = setup();
     addCategory(db, 'Food');
-    setCategoryBudget(db, { groupId: personal, category: 'Food', amount: 10000 });
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 15000, date: at(midMonth()), category: 'Food' });
+    setCategoryBudget(db, { groupId: shared, category: 'Food', amount: 10000 });
+    addSimpleExpense(db, { groupId: shared, personId: me, amount: 15000, date: at(midMonth()), category: 'Food' });
 
-    const [grp] = await getAllGroups(asDb(db));
-    const a = await getBudgetAnalytics(asDb(db), grp, midMonth());
+    const a = await getBudgetAnalytics(asDb(db), await groupById(db, shared), { meId: me, now: midMonth() });
     expect(a.overBudget.map(c => c.category)).toEqual(['Food']);
     expect(a.totalAllocated).toBe(10000);
     expect(a.totalSpent).toBe(15000);
   });
 
   it('classifies 80–99% as near the limit, and below as under', async () => {
-    const { db, me, personal } = setup();
+    const { db, me, shared } = setup();
     addCategory(db, 'Food');
     addCategory(db, 'Travel');
-    setCategoryBudget(db, { groupId: personal, category: 'Food', amount: 10000 });
-    setCategoryBudget(db, { groupId: personal, category: 'Travel', amount: 10000 });
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 8500, date: at(midMonth()), category: 'Food' });
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 1000, date: at(midMonth()), category: 'Travel' });
+    setCategoryBudget(db, { groupId: shared, category: 'Food', amount: 10000 });
+    setCategoryBudget(db, { groupId: shared, category: 'Travel', amount: 10000 });
+    addSimpleExpense(db, { groupId: shared, personId: me, amount: 8500, date: at(midMonth()), category: 'Food' });
+    addSimpleExpense(db, { groupId: shared, personId: me, amount: 1000, date: at(midMonth()), category: 'Travel' });
 
-    const [grp] = await getAllGroups(asDb(db));
-    const a = await getBudgetAnalytics(asDb(db), grp, midMonth());
+    const a = await getBudgetAnalytics(asDb(db), await groupById(db, shared), { meId: me, now: midMonth() });
     expect(a.nearLimit.map(c => c.category)).toEqual(['Food']);
     expect(a.underBudget.map(c => c.category)).toEqual(['Travel']);
   });
 
   it('never counts a recurring rule template against a budget', async () => {
-    const { db, me, personal } = setup();
+    const { db, me, shared } = setup();
     addCategory(db, 'Rent');
-    setCategoryBudget(db, { groupId: personal, category: 'Rent', amount: 100000 });
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 90000, date: at(midMonth()), category: 'Rent', recurFreq: 'monthly' });
+    setCategoryBudget(db, { groupId: shared, category: 'Rent', amount: 100000 });
+    addSimpleExpense(db, { groupId: shared, personId: me, amount: 90000, date: at(midMonth()), category: 'Rent', recurFreq: 'monthly' });
 
-    const [grp] = await getAllGroups(asDb(db));
-    const a = await getBudgetAnalytics(asDb(db), grp, midMonth());
+    const a = await getBudgetAnalytics(asDb(db), await groupById(db, shared), { meId: me, now: midMonth() });
     expect(a.totalSpent).toBe(0);
   });
 });

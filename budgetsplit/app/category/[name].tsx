@@ -16,12 +16,9 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
-import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../../src/db/queries/transactions';
-import { getCategoryBudgets, type CategoryBudget } from '../../src/db/queries/categoryBudgets';
-import { budgetEquivalent, type Period as BudgetPeriod } from '../../src/lib/budget';
-import { getMe } from '../../src/db/queries/persons';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getGoals, type SavingsGoal } from '../../src/db/queries/savings';
+import { type TxnWithSplits } from '../../src/db/queries/transactions';
+import { type Period as BudgetPeriod } from '../../src/lib/budget';
+import { loadCategoryDetail, categoryPeriodBudget } from '../../src/lib/categoryDetailData';
 import { categoryVisual } from '../../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../src/lib/money';
@@ -30,6 +27,7 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { Card } from '../../src/components/ui/Card';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { Divider } from '../../src/components/ui/Divider';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { alpha } from '../../src/theme';
@@ -77,67 +75,28 @@ export default function CategoryDetailScreen() {
   // Refetch on focus (via useScreenData) so returning after adding/editing a txn shows fresh data.
   // All of this year's expenses (every category) are fetched — period subsets are derived
   // client-side so switching tabs is instant and needs no re-query.
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db): Promise<{
-    myId: string;
-    personalGroupId: string | null;
-    groupNames: Record<string, string>;
-    yearExpenses: TxnWithSplits[];
-    catBudgets: CategoryBudget[];
-    recurRules: TxnWithSplits[];
-    goals: SavingsGoal[];
-  }> => {
-    if (!categoryName) {
-      return { myId: '', personalGroupId: null, groupNames: {}, yearExpenses: [], catBudgets: [], recurRules: [], goals: [] };
-    }
-    const me = await getMe(db);
-    const groups = await getAllGroups(db);
-    const personal = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? null;
-    const [yearTxns, rules, allGoals, ...budgetArrays] = await Promise.all([
-      getTransactionsInRange(db, null, ranges.year[0], ranges.year[1]),
-      getActiveRecurringRules(db),
-      getGoals(db),
-      ...groups.map(g => getCategoryBudgets(db, g.id, me?.id)),
-    ]);
-    const budgets = budgetArrays.flat();
-    return {
-      myId: me?.id ?? '',
-      personalGroupId: personal,
-      groupNames: Object.fromEntries(groups.map(g => [g.id, g.name])),
-      yearExpenses: yearTxns.filter(t => t.kind === 'expense' && !t.is_deleted),
-      catBudgets: budgets.filter(b => b.category === categoryName),
-      recurRules: rules.filter(r => r.category === categoryName),
-      goals: allGoals.filter(g => g.category === categoryName),
-    };
-  }, [categoryName, ranges]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(
+    (db) => loadCategoryDetail(db, { category: categoryName, from: ranges.year[0], to: ranges.year[1] }),
+    [categoryName, ranges],
+  );
 
   const myId = data?.myId ?? '';
   const personalGroupId = data?.personalGroupId ?? null;
   const groupNames = data?.groupNames ?? {};
   const yearExpenses = data?.yearExpenses ?? [];
-  const catBudgets = data?.catBudgets ?? [];
+  const globalLines = data?.globalLines ?? [];
+  const groupLimits = data?.groupLimits ?? [];
   const recurRules = data?.recurRules ?? [];
   const goals = data?.goals ?? [];
 
-  /**
-   * This category's budget expressed over the selected period.
-   *
-   * Was a per-day rate that every cadence was flattened onto and then prorated
-   * back out, which is downward proration in both directions: a ₹24,000/yr line
-   * became ₹1,972 of "monthly budget" and the Month tab reported over-spend for a
-   * trip the year's budget comfortably covered. `budgetEquivalent` only rolls
-   * *up*, and returns null when the line is a pool relative to the period shown —
-   * a yearly budget simply has no Day or Month figure, so none is invented.
-   */
-  const periodBudget = useMemo(() => {
-    const target: BudgetPeriod = period === 'day' ? 'daily' : period === 'month' ? 'monthly' : 'yearly';
-    const now = new Date();
-    let total = 0, matched = 0;
-    for (const b of catBudgets) {
-      const v = budgetEquivalent(b.cadence, b.amount, target, now);
-      if (v !== null) { total += v; matched++; }
-    }
-    return { amount: total, matched, hasAny: catBudgets.length > 0 };
-  }, [catBudgets, period]);
+  const target: BudgetPeriod = period === 'day' ? 'daily' : period === 'month' ? 'monthly' : 'yearly';
+  // The hero is MY budget for this category, against my spend on it everywhere —
+  // one basis on both sides. A group's limit is a different question, answered in
+  // its own card below.
+  const periodBudget = useMemo(
+    () => categoryPeriodBudget(globalLines, target, new Date()),
+    [globalLines, target],
+  );
 
   // Derived view for the selected period — budget is always prorated to it.
   // All money figures are MY share (consistent with the rest of Personal).
@@ -173,8 +132,20 @@ export default function CategoryDetailScreen() {
       .sort((a, b) => b.amt - a.amt)
       .slice(0, 5);
 
-    return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places };
-  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, personalGroupId, groupNames]);
+    // Each group's own limit, paired with my spend in THAT group — a self-contained
+    // ratio per row, and deliberately no total across them.
+    const limits = groupLimits
+      .map(gl => ({
+        groupId: gl.groupId,
+        name: gl.name,
+        limit: categoryPeriodBudget(gl.lines, target, now).amount,
+        spent: byGroup.get(gl.groupId) ?? 0,
+      }))
+      .filter(l => l.limit > 0)
+      .sort((a, b) => b.limit - a.limit);
+
+    return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places, limits };
+  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, personalGroupId, groupNames, groupLimits, target]);
 
   const showBudgetCard = view.budget > 0;
   // No budget set at all → prompt to set one. A budget that exists but is a pool
@@ -218,7 +189,7 @@ export default function CategoryDetailScreen() {
             {showBudgetCard ? (
               <Card padded>
                 <View style={styles.budgetTop}>
-                  <Text style={styles.cardLabel}>Budget</Text>
+                  <Text style={styles.cardLabel}>Your budget</Text>
                   <Text style={[styles.budgetPct, { color: view.spent > view.budget ? colors.expense : colors.healthAmber }]}>
                     {Math.round((view.spent / view.budget) * 100)}% used
                   </Text>
@@ -248,7 +219,7 @@ export default function CategoryDetailScreen() {
 
             {/* Set-budget prompt — shown prominently when no monthly budget is set */}
             {showSetBudget && (
-              <TouchableOpacity style={styles.setBudget} onPress={() => personalGroupId && router.push(`/group/${personalGroupId}/budget?category=${encodeURIComponent(categoryName)}`)} accessibilityRole="button">
+              <TouchableOpacity style={styles.setBudget} onPress={() => router.push(`/budget?category=${encodeURIComponent(categoryName)}`)} accessibilityRole="button">
                 <IconCircle icon="target" size={36} color={colors.accent} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.setBudgetTitle}>Set a budget for {categoryName}</Text>
@@ -256,6 +227,33 @@ export default function CategoryDetailScreen() {
                 </View>
                 <Feather name="chevron-right" size={18} color={colors.textMuted} />
               </TouchableOpacity>
+            )}
+
+            {/* A group's limit is its own figure, not part of mine above. */}
+            {view.limits.length > 0 && (
+              <View>
+                <SectionHeader title="Group limits" />
+                <Card>
+                  {view.limits.map((l, i) => (
+                    <View key={l.groupId}>
+                      {i > 0 && <Divider indent="none" />}
+                      <View style={styles.limitRow}>
+                        <View style={styles.limitTop}>
+                          <Text style={styles.limitName} numberOfLines={1}>{l.name}</Text>
+                          <Text style={styles.limitAmt}>
+                            {formatCompact(l.spent)} of {formatCompact(l.limit)}
+                          </Text>
+                        </View>
+                        <BudgetBar allocated={l.limit} spent={l.spent} />
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={styles.limitNote}>
+                    Per person in each group, against your spend there. Not added to your
+                    budget above — that already covers this spending.
+                  </Text>
+                </Card>
+              </View>
             )}
 
             {/* Where it goes — my spend split across personal + groups */}
@@ -396,6 +394,14 @@ const styles = StyleSheet.create({
   amountSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
   setBudget: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.accentMuted, borderRadius: radius.lg, padding: space.md, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
+  limitRow: { paddingHorizontal: space.md, paddingVertical: space.smd, gap: space.sm },
+  limitTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  limitName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  limitAmt: { ...type.caption, color: colors.textSecondary },
+  limitNote: {
+    ...type.caption, color: colors.textMuted,
+    paddingHorizontal: space.md, paddingBottom: space.smd, paddingTop: space.xs,
+  },
   setBudgetTitle: { ...type.bodySemi, color: colors.textPrimary },
   setBudgetSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
 

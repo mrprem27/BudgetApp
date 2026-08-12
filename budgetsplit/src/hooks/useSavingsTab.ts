@@ -1,25 +1,18 @@
 import { useCallback, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from 'expo-router';
-import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { parseToPaise } from '../lib/money';
 import { haptic } from '../lib/haptics';
 import { GOAL_ICONS, GOAL_COLORS } from '../constants/palette';
 import {
-  getGoals, getGoalSavedMap, getTotalMoney, insertGoal, fundGoal, reorderGoals,
+  insertGoal, fundGoal, reorderGoals,
   runSavingsMaintenance, undoOverspendRaid, applyOverspendRaid,
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../db/queries/savings';
-import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
+import { setMoneyProfile } from '../db/queries/moneyProfile';
+import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import type { MoneyProfile } from '../lib/cash';
-import { getAllGroups } from '../db/queries/groups';
-import { getMe } from '../db/queries/persons';
-import { getTransactionsInRange } from '../db/queries/transactions';
-import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
-import { getBudgetAnalytics } from '../lib/analytics';
-import { forecastMonthEnd as computeForecastMonthEnd } from '../lib/forecast';
-import { buildUpcoming, type UpcomingItem } from '../lib/upcoming';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
 
@@ -57,55 +50,8 @@ export function useSavingsTab() {
   // Pure reads — refetch on focus + cross-screen write. The maintenance MUTATION
   // (scheduled funding + overspend raid) is deliberately kept OUT of this loader so
   // it can't re-run/raid on every refetch; it lives in its own focus effect below.
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [g, s, tm, mp] = await Promise.all([getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db)]);
-    const grps = await getAllGroups(db);
-
-    // Current month's category spend — feeds the month-end forecast + what-if simulator.
-    const monthStart = new Date();
-    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-    const monthTxns = await getTransactionsInRange(db, null, monthStart.getTime(), Date.now());
-    const catMap: Record<string, number> = {};
-    for (const t of monthTxns) {
-      if (t.kind === 'expense') {
-        const amt = t.shares.reduce((sum: number, sh: { amount: number }) => sum + sh.amount, 0);
-        catMap[t.category] = (catMap[t.category] ?? 0) + amt;
-      }
-    }
-    // Month-end spend forecast — same credibility-weighted model as Reports
-    // (lib/forecast), blended with last month's actual. Hidden until day 3.
-    const today2 = new Date();
-    const dayOfMonth = getDate(today2);
-    const daysInMonth = getDaysInMonth(today2);
-    const totalMonthSpend = Object.values(catMap).reduce((sum, v) => sum + v, 0);
-    const prevTxns = await getTransactionsInRange(db, null, startOfMonth(subMonths(today2, 1)).getTime(), endOfMonth(subMonths(today2, 1)).getTime());
-    let priorMonthTotal = 0;
-    for (const t of prevTxns) {
-      if (t.kind === 'expense') priorMonthTotal += t.shares.reduce((sum: number, sh: { amount: number }) => sum + sh.amount, 0);
-    }
-    const f = computeForecastMonthEnd(totalMonthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
-    const forecastMonthEnd = f.ready ? f.projected : null;
-
-    // Budget total across all groups for the forecast over/under line.
-    const analyticsAll = await Promise.all(grps.map(g => getBudgetAnalytics(db, g)));
-    // `totalAllocated` is now the MONTHLY rollup, which is what this is compared
-    // against (`forecastMonthEnd`). It used to be a raw cross-cadence sum, so a
-    // ₹24k/yr Trips budget made a month's forecast look comfortably funded.
-    let bTotal = 0;
-    for (const a of analyticsAll) bTotal += a.totalAllocated;
-
-    // Upcoming recurring bills across all groups (design Screen 3).
-    let upcoming: UpcomingItem[] = [];
-    const me2 = await getMe(db);
-    if (me2) {
-      const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-      const rules = recurringByGroup.flat();
-      const skips = await getSkipsMap(db, rules.map(r => r.id));
-      upcoming = buildUpcoming(rules, me2.id, Date.now(), 5, undefined, skips);
-    }
-
-    return { goals: g, saved: s, money: tm, profile: mp, forecastMonthEnd, forecastBudget: bTotal, upcoming };
-  }, []);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
+    (db) => loadSavingsTabData(db), []);
 
   const goals = data?.goals ?? [];
   const saved = data?.saved ?? {};

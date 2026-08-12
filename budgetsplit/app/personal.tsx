@@ -9,6 +9,7 @@ import { type } from '../src/constants/typography';
 import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { TabPills } from '../src/components/ui/TabPills';
+import { Chip } from '../src/components/ui/Chip';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
@@ -121,7 +122,7 @@ export default function PersonalScreen() {
   }
 
   function openBudgetEditor() {
-    if (personalGroup) router.push(`/group/${personalGroup.id}/budget`);
+    router.push('/budget');
   }
 
   async function handleExport() {
@@ -267,10 +268,7 @@ export default function PersonalScreen() {
                 <>
                   <View style={styles.budgetHeadRow}>
                     <Text style={styles.budgetHeading}>Your spending vs budget</Text>
-                    <TouchableOpacity style={styles.editPill} onPress={openBudgetEditor} accessibilityRole="button" accessibilityLabel="Edit budget">
-                      <Feather name="edit-2" size={13} color={colors.accent} />
-                      <Text style={styles.editPillText}>Edit</Text>
-                    </TouchableOpacity>
+                    <Chip label="Edit" icon="edit-2" onPress={openBudgetEditor} />
                   </View>
                   <Text style={styles.budgetNote}>Counts your share across personal + all groups.</Text>
                   <View style={styles.budgetList}>
@@ -385,8 +383,6 @@ const styles = StyleSheet.create({
   budgetBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   budgetHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetHeading: { ...type.subheading, color: colors.textPrimary },
-  editPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
-  editPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   budgetNote: { ...type.caption, color: colors.textMuted, marginTop: 2, marginBottom: space.xs },
   budgetList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   budgetRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

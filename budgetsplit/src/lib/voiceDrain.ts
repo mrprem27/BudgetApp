@@ -13,7 +13,7 @@ import { composeTitleNote } from './txnNote';
 import { insertTxnRows } from '../db/queries/transactions';
 import { insertPending } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
-import { getAllGroups } from '../db/queries/groups';
+import { getAllGroups, personalGroupOf } from '../db/queries/groups';
 import { getMe, getAllPersons } from '../db/queries/persons';
 
 /**
@@ -150,7 +150,8 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
     // Smart-category off means "don't guess a category from what I write". Dictating is
     // writing, so voice honours it too and files under the fallback instead.
     smartCategoryOn = flags.smartCategory;
-    const personal = groups.find(g => g.is_personal === 1) ?? groups[0];
+    // A destination, not a budget scope: filing a capture somewhere beats dropping it.
+    const personal = personalGroupOf(groups) ?? groups[0];
     // Without a person and a destination there is nothing to attribute a spend to. Leave
     // every file untouched rather than inventing either — this is reachable during
     // first-run, before onboarding has committed.
