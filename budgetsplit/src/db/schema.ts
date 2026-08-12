@@ -401,6 +401,34 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
       "UPDATE group_member SET role = 'admin' WHERE person_id = (SELECT created_by FROM budget_group WHERE id = group_member.group_id)",
     ],
   },
+  /*
+   * Repair groups created between `d087d18` and `0a9dd37`.
+   *
+   * `insertGroup` took `creatorId` as an optional and every caller omitted it, so
+   * groups made in that window got `created_by = NULL` and no member with the
+   * 'admin' role — leaving them permanently unadministrable: every budget edit and
+   * membership change was refused, correctly, by a gate nobody could satisfy.
+   *
+   * Same SQL as v1 and deliberately a NEW key: v1 had already run on these
+   * databases *before* the broken groups existed, and a one-time fix does not
+   * revisit. Safe to re-run in the sense that matters — it only touches rows that
+   * are still NULL, so a group whose creator was recorded correctly is untouched.
+   *
+   * The membership INSERT is the part v1 lacked: a creator who is not in
+   * `group_member` gets no admin row from the UPDATE alone, and a group with an
+   * admin who is not a member is the same dead end in a different shape.
+   */
+  {
+    key: 'fix_group_creator_roles_v2',
+    sql: [
+      "UPDATE budget_group SET created_by = (SELECT id FROM person WHERE is_me = 1) WHERE created_by IS NULL",
+      `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
+         SELECT g.id, g.created_by, g.created_at, 'admin'
+           FROM budget_group g
+          WHERE g.created_by IS NOT NULL`,
+      "UPDATE group_member SET role = 'admin' WHERE person_id = (SELECT created_by FROM budget_group WHERE id = group_member.group_id)",
+    ],
+  },
 ];
 
 /**

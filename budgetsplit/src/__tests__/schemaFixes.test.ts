@@ -266,3 +266,92 @@ describe('creator + role backfill', () => {
     expect(roles(db)).toEqual(before);
   });
 });
+
+/**
+ * The v2 repair, for groups created *after* v1 had already run.
+ *
+ * `insertGroup` took `creatorId` as an optional and every caller omitted it, so a
+ * group created in that window got `created_by = NULL` and no admin — and v1 was
+ * long since recorded as applied, so nothing came back for it. A one-time fix does
+ * not revisit; a broken group made after it lands stays broken forever unless a new
+ * key ships.
+ *
+ * These tests start from a database that has ALREADY had v1 applied, which is the
+ * only state where v2 does any work. Seeding the repaired state instead of reaching
+ * it is exactly the mistake that let the original bug through, so the broken group
+ * here is shaped the way `insertGroup` actually produced it.
+ */
+describe('creator repair after the backfill has already run (v2)', () => {
+  /** A device that ran v1, then created a group through the broken `insertGroup`. */
+  function afterV1(): DatabaseSync {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO settings (key, value) VALUES ('fix_group_creator_roles_v1','1');
+      INSERT INTO person (id, name, is_me, email)
+        VALUES ('me','Me',1,NULL), ('rohan','Rohan',0,NULL);
+      -- Shaped as insertGroup left it: no creator, and every member a plain 'member'.
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('gnew','Flatmates','home','#000',0,900,NULL);
+      INSERT INTO group_member (group_id, person_id, joined_at, role)
+        VALUES ('gnew','me',900,'member'), ('gnew','rohan',900,'member');
+    `);
+    return db;
+  }
+  const group = (db: DatabaseSync, id: string) =>
+    db.prepare('SELECT created_by FROM budget_group WHERE id = ?').get(id) as { created_by: string | null };
+  const roles = (db: DatabaseSync, id: string) =>
+    db.prepare('SELECT person_id, joined_at, role FROM group_member WHERE group_id = ? ORDER BY person_id').all(id) as
+      { person_id: string; joined_at: number | null; role: string }[];
+
+  it('runs even though v1 is already recorded as applied', async () => {
+    const applied = await launch(afterV1());
+    expect(applied).toContain('fix_group_creator_roles_v2');
+    expect(applied).not.toContain('fix_group_creator_roles_v1');
+  });
+
+  it('gives the orphaned group a creator and an admin', async () => {
+    const db = afterV1();
+    await launch(db);
+    expect(group(db, 'gnew').created_by).toBe('me');
+    expect(roles(db, 'gnew')).toEqual([
+      { person_id: 'me', joined_at: 900, role: 'admin' },
+      { person_id: 'rohan', joined_at: 900, role: 'member' },
+    ]);
+  });
+
+  it('adds the missing membership row when the creator is not in the group', async () => {
+    const db = afterV1();
+    // v1's UPDATE-only shape could not fix this: an admin who is not a member is the
+    // same dead end as a member with no admin.
+    db.exec("DELETE FROM group_member WHERE group_id = 'gnew' AND person_id = 'me'");
+    await launch(db);
+    expect(roles(db, 'gnew')).toEqual([
+      { person_id: 'me', joined_at: 900, role: 'admin' },
+      { person_id: 'rohan', joined_at: 900, role: 'member' },
+    ]);
+  });
+
+  it('leaves a group that already has a creator completely alone', async () => {
+    const db = afterV1();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('gok','Goa','map','#111',0,950,'rohan');
+      INSERT INTO group_member (group_id, person_id, joined_at, role)
+        VALUES ('gok','rohan',950,'admin'), ('gok','me',950,'member');
+    `);
+    await launch(db);
+    expect(group(db, 'gok').created_by).toBe('rohan');
+    expect(roles(db, 'gok')).toEqual([
+      { person_id: 'me', joined_at: 950, role: 'member' },
+      { person_id: 'rohan', joined_at: 950, role: 'admin' },
+    ]);
+  });
+
+  it('is idempotent — a second launch changes nothing', async () => {
+    const db = afterV1();
+    await launch(db);
+    const before = roles(db, 'gnew');
+    expect(await launch(db)).toEqual([]);
+    expect(roles(db, 'gnew')).toEqual(before);
+  });
+});

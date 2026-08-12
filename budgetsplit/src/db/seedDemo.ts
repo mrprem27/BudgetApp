@@ -72,13 +72,20 @@ async function createMeAndPersonal(
     'INSERT INTO person (id, name, avatar_color, is_me, image_uri) VALUES (?, ?, ?, 1, ?)',
     [meId, meName, meColor, meImage],
   );
+  // Creator + admin, for the reason spelled out in seed.ts: a group with neither is
+  // one `canEditGroupBudget` refuses to let anyone touch, permanently. The demo's
+  // shared groups get theirs from `insertGroup`; this one is hand-written, so it has
+  // to say so itself.
   await db.runAsync(
     `INSERT INTO budget_group
-       (id, name, icon, color, carry_over, is_shared, is_archived, is_personal, simplify_debt, default_split, created_at)
-     VALUES (?, ?, ?, ?, 0, 0, 0, 1, 1, 'equal', ?)`,
-    [personalId, 'Personal', 'credit-card', meColor, now],
+       (id, name, icon, color, carry_over, is_shared, is_archived, is_personal, simplify_debt, default_split, created_at, created_by)
+     VALUES (?, ?, ?, ?, 0, 0, 0, 1, 1, 'equal', ?, ?)`,
+    [personalId, 'Personal', 'credit-card', meColor, now, meId],
   );
-  await db.runAsync('INSERT INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)', [personalId, meId, now]);
+  await db.runAsync(
+    'INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
+    [personalId, meId, now, 'admin'],
+  );
   // Categories are a global catalog seeded in openDB — not per group.
   return personalId;
 }

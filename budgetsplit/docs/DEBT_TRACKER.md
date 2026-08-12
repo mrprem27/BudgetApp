@@ -211,6 +211,23 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Fixed 2026-08-12 — the admin-less groups get repaired, and the two seed paths stop making more
+
+Follow-up to the entry below. That fix stopped *new* groups from being created without an admin;
+it did nothing for the ones already on a device, and it turned out `insertGroup` was not the only
+path that produced them.
+
+| Item | Detail |
+|---|---|
+| **`fix_group_creator_roles_v2`** | Repairs the groups created between `d087d18` and `0a9dd37`. Deliberately a **new key**, not an edit to v1: v1 had already run and been recorded on these databases *before* the broken groups existed, and a one-time fix never revisits. It only touches rows still `NULL`, so a correctly-recorded creator is left alone. |
+| **It also INSERTs the membership row** | The part v1 lacked. A creator who is not in `group_member` gains nothing from an `UPDATE … SET role = 'admin'`, and a group with an admin who is not a member is the same dead end in a different shape. `joined_at` comes from the group's own `created_at`. |
+| **`seedIfNeeded` and the demo's Personal group** | Both hand-write `budget_group` instead of calling `insertGroup`, and both omitted `created_by` and left the membership row at the default `'member'` — the *identical* defect, in the group every install has. **The one-time fix cannot cover this one:** `openDB` applies and records the fixes *before* `app/_layout.tsx` calls `seedIfNeeded`, so on a fresh device the repair completed against an empty database and the broken group appeared a moment later. Every install since `d087d18` therefore had a Personal group whose budget nobody could edit. Both paths now record the creator and write `role = 'admin'`. |
+| **Tested from the creation path, and asserted on the property** | `seedAdmin.test.ts` drives `seedIfNeeded`, `resetToEmpty` and `loadDemoData` for real, then asks `getGroupContext` + `canEditGroupBudget` — "has an admin" is what matters; the two columns are only how it is stored. The demo case loops every group it creates, personal and shared alike. |
+| **Verified by reverting** | Re-introducing `created_by = NULL` + `role = 'member'` fails 4 of the 5 seed assertions; reusing the v1 key fails 4 schema-fix assertions; dropping the membership INSERT fails exactly the one test that exists for it. |
+
+The seed paths are the fourth instance of the session's lesson, from the other direction: the
+suite had **no test at all** for the code that runs on every first launch.
+
 ### Fixed 2026-08-12 — every new group was created without an admin
 
 **Regression from `d087d18`, reported as "demo data won't load: not allowed to edit this group's
