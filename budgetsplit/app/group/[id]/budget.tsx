@@ -237,7 +237,7 @@ export default function BudgetEditorScreen() {
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>≈ My monthly share</Text>
+            <Text style={styles.totalLabel}>≈ Monthly, per person</Text>
             <Text style={styles.totalAmount}>{formatRupees(rollup.amount)}</Text>
             <Text style={styles.totalSub}>
               {budgetedCount} {budgetedCount === 1 ? 'category' : 'categories'} budgeted
@@ -253,7 +253,8 @@ export default function BudgetEditorScreen() {
           {/* One line. The full explanation lives in the tab's empty state, which is
               where someone with no budget actually reads it. */}
           <Text style={styles.explain}>
-            Each period starts fresh — limits reset and unused amounts don't carry over.
+            Amounts are per person, not the group total. Each period starts fresh —
+            limits reset and unused amounts don't carry over.
           </Text>
 
           {sections.length > 0 ? sections.map(sec => {

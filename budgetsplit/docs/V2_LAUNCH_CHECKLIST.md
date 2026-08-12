@@ -238,7 +238,17 @@ quarter.** Whatever you intended, that is what ships today.
 | Make it group-whole | Stop filtering to `meId` | Matches how most people read the number. Changes every group budget figure now on screen. |
 | Store both | New per-person dimension on `category_budget` | Most informative, most work, most schema. |
 
-*Recommendation: relabel now, revisit group-whole when multi-user is real.*
+**DECIDED 2026-08-12 — relabelled, and the semantics pinned.** The line belongs to the
+*group*; the **amount is one person's allowance, not a pot to divide**. ₹10,000 Groceries on a
+4-person flat means ₹10,000 *each*, and you are measured against yours.
+
+That is what the engine already did (`app/group/[id].tsx` passes `meRow?.id` into both
+`getCategoryBudgetStatus` and `getBudgetAnalytics`), so this was label-only — but the first
+wording shipped said "my share", which is wrong in an informative way: *share* implies your
+slice of a ₹10,000 group total, i.e. ₹2,500. The labels now read "per person" and the budget
+editor says so at the point of entry.
+
+Group-whole remains a possible future mode, not a correction — revisit when multi-user is real.
 
 ### D2. Do investments/crypto get a pay method?
 
