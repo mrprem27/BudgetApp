@@ -279,16 +279,16 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { category: 'Chai & Snacks', cadence: 'daily', amount: R(50) },     // daily cadence
     { category: 'Insurance', cadence: 'yearly', amount: R(12000) },     // yearly cadence
     { category: 'Education', cadence: 'once', amount: R(6000) },        // one-time cadence (kept small so it doesn't dwarf the monthly pace)
-  ]);
+  ], { level: 'group', actorId: meId });
   await setCategoryBudgets(db, roommates.id, [
     { category: 'Groceries', cadence: 'monthly', amount: R(6000) },
     { category: 'Electricity', cadence: 'monthly', amount: R(2000) },
-  ]);
+  ], { level: 'group', actorId: meId });
   // A second group with its own (individual) budget → per-group Budget tab has variety.
   await setCategoryBudgets(db, family.id, [
     { category: 'Groceries', cadence: 'monthly', amount: R(3000) },
     { category: 'Health & Pharmacy', cadence: 'monthly', amount: R(1500) },
-  ]);
+  ], { level: 'group', actorId: meId });
 
   // --- Money profile (Total Money breakdown): cash + investments + credit
   await setMoneyProfile(db, {

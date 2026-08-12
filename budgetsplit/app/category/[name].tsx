@@ -96,7 +96,7 @@ export default function CategoryDetailScreen() {
       getTransactionsInRange(db, null, ranges.year[0], ranges.year[1]),
       getActiveRecurringRules(db),
       getGoals(db),
-      ...groups.map(g => getCategoryBudgets(db, g.id)),
+      ...groups.map(g => getCategoryBudgets(db, g.id, me?.id)),
     ]);
     const budgets = budgetArrays.flat();
     return {

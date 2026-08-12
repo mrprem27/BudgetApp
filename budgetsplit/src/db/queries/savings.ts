@@ -472,7 +472,8 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved] = await Promise.all([
     getCashPosition(db),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
-    personal ? getCategoryBudgets(db, personal.id) : Promise.resolve([]),
+    // Resolved for me: Afford must respect my override, not the group default.
+    personal ? getCategoryBudgets(db, personal.id, me.id) : Promise.resolve([]),
     getTransactionsInRange(db, null, monthStart, now),
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
     getTransactionsInRange(db, null, now, monthEnd),

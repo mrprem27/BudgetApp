@@ -192,6 +192,17 @@ export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
   equal: 'Equal', exact: 'Exact', percent: 'Percent', shares: 'Shares',
 };
 
+// --- Groups --------------------------------------------------------------
+
+/**
+ * `group_member.role`. There is deliberately no `owner` here: the group's creator
+ * is `budget_group.created_by`, which is immutable, and is always treated as an
+ * admin. Roles can be edited; creator-ness cannot, which is what makes "nobody can
+ * remove the creator" a guarantee rather than a rule someone can edit their way out of.
+ */
+export const GROUP_ROLE = ['admin', 'member'] as const;
+export type GroupRole = typeof GROUP_ROLE[number];
+
 // --- Categories / budgets ------------------------------------------------
 
 /** `category.kind CHECK(kind IN ('expense','income','transfer'))`. */

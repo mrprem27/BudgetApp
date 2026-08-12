@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { SCHEMA, COLUMN_MIGRATIONS } from '../db/schema';
+import { SCHEMA, COLUMN_MIGRATIONS, INDEXES } from '../db/schema';
 
 /**
  * An in-memory database with the **real** schema, for testing `src/db/queries/*` for real.
@@ -20,6 +20,11 @@ export async function openTestDb(): Promise<SQLite.SQLiteDatabase> {
     // column is already present in `SCHEMA`.
     try { await db.execAsync(sql); } catch { /* already there */ }
   }
+  // Indexes too — and not only for speed. The two partial UNIQUE indexes on
+  // `category_budget` are the only thing enforcing one budget per level, because
+  // a plain UNIQUE cannot (SQL treats NULL person_ids as distinct). A harness
+  // without them silently permits data the app can never produce.
+  await db.execAsync(INDEXES);
   return db;
 }
 

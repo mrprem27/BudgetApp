@@ -136,13 +136,17 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+-- No UNIQUE here. Uniqueness is two partial indexes (see INDEXES), because it has to
+-- differ by level: one group default per category, one override per person per
+-- category. A table-level UNIQUE(group_id, category, period) cannot express that —
+-- it blocks the override row outright — and adding person_id to it would enforce
+-- nothing at the default level, since SQL treats NULLs as distinct.
 CREATE TABLE IF NOT EXISTS category_budget (
   id        TEXT PRIMARY KEY,
   group_id  TEXT NOT NULL REFERENCES budget_group(id),
   category  TEXT NOT NULL,
   period    TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('monthly','yearly')),
-  amount    INTEGER NOT NULL,
-  UNIQUE(group_id, category, period)
+  amount    INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -306,6 +310,19 @@ export const COLUMN_MIGRATIONS = [
   // touch `recur_end` at all; this column exists so resume knows which occurrences
   // fell inside the gap and can skip them instead of back-posting the lot.
   "ALTER TABLE txn ADD COLUMN recur_paused_at INTEGER",
+  // Who created the group. There was no owner concept at all, so nothing could be
+  // gated on one. Backfilled below to the `is_me` person, which is true by
+  // construction: every group on this device was created by you.
+  "ALTER TABLE budget_group ADD COLUMN created_by TEXT",
+  // Per-member role: 'admin' or 'member'. There is no separate 'owner' role — the
+  // creator is identified by `budget_group.created_by`, is always treated as an
+  // admin, and cannot be demoted or removed by anyone. Keeping creator-ness out of
+  // the role column is what makes that guarantee un-loseable: a role can be edited,
+  // `created_by` never is.
+  "ALTER TABLE group_member ADD COLUMN role TEXT NOT NULL DEFAULT 'member'",
+  // NULL = the group's default budget line (what every existing row is, so this is
+  // additive with no data migration). Non-NULL = that person's override.
+  "ALTER TABLE category_budget ADD COLUMN person_id TEXT",
 ];
 
 /**
@@ -372,6 +389,18 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
     key: 'fix_income_category_kind_v1',
     sql: ["UPDATE category SET kind='income' WHERE name IN ('Salary','Freelance','Refunds','Business','Interest','Dividends','Rent Received','Bonus','Cashback','Gifts Received','Other Income')"],
   },
+  // Groups predate the owner/role concept entirely. Every group on this device was
+  // created by the `is_me` person — there is no other user yet — so that is not a
+  // guess, it is the only possibility. Their membership row becomes 'admin'.
+  {
+    key: 'fix_group_creator_roles_v1',
+    sql: [
+      "UPDATE budget_group SET created_by = (SELECT id FROM person WHERE is_me = 1) WHERE created_by IS NULL",
+      // Correlated on the group's own creator rather than on `is_me`, so this stays
+      // correct if it ever runs on a database that has more than one person's groups.
+      "UPDATE group_member SET role = 'admin' WHERE person_id = (SELECT created_by FROM budget_group WHERE id = group_member.group_id)",
+    ],
+  },
 ];
 
 /**
@@ -395,6 +424,35 @@ export async function applyOneTimeFixes(
   }
   return ran;
 }
+
+export const INDEXES = `
+    -- Budget uniqueness, in two halves on purpose.
+    --
+    -- A single UNIQUE(group_id, category, period, person_id) does NOT work: SQL
+    -- treats NULLs as distinct in a unique constraint, so the group-default rows
+    -- (person_id IS NULL) would never collide and one category could accumulate
+    -- unlimited default lines. Splitting it into two partial indexes gives real
+    -- uniqueness at both levels — one default per category, one override per
+    -- category per person.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_catbudget_default
+      ON category_budget(group_id, category, period) WHERE person_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_catbudget_override
+      ON category_budget(group_id, category, period, person_id) WHERE person_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
+    CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
+    CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
+    -- Cross-group recurring scans (materializeDueOccurrences / getActiveRecurringRules)
+    -- filter recur_state with no group_id, so they can't use the group_id-leading
+    -- index above — this recur_state-leading partial index serves them.
+    CREATE INDEX IF NOT EXISTS idx_txn_recur_state ON txn(recur_state) WHERE recur_freq IS NOT NULL;
+    -- getTransactionsInRange(groupId=null, ...) (Home, savings/cash, reports) filters
+    -- date + is_deleted=0 + recur_freq IS NULL with no group_id, so the group_id-leading
+    -- index can't serve it — this date-leading partial index matches that hot predicate.
+    CREATE INDEX IF NOT EXISTS idx_txn_date ON txn(date) WHERE is_deleted = 0 AND recur_freq IS NULL;
+    -- category-frequency / uncategorized / duplicate scans group & filter on category.
+    CREATE INDEX IF NOT EXISTS idx_txn_group_category ON txn(group_id, category);
+    CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
+`;
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('budgetsplit.db');
@@ -499,25 +557,48 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // If the rebuild fails, leave the original table intact (transfer cats stay unavailable).
   }
 
-  // Hot-path indexes. Created here (not inline in SCHEMA) because the one-time
-  // txn rebuild above drops & recreates the txn table, which would wipe any
-  // index defined alongside it. IF NOT EXISTS keeps this idempotent on every open.
-  await db.execAsync(`
-    CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
-    CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
-    CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
-    -- Cross-group recurring scans (materializeDueOccurrences / getActiveRecurringRules)
-    -- filter recur_state with no group_id, so they can't use the group_id-leading
-    -- index above — this recur_state-leading partial index serves them.
-    CREATE INDEX IF NOT EXISTS idx_txn_recur_state ON txn(recur_state) WHERE recur_freq IS NOT NULL;
-    -- getTransactionsInRange(groupId=null, ...) (Home, savings/cash, reports) filters
-    -- date + is_deleted=0 + recur_freq IS NULL with no group_id, so the group_id-leading
-    -- index can't serve it — this date-leading partial index matches that hot predicate.
-    CREATE INDEX IF NOT EXISTS idx_txn_date ON txn(date) WHERE is_deleted = 0 AND recur_freq IS NULL;
-    -- category-frequency / uncategorized / duplicate scans group & filter on category.
-    CREATE INDEX IF NOT EXISTS idx_txn_group_category ON txn(group_id, category);
-    CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
-  `);
+  // One-time rebuild: `category_budget` shipped with UNIQUE(group_id, category,
+  // period), which makes a personal override impossible — the override row collides
+  // with the group default on exactly those three columns. SQLite cannot drop a
+  // constraint, so recreate the table without it and let the two partial indexes in
+  // `INDEXES` carry uniqueness instead. Detected by the constraint's presence in the
+  // stored DDL, so it runs once and is a no-op afterwards.
+  try {
+    const cbDef = await db.getFirstAsync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='category_budget'",
+    );
+    if (cbDef && cbDef.sql.includes('UNIQUE')) {
+      await db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE category_budget_new (
+          id        TEXT PRIMARY KEY,
+          group_id  TEXT NOT NULL REFERENCES budget_group(id),
+          category  TEXT NOT NULL,
+          period    TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('monthly','yearly')),
+          amount    INTEGER NOT NULL,
+          cadence   TEXT NOT NULL DEFAULT 'monthly',
+          person_id TEXT
+        );
+        INSERT INTO category_budget_new (id,group_id,category,period,amount,cadence,person_id)
+          SELECT id,group_id,category,period,amount,cadence,person_id FROM category_budget;
+        DROP TABLE category_budget;
+        ALTER TABLE category_budget_new RENAME TO category_budget;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  } catch {
+    // Leave the old table intact if the rebuild fails; overrides stay unavailable
+    // rather than the budget data being put at risk.
+  }
+
+  // Hot-path indexes + budget uniqueness. Exported as `INDEXES` (not inline in
+  // SCHEMA) for two reasons: the one-time txn rebuild above drops and recreates
+  // the txn table, which would wipe any index defined alongside it; and the test
+  // harness needs the same DDL, which it cannot get from a string literal buried
+  // in this function. IF NOT EXISTS keeps it idempotent on every open.
+  await db.execAsync(INDEXES);
 
   // --- One-time DATA fixes -------------------------------------------------
   // Legacy repairs that reclassify and DELETE user rows. Each runs at most once

@@ -22,7 +22,16 @@ function makeDb(): DatabaseSync {
     );
     CREATE TABLE budget_group (
       id TEXT PRIMARY KEY, name TEXT, icon TEXT, color TEXT,
-      is_personal INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+      is_personal INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+      -- Added by COLUMN_MIGRATIONS in the real schema; included here because the
+      -- creator/role fix writes it. This harness declares the subset the fixes
+      -- touch, so a fix reaching a new column must extend it.
+      created_by TEXT
+    );
+    CREATE TABLE group_member (
+      group_id TEXT NOT NULL, person_id TEXT NOT NULL, joined_at INTEGER,
+      role TEXT NOT NULL DEFAULT 'member',
+      PRIMARY KEY (group_id, person_id)
     );
     CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL);
     CREATE TABLE category (

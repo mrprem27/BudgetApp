@@ -18,9 +18,14 @@ export type BudgetGroup = {
   simplify_debt: number;
   default_split: SplitMode;
   created_at: number;
+  /** Immutable creator. Always an admin; can never be removed or demoted. */
+  created_by: string | null;
 };
 
-import type { SplitMode } from '../../constants/enums';
+import type { SplitMode, GroupRole } from '../../constants/enums';
+import {
+  canAddMember, canChangeRole, canRemoveMember, PermissionError, type GroupContext,
+} from '../../lib/permissions';
 export type { SplitMode } from '../../constants/enums';
 
 export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
@@ -84,27 +89,33 @@ export async function insertGroup(
   color: string,
   memberIds: string[],
   defaultSplit: SplitMode = 'equal',
+  /** Who is creating this. Recorded immutably: they can never be removed or demoted. */
+  creatorId?: string,
 ): Promise<BudgetGroup> {
   const id = uuid();
   const now = Date.now();
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, default_split, created_at)
-       VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
-      [id, name, icon, color, defaultSplit, now],
+      `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, default_split, created_at, created_by)
+       VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
+      [id, name, icon, color, defaultSplit, now, creatorId ?? null],
     );
-    for (const pid of memberIds) {
+    // The creator is always a member of their own group, even if the caller forgot
+    // to include them — a group whose creator is not in it has no un-removable
+    // admin, which is exactly the state `canRemoveMember` exists to prevent.
+    const ids = creatorId && !memberIds.includes(creatorId) ? [creatorId, ...memberIds] : memberIds;
+    for (const pid of ids) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)',
-        [id, pid, now],
+        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
+        [id, pid, now, pid === creatorId ? 'admin' : 'member'],
       );
     }
     // Categories are a single global catalog now (seeded once in openDB) — groups
     // no longer seed their own copies.
   });
 
-  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now };
+  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creatorId ?? null };
 }
 
 export async function setSimplifyDebt(
@@ -222,3 +233,85 @@ export async function archiveGroupSafe(db: SQLite.SQLiteDatabase, groupId: strin
   return true;
 }
 
+
+
+// --- Roles & membership ---------------------------------------------------
+
+/**
+ * Everything `lib/permissions` needs to decide, read in one round trip.
+ *
+ * Screens call this and hide what the actor cannot do; the write paths below call
+ * it again and refuse. The second check is the real one — a hidden button is a
+ * courtesy, not a control.
+ */
+export async function getGroupContext(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  actorId: string,
+): Promise<GroupContext> {
+  const [g, m] = await Promise.all([
+    db.getFirstAsync<{ created_by: string | null }>(
+      'SELECT created_by FROM budget_group WHERE id = ?', [groupId]),
+    db.getFirstAsync<{ role: GroupRole }>(
+      'SELECT role FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, actorId]),
+  ]);
+  return { createdBy: g?.created_by ?? null, actorId, actorRole: m?.role ?? null };
+}
+
+/** Members with their roles, creator first — the order the members list renders in. */
+export async function getGroupMembersWithRoles(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<Array<{ person_id: string; role: GroupRole; is_creator: boolean }>> {
+  const rows = await db.getAllAsync<{ person_id: string; role: GroupRole; created_by: string | null }>(
+    `SELECT gm.person_id, gm.role, bg.created_by
+       FROM group_member gm JOIN budget_group bg ON bg.id = gm.group_id
+      WHERE gm.group_id = ?`,
+    [groupId],
+  );
+  return rows
+    .map(r => ({ person_id: r.person_id, role: r.role, is_creator: r.created_by === r.person_id }))
+    .sort((a, b) => Number(b.is_creator) - Number(a.is_creator));
+}
+
+export async function setMemberRole(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  actorId: string,
+  targetPersonId: string,
+  role: GroupRole,
+): Promise<void> {
+  const ctx = await getGroupContext(db, groupId, actorId);
+  if (!canChangeRole(ctx, targetPersonId)) throw new PermissionError('change this member\'s role');
+  await db.runAsync(
+    'UPDATE group_member SET role = ? WHERE group_id = ? AND person_id = ?',
+    [role, groupId, targetPersonId],
+  );
+}
+
+export async function addGroupMember(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  actorId: string,
+  personId: string,
+): Promise<void> {
+  const ctx = await getGroupContext(db, groupId, actorId);
+  if (!canAddMember(ctx)) throw new PermissionError('add members to this group');
+  await db.runAsync(
+    "INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, 'member')",
+    [groupId, personId, Date.now()],
+  );
+}
+
+export async function removeGroupMember(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  actorId: string,
+  personId: string,
+): Promise<void> {
+  const ctx = await getGroupContext(db, groupId, actorId);
+  // Refuses the creator for everyone, including the creator themselves.
+  if (!canRemoveMember(ctx, personId)) throw new PermissionError('remove this member');
+  await db.runAsync(
+    'DELETE FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, personId]);
+}

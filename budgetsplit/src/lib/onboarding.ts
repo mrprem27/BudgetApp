@@ -96,10 +96,10 @@ export async function finalizeOnboarding(
     }
 
     // Whole monthly budget (the user's own number — no % of income).
-    if (data.budgetNum > 0 && personal) {
+    if (data.budgetNum > 0 && personal && me) {
       await setCategoryBudgets(db, personal.id, [
         { category: 'Total', cadence: 'monthly', amount: parseToPaise(String(data.budgetNum)) },
-      ]);
+      ], { level: 'group', actorId: me.id });
     }
 
     // People to split with → contacts.

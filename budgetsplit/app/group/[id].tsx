@@ -304,7 +304,7 @@ export default function GroupDetailScreen() {
           if (!rebalance) return;
           setApplyingRebalance(true);
           try {
-            await setCategoryBudgets(db, id, applyRebalance(catStatus, rebalance));
+            await setCategoryBudgets(db, id, applyRebalance(catStatus, rebalance), { level: 'group', actorId: meId });
             haptic.success();
             setRebalance(null);
             await reload();

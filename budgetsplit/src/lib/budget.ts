@@ -13,6 +13,37 @@ export type Period = 'daily' | 'monthly' | 'yearly';
 export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
 
 /**
+ * Collapse two-level budget rows into the one line that applies to `meId`.
+ *
+ * `category_budget.person_id` is NULL for the group's default — the line every
+ * member inherits — and set for a personal override. An override wins for its
+ * owner and for nobody else; everything else falls through to the default.
+ *
+ * Resolution is by `(category, cadence)`, not by category alone: a category can
+ * legitimately carry a monthly line and a yearly one, and an override of the
+ * monthly must not silently discard the yearly default.
+ *
+ * **Every reader goes through this.** A reader that queries the rows directly
+ * would ignore overrides while looking like it worked — the same shape of bug as
+ * the nine rollups that each answered "what is my budget" differently.
+ */
+export function resolveBudgetLines<T extends { category: string; cadence: BudgetCadence; person_id: string | null }>(
+  lines: T[],
+  meId?: string,
+): T[] {
+  const byKey = new Map<string, T>();
+  for (const l of lines) {
+    // Someone else's override is not mine to inherit, and not a default either.
+    if (l.person_id !== null && l.person_id !== meId) continue;
+    const key = `${l.category}|${l.cadence}`;
+    const existing = byKey.get(key);
+    // Mine beats the default; order of arrival must not decide it.
+    if (!existing || (l.person_id !== null && existing.person_id === null)) byKey.set(key, l);
+  }
+  return Array.from(byKey.values());
+}
+
+/**
  * A budget line is either a **rate** (a limit that resets at least as often as
  * the headline you are showing) or a **pool** (a lump sum drawn down over a
  * longer window than that headline covers).
@@ -233,7 +264,7 @@ export async function getCategoryBudgetStatus(
   /** When set, spend counts only this person's share (individual budget). */
   meId?: string,
 ): Promise<CategoryBudgetStatus[]> {
-  const budgets = await getCategoryBudgets(db, group.id);
+  const budgets = await getCategoryBudgets(db, group.id, meId);
   if (budgets.length === 0) return [];
 
   // One spending query per distinct cadence window.
@@ -273,7 +304,7 @@ export async function getMyGlobalBudgetStatus(
     'SELECT id FROM budget_group WHERE is_personal = 1 ORDER BY created_at ASC LIMIT 1',
   );
   if (!personal) return [];
-  const budgets = await getCategoryBudgets(db, personal.id);
+  const budgets = await getCategoryBudgets(db, personal.id, meId);
   if (budgets.length === 0) return [];
 
   const cadences = Array.from(new Set(budgets.map(b => b.cadence)));

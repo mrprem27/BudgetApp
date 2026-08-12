@@ -127,7 +127,9 @@ export async function getBudgetAnalytics(
   /** Period the aggregate figures are expressed over. Per-category trends keep their own cadence. */
   target: Period = 'monthly',
 ): Promise<BudgetAnalytics> {
-  const budgets = await getCategoryBudgets(db, group.id);
+  // `meId` matters: without it this reads only the group defaults and silently
+  // ignores every personal override.
+  const budgets = await getCategoryBudgets(db, group.id, meId);
 
   // No budgets → nothing to analyse; skip the spending queries entirely (perf).
   if (budgets.length === 0) {

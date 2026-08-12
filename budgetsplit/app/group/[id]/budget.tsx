@@ -19,7 +19,10 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
 import { seedGlobalCategories } from '../../../src/db/seedCategories';
-import { getCategoryBudgets, setCategoryBudgets } from '../../../src/db/queries/categoryBudgets';
+import { getCategoryBudgetRows, setCategoryBudgets, type BudgetLevel } from '../../../src/db/queries/categoryBudgets';
+import { getGroupContext } from '../../../src/db/queries/groups';
+import { getMe } from '../../../src/db/queries/persons';
+import { canEditGroupBudget } from '../../../src/lib/permissions';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { categoryVisual, categorySection, SECTION_ORDER } from '../../../src/constants/categories';
 import { parseToPaise, formatRupees, formatCompact } from '../../../src/lib/money';
@@ -29,6 +32,7 @@ import type { Category } from '../../../src/db/queries/categories';
 import type { FeatherName } from '../../../src/constants/palette';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { SectionCard } from '../../../src/components/ui/SectionCard';
+import { TabPills } from '../../../src/components/ui/TabPills';
 import { Card } from '../../../src/components/ui/Card';
 import { Divider } from '../../../src/components/ui/Divider';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
@@ -83,31 +87,53 @@ export default function BudgetEditorScreen() {
   // to match the prior behavior (this editor only reloaded on focus, and a mid-edit
   // reseed would wipe unsaved amounts).
   const { data, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    if (!id) return { cats: [] as Category[], budgets: [], defaultCadence: 'monthly' as BudgetCadence };
-    let [cats, budgets, dc] = await Promise.all([
+    if (!id) return { cats: [] as Category[], rows: [], defaultCadence: 'monthly' as BudgetCadence, meId: '', ctx: null };
+    const me = await getMe(db);
+    const meId = me?.id ?? '';
+    let [cats, rows, dc, ctx] = await Promise.all([
       getCategoriesByFrequency(db, id),
-      getCategoryBudgets(db, id),
+      // BOTH levels, unresolved: the editor is the one screen that needs to see the
+      // default and the override side by side rather than the winner.
+      getCategoryBudgetRows(db, id),
       settings.defaultCadence(),
+      getGroupContext(db, id, meId),
     ]);
     // Self-heal: the expense catalog should never be empty. Reseed if it is.
     if (cats.length === 0) {
       await seedGlobalCategories(db);
       cats = await getCategoriesByFrequency(db, id);
     }
-    return { cats, budgets, defaultCadence: dc ? (dc as BudgetCadence) : 'monthly' };
+    return { cats, rows, defaultCadence: dc ? (dc as BudgetCadence) : 'monthly', meId, ctx };
   }, [id], { refetchOnDataChange: false });
 
   const allCategories = data?.cats ?? [];
   const defaultCadence = data?.defaultCadence ?? 'monthly';
+  const meId = data?.meId ?? '';
+  const ctx = data?.ctx ?? null;
+  // Only an admin may edit the line everyone inherits; anyone may edit their own.
+  const mayEditGroup = ctx ? canEditGroupBudget(ctx) : false;
+  const [level, setLevel] = useState<BudgetLevel>('personal');
+  // How many categories you have already overridden — shown on the "Mine" pill so
+  // the override layer is discoverable rather than something you have to remember.
+  const overrideCount = (data?.rows ?? []).filter(r => r.person_id === meId && r.amount > 0).length;
 
   // Seed editable form state (amounts/cadences/collapsed) from the loaded data
   // whenever it (re)arrives — mirrors what the old `load()` did inline.
   useEffect(() => {
     if (!data) return;
-    const { cats, budgets } = data;
+    const { cats, rows } = data;
+    // Seed from the level being edited. The group default is what everyone
+    // inherits; "Mine" starts from that default so the fields are pre-filled with
+    // what currently applies to you, and typing turns an inherited value into an
+    // override. Overlap is by category name, which is safe because the catalog is
+    // global (`category` is UNIQUE(name, kind)).
+    const defaults = rows.filter(r => r.person_id === null);
+    const mine = rows.filter(r => r.person_id === meId);
+    const source = level === 'group' ? defaults : [...defaults, ...mine];
+
     const amt: Record<string, string> = {};
     const cad: Record<string, BudgetCadence> = {};
-    for (const b of budgets) {
+    for (const b of source) {
       if (b.amount > 0) {
         amt[b.category] = (b.amount / 100).toString();
         cad[b.category] = b.cadence;
@@ -129,7 +155,7 @@ export default function BudgetEditorScreen() {
     } else {
       setCollapsed(new Set([...allSections].filter(s => !budgetedSections.has(s))));
     }
-  }, [data, focusCategory]);
+  }, [data, focusCategory, level, meId]);
 
   // Deep-linked from a category: once its row is laid out, center it in the
   // visible area above the keyboard (the field would otherwise sit under it).
@@ -203,7 +229,7 @@ export default function BudgetEditorScreen() {
       const entries = allCategories
         .map(c => ({ category: c.name, cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? '') }))
         .filter(e => e.amount > 0);
-      await setCategoryBudgets(db, id, entries);
+      await setCategoryBudgets(db, id, entries, { level, actorId: meId });
       refresh(); // tell Home / group detail their budget data changed
       haptic.success();
       router.back();
@@ -236,6 +262,28 @@ export default function BudgetEditorScreen() {
           automaticallyAdjustKeyboardInsets
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
+          {/* Which level is being edited. A segmented control, not chips: this is
+              "pick exactly one", and the two are alternatives rather than toggles.
+              Hidden entirely when there is only one thing you can edit, since a
+              one-option control is a label pretending to be a choice. */}
+          {mayEditGroup && (
+            <View style={styles.levelWrap}>
+              <TabPills
+                tabs={[
+                  { key: 'group', label: 'Group default' },
+                  { key: 'personal', label: 'Mine', badge: overrideCount > 0 ? overrideCount : undefined },
+                ]}
+                active={level}
+                onChange={(k) => { haptic.selection(); setLevel(k as BudgetLevel); }}
+              />
+              <Text style={styles.levelHint}>
+                {level === 'group'
+                  ? 'The amount every member starts from. Anyone can set their own instead.'
+                  : 'Yours only. Where you leave a value untouched, the group default applies.'}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>≈ Monthly, per person</Text>
             <Text style={styles.totalAmount}>{formatRupees(rollup.amount)}</Text>
@@ -363,6 +411,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { flex: 1 },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
+  levelWrap: { gap: space.sm, marginBottom: space.md },
+  levelHint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
   totalCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md },
   totalLabel: { ...type.label, color: colors.textSecondary },
   totalAmount: { ...type.amountXL, color: colors.accent },
