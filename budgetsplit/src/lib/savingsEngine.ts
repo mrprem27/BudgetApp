@@ -41,9 +41,22 @@ export type GoalLike = {
   anchor: number; // last_auto_at ?? created_at
 };
 
-/** Funding order key: manual drag rank when set, else the High→Med→Low bucket. */
-const rankKey = (g: { sort_order?: number; priority: Priority }) =>
-  g.sort_order ?? PRIORITY_RANK[g.priority];
+/**
+ * Funding order key — the manual drag rank, and nothing else.
+ *
+ * This was `g.sort_order ?? PRIORITY_RANK[g.priority]`, and the fallback could
+ * **never run**: `savings_goal.sort_order` is `INTEGER NOT NULL DEFAULT 0`, so it
+ * is never null or undefined for a row read from the database. The High/Med/Low
+ * buckets were replaced by drag ordering and no UI has set `priority` since —
+ * `setPriority` is still destructured in `app/(tabs)/savings.tsx` and never
+ * called — so every real goal carries the default 'medium' anyway.
+ *
+ * Left as one axis on purpose. The `priority` column, its enum and its use in
+ * `savingsInsights` scoring are vestigial rather than harmful, and pulling them
+ * out touches ten files of money-handling code; that is its own change, tracked
+ * on the checklist, not a tail-end sweep.
+ */
+const rankKey = (g: { sort_order?: number }) => g.sort_order ?? 0;
 
 export type AutoAllocation = { goalId: string; amount: number; newAnchor: number };
 

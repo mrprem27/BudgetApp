@@ -19,7 +19,7 @@ import { getMe } from './queries/persons';
 import { insertTxn, insertItemizedTxn, recordSettlement, softDeleteTxn } from './queries/transactions';
 import { pauseRecurring, endRecurring } from './queries/recurring';
 import { setCategoryBudgets } from './queries/categoryBudgets';
-import { insertGoal, fundGoal, withdrawFromGoal } from './queries/savings';
+import { insertGoal, fundGoal, withdrawFromGoal, reorderGoals } from './queries/savings';
 import { insertPending } from './queries/pending';
 import { seedGlobalCategories } from './seedCategories';
 import { setMoneyProfile } from './queries/moneyProfile';
@@ -316,7 +316,30 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // PRIMED FLOW: 97.5% funded → add just ₹500 to hit 100% and fire GoalCelebration.
   const almost = await insertGoal(db, { name: 'Weekend Getaway', target: R(20000), priority: 'medium', icon: 'map', color: '#2DD4BF' });
   await fundGoal(db, almost.id, R(19500), 'manual');
-  await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
+  const phone = await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
+
+  /*
+   * Set the funding order explicitly.
+   *
+   * The `priority: high|medium|low` above is decoration — nothing reads it. Order
+   * is `sort_order`, and `insertGoal` appends, so the demo's stated intent
+   * ("Emergency Fund is high, Europe Vacation is low") did not match the order the
+   * engine would actually fund or raid in: the overdue Tax Payment sat sixth and a
+   * low-priority vacation sat fourth.
+   *
+   * Written through `reorderGoals` rather than by hand, so the demo exercises the
+   * same total-permutation write a user's drag does. Funded first → raided last.
+   */
+  await reorderGoals(db, [
+    emergency.id,  // locked, high — must never be raided first
+    overdue.id,    // deadline already past
+    trip.id,       // deadline in 60 days
+    almost.id,     // one tap from completion
+    laptop.id,
+    gift.id,
+    vacation.id,   // distant deadline
+    phone.id,      // untouched, lowest — the first thing an overspend takes
+  ]);
 
   // --- Uncategorized: a co-member (Aarav) used a category that ISN'T in your
   // catalog to split an expense in a shared group you're in → it shows under

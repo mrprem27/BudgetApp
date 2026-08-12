@@ -20,8 +20,17 @@ describe('periodsElapsed / advanceAnchor', () => {
   });
 });
 
-const goal = (id: string, priority: GoalLike['priority'], allocation: number, target: number, anchor = jan1): GoalLike =>
-  ({ id, priority, allocation, target, anchor, frequency: 'monthly' });
+/**
+ * `sort_order` is the funding rank, and the ONLY one. These helpers used to pass
+ * `priority` alone and rely on `rankKey`'s `?? PRIORITY_RANK[...]` fallback —
+ * a branch production can never reach, because `sort_order` is
+ * `INTEGER NOT NULL DEFAULT 0` on every row read from the database. The tests
+ * were exercising a path no user could.
+ */
+const goal = (
+  id: string, priority: GoalLike['priority'], allocation: number, target: number,
+  anchor = jan1, sort_order = 0,
+): GoalLike => ({ id, priority, allocation, target, anchor, sort_order, frequency: 'monthly' });
 
 describe('planAutoAllocations', () => {
   it('funds each goal its allocation × elapsed periods when cash is ample', () => {
@@ -34,8 +43,9 @@ describe('planAutoAllocations', () => {
     expect(plan[0].amount).toBe(2500); // 3×1000 capped at target 2500
   });
 
-  it('prioritises High over Low when cash is short', () => {
-    const goals = [goal('low', 'low', 1000, 100000), goal('hi', 'high', 1000, 100000)];
+  it('funds the higher-ranked goal first when cash is short', () => {
+    // Rank 0 beats rank 1. (Was "High beats Low" — a bucket nothing sets any more.)
+    const goals = [goal('low', 'low', 1000, 100000, jan1, 1), goal('hi', 'high', 1000, 100000, jan1, 0)];
     const plan = planAutoAllocations(goals, {}, 2000, apr1); // each due 3000, cash only 2000
     const hi = plan.find(p => p.goalId === 'hi')!;
     const low = plan.find(p => p.goalId === 'low');
@@ -64,17 +74,19 @@ describe('planAutoAllocations', () => {
 describe('planOverspendRaid', () => {
   // `target` defaults high enough that these goals are never "complete" — the
   // completed-goal case gets its own describe below.
-  const g = (id: string, priority: RaidGoal['priority'], locked = 0, target = 1_000_000): RaidGoal =>
-    ({ id, priority, locked, target });
-  it('raids lowest-priority unlocked goals first, protecting high & locked', () => {
-    const goals = [g('hi', 'high'), g('lo', 'low'), g('mid', 'medium'), g('lk', 'low', 1)];
+  const g = (
+    id: string, priority: RaidGoal['priority'], locked = 0, target = 1_000_000, sort_order = 0,
+  ): RaidGoal => ({ id, priority, locked, target, sort_order });
+  it('raids the lowest-ranked unlocked goals first, protecting top-ranked & locked', () => {
+    const goals = [g('hi', 'high', 0, 1_000_000, 0), g('lo', 'low', 0, 1_000_000, 3),
+                   g('mid', 'medium', 0, 1_000_000, 2), g('lk', 'low', 1, 1_000_000, 4)];
     const saved = { hi: 5000, lo: 3000, mid: 4000, lk: 9999 };
     const out = planOverspendRaid(goals, saved, 5000);
     // low first (3000), then medium (2000) — high & locked untouched
     expect(out).toEqual([{ goalId: 'lo', amount: 3000 }, { goalId: 'mid', amount: 2000 }]);
   });
   it('covers only what the goals hold when the deficit exceeds savings', () => {
-    const goals = [g('a', 'low'), g('b', 'medium')];
+    const goals = [g('a', 'low', 0, 1_000_000, 1), g('b', 'medium', 0, 1_000_000, 0)];
     const out = planOverspendRaid(goals, { a: 1000, b: 1000 }, 5000);
     expect(out).toEqual([{ goalId: 'a', amount: 1000 }, { goalId: 'b', amount: 1000 }]); // partial
   });

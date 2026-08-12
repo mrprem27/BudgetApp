@@ -97,7 +97,7 @@ the module calls).
 | 12 | Insights — one forecast model, not two | **DONE** — ✅ Hero + chart both read `forecastMonthEnd` |
 | 13 | Savings insights — make deterministic | **DONE** — ✅ Seeded on candidate text + day; rotates daily, stable within a day |
 | 14 | Goals — exclude completed from the raid; fix the reorder permutation | **DONE** — ✅ Both, plus the pre-drag tie now mirrors funding |
-| 15 | Goals — `priority` is dead code; decide remove or revive | §4.4 |
+| 15 | Goals — `priority` is dead code | **DECIDED: remove.** ✅ The unreachable `rankKey` fallback is gone and `sort_order` is the only funding axis; demo goals now set a real order via `reorderGoals` instead of decorative `priority`. **Queued:** the column, its enum and the `savingsInsights` bonus are vestigial — a ten-file sweep of money code, its own change |
 | 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | **DONE** — ✅ `src/lib/qrFromImage.ts`, wired into both scanners |
 | 17 | Group budget — relabel to "my share" | **DONE** — ✅ Label-only, as predicted: the engine already passes `meRow?.id`. **Resolves D1**; D3 (health engine) stays open |
 | 18 | WhatsApp reminder — composer + share sheet | §3.4 |
@@ -306,23 +306,34 @@ your catalog lacks. Three things followed from that, in the order they were foun
 Mostly forward-looking: without sync the catalog is device-wide, so divergence is hard to reach
 on purpose today. It becomes ordinary with V3, and is defensive now for restores and imports.
 
-### D2. Do investments/crypto get a pay method?
+### D2. Do investments/crypto get a pay method? *(open; nothing blocks on it)*
 
 **There is no crypto concept anywhere** — grep finds nothing. `investments` is a single
 manually-entered figure, read once and clamped (`src/lib/cash.ts:127`); no transaction
 ever touches it. Either it stays manual, or "move money to investments" becomes a Transfer
 kind. Crypto would be **new**, not an extension.
 
-### D3. Health engine still uses group-total on both sides
+### D3. Health engine still uses group-total on both sides *(now the only budget inconsistency left)*
 
-It pairs group-total budget with group-total spend while everything else moved to my-share
-(`docs/V2_FIX_PLAN.md:374`). Deliberately not rebased. Resolve alongside **D1** — they are
-the same question.
+**Still open, and D1 no longer covers it.** D1 closed on "the amount is one person's allowance",
+and every budget reader now passes an identity and resolves overrides — verified: all five call
+sites of `getCategoryBudgets` pass `meId`. **One does not**: `homeData.ts:143` calls
+`getBudgetAnalytics(db, g)` with no identity, so the health score pairs group-total budget with
+group-total spend.
 
-### D4. Monetisation shape
+That is *internally* consistent — both sides are group-total — and deliberate
+(`homeData.ts:153`). But it is the last place in the app measuring on a different basis from
+everything else, and it is a **product call, not a bug fix**: passing `meId` would change the
+health score for every existing user overnight.
+
+**The decision:** rebase health onto my-share and accept that everyone's score moves, or keep
+group-total and label the card so the two bases are legible rather than mysterious.
+
+### D4. Monetisation shape *(not a pilot blocker)*
 
 No paywall, entitlement or purchase SDK exists, and none of it is reusable from what does.
-Out of scope for the pilot; the decision is *when*, not *whether*.
+The decision is *when*, not *whether* — and nothing in the pilot depends on it, so this can
+sit until there are users to charge.
 
 ---
 

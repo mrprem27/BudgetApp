@@ -4,6 +4,7 @@ import {
   ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -131,6 +132,47 @@ export default function SettingsScreen() {
     haptic.selection();
     setter(val);
     await persist(val);
+  }
+
+  /**
+   * Turning the app lock OFF requires passing it first.
+   *
+   * The lock's entire purpose is that someone holding your unlocked phone cannot
+   * read your finances — and this switch let them disable it in two taps, with no
+   * challenge at all. A lock that can be removed without satisfying it protects
+   * nothing but the screen it draws.
+   *
+   * Turning it ON is deliberately not gated: there is nothing to protect yet, and
+   * demanding Face ID before you may *increase* security is friction with no
+   * benefit. `LockGate` proves the hardware works on the next foreground.
+   */
+  async function toggleLock(next: boolean) {
+    if (next) { await toggle(settings.setBiometricEnabled, true, setBiometric); return; }
+
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!hasHardware || !enrolled) {
+      // Nothing left to authenticate against — refusing here would strand the user
+      // with a lock they can neither pass nor remove.
+      await toggle(settings.setBiometricEnabled, false, setBiometric);
+      return;
+    }
+
+    try {
+      const res = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Turn off app lock',
+        fallbackLabel: 'Use passcode',
+      });
+      if (res.success) {
+        await toggle(settings.setBiometricEnabled, false, setBiometric);
+        return;
+      }
+      haptic.error();
+      Alert.alert('App lock is still on', 'You need to unlock to turn it off.');
+    } catch {
+      haptic.error();
+      Alert.alert('App lock is still on', 'Could not verify it is you, so nothing was changed.');
+    }
   }
 
   async function pickCadence(c: BudgetCadence) {
@@ -285,7 +327,7 @@ export default function SettingsScreen() {
       {/* SECURITY */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
-        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={(v) => toggle(settings.setBiometricEnabled, v, setBiometric)} />
+        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={toggleLock} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
         <View style={settingsRowDivider} />
