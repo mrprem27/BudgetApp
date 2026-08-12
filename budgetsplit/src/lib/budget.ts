@@ -6,6 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
+import { OTHERS_LABEL } from './categoryFold';
 import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudgets';
 
 export type Period = 'daily' | 'monthly' | 'yearly';
@@ -275,19 +276,76 @@ export async function getCategoryBudgetStatus(
     spendByCadence[cad] = await getCategorySpending(db, group.id, w.from, w.to, meId);
   }));
 
-  return statusRows(budgets, spendByCadence);
+  // Budget lines follow the same catalog rule as spend: a line for a category you
+  // do not have shows as Others until you adopt it. See `foldBudgetStatuses`.
+  return foldBudgetStatuses(statusRows(budgets, spendByCadence), await knownCategoryNames(db));
+}
+
+/** Expense category names in the catalog — the set the Others fold is measured against. */
+async function knownCategoryNames(db: SQLite.SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ name: string }>(
+    "SELECT name FROM category WHERE kind = 'expense'",
+  );
+  return new Set(rows.map(r => r.name));
 }
 
 /** Build + sort CategoryBudgetStatus rows from budgets and per-cadence spend maps. */
+/**
+ * Merge budget lines for categories that are not in the reader's catalog into a
+ * single `Others` row — the same rule `foldUncategorized` already applies to
+ * **spend**.
+ *
+ * Without this the two disagreed. `category_budget.category` is a loose name, not
+ * a foreign key, so a group default can budget "Gym" while your catalog has no
+ * Gym: your *spend* on Gym folded into Others, and its *budget* sat in the list
+ * as a category you do not have. Adopting the category un-folds the line with its
+ * amount intact — nothing is redistributed, and the total is identical either way.
+ *
+ * Folded **per cadence**, because a daily ₹100 and a monthly ₹2,000 do not share a
+ * window and a single merged row could not state a meaningful percentage. In
+ * practice that is almost always one row.
+ *
+ * Pure. `known` is the set of category names in the catalog.
+ */
+export function foldBudgetStatuses(
+  rows: CategoryBudgetStatus[],
+  known: ReadonlySet<string>,
+): CategoryBudgetStatus[] {
+  const kept: CategoryBudgetStatus[] = [];
+  const byCadence = new Map<BudgetCadence, { allocated: number; spent: number }>();
+
+  for (const r of rows) {
+    // An existing `Others` category in the catalog is a real category and stays.
+    if (known.has(r.category)) { kept.push(r); continue; }
+    const acc = byCadence.get(r.cadence) ?? { allocated: 0, spent: 0 };
+    acc.allocated += r.allocated;
+    acc.spent += r.spent;
+    byCadence.set(r.cadence, acc);
+  }
+
+  for (const [cadence, { allocated, spent }] of byCadence) {
+    const pct = allocated > 0 ? Math.round((spent / allocated) * 100) : null;
+    kept.push({
+      category: OTHERS_LABEL, cadence, allocated, spent,
+      remaining: allocated - spent, pct, health: budgetHealth(pct),
+    });
+  }
+  return sortStatusRows(kept);
+}
+
+/** Shared ordering: coarser cadence later, most-used first inside a cadence. */
+function sortStatusRows(rows: CategoryBudgetStatus[]): CategoryBudgetStatus[] {
+  const order: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
+  return rows.sort((a, b) => order[a.cadence] - order[b.cadence] || (b.pct ?? 0) - (a.pct ?? 0));
+}
+
 function statusRows(budgets: CategoryBudget[], spendByCadence: Record<string, Record<string, number>>): CategoryBudgetStatus[] {
   const rows: CategoryBudgetStatus[] = budgets.map(b => {
     const spent = spendByCadence[b.cadence]?.[b.category] ?? 0;
     const pct = b.amount > 0 ? Math.round((spent / b.amount) * 100) : null;
     return { category: b.category, cadence: b.cadence, allocated: b.amount, spent, remaining: b.amount - spent, pct, health: budgetHealth(pct) };
   });
-  const order: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
-  rows.sort((a, b) => order[a.cadence] - order[b.cadence] || (b.pct ?? 0) - (a.pct ?? 0));
-  return rows;
+  return sortStatusRows(rows);
 }
 
 /**
@@ -315,5 +373,5 @@ export async function getMyGlobalBudgetStatus(
     spendByCadence[cad] = await getCategorySpending(db, null, w.from, w.to, meId);
   }));
 
-  return statusRows(budgets, spendByCadence);
+  return foldBudgetStatuses(statusRows(budgets, spendByCadence), await knownCategoryNames(db));
 }

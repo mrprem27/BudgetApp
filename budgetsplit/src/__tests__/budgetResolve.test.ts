@@ -1,4 +1,4 @@
-import { resolveBudgetLines } from '../lib/budget';
+import { getCategoryBudgetStatus, resolveBudgetLines } from '../lib/budget';
 import { openTestDb, seedGroupAndMe } from './dbHarness';
 
 type Line = { category: string; cadence: 'daily' | 'monthly' | 'yearly' | 'once'; amount: number; person_id: string | null };
@@ -136,5 +136,63 @@ describe('pre-existing budget rows stay group defaults', () => {
     const rows = await d.getAllAsync<{ category: string; cadence: 'monthly'; amount: number; person_id: string | null }>(
       'SELECT category, cadence, amount, person_id FROM category_budget');
     expect(resolveBudgetLines(rows, 'me')).toHaveLength(1);
+  });
+});
+
+/**
+ * The fold, end-to-end through the real reader — not just the pure function.
+ * This is the wiring that was missing: `getCategoryBudgetStatus` returned the
+ * unknown category verbatim while spend for it folded into Others.
+ */
+describe('getCategoryBudgetStatus folds against the catalog', () => {
+  const group = { id: 'g', name: 'Flat', is_personal: 0 } as never;
+
+  async function seed() {
+    const d = await openTestDb();
+    await seedGroupAndMe(d);
+    // Catalog has Groceries only. The group budgets Gym too — possible because
+    // category_budget.category is a name, not a foreign key.
+    await d.runAsync(
+      `INSERT INTO category (id, group_id, name, icon, color, kind)
+       VALUES ('c1', NULL, 'Groceries', 'shopping-cart', '#fff', 'expense')`,
+    );
+    await d.runAsync(
+      `INSERT INTO category_budget (id, group_id, category, period, cadence, amount)
+       VALUES ('b1','g','Groceries','monthly','monthly',500000),
+              ('b2','g','Gym','monthly','monthly',200000)`,
+    );
+    return d;
+  }
+
+  it('shows Gym as Others while it is absent from the catalog', async () => {
+    const d = await seed();
+    const rows = await getCategoryBudgetStatus(d, group, new Date(), 'me');
+    expect(rows.map(r => r.category).sort()).toEqual(['Groceries', 'Others']);
+    expect(rows.find(r => r.category === 'Others')!.allocated).toBe(200000);
+  });
+
+  it('shows Gym as itself once the category is created', async () => {
+    const d = await seed();
+    await d.runAsync(
+      `INSERT INTO category (id, group_id, name, icon, color, kind)
+       VALUES ('c2', NULL, 'Gym', 'activity', '#fff', 'expense')`,
+    );
+    const rows = await getCategoryBudgetStatus(d, group, new Date(), 'me');
+    expect(rows.map(r => r.category).sort()).toEqual(['Groceries', 'Gym']);
+    expect(rows.find(r => r.category === 'Gym')!.allocated).toBe(200000);
+  });
+
+  it('keeps the same total across that change — nothing is redistributed', async () => {
+    const d = await seed();
+    const before = await getCategoryBudgetStatus(d, group, new Date(), 'me');
+    await d.runAsync(
+      `INSERT INTO category (id, group_id, name, icon, color, kind)
+       VALUES ('c2', NULL, 'Gym', 'activity', '#fff', 'expense')`,
+    );
+    const after = await getCategoryBudgetStatus(d, group, new Date(), 'me');
+    const total = (rs: Awaited<ReturnType<typeof getCategoryBudgetStatus>>) =>
+      rs.reduce((s, r) => s + r.allocated, 0);
+    expect(total(before)).toBe(700000);
+    expect(total(after)).toBe(total(before));
   });
 });

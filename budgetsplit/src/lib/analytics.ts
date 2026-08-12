@@ -7,6 +7,7 @@ import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
 import { getCategorySpending, utilLabel, budgetHealth, rollUpBudgets, budgetKind, type Period } from './budget';
+import { OTHERS_LABEL } from './categoryFold';
 import { forecastMonthEnd } from './forecast';
 import { formatCompact, formatComparison } from './money';
 
@@ -174,9 +175,42 @@ export async function getBudgetAnalytics(
     };
   });
 
-  const overBudget = trends.filter(t => t.status === 'over').sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
-  const nearLimit = trends.filter(t => t.status === 'near').sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
-  const underBudget = trends.filter(t => t.status === 'under');
+  /*
+   * Same catalog fold as the status rows (`foldBudgetStatuses`). Applied here too
+   * because these lists supply the counts rendered directly above them — folding
+   * one and not the other would print "2 over" over a single Others row.
+   *
+   * Per cadence, for the same reason: a daily and a monthly line share no window.
+   * `daysToLimit` is dropped on a folded row — it is a pace estimate for one
+   * category, and a merged bucket has no single pace.
+   */
+  const known = new Set(
+    (await db.getAllAsync<{ name: string }>("SELECT name FROM category WHERE kind = 'expense'"))
+      .map(r => r.name),
+  );
+  const folded: CategoryTrend[] = [];
+  const otherByCadence = new Map<BudgetCadence, { allocated: number; spent: number; prevSpent: number }>();
+  for (const t of trends) {
+    if (known.has(t.category)) { folded.push(t); continue; }
+    const acc = otherByCadence.get(t.cadence) ?? { allocated: 0, spent: 0, prevSpent: 0 };
+    acc.allocated += t.allocated; acc.spent += t.spent; acc.prevSpent += t.prevSpent;
+    otherByCadence.set(t.cadence, acc);
+  }
+  for (const [cadence, a] of otherByCadence) {
+    const pct = a.allocated > 0 ? Math.round((a.spent / a.allocated) * 100) : null;
+    const h = budgetHealth(pct);
+    folded.push({
+      category: OTHERS_LABEL, cadence, allocated: a.allocated, spent: a.spent,
+      prevSpent: a.prevSpent, remaining: a.allocated - a.spent, pct,
+      deltaPct: deltaPctOf(a.spent, a.prevSpent),
+      status: h === 'red' ? 'over' : h === 'amber' ? 'near' : h === 'green' ? 'under' : 'none',
+      daysToLimit: null,
+    });
+  }
+
+  const overBudget = folded.filter(t => t.status === 'over').sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+  const nearLimit = folded.filter(t => t.status === 'near').sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+  const underBudget = folded.filter(t => t.status === 'under');
 
   /*
    * Aggregate over ONE window, from rate lines only.

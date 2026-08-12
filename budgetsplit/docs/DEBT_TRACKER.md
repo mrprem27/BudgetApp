@@ -211,6 +211,33 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Shipped 2026-08-12 — budget lines fold against the catalog, like spend already did
+
+Completes the requirement whose second half was unresolved when the two-level budget shipped.
+
+`category_budget.category` is a **loose name string, not a foreign key**, so a group default can
+budget `Gym` while your catalog has no `Gym`. Spend on Gym already folded into `Others`
+(`foldUncategorized`, used by `homeData` and `reportsData`); its **budget did not**, and sat in
+the list as a category you do not have. Same category, two different treatments — the
+asymmetry, not a missing feature.
+
+`foldBudgetStatuses` (`src/lib/budget.ts`) applies the spend rule to budget lines: a line whose
+category is absent from the catalog shows as `Others`, and adopting the category un-folds it
+with the amount intact.
+
+| Decision | Why |
+|---|---|
+| **Presentation, never arithmetic** | Nothing is redistributed and no total moves — pinned by a test asserting the total is identical before and after adopting the category. The alternative (creating a category takes a slice out of an `Others` budget) needs a split rule nobody has, and would silently change amounts when you edit your catalog. |
+| **Folded per cadence** | A daily ₹100 and a monthly ₹2,000 share no window, so one merged row could not state a meaningful percentage. Almost always one row in practice. |
+| **`Other` ≠ `Others`** | `Other` is a real seeded, budgetable category; `Others` (`categoryFold.ts:2`) is the display bucket. A real `Others` in the catalog is treated as itself, not as the bucket. |
+| **Applied to analytics too** | Those lists supply the counts rendered directly above the rows, so folding one and not the other would print "2 over" above a single Others row. `daysToLimit` is dropped on a folded row — it is a pace estimate for one category and a merged bucket has no single pace. |
+| **`rollUpBudgets` untouched** | Totals are computed from lines, not display rows, so the headline is identical either way. Also pinned. |
+
+**Mostly forward-looking today.** With no sync, the catalog is device-wide and
+`setCategoryBudgets` writes from your own catalog, so divergence is hard to reach on purpose —
+`deleteCategory` even removes an expense category's budget rows with it. It becomes reachable
+with V3 multi-user, and is defensive now against restored or imported data.
+
 ### Shipped 2026-08-12 — group roles, and a budget default a member can override
 
 `69a5912` · `d087d18`
