@@ -132,7 +132,8 @@ export default function GroupsScreen() {
     try {
       const me = await getMe(db);
       if (!me) return;
-      const group = await insertGroup(db, name.trim(), icon, color, [me.id, ...groupMembers], defaultSplit);
+      // Creator passed explicitly: you are creating it, so you administer it.
+      const group = await insertGroup(db, name.trim(), icon, color, [me.id, ...groupMembers], defaultSplit, me.id);
       haptic.success();
       setShowCreate(false);
       setName('');

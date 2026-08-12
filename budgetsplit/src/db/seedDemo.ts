@@ -106,14 +106,14 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   const vikram = await insertPerson(db, 'Vikram', '#22D3EE');
 
   // --- Shared groups (insertGroup seeds their categories) ----------------
-  const roommates = await insertGroup(db, 'Roommates', 'home', '#7C6AF7', [meId, aarav.id, priya.id], 'equal');
-  const goa = await insertGroup(db, 'Goa Trip', 'map', '#F472B6', [meId, rohan.id, sneha.id, vikram.id], 'equal');
-  const office = await insertGroup(db, 'Office Lunch', 'coffee', '#FB923C', [meId, priya.id, vikram.id], 'equal');
-  const family = await insertGroup(db, 'Family', 'users', '#FB7185', [meId, priya.id, aarav.id], 'equal');
-  const manali = await insertGroup(db, 'Manali Trip', 'map', '#22D3EE', [meId, rohan.id, vikram.id], 'equal');
+  const roommates = await insertGroup(db, 'Roommates', 'home', '#7C6AF7', [meId, aarav.id, priya.id], 'equal', meId);
+  const goa = await insertGroup(db, 'Goa Trip', 'map', '#F472B6', [meId, rohan.id, sneha.id, vikram.id], 'equal', meId);
+  const office = await insertGroup(db, 'Office Lunch', 'coffee', '#FB923C', [meId, priya.id, vikram.id], 'equal', meId);
+  const family = await insertGroup(db, 'Family', 'users', '#FB7185', [meId, priya.id, aarav.id], 'equal', meId);
+  const manali = await insertGroup(db, 'Manali Trip', 'map', '#22D3EE', [meId, rohan.id, vikram.id], 'equal', meId);
   // Intentionally empty (members, zero transactions) → exercises the empty Expenses/Budget tab states.
-  await insertGroup(db, 'Weekend Plans', 'calendar', '#A78BFA', [meId, sneha.id], 'equal');
-  const oldFlat = await insertGroup(db, 'Old Flat (archived)', 'home', '#94A3B8', [meId, aarav.id], 'equal');
+  await insertGroup(db, 'Weekend Plans', 'calendar', '#A78BFA', [meId, sneha.id], 'equal', meId);
+  const oldFlat = await insertGroup(db, 'Old Flat (archived)', 'home', '#94A3B8', [meId, aarav.id], 'equal', meId);
   await db.runAsync('UPDATE budget_group SET is_archived=1 WHERE id=?', [oldFlat.id]);
   // Goa keeps every debt separate (simplify OFF) — exercises the non-netted path.
   await db.runAsync('UPDATE budget_group SET simplify_debt=0 WHERE id=?', [goa.id]);

@@ -211,6 +211,31 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Fixed 2026-08-12 — every new group was created without an admin
+
+**Regression from `d087d18`, reported as "demo data won't load: not allowed to edit this group's
+budget".** The demo was only where it surfaced first.
+
+`insertGroup` took `creatorId` as a plain optional, and **every caller omitted it** — including
+`app/(tabs)/groups.tsx`, the app's own create-group screen. So `created_by` was NULL, every
+member including you got `role = 'member'`, and the group had **no admin at all**. The
+permission gate then correctly refused every budget edit and every membership change, with no UI
+able to repair it: a permanently unadministrable group, created by the normal flow.
+
+`creatorId` now defaults to the `is_me` person when omitted — the same answer the creator
+backfill gives existing groups, and true by construction while there is no sync. Both call sites
+also pass it explicitly. An optional parameter whose omission silently produces an unusable
+group was the wrong shape for it.
+
+**Why the suite missed it, which is the more useful half.** `budgetResolve.test.ts` hand-seeded
+`created_by` and `role` before exercising the permission rules — so it proved the rules while
+never touching the path that *establishes* them. The tests validated a state the application
+could not actually produce. Coverage now starts from `insertGroup` itself, and was verified by
+reverting the default and watching four assertions fail.
+
+That is the third instance of the same lesson in one session: **a test that constructs its own
+starting state proves nothing about how that state is reached.**
+
 ### Shipped 2026-08-12 — outside categories become adoptable, and the suite learns to see replaces
 
 Two halves of one near-miss: the feature, and the reason the feature's own defect went unseen.

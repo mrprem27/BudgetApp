@@ -89,33 +89,47 @@ export async function insertGroup(
   color: string,
   memberIds: string[],
   defaultSplit: SplitMode = 'equal',
-  /** Who is creating this. Recorded immutably: they can never be removed or demoted. */
+  /**
+   * Who is creating this. Recorded immutably: they can never be removed or demoted.
+   *
+   * Optional, and **defaulted to the `is_me` person when omitted** — that default
+   * is the entire point. As a plain optional it was a footgun that every caller
+   * stepped on: `created_by` came out NULL, every member got `'member'`, and the
+   * group had **no admin at all**. Nobody could then edit its budget or manage
+   * members, permanently, with the write path correctly refusing and no UI able to
+   * repair it. `is_me` is the same answer the creator backfill gives existing
+   * groups, and it is true by construction: with no sync, you created every group
+   * on this device.
+   */
   creatorId?: string,
 ): Promise<BudgetGroup> {
   const id = uuid();
   const now = Date.now();
+  const creator = creatorId
+    ?? (await db.getFirstAsync<{ id: string }>('SELECT id FROM person WHERE is_me = 1 LIMIT 1'))?.id
+    ?? null;
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO budget_group (id, name, icon, color, carry_over, is_shared, is_archived, default_split, created_at, created_by)
        VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
-      [id, name, icon, color, defaultSplit, now, creatorId ?? null],
+      [id, name, icon, color, defaultSplit, now, creator],
     );
     // The creator is always a member of their own group, even if the caller forgot
     // to include them — a group whose creator is not in it has no un-removable
     // admin, which is exactly the state `canRemoveMember` exists to prevent.
-    const ids = creatorId && !memberIds.includes(creatorId) ? [creatorId, ...memberIds] : memberIds;
+    const ids = creator && !memberIds.includes(creator) ? [creator, ...memberIds] : memberIds;
     for (const pid of ids) {
       await db.runAsync(
         'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
-        [id, pid, now, pid === creatorId ? 'admin' : 'member'],
+        [id, pid, now, pid === creator ? 'admin' : 'member'],
       );
     }
     // Categories are a single global catalog now (seeded once in openDB) — groups
     // no longer seed their own copies.
   });
 
-  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creatorId ?? null };
+  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creator };
 }
 
 export async function setSimplifyDebt(

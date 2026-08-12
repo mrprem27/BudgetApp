@@ -1,6 +1,7 @@
 import { getCategoryBudgetStatus, resolveBudgetLines } from '../lib/budget';
 import { openTestDb, seedGroupAndMe } from './dbHarness';
 import { setCategoryBudgets } from '../db/queries/categoryBudgets';
+import { insertGroup } from '../db/queries/groups';
 
 type Line = { category: string; cadence: 'daily' | 'monthly' | 'yearly' | 'once'; amount: number; person_id: string | null };
 const line = (category: string, amount: number, person_id: string | null, cadence: Line['cadence'] = 'monthly'): Line =>
@@ -268,5 +269,72 @@ describe('setCategoryBudgets preserves lines outside the catalog', () => {
       { category: 'Gym', amount: 200000, person_id: null },
       { category: 'Groceries', amount: 100000, person_id: 'me' },
     ]);
+  });
+});
+
+/**
+ * A group created through the real path must be administrable by its creator.
+ *
+ * This is the test that was missing, and its absence is why the bug shipped: the
+ * suite hand-seeded `created_by` and `role` (see the block above), so it proved
+ * the permission rules while never exercising the path that *establishes* them.
+ * `insertGroup`'s `creatorId` was optional and **every caller omitted it**,
+ * including the app's own "create group" screen — so every new group had
+ * `created_by = NULL`, every member was `'member'`, and the group had no admin at
+ * all. Its budget could never be edited, permanently, and demo data would not
+ * even load.
+ */
+describe('a newly created group is administrable by its creator', () => {
+  async function fresh() {
+    const d = await openTestDb();
+    await seedGroupAndMe(d);
+    await d.runAsync("INSERT INTO person (id, name, is_me, avatar_color) VALUES ('alex','Alex',0,'#fff')");
+    return d;
+  }
+
+  it('records the creator and makes them admin, even when none is passed', async () => {
+    const d = await fresh();
+    const g = await insertGroup(d, 'Flat', 'home', '#fff', ['me', 'alex'], 'equal');
+    const row = await d.getFirstAsync<{ created_by: string }>(
+      'SELECT created_by FROM budget_group WHERE id = ?', [g.id]);
+    expect(row!.created_by).toBe('me');
+    const roles = await d.getAllAsync<{ person_id: string; role: string }>(
+      'SELECT person_id, role FROM group_member WHERE group_id = ? ORDER BY person_id', [g.id]);
+    expect(roles).toEqual([
+      { person_id: 'alex', role: 'member' },
+      { person_id: 'me', role: 'admin' },
+    ]);
+  });
+
+  it('returns the creator it actually stored', async () => {
+    const d = await fresh();
+    const g = await insertGroup(d, 'Flat', 'home', '#fff', ['me'], 'equal');
+    expect(g.created_by).toBe('me');
+  });
+
+  it('lets that creator set the group budget — the failure users actually saw', async () => {
+    const d = await fresh();
+    const g = await insertGroup(d, 'Flat', 'home', '#fff', ['me', 'alex'], 'equal');
+    await expect(
+      setCategoryBudgets(d, g.id, [{ category: 'Groceries', cadence: 'monthly', amount: 500000 }],
+        { level: 'group', actorId: 'me' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('honours an explicit creator over the is_me default', async () => {
+    const d = await fresh();
+    const g = await insertGroup(d, 'Flat', 'home', '#fff', ['me', 'alex'], 'equal', 'alex');
+    const roles = await d.getAllAsync<{ person_id: string; role: string }>(
+      'SELECT person_id, role FROM group_member WHERE group_id = ? ORDER BY person_id', [g.id]);
+    expect(roles.find(r => r.person_id === 'alex')!.role).toBe('admin');
+    expect(roles.find(r => r.person_id === 'me')!.role).toBe('member');
+  });
+
+  it('adds the creator as a member even if the caller left them out', async () => {
+    const d = await fresh();
+    const g = await insertGroup(d, 'Flat', 'home', '#fff', ['alex'], 'equal');
+    const roles = await d.getAllAsync<{ person_id: string; role: string }>(
+      'SELECT person_id, role FROM group_member WHERE group_id = ?', [g.id]);
+    expect(roles.find(r => r.person_id === 'me')!.role).toBe('admin');
   });
 });
