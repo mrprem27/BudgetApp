@@ -211,6 +211,29 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Shipped 2026-08-12 — group roles, and a budget default a member can override
+
+`69a5912` · `d087d18`
+
+Extends D1. `4c7ee45` settled that a group budget *amount* is one person's allowance; this adds
+the two layers above it. Neither existed in any form beforehand.
+
+| Item | Detail |
+|---|---|
+| **Roles, from nothing** | `budget_group` had no `created_by` and `group_member` was `(group_id, person_id, joined_at)`. Now the creator is recorded immutably and `group_member.role` is `admin`/`member`. There is deliberately **no `owner` role**: creator-ness lives in a column that is written once and never updated, so "nobody can remove the creator" is a property of the data model rather than a rule someone can edit their way out of. The creator is treated as admin whatever their role row says, so a mis-migrated role cannot lock them out of their own group. |
+| **Who may do what** | Any admin (including the creator) can add, remove, promote, demote. Nobody can remove or demote the creator — including the creator themselves, because a group with no permanent admin becomes unmanageable. Delete is creator-only: it destroys every member's history, not just the actor's. Rules are pure in `src/lib/permissions.ts` and enforced in `db/queries`, never in screens — a hidden button is a courtesy, the write path is the control. |
+| **Two-level budgets** | `category_budget.person_id`: NULL is the group default every member inherits, set is that person's override. Every pre-existing row is a default, so there is no data migration — pinned by a test rather than asserted. |
+| **Nobody writes another person's override** | Not even an admin. With no sync yet the target could not see it, so it would silently drive *their* over-budget warnings from someone else's opinion. |
+| **SQLite trap 1 — NULL uniqueness** | `UNIQUE(group_id, category, period, person_id)` looks correct and enforces **nothing** at the default level, because SQL treats NULLs as distinct: one category could accumulate unlimited group defaults. Replaced by two partial unique indexes, one per level. |
+| **SQLite trap 2 — the original constraint** | The table's own `UNIQUE(group_id, category, period)` made an override **impossible outright** — the override row collides with the default on exactly those columns. SQLite cannot drop a constraint, so `category_budget` is rebuilt once, guarded on its stored DDL, the same way `txn` and `category` already were. Both traps were found by tests, not by reading. |
+| **Five readers were ignoring overrides** | `getCategoryBudgets` was called without an identity in `analytics`, both budget-status readers, the afford snapshot and the category screen — so they would have read only defaults while appearing to work. Same shape as the nine rollups that each answered "what is my budget" differently. `resolveBudgetLines` is keyed on `(category, cadence)` so overriding a monthly line cannot silently discard a yearly default. |
+| **Test-harness gaps this exposed** | `INDEXES` is now exported, because `openTestDb` was building tables without the constraints the app runs on — it accepted data the app can never produce. `schemaFixes.test.ts` declares "the subset the fixes touch" and had to grow `created_by`/`group_member`. And the new fix must be **appended**, not prepended: that suite pins that a failing fix leaves nothing marked applied, which jumping the queue broke. |
+| **A duplicate caught late** | `addGroupMember`/`removeGroupMember` were written in `groups.ts` before noticing `persons.ts` already had `addMemberToGroup`/`removeMemberFromGroup` with audit logging wired. The duplicates were deleted and the originals gated instead. |
+
+**Still V3**, because both need a second device: publishing a budget to members, and another
+person accepting a role or seeing their override. Per-member budgets set *by* an admin are out
+for the same reason — a number nobody agreed to or can see is worse than no number.
+
 ### Shipped 2026-08-12 — one budget rollup, one spend window, one Reports basis
 
 `0880152`

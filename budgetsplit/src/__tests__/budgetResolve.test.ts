@@ -107,3 +107,34 @@ describe('budget uniqueness holds at BOTH levels', () => {
     expect(rows).toHaveLength(3);
   });
 });
+
+/**
+ * The "no data migration" claim rests on this: `person_id` is nullable and
+ * defaults to NULL, so every budget that existed before the two-level model keeps
+ * applying to everyone rather than silently becoming one person's private line.
+ */
+describe('pre-existing budget rows stay group defaults', () => {
+  it('a row written without person_id reads back as the group default', async () => {
+    const d = await openTestDb();
+    await seedGroupAndMe(d);
+    // Exactly the shape the old writer produced — no person_id column mentioned.
+    await d.runAsync(
+      `INSERT INTO category_budget (id, group_id, category, period, cadence, amount)
+       VALUES ('legacy', 'g', 'Groceries', 'monthly', 'monthly', 500000)`,
+    );
+    const rows = await d.getAllAsync<{ person_id: string | null }>('SELECT person_id FROM category_budget');
+    expect(rows).toEqual([{ person_id: null }]);
+  });
+
+  it('and therefore still resolves for a person who has no override', async () => {
+    const d = await openTestDb();
+    await seedGroupAndMe(d);
+    await d.runAsync(
+      `INSERT INTO category_budget (id, group_id, category, period, cadence, amount)
+       VALUES ('legacy', 'g', 'Groceries', 'monthly', 'monthly', 500000)`,
+    );
+    const rows = await d.getAllAsync<{ category: string; cadence: 'monthly'; amount: number; person_id: string | null }>(
+      'SELECT category, cadence, amount, person_id FROM category_budget');
+    expect(resolveBudgetLines(rows, 'me')).toHaveLength(1);
+  });
+});

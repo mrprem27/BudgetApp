@@ -202,3 +202,67 @@ describe('one-time data fixes', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+/**
+ * The creator/role backfill. Groups predate the concept entirely, so every existing
+ * group has to acquire an owner without one ever having been recorded — and the
+ * only possible answer is the `is_me` person, because there is no other user yet.
+ *
+ * Worth pinning rather than assuming: this is the migration that decides who can
+ * administer a group, and getting it wrong on an existing install leaves someone
+ * locked out of their own data with no UI to fix it.
+ */
+describe('creator + role backfill', () => {
+  function seeded(): DatabaseSync {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO person (id, name, is_me, email)
+        VALUES ('me','Me',1,NULL), ('rohan','Rohan',0,NULL);
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at)
+        VALUES ('gp','Personal','credit-card','#000',1,100),
+               ('gt','Trip','map','#111',0,200);
+      INSERT INTO group_member (group_id, person_id, joined_at)
+        VALUES ('gp','me',1), ('gt','me',2), ('gt','rohan',3);
+    `);
+    return db;
+  }
+  const groups = (db: DatabaseSync) =>
+    db.prepare('SELECT id, created_by FROM budget_group ORDER BY id').all() as { id: string; created_by: string | null }[];
+  const roles = (db: DatabaseSync) =>
+    db.prepare('SELECT group_id, person_id, role FROM group_member ORDER BY group_id, person_id').all() as
+      { group_id: string; person_id: string; role: string }[];
+
+  it('gives every existing group a creator', async () => {
+    const db = seeded();
+    await launch(db);
+    expect(groups(db)).toEqual([
+      { id: 'gp', created_by: 'me' },
+      { id: 'gt', created_by: 'me' },
+    ]);
+  });
+
+  it('promotes the creator to admin and leaves everyone else a member', async () => {
+    const db = seeded();
+    await launch(db);
+    expect(roles(db)).toEqual([
+      { group_id: 'gp', person_id: 'me', role: 'admin' },
+      { group_id: 'gt', person_id: 'me', role: 'admin' },
+      { group_id: 'gt', person_id: 'rohan', role: 'member' },
+    ]);
+  });
+
+  it('never overwrites a creator that is already recorded', async () => {
+    const db = seeded();
+    db.exec("UPDATE budget_group SET created_by = 'rohan' WHERE id = 'gt'");
+    await launch(db);
+    expect(groups(db).find(g => g.id === 'gt')!.created_by).toBe('rohan');
+  });
+
+  it('is idempotent — a second launch changes nothing', async () => {
+    const db = seeded();
+    await launch(db);
+    const before = roles(db);
+    await launch(db);
+    expect(roles(db)).toEqual(before);
+  });
+});
