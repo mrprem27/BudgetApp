@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { TXN_KIND_FOR_CATEGORY } from '../../constants/enums';
+import { OTHERS_LABEL } from '../../lib/categoryFold';
 
 export type CategoryKind = 'expense' | 'income' | 'transfer';
 
@@ -40,28 +41,54 @@ const TXN_KINDS_FOR: Record<CategoryKind, string[]> = {
 };
 
 /**
- * Category names used on transactions of a kind that are NOT in the global
- * catalog — "uncategorized" (from imports, renames, or a co-member's category).
- * Returned with usage counts, most-used first. These fold into "Others" in
- * analytics until adopted.
+ * Category names NOT in the global catalog, from either source that can produce
+ * one — a transaction carrying the name, or a **budget line** naming it.
+ *
+ * The budget half was missing, and it left a real gap: a category that only ever
+ * had a budget set (an admin's group default for something you deleted, or data
+ * from a restore) appeared nowhere. `foldBudgetStatuses` renders it as `Others`
+ * on the budget screens, but there was no surface anywhere that would let you
+ * adopt it, so it could not be resolved at all.
+ *
+ * `count` is transactions only — a budget is not a usage. `budgeted` says the
+ * name carries a budget somewhere; deliberately not an amount, because budgets
+ * belong to a specific group and level and this query spans every group, so any
+ * single figure here would be answering a question nobody asked.
+ *
+ * `Others` is excluded outright. It is the display bucket (`lib/categoryFold`),
+ * not a category, and adopting it would create a real category that then collides
+ * with the bucket it was named after.
  */
 export async function getUncategorizedNames(
   db: SQLite.SQLiteDatabase,
   kind: CategoryKind = 'expense',
-): Promise<Array<{ name: string; count: number }>> {
+): Promise<Array<{ name: string; count: number; budgeted: boolean }>> {
   const txnKinds = TXN_KINDS_FOR[kind];
   const placeholders = txnKinds.map(() => '?').join(',');
-  return db.getAllAsync<{ name: string; count: number }>(
-    `SELECT t.category AS name, COUNT(*) AS count
-       FROM txn t
-      WHERE t.is_deleted = 0
-        AND t.recur_freq IS NULL
-        AND t.kind IN (${placeholders})
-        AND t.category NOT IN (SELECT name FROM category WHERE kind = ?)
-      GROUP BY t.category
-      ORDER BY count DESC, name ASC`,
-    [...txnKinds, kind],
+  // Budgets are an expense-side concept, so only that kind unions them in.
+  const budgetUnion = kind === 'expense'
+    ? `UNION ALL
+       SELECT DISTINCT cb.category AS name, 0 AS count, 1 AS budgeted
+         FROM category_budget cb
+        WHERE cb.category NOT IN (SELECT name FROM category WHERE kind = 'expense')`
+    : '';
+  const rows = await db.getAllAsync<{ name: string; count: number; budgeted: number }>(
+    `SELECT name, SUM(count) AS count, MAX(budgeted) AS budgeted FROM (
+       SELECT t.category AS name, COUNT(*) AS count, 0 AS budgeted
+         FROM txn t
+        WHERE t.is_deleted = 0
+          AND t.recur_freq IS NULL
+          AND t.kind IN (${placeholders})
+          AND t.category NOT IN (SELECT name FROM category WHERE kind = ?)
+        GROUP BY t.category
+       ${budgetUnion}
+     )
+     WHERE name <> ?
+     GROUP BY name
+     ORDER BY count DESC, name ASC`,
+    [...txnKinds, kind, OTHERS_LABEL],
   );
+  return rows.map(r => ({ name: r.name, count: r.count ?? 0, budgeted: r.budgeted === 1 }));
 }
 
 /**

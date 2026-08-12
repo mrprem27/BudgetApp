@@ -211,6 +211,27 @@ Recorded so they stop being re-raised as bugs.
 
 ## ✅ Resolved
 
+### Shipped 2026-08-12 — outside categories become adoptable, and the suite learns to see replaces
+
+Two halves of one near-miss: the feature, and the reason the feature's own defect went unseen.
+
+**`app/categories.tsx` already had the pattern** — your categories in sections plus an
+"Uncategorized" section listing outside names individually, each adoptable. It was
+inconsistently applied, not missing.
+
+| Item | Detail |
+|---|---|
+| **`getUncategorizedNames` was half-blind** | It scanned **transactions only**. A name that had only ever been *budgeted* — an admin's group default for a category you deleted, or data from a restore — appeared on no screen at all: `foldBudgetStatuses` renders it as `Others` on the budget surfaces, and there was nowhere to adopt it from. It now unions transaction names with budget-line names. `count` stays transactions-only (a budget is not a usage) and `budgeted` is a flag, **not an amount** — budgets belong to a specific group and level while this query spans every group, so any single figure would answer a question nobody asked. |
+| **`Others` is excluded outright** | It is the display bucket (`lib/categoryFold`), not a category. Adopting it would mint a real category that then collides with the bucket it was named after. |
+| **The budget editor lists them** | A "Not in your categories" section shows each outside line with its amount and cadence, and adopting calls the existing `insertCategory`. Read-only views keep the merged `Others` row: they summarise and cannot adopt, so the editor is where the list earns its space. `setCategoryBudgets` needed no change — `f9d0e9c` already preserves these rows, and listing them turns that safety net from silent into visible. |
+| **The blind spot itself** | The bug class was a **scoped destructive replace deleting rows the caller never saw**, and the suite had no notion of asserting what *survives* a write. `updateTxn` and `updateItemizedTxn` — the two paths that rewrite money rows in place, deleting every `txn_payment`/`txn_share`/`line_item` and reinserting from input — **appeared in no test file at all**. Both now assert replacement, scope containment (another transaction's rows are untouched), and the currently-unenforced cases: an empty split leaves a transaction allocating nothing, and payments/shares can be written to disagree because all three balance gates live in the UI, none at this layer. |
+| **Verified by reverting** | Both regression sets were checked by undoing their fix and watching them fail. A green suite is not evidence unless something was capable of turning red — which is the entire lesson of `f9d0e9c` passing 1335 tests over a save path that destroyed data. |
+
+**Not swept:** every other `DELETE FROM` is a whole-table wipe (`restoreAllTables`,
+`wipeAllData`, `clearPending`) or an id-scoped cascade (`deleteGroup`, `deleteTxn`), where
+"what survives" is either nothing by design or already covered. Widening this would have buried
+the two paths that genuinely had no tests.
+
 ### Shipped 2026-08-12 — budget lines fold against the catalog, like spend already did
 
 Completes the requirement whose second half was unresolved when the two-level budget shipped.

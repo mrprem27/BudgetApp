@@ -17,7 +17,8 @@ import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
-import { getCategoriesByFrequency } from '../../../src/db/queries/categories';
+import { getCategoriesByFrequency, insertCategory } from '../../../src/db/queries/categories';
+import { OTHERS_LABEL } from '../../../src/lib/categoryFold';
 import { seedGlobalCategories } from '../../../src/db/seedCategories';
 import { getCategoryBudgetRows, setCategoryBudgets, type BudgetLevel } from '../../../src/db/queries/categoryBudgets';
 import { getGroupContext } from '../../../src/db/queries/groups';
@@ -205,6 +206,33 @@ export default function BudgetEditorScreen() {
     cadence: cadenceOf(c.name), amount: parseToPaise(amounts[c.name] ?? ''),
   })).filter(l => l.amount > 0);
   const rollup = rollUpBudgets(linesFor(allCategories), 'monthly', today);
+
+  /**
+   * Budget lines naming a category your catalog does not have.
+   *
+   * `category_budget.category` is a name, not a foreign key, so an admin's group
+   * default can name something you deleted — and the editor, which renders your
+   * catalog, could not show it. Read-only views merge these into `Others`
+   * (`foldBudgetStatuses`); here they are listed individually, because this is the
+   * one screen where you can act on them.
+   *
+   * `setCategoryBudgets` already preserves these rows on save (f9d0e9c); listing
+   * them turns that safety net into something visible rather than merely silent.
+   */
+  const catalogNames = new Set(allCategories.map(c => c.name));
+  const outsideLines = (data?.rows ?? [])
+    .filter(r => !catalogNames.has(r.category) && r.category !== OTHERS_LABEL)
+    .filter(r => (level === 'group' ? r.person_id === null : r.person_id === meId || r.person_id === null))
+    // One row per category; a default and an override of the same name are one thing to adopt.
+    .filter((r, i, all) => all.findIndex(o => o.category === r.category) === i);
+
+  async function adoptCategory(name: string) {
+    const vis = categoryVisual(name);
+    await insertCategory(db, name, vis.icon, vis.color, 'expense', 'Other');
+    haptic.success();
+    // Its budget row is untouched — adopting is a catalog change, not a money one.
+    await reload();
+  }
   const budgetedCount = Object.values(amounts).filter(a => parseToPaise(a) > 0).length;
 
   // Group categories into ordered parent sections.
@@ -336,6 +364,34 @@ export default function BudgetEditorScreen() {
             Amounts are per person, not the group total. Each period starts fresh —
             limits reset and unused amounts don't carry over.
           </Text>
+
+          {outsideLines.length > 0 && (
+            <SectionCard
+              title="Not in your categories"
+              subtitle={`${outsideLines.length} budgeted here but missing from your list`}
+              icon="help-circle"
+              expanded
+              onToggle={() => {}}
+            >
+              {outsideLines.map((r, i) => (
+                <View key={`${r.category}-${r.cadence}`}>
+                  {i > 0 && <Divider indent="text" />}
+                  <ListRow
+                    icon={categoryVisual(r.category).icon as FeatherName}
+                    iconColor={categoryVisual(r.category).color}
+                    title={r.category}
+                    subtitle="Tap to add to your categories"
+                    value={`${formatCompact(r.amount)} · ${r.cadence}`}
+                    onPress={() => adoptCategory(r.category)}
+                  />
+                </View>
+              ))}
+              <Text style={styles.explain}>
+                These have a budget in this group but are not in your category list, so they
+                show as “Others” elsewhere. Tap one to add it — the amount does not change.
+              </Text>
+            </SectionCard>
+          )}
 
           {sections.length > 0 ? sections.map(sec => {
             const isCollapsed = collapsed.has(sec.title);
