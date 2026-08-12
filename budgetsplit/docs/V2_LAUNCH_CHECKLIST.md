@@ -46,11 +46,25 @@ a ₹24k/yr budget made a *monthly* forecast look comfortably funded. `rebalance
 one module that already had the rule right ("a yearly budget's headroom is not spendable this
 month"); the rest now agrees with it.
 
-**The suite itself was the root cause, and is now fixed.** `jest.config.js` mapped
-`expo-sqlite` to an **empty stub**, which made every module in `src/db/queries/`
-*unexecutable* — no assertion about `balances.ts`, `recurring.ts` or `moneyProfile.ts` could
-ever have failed, whatever the SQL said. It is now a real in-memory implementation over
-`node:sqlite` (`__mocks__/expoSqlite.js`), exactly as AsyncStorage already was.
+**The suite was one root cause, and that one is fixed.** `jest.config.js` mapped `expo-sqlite`
+to an **empty stub**, which made every module in `src/db/queries/` *unexecutable* — no assertion
+about `balances.ts`, `recurring.ts` or `moneyProfile.ts` could ever have failed, whatever the
+SQL said. It is now a real in-memory implementation over `node:sqlite`
+(`__mocks__/expoSqlite.js`), exactly as AsyncStorage already was.
+
+⚠️ **"Now fixed" was too strong, and this is the correction.** A *second*, unrelated blindness
+survived it: nothing in the suite asserted what **survives** a scoped destructive write. That
+let `f9d0e9c` — a save path that silently deleted budget lines the editor could not render —
+pass **1335 green tests**. Executable modules were necessary and not sufficient.
+
+Two consequences, both now standing rules:
+
+- **A regression test is verified by reverting its fix and watching it fail.** Green is not
+  evidence unless something was capable of turning red. Every fix since `f9d0e9c` has been
+  checked this way.
+- **A destructive replace needs a preservation assertion**, not just a replacement one.
+  `updateTxn` and `updateItemizedTxn` — the two paths that rewrite money rows in place — had
+  **no tests at all** until `5fd3173`; see `txnUpdate.test.ts` for the shape to copy.
 
 Use **`openTestDb()`** from `src/__tests__/dbHarness.ts` — it applies `SCHEMA` *and*
 `COLUMN_MIGRATIONS`, because `SCHEMA` alone is months out of date (the first attempt died on
@@ -274,6 +288,23 @@ Two SQLite traps this hit, both found by tests rather than by reading: a four-co
 including `person_id` enforces nothing at the default level (NULLs are distinct), and the
 table's original `UNIQUE(group_id, category, period)` made an override impossible outright.
 Fixed with two partial unique indexes and a one-time table rebuild.
+
+**Completed 2026-08-12 — the catalog half** (`050c65c` · `f9d0e9c` · `5fd3173`).
+`category_budget.category` is a **name, not a foreign key**, so a budget can name a category
+your catalog lacks. Three things followed from that, in the order they were found:
+
+1. **Budget lines now fold like spend does** (`foldBudgetStatuses`). Spend on an unknown name
+   already folded into `Others`; its *budget* did not, and sat in the list as a category you do
+   not have. Presentation only — no amount moves, pinned by a total-unchanged assertion.
+2. **Saving no longer destroys what the editor cannot show.** `setCategoryBudgets` is a
+   whole-level replace built from your catalog, so it erased exactly those folded lines. An
+   admin pressing Save silently dropped a default they had never seen.
+3. **Outside names are adoptable.** `getUncategorizedNames` scanned transactions only, so a
+   budget-only name appeared nowhere and could be resolved from nowhere; it now unions both
+   sources, and the editor lists them in a "Not in your categories" section.
+
+Mostly forward-looking: without sync the catalog is device-wide, so divergence is hard to reach
+on purpose today. It becomes ordinary with V3, and is defensive now for restores and imports.
 
 ### D2. Do investments/crypto get a pay method?
 
