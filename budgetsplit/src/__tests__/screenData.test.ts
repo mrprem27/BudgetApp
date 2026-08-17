@@ -3,6 +3,7 @@ import { loadInsightsData } from '../lib/insightsData';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { getAllGroups } from '../db/queries/groups';
 import { getAffordSnapshot, insertGoal, fundGoal } from '../db/queries/savings';
+import { endOfMonth } from 'date-fns';
 import { createTestDb, addPerson, addGroup, addMember, addSimpleExpense, addTxn, addCategory, setCategoryBudget, type TestDb } from './helpers/testDb';
 import type * as SQLite from 'expo-sqlite';
 
@@ -338,29 +339,49 @@ describe('getAffordSnapshot — history stats', () => {
 /**
  * `upcomingBills` used to sum only already-logged future-dated one-off rows —
  * essentially always ₹0 for a real rent/EMI/subscription, since a recurring
- * occurrence is never materialized ahead of `now` (`materializeDueOccurrences`
- * only ever catches up to the past). Now it also projects the next occurrence
- * of every active recurring expense series via `buildUpcoming`, the same
- * projection Home/Plan/reminders already show.
+ * occurrence is never materialized ahead of `now`. It then counted exactly ONE
+ * projected occurrence per series (`buildUpcoming`'s shape), so a daily/weekly
+ * bill was undercounted by every occurrence after the first. Now it expands
+ * EVERY unskipped occurrence through month-end (`expandUpcoming`), across all
+ * groups, on a my-share basis.
  */
 describe('getAffordSnapshot — committed bills', () => {
-  it('counts the projected next occurrence of an active recurring expense', async () => {
+  const DAY = 86400000;
+  // Anchored yesterday-plus-a-minute: the next occurrence is ~now+60s, safely on
+  // one side of the engine's own Date.now() boundary (an exact now-DAY anchor
+  // made the first occurrence land on the very millisecond the engine reads the
+  // clock, so inclusion flipped run to run).
+  const dailyAnchor = () => Date.now() - DAY + 60_000;
+  /** Occurrences of a daily series anchored `anchor` that land in (now, monthEnd]. */
+  const dailyOccurrencesLeft = (anchor: number): number => {
+    const monthEnd = endOfMonth(new Date()).getTime();
+    const now = Date.now();
+    let n = 0;
+    for (let t = anchor; t <= monthEnd; t += DAY) if (t >= now) n++;
+    return n;
+  };
+
+  it('counts EVERY remaining occurrence of an active recurring expense this month', async () => {
     const { db, me, personal } = setup();
-    // A daily rule "anchored" yesterday — its next occurrence is imminent and
-    // reliably within this month, the same convention the income tests above use.
+    // A daily rule "anchored" yesterday — occurrences are imminent and reliably
+    // within this month, the same convention the income tests above use.
+    const anchor = dailyAnchor();
     addTxn(db, {
-      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      groupId: personal, kind: 'expense', date: anchor, category: 'Rent',
       payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
       recurFreq: 'daily',
     });
+    const expected = dailyOccurrencesLeft(anchor) * 150000;
     const snap = await getAffordSnapshot(asDb(db));
-    expect(snap.upcomingBills).toBe(150000);
+    expect(snap.upcomingBills).toBe(expected);
+    // The whole point of the change: more than one occurrence is counted.
+    expect(snap.upcomingBills).toBeGreaterThan(150000);
   });
 
   it('ignores a paused recurring series', async () => {
     const { db, me, personal } = setup();
     const tid = addTxn(db, {
-      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      groupId: personal, kind: 'expense', date: dailyAnchor(), category: 'Rent',
       payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
       recurFreq: 'daily',
     });
@@ -372,16 +393,37 @@ describe('getAffordSnapshot — committed bills', () => {
   it('still counts an already-logged future-dated one-off expense alongside a recurring one', async () => {
     const { db, me, personal } = setup();
     addTxn(db, {
-      groupId: personal, kind: 'expense', date: Date.now() + 5 * 86400000, category: 'Travel',
+      groupId: personal, kind: 'expense', date: Date.now() + 5 * DAY, category: 'Travel',
       payments: [{ personId: me, amount: 200000 }], shares: [{ personId: me, amount: 200000 }],
     });
+    const anchor = dailyAnchor();
     addTxn(db, {
-      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      groupId: personal, kind: 'expense', date: anchor, category: 'Rent',
       payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
       recurFreq: 'daily',
     });
     const snap = await getAffordSnapshot(asDb(db));
-    expect(snap.upcomingBills).toBe(200000 + 150000);
+    // The one-off may or may not fall inside this month; assert the recurring
+    // expansion and the one-off's contribution independently of month boundaries.
+    const recurringPart = dailyOccurrencesLeft(anchor) * 150000;
+    expect(snap.upcomingBills).toBeGreaterThanOrEqual(recurringPart);
+    expect([recurringPart, recurringPart + 200000]).toContain(snap.upcomingBills);
+  });
+
+  it('counts my share of a SHARED group recurring bill (all groups, my-share basis)', async () => {
+    const { db, me, shared } = setup();
+    const friend = addPerson(db, 'Aarav', false);
+    addMember(db, shared, friend);
+    const anchor = dailyAnchor();
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: anchor, category: 'Rent',
+      payments: [{ personId: me, amount: 300000 }],
+      shares: [{ personId: me, amount: 100000 }, { personId: friend, amount: 200000 }],
+      recurFreq: 'daily',
+    });
+    const snap = await getAffordSnapshot(asDb(db));
+    // My ₹1,000 share of each occurrence counts; the friend's ₹2,000 never does.
+    expect(snap.upcomingBills).toBe(dailyOccurrencesLeft(anchor) * 100000);
   });
 });
 

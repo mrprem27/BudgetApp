@@ -1,6 +1,52 @@
-import { nextUnskippedOccurrence } from './recurrence';
+import { nextUnskippedOccurrence, materializeInstances } from './recurrence';
 import { myShareOrTotal } from './splitMath';
 import type { TxnWithSplits } from '../db/queries/transactions';
+
+/** One projected occurrence of a recurring series inside a horizon. */
+export type ExpandedOccurrence = {
+  /** Series id (not unique across the result — a weekly bill appears once per week). */
+  seriesId: string;
+  name: string;
+  category: string;
+  /** My share of THIS occurrence, in paise (full amount when I'm not in the split). */
+  amount: number;
+  dateMs: number;
+};
+
+/**
+ * EVERY unskipped occurrence of every active recurring expense series inside
+ * [fromMs, toMs], my-share amounts. This is the "committed bills" basis: a
+ * weekly ₹500 bill with four occurrences left this month is ₹2,000 of
+ * commitment, not ₹500 — `buildUpcoming` deliberately returns one row per
+ * series (it feeds a "coming up" list), so summing it undercounted every
+ * sub-monthly series. Pure; skips come from `getSkipsMap`.
+ */
+export function expandUpcoming(
+  recurring: TxnWithSplits[],
+  meId: string,
+  fromMs: number,
+  toMs: number,
+  skipsBySeries?: Map<string, Set<number>>,
+): ExpandedOccurrence[] {
+  const out: ExpandedOccurrence[] = [];
+  for (const txn of recurring) {
+    if (txn.is_deleted) continue;
+    if (txn.kind !== 'expense') continue;
+    if (!txn.recur_freq) continue;
+    if (txn.recur_state && txn.recur_state !== 'active') continue;
+    for (const inst of materializeInstances(txn, fromMs, toMs, skipsBySeries?.get(txn.id))) {
+      out.push({
+        seriesId: txn.id,
+        name: (txn.note && txn.note.trim()) || txn.category,
+        category: txn.category,
+        amount: myShareOrTotal(txn, meId),
+        dateMs: inst.date,
+      });
+    }
+  }
+  out.sort((a, b) => a.dateMs - b.dateMs);
+  return out;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -19,7 +19,7 @@ import { forecastMonthEnd } from '../../lib/forecast';
 import { monthlyContribution } from '../../lib/savings';
 import { HISTORY_DAYS } from '../../lib/afford';
 import { budgetEquivalent } from '../../lib/budget';
-import { buildUpcoming } from '../../lib/upcoming';
+import { expandUpcoming } from '../../lib/upcoming';
 import { getMyExposure } from './balances';
 
 // Domain value sets are defined once in constants/enums.ts; re-exported here for
@@ -493,8 +493,11 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const daysInMonth = getDaysInMonth(today);
 
   const groups = await getAllGroups(db);
-  // No fallback: a shared group's categories, budget and bills are not my personal
-  // ones, and Afford presenting them as mine is worse than presenting nothing.
+  // Categories stay personal-scoped (a shared group's catalog ranking is not my
+  // picker), but recurring RULES come from every group on a my-share basis: my
+  // share of the Roommates rent is exactly as committed as a personal bill, and
+  // /plan/recurring + Home's upcoming already count it. Afford was the one
+  // surface that couldn't see it.
   const personal = personalGroupOf(groups);
 
   const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved, exposure] = await Promise.all([
@@ -505,7 +508,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     getTransactionsInRange(db, null, monthStart, now),
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
     getTransactionsInRange(db, null, now, monthEnd),
-    personal ? getRecurringForGroup(db, personal.id) : Promise.resolve([] as TxnWithSplits[]),
+    Promise.all(groups.map(g => getRecurringForGroup(db, g.id))).then(by => by.flat()),
     // 90 days for typical-basket size: a monthly norm can hide a wildly atypical
     // single purchase (a ₹8k dinner inside a ₹10k/mo norm).
     getTransactionsInRange(db, null, now - HISTORY_DAYS * AFFORD_DAY_MS, now),
@@ -565,15 +568,12 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     if (t.is_deleted || t.kind !== 'expense') continue;
     upcomingBills += myShare(t);
   }
-  // Plus the projected next occurrence of every active recurring expense series
-  // through month-end — same projection Home/Plan/reminders already show, so
-  // Afford agrees with them instead of silently ignoring recurring bills. A
-  // weekly/daily series with several occurrences left this month only
-  // contributes its next one (buildUpcoming's own limitation), which still beats
-  // counting zero of them.
+  // Plus EVERY unskipped occurrence of every active recurring expense series
+  // (all groups, my share) through month-end — the same projection Home/Plan/
+  // reminders show. `expandUpcoming` counts each remaining occurrence, so a
+  // weekly bill contributes every week left this month, not just the next one.
   const skipsBySeries = await getSkipsMap(db, recurRules.map(r => r.id));
-  const daysUntilMonthEnd = Math.max(0, Math.ceil((monthEnd - now) / AFFORD_DAY_MS));
-  upcomingBills += buildUpcoming(recurRules, me.id, now, recurRules.length, daysUntilMonthEnd, skipsBySeries)
+  upcomingBills += expandUpcoming(recurRules, me.id, now, monthEnd, skipsBySeries)
     .reduce((sum, item) => sum + item.amount, 0);
 
   // Budgets, normalized to a monthly figure. `budgetEquivalent` is the one source
