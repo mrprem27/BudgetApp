@@ -8,7 +8,10 @@ import { format } from 'date-fns';
  * The SQL reads/writes live in `db/queries/backup.ts`.
  *
  * There is no cloud sync here — this builds a passphrase-encrypted snapshot the
- * user hands to the OS share sheet (Files/iCloud Drive/Google Drive/etc.). The
+ * user hands to the OS share sheet (Files/iCloud Drive/Google Drive/etc.), or, in
+ * a build with an account configured, uploads as-is via `lib/serverApi.ts`. That
+ * second destination changes nothing in this file on purpose: the server receives
+ * the same opaque envelope and cannot open it either. The
  * passphrase is never stored on-device: a Keychain-derived key would be lost
  * along with a lost phone, defeating the entire point of this feature. This
  * means a forgotten passphrase makes its backup permanently unrecoverable —

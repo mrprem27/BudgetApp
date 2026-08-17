@@ -11,7 +11,7 @@ type Props = {
   icon?: keyof typeof Feather.glyphMap;
   /** Right-align and use Space Mono for money entry. */
   amount?: boolean;
-  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'email-address';
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'email-address' | 'phone-pad';
   autoFocus?: boolean;
   multiline?: boolean;
   editable?: boolean;

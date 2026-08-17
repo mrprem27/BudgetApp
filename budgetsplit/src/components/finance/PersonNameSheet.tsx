@@ -30,6 +30,8 @@ export function PersonNameSheet({
   submitLabel = 'Save',
   vpa,
   onChangeVpa,
+  phone,
+  onChangePhone,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -42,6 +44,13 @@ export function PersonNameSheet({
   /** Optional UPI handle. Omit both props to hide the field entirely. */
   vpa?: string;
   onChangeVpa?: (v: string) => void;
+  /**
+   * Optional phone number — what a WhatsApp reminder is sent to. Omit both props
+   * to hide the field. Always yours to set: if a linked account ever offers a
+   * number, it is offered *into* this field, never written over it.
+   */
+  phone?: string;
+  onChangePhone?: (v: string) => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const disabled = !value.trim();
@@ -81,6 +90,24 @@ export function PersonNameSheet({
             {vpaBad
               ? "That doesn't look like a UPI ID — expected something like name@bank."
               : 'Lets you settle up straight into their UPI app. Stays on this device.'}
+          </Text>
+        </>
+      )}
+      {onChangePhone && (
+        <>
+          <Input
+            label="Phone (optional)"
+            value={phone ?? ''}
+            onChangeText={onChangePhone}
+            placeholder="+91 98765 43210"
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={24}
+            style={styles.gap}
+          />
+          <Text style={styles.hint}>
+            Used to remind them on WhatsApp. Stays on this device.
           </Text>
         </>
       )}

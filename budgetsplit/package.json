@@ -28,6 +28,7 @@
     "expo-ocr": "file:./modules/expo-ocr",
     "expo-print": "~56.0.4",
     "expo-router": "~56.2.10",
+    "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.17",
     "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
@@ -65,7 +66,7 @@
     "test:watch": "jest --watch",
     "deploy": "npx expo export -p web && wrangler deploy",
     "preview": "npx expo export -p web && wrangler dev",
-    "test:calendar": "for d in 2026-01-01 2026-01-31 2026-02-28 2026-03-01 2026-06-30 2026-12-31 2027-02-28; do echo \"\u2014 $d\"; FAKE_TODAY=$d npx jest --silent || exit 1; done",
+    "test:calendar": "for d in 2026-01-01 2026-01-31 2026-02-28 2026-03-01 2026-06-30 2026-12-31 2027-02-28; do echo \"— $d\"; FAKE_TODAY=$d npx jest --silent || exit 1; done",
     "build:shortcuts": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/build-shortcuts.ts"
   },
   "private": true

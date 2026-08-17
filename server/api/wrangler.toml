@@ -1,0 +1,65 @@
+name = "budgetsplit-api"
+main = "index.ts"
+compatibility_date = "2026-07-01"
+
+# Everything below runs on the Workers **Free** plan: 100k requests/day, D1
+# (5 GB total, 500 MB per database), R2 (10 GB). The one thing that is NOT free
+# is Cloudflare's own Email Sending — it requires Workers Paid ($5/mo) — so the
+# `[[send_email]]` block is commented out and email goes through an HTTP
+# provider's free tier instead. See README.md § Free deployment.
+
+# --- D1: users, sessions, magic links, links, backup metadata ---
+# Create with: wrangler d1 create budgetsplit-api
+# Then paste the returned database_id below, and run:
+#   wrangler d1 migrations apply budgetsplit-api --remote
+[[d1_databases]]
+binding = "DB"
+database_name = "budgetsplit-api"
+database_id = "a493fbe0-3515-4b9a-ba7c-dd2d72bc4bd8"
+
+# --- R2: encrypted backup blobs (backups/…) and profile avatars (avatars/…) ---
+# COMMENTED OUT until R2 is switched on. R2 has to be enabled once from the
+# Cloudflare dashboard (Storage & Databases → R2) before any bucket can be
+# created — `wrangler r2 bucket create` fails with code 10042 until then. The
+# free tier is 10 GB.
+#
+# Sign-in and linking need no storage at all, so the Worker is deployed without
+# this and the backup/avatar routes answer 503 `E_STORAGE_UNCONFIGURED`. To turn
+# them on:
+#   1. enable R2 in the dashboard
+#   2. wrangler r2 bucket create budgetsplit-files
+#   3. uncomment the block below and redeploy
+#
+# [[r2_buckets]]
+# binding = "FILES"
+# bucket_name = "budgetsplit-files"
+
+# --- Email: magic-link delivery ---
+# DEFAULT (free): an HTTP provider, no domain and no card required.
+#   1. Sign up at brevo.com (free tier: 300 emails/day)
+#   2. Verify one sender address — they email you a link; clicking it is the
+#      whole verification, so a Gmail address works and no domain is needed
+#   3. wrangler secret put BREVO_API_KEY
+#   4. Set EMAIL_FROM below to that verified address
+#
+# ALTERNATIVE (paid, better deliverability): Cloudflare Email Sending. Needs the
+# Workers Paid plan ($5/mo) and a domain you own onboarded to Cloudflare:
+#   wrangler email sending enable yourdomain.com
+# then uncomment the block below, unset BREVO_API_KEY, and point EMAIL_FROM at
+# an address on that domain. `mailer.ts` picks the provider from what is
+# configured — Brevo wins if its key is set — so switching is config, not code.
+#
+# [[send_email]]
+# name = "EMAIL"
+
+[vars]
+EMAIL_FROM = "REPLACE_WITH_A_VERIFIED_SENDER_ADDRESS"
+# The app deep link /auth/open redirects into. Three slashes, not two: an empty
+# host makes the rest a *route path* for expo-router (`budgetsplit://auth` would
+# parse `auth` as a host and match no screen) — same shape as VOICE_DEEP_LINK in
+# budgetsplit/src/lib/voiceShortcut.ts. The email itself always links to
+# https://…/auth/open, because mail clients won't render a custom scheme as a
+# tappable link.
+APP_AUTH_URL = "budgetsplit:///auth"
+# Where an invite link bounces into the app (Stage B). Same three-slash rule.
+APP_LINK_URL = "budgetsplit:///link"

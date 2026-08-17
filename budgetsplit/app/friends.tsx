@@ -14,10 +14,11 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { Input } from '../src/components/ui/Input';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
-import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa } from '../src/db/queries/persons';
+import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa, setPersonContact } from '../src/db/queries/persons';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
 import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
+import { deleteAttachment } from '../src/lib/attachment';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
@@ -36,6 +37,7 @@ export default function FriendsScreen() {
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
   const [renameVpa, setRenameVpa] = useState('');
+  const [renamePhone, setRenamePhone] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [query, setQuery] = useState('');
@@ -57,7 +59,16 @@ export default function FriendsScreen() {
 
   async function changePhoto(p: Person) {
     const uri = await pickAndSaveAvatar(p.id);
-    if (uri) { await setPersonImage(db, p.id, uri); haptic.success(); refresh(); }
+    if (uri) {
+      const old = p.image_uri;
+      await setPersonImage(db, p.id, uri);
+      // Every avatar pick writes a new timestamped file and never replaces
+      // one in place — unlink the one this photo replaces, now that the new
+      // one is safely recorded.
+      if (old) await deleteAttachment(old);
+      haptic.success();
+      refresh();
+    }
   }
 
   async function handleAddFriend() {
@@ -79,17 +90,23 @@ export default function FriendsScreen() {
     setRenamePerson(p);
     setRenameText(p.name);
     setRenameVpa(p.upi_vpa ?? '');
+    setRenamePhone(p.mobile ?? '');
   }
 
   async function handleRename() {
     const trimmed = renameText.trim();
     const vpa = renameVpa.trim() || null;
+    const phone = renamePhone.trim() || null;
     const vpaChanged = vpa !== (renamePerson?.upi_vpa ?? null);
+    const phoneChanged = phone !== (renamePerson?.mobile ?? null);
     if (!renamePerson || !trimmed) { setRenamePerson(null); return; }
-    if (trimmed === renamePerson.name && !vpaChanged) { setRenamePerson(null); return; }
+    if (trimmed === renamePerson.name && !vpaChanged && !phoneChanged) { setRenamePerson(null); return; }
     try {
       if (trimmed !== renamePerson.name) await updatePersonName(db, renamePerson.id, trimmed);
       if (vpaChanged) await setPersonUpiVpa(db, renamePerson.id, vpa);
+      // Stored as typed. No country-code guessing: this number is dialled by a
+      // human or handed to WhatsApp, never used as a key.
+      if (phoneChanged) await setPersonContact(db, renamePerson.id, { mobile: phone });
       haptic.success();
       setRenamePerson(null);
       refresh();
@@ -219,6 +236,8 @@ export default function FriendsScreen() {
         onSubmit={handleRename}
         vpa={renameVpa}
         onChangeVpa={setRenameVpa}
+        phone={renamePhone}
+        onChangePhone={setRenamePhone}
       />
 
       <PersonNameSheet

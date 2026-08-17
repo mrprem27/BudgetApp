@@ -85,7 +85,8 @@
       "./plugins/withoutPushEntitlement",
       "expo-notifications",
       "./plugins/withSwiftUICoreLinkFix",
-      "./plugins/withDevelopmentTeam"
+      "./plugins/withDevelopmentTeam",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

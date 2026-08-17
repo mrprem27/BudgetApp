@@ -1,0 +1,17 @@
+{
+  "name": "budgetsplit-api",
+  "private": true,
+  "description": "BudgetSplit API Worker — sign-in and encrypted backup/restore (phase S1)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "wrangler d1 migrations apply budgetsplit-api --remote",
+    "migrate:local": "wrangler d1 migrations apply budgetsplit-api --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260811.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

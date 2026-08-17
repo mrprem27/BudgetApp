@@ -18,8 +18,9 @@ export type ReminderPrefs = {
   daily: boolean;
   /** Time of day for the daily nudge. */
   dailyTime: ReminderTime;
-  /** Monthly "back up your data" nudge — there's no cloud backup, so this is
-   *  the only mitigation for losing the phone. */
+  /** Monthly "back up your data" nudge. A backup — to a file, or to an account
+   *  where one is configured — is still the only mitigation for losing the phone:
+   *  nothing syncs continuously. */
   backup: boolean;
 };
 

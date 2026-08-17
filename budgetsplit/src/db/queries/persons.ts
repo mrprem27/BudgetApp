@@ -62,6 +62,31 @@ export async function setPersonUpiVpa(
   await db.runAsync('UPDATE person SET upi_vpa = ? WHERE id = ?', [vpa, personId]);
 }
 
+/**
+ * Contact details for a person — the long-dead `person.email` / `person.mobile`
+ * columns (`schema.ts:19-20`), finally written to.
+ *
+ * `mobile` is **yours to set, always**. When a linked account offers a number it
+ * is a suggestion the user accepts into this field; it never overwrites what is
+ * already here and it is never re-synced over the top. You may legitimately know
+ * a different number for someone than the one they signed up with, and the app
+ * has no business correcting you.
+ *
+ * Only the keys present are written, so a caller updating one doesn't null the other.
+ */
+export async function setPersonContact(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  patch: { email?: string | null; mobile?: string | null },
+): Promise<void> {
+  const sets: string[] = [];
+  const binds: (string | null)[] = [];
+  if ('email' in patch) { sets.push('email = ?'); binds.push(patch.email ?? null); }
+  if ('mobile' in patch) { sets.push('mobile = ?'); binds.push(patch.mobile ?? null); }
+  if (sets.length === 0) return;
+  await db.runAsync(`UPDATE person SET ${sets.join(', ')} WHERE id = ?`, [...binds, personId]);
+}
+
 export async function updatePersonName(
   db: SQLite.SQLiteDatabase,
   personId: string,

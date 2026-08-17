@@ -1,5 +1,13 @@
 # wrangler local cache/state (contains account ID, never commit)
 .wrangler/
+# local secrets for `wrangler dev` (EMAIL_FROM etc.)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# dependencies (server/api installs wrangler + workers-types for typechecking;
+# budgetsplit/ has its own ignore file for the app's)
+node_modules/
 
 # OS
 .DS_Store

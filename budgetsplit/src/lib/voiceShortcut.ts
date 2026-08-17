@@ -86,11 +86,20 @@ export const VOICE_DEEP_LINK = 'budgetsplit:///add/quick?q=';
 export const VOICE_ENCODED_OUTPUT = 'URL Encoded Text';
 
 
-/** Worth saying out loud, given the app's "nothing leaves your device" promise. */
+/**
+ * Worth saying out loud, given the app's "nothing leaves your device" promise.
+ *
+ * The last clause is qualified on purpose: there are now two ways data can leave,
+ * both opt-in and both user-initiated — cloud receipt scanning (a photo to the
+ * OCR proxy) and a server backup (an already-encrypted blob, see
+ * `lib/serverApi.ts`). An absolute claim here would have quietly become false the
+ * day either was used.
+ */
 export const VOICE_SHORTCUT_PRIVACY =
   'Siri turns your words into text, which recent iPhones do on the device. Tapping the one-tap '
   + 'link above fetches the shortcut definition from Apple once, at setup — after that nothing '
-  + 'BudgetSplit stores ever leaves your phone.';
+  + 'BudgetSplit stores leaves your phone unless you ask it to, like scanning a receipt in the '
+  + 'cloud or backing up to an account.';
 
 /**
  * What Siri says before it listens — the one field that turns a machine noise into a question.

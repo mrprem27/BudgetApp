@@ -26,6 +26,7 @@ import { shareCsv } from '../../src/lib/shareCsv';
 import { getCategories } from '../../src/db/queries/categories';
 import { seedGlobalCategories } from '../../src/db/seedCategories';
 import { pickAndSaveAvatar } from '../../src/lib/avatar';
+import { deleteAttachment } from '../../src/lib/attachment';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
@@ -37,6 +38,7 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
 import { useScreenData } from '../../src/hooks/useScreenData';
+import { useServerSession } from '../../src/hooks/useServerSession';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
@@ -115,6 +117,18 @@ export default function SettingsScreen() {
   const [showCadence, setShowCadence] = useState(false);
 
   const [devTaps, setDevTaps] = useState(0);
+
+  // Optional server account (`server/api`). `configured` is false in any build
+  // without EXPO_PUBLIC_API_URL, and then none of this UI exists.
+  const { session: serverSession, configured: serverSessionConfigured } = useServerSession();
+
+  /**
+   * Only the topmost section drops its top margin, and which section that is
+   * depends on what's enabled above it. This was `{ marginTop: 0 }` hardcoded on
+   * "Getting paid" plus a one-off ternary on "Manage" — a third optional section
+   * would have silently double-spaced.
+   */
+  const sectionTop = (isFirst: boolean) => (isFirst ? { marginTop: 0 } : null);
 
   // Local preference toggles (AsyncStorage, not the DB) — re-read on focus so a
   // change made elsewhere is reflected.
@@ -240,7 +254,15 @@ export default function SettingsScreen() {
         <TouchableOpacity
           onPress={me ? async () => {
             const uri = await pickAndSaveAvatar(me.id);
-            if (uri) { await setPersonImage(db, me.id, uri); haptic.success(); await reload(); }
+            if (uri) {
+              const old = me.image_uri;
+              await setPersonImage(db, me.id, uri);
+              // Every avatar pick writes a new timestamped file and never
+              // replaces one in place — unlink the one this photo replaces.
+              if (old) await deleteAttachment(old);
+              haptic.success();
+              await reload();
+            }
           } : undefined}
           accessibilityLabel="Change avatar"
           hitSlop={4}
@@ -257,17 +279,39 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
-          <Text style={styles.profileSub}>Offline-first · no accounts</Text>
+          <Text style={styles.profileSub}>
+            {serverSession
+              ? serverSession.user.email
+              : serverSessionConfigured ? 'Offline-first · sign in to back up' : 'Offline-first · no accounts'}
+          </Text>
         </View>
         <Feather name="edit-2" size={16} color={colors.textMuted} />
       </TouchableOpacity>
+
+      {/* ACCOUNT — only in a build that has a server to talk to
+          (EXPO_PUBLIC_API_URL). Signing in buys one thing: backups that outlive
+          this phone. Everything else stays local-first either way, which is why
+          this is a row and not a gate in front of the app. */}
+      {serverSessionConfigured && (
+        <>
+          <Text style={[styles.sectionTitle, sectionTop(true)]}>Account</Text>
+          <View style={styles.card}>
+            <SettingsRow
+              icon={serverSession ? 'user-check' : 'cloud'}
+              label={serverSession ? 'Account' : 'Sign in'}
+              value={serverSession ? serverSession.user.email : 'Back up beyond this phone'}
+              onPress={() => { router.push('/settings/account'); }}
+            />
+          </View>
+        </>
+      )}
 
       {/* GETTING PAID — your own handle, and the code others scan to pay you.
           Sits directly under the profile because both rows are about *you*, not about
           the app. `friends.tsx` covers everyone else's handle; it filters out `is_me`. */}
       {flags.upiSettle && (
         <>
-          <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Getting paid</Text>
+          <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured)]}>Getting paid</Text>
           <View style={styles.card}>
             <SettingsRow
               icon="credit-card"
@@ -287,7 +331,7 @@ export default function SettingsScreen() {
       )}
 
       {/* MANAGE */}
-      <Text style={[styles.sectionTitle, flags.upiSettle ? null : { marginTop: 0 }]}>Manage</Text>
+      <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured && !flags.upiSettle)]}>Manage</Text>
       <View style={styles.card}>
         <SettingsRow
           icon="users"
@@ -387,11 +431,15 @@ export default function SettingsScreen() {
         <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
       </View>
 
-      {/* About — tap version 7× to open developer storage screen */}
+      {/* About — tap version 7× to open developer storage screen. __DEV__-gated:
+          this screen can replace or erase a user's entire dataset
+          (loadDemoData/resetToEmpty), so the unlock gesture and its on-screen
+          hint must not exist in a release/TestFlight build. */}
       <Text style={styles.sectionTitle}>About</Text>
       <View style={styles.card}>
         <TouchableOpacity
           onPress={() => {
+            if (!__DEV__) return;
             const next = devTaps + 1;
             setDevTaps(next);
             if (next >= 7) {
@@ -400,13 +448,13 @@ export default function SettingsScreen() {
               router.push('/storage');
             }
           }}
-          activeOpacity={0.7}
+          activeOpacity={__DEV__ ? 0.7 : 1}
           accessibilityLabel="App version"
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
           <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
           <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
-          <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>
+          {__DEV__ && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
         </TouchableOpacity>
       </View>
 

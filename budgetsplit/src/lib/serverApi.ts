@@ -1,0 +1,354 @@
+import * as SecureStore from 'expo-secure-store';
+import * as Device from 'expo-device';
+import { File } from 'expo-file-system';
+
+/**
+ * The app's only talking-to-a-server code: sign-in (email magic link) and
+ * server-side backup/restore, against `server/api` (Cloudflare Worker).
+ *
+ * Everything here is opt-in and additive. The app stays local-first: SQLite is
+ * still the single source of truth, the existing share-sheet backup still works
+ * with no account, and nothing on this path uploads a transaction — a server
+ * backup is the same passphrase-encrypted envelope `lib/backup.ts` already
+ * builds, which this file moves without being able to read.
+ *
+ * Signed-in state lives in `expo-secure-store`, not AsyncStorage: the session
+ * token is a bearer credential, the first real one the app has ever held, and
+ * feature flags' storage is not the right neighbourhood for it.
+ */
+
+const SESSION_KEY = 'budgetsplit.session.v1';
+
+export type ServerUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  /** Self-declared, never verified, never searchable. See `server/api` 0002. */
+  phone: string | null;
+  avatarUrl: string | null;
+  createdAt: number;
+};
+
+export type ServerSession = { token: string; user: ServerUser };
+
+export type ServerBackup = { id: string; sizeBytes: number; createdAt: number };
+
+// --- Configuration --------------------------------------------------------
+
+/** Nothing is configured and no account UI should appear — the default build. */
+export class ServerNotConfiguredError extends Error {
+  constructor() {
+    super('Accounts are not configured in this build.');
+    this.name = 'ServerNotConfiguredError';
+  }
+}
+
+/** The session is gone (expired, or signed out elsewhere). Local state is already cleared. */
+export class ServerAuthError extends Error {
+  constructor(message = 'You’re signed out. Sign in again to continue.') {
+    super(message);
+    this.name = 'ServerAuthError';
+  }
+}
+
+/** Any other non-2xx — carries the server's own message, which is written for humans. */
+export class ServerRequestError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ServerRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/**
+ * `null` when unset, which is the shipped default.
+ *
+ * Read through `process.env` at the reference site on purpose: Expo's babel
+ * transform *inlines* `EXPO_PUBLIC_*` references at bundle time rather than
+ * reading them at runtime, so this cannot be hoisted into a module constant
+ * built from a variable name, and a build made without `.env` present gets
+ * `undefined` here. Same trap `ocrProviders/gemini.ts` documents.
+ */
+export function serverBaseUrl(): string | null {
+  const raw = process.env.EXPO_PUBLIC_API_URL;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Gate every piece of account UI on this — an unconfigured build shows none of it. */
+export const serverConfigured = (): boolean => serverBaseUrl() !== null;
+
+// --- Session storage ------------------------------------------------------
+
+export async function getStoredSession(): Promise<ServerSession | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ServerSession>;
+    if (typeof parsed.token !== 'string' || !parsed.token || !parsed.user) return null;
+    return { token: parsed.token, user: parsed.user as ServerUser };
+  } catch {
+    // Unreadable keychain entry or a shape from an older build: treat as signed
+    // out rather than throwing on every screen that asks who's signed in.
+    return null;
+  }
+}
+
+async function storeSession(session: ServerSession): Promise<void> {
+  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
+}
+
+async function clearSession(): Promise<void> {
+  try { await SecureStore.deleteItemAsync(SESSION_KEY); } catch { /* already gone */ }
+}
+
+// --- Transport ------------------------------------------------------------
+
+type SendOptions = {
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  /** JSON-serialisable body. Mutually exclusive with `text`. */
+  json?: unknown;
+  /** Raw text body — used for the encrypted backup envelope. */
+  text?: string;
+  /** Bearer token, when the route needs one. */
+  token?: string;
+};
+
+async function send(path: string, options: SendOptions = {}): Promise<Response> {
+  const base = serverBaseUrl();
+  if (!base) throw new ServerNotConfiguredError();
+
+  const headers: Record<string, string> = {};
+  let body: string | undefined;
+  if (options.json !== undefined) {
+    headers['content-type'] = 'application/json';
+    body = JSON.stringify(options.json);
+  } else if (options.text !== undefined) {
+    headers['content-type'] = 'text/plain';
+    body = options.text;
+  }
+  if (options.token) headers.authorization = `Bearer ${options.token}`;
+
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, { method: options.method ?? 'GET', headers, body });
+  } catch {
+    // No connectivity, DNS failure, or the Worker is down. One message, because
+    // the user's next move is the same in all three cases.
+    throw new ServerRequestError(0, 'Could not reach the server. Check your connection and try again.');
+  }
+
+  if (response.ok) return response;
+
+  // 401 means the token is dead server-side; keeping it locally would show a
+  // signed-in screen that fails every action. Clear first, then report.
+  if (response.status === 401 && options.token) {
+    await clearSession();
+    throw new ServerAuthError();
+  }
+
+  const detail = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+  throw new ServerRequestError(
+    response.status,
+    detail?.error ?? `The server returned an error (${response.status}).`,
+    detail?.code,
+  );
+}
+
+/** Sends with the stored session, or throws `ServerAuthError` if there isn't one. */
+async function sendAuthed(path: string, options: Omit<SendOptions, 'token'> = {}): Promise<Response> {
+  const session = await getStoredSession();
+  if (!session) throw new ServerAuthError('Sign in first.');
+  return send(path, { ...options, token: session.token });
+}
+
+// --- Sign-in --------------------------------------------------------------
+
+/**
+ * Extracts the token from `budgetsplit:///auth?token=…`, or from a token the
+ * user pasted by hand (the email prints it for exactly that case).
+ *
+ * Pure and lenient about the wrapper, strict about the shape: the server issues
+ * lowercase hex, so anything else is a mis-paste and is better refused here than
+ * spent as a request.
+ */
+export function extractAuthToken(input: string): string | null {
+  const trimmed = input.trim();
+  const fromQuery = /[?&]token=([0-9a-fA-F]{16,256})\b/.exec(trimmed);
+  if (fromQuery) return fromQuery[1].toLowerCase();
+  return /^[0-9a-fA-F]{16,256}$/.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+/**
+ * What shows up in the account's session list — "iPhone 15", not a fingerprint.
+ * `expo-device` rather than `Platform.OS` so it reads as a device a person can
+ * recognise, and so this module stays importable outside a React Native runtime.
+ */
+export function deviceLabel(): string {
+  return Device.modelName ?? Device.osName ?? 'This device';
+}
+
+export async function requestMagicLink(email: string): Promise<void> {
+  await send('/auth/request-link', { method: 'POST', json: { email } });
+}
+
+export async function verifyMagicLink(token: string): Promise<ServerSession> {
+  const response = await send('/auth/verify', {
+    method: 'POST',
+    json: { token, deviceLabel: deviceLabel() },
+  });
+  const data = await response.json() as { sessionToken?: string; user?: ServerUser };
+  if (!data.sessionToken || !data.user) {
+    throw new ServerRequestError(502, 'The server sent back an unexpected response.');
+  }
+  const session: ServerSession = { token: data.sessionToken, user: data.user };
+  await storeSession(session);
+  return session;
+}
+
+/**
+ * Always clears the local session, even when the server call fails — a sign-out
+ * that leaves the app looking signed in because the network blipped is worse
+ * than a session row that outlives its device and expires on its own.
+ */
+export async function signOut(): Promise<void> {
+  const session = await getStoredSession();
+  if (session) {
+    await send('/auth/logout', { method: 'POST', token: session.token }).catch(() => {});
+  }
+  await clearSession();
+}
+
+// --- Profile --------------------------------------------------------------
+
+async function readUser(response: Response): Promise<ServerUser> {
+  const data = await response.json() as { user?: ServerUser };
+  if (!data.user) throw new ServerRequestError(502, 'The server sent back an unexpected response.');
+  const session = await getStoredSession();
+  // Keep the cached copy honest, so the account screen renders the same profile
+  // the server holds without a round trip on every mount.
+  if (session) await storeSession({ ...session, user: data.user });
+  return data.user;
+}
+
+export async function fetchProfile(): Promise<ServerUser> {
+  return readUser(await sendAuthed('/me'));
+}
+
+export async function updateProfile(
+  patch: { name?: string | null; phone?: string | null; avatarUrl?: string | null },
+): Promise<ServerUser> {
+  return readUser(await sendAuthed('/me', { method: 'PATCH', json: patch }));
+}
+
+/**
+ * Uploads a local avatar file as base64 JSON rather than raw bytes: React
+ * Native's `fetch` has no dependable binary-body support (a `Uint8Array` body
+ * silently stringifies), and a wrong avatar is a bad way to find that out. The
+ * Worker accepts both shapes.
+ */
+export async function uploadAvatar(fileUri: string): Promise<ServerUser> {
+  const base64 = await new File(fileUri).base64();
+  const ext = fileUri.split('.').pop()?.toLowerCase();
+  const contentType = ext === 'png' ? 'image/png' : ext === 'heic' ? 'image/heic' : 'image/jpeg';
+  return readUser(await sendAuthed('/me/avatar', { method: 'PUT', json: { contentType, base64 } }));
+}
+
+// --- Backups --------------------------------------------------------------
+
+/** `envelopeJson` is the already-encrypted `BackupEnvelope`, serialised. */
+export async function uploadBackup(envelopeJson: string): Promise<ServerBackup> {
+  const response = await sendAuthed('/backups', { method: 'POST', text: envelopeJson });
+  const data = await response.json() as { backup?: ServerBackup };
+  if (!data.backup) throw new ServerRequestError(502, 'The server sent back an unexpected response.');
+  return data.backup;
+}
+
+export async function listServerBackups(): Promise<ServerBackup[]> {
+  const response = await sendAuthed('/backups');
+  const data = await response.json() as { backups?: ServerBackup[] };
+  return data.backups ?? [];
+}
+
+/** Returns the raw envelope text, for `decryptEnvelope` to open on-device. */
+export async function downloadServerBackup(id: string): Promise<string> {
+  const response = await sendAuthed(`/backups/${encodeURIComponent(id)}`);
+  return response.text();
+}
+
+export async function deleteServerBackup(id: string): Promise<void> {
+  await sendAuthed(`/backups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// --- Linking (Stage B) ----------------------------------------------------
+
+export type ServerLink = {
+  id: string;
+  createdAt: number;
+  /** Whether *I* am showing my number to them. Never what they see of me. */
+  sharingMyPhone: boolean;
+  person: {
+    id: string;
+    name: string | null;
+    email: string;
+    /** Present only while their own disclosure is on — resolved server-side per request. */
+    phone: string | null;
+    avatarUrl: string | null;
+  };
+};
+
+export type PendingClaim = {
+  token: string;
+  claimedAt: number;
+  from: { id: string; name: string | null; email: string };
+};
+
+/** The link you hand to one person. Claiming it binds nothing until you approve. */
+export async function createInvite(): Promise<{ token: string; url: string; expiresAt: number }> {
+  const response = await sendAuthed('/invites', { method: 'POST' });
+  return response.json() as Promise<{ token: string; url: string; expiresAt: number }>;
+}
+
+/**
+ * Opens someone's invite. Returns `'pending'` — the sender still has to approve
+ * you, because an invite is made to be forwarded and the app must not let a
+ * forwarded one bind whoever taps it first.
+ */
+export async function claimInvite(token: string): Promise<'pending' | 'already-linked'> {
+  const response = await sendAuthed('/invites/claim', { method: 'POST', json: { token } });
+  const data = await response.json() as { state?: string };
+  return data.state === 'already-linked' ? 'already-linked' : 'pending';
+}
+
+/** Claims waiting on *my* decision. */
+export async function listPendingClaims(): Promise<PendingClaim[]> {
+  const response = await sendAuthed('/invites');
+  const data = await response.json() as { claims?: PendingClaim[] };
+  return data.claims ?? [];
+}
+
+export async function decideClaim(token: string, approve: boolean): Promise<void> {
+  await sendAuthed(`/invites/${encodeURIComponent(token)}/${approve ? 'approve' : 'decline'}`, { method: 'POST' });
+}
+
+export async function listLinks(): Promise<ServerLink[]> {
+  const response = await sendAuthed('/links');
+  const data = await response.json() as { links?: ServerLink[] };
+  return data.links ?? [];
+}
+
+/** Flips only my own side. I can never change what they disclose to me. */
+export async function setLinkPhoneSharing(id: string, sharePhone: boolean): Promise<void> {
+  await sendAuthed(`/links/${encodeURIComponent(id)}`, { method: 'PATCH', json: { sharePhone } });
+}
+
+export async function removeLink(id: string): Promise<void> {
+  await sendAuthed(`/links/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+/** Same shape as `extractAuthToken`, for `budgetsplit:///link?token=…`. */
+export const extractInviteToken = extractAuthToken;

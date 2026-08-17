@@ -22,16 +22,33 @@ import {
   BackupWrongPassphraseError, type BackupEnvelope, type BackupPayload,
 } from '../../src/lib/backup';
 import { readAllTables, restoreAllTables, readPhotoFiles, restorePhotoFiles } from '../../src/db/queries/backup';
+import { ServerBackupSheet } from '../../src/components/finance/backup/ServerBackupSheet';
+import { useServerSession } from '../../src/hooks/useServerSession';
+import { formatBytes } from '../../src/lib/storage';
+import {
+  uploadBackup, listServerBackups, downloadServerBackup, deleteServerBackup,
+  type ServerBackup,
+} from '../../src/lib/serverApi';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { refresh } = useDataRefresh();
 
+  const { session: serverSession, configured: serverConfigured } = useServerSession();
+
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [showCreateSheet, setShowCreateSheet] = useState(false);
+  /** Where the encrypted envelope goes once it's built — the only difference
+   *  between the two "create" rows. Everything up to that point is identical. */
+  const [createTarget, setCreateTarget] = useState<'file' | 'server'>('file');
+  const [showServerList, setShowServerList] = useState(false);
+  const [serverBackups, setServerBackups] = useState<ServerBackup[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [includePhotos, setIncludePhotos] = useState(false);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
   const [pickedEnvelope, setPickedEnvelope] = useState<BackupEnvelope | null>(null);
@@ -54,13 +71,24 @@ export default function BackupScreen() {
       const photos = includePhotos ? await readPhotoFiles(tables) : undefined;
       const payload = buildBackupPayload(tables, photos);
       const envelope = encryptPayload(payload, passphrase);
-      const file = new File(Paths.cache, backupFileName());
-      file.create({ overwrite: true });
-      file.write(JSON.stringify(envelope));
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Saved', `Sharing isn’t available here. The backup was saved to:\n${file.uri}`);
+
+      if (createTarget === 'server') {
+        // Uploaded already-encrypted: the server stores the same bytes this
+        // device would have written to a file, and can't read either.
+        const saved = await uploadBackup(JSON.stringify(envelope));
+        Alert.alert(
+          'Backed up to your account',
+          `${formatBytes(saved.sizeBytes)}, encrypted on this phone. You'll need this passphrase to restore it — it was never sent.`,
+        );
       } else {
-        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
+        const file = new File(Paths.cache, backupFileName());
+        file.create({ overwrite: true });
+        file.write(JSON.stringify(envelope));
+        if (!(await Sharing.isAvailableAsync())) {
+          Alert.alert('Saved', `Sharing isn’t available here. The backup was saved to:\n${file.uri}`);
+        } else {
+          await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
+        }
       }
       // Both: a real export is genuinely the new reminder anchor *and* the
       // moment a backup exists.
@@ -99,6 +127,63 @@ export default function BackupScreen() {
       haptic.error();
       Alert.alert('Could not read that file', 'Try picking it again.');
     }
+  }
+
+  async function openServerList() {
+    setShowServerList(true);
+    setListLoading(true);
+    setListError(null);
+    try {
+      setServerBackups(await listServerBackups());
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Could not load your backups.');
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  /** Downloads one, then hands it to the exact same passphrase → confirm → restore
+   *  path a picked file goes through. The transport is the only difference. */
+  async function handlePickServerBackup(backup: ServerBackup) {
+    setDownloadingId(backup.id);
+    try {
+      const text = await downloadServerBackup(backup.id);
+      const json = JSON.parse(text) as Partial<BackupEnvelope>;
+      if (typeof json.ciphertext !== 'string') throw new Error('missing ciphertext');
+      setShowServerList(false);
+      setPickedEnvelope(json as BackupEnvelope);
+      setRestoreError(null);
+      setShowRestoreSheet(true);
+    } catch (e) {
+      haptic.error();
+      setListError(e instanceof Error ? e.message : 'Could not download that backup.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  function handleDeleteServerBackup(backup: ServerBackup) {
+    Alert.alert(
+      'Delete this backup?',
+      `The copy from ${format(new Date(backup.createdAt), 'd MMM yyyy, h:mm a')} is removed from your account. Anything on this device is untouched.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteServerBackup(backup.id);
+              setServerBackups(prev => prev.filter(b => b.id !== backup.id));
+              haptic.warning();
+            } catch (e) {
+              haptic.error();
+              setListError(e instanceof Error ? e.message : 'Could not delete that backup.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function handleRestoreSubmit(passphrase: string) {
@@ -172,9 +257,9 @@ export default function BackupScreen() {
         <View style={styles.card}>
           <IconCircle icon="shield" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
           <Text style={styles.note}>
-            Your data lives only on this device — there's no cloud sync. Create an encrypted
-            backup file and save it to Files, iCloud Drive, or Google Drive so you can recover
-            everything if you lose this phone.
+            {serverSession
+              ? 'Your transactions live on this device — signing in didn’t change that. What an account adds is somewhere to keep an encrypted backup, so losing this phone doesn’t lose your data. Every backup is encrypted here first; the passphrase never leaves this phone.'
+              : 'Your data lives only on this device — nothing is uploaded. Create an encrypted backup file and save it to Files, iCloud Drive, or Google Drive so you can recover everything if you lose this phone.'}
           </Text>
           {lastBackupAt != null && (
             <Text style={styles.lastBackup}>Last backup: {format(new Date(lastBackupAt), 'd MMM yyyy, h:mm a')}</Text>
@@ -186,7 +271,7 @@ export default function BackupScreen() {
             icon="upload-cloud"
             label="Create backup"
             value={creating ? undefined : 'Encrypted file'}
-            onPress={busy ? undefined : () => setShowCreateSheet(true)}
+            onPress={busy ? undefined : () => { setCreateTarget('file'); setShowCreateSheet(true); }}
             right={creating ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
           />
           <View style={settingsRowDivider} />
@@ -197,6 +282,37 @@ export default function BackupScreen() {
             onPress={busy ? undefined : handlePickRestoreFile}
             right={restoring ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
           />
+          {/* The same two actions, over the network instead of the share sheet.
+              Only in a build with a server configured, and only once signed in —
+              an account is what gives the blob somewhere to go. */}
+          {serverSession ? (
+            <>
+              <View style={settingsRowDivider} />
+              <SettingsRow
+                icon="cloud"
+                label="Back up to your account"
+                value={busy ? undefined : serverSession.user.email}
+                onPress={busy ? undefined : () => { setCreateTarget('server'); setShowCreateSheet(true); }}
+              />
+              <View style={settingsRowDivider} />
+              <SettingsRow
+                icon="rotate-ccw"
+                label="Restore from your account"
+                value={busy ? undefined : 'Pick a backup'}
+                onPress={busy ? undefined : openServerList}
+              />
+            </>
+          ) : serverConfigured ? (
+            <>
+              <View style={settingsRowDivider} />
+              <SettingsRow
+                icon="cloud"
+                label="Back up off this phone"
+                value="Sign in"
+                onPress={() => router.push('/settings/account')}
+              />
+            </>
+          ) : null}
         </View>
 
         <Text style={styles.warning}>Restoring replaces ALL current data on this device. This cannot be undone.</Text>
@@ -231,6 +347,16 @@ export default function BackupScreen() {
           </TouchableOpacity>
         }
         submitting={creating}
+      />
+      <ServerBackupSheet
+        visible={showServerList}
+        onClose={() => { setShowServerList(false); setListError(null); }}
+        backups={serverBackups}
+        loading={listLoading}
+        error={listError}
+        onPick={handlePickServerBackup}
+        onDelete={handleDeleteServerBackup}
+        busyId={downloadingId}
       />
       <PassphraseSheet
         visible={showRestoreSheet}

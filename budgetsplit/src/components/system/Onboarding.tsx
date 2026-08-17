@@ -83,7 +83,10 @@ const SLIDES: Slide[] = [
   {
     anim: 'privacy', tint: colors.settle,
     title: 'Yours alone',
-    body: 'No account, no cloud, no tracking.',
+    // "No account *needed*", not "no account": signing in is possible in a build
+    // with a server configured, and it buys backups — the promise is that the app
+    // is fully usable without one, which stays true either way.
+    body: 'No account needed, no tracking, nothing uploaded.',
     points: [
       { icon: 'wifi-off', text: 'Works fully offline' },
       { icon: 'shield', text: 'Lock it behind Face ID' },
