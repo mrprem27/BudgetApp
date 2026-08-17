@@ -4,6 +4,8 @@ import { v4 as uuid } from 'uuid';
 import { planAutoAllocations, planOverspendRaid } from '../../lib/savingsEngine';
 import { generateInsights, type Insight, type CategorySpend } from '../../lib/savingsInsights';
 import { cashPositionFromTotals, computeTotalMoney, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
+import { computeSafeToSpend, type SafeToSpend } from '../../lib/safeToSpend';
+import { getSafeToSpend } from './spendPower';
 import { CASH_TOTALS_SQL } from './cashQuery';
 import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups, personalGroupOf } from './groups';
@@ -439,6 +441,9 @@ export type AffordSnapshot = {
    * month only contributes its next one, not all of them.
    */
   upcomingBills: number;
+  /** The full Safe-to-Spend breakdown (`lib/safeToSpend`) — the cash gate's
+   *  actual formula, shared with Home's hero. */
+  sts: SafeToSpend;
   /**
    * Money owed TO me by friends, right now (`getMyExposure`). Deliberately kept
    * separate from `available` rather than folded in — it isn't liquid yet, so
@@ -482,7 +487,7 @@ const AFFORD_DAY_MS = 86_400_000;
  * and the inputs reproducible.
  */
 export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
-  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, owedToMe: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, sts: computeSafeToSpend({ available: 0, upcomingBills: 0, goalRemaining: 0, netIOwe: 0 }), owedToMe: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
   const me = await getMe(db);
   if (!me) return empty;
 
@@ -500,14 +505,16 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   // surface that couldn't see it.
   const personal = personalGroupOf(groups);
 
-  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved, exposure] = await Promise.all([
-    getCashPosition(db),
+  const [sts, categories, budgets, monthTxns, recentTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved, exposure] = await Promise.all([
+    // Safe-to-Spend, assembled once (db/queries/spendPower) — the same figure
+    // Home's hero leads with. Supplies available + committed bills, so Afford
+    // and Home cannot disagree about either.
+    getSafeToSpend(db, now),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
     // My Budget — the same rows and the same reader every other surface uses.
     getMyGlobalBudgetRows(db, me.id),
     getTransactionsInRange(db, null, monthStart, now),
     getTransactionsInRange(db, null, now - 30 * AFFORD_DAY_MS, now),
-    getTransactionsInRange(db, null, now, monthEnd),
     Promise.all(groups.map(g => getRecurringForGroup(db, g.id))).then(by => by.flat()),
     // 90 days for typical-basket size: a monthly norm can hide a wildly atypical
     // single purchase (a ₹8k dinner inside a ₹10k/mo norm).
@@ -560,22 +567,10 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const incomeSource: AffordSnapshot['incomeSource'] =
     ruleIncome > 0 ? 'rule' : recentIncome > 0 ? 'recent' : 'none';
 
-  // Committed bills: my share of already-logged future-dated one-off expenses
-  // (recur_freq IS NULL — a recurring occurrence is never materialized ahead of
-  // `now`, so this alone was always ~₹0 for a real rent/EMI/subscription).
-  let upcomingBills = 0;
-  for (const t of futureTxns) {
-    if (t.is_deleted || t.kind !== 'expense') continue;
-    upcomingBills += myShare(t);
-  }
-  // Plus EVERY unskipped occurrence of every active recurring expense series
-  // (all groups, my share) through month-end — the same projection Home/Plan/
-  // reminders show. `expandUpcoming` counts each remaining occurrence, so a
-  // weekly bill contributes every week left this month, not just the next one.
-  const skipsBySeries = await getSkipsMap(db, recurRules.map(r => r.id));
-  const committedRecurring = expandUpcoming(recurRules, me.id, now, monthEnd, skipsBySeries)
-    .reduce((sum, item) => sum + item.amount, 0);
-  upcomingBills += committedRecurring;
+  // Committed bills: EVERY unskipped recurring occurrence (all groups, my
+  // share) plus logged future-dated one-offs, through month-end — computed once
+  // inside getSafeToSpend, read here so the two screens agree by construction.
+  const upcomingBills = sts.upcomingBills;
 
   // Budgets, normalized to a monthly figure. `budgetEquivalent` is the one source
   // (this file used to carry its own copy that divided yearly lines by 12 — a
@@ -623,7 +618,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const priorMonthTotal = lastMonthTxns
     .filter(t => !t.is_deleted && t.kind === 'expense')
     .reduce((a, t) => a + myShare(t), 0);
-  const fc = forecastMonthEnd(monthSpentSoFar, getDate(today), daysInMonth, priorMonthTotal, committedRecurring);
+  const fc = forecastMonthEnd(monthSpentSoFar, getDate(today), daysInMonth, priorMonthTotal, sts.upcomingBills);
   const budgetTotal = Object.values(budgetByCat).reduce((a, b) => a + b, 0);
   const projection = fc.ready && budgetTotal > 0
     ? { projectedMonthEnd: fc.projected, budget: budgetTotal }
@@ -642,7 +637,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     ? { name: nextGoal.name, monthlyRate: monthlyContribution(nextGoal.allocation, nextGoal.frequency) }
     : null;
 
-  return { available: pos.available, upcomingBills, owedToMe: exposure.owed, monthlyIncome, incomeSource, categories, byCategory, projection, goalPacing };
+  return { available: sts.available, upcomingBills, sts, owedToMe: exposure.owed, monthlyIncome, incomeSource, categories, byCategory, projection, goalPacing };
 }
 
 /** Build psychological savings insights from real goals + spending. */

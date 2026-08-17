@@ -96,6 +96,10 @@ export type AffordContext = {
   available: number;
   /** Bills already committed for the rest of this month (paise, clamped ≥ 0). */
   upcomingBills: number;
+  /** Goal contributions still due this cycle, unfunded (paise, clamped ≥ 0). */
+  goalRemaining?: number;
+  /** What I owe people net of settlements (paise, clamped ≥ 0) — their money. */
+  netIOwe?: number;
   /** Typical monthly income (paise, > 0 to engage the income-share axis). */
   monthlyIncome?: number;
   /**
@@ -117,7 +121,8 @@ export type AffordContext = {
 
 export type AffordResult = {
   verdict: AffordVerdict;
-  /** Cash left once this month's known bills are set aside. */
+  /** Safe-to-Spend: cash left once bills, goal contributions and money owed to
+   *  others are set aside — the same figure Home's hero leads with. */
   freeToSpend: number;
   /** What remains after the prospective purchase. */
   remaining: number;
@@ -165,8 +170,12 @@ export function evaluateAfford(ctx: AffordContext): AffordResult {
   const amount = Math.max(0, ctx.amount);
   const available = ctx.available;
   const upcomingBills = Math.max(0, ctx.upcomingBills);
+  const goalRemaining = Math.max(0, ctx.goalRemaining ?? 0);
+  const netIOwe = Math.max(0, ctx.netIOwe ?? 0);
 
-  const freeToSpend = available - upcomingBills;
+  // The cash gate IS Safe-to-Spend (lib/safeToSpend) — one formula, shared with
+  // Home's hero, so "can I afford ₹X" is exactly "is X within that number".
+  const freeToSpend = available - upcomingBills - goalRemaining - netIOwe;
   const remaining = freeToSpend - amount;
   const bufferTarget = Math.max(0, available * SAFETY_BUFFER_RATIO);
 

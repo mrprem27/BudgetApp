@@ -27,6 +27,7 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
+import { StsSheet } from '../../src/components/finance/home/StsSheet';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
 import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
@@ -57,6 +58,7 @@ export default function DashboardScreen() {
   const [everHadCats, setEverHadCats] = useState(false);
   const [catExpanded, setCatExpanded] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
+  const [showSts, setShowSts] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
   const [catchUpBanner, setCatchUpBanner] = useState<{ days: number; ruleCount: number } | null>(null);
 
@@ -84,6 +86,7 @@ export default function DashboardScreen() {
   const healthInputs = flags.healthScore ? (data?.healthInputs ?? null) : null;
   const healthTxnCount = data?.healthTxnCount ?? 0;
   const upcoming = data?.upcoming ?? [];
+  const sts = data?.sts ?? null;
   const forecast = data?.forecast ?? null;
   const topShift = data?.topShift ?? null;
   const streak = data?.streak ?? 0;
@@ -273,6 +276,8 @@ export default function DashboardScreen() {
             ) : (
             <>
             <HeroCard
+              sts={sts}
+              onPressSts={() => setShowSts(true)}
               spent={spending}
               periodLabel={PERIOD_LABEL[tab]}
               budgetAllocated={paceAllocated}
@@ -345,6 +350,8 @@ export default function DashboardScreen() {
         txnCount={healthTxnCount}
         periodLabel={TXN_COUNT_PERIOD_LABEL[tab]}
       />
+
+      <StsSheet visible={showSts} onClose={() => setShowSts(false)} sts={sts} />
     </View>
   );
 }

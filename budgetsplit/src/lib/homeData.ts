@@ -6,6 +6,7 @@ import {
 import { getAllPersons } from '../db/queries/persons';
 import { getAllGroups } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
+import { getSafeToSpend } from '../db/queries/spendPower';
 import { getPendingCount } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange } from '../db/queries/transactions';
@@ -15,7 +16,7 @@ import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
-import { buildUpcoming, expandUpcoming, type UpcomingItem } from './upcoming';
+import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
 import type { ForecastShift } from '../components/finance/home/ForecastCard';
@@ -190,6 +191,10 @@ export async function loadHomeData(
     const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
     const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
 
+    // Safe-to-Spend — Home's headline (D10). Month-scoped regardless of the
+    // Today/Month/Year selector: it answers "right now, to month-end".
+    const sts = await getSafeToSpend(db);
+
     // Month-end forecast + biggest category shift vs last month (Month view only).
     let forecast: Forecast | null = null;
     let topShift: ForecastShift | null = null;
@@ -208,11 +213,8 @@ export async function loadHomeData(
         lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
       }
       // Known committed bills still due this month floor the forecast — the
-      // rules and skips are already loaded for "Coming up" just above.
-      const committedRemaining = expandUpcoming(
-        upcomingRules, me.id, Date.now(), endOfMonth(now).getTime(), upcomingSkips,
-      ).reduce((s, o) => s + o.amount, 0);
-      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, committedRemaining);
+      // same figure Safe-to-Spend subtracts, so the two can't disagree.
+      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, sts.upcomingBills);
       // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
       topShift = Object.entries(catMap)
         .filter(([cat]) => lmCat[cat])
@@ -227,7 +229,7 @@ export async function loadHomeData(
       budget: { allocated: mine.allocated, spent: mine.spent },
       catRows, catTotal, health, healthInputs,
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
-      upcoming, forecast, topShift,
+      upcoming, forecast, topShift, sts,
       streak: s, streakLoggedDays: loggedDays,
     };
 }

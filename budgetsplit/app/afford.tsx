@@ -77,6 +77,10 @@ export default function AffordScreen() {
   const result: AffordResult = useMemo(() => {
     const ctx: AffordContext = {
       amount, available, upcomingBills: upcoming,
+      // Complete the Safe-to-Spend gate (same figure as Home's hero): goal
+      // contributions still due, and money that is really other people's.
+      goalRemaining: snap?.sts.goalRemaining,
+      netIOwe: snap?.sts.netIOwe,
       monthlyIncome: incomeSource !== 'none' && monthlyIncome > 0 ? monthlyIncome : undefined,
       recurringMonthlyEquivalent: frequency !== 'once'
         ? Math.round(amount * FREQUENCY_PER_MONTH[frequency])
@@ -254,9 +258,31 @@ export default function AffordScreen() {
                   <Text style={styles.cashLabel}>− Upcoming bills this month</Text>
                   <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(upcoming)}</Text>
                 </View>
+              </>
+            )}
+            {!!snap?.sts.goalRemaining && snap.sts.goalRemaining > 0 && (
+              <>
                 <View style={styles.breakdownDivider} />
                 <View style={styles.cashRow}>
-                  <Text style={[styles.cashLabel, { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' }]}>Free to spend</Text>
+                  <Text style={styles.cashLabel}>− Goal contributions still due</Text>
+                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(snap.sts.goalRemaining)}</Text>
+                </View>
+              </>
+            )}
+            {!!snap?.sts.netIOwe && snap.sts.netIOwe > 0 && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.cashRow}>
+                  <Text style={styles.cashLabel}>− You owe people</Text>
+                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(snap.sts.netIOwe)}</Text>
+                </View>
+              </>
+            )}
+            {(upcoming > 0 || (snap?.sts.goalRemaining ?? 0) > 0 || (snap?.sts.netIOwe ?? 0) > 0) && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.cashRow}>
+                  <Text style={[styles.cashLabel, { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' }]}>Safe to spend</Text>
                   <Text style={[styles.cashVal, { color: freeToSpend >= 0 ? colors.income : colors.expense }]}>{formatRupees(freeToSpend)}</Text>
                 </View>
               </>
