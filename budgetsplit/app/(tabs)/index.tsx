@@ -132,6 +132,12 @@ export default function DashboardScreen() {
 
   // Budgets are stored monthly; scale to the active period so the pace line
   // shows on every tab when a budget exists (Today = per-day, Year = ×12).
+  // A first-run tile is offered only when the thing it creates is still absent.
+  const peopleCount = data?.peopleCount ?? 0;
+  const showBudgetTile = budget.allocated <= 0;
+  const showGroupTile = flags.splitting && groups.filter(g => g.is_personal !== 1).length === 0;
+  const showPeopleTile = flags.splitting && peopleCount === 0;
+
   const paceAllocated = budget.allocated <= 0 ? 0
     : tab === 'today' ? Math.round(budget.allocated / getDaysInMonth(new Date()))
     : tab === 'year' ? budget.allocated * 12
@@ -239,39 +245,47 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.getStartedLabel}>GET STARTED</Text>
-                <View style={{ gap: space.sm }}>
-                  <TouchableOpacity style={styles.startTile} onPress={() => router.push('/budget')} accessibilityRole="button">
-                    <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.startTitle}>Set a monthly budget</Text>
-                      <Text style={styles.startSub}>Know your limits before you hit them</Text>
+                {/* Only what's genuinely still missing. Onboarding can set a
+                    budget, create a group and add people — re-offering those to
+                    the user who just did them is why the flow read as "nothing
+                    happened". */}
+                {(showBudgetTile || showGroupTile || showPeopleTile) && (
+                  <>
+                    <Text style={styles.getStartedLabel}>GET STARTED</Text>
+                    <View style={{ gap: space.sm }}>
+                      {showBudgetTile && (
+                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/budget')} accessibilityRole="button">
+                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.startTitle}>Set a monthly budget</Text>
+                            <Text style={styles.startSub}>Know your limits before you hit them</Text>
+                          </View>
+                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                      {showGroupTile && (
+                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
+                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.startTitle}>Create a group</Text>
+                            <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
+                          </View>
+                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                      {showPeopleTile && (
+                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
+                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.startTitle}>Add people you split with</Text>
+                            <Text style={styles.startSub}>Name-only — no account needed</Text>
+                          </View>
+                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
                     </View>
-                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                  {/* Both first-run tiles are about splitting — pointless for someone
-                      who told us they only track their own money. */}
-                  {flags.splitting && (
-                    <>
-                      <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
-                        <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.startTitle}>Create a group</Text>
-                          <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
-                        </View>
-                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
-                        <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.startTitle}>Add people you split with</Text>
-                          <Text style={styles.startSub}>Name-only — no account needed</Text>
-                        </View>
-                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
+                  </>
+                )}
               </>
             ) : (
             <>

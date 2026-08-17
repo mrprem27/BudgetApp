@@ -14,6 +14,7 @@ import { getGoalFundingStatus } from '../db/queries/spendPower';
 import { getTotalMoney } from '../db/queries/savings';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
+import { settings } from './settings';
 import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
@@ -151,6 +152,12 @@ export async function loadHomeData(
      * health score is rebased onto them.
      */
     const mine = await getMyGlobalBudgetSummary(db, me.id);
+    // D2: the whole-month figure onboarding stores (`budget_target`) is a real
+    // input until category budgets exist — it drives the Home pace bar and the
+    // health engine's budget terms instead of being one sentence two screens
+    // deep in the budget editor. Category budgets win the moment they're set.
+    const budgetTarget = (await settings.budgetTarget()) ?? 0;
+    const effAllocated = mine.allocated > 0 ? mine.allocated : budgetTarget;
 
     // Category breakdown for "Where it went" (largest first). Names not in the
     // global catalog fold into one "Others" row (catMap itself is left intact so
@@ -183,16 +190,22 @@ export async function loadHomeData(
       getTotalMoney(db),
       getLedgerStats(db),
     ]);
-    let income90 = 0, spend90 = 0;
+    let income90 = 0, spend90 = 0, monthSp = 0;
+    const monthStartMs = startOfMonth(now2).getTime();
     for (const t of ninetyTxns) {
       if (t.is_deleted) continue;
-      if (t.kind === 'expense') spend90 += myShareOf(t, me.id);
-      else if (t.kind === 'income') income90 += myIncomeOf(t, me.id);
+      if (t.kind === 'expense') {
+        const share = myShareOf(t, me.id);
+        spend90 += share;
+        if (t.date >= monthStartMs) monthSp += share;
+      } else if (t.kind === 'income') income90 += myIncomeOf(t, me.id);
     }
     const healthInputsNow: HealthInputs = {
       income90, spend90,
-      budgetAllocated: mine.allocated,
-      budgetSpent: mine.spent,
+      budgetAllocated: effAllocated,
+      // Against a bare whole-month target the spend side is the whole month's
+      // my-share spend; category budgets keep their own scoped figure.
+      budgetSpent: mine.allocated > 0 ? mine.spent : monthSp,
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
       liquid: sts.available,
@@ -202,7 +215,7 @@ export async function loadHomeData(
       netIOwe: exp.owe,
       upcomingBills: sts.upcomingBills,
       goalsCount: funding.goalsCount,
-      hasBudget: mine.allocated > 0,
+      hasBudget: effAllocated > 0,
       dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
       hasIncome: ledger.hasIncome,
       txnCount: ledger.txnCount,
@@ -241,7 +254,9 @@ export async function loadHomeData(
       meInfo,
       spending: sp, income: inc, prevSpending: prevSp,
       oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
-      budget: { allocated: mine.allocated, spent: mine.spent },
+      budget: { allocated: effAllocated, spent: mine.spent },
+      // For Home's GET STARTED tiles: don't re-ask what onboarding answered.
+      peopleCount: persons.filter(p => p.id !== me.id).length,
       catRows, catTotal, health, healthInputs,
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
       upcoming, forecast, topShift, sts,

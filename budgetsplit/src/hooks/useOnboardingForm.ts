@@ -1,5 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
-import { Animated, Easing, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Location from 'expo-location';
 import { settings } from '../lib/settings';
@@ -10,25 +9,38 @@ import { finalizeOnboarding } from '../lib/onboarding';
 import type { OnboardingIntent } from '../lib/personaDefaults';
 
 /**
- * `payoff` and `committing` are **presentational** stages — they ask nothing and store
- * nothing. `payoff` reflects the numbers just entered back at the user; `committing`
- * covers the single `finalizeOnboarding` write. Neither is a questionnaire step, so
- * neither appears in `SETUP_STEPS` or the progress count.
+ * The rebuilt first-run flow: every stage either asks something that visibly
+ * changes the app, or (summary) shows exactly what the answers changed. The
+ * feature carousel (asked nothing, changed nothing), the forward-only payoff
+ * beat and the fake 1.7s "committing" checklist are gone — the write is a fast
+ * local SQLite transaction and pretending otherwise was theatre.
  */
 export type OnboardingStage =
-  | 'hero' | 'intent' | 'features' | 'name' | 'income' | 'money' | 'budget'
-  | 'payoff' | 'people' | 'permissions' | 'committing';
+  | 'hero' | 'intent' | 'name' | 'income' | 'money' | 'budget'
+  | 'people' | 'permissions' | 'summary';
 
-/** The setup steps after the name screen — these drive the progress indicator. */
-export const SETUP_STEPS: OnboardingStage[] = ['income', 'money', 'budget', 'people', 'permissions'];
+/** The numbered flow, intent onward. `summary` is a result, not a question. */
+export const NUMBERED_STEPS: OnboardingStage[] = ['intent', 'name', 'income', 'money', 'budget', 'people', 'permissions'];
 
 /**
  * Someone who told us they only track their own spending is never asked who they
  * split with — the step can only produce contacts they'd never use, and the dots
  * shouldn't count a screen they'll never see.
  */
-export function setupSteps(intent: OnboardingIntent): OnboardingStage[] {
-  return intent === 'personal' ? SETUP_STEPS.filter(s => s !== 'people') : SETUP_STEPS;
+export function numberedSteps(intent: OnboardingIntent): OnboardingStage[] {
+  return intent === 'personal' ? NUMBERED_STEPS.filter(s => s !== 'people') : NUMBERED_STEPS;
+}
+
+/**
+ * Where a step sits in the flow, 1-based. Known from the FIRST question — the
+ * old flow showed no count until three screens had gone by, and the total
+ * changed under the user when the persona shifted mid-flow.
+ */
+export function stepPosition(stage: OnboardingStage, intent: OnboardingIntent): { step: number; total: number } | null {
+  const steps = numberedSteps(intent);
+  const idx = steps.indexOf(stage);
+  if (idx < 0) return null;
+  return { step: idx + 1, total: steps.length };
 }
 
 /** rupees text → integer paise (0 when blank or unparseable). */
@@ -44,20 +56,15 @@ function toRupees(t: string): number {
 /**
  * All of the onboarding questionnaire's state, stage machine and commit — so the
  * screen is render-only, matching `useAddTxnForm` / `useItemizedForm` (AUDIT DEBT-12).
- *
- * `slideCount` and `width` come from the caller because they're presentation facts
- * (how many carousel slides exist, how wide the window is) that the paging math needs.
  */
-export function useOnboardingForm({
-  onDone, slideCount, width,
-}: { onDone: () => void; slideCount: number; width: number }) {
+export function useOnboardingForm({ onDone }: { onDone: () => void }) {
   const db = useSQLiteContext();
 
   const [stage, setStage] = useState<OnboardingStage>('hero');
-  const [page, setPage] = useState(0);
   const [intent, setIntent] = useState<OnboardingIntent>('both');
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [committed, setCommitted] = useState(false);           // finalize succeeded
   const [incomeText, setIncomeText] = useState('');            // free take-home entry (rupees)
   const [payday, setPayday] = useState(1);                     // day of month salary lands
   const [budgetText, setBudgetText] = useState('');            // free monthly-budget entry (rupees)
@@ -67,21 +74,13 @@ export function useOnboardingForm({
   const [creditUsedText, setCreditUsedText] = useState('');    // credit already used (rupees)
   const [people, setPeople] = useState<string[]>([]);          // contacts added during onboarding
   const [personDraft, setPersonDraft] = useState('');
+  const [groupName, setGroupName] = useState('Friends');       // the group the contacts land in
   const [notifPerm, setNotifPerm] = useState(false);
   const [locPerm, setLocPerm] = useState(false);
-  const addFirstRef = useRef(false);
 
   // Parsed numeric views of the free-text amounts (0 when blank/invalid).
   const incomeNum = toRupees(incomeText);
   const budgetNum = toRupees(budgetText);
-
-  const scrollRef = useRef<any>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const progress = useRef(new Animated.Value(1 / slideCount)).current; // top progress bar fill
-  // Source of truth for the current page. `page` state drives the dots/button label,
-  // but navigation reads this ref so the "last slide → name" transition fires even
-  // after a slow drag-release (which never emits onMomentumScrollEnd).
-  const pageRef = useRef(0);
 
   // The 'people' step is skipped for the personal-only persona, in both directions —
   // so Back from permissions must land on budget, not on the skipped screen.
@@ -89,77 +88,15 @@ export function useOnboardingForm({
   const beforePermissions: OnboardingStage = intent === 'personal' ? 'budget' : 'people';
 
   /**
-   * Where Continue goes from the budget step: through the payoff beat when there's
-   * something to say, straight on when both income and budget were skipped (an empty
-   * congratulation is worse than no screen).
-   *
-   * The payoff is **forward-only** — Back from `people`/`permissions` returns to
-   * `budget`, not through it. It's a reflection, not a question, and re-showing a
-   * celebration on the way backwards reads as a loop.
+   * Commit, then land on the summary — which reads back what was actually set
+   * up. The write is one atomic `finalizeOnboarding` call; no theatrical wait.
    */
-  const afterBudgetOrPayoff: OnboardingStage =
-    incomeNum > 0 || budgetNum > 0 ? 'payoff' : afterBudget;
-
-  // Synced on BOTH drag-end and momentum-end so a slow drag can't leave us stale.
-  function syncPage(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const p = Math.round(e.nativeEvent.contentOffset.x / width);
-    pageRef.current = p;
-    setPage(prev => (prev === p ? prev : p));
-  }
-
-  function goToPage(p: number) {
-    pageRef.current = p;
-    setPage(p);
-    scrollRef.current?.scrollTo?.({ x: p * width, animated: true });
-  }
-
-  function enterIntent() {
-    setStage('intent');
-  }
-
-  function enterFeatures() {
-    // The persona is persisted (with the flags it implies) by finalizeOnboarding, so
-    // it lands in the same commit as everything else and can't be half-applied by
-    // someone who abandons setup on a later step.
-    pageRef.current = 0;
-    setPage(0);
-    setStage('features');
-  }
-
-  function advance() {
-    if (pageRef.current < slideCount - 1) {
-      goToPage(pageRef.current + 1);
-    } else {
-      setStage('name'); // always reach the (mandatory) name screen
-    }
-  }
-
-  function backFromFeatures() {
-    if (pageRef.current > 0) {
-      goToPage(pageRef.current - 1);
-    } else {
-      setStage('intent');
-    }
-  }
-
-  // Animate the top progress bar as the slide changes.
-  useEffect(() => {
-    Animated.timing(progress, {
-      toValue: (page + 1) / slideCount,
-      duration: 300,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [page, progress, slideCount]);
-
-  /** Single commit point for the whole questionnaire — see lib/onboarding.ts. */
   async function finalize() {
     setSaving(true);
-    // Show the commit rather than pausing silently on the permissions screen. This
-    // does NOT split the write — `finalizeOnboarding` stays one atomic call.
-    setStage('committing');
     const ok = await finalizeOnboarding(db, {
-      intent, name, incomeNum, payday, budgetNum, people, addFirst: addFirstRef.current,
+      intent, name, incomeNum, payday, budgetNum, people,
+      groupName: people.length > 0 ? groupName : null,
+      addFirst: false, // the summary's own CTA arms this explicitly
       money: {
         openingCash: toPaise(cashText),
         investments: toPaise(investText),
@@ -168,10 +105,14 @@ export function useOnboardingForm({
       },
     });
     if (ok) haptic.success(); else haptic.error();
+    setCommitted(ok);
     setSaving(false);
-    // Let the last checklist item land as done before handing over; without this the
-    // screen would flash and be gone on a fast device.
-    await new Promise(r => setTimeout(r, 420));
+    setStage('summary');
+  }
+
+  /** Summary CTA: open Quick Add once, right after the gate opens. */
+  async function finishAndAddFirst() {
+    try { await settings.setPendingFirstAdd(true); } catch { /* best-effort */ }
     onDone();
   }
 
@@ -200,20 +141,19 @@ export function useOnboardingForm({
 
   return {
     // stage machine
-    stage, setStage, afterBudget, beforePermissions, afterBudgetOrPayoff,
-    // carousel
-    page, scrollRef, scrollX, progress, syncPage, advance, backFromFeatures,
+    stage, setStage, afterBudget, beforePermissions,
     // persona
-    intent, setIntent, enterIntent, enterFeatures,
+    intent, setIntent,
     // fields
     name, setName, incomeText, setIncomeText, incomeNum, payday, setPayday,
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
     people, setPeople, personDraft, setPersonDraft, addPerson,
+    groupName, setGroupName,
     // permissions
     notifPerm, locPerm, allowNotifications, allowLocation,
-    // commit
-    addFirstRef, saving, finalize,
+    // commit + summary
+    saving, committed, finalize, finishAndAddFirst, onDone,
   };
 }

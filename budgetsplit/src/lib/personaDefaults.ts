@@ -104,6 +104,32 @@ export function personaFlags(intent: OnboardingIntent): FeatureFlags {
   return { ...DEFAULTS, ...personaFlagPatch(intent) };
 }
 
+/** Short human names for the flags personas trim — for honest onboarding copy. */
+const FLAG_SHORT_LABEL: Partial<Record<FeatureKey, string>> = {
+  splitting: 'Group splitting',
+  itemized: 'Itemized bills',
+  upiSettle: 'UPI settle',
+  healthScore: 'Health score',
+  savingsGoals: 'Savings goals',
+  affordCheck: '“Can I afford this?”',
+  insights: 'Insights',
+  reports: 'Reports',
+  streak: 'Streaks',
+};
+
+/**
+ * What a persona actually TRIMS (turns off vs DEFAULTS), as human labels —
+ * derived live from the patch so the onboarding card can never claim "all
+ * features stay available" while silently disabling five of them (which is
+ * exactly what the old static copy did).
+ */
+export function personaTrims(intent: OnboardingIntent): string[] {
+  const patch = personaFlagPatch(intent);
+  return (Object.keys(patch) as FeatureKey[])
+    .filter(k => patch[k] === false && DEFAULTS[k] === true)
+    .map(k => FLAG_SHORT_LABEL[k] ?? k);
+}
+
 /**
  * The keys a persona actually changes, so onboarding writes only those.
  *

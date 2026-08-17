@@ -1,18 +1,16 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity,
-  Animated, ScrollView, useWindowDimensions, Linking,
+  useWindowDimensions, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { type } from '../../constants/typography';
-import { space, radius, layout, shadow } from '../../constants/layout';
-import { PERSONA_OPTIONS, type OnboardingIntent } from '../../lib/personaDefaults';
-import {
-  useOnboardingForm, setupSteps, type OnboardingStage,
-} from '../../hooks/useOnboardingForm';
+import { space, radius, layout } from '../../constants/layout';
+import { PERSONA_OPTIONS, personaTrims, type OnboardingIntent } from '../../lib/personaDefaults';
+import { useOnboardingForm, stepPosition } from '../../hooks/useOnboardingForm';
 import { GROUP_COLORS } from '../../constants/palette';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { FadeIn } from '../ui/FadeIn';
@@ -24,79 +22,15 @@ import { OptionRow } from '../ui/OptionRow';
 import { SectionHeader } from '../ui/SectionHeader';
 import { StepScaffold } from './onboarding/StepScaffold';
 import { StepFooter } from './onboarding/StepFooter';
-import { StepProgress } from './onboarding/StepProgress';
-import { StepBack } from './onboarding/StepBack';
 import { StepAmountField } from './onboarding/StepAmountField';
 import { MoneyRow } from './onboarding/MoneyRow';
-import { PayoffStage } from './onboarding/PayoffStage';
-import { payoffFor } from '../../lib/onboardingPayoff';
-import { CommitStage } from './onboarding/CommitStage';
+import { SummaryStage } from './onboarding/SummaryStage';
 import { haptic } from '../../lib/haptics';
-import { formatRupees } from '../../lib/money';
 import { LogoAssembly } from './LogoAssembly';
-import { SlideArt, bigDiscStyle, type AnimKind } from './onboarding/SlideArt';
-import { alpha } from '../../theme';
 import { VOICE_ONE_WAY_NAME, VOICE_SHORTCUT_URL, SHORTCUTS_APP_URL } from '../../lib/voiceShortcut';
 import { ensureVoiceInbox } from '../../lib/voiceDrain';
 import { useFeatureFlags } from './FeatureFlagsProvider';
 
-
-type Slide = {
-  anim: AnimKind;
-  tint: string;
-  title: string;
-  body: string;
-  points: { icon: keyof typeof Feather.glyphMap; text: string }[];
-};
-
-const SLIDES: Slide[] = [
-  {
-    anim: 'spend', tint: colors.accent,
-    title: 'Know where it goes',
-    body: 'Log a spend in two taps and see the full picture.',
-    points: [
-      { icon: 'tag', text: 'Categories built for life in India' },
-      { icon: 'pie-chart', text: 'Charts for the day, month and year' },
-      { icon: 'repeat', text: 'Rent & bills repeat on their own' },
-    ],
-  },
-  {
-    anim: 'split', tint: colors.coral,
-    title: 'Split, minus the math',
-    body: 'Add people to a group and share any bill.',
-    points: [
-      { icon: 'divide', text: 'Equal, exact, percentage or shares' },
-      { icon: 'list', text: 'Itemise a bill, assign each dish' },
-      { icon: 'shuffle', text: 'Settle up in the fewest payments' },
-    ],
-  },
-  {
-    anim: 'budget', tint: colors.healthAmber,
-    title: 'Budgets that hold',
-    body: 'Give each category a limit and track it live.',
-    points: [
-      { icon: 'sliders', text: 'One-time, daily, monthly or yearly' },
-      { icon: 'trending-up', text: 'See what’s left and the trend' },
-      { icon: 'alert-triangle', text: 'A heads-up before you overspend' },
-    ],
-  },
-  {
-    anim: 'privacy', tint: colors.settle,
-    title: 'Yours alone',
-    // "No account *needed*", not "no account": signing in is possible in a build
-    // with a server configured, and it buys backups — the promise is that the app
-    // is fully usable without one, which stays true either way.
-    body: 'No account needed, no tracking, nothing uploaded.',
-    points: [
-      { icon: 'wifi-off', text: 'Works fully offline' },
-      { icon: 'shield', text: 'Lock it behind Face ID' },
-      { icon: 'download', text: 'Export to CSV or PDF anytime' },
-    ],
-  },
-];
-
-// The stage machine and the persona→steps rule live with the state, in the hook.
-type Stage = OnboardingStage;
 // The persona type is owned by lib/personaDefaults, which maps it to feature flags.
 type IntentKey = OnboardingIntent;
 
@@ -109,28 +43,18 @@ const INCOME_PRESETS = [
   { label: '₹1L', value: 100000 },
 ];
 
-const BUDGET_PRESETS = [20000, 30000, 40000, 50000];
+/** Fallback budget presets when no income was given (nothing to derive from). */
+const BUDGET_PRESETS_FLAT = [20000, 30000, 40000, 50000];
 const PAYDAY_OPTIONS = [1, 5, 7, 10, 15, 25, 30];
+const GROUP_NAME_OPTIONS = ['Home', 'Trip', 'Friends'];
 
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-/**
- * Where a setup step sits in the flow, 1-based, for `StepProgress`.
- *
- * Derived from `setupSteps(intent)` so the `personal` persona — which skips `people` —
- * reports "3 of 4" rather than a gap. Returns null for stages outside the numbered
- * flow (hero, intent, features), which show no progress at all.
- */
-function stepPosition(stage: Stage, intent: IntentKey): { step: number; total: number } | null {
-  const steps = setupSteps(intent);
-  const idx = steps.indexOf(stage);
-  // `name` precedes the setup steps and is part of the same count.
-  if (stage === 'name') return { step: 1, total: steps.length + 1 };
-  if (idx < 0) return null;
-  return { step: idx + 2, total: steps.length + 1 };
+function fmtK(v: number): string {
+  return `₹${v >= 100000 ? `${(v / 100000).toFixed(1).replace(/\.0$/, '')}L` : `${Math.round(v / 1000)}k`}`;
 }
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
@@ -157,16 +81,24 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   // render-only (AUDIT DEBT-12), matching useAddTxnForm / useItemizedForm.
   const {
     stage, setStage, afterBudget, beforePermissions,
-    page, scrollRef, scrollX, progress, syncPage, advance, backFromFeatures,
-    intent, setIntent, enterIntent, enterFeatures,
+    intent, setIntent,
     name, setName, incomeText, setIncomeText, incomeNum, payday, setPayday,
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
     people, setPeople, personDraft, setPersonDraft, addPerson,
+    groupName, setGroupName,
     notifPerm, locPerm, allowNotifications, allowLocation,
-    addFirstRef, saving, finalize, afterBudgetOrPayoff,
-  } = useOnboardingForm({ onDone, slideCount: SLIDES.length, width });
+    saving, finalize, finishAndAddFirst, onDone: done,
+  } = useOnboardingForm({ onDone });
+
+  // Budget chips derive from the income just given (50/60/70% of take-home) so
+  // the suggestion is about THIS user, not four round numbers.
+  const budgetPresets = incomeNum > 0
+    ? [0.5, 0.6, 0.7].map(f => Math.round((incomeNum * f) / 1000) * 1000).filter(v => v > 0)
+    : BUDGET_PRESETS_FLAT;
+
+  const trims = personaTrims(intent);
 
   return (
     <KeyboardAvoidingView
@@ -187,26 +119,45 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               <Text style={styles.tagline}>Budget your money and split bills — all on your phone, nothing in the cloud.</Text>
             </FadeIn>
             <FadeIn delay={4760} style={styles.footer}>
-              <PrimaryButton label="Get Started" onPress={enterIntent} />
+              <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
               <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
             </FadeIn>
           </View>
         </View>
       )}
 
-      {/* INTENT — "What brings you here?" */}
+      {/* Early exit from the hero — a SIBLING of the protected block above (its
+          FadeIn delays are tuned to the logo run and stay untouched): the intro
+          is skippable ~1s in instead of gating the first tap behind ~4.8s. */}
+      {stage === 'hero' && (
+        <FadeIn delay={900} style={[styles.heroSkip, { top: insets.top + space.sm }]}>
+          <TouchableOpacity
+            onPress={() => setStage('intent')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Skip intro"
+          >
+            <Text style={styles.heroSkipText}>Skip intro →</Text>
+          </TouchableOpacity>
+        </FadeIn>
+      )}
+
+      {/* INTENT — "What brings you here?" Each card says what it TRIMS, derived
+          live from the persona's real flag patch — the old copy said "all
+          features stay available" while 'split' silently disabled five. */}
       {stage === 'intent' && (
         <StepScaffold
           stageKey="intent"
           onBack={() => setStage('hero')}
+          {...(stepPosition('intent', intent) ?? {})}
           title="What brings you here?"
-          subtitle={"We'll set things up to match. You can change this any time."}
+          subtitle={"We'll shape the app to match. Change it any time in Settings → Features."}
           art={
             <LinearGradient colors={[colors.accent, colors.accentDeep]} style={styles.intentLogo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Text style={styles.intentRupee}>₹</Text>
             </LinearGradient>
           }
-          footer={<StepFooter primaryLabel="Get started" onPrimary={() => { haptic.selection(); enterFeatures(); }} />}
+          footer={<StepFooter primaryLabel="Continue" onPrimary={() => { haptic.selection(); setStage('name'); }} />}
         >
           <View style={styles.intentCards}>
             {INTENT_OPTIONS.map(opt => (
@@ -220,86 +171,19 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               />
             ))}
           </View>
-          <Text style={styles.intentNote}>This is a soft preference, not a lock. All features stay available.</Text>
+          <Text style={styles.intentNote}>
+            {trims.length > 0
+              ? `This trims: ${trims.join(', ')} — each one tap away in Settings → Features.`
+              : 'The full app. Trim features any time in Settings → Features.'}
+          </Text>
         </StepScaffold>
-      )}
-
-      {/* FEATURE CAROUSEL (swipeable, animated) */}
-      {stage === 'features' && (
-        <View style={{ flex: 1 }}>
-          {/* Same top row as every other step: back + one progress bar. The fill is
-              driven by the carousel's own Animated value so it tracks mid-swipe,
-              rather than snapping per page. No count — "3 of 4" on a browsable
-              carousel implies a required sequence it doesn't have. */}
-          <View style={styles.topBar}>
-            <StepBack onPress={backFromFeatures} />
-            <StepProgress
-              step={page + 1}
-              total={SLIDES.length}
-              showCount={false}
-              animated={progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })}
-            />
-            <TouchableOpacity onPress={() => setStage('name')} hitSlop={10} accessibilityRole="button">
-              <Text style={styles.skip}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Animated.ScrollView
-            // Animated.ScrollView's ref type doesn't unify with ScrollView's.
-            // Third-party typing gap; the runtime ref is a real ScrollView.
-            ref={scrollRef as any}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true })}
-            onMomentumScrollEnd={syncPage}
-            onScrollEndDrag={syncPage}
-            scrollEventThrottle={16}
-            style={{ flex: 1 }}
-          >
-            {SLIDES.map((slide, i) => {
-              const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
-              const artTranslate = scrollX.interpolate({ inputRange, outputRange: [width * 0.3, 0, -width * 0.3], extrapolate: 'clamp' });
-              const artOpacity = scrollX.interpolate({ inputRange, outputRange: [0, 1, 0], extrapolate: 'clamp' });
-              const textTranslate = scrollX.interpolate({ inputRange, outputRange: [width * 0.15, 0, -width * 0.15], extrapolate: 'clamp' });
-              const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: 'clamp' });
-              return (
-                <View key={slide.title} style={[styles.slide, { width }]}>
-                  <View style={styles.slideTop}>
-                    <Animated.View style={{ opacity: artOpacity, transform: [{ translateX: artTranslate }, { scale }] }}>
-                      <SlideArt kind={slide.anim} tint={slide.tint} active={page === i} />
-                    </Animated.View>
-                    <Animated.View style={{ alignItems: 'center', alignSelf: 'stretch', transform: [{ translateX: textTranslate }, { scale }] }}>
-                      <Text style={styles.slideTitle}>{slide.title}</Text>
-                      <Text style={styles.slideBody}>{slide.body}</Text>
-                      <View style={styles.pointsCard}>
-                        {slide.points.map((p, j) => (
-                          <View key={p.text} style={[styles.pointRow, j < slide.points.length - 1 && styles.pointBorder]}>
-                            <View style={[styles.pointIcon, { backgroundColor: alpha(slide.tint, 13) }]}>
-                              <Feather name={p.icon} size={15} color={slide.tint} />
-                            </View>
-                            <Text style={styles.pointText}>{p.text}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </Animated.View>
-                  </View>
-                </View>
-              );
-            })}
-          </Animated.ScrollView>
-
-          <View style={[styles.footer, { paddingHorizontal: layout.screenPaddingH, paddingBottom: bottomPad }]}>
-            <PrimaryButton label={page === SLIDES.length - 1 ? 'Continue' : 'Next'} onPress={advance} />
-          </View>
-        </View>
       )}
 
       {/* NAME ENTRY — the only step that needs the keyboard. */}
       {stage === 'name' && (
         <StepScaffold
           stageKey="name"
-          onBack={enterFeatures}
+          onBack={() => setStage('intent')}
           {...(stepPosition('name', intent) ?? {})}
           title="First, your name"
           subtitle="It's shown when you split bills with others. You can change any of this later in Settings."
@@ -307,11 +191,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           footer={
             <StepFooter
               primaryLabel="Continue"
-              onPrimary={() => { addFirstRef.current = true; setStage('income'); }}
-              loading={saving}
-              skipLabel="Skip — just explore"
-              onSkip={() => { addFirstRef.current = false; setStage('income'); }}
-              skipDisabled={saving}
+              onPrimary={() => setStage('income')}
+              skipLabel="Skip"
+              onSkip={() => setStage('income')}
             />
           }
         >
@@ -324,7 +206,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             returnKeyType="done"
             maxLength={30}
             autoFocus
-            onSubmitEditing={() => { addFirstRef.current = true; setStage('income'); }}
+            onSubmitEditing={() => setStage('income')}
             accessibilityLabel="Your name"
           />
         </StepScaffold>
@@ -337,11 +219,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           onBack={() => setStage('name')}
           {...(stepPosition('income', intent) ?? {})}
           title="What's your monthly take-home?"
-          subtitle="A rough number is fine — tap a preset or type your own. It only sets up your income."
+          subtitle="A rough number is fine — tap a preset or type your own."
           footer={
             <StepFooter
               primaryLabel="Continue"
-              onPrimary={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(incomeNum) : ''); setStage('money'); }}
+              onPrimary={() => { if (!budgetText) setBudgetText(incomeNum > 0 ? String(Math.round((incomeNum * 0.6) / 1000) * 1000) : ''); setStage('money'); }}
               skipLabel="Skip"
               onSkip={() => setStage('money')}
             />
@@ -366,7 +248,6 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
 
           <SectionHeader title="When do you get paid?" />
-          <Text style={styles.helpLine}>We'll add it as a recurring income each month.</Text>
           <View style={styles.chipRowLeft}>
             {PAYDAY_OPTIONS.map(d => (
               <Chip
@@ -378,19 +259,22 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               />
             ))}
           </View>
-          <Text style={styles.helpLine}>Salary lands on the {ordinal(payday)} of each month.</Text>
+          {/* What the answer DOES — not a vague promise. */}
+          <Text style={styles.helpLine}>
+            Becomes a salary entry on the {ordinal(payday)} of each month — you&apos;ll see it under Plan → Recurring, and it powers &quot;Can I afford this?&quot;.
+          </Text>
         </StepScaffold>
       )}
 
-      {/* MONEY STEP — one hero figure, then three quiet rows. Was four 40px
-          heroes stacked down the page (V2_PRODUCT_REVIEW §150-153). */}
+      {/* MONEY STEP — cash leads; investments/credit sit behind a disclosure so
+          the fast path costs one number, not four. */}
       {stage === 'money' && (
         <StepScaffold
           stageKey="money"
           onBack={() => setStage('income')}
           {...(stepPosition('money', intent) ?? {})}
           title="What do you have right now?"
-          subtitle="This sets up your Total Money. Rough numbers are fine — edit them any time on the Plan screen."
+          subtitle="Sets up Available Money on the Plan screen — and your Safe-to-Spend on Home. Rough numbers are fine."
           footer={
             <StepFooter
               primaryLabel="Continue"
@@ -416,22 +300,24 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Divider indent="text" />
             <MoneyRow icon="activity" label="Credit used" value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} tint={colors.expense} accessibilityLabel="Credit already used" />
           </Card>
-          <Text style={styles.helpLine}>Leave any of these at zero if they don't apply.</Text>
+          <Text style={styles.helpLine}>Leave any of these at zero if they don&apos;t apply.</Text>
         </StepScaffold>
       )}
 
-      {/* BUDGET STEP — whole amount, the user's own number (no % of income) */}
+      {/* BUDGET STEP — presets derive from the income just entered. */}
       {stage === 'budget' && (
         <StepScaffold
           stageKey="budget"
           onBack={() => setStage('money')}
           {...(stepPosition('budget', intent) ?? {})}
           title="Set your monthly budget"
-          subtitle="What do you want to cap your spending at each month? Whatever works for you."
+          subtitle={incomeNum > 0
+            ? 'Most people cap spending at 50–70% of take-home. Pick one or type your own.'
+            : 'What do you want to cap your spending at each month?'}
           footer={
             <StepFooter
               primaryLabel="Continue"
-              onPrimary={() => setStage(afterBudgetOrPayoff)}
+              onPrimary={() => setStage(afterBudget)}
               skipLabel="Skip — I'll set it later"
               onSkip={() => { setBudgetText(''); setStage(afterBudget); }}
             />
@@ -445,10 +331,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             maxLength={9}
           />
           <View style={styles.chipRow}>
-            {BUDGET_PRESETS.map(v => (
+            {budgetPresets.map(v => (
               <Chip
                 key={v}
-                label={`₹${v >= 100000 ? '1L' : `${Math.round(v / 1000)}k`}`}
+                label={fmtK(v)}
                 selected={budgetNum === v}
                 onPress={() => { haptic.selection(); setBudgetText(String(v)); }}
               />
@@ -457,23 +343,24 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           {/* Both operands guarded: with budget 0 this rendered "that's — of your take-home". */}
           {incomeNum > 0 && budgetNum > 0 && (
             <Text style={styles.budgetPct}>
-              That's {Math.round((budgetNum / incomeNum) * 100)}% of your take-home.
+              That&apos;s {Math.round((budgetNum / incomeNum) * 100)}% of your take-home — it shows as the pace bar on Home.
             </Text>
           )}
         </StepScaffold>
       )}
 
-      {/* PEOPLE STEP — add contacts you split with */}
+      {/* PEOPLE STEP — contacts AND the group they live in, so the Groups tab is
+          real on landing instead of "No groups yet". */}
       {stage === 'people' && (
         <StepScaffold
           stageKey="people"
           onBack={() => setStage('budget')}
           {...(stepPosition('people', intent) ?? {})}
           title="Anyone you split with?"
-          subtitle="Add flatmates, friends or family now — or skip and add them later."
+          subtitle="Add flatmates, friends or family — they become a group you can bill straight away."
           footer={
             <StepFooter
-              primaryLabel={people.length > 0 ? `Continue with ${people.length}` : 'Continue'}
+              primaryLabel={people.length > 0 ? `Create “${groupName}” with ${people.length}` : 'Continue'}
               onPrimary={() => setStage('permissions')}
               skipLabel="Skip"
               onSkip={() => setStage('permissions')}
@@ -499,25 +386,48 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
 
           {people.length > 0 && (
-            <Card clip style={styles.peopleCard}>
-              {people.map((pn, i) => (
-                <View key={`${pn}-${i}`}>
-                  {i > 0 && <Divider indent="text" />}
-                  <View style={styles.personRow}>
-                    <IconCircle icon="user" size={layout.avatarSize} color={GROUP_COLORS[i % GROUP_COLORS.length]} />
-                    <Text style={styles.personName} numberOfLines={1}>{pn}</Text>
-                    <TouchableOpacity onPress={() => { haptic.selection(); setPeople(prev => prev.filter((_, j) => j !== i)); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${pn}`}>
-                      <Feather name="x" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
+            <>
+              <Card clip style={styles.peopleCard}>
+                {people.map((pn, i) => (
+                  <View key={`${pn}-${i}`}>
+                    {i > 0 && <Divider indent="text" />}
+                    <View style={styles.personRow}>
+                      <IconCircle icon="user" size={layout.avatarSize} color={GROUP_COLORS[i % GROUP_COLORS.length]} />
+                      <Text style={styles.personName} numberOfLines={1}>{pn}</Text>
+                      <TouchableOpacity onPress={() => { haptic.selection(); setPeople(prev => prev.filter((_, j) => j !== i)); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${pn}`}>
+                        <Feather name="x" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </Card>
+                ))}
+              </Card>
+
+              <SectionHeader title="Call the group" />
+              <View style={styles.chipRowLeft}>
+                {GROUP_NAME_OPTIONS.map(g => (
+                  <Chip
+                    key={g}
+                    label={g}
+                    selected={groupName === g}
+                    onPress={() => { haptic.selection(); setGroupName(g); }}
+                  />
+                ))}
+              </View>
+              <TextInput
+                style={styles.groupNameInput}
+                value={GROUP_NAME_OPTIONS.includes(groupName) ? '' : groupName}
+                onChangeText={(t) => setGroupName(t || 'Friends')}
+                placeholder="…or type a name"
+                placeholderTextColor={colors.textMuted}
+                maxLength={30}
+                accessibilityLabel="Group name"
+              />
+            </>
           )}
         </StepScaffold>
       )}
 
-      {/* PERMISSIONS STEP — notifications + location priming */}
+      {/* PERMISSIONS STEP — notifications + location priming + data safety. */}
       {stage === 'permissions' && (
         <StepScaffold
           stageKey="permissions"
@@ -569,35 +479,40 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               />
             )}
           </View>
+          {/* V2-02: everything lives only on this phone, and the backup nudge is the
+              one mitigation for losing it. Stated here, defaulted on in the commit. */}
+          <Text style={styles.dataNote}>
+            Everything stays on this phone — no account, nothing uploaded. We&apos;ll nudge you monthly to back up (Settings → Backup), because a lost phone is the one thing this can&apos;t survive.
+          </Text>
         </StepScaffold>
       )}
 
-      {/* PAYOFF — reads the numbers just entered back at the user. Asks nothing.
-          The flow previously returned nothing at all until the app opened. */}
-      {stage === 'payoff' && (() => {
-        const payoff = payoffFor(incomeNum, budgetNum);
-        // Defensive: `afterBudgetOrPayoff` already skips this stage when both are 0,
-        // so a null here would mean the numbers were cleared after routing.
-        if (!payoff) { setStage(afterBudget); return null; }
-        return (
-          <StepScaffold
-            stageKey="payoff"
-            onBack={() => setStage('budget')}
-            title={`${formatRupees(payoff.amountPaise)} ${payoff.headline}`}
-            titlePosition="bottom"
-            footer={<StepFooter primaryLabel="Keep going" onPrimary={() => setStage(afterBudget)} />}
-          >
-            <PayoffStage payoff={payoff} />
-          </StepScaffold>
-        );
-      })()}
-
-      {/* COMMITTING — covers the one atomic finalizeOnboarding write. No back, no
-          skip: the commit is already running. */}
-      {stage === 'committing' && (
-        <View style={styles.commitPage}>
-          <CommitStage saving={saving} />
-        </View>
+      {/* SUMMARY — what the answers actually created, then straight into the app. */}
+      {stage === 'summary' && (
+        <StepScaffold
+          stageKey="summary"
+          onBack={done}
+          title="You're set"
+          subtitle="Here's what your answers just set up — each one is live in the app right now."
+          art={<IconCircle icon="check-circle" size={72} color={colors.income} bg={colors.bgMuted} iconSize={32} />}
+          footer={
+            <StepFooter
+              primaryLabel="Log your first expense"
+              onPrimary={finishAndAddFirst}
+              skipLabel="Go to Home"
+              onSkip={done}
+            />
+          }
+        >
+          <SummaryStage
+            incomeNum={incomeNum}
+            payday={payday}
+            budgetNum={budgetNum}
+            people={people}
+            groupName={groupName}
+            notifPerm={notifPerm}
+          />
+        </StepScaffold>
       )}
 
     </KeyboardAvoidingView>
@@ -606,16 +521,6 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: layout.screenPaddingH,
-    height: layout.touchMin,
-  },
-  skip: { ...type.label, color: colors.textSecondary, width: 36, textAlign: 'right' },
-
-  page: { flex: 1, paddingHorizontal: layout.screenPaddingH },
 
   // ⛔ HERO ONLY — do not touch. The FadeIn delays in the hero block are tuned to
   // LogoAssembly's ~3.7s physics run; `footer` and `bottomPad` are shared with it,
@@ -625,33 +530,15 @@ const styles = StyleSheet.create({
   brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center' },
   taglineWrap: { alignSelf: 'stretch' },
   tagline: { ...type.body, fontSize: 16, color: colors.textSecondary, marginTop: space.md, lineHeight: 24, textAlign: 'center', paddingHorizontal: space.md },
-
-  slide: { flex: 1 },
-  slideTop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: layout.screenPaddingH },
-  slideTitle: { ...type.title, color: colors.textPrimary, textAlign: 'center' },
-  slideBody: { ...type.body, fontSize: 16, color: colors.textSecondary, marginTop: space.xs, marginBottom: space.xl, lineHeight: 23, textAlign: 'center', paddingHorizontal: space.md },
-
-  pointsCard: {
-    alignSelf: 'stretch',
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: space.md,
-    ...shadow.sm,
-  },
-  pointRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
-  pointBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  pointIcon: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  pointText: { ...type.body, color: colors.textPrimary, flex: 1 },
-
   footer: { gap: space.md, paddingTop: space.md },
   footNote: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
 
+  // The early hero escape — a sibling overlay, not part of the hero block.
+  heroSkip: { position: 'absolute', right: layout.screenPaddingH, zIndex: 2 },
+  heroSkipText: { ...type.label, color: colors.textSecondary, padding: space.sm },
+
   // ---- step content (chrome itself lives in onboarding/Step*) ----------------
-  /** One shared help//caption line, replacing `slideBodyTight`, `daySub` and `intentNote`. */
+  /** One shared help/caption line. */
   helpLine: { ...type.caption, color: colors.textMuted, alignSelf: 'stretch', marginTop: space.sm, lineHeight: 16 },
   chipRow: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', justifyContent: 'center' },
   chipRowLeft: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
@@ -672,7 +559,7 @@ const styles = StyleSheet.create({
   intentRupee: { ...type.amountLG, color: colors.bg },
   intentCards: { gap: space.sm },
   intentEmoji: { fontSize: 22 },
-  intentNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingHorizontal: space.md, marginTop: space.md },
+  intentNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingHorizontal: space.md, marginTop: space.md, lineHeight: 16 },
 
   // Budget stage
   budgetPct: { ...type.label, color: colors.income, textAlign: 'center', marginTop: space.md },
@@ -685,11 +572,9 @@ const styles = StyleSheet.create({
   peopleCard: { marginTop: space.md },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.smd },
   personName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  groupNameInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.smd, borderWidth: 1, borderColor: colors.border, alignSelf: 'stretch', marginTop: space.sm },
 
   // Permissions step
   permList: { gap: space.sm },
-
-  /** The commit stage has no back button and no footer — it isn't a step you can
-   *  leave — so it centres its own content instead of using StepScaffold. */
-  commitPage: { flex: 1, justifyContent: 'center', paddingHorizontal: layout.screenPaddingH },
+  dataNote: { ...type.caption, color: colors.textMuted, marginTop: space.lg, paddingHorizontal: space.xs, lineHeight: 16 },
 });

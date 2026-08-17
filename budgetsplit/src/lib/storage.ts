@@ -3,8 +3,8 @@
  *
  * Pure on purpose — no `expo-file-system`, no React Native — so jest can reach every
  * boundary. The native probe lives in `deviceStorage.ts`, which this file knows nothing
- * about. Same split (and same reason) as `onboardingPayoff.ts`: the advice below returns a
- * semantic `tone`, never a colour, so the theme stays on the other side of the line.
+ * about. The advice below returns a semantic `tone`, never a colour, so the theme
+ * stays on the other side of the line.
  *
  * The ordering rule is the whole point of this module, so it is written down once here and
  * read from everywhere: **recording a transaction is the last thing that may ever fail.**

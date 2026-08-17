@@ -26,52 +26,11 @@ export {
 } from './reminderPlan';
 
 const DAY = 24 * 60 * 60 * 1000;
-const PREFS_KEY = 'reminder_prefs_v2';
-/** Legacy boolean keys (pre-scheduling-prefs) — migrated on first read. */
-const LEGACY_KEYS = { renewals: 'reminders_renewals', daily: 'reminders_daily' } as const;
-
-/** Read the full reminder preferences (with defaults + one-time legacy migration). */
-export async function getReminderPrefs(): Promise<ReminderPrefs> {
-  try {
-    const raw = await AsyncStorage.getItem(PREFS_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as Partial<ReminderPrefs>;
-      return {
-        renewals: !!p.renewals,
-        renewalLeadDays: clampLead(p.renewalLeadDays ?? 1),
-        renewalTime: clampTime(p.renewalTime, DEFAULT_RENEWAL_TIME),
-        daily: !!p.daily,
-        dailyTime: clampTime(p.dailyTime, DEFAULT_DAILY_TIME),
-        backup: !!p.backup,
-      };
-    }
-    // Migrate the old on/off booleans, if present.
-    const [r, d] = await Promise.all([
-      AsyncStorage.getItem(LEGACY_KEYS.renewals),
-      AsyncStorage.getItem(LEGACY_KEYS.daily),
-    ]);
-    const migrated = { ...defaultReminderPrefs(), renewals: r === 'true', daily: d === 'true' };
-    if (r !== null || d !== null) await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(migrated));
-    return migrated;
-  } catch {
-    return defaultReminderPrefs();
-  }
-}
-
-/** Merge + persist a partial preference change; returns the full resolved prefs. */
-export async function setReminderPrefs(patch: Partial<ReminderPrefs>): Promise<ReminderPrefs> {
-  const cur = await getReminderPrefs();
-  const next: ReminderPrefs = {
-    renewals: patch.renewals ?? cur.renewals,
-    renewalLeadDays: clampLead(patch.renewalLeadDays ?? cur.renewalLeadDays),
-    renewalTime: clampTime(patch.renewalTime ?? cur.renewalTime, DEFAULT_RENEWAL_TIME),
-    daily: patch.daily ?? cur.daily,
-    dailyTime: clampTime(patch.dailyTime ?? cur.dailyTime, DEFAULT_DAILY_TIME),
-    backup: patch.backup ?? cur.backup,
-  };
-  try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* best-effort */ }
-  return next;
-}
+// Preference persistence lives in reminderPrefsStore (AsyncStorage only, no
+// expo-notifications) so non-scheduling callers can read/write a pref without
+// pulling the native module in. Re-exported here so callers see one surface.
+import { getReminderPrefs, setReminderPrefs } from './reminderPrefsStore';
+export { getReminderPrefs, setReminderPrefs };
 
 /**
  * Rebuild all local reminders from current prefs + data. Cancels everything
