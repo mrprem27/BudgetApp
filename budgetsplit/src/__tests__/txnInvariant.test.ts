@@ -38,6 +38,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     contains: 'SELECT tags FROM txn',
     why: 'Building the tag vocabulary (getTagsByFrequency). A tag applied to a recurring RULE is a tag genuinely in use, so it belongs in the picker — excluding templates would hide a tag the user typed and then never offer it back. This counts tag names, not money or dates, so the usual reason to exclude rules (double-counting a template as a transaction) does not apply.',
   },
+  {
+    file: 'transactions.ts',
+    contains: 'attachment_uri IS NOT NULL AND updated_at',
+    why: 'reapDeletedAttachments — a recurring RULE\'s own template row can hold an attachment too, and a deleted one must still be reaped. Same reasoning as the groups.ts entry above.',
+  },
 ];
 
 /** SQL string literals (template or single-quoted) that select FROM txn. */

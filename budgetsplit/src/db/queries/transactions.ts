@@ -483,6 +483,36 @@ export async function softDeleteTxn(
   });
 }
 
+/**
+ * Unlink receipt files belonging to transactions soft-deleted more than
+ * `maxAgeMs` ago. There's no "recently deleted" browsing screen — the only
+ * way back is the ~5s Undo toast (`UndoToast.tsx`'s `UNDO_MS`) right after
+ * delete — so a row still `is_deleted=1` well past that is not coming back,
+ * and its photo would otherwise sit on disk forever (softDeleteTxn never
+ * touches `attachment_uri`). This module has no native file IO (AGENTS.md's
+ * layering rule), so — same split `deleteGroup` uses for its own orphaned
+ * attachments — this only reads and nulls the DB column; the caller deletes
+ * the actual files.
+ */
+export async function reapDeletedAttachments(
+  db: SQLite.SQLiteDatabase,
+  maxAgeMs: number,
+): Promise<string[]> {
+  const cutoff = Date.now() - maxAgeMs;
+  const rows = await db.getAllAsync<{ id: string; attachment_uri: string }>(
+    `SELECT id, attachment_uri FROM txn
+     WHERE is_deleted = 1 AND attachment_uri IS NOT NULL AND updated_at < ?`,
+    [cutoff],
+  );
+  if (rows.length === 0) return [];
+  const ids = rows.map(r => r.id);
+  await db.runAsync(
+    `UPDATE txn SET attachment_uri = NULL WHERE id IN (${ids.map(() => '?').join(',')})`,
+    ids,
+  );
+  return rows.map(r => r.attachment_uri);
+}
+
 /* ---- Recurring lifecycle (the parent txn row IS the recurring rule) ---- */
 
 export async function findRecentDuplicate(

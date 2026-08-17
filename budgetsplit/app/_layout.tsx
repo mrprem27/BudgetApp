@@ -13,6 +13,8 @@ import { openDB } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/recurring';
+import { reapDeletedAttachments } from '../src/db/queries/transactions';
+import { deleteAttachment } from '../src/lib/attachment';
 import { drainVoiceInbox, ensureVoiceInbox } from '../src/lib/voiceDrain';
 import * as Notifications from 'expo-notifications';
 import { rescheduleReminders } from '../src/lib/reminders';
@@ -28,6 +30,17 @@ import { StoreHydrator } from '../src/components/system/StoreHydrator';
 import { UndoProvider } from '../src/components/system/UndoToast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+
+// Soft-deleted transactions older than this have long outlived the ~5s Undo
+// toast — their receipt photo is never coming back, so the reaper unlinks it.
+// A safety margin, not a number shown anywhere, so it needs no product call.
+const ATTACHMENT_REAP_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Read-then-delete, same split as deleteGroup's own orphaned-attachment cleanup. */
+async function reapOrphanedAttachments(db: Awaited<ReturnType<typeof openDB>>): Promise<void> {
+  const orphaned = await reapDeletedAttachments(db, ATTACHMENT_REAP_MAX_AGE_MS);
+  for (const uri of orphaned) await deleteAttachment(uri);
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -64,6 +77,7 @@ export default function RootLayout() {
         const raid = await runSavingsMaintenance(db);
         if (raid.total > 0) setPendingOverspendNotice(raid).catch(() => {});
         rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)
+        reapOrphanedAttachments(db).catch(() => {});
         if (alive) { setDbReady(true); setDbError(false); }
       } catch {
         // Never strand the user on the splash — surface a retry instead.
@@ -80,6 +94,7 @@ export default function RootLayout() {
           .then((raid) => { if (raid.total > 0) return setPendingOverspendNotice(raid); })
           .catch(() => {});
         rescheduleReminders(dbRef).catch(() => {});
+        reapOrphanedAttachments(dbRef).catch(() => {});
       }
     });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { File } from 'expo-file-system';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -20,7 +20,7 @@ import {
 import { type SplitMode } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
-import { pickAttachment, AttachmentStorageError } from '../lib/attachment';
+import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../lib/attachment';
 import { getReceiptExtractor, type ParsedLineItem } from '../lib/ocrProviders';
 
 export type ItemizedStep = 'items' | 'assign' | 'payers' | 'review';
@@ -104,6 +104,11 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   const [locEnabled, setLocEnabled] = useState(false);
   const [capturingLoc, setCapturingLoc] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
+  // The receipt this bill had *before* any edit-mode change, captured once at
+  // load. Replacing/removing the receipt while editing overwrites `attachmentUri`
+  // itself, so without this the old file's path is gone by save time and never
+  // unlinked — a ref (not state) since nothing should re-render off it.
+  const originalAttachmentUriRef = useRef<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<{ rawText: string | null; candidates: ParsedLineItem[]; fellBack?: boolean } | null>(null);
   const [showScanSheet, setShowScanSheet] = useState(false);
@@ -154,6 +159,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
           setNote(t.note ?? '');
           setTxnDate(t.date);
           setAttachmentUri(t.attachment_uri ?? null);
+          originalAttachmentUriRef.current = t.attachment_uri ?? null;
           setItems(lineItems.map(li => ({
             id: li.id,
             name: li.name,
@@ -379,8 +385,16 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         lng: place?.lng,
         placeLabel: place?.label ?? undefined,
       };
-      if (isEditing) await updateItemizedTxn(db, editId!, payload);
-      else await insertItemizedTxn(db, payload);
+      if (isEditing) {
+        await updateItemizedTxn(db, editId!, payload);
+        // Replacing/removing the receipt while editing must unlink the old
+        // file — otherwise it orphans on disk forever, since nothing else
+        // ever revisits a bill's *previous* attachment.
+        const original = originalAttachmentUriRef.current;
+        if (original && original !== attachmentUri) await deleteAttachment(original);
+      } else {
+        await insertItemizedTxn(db, payload);
+      }
       haptic.success();
       refresh();
       router.back();
