@@ -643,3 +643,28 @@ export async function updateTxn(
     });
   });
 }
+
+export type LedgerStats = {
+  /** Epoch ms of the earliest real ledger row (null on an empty ledger). */
+  firstTxnMs: number | null;
+  /** Real ledger rows (rule templates excluded). */
+  txnCount: number;
+  /** Any income ever logged, as a row or a recurring rule. */
+  hasIncome: boolean;
+};
+
+/** Ledger footprint for the health score's minimum-data gate. */
+export async function getLedgerStats(db: SQLite.SQLiteDatabase): Promise<LedgerStats> {
+  const row = await db.getFirstAsync<{ first: number | null; n: number; incomes: number }>(
+    `SELECT MIN(CASE WHEN recur_freq IS NULL THEN date END) AS first,
+            SUM(CASE WHEN recur_freq IS NULL THEN 1 ELSE 0 END) AS n,
+            SUM(CASE WHEN kind = 'income' THEN 1 ELSE 0 END) AS incomes
+       FROM txn
+      WHERE is_deleted = 0`,
+  );
+  return {
+    firstTxnMs: row?.first ?? null,
+    txnCount: row?.n ?? 0,
+    hasIncome: (row?.incomes ?? 0) > 0,
+  };
+}

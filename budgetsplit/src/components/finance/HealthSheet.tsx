@@ -40,6 +40,38 @@ const CIRC = 2 * Math.PI * R;
 export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, periodLabel = 'this month' }: Props) {
   const improvement = result && inputs ? suggestImprovement(inputs, result) : null;
 
+  // Minimum-data gate (financialHealth.ts): below it there is no number at
+  // all — just the checklist of what unlocks one. Showing a score computed
+  // from silence is exactly the "59/Fair on an empty app" this replaces.
+  if (result && !result.gate.ok) {
+    return (
+      <SheetModal visible={visible} onClose={onClose} title="Money Health">
+        <View style={styles.gateHead}>
+          <Text style={styles.gateTitle}>Building your score</Text>
+          <Text style={styles.gateBody}>
+            Your score is computed from your real ledger — it unlocks once there&apos;s enough
+            data to be honest about it.
+          </Text>
+        </View>
+        <Card clip>
+          {result.gate.needs.map((n, i) => (
+            <View key={n.label}>
+              {i > 0 && <Divider indent="none" />}
+              <View style={styles.gateRow}>
+                <Feather
+                  name={n.done ? 'check-circle' : 'circle'}
+                  size={18}
+                  color={n.done ? colors.income : colors.textMuted}
+                />
+                <Text style={[styles.gateLabel, n.done && styles.gateDone]}>{n.label}</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+      </SheetModal>
+    );
+  }
+
   return (
     <SheetModal visible={visible} onClose={onClose} title="Money Health">
       {result && (
@@ -137,6 +169,12 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
 const DOT = 8;
 
 const styles = StyleSheet.create({
+  gateHead: { marginBottom: space.md },
+  gateTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.xs },
+  gateBody: { ...type.body, color: colors.textSecondary },
+  gateRow: { flexDirection: 'row', alignItems: 'center', gap: space.smd, paddingVertical: space.smd, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
+  gateLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
+  gateDone: { color: colors.textSecondary },
   ringWrap: { width: 120, height: 120, alignSelf: 'center', marginBottom: space.lg },
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
   ringScore: { ...type.amountXL, color: colors.textPrimary },

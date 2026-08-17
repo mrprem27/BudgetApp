@@ -9,7 +9,9 @@ import { getMyExposure } from '../db/queries/balances';
 import { getSafeToSpend } from '../db/queries/spendPower';
 import { getPendingCount } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
-import { getTransactionsInRange } from '../db/queries/transactions';
+import { getTransactionsInRange, getLedgerStats } from '../db/queries/transactions';
+import { getGoalFundingStatus } from '../db/queries/spendPower';
+import { getTotalMoney } from '../db/queries/savings';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
 import { myShareOf, myIncomeOf } from './splitMath';
@@ -149,30 +151,6 @@ export async function loadHomeData(
      * health score is rebased onto them.
      */
     const mine = await getMyGlobalBudgetSummary(db, me.id);
-    const over = mine.rows.filter(r => r.health === 'red').length;
-    const near = mine.rows.filter(r => r.health === 'amber').length;
-    const worstCat = mine.rows
-      .filter(r => r.health === 'red' || r.health === 'amber')
-      .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0] ?? null;
-
-    const now2 = new Date();
-    const healthInputsNow: HealthInputs = {
-      spendPaise: sp,
-      incomePaise: inc,
-      prevSpendPaise: prevSp,
-      budgetAllocated: mine.allocated,
-      budgetSpent: mine.spent,
-      categoriesOver: over,
-      categoriesNear: near,
-      totalBudgeted: mine.categoryCount,
-      worstCategoryPct: worstCat?.pct ?? null,
-      worstCategoryName: worstCat?.category ?? null,
-      netOwedPaise: exp.owe - exp.owed,
-      dayOfMonth: getDate(now2),
-      daysInMonth: getDaysInMonth(now2),
-    };
-    const health = computeHealthScore(healthInputsNow);
-    const healthInputs = healthInputsNow;
 
     // Category breakdown for "Where it went" (largest first). Names not in the
     // global catalog fold into one "Others" row (catMap itself is left intact so
@@ -194,6 +172,43 @@ export async function loadHomeData(
     // Safe-to-Spend — Home's headline (D10). Month-scoped regardless of the
     // Today/Month/Year selector: it answers "right now, to month-end".
     const sts = await getSafeToSpend(db);
+
+    // ── Health score inputs: the four FinHealth-style pillars, each term from
+    // its single existing source (see lib/financialHealth.ts). ──
+    const nowMs2 = Date.now();
+    const now2 = new Date(nowMs2);
+    const [ninetyTxns, funding, totalMoney, ledger] = await Promise.all([
+      getTransactionsInRange(db, null, nowMs2 - 90 * 86400000, nowMs2),
+      getGoalFundingStatus(db, nowMs2),
+      getTotalMoney(db),
+      getLedgerStats(db),
+    ]);
+    let income90 = 0, spend90 = 0;
+    for (const t of ninetyTxns) {
+      if (t.is_deleted) continue;
+      if (t.kind === 'expense') spend90 += myShareOf(t, me.id);
+      else if (t.kind === 'income') income90 += myIncomeOf(t, me.id);
+    }
+    const healthInputsNow: HealthInputs = {
+      income90, spend90,
+      budgetAllocated: mine.allocated,
+      budgetSpent: mine.spent,
+      dayOfMonth: getDate(now2),
+      daysInMonth: getDaysInMonth(now2),
+      liquid: sts.available,
+      goalCommitMonthly: funding.commitMonthly,
+      goalFundedThisMonth: funding.fundedThisMonth,
+      creditUsed: totalMoney.creditUsed,
+      netIOwe: exp.owe,
+      upcomingBills: sts.upcomingBills,
+      goalsCount: funding.goalsCount,
+      hasBudget: mine.allocated > 0,
+      dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
+      hasIncome: ledger.hasIncome,
+      txnCount: ledger.txnCount,
+    };
+    const health = computeHealthScore(healthInputsNow);
+    const healthInputs = healthInputsNow;
 
     // Month-end forecast + biggest category shift vs last month (Month view only).
     let forecast: Forecast | null = null;

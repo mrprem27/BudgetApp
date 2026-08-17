@@ -284,7 +284,8 @@ export default function DashboardScreen() {
               prevSpending={prevSpending}
               prevLabel={PREV_LABEL[tab]}
               obfuscate={hideAmounts}
-              healthScore={health ? health.score : null}
+              healthScore={health && health.gate.ok ? health.score : null}
+              healthLocked={!!health && !health.gate.ok}
               healthColor={health ? healthBandColor(health.band) : colors.accent}
               onPressHealth={() => setShowHealth(true)}
             />

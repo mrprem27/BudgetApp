@@ -33,6 +33,9 @@ type Props = {
   obfuscate?: boolean;
   /** Money-health score (0–100) for the corner ring; null hides the ring. */
   healthScore?: number | null;
+  /** Score exists but is gated on minimum data: show an empty ring that opens
+   *  the unlock checklist instead of a number. */
+  healthLocked?: boolean;
   /** Band colour for the ring + score text. */
   healthColor?: string;
   /** Tap handler for the ring — opens the health breakdown sheet. */
@@ -51,7 +54,8 @@ type Props = {
  */
 export function HeroCard({
   sts = null, onPressSts, spent, periodLabel, budgetAllocated, prevSpending, prevLabel,
-  obfuscate = false, healthScore = null, healthColor = colors.accent, onPressHealth, settling = false,
+  obfuscate = false, healthScore = null, healthLocked = false, healthColor = colors.accent,
+  onPressHealth, settling = false,
 }: Props) {
   const hasBudget = budgetAllocated > 0;
   const util = hasBudget ? Math.round((spent / budgetAllocated) * 100) : 0;
@@ -96,6 +100,29 @@ export function HeroCard({
 
   return (
     <View style={styles.card}>
+      {/* Gated score: an empty muted ring that opens the unlock checklist —
+          the activation loop, not a fake number. */}
+      {!showRing && healthLocked && (
+        <TouchableOpacity
+          onPress={onPressHealth}
+          hitSlop={8}
+          style={styles.ringAbs}
+          accessibilityRole="button"
+          accessibilityLabel="Money health locked, see what unlocks it"
+        >
+          <Svg width={RING} height={RING}>
+            <Circle
+              cx={RING / 2} cy={RING / 2} r={RING_R}
+              stroke={colors.bgElevated} strokeWidth={RING_STROKE} fill="none"
+              strokeDasharray="3 4"
+            />
+          </Svg>
+          <View style={[StyleSheet.absoluteFill, styles.ringCenter]}>
+            <Feather name="lock" size={13} color={colors.textMuted} />
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Health ring pinned top-right so the label sits tight above the number. */}
       {showRing && (
         <TouchableOpacity
@@ -125,7 +152,7 @@ export function HeroCard({
 
       {sts ? (
         <>
-          <Text style={[styles.label, showRing && styles.gutter]}>Safe to spend · to month-end</Text>
+          <Text style={[styles.label, (showRing || healthLocked) && styles.gutter]}>Safe to spend · to month-end</Text>
           {/* The headline: StS, tappable for the subtraction breakdown. Negative
               is shown honestly in red — over-committed IS the answer. */}
           <TouchableOpacity
@@ -163,7 +190,7 @@ export function HeroCard({
         </>
       ) : (
         <>
-          <Text style={[styles.label, showRing && styles.gutter]}>{periodLabel}</Text>
+          <Text style={[styles.label, (showRing || healthLocked) && styles.gutter]}>{periodLabel}</Text>
           {/* Fallback (no StS yet): spent-led hero, exactly the old layout. */}
           <View style={styles.numberRow}>
             {obfuscate

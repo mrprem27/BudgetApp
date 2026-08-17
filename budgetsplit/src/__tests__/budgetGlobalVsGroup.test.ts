@@ -98,7 +98,10 @@ describe('My Budget is never added to a group budget', () => {
   it('counts a category budgeted both globally and in a group once', async () => {
     const { db } = await fixture();
     const home = await loadHomeData(asDb(db), await getAllGroups(asDb(db)), 'month');
-    expect(home.healthInputs?.totalBudgeted).toBe(1);
+    // The health engine's budget terms read My Budget only — the same ₹8,000
+    // line must not double when the category is also budgeted in a group.
+    expect(home.healthInputs?.budgetAllocated).toBe(800000);
+    expect(home.healthInputs?.hasBudget).toBe(true);
   });
 
   it('gives Reports no group-budget bar for the personal group', async () => {

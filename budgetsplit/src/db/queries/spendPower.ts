@@ -11,6 +11,50 @@ import { getTransactionsInRange } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
 
+export type GoalFundingStatus = {
+  /** Monthly goal-funding commitment across active, uncompleted goals (paise). */
+  commitMonthly: number;
+  /** Allocated to goals so far this month (paise). */
+  fundedThisMonth: number;
+  /** Unfunded remainder of this cycle's commitments (paise). */
+  remaining: number;
+  /** Active goals. */
+  goalsCount: number;
+};
+
+/** This cycle's goal-funding position — shared by Safe-to-Spend and the health
+ *  score's Save pillar so "goal commitment" means one thing. */
+export async function getGoalFundingStatus(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<GoalFundingStatus> {
+  const monthStartMs = startOfMonth(new Date(nowMs)).getTime();
+  const [goals, saved, fundedRows] = await Promise.all([
+    getGoals(db),
+    getGoalSavedMap(db),
+    db.getAllAsync<{ goal_id: string; funded: number }>(
+      `SELECT goal_id, SUM(amount) AS funded
+         FROM savings_txn
+        WHERE kind = 'allocate' AND goal_id IS NOT NULL AND date >= ?
+        GROUP BY goal_id`,
+      [monthStartMs],
+    ),
+  ]);
+  const allocatedThisMonth: Record<string, number> = {};
+  for (const r of fundedRows) allocatedThisMonth[r.goal_id] = r.funded ?? 0;
+  const rated = goals.map(g => ({
+    id: g.id,
+    monthlyRate: monthlyContribution(g.allocation, g.frequency),
+    saved: saved[g.id] ?? 0,
+    target: g.target,
+  }));
+  const commitMonthly = rated.reduce((s, g) => s + (g.saved >= g.target ? 0 : Math.max(0, g.monthlyRate)), 0);
+  const fundedThisMonth = Object.values(allocatedThisMonth).reduce((s, v) => s + v, 0);
+  return {
+    commitMonthly,
+    fundedThisMonth,
+    remaining: goalRemainingThisCycle(rated, allocatedThisMonth),
+    goalsCount: goals.length,
+  };
+}
+
 /**
  * Assemble Safe-to-Spend (see `lib/safeToSpend.ts` for the formula and why
  * each term has exactly one source). Horizon: month-end. Used by Home's hero
@@ -21,25 +65,16 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
   if (!me) return computeSafeToSpend({ available: 0, upcomingBills: 0, goalRemaining: 0, netIOwe: 0 });
 
   const today = new Date(nowMs);
-  const monthStartMs = startOfMonth(today).getTime();
   const monthEndMs = endOfMonth(today).getTime();
 
-  const [pos, groups, goals, saved, exposure, futureTxns, fundedRows] = await Promise.all([
+  const [pos, groups, funding, exposure, futureTxns] = await Promise.all([
     getCashPosition(db),
     getAllGroups(db),
-    getGoals(db),
-    getGoalSavedMap(db),
+    getGoalFundingStatus(db, nowMs),
     getMyExposure(db, me.id),
     // Already-logged future-dated one-offs (recurring occurrences are never
     // materialized ahead of now, so these are disjoint from the expansion).
     getTransactionsInRange(db, null, nowMs, monthEndMs),
-    db.getAllAsync<{ goal_id: string; funded: number }>(
-      `SELECT goal_id, SUM(amount) AS funded
-         FROM savings_txn
-        WHERE kind = 'allocate' AND goal_id IS NOT NULL AND date >= ?
-        GROUP BY goal_id`,
-      [monthStartMs],
-    ),
   ]);
 
   const recurRules = (await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)))).flat();
@@ -52,22 +87,10 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
     upcomingBills += myShareOf(t, me.id);
   }
 
-  const allocatedThisMonth: Record<string, number> = {};
-  for (const r of fundedRows) allocatedThisMonth[r.goal_id] = r.funded ?? 0;
-  const goalRemaining = goalRemainingThisCycle(
-    goals.map(g => ({
-      id: g.id,
-      monthlyRate: monthlyContribution(g.allocation, g.frequency),
-      saved: saved[g.id] ?? 0,
-      target: g.target,
-    })),
-    allocatedThisMonth,
-  );
-
   return computeSafeToSpend({
     available: pos.available,
     upcomingBills,
-    goalRemaining,
+    goalRemaining: funding.remaining,
     netIOwe: exposure.owe,
   });
 }

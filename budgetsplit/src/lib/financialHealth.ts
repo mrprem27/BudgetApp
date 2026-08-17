@@ -1,239 +1,222 @@
 /**
- * Financial health engine — five independent signals derived from real
- * transaction data (no pre-calculations, no generalised summaries).
- * Each signal explains itself with a plain-language detail string so the
- * user understands exactly why their score is what it is.
+ * Financial health engine — four equal-weighted pillars in the structure the
+ * validated instruments use (Financial Health Network's FinHealth Score®,
+ * CFPB Financial Well-Being Scale): **Spend / Save / Borrow / Plan**, each
+ * scored 0–100 from real ledger data, overall = plain average, tiers named
+ * Vulnerable (0–39) / Coping (40–79) / Healthy (80–100).
+ *
+ * Two rules carried over from those instruments, because they are what
+ * separates a measurement from a vibe:
+ *
+ * 1. **Equal weights.** No published instrument justifies unequal ones, so we
+ *    don't invent any. A pillar is the average of its factors; the score is
+ *    the average of every factor that could be computed.
+ * 2. **No score on insufficient data.** Both instruments refuse to score an
+ *    incomplete questionnaire. Our analog: fewer than `GATE_MIN_DAYS` days of
+ *    ledger history, no income ever logged, or fewer than `GATE_MIN_TXNS`
+ *    transactions → `gate.ok === false`, no number, and `gate.needs` is the
+ *    "add X to unlock" checklist. (The old rubric paid an empty database
+ *    59/100 "Fair" out of neutral defaults — a confident number manufactured
+ *    from silence.)
+ *
+ * Factors that genuinely don't apply (no budget set, no goals with a funding
+ * rate, no recurring bills known) are EXCLUDED from numerator and denominator
+ * alike — absence of data is never worth points in either direction.
+ * Every factor explains itself with a plain-language detail string.
  */
 import { formatCompact } from './money';
 
-export type HealthBand = 'great' | 'good' | 'fair' | 'poor';
+export type HealthBand = 'healthy' | 'coping' | 'vulnerable';
+
+/** Tier boundaries, straight from the FinHealth Score. */
+export const HEALTH_TIER_HEALTHY = 80;
+export const HEALTH_TIER_COPING = 40;
+
+/** Minimum ledger history before a score is shown. */
+export const GATE_MIN_DAYS = 30;
+export const GATE_MIN_TXNS = 10;
 
 export type HealthInputs = {
-  /** My total spending this period (paise). */
-  spendPaise: number;
-  /** My total income this period (paise). */
-  incomePaise: number;
-  /** My total spending the previous equivalent period (paise). */
-  prevSpendPaise: number;
-
-  /** Sum of all budget allocations across groups (paise; 0 = no budget set). */
+  // ── Spend ──
+  /** My income over the last 90 days (paise). */
+  income90: number;
+  /** My spend (my share) over the last 90 days (paise). */
+  spend90: number;
+  /** My Budget: total monthly allocation (paise; 0 = no budget set). */
   budgetAllocated: number;
-  /** Sum of spending against budgeted categories (paise). */
+  /** Spend against those budgeted categories this month (paise). */
   budgetSpent: number;
-  /** Number of budget categories currently over 100 % utilisation. */
-  categoriesOver: number;
-  /** Number of budget categories between 80–100 % utilisation. */
-  categoriesNear: number;
-  /** Total number of categories that have a budget set. */
-  totalBudgeted: number;
-  /** Worst single category utilisation % (null when no budgets). */
-  worstCategoryPct: number | null;
-  /** Name of the worst category (null when no budgets). */
-  worstCategoryName: string | null;
-
-  /** Positive = you owe others; negative = others owe you (paise). */
-  netOwedPaise: number;
-
-  /** Current day of the month (1–31). */
   dayOfMonth: number;
-  /** Total days in the current month (28–31). */
   daysInMonth: number;
+
+  // ── Save ──
+  /** Liquid cash right now (paise) — `getCashPosition().available`. */
+  liquid: number;
+  /** Monthly goal-funding commitment across active goals (paise). */
+  goalCommitMonthly: number;
+  /** Allocated to goals so far this month (paise). */
+  goalFundedThisMonth: number;
+
+  // ── Borrow ──
+  /** Credit-card balance currently used (paise). */
+  creditUsed: number;
+  /** What I owe people net of settlements (paise, ≥ 0). */
+  netIOwe: number;
+
+  // ── Plan ──
+  /** My share of bills still due before month-end (paise). */
+  upcomingBills: number;
+  /** Active savings goals. */
+  goalsCount: number;
+  /** Is any budget set at all? */
+  hasBudget: boolean;
+
+  // ── Gate ──
+  /** Days since the first ledger transaction. */
+  dataDays: number;
+  /** Has any income ever been logged (row or recurring rule)? */
+  hasIncome: boolean;
+  /** Ledger transactions (excluding rule templates). */
+  txnCount: number;
 };
 
 export type HealthFactor = {
   label: string;
-  /** Concise sentence explaining the score for this dimension. */
+  /** Concise sentence explaining the score for this factor. */
   detail: string;
+  /** 0–100. */
   points: number;
+  /** Always 100 — kept so existing meters render unchanged. */
   max: number;
   severity: 'good' | 'warn' | 'bad' | 'neutral';
 };
 
 export type HealthDimension = {
-  /** Short label shown under the ring (e.g. "Spending"). */
+  /** Pillar label: Spend / Save / Borrow / Plan. */
   label: string;
   score: number;
   max: number;
-  /** 0–100 percentage fill for the circular ring. */
+  /** 0–100 fill for the pillar meter. */
   pct: number;
   severity: 'good' | 'warn' | 'bad' | 'neutral';
-  /** Constituent signals, shown when the user taps the ring. */
   factors: HealthFactor[];
 };
 
+export type HealthGateNeed = { label: string; done: boolean };
+
 export type HealthResult = {
+  /** 0–100. Meaningless when `gate.ok` is false — UIs must not show it then. */
   score: number;
   band: HealthBand;
   factors: HealthFactor[];
-  /** Three grouped dimensions driving the ring UI. */
+  /** The four pillars driving the UI. */
   dimensions: HealthDimension[];
+  /** Minimum-data gate. `ok: false` → show `needs` as the unlock checklist. */
+  gate: { ok: boolean; needs: HealthGateNeed[] };
 };
 
-// ─── Signal 1: Spend pace (max 25) ───────────────────────────────────────────
-// Compares actual spend against the time-weighted expected spend for this point
-// in the month. Tells you whether you're running hot or cold relative to pace.
+const F = (label: string, detail: string, points: number, severity: HealthFactor['severity']): HealthFactor =>
+  ({ label, detail, points: Math.max(0, Math.min(100, Math.round(points))), max: 100, severity });
 
-function spendPaceFactor(input: HealthInputs): HealthFactor {
-  const { spendPaise, incomePaise, budgetAllocated, budgetSpent, dayOfMonth, daysInMonth } = input;
+// ── Spend ────────────────────────────────────────────────────────────────────
 
-  if (budgetAllocated > 0) {
-    const paceExpected = Math.round((dayOfMonth / daysInMonth) * budgetAllocated);
-    if (paceExpected === 0) {
-      return { label: 'Spend pace', detail: 'Too early in the month to gauge pace.', points: 14, max: 25, severity: 'neutral' };
-    }
-    const ratio = budgetSpent / paceExpected;
-    const headroom = paceExpected - budgetSpent;
-    const over = budgetSpent - paceExpected;
-
-    if (ratio <= 0.75) {
-      return { label: 'Spend pace', detail: `${formatCompact(Math.abs(headroom))} under pace — well ahead of budget.`, points: 25, max: 25, severity: 'good' };
-    }
-    if (ratio <= 1.0) {
-      return { label: 'Spend pace', detail: `${formatCompact(Math.abs(headroom))} under pace — on track.`, points: 18, max: 25, severity: 'good' };
-    }
-    if (ratio <= 1.2) {
-      return { label: 'Spend pace', detail: `${formatCompact(over)} over pace with ${daysInMonth - dayOfMonth} days left.`, points: 9, max: 25, severity: 'warn' };
-    }
-    return { label: 'Spend pace', detail: `${formatCompact(over)} ahead of pace — running significantly hot.`, points: 2, max: 25, severity: 'bad' };
-  }
-
-  // No budget — use income as the reference.
-  if (incomePaise > 0) {
-    const ratio = spendPaise / incomePaise;
-    if (ratio <= 0.5) {
-      return { label: 'Spend pace', detail: `Spent ${Math.round(ratio * 100)}% of income — healthy.`, points: 22, max: 25, severity: 'good' };
-    }
-    if (ratio <= 0.8) {
-      return { label: 'Spend pace', detail: `Spent ${Math.round(ratio * 100)}% of income so far.`, points: 16, max: 25, severity: 'good' };
-    }
-    if (ratio <= 1.0) {
-      return { label: 'Spend pace', detail: `Spent ${Math.round(ratio * 100)}% of income — approaching the limit.`, points: 10, max: 25, severity: 'warn' };
-    }
-    return { label: 'Spend pace', detail: `Spending exceeds income by ${formatCompact(spendPaise - incomePaise)}.`, points: 2, max: 25, severity: 'bad' };
-  }
-
-  return { label: 'Spend pace', detail: 'No budget or income to compare against.', points: 12, max: 25, severity: 'neutral' };
+/** Spend < income — the most basic FinHealth indicator, over a 90-day window. */
+function spendVsIncome(i: HealthInputs): HealthFactor | null {
+  if (i.income90 <= 0) return null; // gate requires income *ever*; window can still be empty
+  const rate = (i.income90 - i.spend90) / i.income90;
+  const pct = Math.round(rate * 100);
+  if (rate >= 0.2) return F('Spending vs income', `Keeping ${pct}% of income over 90 days — healthy.`, 100, 'good');
+  if (rate >= 0.1) return F('Spending vs income', `Keeping ${pct}% of income over 90 days.`, 75, 'good');
+  if (rate >= 0)   return F('Spending vs income', `Keeping only ${pct}% of income — spending nearly all of it.`, 50, 'warn');
+  return F('Spending vs income', `Spending ${formatCompact(i.spend90 - i.income90)} more than income over 90 days.`, 15, 'bad');
 }
 
-// ─── Signal 2: Category discipline (max 20) ───────────────────────────────────
-// Looks at each budgeted category individually — the worst offender matters most.
-// A single runaway category tanks this signal even if the aggregate looks fine.
-
-function categoryFactor(input: HealthInputs): HealthFactor {
-  const { categoriesOver, categoriesNear, totalBudgeted, worstCategoryPct, worstCategoryName } = input;
-
-  if (totalBudgeted === 0) {
-    return { label: 'Category budgets', detail: 'No category budgets set yet.', points: 10, max: 20, severity: 'neutral' };
-  }
-  if (categoriesOver === 0 && categoriesNear === 0) {
-    return { label: 'Category budgets', detail: `All ${totalBudgeted} budgeted categories on track.`, points: 20, max: 20, severity: 'good' };
-  }
-  if (categoriesOver === 0) {
-    const nearText = categoriesNear === 1 ? '1 category near limit' : `${categoriesNear} categories near limit`;
-    return { label: 'Category budgets', detail: `${nearText} — watch your spending.`, points: 14, max: 20, severity: 'warn' };
-  }
-  if (categoriesOver === 1 && worstCategoryName) {
-    const pct = worstCategoryPct !== null ? ` (${worstCategoryPct}%)` : '';
-    return { label: 'Category budgets', detail: `${worstCategoryName}${pct} is over budget.`, points: 8, max: 20, severity: 'bad' };
-  }
-  const worstText = worstCategoryName && worstCategoryPct !== null ? ` — worst: ${worstCategoryName} at ${worstCategoryPct}%` : '';
-  return { label: 'Category budgets', detail: `${categoriesOver} categories over budget${worstText}.`, points: 2, max: 20, severity: 'bad' };
+/** Pace against the budget the user set. N/A without a budget. */
+function budgetPace(i: HealthInputs): HealthFactor | null {
+  if (i.budgetAllocated <= 0) return null;
+  const paceExpected = Math.round((i.dayOfMonth / i.daysInMonth) * i.budgetAllocated);
+  if (paceExpected === 0) return F('Budget pace', 'Too early in the month to gauge pace.', 80, 'neutral');
+  const ratio = i.budgetSpent / paceExpected;
+  const headroom = paceExpected - i.budgetSpent;
+  if (ratio <= 0.75) return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace — well ahead of budget.`, 100, 'good');
+  if (ratio <= 1.0)  return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace — on track.`, 80, 'good');
+  if (ratio <= 1.2)  return F('Budget pace', `${formatCompact(-headroom)} over pace with ${i.daysInMonth - i.dayOfMonth} days left.`, 45, 'warn');
+  return F('Budget pace', `${formatCompact(-headroom)} over pace — running significantly hot.`, 10, 'bad');
 }
 
-// ─── Signal 3: Cash flow / savings rate (max 20) ──────────────────────────────
-// (income − spending) ÷ income — the most direct measure of whether money is
-// accumulating or evaporating. No income = penalise only lightly.
+// ── Save ─────────────────────────────────────────────────────────────────────
 
-function cashFlowFactor(input: HealthInputs): HealthFactor {
-  const { spendPaise, incomePaise } = input;
-
-  if (incomePaise === 0) {
-    if (spendPaise === 0) {
-      return { label: 'Cash flow', detail: 'No income or spending recorded yet.', points: 10, max: 20, severity: 'neutral' };
-    }
-    return { label: 'Cash flow', detail: `${formatCompact(spendPaise)} spent with no income logged.`, points: 5, max: 20, severity: 'warn' };
-  }
-
-  const rate = Math.round(((incomePaise - spendPaise) / incomePaise) * 100);
-  if (rate >= 20) {
-    return { label: 'Cash flow', detail: `Saving ${rate}% of income — excellent.`, points: 20, max: 20, severity: 'good' };
-  }
-  if (rate >= 10) {
-    return { label: 'Cash flow', detail: `Saving ${rate}% of income.`, points: 15, max: 20, severity: 'good' };
-  }
-  if (rate >= 0) {
-    return { label: 'Cash flow', detail: `Saving ${rate}% of income — try to push above 10%.`, points: 10, max: 20, severity: 'warn' };
-  }
-  const overBy = formatCompact(spendPaise - incomePaise);
-  return { label: 'Cash flow', detail: `Spending ${overBy} more than income.`, points: 2, max: 20, severity: 'bad' };
+/** Liquid runway in months of typical spend — FinHealth's liquid-savings indicator. */
+function runway(i: HealthInputs): HealthFactor | null {
+  const monthlySpend = i.spend90 / 3;
+  if (monthlySpend <= 0) return null;
+  const months = i.liquid / monthlySpend;
+  const label = 'Cash runway';
+  const m = months.toFixed(1).replace(/\.0$/, '');
+  if (months >= 6) return F(label, `${m} months of spending in cash — a real cushion.`, 100, 'good');
+  if (months >= 3) return F(label, `${m} months of spending in cash.`, 80, 'good');
+  if (months >= 1) return F(label, `${m} months of spending in cash — thin cushion.`, 55, 'warn');
+  if (months > 0)  return F(label, `Less than a month of spending in cash.`, 30, 'bad');
+  return F(label, 'No cash cushion — spending would go straight to debt.', 10, 'bad');
 }
 
-// ─── Signal 4: Spending momentum (max 20) ────────────────────────────────────
-// Period-over-period delta: are you improving or worsening? Rewards consistent
-// downward movement; penalises sharp spikes.
-
-function momentumFactor(input: HealthInputs): HealthFactor {
-  const { spendPaise, prevSpendPaise } = input;
-
-  if (prevSpendPaise === 0) {
-    if (spendPaise === 0) {
-      return { label: 'Spending trend', detail: 'No prior period to compare against.', points: 12, max: 20, severity: 'neutral' };
-    }
-    return { label: 'Spending trend', detail: 'First period with spending recorded.', points: 12, max: 20, severity: 'neutral' };
-  }
-
-  const delta = Math.round(((spendPaise - prevSpendPaise) / prevSpendPaise) * 100);
-  const absDelta = Math.abs(delta);
-
-  if (delta <= -15) {
-    return { label: 'Spending trend', detail: `Down ${absDelta}% from last period — great improvement.`, points: 20, max: 20, severity: 'good' };
-  }
-  if (delta <= -5) {
-    return { label: 'Spending trend', detail: `Down ${absDelta}% from last period.`, points: 16, max: 20, severity: 'good' };
-  }
-  if (delta <= 5) {
-    return { label: 'Spending trend', detail: `Similar to last period (${delta > 0 ? '+' : ''}${delta}%).`, points: 12, max: 20, severity: 'neutral' };
-  }
-  if (delta <= 20) {
-    return { label: 'Spending trend', detail: `Up ${delta}% from last period — spending is rising.`, points: 7, max: 20, severity: 'warn' };
-  }
-  return { label: 'Spending trend', detail: `Up ${delta}% from last period — sharp increase.`, points: 2, max: 20, severity: 'bad' };
+/** Are this cycle's goal contributions actually happening? N/A without a rate. */
+function goalFunding(i: HealthInputs): HealthFactor | null {
+  if (i.goalCommitMonthly <= 0) return null;
+  const ratio = i.goalFundedThisMonth / i.goalCommitMonthly;
+  const label = 'Goal funding';
+  if (ratio >= 1)   return F(label, 'This month’s goal contributions are fully set aside.', 100, 'good');
+  if (ratio >= 0.5) return F(label, `${Math.round(ratio * 100)}% of this month’s goal funding set aside.`, 70, 'good');
+  if (ratio > 0)    return F(label, `Only ${Math.round(ratio * 100)}% of this month’s goal funding set aside so far.`, 40, 'warn');
+  return F(label, `None of this month’s ${formatCompact(i.goalCommitMonthly)} goal funding set aside yet.`, 20, 'warn');
 }
 
-// ─── Signal 5: Debt burden (max 15) ──────────────────────────────────────────
-// How much you owe others relative to your income. Owing a lot relative to what
-// you earn is a stress indicator. Being owed is a positive signal.
+// ── Borrow ───────────────────────────────────────────────────────────────────
 
-function debtFactor(input: HealthInputs): HealthFactor {
-  const { netOwedPaise, incomePaise } = input;
-
-  if (netOwedPaise < 0) {
-    return { label: 'Debt position', detail: `Others owe you ${formatCompact(-netOwedPaise)} — positive.`, points: 15, max: 15, severity: 'good' };
+/** Debt load: card balance + what you owe people, against monthly income. */
+function debtLoad(i: HealthInputs): HealthFactor {
+  const debt = Math.max(0, i.creditUsed) + Math.max(0, i.netIOwe);
+  const label = 'Debt load';
+  if (debt === 0) {
+    // Earned, not defaulted: the gate guarantees a real ledger exists.
+    return F(label, 'No card balance and nothing owed — clear.', 100, 'good');
   }
-  if (netOwedPaise === 0) {
-    return { label: 'Debt position', detail: 'All balances settled.', points: 15, max: 15, severity: 'good' };
+  const monthlyIncome = i.income90 / 3;
+  if (monthlyIncome <= 0) {
+    return F(label, `Owing ${formatCompact(debt)} with no recent income logged.`, 25, 'warn');
   }
-
-  if (incomePaise > 0) {
-    const ratio = netOwedPaise / incomePaise;
-    if (ratio < 0.1) {
-      return { label: 'Debt position', detail: `You owe ${formatCompact(netOwedPaise)} — less than 10% of income.`, points: 12, max: 15, severity: 'good' };
-    }
-    if (ratio < 0.3) {
-      return { label: 'Debt position', detail: `You owe ${formatCompact(netOwedPaise)} — ${Math.round(ratio * 100)}% of income.`, points: 7, max: 15, severity: 'warn' };
-    }
-    return { label: 'Debt position', detail: `You owe ${formatCompact(netOwedPaise)} — over 30% of income.`, points: 2, max: 15, severity: 'bad' };
-  }
-
-  // No income to ratio against — use absolute thresholds.
-  const K = 100 * 100; // ₹100 in paise
-  if (netOwedPaise <= 10 * K) {
-    return { label: 'Debt position', detail: `You owe ${formatCompact(netOwedPaise)} — small balance.`, points: 11, max: 15, severity: 'neutral' };
-  }
-  return { label: 'Debt position', detail: `You owe ${formatCompact(netOwedPaise)}.`, points: 4, max: 15, severity: 'warn' };
+  const ratio = debt / monthlyIncome;
+  if (ratio < 0.1) return F(label, `Owing ${formatCompact(debt)} — under 10% of a month's income.`, 85, 'good');
+  if (ratio < 0.3) return F(label, `Owing ${formatCompact(debt)} — ${Math.round(ratio * 100)}% of a month's income.`, 55, 'warn');
+  if (ratio < 0.6) return F(label, `Owing ${formatCompact(debt)} — ${Math.round(ratio * 100)}% of a month's income.`, 30, 'bad');
+  return F(label, `Owing ${formatCompact(debt)} — more than half a month's income.`, 10, 'bad');
 }
 
-// ─── Main entry point ─────────────────────────────────────────────────────────
+// ── Plan ─────────────────────────────────────────────────────────────────────
+
+/** Are the bills you know about covered by the cash you actually have? */
+function billsCovered(i: HealthInputs): HealthFactor | null {
+  if (i.upcomingBills <= 0) return null; // no known bills → nothing to assess
+  const label = 'Bills covered';
+  if (i.liquid >= i.upcomingBills) {
+    return F(label, `This month's remaining ${formatCompact(i.upcomingBills)} in bills is covered by cash on hand.`, 100, 'good');
+  }
+  const ratio = i.liquid > 0 ? i.liquid / i.upcomingBills : 0;
+  if (ratio >= 0.5) return F(label, `Cash covers only ${Math.round(ratio * 100)}% of the bills still due this month.`, 50, 'warn');
+  return F(label, `Bills still due (${formatCompact(i.upcomingBills)}) exceed the cash on hand.`, 15, 'bad');
+}
+
+/** Planning ahead: a budget and goals exist at all. Always computable. */
+function plansAhead(i: HealthInputs): HealthFactor {
+  const label = 'Plans ahead';
+  const hasGoals = i.goalsCount > 0;
+  if (i.hasBudget && hasGoals) return F(label, 'Budget set and savings goals defined.', 100, 'good');
+  if (i.hasBudget) return F(label, 'Budget set — no savings goals yet.', 60, 'neutral');
+  if (hasGoals) return F(label, 'Savings goals defined — no budget yet.', 60, 'neutral');
+  return F(label, 'No budget and no savings goals yet.', 20, 'warn');
+}
+
+// ── Main entry point ─────────────────────────────────────────────────────────
 
 function worstSev(fs: HealthFactor[]): HealthFactor['severity'] {
   if (fs.some(f => f.severity === 'bad')) return 'bad';
@@ -242,37 +225,46 @@ function worstSev(fs: HealthFactor[]): HealthFactor['severity'] {
   return 'neutral';
 }
 
-export function computeHealthScore(input: HealthInputs): HealthResult {
-  const f1 = spendPaceFactor(input);
-  const f2 = categoryFactor(input);
-  const f3 = cashFlowFactor(input);
-  const f4 = momentumFactor(input);
-  const f5 = debtFactor(input);
-  const factors: HealthFactor[] = [f1, f2, f3, f4, f5];
-
-  const score = Math.max(0, Math.min(100, factors.reduce((s, f) => s + f.points, 0)));
-  const band: HealthBand = score >= 80 ? 'great' : score >= 60 ? 'good' : score >= 40 ? 'fair' : 'poor';
-
-  const mkDim = (label: string, fs: HealthFactor[]): HealthDimension => {
-    const s = fs.reduce((a, f) => a + f.points, 0);
-    const m = fs.reduce((a, f) => a + f.max, 0);
-    return { label, score: s, max: m, pct: Math.round((s / m) * 100), severity: worstSev(fs), factors: fs };
-  };
-
-  // 3 rings grouped by what they measure:
-  //   Spending : spendPace (25) + cashFlow (20) = max 45
-  //   Trend    : momentum (20)                  = max 20
-  //   Budget   : category (20) + debt (15)      = max 35
-  const dimensions: HealthDimension[] = [
-    mkDim('Spending', [f1, f3]),
-    mkDim('Trend', [f4]),
-    mkDim('Budget', [f2, f5]),
+export function healthGate(i: HealthInputs): HealthResult['gate'] {
+  const needs: HealthGateNeed[] = [
+    { label: `${GATE_MIN_DAYS} days of history (${Math.min(i.dataDays, GATE_MIN_DAYS)}/${GATE_MIN_DAYS})`, done: i.dataDays >= GATE_MIN_DAYS },
+    { label: 'At least one income logged', done: i.hasIncome },
+    { label: `${GATE_MIN_TXNS} transactions logged (${Math.min(i.txnCount, GATE_MIN_TXNS)}/${GATE_MIN_TXNS})`, done: i.txnCount >= GATE_MIN_TXNS },
   ];
-
-  return { score, band, factors, dimensions };
+  return { ok: needs.every(n => n.done), needs };
 }
 
-// ─── Improvement projection ───────────────────────────────────────────────────
+export function computeHealthScore(input: HealthInputs): HealthResult {
+  const gate = healthGate(input);
+
+  const pillarDefs: Array<{ label: string; factors: Array<HealthFactor | null> }> = [
+    { label: 'Spend',  factors: [spendVsIncome(input), budgetPace(input)] },
+    { label: 'Save',   factors: [runway(input), goalFunding(input)] },
+    { label: 'Borrow', factors: [debtLoad(input)] },
+    { label: 'Plan',   factors: [billsCovered(input), plansAhead(input)] },
+  ];
+
+  const dimensions: HealthDimension[] = [];
+  const allFactors: HealthFactor[] = [];
+  for (const p of pillarDefs) {
+    const fs = p.factors.filter((f): f is HealthFactor => f !== null);
+    if (fs.length === 0) continue; // absent pillar: out of numerator AND denominator
+    const pct = Math.round(fs.reduce((s, f) => s + f.points, 0) / fs.length);
+    dimensions.push({ label: p.label, score: pct, max: 100, pct, severity: worstSev(fs), factors: fs });
+    allFactors.push(...fs);
+  }
+
+  // Equal-weighted average of the pillars (FinHealth's structure: each pillar
+  // counts the same, however many of its indicators were computable).
+  const score = dimensions.length > 0
+    ? Math.max(0, Math.min(100, Math.round(dimensions.reduce((s, d) => s + d.pct, 0) / dimensions.length)))
+    : 0;
+  const band: HealthBand = score >= HEALTH_TIER_HEALTHY ? 'healthy' : score >= HEALTH_TIER_COPING ? 'coping' : 'vulnerable';
+
+  return { score, band, factors: allFactors, dimensions, gate };
+}
+
+// ── Improvement projection ───────────────────────────────────────────────────
 // A *real* "what would help most" — never a fabricated number. We take the
 // weakest actionable factor, apply a concrete, achievable change, and re-run
 // computeHealthScore() so the projected score is the true recomputed result.
@@ -289,50 +281,59 @@ function buildLever(label: string, input: HealthInputs, fromScore: number): Heal
   const project = (patch: Partial<HealthInputs>): number => computeHealthScore({ ...input, ...patch }).score;
 
   switch (label) {
-    case 'Cash flow':
-    case 'Spend pace': {
-      // Nothing to pace against → can't model honestly.
-      if (input.incomePaise <= 0 && input.budgetAllocated <= 0) return null;
-      const cut = Math.round(input.spendPaise * 0.12); // a concrete ~12% trim
+    case 'Spending vs income':
+    case 'Budget pace': {
+      const cut = Math.round((input.spend90 / 3) * 0.12); // a concrete ~12% monthly trim
       if (cut <= 0) return null;
       const to = project({
-        spendPaise: Math.max(0, input.spendPaise - cut),
+        spend90: Math.max(0, input.spend90 - cut * 3),
         budgetSpent: Math.max(0, input.budgetSpent - cut),
       });
       if (to <= fromScore) return null;
       return {
         factorLabel: label,
         title: 'Biggest lever: trim spending',
-        detail: `Spending ${formatCompact(cut)} less this month would lift your score from ${fromScore} to ${to}.`,
+        detail: `Spending ${formatCompact(cut)} less a month would lift your score from ${fromScore} to ${to}.`,
         fromScore, toScore: to,
       };
     }
-    case 'Category budgets': {
-      if (input.totalBudgeted === 0) return null;
-      if (input.categoriesOver === 0) {
-        if (input.categoriesNear === 0) return null;
-        const to = project({ categoriesNear: 0 });
-        if (to <= fromScore) return null;
-        return { factorLabel: label, title: 'Keep categories under budget', detail: `Keeping your near-limit categories under budget would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
-      }
-      const name = input.worstCategoryName;
-      const onlyOne = input.categoriesOver === 1;
-      const to = project({
-        categoriesOver: input.categoriesOver - 1,
-        worstCategoryPct: onlyOne ? null : input.worstCategoryPct,
-        worstCategoryName: onlyOne ? null : input.worstCategoryName,
-      });
+    case 'Debt load': {
+      const debt = Math.max(0, input.creditUsed) + Math.max(0, input.netIOwe);
+      if (debt <= 0) return null;
+      const to = project({ creditUsed: 0, netIOwe: 0 });
       if (to <= fromScore) return null;
-      return { factorLabel: label, title: name ? `Rein in ${name}` : 'Rein in over-budget spending', detail: `Bringing ${name ?? 'your worst category'} back under budget would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
+      return {
+        factorLabel: label,
+        title: 'Clear what you owe',
+        detail: `Settling the ${formatCompact(debt)} you owe would lift your score from ${fromScore} to ${to}.`,
+        fromScore, toScore: to,
+      };
     }
-    case 'Debt position': {
-      if (input.netOwedPaise <= 0) return null;
-      const to = project({ netOwedPaise: 0 });
+    case 'Goal funding': {
+      if (input.goalCommitMonthly <= 0 || input.goalFundedThisMonth >= input.goalCommitMonthly) return null;
+      const to = project({ goalFundedThisMonth: input.goalCommitMonthly });
       if (to <= fromScore) return null;
-      return { factorLabel: label, title: 'Settle what you owe', detail: `Settling the ${formatCompact(input.netOwedPaise)} you owe would lift your score from ${fromScore} to ${to}.`, fromScore, toScore: to };
+      const gap = input.goalCommitMonthly - input.goalFundedThisMonth;
+      return {
+        factorLabel: label,
+        title: 'Fund this month’s goals',
+        detail: `Setting aside the remaining ${formatCompact(gap)} for goals would lift your score from ${fromScore} to ${to}.`,
+        fromScore, toScore: to,
+      };
+    }
+    case 'Plans ahead': {
+      if (input.hasBudget) return null;
+      const to = project({ hasBudget: true });
+      if (to <= fromScore) return null;
+      return {
+        factorLabel: label,
+        title: 'Set a monthly budget',
+        detail: `Setting a budget would lift your score from ${fromScore} to ${to} — and make the pace line real.`,
+        fromScore, toScore: to,
+      };
     }
     default:
-      return null; // Spending trend isn't directly actionable within the period.
+      return null; // Runway / bills-covered move by saving, which the levers above already cover.
   }
 }
 
@@ -342,14 +343,16 @@ function buildLever(label: string, input: HealthInputs, fromScore: number): Heal
  * by re-running the real scoring formula, so it can never be a fake figure.
  */
 export function suggestImprovement(input: HealthInputs, result: HealthResult): HealthImprovement | null {
+  if (!result.gate.ok) return null;
   const ranked = result.factors
     .map(f => ({ f, gap: f.max - f.points }))
-    .filter(x => x.gap >= 3)
+    .filter(x => x.gap >= 20)
     .sort((a, b) => b.gap - a.gap);
 
   for (const { f } of ranked) {
     const built = buildLever(f.label, input, result.score);
-    if (built && built.toScore > built.fromScore) return built;
+    // A lever must be material: nudging 95→98 is noise, not advice.
+    if (built && built.toScore - built.fromScore >= 5) return built;
   }
   return null;
 }
