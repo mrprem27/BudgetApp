@@ -6,11 +6,12 @@ import { formatCompact } from '../../../lib/money';
 import { AvatarStack } from '../AvatarStack';
 import type { Person } from '../../../db/queries/persons';
 import type { Share } from '../../../lib/splitMath';
+import { SPLIT_MODE_LABEL, type SplitMode } from '../../../constants/enums';
 
 type Props = {
   members: Person[];
   splitMembers: string[];
-  splitType: string;
+  splitType: SplitMode;
   total: number;
   payments: Share[];
   meId: string | undefined;
@@ -25,8 +26,8 @@ export function SplitSummary({ members, splitMembers, splitType, total, payments
   const inSplit = members.filter(m => splitMembers.includes(m.id));
   const perEach = inSplit.length > 0 ? Math.round(total / inSplit.length) : 0;
   const summary = splitType === 'equal'
-    ? `Equal · ${formatCompact(perEach)} each`
-    : splitType.charAt(0).toUpperCase() + splitType.slice(1);
+    ? `${SPLIT_MODE_LABEL.equal} · ${formatCompact(perEach)} each`
+    : SPLIT_MODE_LABEL[splitType];
   const payerName = payments.length === 1
     ? (payments[0].personId === meId ? 'you' : members.find(m => m.id === payments[0].personId)?.name ?? 'someone')
     : `${payments.length} people`;

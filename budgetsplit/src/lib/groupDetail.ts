@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from './recurrence';
+import { SPLIT_MODE_PHRASE, type SplitMode } from '../constants/enums';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
 
@@ -16,12 +17,7 @@ export function isRecurInstance(id: string): boolean {
 
 /** Human phrasing of a split mode (used in the recurring summary). */
 export function splitLabel(mode: string): string {
-  switch (mode) {
-    case 'shares': return 'by shares';
-    case 'exact': return 'by exact amounts';
-    case 'percent': return 'by percentage';
-    default: return 'equally';
-  }
+  return SPLIT_MODE_PHRASE[mode as SplitMode] ?? SPLIT_MODE_PHRASE.equal;
 }
 
 /** Human phrasing of a recur frequency. */

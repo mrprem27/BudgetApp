@@ -191,6 +191,10 @@ export type SplitMode = typeof SPLIT_MODE[number];
 export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
   equal: 'Equal', exact: 'Exact', percent: 'Percent', shares: 'Shares',
 };
+/** Sentence-form phrasing ("Splits <phrase>") — same set, prose register. */
+export const SPLIT_MODE_PHRASE: Record<SplitMode, string> = {
+  equal: 'equally', exact: 'by exact amounts', percent: 'by percentage', shares: 'by shares',
+};
 
 // --- Groups --------------------------------------------------------------
 

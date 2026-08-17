@@ -5,17 +5,15 @@ import { colors, type, space, radius } from '../tokens';
 import { GROUP_TYPES } from '../../constants/palette';
 import { MemberAvatar } from './MemberAvatar';
 import type { Person } from '../../db/queries/persons';
-import type { SplitMode } from '../../db/queries/groups';
+import { SPLIT_MODE, SPLIT_MODE_LABEL, type SplitMode } from '../../constants/enums';
 
 // GROUP_TYPES lives with the other catalogues in constants/palette.
 export { GROUP_TYPES };
 
-export const SPLIT_OPTIONS: { key: SplitMode; label: string }[] = [
-  { key: 'equal', label: 'Equal' },
-  { key: 'shares', label: 'Shares' },
-  { key: 'exact', label: 'Exact' },
-  { key: 'percent', label: 'Percent' },
-];
+// Derived from the canonical set so the options, their labels and their order
+// can never drift from what the Add screen's split sheet shows.
+export const SPLIT_OPTIONS: { key: SplitMode; label: string }[] =
+  SPLIT_MODE.map(key => ({ key, label: SPLIT_MODE_LABEL[key] }));
 
 export type GroupFormValues = {
   name: string;
