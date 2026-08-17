@@ -145,12 +145,12 @@ describe('evaluateAfford — combined', () => {
 
 describe('incomeSharePct', () => {
   it('renders a normal share as a rounded percentage', () => {
-    // ₹5,000 against ₹85,000/month — the case UX_AUDIT reported as 417%.
+    // ₹5,000 against ₹85,000/month — the case an early UX audit reported as 417%.
     expect(incomeSharePct(500000 / 8500000)).toBe('6%');
   });
 
   it('still prints a merely-large share, because that can be real', () => {
-    // 417% was the figure UX_AUDIT reported. The cap is deliberately NOT what
+    // 417% was the figure that audit reported. The cap is deliberately NOT what
     // fixes it — a purchase really can exceed a month's income, so suppressing
     // this would hide a true answer. What fixes it is the denominator
     // (`incomeSource: 'rule'` over a 30-day sample) and the honest label.

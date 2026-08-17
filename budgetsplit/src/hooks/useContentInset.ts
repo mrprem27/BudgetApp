@@ -18,7 +18,7 @@ type Opts = {
  * `paddingBottom: 100` in three group tabs, `insets.bottom + 96` in Review,
  * `insets.bottom + 40` in Quick Add, plus `+ space.lg` / `+ space.xl` /
  * `+ tabBarHeight + space.lg` variants elsewhere — none of which tracked the
- * thing they were clearing. `UX_AUDIT.md` High #3 confirmed the FAB overlapping
+ * thing they were clearing. An August 2026 device audit confirmed the FAB overlapping
  * real content on six separate screens as a result.
  *
  * Pass what actually overlaps the list and let the maths follow the tokens.
