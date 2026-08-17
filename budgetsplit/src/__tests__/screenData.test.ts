@@ -2,7 +2,7 @@ import { loadReportsData } from '../lib/reportsData';
 import { loadInsightsData } from '../lib/insightsData';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { getAllGroups } from '../db/queries/groups';
-import { getAffordSnapshot } from '../db/queries/savings';
+import { getAffordSnapshot, insertGoal, fundGoal } from '../db/queries/savings';
 import { createTestDb, addPerson, addGroup, addMember, addSimpleExpense, addTxn, addCategory, setCategoryBudget, type TestDb } from './helpers/testDb';
 import type * as SQLite from 'expo-sqlite';
 
@@ -332,5 +332,117 @@ describe('getAffordSnapshot — history stats', () => {
     const { db } = setup();
     const snap = await getAffordSnapshot(asDb(db));
     expect(snap.goalPacing).toBeNull();
+  });
+});
+
+/**
+ * `upcomingBills` used to sum only already-logged future-dated one-off rows —
+ * essentially always ₹0 for a real rent/EMI/subscription, since a recurring
+ * occurrence is never materialized ahead of `now` (`materializeDueOccurrences`
+ * only ever catches up to the past). Now it also projects the next occurrence
+ * of every active recurring expense series via `buildUpcoming`, the same
+ * projection Home/Plan/reminders already show.
+ */
+describe('getAffordSnapshot — committed bills', () => {
+  it('counts the projected next occurrence of an active recurring expense', async () => {
+    const { db, me, personal } = setup();
+    // A daily rule "anchored" yesterday — its next occurrence is imminent and
+    // reliably within this month, the same convention the income tests above use.
+    addTxn(db, {
+      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
+      recurFreq: 'daily',
+    });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.upcomingBills).toBe(150000);
+  });
+
+  it('ignores a paused recurring series', async () => {
+    const { db, me, personal } = setup();
+    const tid = addTxn(db, {
+      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
+      recurFreq: 'daily',
+    });
+    db.raw.prepare("UPDATE txn SET recur_state = 'paused' WHERE id = ?").run(tid);
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.upcomingBills).toBe(0);
+  });
+
+  it('still counts an already-logged future-dated one-off expense alongside a recurring one', async () => {
+    const { db, me, personal } = setup();
+    addTxn(db, {
+      groupId: personal, kind: 'expense', date: Date.now() + 5 * 86400000, category: 'Travel',
+      payments: [{ personId: me, amount: 200000 }], shares: [{ personId: me, amount: 200000 }],
+    });
+    addTxn(db, {
+      groupId: personal, kind: 'expense', date: Date.now() - 86400000, category: 'Rent',
+      payments: [{ personId: me, amount: 150000 }], shares: [{ personId: me, amount: 150000 }],
+      recurFreq: 'daily',
+    });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.upcomingBills).toBe(200000 + 150000);
+  });
+});
+
+/**
+ * The goal named in `goalPacing` used to be "whichever funds next" — which
+ * could just as easily be an Emergency goal, the last one a spending decision
+ * should point at. It's now picked in raid order (want, then need, then
+ * emergency), matching `planOverspendRaid`.
+ */
+describe('getAffordSnapshot — goal pacing picks the least-protected fundable goal', () => {
+  it('prefers a want goal over an earlier-funding need goal', async () => {
+    const { db } = setup();
+    // 'need' funds FIRST (sort_order 0) under the old "whichever funds next" rule...
+    await insertGoal(asDb(db), { name: 'Laptop', target: 500000, priority: 'need', allocation: 5000, frequency: 'monthly' });
+    // ...but 'want' is what an overspend would actually take from first.
+    await insertGoal(asDb(db), { name: 'Trip', target: 500000, priority: 'want', allocation: 3000, frequency: 'monthly' });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.goalPacing?.name).toBe('Trip');
+  });
+
+  it('only points at an emergency goal when nothing else is fundable', async () => {
+    const { db } = setup();
+    await insertGoal(asDb(db), { name: 'Safety Net', target: 500000, priority: 'emergency', allocation: 5000, frequency: 'monthly' });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.goalPacing?.name).toBe('Safety Net');
+  });
+
+  it('skips a goal that is already fully funded, regardless of tag', async () => {
+    const { db } = setup();
+    const done = await insertGoal(asDb(db), { name: 'Done', target: 100000, priority: 'want', allocation: 5000, frequency: 'monthly' });
+    await fundGoal(asDb(db), done.id, 100000);
+    await insertGoal(asDb(db), { name: 'Still going', target: 500000, priority: 'need', allocation: 3000, frequency: 'monthly' });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.goalPacing?.name).toBe('Still going');
+  });
+});
+
+/**
+ * Money owed to me is a near-term inflow the app already tracks, but it isn't
+ * liquid yet — kept as its own field rather than folded into `available`.
+ */
+describe('getAffordSnapshot — money owed to me', () => {
+  it('reports what a flatmate owes me, separately from available cash', async () => {
+    const { db, me, personal } = setup();
+    const flatmate = addPerson(db, 'Flatmate', false);
+    const shared = addGroup(db, 'Flat', false);
+    addMember(db, shared, me);
+    addMember(db, shared, flatmate);
+    // I paid ₹1,000, split evenly — the flatmate owes me ₹500.
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: Date.now(), category: 'Groceries',
+      payments: [{ personId: me, amount: 100000 }],
+      shares: [{ personId: me, amount: 50000 }, { personId: flatmate, amount: 50000 }],
+    });
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.owedToMe).toBe(50000);
+  });
+
+  it('reports zero when nobody owes me anything', async () => {
+    const { db } = setup();
+    const snap = await getAffordSnapshot(asDb(db));
+    expect(snap.owedToMe).toBe(0);
   });
 });

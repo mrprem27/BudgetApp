@@ -89,7 +89,8 @@ export type AffordGoalImpact = {
 };
 
 export type AffordContext = {
-  /** Prospective purchase (paise). */
+  /** Prospective purchase (paise). This is the cash leaving your account *today* —
+   * always what the cash/buffer axes are judged against, one-time or recurring. */
   amount: number;
   /** Spendable cash right now (paise). */
   available: number;
@@ -97,6 +98,17 @@ export type AffordContext = {
   upcomingBills: number;
   /** Typical monthly income (paise, > 0 to engage the income-share axis). */
   monthlyIncome?: number;
+  /**
+   * Set when this purchase recurs (weekly/monthly/yearly), to the monthly rate
+   * it implies — e.g. a ₹500/week habit is ~₹2,166/month, not ₹500. The
+   * category-budget/norm and income-share axes compare against *this* instead
+   * of `amount` when present, since those are inherently monthly questions
+   * ("does this blow the month's budget", "how much of a month's income").
+   * Cash/buffer still judge `amount` — that's what actually leaves today.
+   * `UnusualForCategory` also stays on `amount`: it's asking whether a single
+   * purchase is out of character, not whether a habit adds up.
+   */
+  recurringMonthlyEquivalent?: number;
   category?: AffordCategoryContext;
   necessity?: AffordNecessity;
   projection?: AffordProjection;
@@ -164,11 +176,16 @@ export function evaluateAfford(ctx: AffordContext): AffordResult {
   const cashShort = remaining < 0;
   if (cashShort) reasons.push(AffordReason.CashShort);
 
+  // Monthly-question axes (category, income-share, month projection) compare
+  // against the recurring monthly rate when this is a recurring purchase,
+  // never the one-time cash amount — see AffordContext.recurringMonthlyEquivalent.
+  const monthlyAmount = ctx.recurringMonthlyEquivalent ?? amount;
+
   // 2) Category — explicit budget wins; otherwise judge against your own norm.
   let categoryAfter: number | undefined;
   let categoryCap: number | undefined;
   if (ctx.category) {
-    categoryAfter = ctx.category.spentThisMonth + amount;
+    categoryAfter = ctx.category.spentThisMonth + monthlyAmount;
     if (ctx.category.budget && ctx.category.budget > 0) {
       categoryCap = ctx.category.budget;
       if (categoryAfter > categoryCap) reasons.push(AffordReason.OverCategoryBudget);
@@ -181,14 +198,14 @@ export function evaluateAfford(ctx: AffordContext): AffordResult {
   // 3) Income share.
   let incomeShare: number | undefined;
   if (ctx.monthlyIncome && ctx.monthlyIncome > 0) {
-    incomeShare = amount / ctx.monthlyIncome;
+    incomeShare = monthlyAmount / ctx.monthlyIncome;
     if (incomeShare > INCOME_SHARE_WARN) reasons.push(AffordReason.LargeIncomeShare);
   }
 
   // 4) Where the month is already heading, before this purchase is added.
   let projectedAfter: number | undefined;
   if (ctx.projection && ctx.projection.budget > 0) {
-    projectedAfter = ctx.projection.projectedMonthEnd + amount;
+    projectedAfter = ctx.projection.projectedMonthEnd + monthlyAmount;
     if (projectedAfter > ctx.projection.budget) reasons.push(AffordReason.MonthAlreadyOver);
   }
 

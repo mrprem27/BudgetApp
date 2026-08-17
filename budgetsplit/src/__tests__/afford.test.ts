@@ -64,6 +64,55 @@ describe('evaluateAfford — category axis', () => {
   });
 });
 
+describe('evaluateAfford — recurring purchases judge the monthly rate, not the one-off amount', () => {
+  it('a small recurring habit can blow the category budget even though the single charge looks fine', () => {
+    // ₹500 alone is nowhere near the ₹10,000 budget — but ~₹2,166/month is.
+    const r = evaluateAfford({
+      amount: 500, available: 100000, upcomingBills: 0,
+      recurringMonthlyEquivalent: 2166,
+      category: { name: 'Subscriptions', spentThisMonth: 9000, norm: 0, budget: 10000 },
+    });
+    expect(r.reasons).toContain(AffordReason.OverCategoryBudget);
+    expect(r.categoryAfter).toBe(9000 + 2166);
+  });
+
+  it('a one-off purchase of the same size does not trip the budget', () => {
+    const r = evaluateAfford({
+      amount: 500, available: 100000, upcomingBills: 0,
+      category: { name: 'Subscriptions', spentThisMonth: 9000, norm: 0, budget: 10000 },
+    });
+    expect(r.reasons).not.toContain(AffordReason.OverCategoryBudget);
+  });
+
+  it('still judges cash/buffer on the one-off amount, not the monthly rate', () => {
+    const r = evaluateAfford({
+      amount: 500, available: 1000, upcomingBills: 0, recurringMonthlyEquivalent: 20000,
+    });
+    // Only ₹500 leaves today — plenty of cash for that, regardless of the ₹20,000/mo rate.
+    expect(r.reasons).not.toContain(AffordReason.CashShort);
+    expect(r.remaining).toBe(500);
+  });
+
+  it('income share is judged on the monthly rate too', () => {
+    const r = evaluateAfford({
+      amount: 100, available: 100000, upcomingBills: 0, monthlyIncome: 10000,
+      recurringMonthlyEquivalent: 1500, // 15% of income — above the 10% warn line
+    });
+    expect(r.reasons).toContain(AffordReason.LargeIncomeShare);
+    expect(r.incomeShare).toBeCloseTo(0.15);
+  });
+
+  it('unusual-for-category still judges the single charge, not the monthly rate', () => {
+    // A ₹500 coffee habit isn't an unusual SINGLE purchase, even though its
+    // monthly total (₹2,166) would look large next to a ₹100 typical basket.
+    const r = evaluateAfford({
+      amount: 500, available: 100000, upcomingBills: 0, recurringMonthlyEquivalent: 2166,
+      category: { name: 'Coffee', spentThisMonth: 0, norm: 0, typicalBasket: 400 },
+    });
+    expect(r.reasons).not.toContain(AffordReason.UnusualForCategory);
+  });
+});
+
 describe('evaluateAfford — income share axis', () => {
   it('flags a purchase that is a large slice of monthly income', () => {
     const r = evaluateAfford({

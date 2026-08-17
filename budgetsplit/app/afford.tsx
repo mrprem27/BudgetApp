@@ -25,6 +25,23 @@ const NECESSITY_OPTS: { key: AffordNecessity; label: string; color: string }[] =
   { key: AffordNecessity.Later, label: 'Can wait', color: colors.healthAmber },
 ];
 
+/**
+ * A one-time ₹500 and a ₹500/week habit are different questions — the habit is
+ * ~₹2,166/month, and evaluateAfford only sees that if told (`recurringMonthlyEquivalent`).
+ * 'once' is the default so the fast path (most purchases) needs no extra tap.
+ */
+type PurchaseFrequency = 'once' | 'weekly' | 'monthly' | 'yearly';
+const FREQUENCY_OPTS: { key: PurchaseFrequency; label: string }[] = [
+  { key: 'once', label: 'One-time' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
+];
+/** Occurrences per month, for turning a recurring amount into a monthly rate. */
+const FREQUENCY_PER_MONTH: Record<PurchaseFrequency, number> = {
+  once: 0, weekly: 52 / 12, monthly: 1, yearly: 1 / 12,
+};
+
 /** Months → the coarsest unit that still reads as a real delay. */
 function delayLabel(months: number): string {
   if (months >= 12) { const y = months / 12; return `${y.toFixed(y >= 10 ? 0 : 1)} years`; }
@@ -38,6 +55,7 @@ export default function AffordScreen() {
   const [amountText, setAmountText] = useState('');
   const [necessity, setNecessity] = useState<AffordNecessity | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
+  const [frequency, setFrequency] = useState<PurchaseFrequency>('once');
 
   // Refetch on focus (via useScreenData) so the snapshot reflects txns added elsewhere.
   // Errors must NOT be swallowed here: a zeroed snapshot renders as "₹0 available",
@@ -60,6 +78,9 @@ export default function AffordScreen() {
     const ctx: AffordContext = {
       amount, available, upcomingBills: upcoming,
       monthlyIncome: incomeSource !== 'none' && monthlyIncome > 0 ? monthlyIncome : undefined,
+      recurringMonthlyEquivalent: frequency !== 'once'
+        ? Math.round(amount * FREQUENCY_PER_MONTH[frequency])
+        : undefined,
       category: categoryName && catStat
         ? {
             name: categoryName, spentThisMonth: catStat.spentThisMonth, norm: catStat.norm,
@@ -74,7 +95,7 @@ export default function AffordScreen() {
         : undefined,
     };
     return evaluateAfford(ctx);
-  }, [amount, available, upcoming, monthlyIncome, incomeSource, categoryName, catStat, necessity, snap]);
+  }, [amount, available, upcoming, monthlyIncome, incomeSource, frequency, categoryName, catStat, necessity, snap]);
 
   // `snap` is undefined until the first load resolves (never null), so both
   // guards must test truthiness — otherwise the verdict is computed from zeros
@@ -142,6 +163,34 @@ export default function AffordScreen() {
             />
           </View>
 
+          {/* Optional: only changes the verdict once an amount is entered, and only
+              for the monthly-question axes (category, income share, month
+              projection) — cash today is judged on the one-time amount either
+              way, so leaving this on "One-time" is exactly today's behaviour. */}
+          <Text style={styles.label}>How often? <Text style={styles.labelHint}>(optional)</Text></Text>
+          <View style={styles.chipRow}>
+            {FREQUENCY_OPTS.map(o => {
+              const on = frequency === o.key;
+              return (
+                <TouchableOpacity
+                  key={o.key}
+                  style={[styles.necChip, on && { borderColor: colors.accent, backgroundColor: alpha(colors.accent, 10) }]}
+                  onPress={() => setFrequency(o.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={o.label}
+                >
+                  <Text style={[styles.necChipText, on && { color: colors.accent }]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {frequency !== 'once' && amount > 0 && (
+            <Text style={styles.frequencyHint}>
+              ≈ {formatCompact(Math.round(amount * FREQUENCY_PER_MONTH[frequency]))}/month — that's what your budget and income share are judged against.
+            </Text>
+          )}
+
           {/* Category — sharpens the verdict using how you spend on this kind of thing. */}
           {(snap?.categories.length ?? 0) > 0 && (
             <View>
@@ -186,6 +235,18 @@ export default function AffordScreen() {
               <Text style={styles.cashLabel}>Spendable cash now</Text>
               <Text style={[styles.cashVal, { color: available >= 0 ? colors.textPrimary : colors.expense }]}>{!snap ? '—' : formatRupees(available)}</Text>
             </View>
+            {/* Informational only — never added to `available`. Money someone
+                owes you isn't liquid yet, so counting it as spendable would be
+                its own confident-wrong answer. */}
+            {!!snap?.owedToMe && snap.owedToMe > 0 && (
+              <>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.cashRow}>
+                  <Text style={styles.cashLabel}>Owed to you (not counted above)</Text>
+                  <Text style={[styles.cashVal, { color: colors.textMuted }]}>{formatRupees(snap.owedToMe)}</Text>
+                </View>
+              </>
+            )}
             {upcoming > 0 && (
               <>
                 <View style={styles.breakdownDivider} />
@@ -300,6 +361,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, gap: space.md },
   label: { ...type.label, color: colors.textSecondary },
   labelHint: { ...type.label, color: colors.textMuted },
+  frequencyHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   amountWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.border },
   rupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, minWidth: 120, textAlign: 'center' },

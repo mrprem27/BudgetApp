@@ -9,7 +9,7 @@ import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getMe } from './persons';
 import { getTransactionsInRange, type TxnWithSplits } from './transactions';
-import { getRecurringForGroup } from './recurring';
+import { getRecurringForGroup, getSkipsMap } from './recurring';
 import { recurringMonthlyEquivalent } from '../../lib/recurrence';
 import { getCategoriesByFrequency, type Category } from './categories';
 import { getMyGlobalBudgetRows, type BudgetCadence } from './categoryBudgets';
@@ -18,6 +18,8 @@ import { forecastMonthEnd } from '../../lib/forecast';
 import { monthlyContribution } from '../../lib/savings';
 import { HISTORY_DAYS } from '../../lib/afford';
 import { budgetEquivalent } from '../../lib/budget';
+import { buildUpcoming } from '../../lib/upcoming';
+import { getMyExposure } from './balances';
 
 // Domain value sets are defined once in constants/enums.ts; re-exported here for
 // existing importers.
@@ -57,8 +59,10 @@ export type SavingsTxn = {
 
 export async function getGoals(db: SQLite.SQLiteDatabase, includeArchived = false): Promise<SavingsGoal[]> {
   const where = includeArchived ? '' : 'WHERE is_archived = 0';
-  // Manual drag rank first (lower = higher priority); newest first as a stable tiebreak
+  // Flat, unsectioned order: drag rank first, newest first as a stable tiebreak
   // before any reordering (all sort_order default to 0 until the user drags).
+  // Callers that need the three priority sections (Emergency/Need/Want) group
+  // this by `priority` themselves — see `loadSavingsTabData`.
   return db.getAllAsync<SavingsGoal>(
     `SELECT * FROM savings_goal ${where}
      ORDER BY sort_order ASC, created_at DESC`,
@@ -251,9 +255,10 @@ export async function getGoalHistoryCount(db: SQLite.SQLiteDatabase, goalId: str
 
 /**
  * Catch-up auto-funding. Runs cheaply on app open / Savings focus: funds each
- * goal's fixed allocation for every elapsed period from Cash available (priority
- * order when cash is short), then advances each goal's schedule anchor.
- * Idempotent — nothing happens until a full period elapses.
+ * goal's fixed allocation for every elapsed period from Cash available
+ * (emergency → need → want, then drag rank, when cash is short), then advances
+ * each goal's schedule anchor. Idempotent — nothing happens until a full period
+ * elapses.
  */
 export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean> {
   const goals = await getGoals(db);
@@ -287,9 +292,10 @@ export type OverspendRaid = { withdrawals: { goalId: string; name: string; amoun
 
 /**
  * If Cash available has gone negative (overspending), cover the deficit by
- * pulling from the lowest-priority unlocked goals first (drag rank). Records the
- * raid as auto goal withdrawals and returns what moved so the Plan screen can
- * show a notice + offer Undo. Investments are never touched.
+ * pulling from `want`-tagged goals first, then `need` — `emergency` and
+ * `locked` goals are never touched, and drag rank breaks ties within a tag.
+ * Records the raid as auto goal withdrawals and returns what moved so the Plan
+ * screen can show a notice + offer Undo. Investments are never touched.
  */
 /**
  * What a raid *would* take, without taking it (`V2-10`).
@@ -355,8 +361,9 @@ export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: 
 
 /**
  * Run savings automation: scheduled per-goal funding (from Cash available) →
- * overspend raid (pull lowest-priority goals when cash goes negative). Returns
- * the raid result so the caller can surface a notice.
+ * overspend raid (pull from `want`/`need` goals when cash goes negative,
+ * never `emergency` or locked). Returns the raid result so the caller can
+ * surface a notice.
  */
 export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   await runAutoFunding(db).catch(() => {});
@@ -422,8 +429,21 @@ export type AffordCategoryStat = {
 export type AffordSnapshot = {
   /** Spendable cash right now. */
   available: number;
-  /** My share of expenses dated from now to month-end (committed bills). */
+  /**
+   * My share of committed bills through month-end: already-logged future-dated
+   * one-off expenses, plus the next occurrence of every active recurring
+   * expense series (`buildUpcoming` — the same projection Home/Plan/reminders
+   * already show, so this figure agrees with them instead of undercounting to
+   * near-zero). A weekly/daily series with more than one occurrence left this
+   * month only contributes its next one, not all of them.
+   */
   upcomingBills: number;
+  /**
+   * Money owed TO me by friends, right now (`getMyExposure`). Deliberately kept
+   * separate from `available` rather than folded in — it isn't liquid yet, so
+   * treating it as spendable cash would be its own confident-wrong answer.
+   */
+  owedToMe: number;
   /** Typical monthly income in paise. See `incomeSource` for what it measures. */
   monthlyIncome: number;
   /**
@@ -439,9 +459,14 @@ export type AffordSnapshot = {
   /** Where this month is heading before any new purchase. Null when un-forecastable. */
   projection: { projectedMonthEnd: number; budget: number } | null;
   /**
-   * The goal a purchase would set back: the first unfinished one in funding rank
-   * order (`sort_order`), with the monthly rate needed to turn an amount into a
-   * delay. Null when there is no fundable goal.
+   * The goal a purchase would set back, with the monthly rate needed to turn an
+   * amount into a delay. Null when there is no fundable goal. Picked the same
+   * way an overspend raid would pick a target — `want` before `need` before
+   * `emergency`, `sort_order` breaking ties within a tag (`savingsEngine.ts`) —
+   * so the goal named here is genuinely the one most exposed to being spent
+   * from, not just whichever happens to fund first. Still phrased as a delay,
+   * never a transfer: the real raid is proposed, not predicted, at the moment
+   * cash actually goes negative (`V2-10`).
    */
   goalPacing: { name: string; monthlyRate: number } | null;
 };
@@ -456,7 +481,7 @@ const AFFORD_DAY_MS = 86_400_000;
  * and the inputs reproducible.
  */
 export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
-  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, owedToMe: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
   const me = await getMe(db);
   if (!me) return empty;
 
@@ -471,7 +496,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   // ones, and Afford presenting them as mine is worse than presenting nothing.
   const personal = personalGroupOf(groups);
 
-  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved] = await Promise.all([
+  const [pos, categories, budgets, monthTxns, recentTxns, futureTxns, recurRules, historyTxns, lastMonthTxns, goals, goalSaved, exposure] = await Promise.all([
     getCashPosition(db),
     personal ? getCategoriesByFrequency(db, personal.id) : Promise.resolve([] as Category[]),
     // My Budget — the same rows and the same reader every other surface uses.
@@ -487,6 +512,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     getTransactionsInRange(db, null, startOfMonth(subMonths(today, 1)).getTime(), endOfMonth(subMonths(today, 1)).getTime()),
     getGoals(db),
     getGoalSavedMap(db),
+    getMyExposure(db, me.id),
   ]);
 
   const myShare = (t: { shares: Array<{ personId: string; amount: number }> }) =>
@@ -530,12 +556,24 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const incomeSource: AffordSnapshot['incomeSource'] =
     ruleIncome > 0 ? 'rule' : recentIncome > 0 ? 'recent' : 'none';
 
-  // Committed bills: my share of future-dated expenses through month-end.
+  // Committed bills: my share of already-logged future-dated one-off expenses
+  // (recur_freq IS NULL — a recurring occurrence is never materialized ahead of
+  // `now`, so this alone was always ~₹0 for a real rent/EMI/subscription).
   let upcomingBills = 0;
   for (const t of futureTxns) {
     if (t.is_deleted || t.kind !== 'expense') continue;
     upcomingBills += myShare(t);
   }
+  // Plus the projected next occurrence of every active recurring expense series
+  // through month-end — same projection Home/Plan/reminders already show, so
+  // Afford agrees with them instead of silently ignoring recurring bills. A
+  // weekly/daily series with several occurrences left this month only
+  // contributes its next one (buildUpcoming's own limitation), which still beats
+  // counting zero of them.
+  const skipsBySeries = await getSkipsMap(db, recurRules.map(r => r.id));
+  const daysUntilMonthEnd = Math.max(0, Math.ceil((monthEnd - now) / AFFORD_DAY_MS));
+  upcomingBills += buildUpcoming(recurRules, me.id, now, recurRules.length, daysUntilMonthEnd, skipsBySeries)
+    .reduce((sum, item) => sum + item.amount, 0);
 
   // Budgets, normalized to a monthly figure. `budgetEquivalent` is the one source
   // (this file used to carry its own copy that divided yearly lines by 12 — a
@@ -589,15 +627,20 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     ? { projectedMonthEnd: fc.projected, budget: budgetTotal }
     : null;
 
-  // The goal money would otherwise fund: first unfinished one in funding-rank
-  // order (`getGoals` is already ordered by sort_order).
-  const nextGoal = goals.find(g => (goalSaved[g.id] ?? 0) < g.target
-    && monthlyContribution(g.allocation, g.frequency) > 0) ?? null;
+  // The goal money would otherwise fund: picked in raid order (want, then
+  // need, then emergency — the same order planOverspendRaid would pull from),
+  // sort_order breaking ties within a tag. Not "whichever funds next" — that
+  // could just as easily be an Emergency goal, which is the last thing this
+  // framing should point at.
+  const raidOrderRank = (p: Priority) => (p === 'want' ? 0 : p === 'need' ? 1 : 2);
+  const nextGoal = goals
+    .filter(g => (goalSaved[g.id] ?? 0) < g.target && monthlyContribution(g.allocation, g.frequency) > 0)
+    .sort((a, b) => raidOrderRank(a.priority) - raidOrderRank(b.priority) || a.sort_order - b.sort_order)[0] ?? null;
   const goalPacing = nextGoal
     ? { name: nextGoal.name, monthlyRate: monthlyContribution(nextGoal.allocation, nextGoal.frequency) }
     : null;
 
-  return { available: pos.available, upcomingBills, monthlyIncome, incomeSource, categories, byCategory, projection, goalPacing };
+  return { available: pos.available, upcomingBills, owedToMe: exposure.owed, monthlyIncome, incomeSource, categories, byCategory, projection, goalPacing };
 }
 
 /** Build psychological savings insights from real goals + spending. */
