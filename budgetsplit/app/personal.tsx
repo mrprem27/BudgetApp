@@ -304,7 +304,7 @@ export default function PersonalScreen() {
                 const isOpen = !collapsed.has(rg.groupId);
                 const monthly = rg.rules.reduce((s, r) => {
                   const mine = myShareOrTotal(r, myId);
-                  return s + (r.recur_freq ? recurringMonthlyEquivalent(mine, r.recur_freq) : 0);
+                  return s + (r.recur_freq ? recurringMonthlyEquivalent(mine, r.recur_freq, r.recur_interval) : 0);
                 }, 0);
                 return (
                   <View key={rg.groupId} style={styles.recurGroup}>

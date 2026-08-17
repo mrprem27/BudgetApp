@@ -105,10 +105,18 @@ describe('recurringMonthlyEquivalent', () => {
     expect(recurringMonthlyEquivalent(120000, 'yearly')).toBe(10000);
   });
 
-  it('custom / unknown / null → unchanged (no fixed monthly cadence)', () => {
+  it('custom repeats every `interval` days → ×30/interval', () => {
+    expect(recurringMonthlyEquivalent(1000, 'custom', 3)).toBe(10000);
+    // No interval to go on — left unchanged rather than guessed.
     expect(recurringMonthlyEquivalent(7777, 'custom')).toBe(7777);
-    expect(recurringMonthlyEquivalent(7777, null)).toBe(7777);
-    expect(recurringMonthlyEquivalent(7777, undefined)).toBe(7777);
+  });
+
+  // D6 regression: no cadence contributes NOTHING to a monthly total. Before,
+  // an unknown freq passed straight through, so a one-off ('once' from the
+  // budget-cadence vocabulary) could be summed as a monthly commitment.
+  it('null / undefined freq → 0 (a one-off is not a monthly commitment)', () => {
+    expect(recurringMonthlyEquivalent(7777, null)).toBe(0);
+    expect(recurringMonthlyEquivalent(7777, undefined)).toBe(0);
   });
 });
 

@@ -68,7 +68,7 @@ export function computeContributions(
 export function computeRecurringMonthlyTotal(rules: TxnWithSplits[]): number {
   return rules.reduce((sum, r) => {
     const rAmt = r.payments.reduce((s, p) => s + p.amount, 0);
-    return sum + recurringMonthlyEquivalent(rAmt, r.recur_freq);
+    return sum + recurringMonthlyEquivalent(rAmt, r.recur_freq, r.recur_interval);
   }, 0);
 }
 

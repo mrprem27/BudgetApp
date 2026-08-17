@@ -24,10 +24,11 @@ import { useRecurringActions } from '../../src/hooks/useRecurringActions';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
 import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
+import type { RecurFreq } from '../../src/constants/enums';
 import { formatCompact } from '../../src/lib/money';
 import { alpha } from '../../src/theme';
 
-type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: string; nextMs: number | null };
+type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null };
 
 // Normalise a recurring charge to a per-month figure for the running total.
 const toMonthly = recurringMonthlyEquivalent;
@@ -63,7 +64,8 @@ export default function RecurringScreen() {
       name: (t.note && t.note.trim()) || t.category,
       category: t.category,
       amount: t.shares.reduce((s, sh) => s + sh.amount, 0),
-      freq: t.recur_freq as string,
+      freq: t.recur_freq!,
+      interval: t.recur_interval,
       nextMs: nextUnskippedOccurrence(t, now, skips.get(t.id)),
     }));
     list.sort((a, b) => (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
@@ -72,7 +74,7 @@ export default function RecurringScreen() {
 
   const subs = data ?? [];
   const { skipNext, pause, end } = useRecurringActions(reload);
-  const monthlyTotal = subs.reduce((s, x) => s + toMonthly(x.amount, x.freq), 0);
+  const monthlyTotal = subs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
   const nextUp = subs.find(s => s.nextMs != null);
 
   if (error) {

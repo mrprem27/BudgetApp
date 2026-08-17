@@ -1,4 +1,5 @@
 import { addDays, addWeeks, addMonths, addYears, isAfter, isBefore, startOfDay } from 'date-fns';
+import type { RecurFreq } from '../constants/enums';
 import type { Txn, TxnWithSplits } from '../db/queries/transactions';
 
 export function materializeInstances(
@@ -124,19 +125,26 @@ export function nthOccurrenceMs(
  * Normalize a recurring charge to its monthly-equivalent (paise) for "₹X/mo"
  * rollups. The single source of truth — three call sites previously disagreed
  * (a weekly charge was ×4 in one place and ×52/12 in others). Weekly uses
- * 52/12 (≈4.33 weeks per month); `custom` has no fixed cadence so it's left
- * as-is. Amounts are integer paise, so the rounding stays exact.
+ * 52/12 (≈4.33 weeks per month); `custom` repeats every `interval` DAYS (that
+ * is how `occurrenceAt` walks it), so its equivalent is ×30/interval.
+ *
+ * No cadence — null/undefined — is 0: nothing recurs, so it contributes
+ * nothing to a monthly total. The `freq` param is typed so a non-recur
+ * vocabulary ('once' from budget cadences) can't silently pass through and
+ * count a one-off as a monthly commitment. Amounts are integer paise.
  */
 export function recurringMonthlyEquivalent(
   amount: number,
-  freq: string | null | undefined,
+  freq: RecurFreq | null | undefined,
+  interval?: number | null,
 ): number {
   switch (freq) {
     case 'daily':   return Math.round(amount * 30);
     case 'weekly':  return Math.round((amount * 52) / 12);
     case 'monthly': return amount;
     case 'yearly':  return Math.round(amount / 12);
-    default:        return amount; // custom / unknown — no fixed monthly cadence
+    case 'custom':  return interval && interval > 0 ? Math.round((amount * 30) / interval) : amount;
+    default:        return 0; // no cadence — a one-off is not a monthly commitment
   }
 }
 

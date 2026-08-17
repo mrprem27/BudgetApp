@@ -10,7 +10,7 @@ import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource } 
 export type Txn = {
   id: string;
   group_id: string;
-  kind: 'income' | 'expense' | 'settlement';
+  kind: TxnKind;
   entry_mode: EntryMode;
   date: number;
   category: string;
@@ -177,7 +177,7 @@ export async function loadSplitsMany(db: SQLite.SQLiteDatabase, txns: Txn[]): Pr
 
 export type InsertTxnInput = {
   groupId: string;
-  kind: 'income' | 'expense' | 'settlement';
+  kind: TxnKind;
   entryMode: EntryMode;
   date: number;
   category: string;
@@ -327,7 +327,10 @@ export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementI
   });
 }
 
-export type ItemizedAdjustment = { label: string; type: 'tax' | 'tip' | 'discount'; mode: 'flat' | 'percent'; value: string };
+/** The four adjustment buttons the Itemized screen offers. `service` was missing
+ * here while the UI offered it — papered over by a cast in useItemizedForm. */
+export type ItemizedAdjustmentType = 'tax' | 'tip' | 'discount' | 'service';
+export type ItemizedAdjustment = { label: string; type: ItemizedAdjustmentType; mode: 'flat' | 'percent'; value: string };
 
 export type InsertItemizedTxnInput = InsertTxnInput & {
   items: Array<{
@@ -596,7 +599,7 @@ export async function getTxnById(
 export type UpdateTxnInput = {
   id: string;
   groupId: string;
-  kind: 'income' | 'expense' | 'settlement';
+  kind: TxnKind;
   date: number;
   category: string;
   note?: string;

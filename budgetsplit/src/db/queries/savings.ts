@@ -550,7 +550,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     if (r.kind !== 'income' || r.is_deleted) continue;
     if (r.recur_state && r.recur_state !== 'active') continue;   // paused/ended earns nothing
     const mine = r.payments.filter(p => p.personId === me.id).reduce((s, p) => s + p.amount, 0);
-    if (mine > 0) ruleIncome += recurringMonthlyEquivalent(mine, r.recur_freq);
+    if (mine > 0) ruleIncome += recurringMonthlyEquivalent(mine, r.recur_freq, r.recur_interval);
   }
 
   const monthlyIncome = ruleIncome > 0 ? ruleIncome : recentIncome;

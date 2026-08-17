@@ -1,6 +1,7 @@
 import { parseToPaise, splitByMode } from './money';
 import type { SplitMode } from '../constants/enums';
 import type { Person } from '../db/queries/persons';
+import type { ItemizedAdjustment } from '../db/queries/transactions';
 
 /** A draft line item being entered on the Itemized screen (string fields = raw input). */
 export type LineItemDraft = {
@@ -25,13 +26,10 @@ export function splitItemBase(item: LineItemDraft, base: number): Record<string,
   return splitByMode(base, item.assignedTo, item.splitMode ?? 'equal', item.splitValues ?? {});
 }
 
-/** A tax / tip / discount / service-charge adjustment on an itemized bill. */
-export type Adjustment = {
-  label: string;
-  type: 'tax' | 'tip' | 'discount' | 'service';
-  mode: 'flat' | 'percent';
-  value: string;
-};
+/** A tax / tip / discount / service-charge adjustment on an itemized bill.
+ *  Same shape as the query layer's `ItemizedAdjustment` — typed from it so the
+ *  two can't drift again (the DB type was missing `service` for months). */
+export type Adjustment = ItemizedAdjustment;
 
 /** Bill total (paise) after applying tax/tip/service/discount adjustments to a subtotal. */
 export function computeAdjustedTotal(subtotal: number, adjustments: Adjustment[]): number {

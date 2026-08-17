@@ -1,10 +1,12 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { TXN_KIND_FOR_CATEGORY } from '../../constants/enums';
+import { TXN_KIND_FOR_CATEGORY, type CategoryKind } from '../../constants/enums';
 import { OTHERS_LABEL } from '../../lib/categoryFold';
 
-export type CategoryKind = 'expense' | 'income' | 'transfer';
+// Re-exported from the canonical enums module (the header there names this file
+// as a re-exporter; it had drifted into re-declaring the union instead).
+export type { CategoryKind };
 
 export type Category = {
   id: string;

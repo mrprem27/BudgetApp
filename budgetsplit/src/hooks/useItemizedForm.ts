@@ -10,7 +10,7 @@ import { getGroupMembers, getMe, type Person } from '../db/queries/persons';
 import { getCategoriesByFrequency, type Category } from '../db/queries/categories';
 import {
   insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems,
-  type ItemizedAdjustment,
+  type ItemizedAdjustmentType,
 } from '../db/queries/transactions';
 import { parseToPaise } from '../lib/money';
 import {
@@ -33,7 +33,7 @@ export const STEP_TITLE: Record<ItemizedStep, string> = {
   review: 'Review & save',
 };
 
-export type AdjustmentType = 'tax' | 'tip' | 'discount' | 'service';
+export type AdjustmentType = ItemizedAdjustmentType;
 
 /** Display label per adjustment type — shared by the adjustment buttons, the
  *  add-adjustment sheet title, and the label stored on the adjustment itself. */
@@ -380,7 +380,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
           splitMode: i.splitMode,
           splitValues: i.splitValues,
         })),
-        adjustments: adjustments as ItemizedAdjustment[],
+        adjustments,
         lat: place?.lat,
         lng: place?.lng,
         placeLabel: place?.label ?? undefined,
