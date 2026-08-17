@@ -80,10 +80,17 @@ async function sendViaBrevo(env: Env, mail: Mail): Promise<void> {
   if (response.ok) return;
 
   const body = await response.text().catch(() => '');
-  // 401 here is always the same mistake, and the message should say so rather
-  // than making someone read Brevo's docs to translate it.
+  // A 401 is NOT always a bad key: Brevo also 401s when the calling IP isn't on
+  // its "authorised IPs" list, which a Worker can never satisfy — the edge IP
+  // changes per request. Passing the provider's own sentence through is the
+  // difference between fixing it in a minute and hunting the wrong problem, so
+  // the generic "bad key" message is only used when there's nothing better.
   if (response.status === 401) {
-    throw new MailSendError('The email provider rejected the API key.', 'E_MAIL_KEY_INVALID');
+    const detail = extractProviderMessage(body);
+    throw new MailSendError(
+      detail ?? 'The email provider rejected the API key.',
+      detail?.includes('IP address') ? 'E_MAIL_IP_BLOCKED' : 'E_MAIL_KEY_INVALID',
+    );
   }
   // Brevo answers 400 with `code: "invalid_parameter"` when the sender address
   // has not been verified — the single most likely first-deploy failure.
@@ -94,6 +101,16 @@ async function sendViaBrevo(env: Env, mail: Mail): Promise<void> {
     );
   }
   throw new MailSendError(`Email provider returned ${response.status}: ${body.slice(0, 200)}`);
+}
+
+/** Providers answer `{message, code}`; fall back to the raw body if not. */
+function extractProviderMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown };
+    return typeof parsed.message === 'string' && parsed.message ? parsed.message : null;
+  } catch {
+    return body.trim() ? body.slice(0, 200) : null;
+  }
 }
 
 /** Cloudflare Email Sending — Workers Paid, and the domain must be onboarded. */

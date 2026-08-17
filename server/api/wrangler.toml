@@ -53,7 +53,7 @@ database_id = "a493fbe0-3515-4b9a-ba7c-dd2d72bc4bd8"
 # name = "EMAIL"
 
 [vars]
-EMAIL_FROM = "REPLACE_WITH_A_VERIFIED_SENDER_ADDRESS"
+EMAIL_FROM = "amitbhati1008@gmail.com"
 # The app deep link /auth/open redirects into. Three slashes, not two: an empty
 # host makes the rest a *route path* for expo-router (`budgetsplit://auth` would
 # parse `auth` as a host and match no screen) — same shape as VOICE_DEEP_LINK in
