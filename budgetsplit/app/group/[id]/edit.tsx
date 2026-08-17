@@ -17,11 +17,13 @@ import { getGroupById, updateGroup, archiveGroupSafe, deleteGroup, type SplitMod
 import { deleteAttachment } from '../../../src/lib/attachment';
 import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, type Person } from '../../../src/db/queries/persons';
 import { GROUP_COLORS } from '../../../src/constants/palette';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../src/lib/haptics';
 
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
+  const { refresh } = useDataRefresh();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -79,6 +81,7 @@ export default function EditGroupScreen() {
         for (const pid of removed) await removeMemberFromGroup(db, id, pid);
       }
       haptic.success();
+      refresh();
       router.back();
     } catch (e) {
       haptic.error();
@@ -93,7 +96,7 @@ export default function EditGroupScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Archive', style: 'destructive', onPress: async () => {
         const ok = await archiveGroupSafe(db, id);
-        if (ok) { haptic.warning(); router.replace('/groups'); }
+        if (ok) { haptic.warning(); refresh(); router.replace('/groups'); }
       } },
     ]);
   }
@@ -108,6 +111,7 @@ export default function EditGroupScreen() {
           // never allowed to block navigation out of a group that is already gone.
           for (const uri of res.orphanedAttachments) await deleteAttachment(uri);
           haptic.warning();
+          refresh();
           router.replace('/groups');
         }
         else Alert.alert('Can’t delete', 'The Personal group can’t be deleted.');

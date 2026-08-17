@@ -357,14 +357,15 @@ export async function insertItemizedTxn(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
-        null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null, now, now,
+        null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
+        input.payMethod ?? null, now, now,
       ],
     );
     for (const item of input.items) {
@@ -407,12 +408,12 @@ export async function updateItemizedTxn(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, updated_at=? WHERE id=?`,
+      `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, pay_method=?, updated_at=? WHERE id=?`,
       [
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
-        input.date, now, id,
+        input.date, input.payMethod ?? null, now, id,
       ],
     );
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);

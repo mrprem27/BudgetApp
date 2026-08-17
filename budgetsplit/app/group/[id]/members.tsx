@@ -24,6 +24,7 @@ import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
 import { oweView } from '../../../src/lib/owe';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
@@ -35,6 +36,7 @@ import { isAdmin, canRemoveMember, canChangeRole } from '../../../src/lib/permis
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
+  const { refresh } = useDataRefresh();
   const router = useRouter();
   const { showUndo } = useUndo();
   const [showAdd, setShowAdd] = useState(false);
@@ -79,7 +81,7 @@ export default function MembersScreen() {
       haptic.success();
       setShowAdd(false);
       setPendingIds([]);
-      await reload();
+      await reload(); refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -98,7 +100,7 @@ export default function MembersScreen() {
       await updatePersonName(db, renamePerson.id, trimmed);
       haptic.success();
       setRenamePerson(null);
-      await reload();
+      await reload(); refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -110,7 +112,7 @@ export default function MembersScreen() {
     try {
       await setMemberRole(db, groupId, meId, person.id, next);
       haptic.success();
-      await reload();
+      await reload(); refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -147,10 +149,10 @@ export default function MembersScreen() {
         onPress: async () => {
           try {
             await removeMemberFromGroup(db, groupId, person.id, meId);
-            await reload();
+            await reload(); refresh();
             showUndo({
               message: `Removed ${person.name}`,
-              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id, meId); await reload(); } catch { /* ignore */ } },
+              onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id, meId); await reload(); refresh(); } catch { /* ignore */ } },
             });
           } catch {
             haptic.error();
@@ -201,7 +203,7 @@ export default function MembersScreen() {
                       color={item.avatar_color}
                       size={36}
                       imageUri={item.image_uri}
-                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); } }}
+                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); refresh(); } }}
                     />
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -272,7 +274,7 @@ export default function MembersScreen() {
           onToggle={togglePending}
           onCreate={async (name) => {
             const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
-            reload();
+            reload(); refresh();
             return person;
           }}
           placeholder="Search or create a person…"

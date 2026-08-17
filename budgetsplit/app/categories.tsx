@@ -18,6 +18,7 @@ import {
   getCategories, getUncategorizedNames, insertCategory, deleteCategory, renameCategory,
 } from '../src/db/queries/categories';
 import { seedGlobalCategories } from '../src/db/seedCategories';
+import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
 import {
   CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection, categoryVisual,
@@ -37,6 +38,7 @@ import { SectionCard } from '../src/components/ui/SectionCard';
 
 export default function CategoriesScreen() {
   const db = useSQLiteContext();
+  const { refresh } = useDataRefresh();
   const router = useRouter();
   const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export default function CategoriesScreen() {
       await insertCategory(db, name, vis.icon, vis.color, kindTab, 'Other');
       haptic.success();
       reload();
+      refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -113,6 +116,7 @@ export default function CategoriesScreen() {
       setColor(COLOR_CHOICES[0]);
       setAddingToSection(null);
       reload();
+      refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -140,6 +144,7 @@ export default function CategoriesScreen() {
       haptic.success();
       setRenamingId(null);
       reload();
+      refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
@@ -159,6 +164,7 @@ export default function CategoriesScreen() {
               await deleteCategory(db, cat.id);
               haptic.warning();
               reload();
+              refresh();
             } catch {
               haptic.error();
               Alert.alert('Something went wrong', 'Please try again.');

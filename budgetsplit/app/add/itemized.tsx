@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   FlatList, ScrollView, KeyboardAvoidingView, Platform,
@@ -21,6 +21,9 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Chip } from '../../src/components/ui/Chip';
+import { PayMethodSheet } from '../../src/components/finance/add/PayMethodSheet';
+import { PAY_METHOD_LABEL, AddKind } from '../../src/constants/enums';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { alpha } from '../../src/theme';
@@ -38,6 +41,7 @@ export default function ItemizedScreen() {
 
   const f = useItemizedForm(paramGroupId, editId);
   const { flags } = useFeatureFlags();
+  const [showPayMethod, setShowPayMethod] = useState(false);
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -434,6 +438,16 @@ export default function ItemizedScreen() {
             onChangeText={f.setNote}
           />
 
+          {/* How it was paid — the same picker Quick Add uses. Card vs cash is
+              not cosmetic: lib/cash books card spend as debt, not cash out. */}
+          <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Paid via</Text>
+          <Chip
+            icon="credit-card"
+            label={PAY_METHOD_LABEL[f.payMethod]}
+            chevron
+            onPress={() => setShowPayMethod(true)}
+          />
+
           {f.locEnabled && !f.isEditing && (
             <View style={styles.locRow}>
               <Feather name="map-pin" size={15} color={f.place ? colors.accent : colors.textMuted} />
@@ -498,6 +512,14 @@ export default function ItemizedScreen() {
       )}
 
       {/* Adjustment sheet — keyboard-safe */}
+      <PayMethodSheet
+        visible={showPayMethod}
+        onClose={() => setShowPayMethod(false)}
+        value={f.payMethod}
+        onChange={f.setPayMethod}
+        kind={AddKind.Expense}
+      />
+
       <SheetModal visible={f.showAdjModal} onClose={() => f.setShowAdjModal(false)} title={`Add ${ADJUSTMENT_LABELS[f.adjType]}`}>
         <View style={styles.modeRow}>
           {(['percent', 'flat'] as const).map(m => (

@@ -17,7 +17,7 @@ import {
   computeAdjustedTotal, computeItemSubtotal, computePerPersonShares,
   type LineItemDraft, type Adjustment,
 } from '../lib/itemized';
-import { type SplitMode } from '../constants/enums';
+import { PayMethod, type SplitMode } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../lib/attachment';
@@ -93,6 +93,10 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   const [newQty, setNewQty] = useState('1');
   const [newPrice, setNewPrice] = useState('');
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  // How the bill was paid. Itemized never captured this, so a card-paid
+  // restaurant bill was booked as cash out in lib/cash — the exact bug the
+  // recurring-materialize path documents having fixed.
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
   const [showAdjModal, setShowAdjModal] = useState(false);
   const [adjType, setAdjType] = useState<AdjustmentType>('tax');
   const [adjMode, setAdjMode] = useState<'flat' | 'percent'>('percent');
@@ -157,6 +161,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
           setMembers(mems);
           setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
           setNote(t.note ?? '');
+          if (t.pay_method) setPayMethod(t.pay_method);
           setTxnDate(t.date);
           setAttachmentUri(t.attachment_uri ?? null);
           originalAttachmentUriRef.current = t.attachment_uri ?? null;
@@ -369,6 +374,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         date: txnDate,
         category: selectedCategory?.name ?? 'Other',
         note: note.trim() || undefined,
+        payMethod,
         attachmentUri: attachmentUri ?? undefined,
         payments,
         shares,
@@ -416,6 +422,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
     selectedGroupId, members, categories, setCategories,
     selectedCategory, setSelectedCategory,
     note, setNote,
+    payMethod, setPayMethod,
     txnDate, setTxnDate,
     // items
     items, editingId, setEditingId,

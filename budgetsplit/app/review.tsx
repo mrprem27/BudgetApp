@@ -40,7 +40,7 @@ import { confirmDuplicates } from '../src/lib/confirm';
 import { convertToRecurring } from '../src/db/queries/recurring';
 import { getMe, getGroupMembers, type Person } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
-import { getCategories, type Category } from '../src/db/queries/categories';
+import { getCategoriesByFrequency, type Category } from '../src/db/queries/categories';
 import { parseToPaise } from '../src/lib/money';
 import { recordCorrection } from '../src/lib/smartCategoryLearn';
 import { detectRecurringCandidates, toRecurRows, type RecurringCandidate } from '../src/lib/recurringSuggest';
@@ -119,9 +119,9 @@ export default function ReviewScreen() {
     const shared = groups.filter(g => g.is_personal !== 1 && g.is_archived !== 1);
     const [pending, expenseCats, incomeCats, transferCats, ...memberLists] = await Promise.all([
       getPending(db),
-      getCategories(db, 'expense'),
-      getCategories(db, 'income'),
-      getCategories(db, 'transfer'),
+      getCategoriesByFrequency(db, personalId, 'expense'),
+      getCategoriesByFrequency(db, personalId, 'income'),
+      getCategoriesByFrequency(db, personalId, 'transfer'),
       ...shared.map(g => getGroupMembers(db, g.id)),
     ]);
     const groupMembers: Record<string, Person[]> = {};

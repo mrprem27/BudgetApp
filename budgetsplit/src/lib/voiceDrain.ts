@@ -10,6 +10,7 @@ import {
 } from './voiceInbox';
 import { loadFlags } from './featureFlags';
 import { composeTitleNote } from './txnNote';
+import { detectPayMethod } from './payMethodDetect';
 import { insertTxnRows } from '../db/queries/transactions';
 import { insertPending } from '../db/queries/pending';
 import { getCategories } from '../db/queries/categories';
@@ -223,6 +224,10 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
             // a category word — an auto-saved row must always be able to say what was heard.
             note: composeTitleNote(title, note, smartCategoryOn) ?? draft.transcript,
             source: 'voice',
+            // "paid Swiggy by card" is exactly the text the detector is built
+            // for — every other ingestion path already runs it. A missed method
+            // stays null; a missed CARD booking mis-states the cash position.
+            payMethod: detectPayMethod(draft.transcript) ?? undefined,
             payments: [{ personId: meId, amount }],
             // Income carries NO shares — money arriving is not apportioned to anyone, and
             // `useAddTxnForm` saves it the same way. Writing a share row here would make the
@@ -243,7 +248,7 @@ export async function drainVoiceInbox(db: SQLite.SQLiteDatabase): Promise<DrainR
           // rather than asserting one.
           direction: kind === 'income' ? 'credit' : kind === 'settlement' ? 'unknown' : 'debit',
           source: 'voice',
-          pay_method: null,
+          pay_method: detectPayMethod(draft.transcript),
           // Pre-filled so confirming a settlement is a tap rather than a form. Null whenever
           // nobody was named, or when two people share a first name — `parseVoice` refuses to
           // pick between them, and a settlement aimed at the wrong person is worse than one

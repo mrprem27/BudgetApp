@@ -8,6 +8,7 @@ import { formatRupees } from '../../../lib/money';
 import { handoffVerb, type UpiHandoff } from '../../../hooks/useUpiHandoff';
 import type { UpiRequest } from '../../../lib/upiIntent';
 import { haptic } from '../../../lib/haptics';
+import { oweView } from '../../../lib/owe';
 import type { Person } from '../../../db/queries/persons';
 import type { TransferScopes } from '../../../lib/settleScope';
 import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../../constants/enums';
@@ -92,8 +93,11 @@ export function TransferBody({
     if (bal > 0 && entry) {
       const owerName = nameOf(persons.find(p => p.id === entry.from) ?? null, 'Someone');
       const oweeName = nameOf(persons.find(p => p.id === entry.to) ?? null, 'someone');
-      if (entry.from === me?.id) { balLabel = `You owe ${oweeName}`; balColor = colors.expense; }
-      else if (entry.to === me?.id) { balLabel = `${owerName} owes you`; balColor = colors.income; }
+      // Me-facing phrasing/colour comes from oweView — the module that exists so
+      // owe wording can't drift per-screen. Third-party ("A owes B") has no
+      // me-centric reading, so it stays local.
+      if (entry.from === me?.id) { const v = oweView(-bal); balLabel = v.withName(oweeName); balColor = v.color; }
+      else if (entry.to === me?.id) { const v = oweView(bal); balLabel = v.withName(owerName); balColor = v.color; }
       else { balLabel = `${owerName} owes ${oweeName}`; balColor = colors.settle; }
     } else {
       noBalance = true;

@@ -152,6 +152,17 @@ describe('updateItemizedTxn replaces its own items', () => {
     expect((await itemsOf(db, other)).map(i => i.name)).toEqual(before);
   });
 
+  // Itemized never captured pay_method — a card-paid restaurant bill was
+  // booked as cash out in lib/cash. Reverting the payMethod plumb-through in
+  // useItemizedForm/insert makes this fail.
+  it('persists the pay method on insert and update', async () => {
+    const db = await seed();
+    const id = await insertItemizedTxn(db, bill({ payMethod: 'card' } as never) as Parameters<typeof insertItemizedTxn>[1]);
+    expect((await getTxnById(db, id))?.pay_method).toBe('card');
+    await updateItemizedTxn(db, id, bill({ payMethod: 'upi' } as never) as Parameters<typeof insertItemizedTxn>[1]);
+    expect((await getTxnById(db, id))?.pay_method).toBe('upi');
+  });
+
   it('clears the items when the edit removes them all', async () => {
     const { db, id } = await seedBill();
     await updateItemizedTxn(db, id, bill({ items: [] }) as Parameters<typeof insertItemizedTxn>[1]);
