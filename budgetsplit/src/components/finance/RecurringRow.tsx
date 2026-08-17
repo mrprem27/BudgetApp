@@ -1,14 +1,15 @@
 import React from 'react';
-import { format } from 'date-fns';
+import { Text, View, StyleSheet } from 'react-native';
 import { ListRow } from '../ui/ListRow';
 import { IconCircle } from '../ui/IconCircle';
 import { AmountText } from '../ui/AmountText';
 import { categoryVisual } from '../../constants/categories';
 import { asFeather } from '../../constants/palette';
-import { freqWord } from '../../lib/groupDetail';
-import { nextOccurrenceOnOrAfter } from '../../lib/recurrence';
+import { freqLabel, nextUnskippedOccurrence } from '../../lib/recurrence';
+import { shortDate } from '../../lib/dateFormat';
+import { formatCompact } from '../../lib/money';
 import { myShareOrTotal, txnTotal } from '../../lib/splitMath';
-import { colors, layout } from '../tokens';
+import { colors, type, layout } from '../tokens';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 
 type Props = {
@@ -16,33 +17,47 @@ type Props = {
   /** Whose share to show. Omit to show the rule's full amount. */
   meId?: string;
   onPress?: () => void;
-  /** Adds "· next Mar 5" to the subtitle. */
+  /** Adds "· next 5 Mar" to the subtitle. */
   showNext?: boolean;
-  /** Labels the amount "your share" underneath. */
+  /**
+   * Group-surface presentation: the WHOLE bill as the amount, with "your share
+   * ₹X" beneath it. Personal surfaces omit this and get just their share —
+   * the one basis whose totals sum honestly with budgets and afford.
+   */
   showShareLabel?: boolean;
+  /**
+   * Skipped occurrence dates for this rule (`getSkipsMap().get(rule.id)`).
+   * Without it, "next" shows a date the user explicitly skipped.
+   */
+  skipDates?: Set<number>;
 };
 
 /**
  * One recurring rule as a row: category icon, name, cadence, amount.
  *
  * The *derivations* were the real duplication here, not the styling — three
- * places each worked out that the display name is `note || category`, that the
- * amount is the caller's share of `shares` (falling back to the rule total), and
- * how to word the cadence. They disagreed in the process: the group tab showed
- * the full total with "your share" beside it, Personal showed only your share,
- * and the icon disc was 40px/r20 in one and 32px/r16 in the other.
+ * places each worked out that the display name is `note || category`, what
+ * amount basis to show, and how to word the cadence, and they disagreed in the
+ * process (skip-blind next dates, interval-dropping cadence words, my-share vs
+ * whole-bill totals). Every derivation now comes from the shared libs:
+ * `nextUnskippedOccurrence`, `freqLabel`, `myShareOrTotal`/`txnTotal`.
  *
  * Composed over `ListRow` rather than being a fourth row implementation.
  */
-export function RecurringRow({ rule, meId, onPress, showNext, showShareLabel }: Props) {
+export function RecurringRow({ rule, meId, onPress, showNext, showShareLabel, skipDates }: Props) {
   const visual = categoryVisual(rule.category);
   const name = rule.note?.trim() || rule.category;
 
-  const amount = meId ? myShareOrTotal(rule, meId) : txnTotal(rule);
+  const wholeBill = txnTotal(rule);
+  const myShare = meId ? myShareOrTotal(rule, meId) : wholeBill;
+  const amount = showShareLabel ? wholeBill : myShare;
+  const shareLine = showShareLabel && meId && myShare !== wholeBill
+    ? `your share ${formatCompact(myShare)}`
+    : null;
 
-  const next = showNext ? nextOccurrenceOnOrAfter(rule, Date.now()) : null;
+  const next = showNext ? nextUnskippedOccurrence(rule, Date.now(), skipDates) : null;
   const paused = rule.recur_state !== 'active' ? `${rule.recur_state} · ` : '';
-  const subtitle = `${paused}${freqWord(rule.recur_freq)}${next ? ` · next ${format(next, 'MMM d')}` : ''}`;
+  const subtitle = `${paused}${freqLabel(rule.recur_freq, rule.recur_interval)}${next ? ` · next ${shortDate(next)}` : ''}`;
 
   return (
     <ListRow
@@ -56,16 +71,24 @@ export function RecurringRow({ rule, meId, onPress, showNext, showShareLabel }: 
       title={name}
       subtitle={subtitle}
       value={
-        <AmountText
-          paise={amount}
-          size="sm"
-          forceColor={colors.textPrimary}
-          rounded
-        />
+        <View style={styles.amountCol}>
+          <AmountText
+            paise={amount}
+            size="sm"
+            forceColor={colors.textPrimary}
+            rounded
+          />
+          {shareLine && <Text style={styles.shareLine}>{shareLine}</Text>}
+        </View>
       }
       chevron={!!onPress}
       onPress={onPress}
-      accessibilityLabel={showShareLabel ? `${name}, your share` : name}
+      accessibilityLabel={shareLine ? `${name}, ${shareLine}` : name}
     />
   );
 }
+
+const styles = StyleSheet.create({
+  amountCol: { alignItems: 'flex-end' },
+  shareLine: { ...type.caption, color: colors.textSecondary },
+});

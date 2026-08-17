@@ -9,7 +9,7 @@ import { type } from '../../src/constants/typography';
 import { space, layout, radius } from '../../src/constants/layout';
 import { getGroupById, setSimplifyDebt, archiveGroupSafe, getGroupContext } from '../../src/db/queries/groups';
 import { getTransactionsForGroup } from '../../src/db/queries/transactions';
-import { getRecurringForGroup } from '../../src/db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
 import { getGroupMembers, getMe } from '../../src/db/queries/persons';
@@ -77,6 +77,7 @@ export default function GroupDetailScreen() {
     let catStatus: CategoryBudgetStatus[] = [];
     let analytics: BudgetAnalytics | null = null;
     let recurringRules: TxnWithSplits[] = [];
+    let recurSkips = new Map<string, Set<number>>();
     if (grp) {
       const meId = meRow?.id ?? '';
       const [cs, an, gctx, budgetRows] = await Promise.all([
@@ -91,8 +92,9 @@ export default function GroupDetailScreen() {
       analytics = an;
       const rules = await getRecurringForGroup(db, id);
       recurringRules = rules.filter(r => r.recur_state === 'active');
+      recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
     }
-    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, ctx, overrideCount };
+    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };
   }, [id]);
 
   const group = data?.group ?? null;
@@ -103,6 +105,7 @@ export default function GroupDetailScreen() {
   const catStatus = data?.catStatus ?? [];
   const analytics = data?.analytics ?? null;
   const recurringRules = data?.recurringRules ?? [];
+  const recurSkips = data?.recurSkips;
   const meId = me?.id ?? '';
   const isPersonal = group?.is_personal === 1;
 
@@ -145,7 +148,7 @@ export default function GroupDetailScreen() {
   const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
   const contributions = useMemo(() => computeContributions(txns, members, net), [txns, members, net]);
   const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
-  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules), [recurringRules]);
+  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
   const totalSpent = useMemo(
     () => txns.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
     [txns],
@@ -270,6 +273,7 @@ export default function GroupDetailScreen() {
           refreshing={refreshing}
           onRefresh={onRefresh}
           rules={recurringRules}
+          skips={recurSkips}
           meId={meId}
           defaultSplit={group.default_split}
           monthlyTotal={recurringMonthlyTotal}

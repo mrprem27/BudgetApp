@@ -1,5 +1,5 @@
 import {
-  isRecurInstance, splitLabel, freqWord,
+  isRecurInstance, splitLabel,
   computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
 } from '../lib/groupDetail';
 import type { TxnWithSplits } from '../db/queries/transactions';
@@ -22,19 +22,17 @@ describe('isRecurInstance', () => {
   });
 });
 
-describe('splitLabel / freqWord', () => {
-  it('maps split modes', () => {
+describe('splitLabel', () => {
+  it('maps split modes (from the canonical SPLIT_MODE_PHRASE)', () => {
     expect(splitLabel('shares')).toBe('by shares');
     expect(splitLabel('exact')).toBe('by exact amounts');
     expect(splitLabel('percent')).toBe('by percentage');
     expect(splitLabel('equal')).toBe('equally');
+    expect(splitLabel('nonsense')).toBe('equally');
   });
-  it('maps frequencies, defaulting to monthly', () => {
-    expect(freqWord('daily')).toBe('daily');
-    expect(freqWord('weekly')).toBe('weekly');
-    expect(freqWord(null)).toBe('monthly');
-    expect(freqWord('monthly')).toBe('monthly');
-  });
+  // freqWord is gone — every cadence label now comes from `freqLabel` in
+  // lib/recurrence, which honours recur_interval ("Every 3 months") where
+  // freqWord silently dropped it.
 });
 
 describe('computeContributions', () => {

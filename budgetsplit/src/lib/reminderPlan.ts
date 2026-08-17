@@ -94,3 +94,49 @@ export function nextMonthlyAnchor(anchorMs: number, now: number): number {
   while (d.getTime() <= now) d.setMonth(d.getMonth() + 1);
   return d.getTime();
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The slice of a recurring rule renewal planning needs (a `TxnWithSplits` fits). */
+export type RenewalRule = {
+  id: string;
+  kind: string;
+  category: string;
+  payments: readonly { personId: string; amount: number }[];
+  shares: readonly { personId: string; amount: number }[];
+};
+
+/**
+ * Plan renewal reminders for a set of recurring rules. Pure — the caller
+ * resolves each rule's next occurrence (skip-aware, via
+ * `nextUnskippedOccurrence`) and the amount to announce (my share, via
+ * `myShareOrTotal`), so this layer can be tested without a DB.
+ */
+export function planRenewalReminders<R extends RenewalRule>(
+  rules: R[],
+  nextOf: (rule: R) => number | null,
+  amountOf: (rule: R) => number,
+  formatAmount: (paise: number) => string,
+  prefs: Pick<ReminderPrefs, 'renewalLeadDays' | 'renewalTime'>,
+  now: number,
+): PlannedReminder[] {
+  const planned: PlannedReminder[] = [];
+  for (const r of rules) {
+    if (r.kind !== 'expense') continue;
+    const next = nextOf(r);
+    if (!next) continue;
+    const total = amountOf(r);
+    for (let d = prefs.renewalLeadDays; d >= 1; d--) {
+      const fireAt = atTimeOfDay(next - d * DAY_MS, prefs.renewalTime);
+      if (fireAt <= now) continue; // already passed
+      const when = d === 1 ? 'tomorrow' : `in ${d} days`;
+      planned.push({
+        id: `renew_${r.id}_d${d}`,
+        fireAt,
+        title: `${r.category} renews ${when}`,
+        body: `${formatAmount(total)} is due. Tap to review — or cancel it if you no longer use it.`,
+      });
+    }
+  }
+  return planned;
+}

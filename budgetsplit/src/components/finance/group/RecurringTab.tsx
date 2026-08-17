@@ -5,8 +5,7 @@ import { format } from 'date-fns';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatRupees } from '../../../lib/money';
-import { splitLabel, freqWord } from '../../../lib/groupDetail';
-import { nextOccurrenceOnOrAfter } from '../../../lib/recurrence';
+import { splitLabel } from '../../../lib/groupDetail';
 import { categoryVisual } from '../../../constants/categories';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
@@ -20,6 +19,8 @@ type Props = {
   refreshing: boolean;
   onRefresh: () => void;
   rules: TxnWithSplits[];
+  /** Skipped occurrence dates per rule — keeps "next charge" honest. */
+  skips?: Map<string, Set<number>>;
   meId: string;
   defaultSplit: string;
   monthlyTotal: number;
@@ -29,7 +30,7 @@ type Props = {
 };
 
 /** Group Recurring tab: monthly-total summary + active recurring rules + add CTA. */
-export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabel, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
+export function RecurringTab({ rules, skips, meId, defaultSplit, monthlyTotal, nextLabel, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
   if (rules.length === 0) {
     return (
@@ -68,7 +69,7 @@ export function RecurringTab({ rules, meId, defaultSplit, monthlyTotal, nextLabe
         {rules.map((r, i) => (
           <React.Fragment key={r.id}>
             {i > 0 && <Divider indent="text" />}
-            <RecurringRow rule={r} meId={meId} showNext onPress={() => onOpenRule(r.id)} />
+            <RecurringRow rule={r} meId={meId} showNext showShareLabel skipDates={skips?.get(r.id)} onPress={() => onOpenRule(r.id)} />
           </React.Fragment>
         ))}
       </View>

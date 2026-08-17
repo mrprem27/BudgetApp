@@ -1,5 +1,6 @@
-import { format } from 'date-fns';
-import { nextOccurrenceOnOrAfter, recurringMonthlyEquivalent } from './recurrence';
+import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from './recurrence';
+import { shortDate } from './dateFormat';
+import { txnTotal } from './splitMath';
 import { SPLIT_MODE_PHRASE, type SplitMode } from '../constants/enums';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -18,17 +19,6 @@ export function isRecurInstance(id: string): boolean {
 /** Human phrasing of a split mode (used in the recurring summary). */
 export function splitLabel(mode: string): string {
   return SPLIT_MODE_PHRASE[mode as SplitMode] ?? SPLIT_MODE_PHRASE.equal;
-}
-
-/** Human phrasing of a recur frequency. */
-export function freqWord(freq: string | null): string {
-  switch (freq) {
-    case 'daily': return 'daily';
-    case 'weekly': return 'weekly';
-    case 'yearly': return 'yearly';
-    case 'custom': return 'custom';
-    default: return 'monthly';
-  }
 }
 
 export type ContributionRow = { member: Person; paid: number; net: number; frac: number };
@@ -64,19 +54,27 @@ export function computeContributions(
   };
 }
 
-/** Monthly-equivalent total across active recurring rules (summary pill). */
+/** Monthly-equivalent WHOLE-BILL total across active recurring rules (the group
+ *  summary pill — a group surface shows the group's bill; rows carry "your share"). */
 export function computeRecurringMonthlyTotal(rules: TxnWithSplits[]): number {
-  return rules.reduce((sum, r) => {
-    const rAmt = r.payments.reduce((s, p) => s + p.amount, 0);
-    return sum + recurringMonthlyEquivalent(rAmt, r.recur_freq, r.recur_interval);
-  }, 0);
+  return rules.reduce(
+    (sum, r) => sum + recurringMonthlyEquivalent(txnTotal(r), r.recur_freq, r.recur_interval),
+    0,
+  );
 }
 
-/** Earliest upcoming charge across active recurring rules, as "MMM d" (or null). */
-export function computeRecurNextLabel(rules: TxnWithSplits[], now: number = Date.now()): string | null {
+/**
+ * Earliest upcoming charge across active recurring rules (or null). Skip-aware:
+ * without the skips map this advertised a charge the user explicitly skipped.
+ */
+export function computeRecurNextLabel(
+  rules: TxnWithSplits[],
+  skips?: Map<string, Set<number>>,
+  now: number = Date.now(),
+): string | null {
   const next = rules
-    .map(r => nextOccurrenceOnOrAfter(r, now))
+    .map(r => nextUnskippedOccurrence(r, now, skips?.get(r.id)))
     .filter((d): d is number => d != null)
     .sort((a, b) => a - b)[0];
-  return next ? format(next, 'MMM d') : null;
+  return next ? shortDate(next) : null;
 }

@@ -1,7 +1,10 @@
 import type * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getActiveRecurringRules } from '../db/queries/transactions';
-import { nextOccurrenceOnOrAfter } from './recurrence';
+import { getSkipsMap } from '../db/queries/recurring';
+import { getMe } from '../db/queries/persons';
+import { nextUnskippedOccurrence } from './recurrence';
+import { myShareOrTotal } from './splitMath';
 import {
   scheduleReminderAt, scheduleDailyReminder, cancelAllReminders,
   ensureAndroidChannel, hasNotificationPermission,
@@ -12,6 +15,7 @@ import {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
   DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME,
   clampLead, clampTime, defaultReminderPrefs, limitReminders, atTimeOfDay, nextMonthlyAnchor,
+  planRenewalReminders,
 } from './reminderPlan';
 
 // Re-export the pure surface so callers import everything from one place.
@@ -87,24 +91,20 @@ export async function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<vo
 
   if (prefs.renewals) {
     const rules = await getActiveRecurringRules(db);
-    const planned: PlannedReminder[] = [];
-    for (const r of rules) {
-      if (r.kind !== 'expense') continue;
-      const next = nextOccurrenceOnOrAfter(r, now);
-      if (!next) continue;
-      const total = r.payments.reduce((s, p) => s + p.amount, 0);
-      for (let d = prefs.renewalLeadDays; d >= 1; d--) {
-        const fireAt = atTimeOfDay(next - d * DAY, prefs.renewalTime);
-        if (fireAt <= now) continue; // already passed
-        const when = d === 1 ? 'tomorrow' : `in ${d} days`;
-        planned.push({
-          id: `renew_${r.id}_d${d}`,
-          fireAt,
-          title: `${r.category} renews ${when}`,
-          body: `${formatRupees(total)} is due. Tap to review — or cancel it if you no longer use it.`,
-        });
-      }
-    }
+    // Skip-aware: a renewal the user explicitly skipped must not push
+    // "renews tomorrow" — the next UNskipped date is the one that's due.
+    const skips = await getSkipsMap(db, rules.map(r => r.id));
+    const me = await getMe(db);
+    const planned = planRenewalReminders(
+      rules,
+      r => nextUnskippedOccurrence(r, now, skips.get(r.id)),
+      // A reminder is a personal surface: it says what YOU owe (my share,
+      // whole bill for unsplit rules) — not the group's full rent.
+      r => (me ? myShareOrTotal(r, me.id) : r.payments.reduce((s, p) => s + p.amount, 0)),
+      formatRupees,
+      prefs,
+      now,
+    );
     for (const rem of limitReminders(planned)) {
       await scheduleReminderAt(rem.id, new Date(rem.fireAt), rem.title, rem.body);
     }

@@ -26,7 +26,7 @@ import { FAB } from '../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { useGroupTxnActions } from '../src/hooks/useGroupTxnActions';
 import { getMyActivity, type TxnWithSplits } from '../src/db/queries/transactions';
-import { getRecurringForGroup } from '../src/db/queries/recurring';
+import { getRecurringForGroup, getSkipsMap } from '../src/db/queries/recurring';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
@@ -83,12 +83,14 @@ export default function PersonalScreen() {
       .map((g, i) => ({ groupId: g.id, name: g.is_personal === 1 ? 'Personal' : g.name, isPersonal: g.is_personal === 1, rules: rulesByGroup[i] }))
       .filter(r => r.rules.length > 0)
       .sort((a, b) => (a.isPersonal ? -1 : b.isPersonal ? 1 : 0));
+    const recurSkips = await getSkipsMap(db, recurGroups.flatMap(rg => rg.rules.map(r => r.id)));
     return {
       persons: allPersons,
       activity: acts,
       groups: grps,
       budget: bud,
       recurGroups,
+      recurSkips,
       // Owe / Lent summary — single source of truth (netted per person).
       summary: { owe: exp.owe, lent: exp.owed },
     };
@@ -99,6 +101,7 @@ export default function PersonalScreen() {
   const groups = data?.groups ?? [];
   const budget = data?.budget ?? [];
   const recurGroups = data?.recurGroups ?? [];
+  const recurSkips = data?.recurSkips;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
 
   const sharedGroups = groups.filter(g => g.is_personal !== 1);
@@ -322,6 +325,8 @@ export default function PersonalScreen() {
                               <RecurringRow
                                 rule={r}
                                 meId={myId}
+                                showNext
+                                skipDates={recurSkips?.get(r.id)}
                                 onPress={() => router.push(`/group/${rg.groupId}/recurring?focus=${r.id}`)}
                               />
                             </React.Fragment>
