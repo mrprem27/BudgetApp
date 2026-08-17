@@ -87,22 +87,23 @@ re-adding the same name), and `settings` is never synced as a table because it h
 one-time migration flags (`schema.ts:771-786`) alongside real user data. See
 `V2_LAUNCH_CHECKLIST.md` §6b Finding 2 and the F1–F9 pre-mortem.
 
-## Open money-model gaps (2026-08-08)
+## Open money-model gaps (2026-08-08, revised 2026-08-18)
 
-**Card repayment is not modelled.** `pay_method = card` now correctly routes spend to
-used credit instead of cash (`lib/cash.ts` + `cashQuery.ts`, parity locked by
-`cashSql.test.ts`), and `creditUsed` is read as *stated balance + card spend since
-`money.updated_at`* — so it self-corrects whenever the user re-enters the balance in
-the Plan editor. What's missing is the other direction: paying your card bill should
-move cash down and `creditUsed` down, and there is no card-bill concept to hang that
-on. Guessing (a magic category name, or a bank→card transfer) would be worse than the
-gap. Until a real card-payment path exists, `creditUsed` only grows between Plan edits.
+**~~Card repayment is not modelled.~~ CLOSED 2026-08-18.** A card-bill payment is a
+settlement row carrying `pay_method = 'card'` (`payCardBill` in
+`db/queries/spendPower.ts`): cash leaves through `settledOut` and the same amount comes
+off `cardSpend`, which is now a *net* delta. `computeTotalMoney` lets a repayment larger
+than post-baseline spend reduce the stated balance itself, clamped at zero. Both halves
+of the parity pair moved together (`lib/cash.ts` + `cashQuery.ts`, `cashSql.test.ts`
+extended). Surfaced as "Paid your card bill? Log it" on the Plan money card. The full
+accounts model below is still deferred — this row is deliberately shaped to survive it.
 
 **Accounts as entities.** Income records *where it landed* (`INCOME_LANDING`, a view
 over `pay_method`), but cash is a single pooled figure — choosing Bank vs Cash labels
 the transaction, it does not maintain separate balances. Real accounts with balances
 would reopen Total Money, the settlement engine and the transfer flow; deliberately
-deferred. The two gaps above are the same missing model.
+deferred. `INCOME_LANDING` still has no reader (`lib/cash.ts` branches on
+`PayMethod.Card` alone), and that stays true until this lands.
 
 
 ## How to use this file
@@ -542,3 +543,20 @@ fixed, each for a stated reason.
 | **`TransferBody` lives outside `finance/add/` and mounts its own sheets** | It sits in `components/finance/` unlike every other Add component, and mounts `UpiUriSheet` + `RequestQrSheet` from local state — breaking the one-overlay-at-a-time invariant that `QuickAddSheets` exists to enforce. Both are moves, not behaviour changes, so they belong in a commit where a regression is attributable. |
 | **Transfer has no `DetailChips`** | No tags, receipt, time, location or repeat on a transfer, and its note is a bespoke `TextInput` writing a *different* field (`transferNote`) from every other kind (`note`). Pay method is a third control again — a horizontal scroller here, a chip → sheet elsewhere. Consolidating means deciding which fields a settlement legitimately has, which is a product question, not a refactor. |
 | **A mid-phrase lone numeral is ignored; a leading one is not** | `parseVoice` refuses a single bare numeral mid-sentence (transliterated Hindi makes "do"/"char" homophones), but a phrase *starting* with one is still read as the amount — so "do you have change" is ₹2. That leading rule is what makes "450 groceries" work, so tightening it costs more than it saves. Covered by a test that documents the limit rather than asserting it away. |
+
+## Deferred by the pre-pilot consistency pass (2026-08-18)
+
+Recorded here so `PILOT_READINESS_REVIEW.md` stays a point-in-time report and this
+file stays the single live tracker.
+
+| Item | Why it's deferred, not forgotten |
+|---|---|
+| **Accounts as entities** | The remaining half of the money model (see § Open money-model gaps). Card repayment landed without it; separate Bank/Cash/Card balances still don't exist, so `INCOME_LANDING` has no reader. Reopens Total Money, settlement and transfer — a design change, not a fix. |
+| **Full date/currency formatter sweep** | `src/lib/dateFormat.ts` now defines the role-based rule (`shortDate`/`fullDate`/`monthLabel`/`timeOfDay`) and the recurring surfaces were converted with it. The remaining ~12 inline `date-fns` patterns across other screens are correct today; converting them is mechanical and belongs in a change where a visual regression would be attributable. Same for the ~15 inlined `(x/100).toString()` calls now that `paiseToInput` exists. |
+| **`category_global_v1` has never run against a populated DB** | `src/db/schema.ts:523` drops and rebuilds the `category` table. Untouched by this pass; still the highest-risk migration in the app and still needs one rehearsal against a real backup before the pilot. |
+| **45 files still import `src/constants/*` shims** | `src/theme` is canonical and the shims re-export it, so nothing is broken — but two import paths for one token set is exactly the drift this pass exists to remove. Mechanical, wide, and best done in isolation. |
+| **`help.tsx` third collapsible (N2)** | Structurally unlike the other two (bare header + card body, plus a nested item-level accordion). Converting to `SectionCard` adds card chrome — a real visual change that can't be device-verified from here. |
+| **Insights empty state has no CTA** | `app/insights.tsx:339` renders icon + title + body only, against AGENTS §2 which requires a primary action on every empty state. Every other screen complies. |
+| **`TransactionRow` never displays pay method** | The field is captured everywhere now (including itemized and voice, fixed in this pass) and shown only in Review and on the transaction detail screen. Whether the main ledger row *should* show it is a density question, not a bug. |
+| **Sync-readiness columns** | Unchanged by this pass: only `txn` has `updated_at`/`is_deleted`. See § Sync prerequisites. |
+| **`seed.ts` can mint duplicate `is_me` rows** | Checklist §6b Finding F5. One account can end up with two "me" persons, and every my-share figure would then silently read one of them. Not reproduced in this pass; still the sharpest identity risk before any sync work. |

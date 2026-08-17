@@ -1,4 +1,4 @@
-# Status — 17 Aug 2026
+# Status — 18 Aug 2026
 
 Where the project actually stands, on one page. Every line links into the
 detailed doc rather than restating it.
@@ -7,6 +7,7 @@ detailed doc rather than restating it.
 - What each screen does → [`FEATURES_AND_FLOWS.md`](./FEATURES_AND_FLOWS.md)
 - Known debt with evidence → [`DEBT_TRACKER.md`](./DEBT_TRACKER.md)
 - The device walkthrough → [`UI_UX_SWEEP.md`](./UI_UX_SWEEP.md)
+- The pre-pilot consistency pass → [`PILOT_READINESS_REVIEW.md`](./PILOT_READINESS_REVIEW.md)
 
 ---
 
@@ -19,7 +20,7 @@ detailed doc rather than restating it.
 | Backup upload / download / delete | Worker + KV | Round-trip against the live server: downloaded blob **byte-identical** to what was uploaded |
 | Profile + linking endpoints | Worker + D1 | `PATCH /me` normalised a phone; invite minted; session dead after logout |
 | Receipt OCR proxy | `receipt-ocr-proxy.budgetsplit.workers.dev` | Live since July; re-checked today |
-| App test suite | `budgetsplit/` | **96 suites / 1481 tests**, `tsc --noEmit` clean in app *and* Worker |
+| App test suite | `budgetsplit/` | **97 suites / 1517 tests**, `tsc --noEmit` clean in app *and* Worker |
 
 Cost: **₹0**. Workers, D1 and KV are free-plan; email is a free-tier HTTP
 provider. No card on file anywhere. See [`server/api/README.md`](../../server/api/README.md).
@@ -36,6 +37,16 @@ pushed**) and has never rendered on a phone. This is what
 - "Can I Afford This" — real upcoming bills, purchase frequency, owed-to-you line
 - Attachment reaper, bundled pdf.js, dev-screen gate, Review banner fix, Transfer sheet move
 
+**Plus everything on `feat/pre-pilot-consistency`** (see
+[`PILOT_READINESS_REVIEW.md`](./PILOT_READINESS_REVIEW.md)) — none of it device-tested:
+- **Home's hero now leads with Safe-to-Spend**, the single biggest visual change
+- **Health score rebuilt** on four equal-weighted pillars with a minimum-data gate; new
+  users see a locked ring and an unlock checklist instead of a manufactured 59/100
+- **Onboarding rebuilt** — 9 stages, every answer visibly lands somewhere, real group
+  creation, honest summary in place of the fake commit wait
+- **Card-bill payment** on the Plan money card (`creditUsed` can finally go down)
+- Recurring on one skip-aware, my-share basis; afford fed all groups and every occurrence
+
 **Blocked on one thing:** a native rebuild.
 `npx expo prebuild --clean && npx expo run:ios` — `expo-secure-store` is a new
 native module, so the current binary crashes at launch without it (now
@@ -47,7 +58,7 @@ native module, so the current binary crashes at launch without it (now
 |---|---|---|
 | **Multi-device sync (S2)** | Only `txn` has `updated_at`/`is_deleted`; 9 tables have neither, so it opens with a migration across every write path | You want it enough to spend weeks — plan and pre-mortem are in §6b |
 | **Shared groups (S3)** | Hardest rung: identity merging + multi-writer money | S2 is running and boring |
-| **Per-method money baselines** | Money-correctness risk; deserves its own reviewed pass | Next money-model pass — card repayment and investments-as-transfer are decided and waiting with it |
+| **Per-method money baselines** | Money-correctness risk; deserves its own reviewed pass | Next money-model pass. Card repayment **landed 2026-08-18**; accounts-as-entities and investments-as-transfer are still waiting with it |
 | **Monetisation** | A tier boundary drawn before anyone uses the app is a guess | After the pilot |
 | **Widget** | Scope genuinely undecided — balance? today's spend? quick-add? | You answer that, and Gate 0 clears |
 | **WhatsApp composer** | Framing decided, phone field already shipped; only the compose step is left | Any time — it's small |

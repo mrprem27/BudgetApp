@@ -18,8 +18,12 @@
 > resolve to §3 and §15 below. Corrected against source: **receipt scanning is live**, not
 > parked (§7.4) and ships with a **cloud OCR provider** that makes a network call (§19);
 > **`/settings/backup`**, **`/review`**, **`/import`** and **`/report-transactions`** now have
-> sections; onboarding is **11 stages**, not 8; there are **7 pay methods**, not 3; goal funding
+> sections; there are **7 pay methods**, not 3; goal funding
 > is `fundGoal` with **no pool**. Every route now carries a documented state set (§20).
+>
+> **Revised 2026-08-18** (pre-pilot consistency pass — see `PILOT_READINESS_REVIEW.md`):
+> onboarding is now **9 stages**, of which one (`summary`) asks nothing; the feature
+> carousel, the `payoff` beat and the `committing` stage are gone.
 
 ---
 
@@ -59,16 +63,19 @@
 
 ## 1. First run & onboarding
 
-`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **11-stage**
+`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **9-stage**
 `Onboarding` flow (`src/hooks/useOnboardingForm.ts` owns the stage machine; `OnboardingStage`
-is the authoritative list). A single DB commit (`finalizeOnboarding`) happens at the very end —
-nothing is written mid-flow except two AsyncStorage preferences and the persona flag defaults.
+is the authoritative list): `hero → intent → name → income → money → budget → people →
+permissions → summary`. A single DB commit (`finalizeOnboarding`) happens at the very end —
+nothing is written mid-flow except the persona flag defaults.
 
-**Two of the eleven ask nothing.** `payoff` reflects the numbers just entered back at the user,
-and `committing` covers the commit itself; neither collects input, neither is in `SETUP_STEPS`,
-and neither appears in the progress count. They exist because the flow previously asked for a
-name, income, pay-day, four money figures and a budget cap and returned **nothing** until the
-app opened.
+**One of the nine asks nothing.** `summary` reads back what the answers actually created —
+the salary rule and where it shows, the budget and where it shows, the group and its members,
+the backup reminder — then offers "Log your first expense". It replaced a forward-only
+`payoff` beat and a `committing` stage whose three-phase checklist was ~1.7s of manufactured
+waiting over a write that completes in milliseconds. Every other stage now changes something
+the user can see; the four-slide feature carousel, which asked nothing and changed nothing,
+was deleted (`PILOT_READINESS_REVIEW.md` D4).
 
 **Shared chrome.** Every non-hero stage renders through `StepScaffold` (back + one progress bar
 in a single top row, scrolling body, pinned `StepFooter`). Before this, the back chevron was
@@ -79,37 +86,45 @@ equivalent styling rather than sharing theirs.
 
 | # | Stage | What the user does | Persisted |
 |---|---|---|---|
-| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline fade in. Tap **Get Started**. | nothing |
-| 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
-| 2 | **Feature carousel** | 4 swipeable slides (Spend / Split / Budget / Privacy) + progress bar, art from `system/onboarding/SlideArt`. **Skip** → Name. | nothing |
-| 3 | **Name** | Type your name (≤30). Always reached, even from Skip. **Continue** (sets "add first expense" intent) or **Skip — just explore**. | committed in `finalize` |
-| 4 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L) + pay-day chips. **Skip**. | committed in `finalize` |
-| 5 | **Money** | Opening position: cash on hand, investments, credit limit, credit used. **Skip**. | `setMoneyProfile`, best-effort |
-| 6 | **Budget** | Monthly cap field + presets; shows "X% of take-home" if income set. **Skip**. | committed in `finalize` |
-| 6.5 | **Payoff** | Reads the answers back: "₹18,000 a month left over" / "₹27,000 a month is your ceiling" when income was skipped. Asks nothing. **Forward-only** — Back from People/Permissions returns to Budget, not through here. Skipped entirely when income *and* budget were both skipped (`payoffFor` returns null). Copy + arithmetic live in `lib/onboardingPayoff.ts`, unit-tested. | nothing |
-| 7 | **People** | Add split-contacts inline (dedup by name). **Skipped entirely when intent is *personal*** (`setupSteps()`). | committed in `finalize` |
-| 8 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`, read by add flows). | `save_location` on grant |
-| 9 | **Committing** | "Setting things up" checklist over the single `finalizeOnboarding` write. No back, no skip. The phases tick on a timer *because the commit is atomic and has no per-phase progress to report* — but the last phase never completes until the write actually resolves, so the screen can't claim to be done early. | the commit itself |
+| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline fade in. Tap **Get Started** — or **Skip intro**, a sibling overlay that fades in ~1s so the first tap isn't gated behind the animation's ~4.8s reveal. | nothing |
+| 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). The note beneath lists exactly what the choice **trims**, derived live from `personaTrims()`, so the copy can't drift from the flags. | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
+| 2 | **Name** | Type your name (≤30). **Continue** or **Skip**. | committed in `finalize` |
+| 3 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L) + pay-day chips. Sub-copy states what the answer does: a salary entry on that day, visible under Plan → Recurring, powering "Can I afford this?". **Skip**. | committed in `finalize` |
+| 4 | **Money** | Cash on hand leads; investments / credit limit / credit used sit in a quieter card beneath. **Skip**. | committed in `finalize` |
+| 5 | **Budget** | Monthly cap field + presets **derived from the income just entered** (50/60/70% of take-home); shows "X% of your take-home — it shows as the pace bar on Home". **Skip**. | `budget_target`, read by Home's pace bar and the health engine when no category budgets exist |
+| 6 | **People** | Add split-contacts inline (dedup by name), then name the group they form (Home / Trip / Friends / custom). **Skipped entirely when intent is *personal***. | contacts **and a real group** holding them, in `finalize` |
+| 7 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`), plus the flag-gated Siri shortcut hand-off. States the local-only reality and the monthly backup nudge. | `save_location` on grant |
+| 8 | **Summary** | Reads back what the answers actually created — each row names the artifact and where it now lives — then **Log your first expense** (arms `pending_first_add`) or **Go to Home**. Asks nothing. | `pending_first_add` on the primary CTA |
 
-**Stage order** comes from `SETUP_STEPS = ['income','money','budget','people','permissions']`,
-filtered by intent. Back navigation uses `afterBudget` / `beforePermissions`, which skip
-`people` for the personal persona in both directions; `afterBudgetOrPayoff` routes Budget's
-Continue through the payoff beat when there's something to show. The progress indicator counts
-`name` plus the intent-filtered setup steps, so the personal persona reads "3 of 4" rather than
-leaving a gap where `people` would have been.
+**Stage order** comes from `NUMBERED_STEPS = ['intent','name','income','money','budget','people','permissions']`,
+filtered by intent (`numberedSteps()`); `summary` is a result, not a numbered question. Back
+navigation uses `afterBudget` / `beforePermissions`, which skip `people` for the personal
+persona in both directions. The progress indicator is known from the **first** question rather
+than appearing three screens in, and the personal persona reads "5 of 6" rather than leaving a
+gap where `people` would have been.
 
-**`finalizeOnboarding()`** (`src/lib/onboarding.ts:42-88`, best-effort, each step isolated so
-one failure never blocks finishing):
+**`finalizeOnboarding()`** (`src/lib/onboarding.ts`, best-effort, each step isolated so
+one failure never blocks finishing — covered by `finalizeOnboarding.test.ts`, including a
+preservation case asserting that a skipped answer removes only its own artifact):
+- `applyPersona(intent)` — the stored intent plus the flag defaults it implies.
 - `updatePersonName(me)` if a name was entered.
 - If income > 0: inserts a **recurring monthly Salary income** in the Personal group anchored
   by `paydayAnchor(day)` — the next occurrence of that day-of-month at 09:00, clamped to month
-  length, so it never immediately back-fills.
-- If budget > 0: writes a `Total` monthly `category_budget` on the Personal group.
-- Each contact → `insertPerson`.
-- If "add first" intent: persists `pending_first_add='true'` (Home auto-opens Add once, then
-  clears the flag).
+  length, so it never immediately back-fills. Visible day-0 on `/plan/recurring` (which shows
+  income, not just expenses) and used as the afford engine's income floor.
+- If budget > 0: writes the `budget_target` preference. **Not** a `category_budget` — inventing
+  a `Total` category put a phantom Others row on Personal and offered "Total" for adoption in
+  the editor. Home's pace bar and the health engine read the preference until real category
+  budgets exist.
+- Each contact → `insertPerson`; if any were added, `insertGroup` creates the group they named
+  with `[me, ...contacts]` as members.
+- `setMoneyProfile` writes cash / investments / credit.
+- `setReminderPrefs({ backup: true })` — the monthly backup nudge defaults on, because with no
+  sync a lost phone is total data loss and a skipped notification prompt used to mean no
+  mitigation at all (`V2-02`).
 - Calls `onDone()` → gate writes `onboarding_done='true'` in a `try/finally`, so the gate opens
-  even if that write fails.
+  even if that write fails. The summary's primary CTA persists `pending_first_add='true'`
+  (Home auto-opens Add once, then clears the flag).
 
 **Replay:** Settings → "Replay welcome tour" removes `onboarding_done` and restarts this flow.
 
@@ -1459,8 +1474,8 @@ Absorbed from `AUDIT.md` §3. Each step names the code that does it.
 | 5 | `LockGate` (biometric, default off) then `OnboardingGate` reads `onboarding_done` | `components/system/{LockGate,OnboardingGate}.tsx` |
 | 6 | 9-stage questionnaire (§1) | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
 | 7 | Intent → `onboarding_intent` **and the feature flags it implies** | `lib/personaDefaults.ts`, `lib/onboarding.ts` |
-| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, a `Total` budget line, and contacts — each step individually try/caught | `src/lib/onboarding.ts:42-88` |
-| 9 | `setMoneyProfile` writes cash / investments / credit, best-effort | `Onboarding.tsx:213-218` |
+| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, the `budget_target` preference, contacts **and the group holding them**, the money profile, and turns the backup reminder on — each step individually try/caught | `src/lib/onboarding.ts` |
+| 9 | *(folded into step 8 — `setMoneyProfile` is part of the single commit)* | `src/lib/onboarding.ts` |
 | 10 | `onDone()` → `settings.setOnboardingDone(true)` in a `try/finally`; the gate opens regardless | `OnboardingGate.tsx:19-25` |
 | 11 | If the user chose "add my first expense", Home fires a one-shot push to Quick Add and clears the flag | `app/(tabs)/index.tsx:101-108` |
 
@@ -2028,7 +2043,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `add/ReceiptScanSheet` · `add/ScanningOverlay` | Receipt-scan result sheet and blocking progress overlay (§7.4). |
 | `review/ReviewRowCard` | One editable pending row. **Module scope is load-bearing** — see §10.2. |
 | `review/DestOption` · `review/FChip` · `review/FilterForm` · `review/SaveViewForm` · `review/RecurringSuggestionBanner` · `review/RecurringSuggestionsSheet` · `review/ReviewDestSheet` · `review/CounterpartySheet` · `review/BulkGroupSheet` · `review/ReviewOverflowSheet` · `review/SavedViewsSheet` | Review sub-views (§10.2). |
-| `system/onboarding/StepScaffold` · `StepFooter` · `StepProgress` · `StepBack` · `StepAmountField` · `MoneyRow` · `PayoffStage` · `CommitStage` | Onboarding step chrome (§1). `StepFooter` **forks** the hero's footer styling rather than sharing it. |
+| `system/onboarding/StepScaffold` · `StepFooter` · `StepProgress` · `StepBack` · `StepAmountField` · `MoneyRow` · `SummaryStage` | Onboarding step chrome (§1). `StepFooter` **forks** the hero's footer styling rather than sharing it. |
 | `backup/PassphraseSheet` | Passphrase create/unlock sheet (§13.3). |
 
 ### `system/` — global behaviors
@@ -2039,7 +2054,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `FeatureFlagsProvider` (+ `useFeatureFlags`, `FlagsGate`) | Feature-flag context (AsyncStorage-backed). |
 | `LockGate` | Biometric lock on background, with the not-enrolled escape hatches (§17). |
 | `LogoAssembly` | Brand assembly animation — ⛔ **never modify**. |
-| `Onboarding` (+ `onboarding/SlideArt`) | The **9-stage** onboarding flow (§1). |
+| `Onboarding` (+ `onboarding/*` step chrome) | The **9-stage** onboarding flow (§1). |
 | `OnboardingGate` | Gates onboarding via AsyncStorage `onboarding_done`. |
 | `PdfTextExtractor` | Off-screen WebView running pdf.js for PDF import. |
 | `PrivacyScreen` | App-switcher privacy cover. |
