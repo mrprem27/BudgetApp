@@ -169,7 +169,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
-| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
+| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
 
@@ -230,12 +230,18 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
 | S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. Per-row **Skip next · Pause · Stop** (shared `useRecurringActions`); row tap → `/group/{id}/recurring?focus={ruleId}`. |
 | S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
-| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet; restore **replaces all data**. See §13.3. |
+| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet **or** to your account; restore **replaces all data**. See §13.3. |
+| S-36 | **Account** | `app/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out. Exists only in a build with `EXPO_PUBLIC_API_URL` set; buys exactly one capability, off-device encrypted backups (§13.3). |
+| S-38 | **Linked people** | `app/settings/linked.tsx` | Who you're linked with, who is **waiting for your approval**, and per-person "show them my number". Invite by link or QR. No search, no directory — a link you generated is the only way in. Server-configured builds only. See §13.5. |
+| S-39 | **Invite landing** | `app/link.tsx` | Where a tapped invite link lands (`budgetsplit:///link?token=…`, bounced from the Worker's `/invite/open`). Claiming **asks**; it links nothing until the sender confirms. Deep-link target only. |
+| S-37 | **Sign-in callback** | `app/auth.tsx` | Where a tapped magic link lands (`budgetsplit:///auth?token=…`, redirected from the Worker's `/auth/open`). Spends the token once, then replaces itself with S-36. Not reachable from any button — a deep-link target only. |
 
 ### 3.9 Reachability
 
 Every route is reachable. Conditionally: S-32 and S-33 only appear when their flags are on
-(`recurring: true`, `streak: false` by default), and S-27 requires the 7-tap easter egg.
+(`recurring: true`, `streak: false` by default), S-27 requires the 7-tap easter egg, S-36 only
+appears in a build with a server configured, and S-37 / S-39 are only ever entered from a
+link in an email or a message.
 
 ---
 
@@ -1236,14 +1242,21 @@ owe-owed / recurring analytics live in **Reports**, not here — insights has on
 state and no pull-to-refresh — it's a static config list. A persistent status-bar cover view
 keeps content from painting under the clock/notch.
 
-1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), and a privacy subtitle.
-2. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
-3. **Manage** — People → `/friends` · Categories → `/categories` · **My Budget** (monthly rollup, or "Not set") → `/budget`.
-4. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
-5. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
-6. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
-7. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
-8. **About** — version; tap **7×** → `/storage` (hidden debug entry).
+1. **Profile card** — avatar (→ photo picker), name (→ rename *(sheet)*), and a subtitle that
+   reads the signed-in email when there is one, else "Offline-first · sign in to back up"
+   (configured builds) or "Offline-first · no accounts" (the default build).
+2. **Account** *(only when `EXPO_PUBLIC_API_URL` is set)* — one row: the signed-in email, or
+   "Sign in — back up beyond this phone" → `/settings/account` (§13.4).
+3. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
+4. **Manage** — People → `/friends` · Categories → `/categories` · **My Budget** (monthly rollup, or "Not set") → `/budget`.
+5. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
+6. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
+7. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
+8. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
+9. **About** — version; tap **7×** → `/storage` (hidden debug entry).
+
+Only the topmost section drops its top margin, and which one that is depends on what's enabled
+above it (`sectionTop(isFirst)`) — Account when configured, else Getting paid, else Manage.
 
 ### 13.2 Settings sub-screens
 | Screen | Route | What it does | States |
@@ -1257,13 +1270,17 @@ keeps content from painting under the clock/notch.
 | **Storage** | `storage.tsx` | Receipt-photo disk usage + "Delete all attachments"; **TESTING:** Load demo data / Erase all data (see §24). | Error + retry |
 | **Notifications** | `settings/notifications.tsx` | Reminder prefs + permission handling + test notification (§18). | Error + retry ("Couldn't load reminder settings") · no pull-to-refresh (it's a form) |
 | **Backup & restore** | `settings/backup.tsx` | §13.3. | `ActivityIndicator` per row while busy; every failure is an Alert |
+| **Account** | `settings/account.tsx` | §13.4. Absent entirely without `EXPO_PUBLIC_API_URL`. | Spinner while the stored session is read · inline error text (not an Alert — the retry is right there) |
 
 ### 13.3 Backup & restore — `app/settings/backup.tsx`
-The highest-consequence flow in the app. There is **no cloud sync**: this builds a
-passphrase-encrypted snapshot and hands it to the OS share sheet.
+The highest-consequence flow in the app. There is still **no cloud sync**: this builds a
+passphrase-encrypted snapshot and hands it either to the OS share sheet or, when signed in, to
+your account. Both destinations get the identical envelope — the only difference is transport,
+and the server cannot read what it stores (§13.4).
 
-1. **Explainer card** — icon, the "your data lives only on this device" note, and **Last backup:
-   {date}** once one exists (`settings.backupAnchorAt()`).
+1. **Explainer card** — icon, a note that swaps for the signed-in case ("your transactions live
+   on this device — signing in didn't change that"), and **Last backup: {date}** once one exists
+   (`settings.backupAnchorAt()`).
 2. **Create backup** ("Encrypted file") → **PassphraseSheet** *(mode `create`)* →
    `readAllTables` → `buildBackupPayload` → `encryptPayload` → write to cache as
    `.bsbackup` → `Sharing.shareAsync`. If sharing isn't available it reports the on-disk path
@@ -1271,7 +1288,14 @@ passphrase-encrypted snapshot and hands it to the OS share sheet.
 3. **Restore from backup** ("Pick a file") → `DocumentPicker` → JSON parse + a `ciphertext`
    shape check → **PassphraseSheet** *(mode `restore`)* → `decryptEnvelope` → a
    **destructive-style confirm Alert** naming the backup's date → `restoreAllTables`.
-4. **Standing warning** under the rows: "Restoring replaces ALL current data on this device.
+4. **Back up to your account** / **Restore from your account** *(signed in only)* — the same
+   two actions over the network. Create runs the identical passphrase → `readAllTables` →
+   `encryptPayload` path and then `uploadBackup(JSON.stringify(envelope))` instead of writing a
+   file. Restore opens `ServerBackupSheet` (date + size per snapshot, newest first; trash icon
+   deletes one; tap downloads it), then rejoins the *same* passphrase → confirm → `restoreAllTables`
+   path a picked file takes. When a server is configured but nobody is signed in, one row
+   ("Back up off this phone · Sign in") points at `/settings/account` instead.
+5. **Standing warning** under the rows: "Restoring replaces ALL current data on this device.
    This cannot be undone."
 
 **Restore replaces, it does not merge.** `restoreAllTables` toggles `PRAGMA foreign_keys=OFF`
@@ -1286,6 +1310,78 @@ backup permanently unrecoverable, by design.** Failure modes are typed and disti
 `BackupCorruptError` ("This backup looks corrupted", sheet dismissed). Wrong-passphrase and
 not-a-backup are **deliberately indistinguishable** — an attacker shouldn't be able to tell
 which one they hit.
+
+---
+
+### 13.4 Account — `app/settings/account.tsx` (optional, server-backed)
+
+Exists only in a build with `EXPO_PUBLIC_API_URL` set (`serverConfigured()`); the default build
+has no account UI at all, and nothing is uploaded. Backed by the Worker in `server/api`
+(see its README for the route table and deploy steps).
+
+**Sign-in is an email magic link, no password.**
+
+1. **Signed out** — explainer card + email field → **Email me a sign-in link**
+   (`POST /auth/request-link`). The response is the same whether or not that address already has
+   an account: accounts are created at verify time, so there is no account-existence signal to
+   leak.
+2. **Check your inbox** — the email's button points at the Worker's `https://…/auth/open`, which
+   **302s** to `budgetsplit:///auth?token=…` (S-37). Mail clients won't render a custom scheme as
+   a tappable link, hence the bounce; `/auth/open` deliberately touches no database, so link
+   scanners and mail-provider prefetchers can't burn the token before the human taps it. The
+   email also prints the raw code, and this state has a **paste-the-code** field — the way in
+   when the mail was opened on a laptop.
+3. **Verify** — `POST /auth/verify` spends the token once (guarded `UPDATE … WHERE used_at IS
+   NULL`, so a double-tap can't mint two sessions), finds-or-creates the user, and returns a
+   session token stored in **`expo-secure-store`** — a bearer credential does not belong in
+   AsyncStorage next to feature flags. 90-day rolling expiry; a row in `sessions`, not a JWT, so
+   signing out genuinely ends it.
+4. **Signed in** — profile card (device avatar/name + the server's email and created-on date),
+   **Update profile from this device** (pushes `me.name`, then the local avatar as base64 —
+   one-directional on purpose, the device profile is the one the user edits), **Backup & restore**
+   → §13.3, and **Sign out** (confirm Alert; clears the local session even if the network call
+   fails, because looking signed in while every action 401s is worse).
+
+**What the account is for, and what it is not.** It buys off-device encrypted backups and nothing
+else. The ledger stays local-first, there is no sync (that's phase S2) and no shared groups
+(S3) — see `docs/V2_LAUNCH_CHECKLIST.md` §6b. Backups are encrypted **on the phone** by
+`lib/backup.ts` before upload, with a passphrase the server never receives, so a leaked bucket is
+unreadable and a leaked D1 gives up email addresses and nothing about anyone's money. The
+server keeps the newest **10** snapshots per account and prunes older ones on upload.
+
+---
+
+### 13.5 Linked people — `app/settings/linked.tsx` (optional, server-backed)
+
+Linking two accounts so they can see details each has chosen to share. Today that is a name,
+an email and — only if switched on — a phone number. It is **not** group sharing or sync
+(S2/S3); nothing about anyone's money crosses a link.
+
+**There is no username, no directory and no lookup** — not by email, not by phone. The only
+way to reach an account is a link its owner generated. That is a deliberate product call
+recorded in `V2_LAUNCH_CHECKLIST.md` §6b: this is a personal-finance app first, and a
+searchable handle is social furniture it does not need — with the side benefit that nobody
+can check whether a number they hold belongs to someone using a finance app.
+
+1. **Invite someone** → `POST /invites` → a sheet with a **QR** (`react-native-qrcode-svg`,
+   the same dependency the UPI request-QR uses) and **Send link** (`Share.share`). Seven-day
+   expiry, single use.
+2. The recipient taps it → the Worker's `/invite/open` 302s to `budgetsplit:///link?token=…`
+   → **S-39**, which calls `POST /invites/claim`. This **binds nothing** and says so
+   ("Asked to link").
+3. **Waiting for you** — the sender sees who claimed it, with the email, and answers
+   **Link** or **Not them**. Only approval writes the link. This exists because an invite is
+   *made to be forwarded*: first-tap-wins would hand a stranger a link to your account, and
+   your number with it.
+4. **Show them my number** — a switch per linked person, per side. Resolved live on every
+   read, so switching it off stops future reads. The copy calls it a disclosure, never a
+   recall: *"it can't take back a number they already have."*
+5. **Unlink** — either side, removes it for both. Local `person` rows are untouched.
+
+**A friend is still a local record.** Adding someone in People needs no account and no
+network, and their phone number there is yours to set — if a linked account offers one, it is
+offered *into* the field, never written over it. You may legitimately know a different number
+for someone than the one they signed up with.
 
 ---
 
@@ -1599,14 +1695,14 @@ because those ids are already this app's contract for a reminder's source — so
 
 ## 19. Network & data egress
 
-The app is local-first: SQLite on device, no accounts, no sync, no telemetry, no analytics SDK.
-There are exactly **two** places anything leaves the device, and only one of them sends user
-content.
+The app is local-first: SQLite on device, no sync, no telemetry, no analytics SDK. Three paths
+can leave the device, all listed below, and **only one is on by default**.
 
 | # | What | Sends | When |
 |---|---|---|---|
-| 1 | **pdf.js**, loaded in the off-screen `PdfTextExtractor` WebView to read a compressed PDF | Nothing — the library is fetched/cached (`src/lib/pdfjsCache.ts`); the PDF itself is parsed locally | Importing a PDF statement |
-| 2 | **Receipt OCR, cloud provider** — `server/receipt-ocr-proxy` → Gemini Flash | **The receipt photo**, base64-encoded | Scanning a receipt while `settings.ocrProvider()` is `gemini` — **the default** |
+| 1 | **Receipt OCR, cloud provider** — `server/receipt-ocr-proxy` → Gemini Flash | **The receipt photo**, base64-encoded | Scanning a receipt while `settings.ocrProvider()` is `gemini` — **the default** |
+| 2 | **Account, linking + server backup** — `server/api` (`src/lib/serverApi.ts`) | Your **email address**, a device label ("iPhone 15"), optionally your name, profile picture and phone number, who you are **linked** with, and **encrypted backup blobs** the server cannot read. No transaction, group, budget or goal ever goes up | Only in a build with `EXPO_PUBLIC_API_URL` set, and only after the user signs in and taps a backup, invite or approve action (§13.4, §13.5) |
+| 3 | **pdf.js**, loaded in the off-screen `PdfTextExtractor` WebView to read a compressed PDF | Nothing — the library is **bundled** in the app (`src/assets/pdfjs/`, integrity-checked in `src/lib/pdfjsCache.ts`) and the PDF is parsed locally | Importing a PDF statement |
 
 ### The proxy
 [server/receipt-ocr-proxy/](../../server/receipt-ocr-proxy/) is a stateless **Cloudflare
@@ -1626,14 +1722,32 @@ set `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` in `budgetsplit/.env` or the EAS environ
 user-base growth. `ocrProviders/index.ts` documents Mistral as a possible automatic fallback —
 documented, **not implemented**.
 
+### The account/backup Worker
+[server/api/](../../server/api/) is the second Worker: D1 for identity (`users`, `magic_links`,
+`sessions`) and backup metadata, R2 for the blobs. It never sees a transaction, and never sees a
+backup passphrase — `lib/backup.ts` encrypts on the phone first, so the stored bytes are opaque
+to it. Phase **S1** only: no sync (S2), no shared groups (S3).
+
+**Config**: `wrangler d1 create` → `d1 migrations apply` → `r2 bucket create` → an email
+provider (see below) → `wrangler deploy` → set `EXPO_PUBLIC_API_URL`.
+
+**It runs free.** Workers (100k req/day), D1 (5 GB) and R2 (10 GB) are all on Cloudflare's
+free plan. The one exception is Cloudflare's *own* Email Sending, which is Workers Paid
+($5/mo) and needs a domain you own — so `server/api/mailer.ts` defaults to an HTTP provider
+with a free tier and single-sender verification, and falls back to the Cloudflare binding
+when it is configured. Which one is live is reported by `GET /health`.
+Leave that env var unset (the default) and none of this code path is reachable: no Account row,
+no server backup rows, no requests.
+
 ### What this means for the privacy claims
-The default is `gemini`, so out of the box a scanned receipt photo does reach a third party.
-**Feature management → Smart capture → Cloud Receipt Scanning** turns that off and keeps
-everything on the phone (§7.4). Because the default is the cloud path, any absolute in-app claim
-("zero network calls", "nothing ever leaves your device") would be false as written, so the
-strings in `app/help.tsx`, `app/(tabs)/settings.tsx` and `app/storage.tsx` are scoped instead:
-no accounts, no cloud sync, no tracking, no analytics — with receipt scanning named as the one
-exception, and the toggle named as the way out.
+The default OCR provider is `gemini`, so out of the box a scanned receipt photo does reach a third
+party. **Feature management → Smart capture → Cloud Receipt Scanning** turns that off and keeps
+everything on the phone (§7.4). Because of that, and now because signing in is possible at all,
+any absolute in-app claim ("zero network calls", "nothing ever leaves your device") would be
+false as written. The strings in `app/help.tsx`, `app/(tabs)/settings.tsx`, `app/storage.tsx` and
+`VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, no analytics, nothing
+uploaded **unless you ask** — with receipt scanning and server backup named as the two
+exceptions, and the way out named for each (the OCR toggle; not signing in).
 
 ---
 

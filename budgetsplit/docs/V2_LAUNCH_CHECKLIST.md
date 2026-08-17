@@ -29,8 +29,8 @@ Not all large, but all *wrong money*. **All nine are done.**
 | ✅ `14c5fa4` | 0.5 card baseline split from the "last edited" stamp | XS | — |
 | ✅ `e0fdd32` | 0.3 pause/resume preserves `recur_end`; the dormant gap is written to `recur_skip` instead of back-posted | S | — |
 | ✅ `4491769` | 0.4 materialization now copies `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`; the test asserts on the **column set**, not named fields | S | — |
-| ✅ `0880152`+`ced6264` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. **`priority` remove-or-revive still open** (#15) | M | — |
-| ✅ `e0fdd32`+`a522d77`+`pending` | Tier 1 — **all 11**. Backup photos are opt-in with URIs rewritten on restore; the app-lock failure path speaks. One residue, tracked separately: turning the lock *off* still needs no auth (a Settings fix, not a gate fix) | M | — |
+| ✅ `0880152`+`ced6264` | 0.9 one forecast model (`forecast.ts` everywhere); goals engine — ties, reorder permutation, completed raids. `priority` remove-or-revive — **decided: revive** (#15) | M | — |
+| ✅ `e0fdd32`+`a522d77`+`0e2aa6e` | Tier 1 — **all 11**. Backup photos are opt-in with URIs rewritten on restore; the app-lock failure path speaks; the residue (turning the lock *off* needed no auth) is closed too — `toggleLock` now requires biometric/passcode auth to disable, with a stranding guard when no hardware/enrollment exists | M | — |
 | ✅ `0880152` | 0.6 one `rollUpBudgets`, keyed by target period. **Decided:** a budget rolls *up* only — `daily × real days`, `monthly × 12` into a year; `yearly`/`once` are **pools**, never ÷12 | M | — |
 | ✅ `0880152` | 0.7 / 0.8. **Decided:** "spent" is what happened — every window ends at `now`; Reports is **my-share**, like every other surface | M | — |
 
@@ -97,10 +97,11 @@ the module calls).
 | 12 | Insights — one forecast model, not two | **DONE** — ✅ Hero + chart both read `forecastMonthEnd` |
 | 13 | Savings insights — make deterministic | **DONE** — ✅ Seeded on candidate text + day; rotates daily, stable within a day |
 | 14 | Goals — exclude completed from the raid; fix the reorder permutation | **DONE** — ✅ Both, plus the pre-drag tie now mirrors funding |
-| 15 | Goals — `priority` is dead code | **DECIDED: remove.** ✅ The unreachable `rankKey` fallback is gone and `sort_order` is the only funding axis; demo goals now set a real order via `reorderGoals` instead of decorative `priority`. **Queued:** the column, its enum and the `savingsInsights` bonus are vestigial — a ten-file sweep of money code, its own change |
+| 15 | Goals — `priority` is dead code | **DECIDED: revive, not remove** (superseding the earlier "remove" call — see below). ✅ Repurposed as a real, user-set **Emergency / Need / Want** protect-from-raid tag: `CHECK(priority IN ('emergency','need','want'))` (one-time table rebuild, `medium→need`/`high→emergency`/`low→want`), a picker in both the New Goal and Adjust Goal sheets, and `planOverspendRaid` now excludes `emergency` outright and raids `want` before `need`. `planAutoAllocations` funds in the same tag order, `sort_order` (drag) breaking ties within a tag. This also closes #23 below: the Goals list now renders three sections by tag, which *is* the fund/protect split — drag reorders within a section, the section is the protect order. |
 | 16 | QR from a photo (`scanFromURLAsync`, no new dependency) | **DONE** — ✅ `src/lib/qrFromImage.ts`, wired into both scanners |
-| 17 | Group budget — relabel to "my share" | **DONE** — ✅ Label-only, as predicted: the engine already passes `meRow?.id`. **Resolves D1**; D3 (health engine) stays open |
+| 17 | Group budget — relabel to "my share" | **DONE** — ✅ Label-only, as predicted: the engine already passes `meRow?.id`. **Resolves D1**; ~~D3 (health engine) stays open~~ — D3 closed too, see §2 |
 | 18 | WhatsApp reminder — composer + share sheet | §3.4 |
+| 18b | **Deploy the account/backup Worker** — `server/api/README.md`: D1 + R2 + a domain onboarded to Email Sending, then `EXPO_PUBLIC_API_URL` and a native rebuild. Optional: skip it and the app ships exactly as it does today, with no account UI | §6b |
 
 ### M — a day to a few days
 
@@ -110,8 +111,8 @@ the module calls).
 | 20 | ⛔ Privacy policy, store listing, icon, splash, screenshots | §1 |
 | 21 | Money model — per-method baselines | §3.2 |
 | 22 | Insights — restructure into three tiers | §4.3 |
-| 23 | Goals — list redesign; split fund order from protect order | §4.4 |
-| 24 | Import — restructure, bundle pdf.js locally | §3.3 |
+| ~~23~~ ✅ | ~~Goals — list redesign; split fund order from protect order~~ | Done via #15's Emergency/Need/Want tag — see §4.4 |
+| 24 | Import — restructure *(~~bundle pdf.js locally~~ ✅ done 2026-08-17)* | §3.3 |
 | 25 | Push notifications (needs Gate 0) | §3.3 |
 | 26 | Device verification sweep — UPI on Android, Google Pay, Pass 4 | §5 |
 
@@ -129,7 +130,7 @@ the module calls).
 
 | | Task | Detail |
 |---|---|---|
-| 32 | Server, login and sync — S1 → S2 → S3 | §6b |
+| 32 | ~~Server, login and sync — **S1 done 2026-08-17**~~ → S2 → S3 | §6b |
 
 
 ---
@@ -160,8 +161,8 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 |---|---|---|
 | ~~**0.1**~~ ✅ | ~~**A personal transfer invents debts to people you never transacted with.** `reviewCommit.ts:163-165` writes a personal settlement one-sided — correctly, because `computeCash` does `− settledOut + settledIn` and booking both sides would net to zero. But `getGlobalNet` has **no `is_personal` filter** (only the roster query does, `:76`), so that lone share row enters the global net and `simplify()` pairs you as a debtor against whoever has a positive balance. **Reachable on a fresh install:** import a Paytm statement → "Money received from Rahul ₹10,000" is classified `settlement`/`credit` (`paytmParse.ts:158`) → Review defaults to Personal → commit → Home reads *"You owe Priya ₹10,000"*. ~~ **Fixed `99601c7`** — all four aggregates now come from one template; `balancesSql.test.ts` runs the real SQL against in-process SQLite. | `balances.ts` |
 | ~~**0.2**~~ ✅ | ~~**Every owe/owed figure is inflated by recurring templates.** All four aggregates omit `recur_freq IS NULL`. A rule is a `txn` row carrying its own payment/share rows, so the template is counted *and* every occurrence it spawns is counted. Every other read path has this filter. ~~ **Fixed `99601c7`** — same template. The pre-fix SQL returned `{me: -8700, priya: -1300}`, both negative; a cross-group net summing to zero is now an assertion. | `balances.ts` |
-| **0.3** | **Resuming a paused rule destroys its end date and back-posts the gap.** `pause` sets `recur_end = now` — overwriting the user's own end date, of which there is no other copy — and `resume` sets it to `NULL`, so a rule set to "end 31 Dec" recurs **forever**. Nothing is claimed during the pause, so the next foreground materializes the whole window: pause a daily ₹300 rule for 60 days and resuming silently posts **60 rows, ₹18,000**. | `recurring.ts:40-41,57` |
-| **0.4** | **Recurring card spend is booked as cash.** The materializing INSERT drops `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`. A card bill materializes as `pay_method = NULL` and counts as cash out, not debt — and since `computeCash` reads the same bad data, **the SQL/TS parity test cannot see it**. | `recurring.ts:213-221` |
+| ~~**0.3**~~ ✅ | ~~**Resuming a paused rule destroys its end date and back-posts the gap.** `pause` sets `recur_end = now` — overwriting the user's own end date, of which there is no other copy — and `resume` sets it to `NULL`, so a rule set to "end 31 Dec" recurs **forever**. Nothing is claimed during the pause, so the next foreground materializes the whole window: pause a daily ₹300 rule for 60 days and resuming silently posts **60 rows, ₹18,000**.~~ **Fixed `e0fdd32`** — new `txn.recur_paused_at`; resume writes the dormant window into `recur_skip` instead of back-posting it. | `recurring.ts:40-41,57` |
+| ~~**0.4**~~ ✅ | ~~**Recurring card spend is booked as cash.** The materializing INSERT drops `pay_method`, `currency`, `source`, `tz`, `lat`, `lng`, `place_label`. A card bill materializes as `pay_method = NULL` and counts as cash out, not debt — and since `computeCash` reads the same bad data, **the SQL/TS parity test cannot see it**.~~ **Fixed `4491769`** — materialization now copies the full column set; the test asserts on the column set itself, not named fields, so a future column can't reopen this silently. | `recurring.ts:213-221` |
 | ~~**0.5**~~ ✅ | ~~**Editing investments wipes accumulated card debt.** `setMoneyProfile` stamps `updated_at` whenever *any* field changes, and that timestamp is `cardBaselineMs`. Update investments only and all prior card spend drops below the new baseline — net worth jumps overnight. `cash.ts:132-137` assumes the baseline moves only on card re-confirmation; the write path does not honour it. ~~ **Fixed `14c5fa4`** — split into `money.card_baseline_at`, moved only by a write that restates `creditUsed`. Old profiles fall back to `updated_at`, which *is* the old behaviour, so no migration. Also fixed: the editor pre-filled the **stored** `creditUsed` while the card behind it showed the **derived** one. | `moneyProfile.ts` |
 | ~~**0.6**~~ ✅ | ~~**Five functions answer "what is my monthly budget."** A daily ₹500 line is ₹15,000/mo on one screen and ₹15,500 on another.~~ **Nine, not five** — and the worst (`analytics.ts`) was on no list; see the §0 note above. Fixed by one `rollUpBudgets(lines, target, on)`: a line at or finer than the target rolls **up** (`daily × real days`, `monthly × 12`), anything coarser is a **pool** reported separately and never divided down. `budgetEquivalent` returns `null`, not `0`, so a pool cannot be silently summed away. `budgetRollup.test.ts` covers the full target × cadence matrix. | `budget.ts`, `analytics.ts` |
 | ~~**0.7**~~ ✅ | ~~**Reports contradicts Home.** `reportsData.ts:128` sums every member's share; `homeData.ts:100` sums mine.~~ Reports is **my-share** now — all six sites, via the shared `myShareOf` / new `myIncomeOf` (`lib/splitMath.ts`). Per-group budget *utilisation* stays group-scoped, which is **D1**, still open and deliberately untouched. | `reportsData.ts` |
@@ -221,10 +222,16 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 
 ## 1. Ship blockers — fix before anyone else installs
 
-- [ ] **Receipt-OCR proxy is not in this repo.** `src/lib/ocrProviders/gemini.ts` calls
-      `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL`; `.env` is gitignored and
-      `server/receipt-ocr-proxy/` lives elsewhere. If it is unset in the release build,
-      **Scan degrades silently** for every pilot user. Deploy it, set the var, verify.
+- [ ] **`EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` — ~~no `.env.example`~~; confirm it is set in the build.**
+      `server/receipt-ocr-proxy/` *is* in this repo (a sibling of `budgetsplit/`, tracked
+      in git) and the deployed Worker is live and healthy — verified directly: correct
+      Gemini key, correct model, ~4s response. The real gap is narrower than "not
+      deployed": `EXPO_PUBLIC_*` bakes into the JS bundle at build time, and any build
+      made without `.env` present at that moment (a stale Metro cache, a clean checkout,
+      a TestFlight/EAS build) gets `undefined` and **Scan degrades silently**. An
+      `.env.example` now documents the var (added 2026-08-17, alongside `EXPO_PUBLIC_API_URL`);
+      what is left is **not** a code task — confirm the same value is set wherever a
+      release/EAS build actually runs.
 - [ ] **`expo-file-system/legacy` may already throw at runtime in SDK 56.**
       `src/lib/avatar.ts` and `ocrProviders/gemini.ts` still call it, while
       `src/lib/pdfjsCache.ts` states the legacy API throws. Jest stubs the module, so the
@@ -242,6 +249,11 @@ fact to design against: each fix needs a **failing test written first**. Ordered
 ---
 
 ## 2. Open decisions — these need your call, not more analysis
+
+**Two of the four are closed.** D1 (2026-08-12) and D3 (2026-08-17) are kept below with their
+evidence rather than deleted, because both were decided *by shipping* and the reasoning is what
+stops them being reopened. Genuinely open: **D2** (pay method for investments/crypto) and **D4**
+(monetisation) — neither blocks the pilot.
 
 ### D1. What does a group budget mean? *(CLOSED 2026-08-12)*
 
@@ -306,34 +318,54 @@ your catalog lacks. Three things followed from that, in the order they were foun
 Mostly forward-looking: without sync the catalog is device-wide, so divergence is hard to reach
 on purpose today. It becomes ordinary with V3, and is defensive now for restores and imports.
 
-### D2. Do investments/crypto get a pay method? *(open; nothing blocks on it)*
+### D2. Do investments/crypto get a pay method? *(CLOSED 2026-08-17)*
 
 **There is no crypto concept anywhere** — grep finds nothing. `investments` is a single
 manually-entered figure, read once and clamped (`src/lib/cash.ts:127`); no transaction
-ever touches it. Either it stays manual, or "move money to investments" becomes a Transfer
-kind. Crypto would be **new**, not an extension.
+ever touches it.
 
-### D3. Health engine still uses group-total on both sides *(now the only budget inconsistency left)*
+**Decided: "move money to investments" becomes a Transfer destination — and crypto does not.**
+Same mechanism as the card-repayment decision (§3.2), on purpose: one path for "cash left my
+pocket and became a holding", not two. Crypto would be a new concept with its own valuation
+problem, which a flat figure avoids; investments stays a flat figure that transactions can now
+move.
 
-**Still open, and D1 no longer covers it.** D1 closed on "the amount is one person's allowance",
-and every budget reader now passes an identity and resolves overrides — verified: all five call
-sites of `getCategoryBudgets` pass `meId`. **One does not**: `homeData.ts:143` calls
-`getBudgetAnalytics(db, g)` with no identity, so the health score pairs group-total budget with
-group-total spend.
+### D3. Health engine basis *(CLOSED 2026-08-17 — resolved by `7b597e1`, ahead of this section)*
 
-That is *internally* consistent — both sides are group-total — and deliberate
-(`homeData.ts:153`). But it is the last place in the app measuring on a different basis from
-everything else, and it is a **product call, not a bug fix**: passing `meId` would change the
-health score for every existing user overnight.
+**It was decided by being built: health is rebased onto my-share.** The choice this section
+framed — rebase and accept that every score moves, or keep group-total and label the card — was
+taken in favour of rebasing, as a side effect of the "three concepts, two storage levels, one
+reading each" budget pass, and this text simply went stale. Verified against source
+2026-08-17:
 
-**The decision:** rebase health onto my-share and accept that everyone's score moves, or keep
-group-total and label the card so the two bases are legible rather than mysterious.
+- `homeData.ts` no longer calls `getBudgetAnalytics(db, g)` at all. The per-group loop is gone,
+  replaced by one `getMyGlobalBudgetSummary(db, me.id)` — which by construction shares one
+  window and one basis between numerator and denominator (`src/lib/budget.ts:435`).
+- **Every** remaining `getBudgetAnalytics` call site passes `meId`: `groups.tsx:80`,
+  `group/[id].tsx:84`, `insightsData.ts:155`, `reportsData.ts:92`. There is no identity-less
+  caller left.
+- Every other `HealthInputs` field was already my-share and still is: `spendPaise` /
+  `prevSpendPaise` read `txn.shares` for me, `incomePaise` reads my `txn_payment` rows, and
+  `netOwedPaise` comes from `getMyExposure`.
 
-### D4. Monetisation shape *(not a pilot blocker)*
+So there is no longer a place in the app measuring on a different basis, which is what made this
+a product call. **Consequence, recorded rather than fixed:** anyone who had used the app before
+that commit saw their health score move once, with no notice. A derived score has nothing to
+migrate, so there was nothing to do about it beyond saying so here.
+
+The second half of the option ("label the card") was **not** done and is no longer needed — the
+factor strings in `financialHealth.ts` name no basis because there is only one.
+
+### D4. Monetisation shape *(PARKED 2026-08-17 — deliberately, not forgotten)*
 
 No paywall, entitlement or purchase SDK exists, and none of it is reusable from what does.
-The decision is *when*, not *whether* — and nothing in the pilot depends on it, so this can
-sit until there are users to charge.
+The decision is *when*, not *whether* — and nothing in the pilot depends on it.
+
+**Decided: park it until there are users.** Not "decide the shape on paper" and not "build the
+entitlement plumbing now" — a tier boundary drawn before anyone has used the app is a guess, and
+the plumbing needs Gate 0 plus configured App Store products before a single line of it can be
+tested. The feature flags stay **preferences, not entitlements** meanwhile
+(see the `project_premium_tier_later` note). Revisit after the pilot.
 
 ---
 
@@ -381,17 +413,31 @@ second ledger. This is that same shape, three more times.
       `src/lib/cash.ts:81` treats every income identically.
 - [ ] Touches `moneyProfile.ts`, `cashQuery.ts`, `cash.ts`, `MoneyEditorSheet.tsx`,
       `TotalMoneyCard.tsx`, and the Onboarding money step.
-- [ ] **Card repayment is still unmodelled** (`DEBT_TRACKER.md:71`) — `creditUsed` only
-      grows between Plan edits. Decide whether the pilot ships with that.
+- [x] **Card repayment — DECIDED 2026-08-17: a Transfer whose destination is a card.**
+      `creditUsed` currently only grows between Plan edits (`DEBT_TRACKER.md:71`); paying the
+      bill becomes an ordinary Transfer that moves cash **down** and used credit **down** in
+      one recorded transaction. Chosen over both alternatives on purpose: shipping the gap
+      leaves Total Money drifting pessimistically and relies on the user knowing to re-enter
+      a balance, and full accounts-as-entities reopens Total Money, the settlement engine and
+      the transfer flow. This needs **no new entity** — `pay_method` and the Transfer kind
+      already exist, so it is a destination and a cash-side rule, not a new model.
+- [x] **Investments (D2) — DECIDED 2026-08-17: the same mechanism**, a Transfer destination.
+      Deliberately one implementation with the card decision above rather than two ways to say
+      "money moved into a holding". Crypto stays out of scope — it would be new, not an
+      extension, and a flat manually-entered figure is exactly what lets investments dodge a
+      valuation story.
 
 ### 3.3 Push, widget, proper import structure
 
 - [ ] **Push** — delete `plugins/withoutPushEntitlement.js` once Gate 0 clears. Only local
       notifications exist today.
 - [ ] **Widget** — new signed target. Scope it: balance? today's spend? quick-add?
-- [ ] **Import structure** — `app/import.tsx` + `paytmParse.ts` + `pdfjsCache.ts`. pdf.js is
-      pinned to a **CDN URL fetched on first use**; bundle it locally so import works
-      offline and does not depend on someone else's uptime.
+- [x] ~~**pdf.js from a CDN on first use**~~ — done 2026-08-17: both files are vendored at
+      `src/assets/pdfjs/` (pdf.js 3.11.174, matching the SHA-256s already pinned in
+      `pdfjsCache.ts`, still verified at load). Import works offline and depends on nobody's
+      uptime; the download path, its cache directory and the storage-screen row for it are gone.
+- [ ] **Import structure** — what's left of the item: `app/import.tsx` + `paytmParse.ts` are still
+      one long screen and one long parser.
 
 ### 3.4 WhatsApp payment reminders — feasible, but not the automatic version
 
@@ -509,9 +555,12 @@ SMS rates" rather than implied free. The comparison of routes is in the table ab
 - [ ] **Say the privacy line out loud.** Nothing leaves the device: the text is handed to
       WhatsApp, and there is no server in the path. That is worth stating given the app's
       standing promise.
-- [ ] **Decide: import from Contacts, or type numbers by hand?** `expo-contacts` is not
-      installed, and asking for the whole address book is a heavy permission for a pilot.
-      *Recommendation: manual entry first.*
+- [x] **DECIDED 2026-08-17: typed by hand.** A phone field beside the UPI ID in the Friends
+      rename sheet — no `expo-contacts`, no native rebuild, and **no address-book permission
+      prompt at all**. Asking a pilot user for their entire contact list to send one reminder is
+      a bad trade when most people split with a handful of others. A "pick from Contacts"
+      shortcut stays possible later if typing proves to be the friction; it is not the default
+      and not in scope now.
 
 ---
 
@@ -527,10 +576,10 @@ On a 393pt screen with 4 pills that is **~89pt per pill**; the label needs **~10
 13px SemiBold. And because the count is **last in the string, the count is what gets cut** —
 the one thing being scanned.
 
-- [ ] Short-form labels + count as a separate badge, or a scrollable `TabPills` variant.
-- [ ] Saved-view banner one-line clips the count *and* payer (`review.tsx:513`).
-- [ ] Footer CTA wraps and breaks the 52pt button height (`review.tsx:629`).
-- [ ] Filter chips hard-capped at `maxWidth: 160` (`FChip.tsx:18`) — the "Househol…" pattern.
+- ~~Short-form labels + count as a separate badge, or a scrollable `TabPills` variant.~~ **Done** — `TabPills` takes a per-tab `badge`; `TXN_SOURCE_LABEL_SHORT` for the strip. The label shrinks, the count never does.
+- ~~Saved-view banner one-line clips the count *and* payer (`review.tsx:513`).~~ **Done 2026-08-17** — same fix shape as the tabs above, one level up: `Banner` takes a non-truncating trailing `badge`, and `review.tsx` splits the one concatenated string into `text` (the view name, which may shrink) + `badge` (`"{n} of {m} · paid by X"`, which may not).
+- ~~Footer CTA wraps and breaks the 52pt button height (`review.tsx:629`).~~ **Done** — `PrimaryButton` truncates at one line (`numberOfLines={1}`), fixing every caller.
+- ~~Filter chips hard-capped at `maxWidth: 160` (`FChip.tsx:18`) — the "Househol…" pattern.~~ **Done** — cap removed; the row already wraps (`FChip.tsx:24`).
 
 ### 4.2 Insights x-axis truncation *(cause found)*
 
@@ -539,24 +588,28 @@ the one thing being scanned.
 in a `View` exactly `spacing` wide at `numberOfLines={1}`. One digit fits; two do not —
 hence `"1…"`, `"2…"`, `"3…"`.
 
-- [ ] Measure the container via `onLayout` — `300` is a hardcoded magic width and the chart
-      never measures anything.
-- [ ] Or bucket weekly: 4–5 fat points instead of 31 hairlines.
+- ~~Measure the container via `onLayout` — `300` is a hardcoded magic width and the chart
+      never measures anything.~~ **Done** — `onChartLayout` + `plotWidth()` (`lib/chartAxis.ts`).
+- ~~Or bucket weekly: 4–5 fat points instead of 31 hairlines.~~ **Done, both were needed** —
+      measuring alone moved 9.7px → 10.5px against the ~12px two digits require, so the
+      series is also bucketed weekly.
 
 ### 4.3 Insights — ten equal cards, and two real bugs inside them
 
 Everything is a card in one `ScrollView` with an 8px gap (`insights.tsx:327`), so nothing
 is more important than anything else.
 
-- [ ] 🐞 **Two different forecast models print different numbers ~100px apart.** The hero
+- ~~🐞 **Two different forecast models print different numbers ~100px apart.** The hero
       uses a naive run-rate — `Math.round((monthSpend / dayOfMonth) * daysInMonth)`
       (`insightsData.ts:69`) — while the chart badge uses the credibility-weighted model
-      (`src/lib/forecast.ts:43`).
-- [ ] 🐞 **The savings nudges are random** — `generateInsights(ctx, maxN = 3, rng =
+      (`src/lib/forecast.ts:43`).~~ **Done** — both now read `forecastMonthEnd`, computed once.
+- ~~🐞 **The savings nudges are random** — `generateInsights(ctx, maxN = 3, rng =
       Math.random)` (`savingsInsights.ts:28`) reshuffles on every pull-to-refresh. An
-      insight you cannot return to is not an insight.
-- [ ] **The month pill is a fake control** — `insights.tsx:79` renders a pill-shaped muted
-      `View` with **no `onPress`**. Wire it or make it a plain label.
+      insight you cannot return to is not an insight.~~ **Done** — seeded on the candidate's
+      own text + the day number; rotates daily, stable within a day.
+- ~~**The month pill is a fake control** — `insights.tsx:79` renders a pill-shaped muted
+      `View` with **no `onPress`**. Wire it or make it a plain label.~~ **Done — deleted.**
+      Neither option was right: the eyebrow one line below already prints the month.
 
 **Proposed structure — three tiers instead of ten peers:**
 
@@ -576,38 +629,49 @@ number twice** (`p.pct` in the bar and again in the meta).
 
 The engine is worse. In `src/lib/savingsEngine.ts`:
 
-- [ ] 🐞 **`priority` is dead code.** `rankKey = g.sort_order ?? PRIORITY_RANK[g.priority]`
-      (`:45-46`), but `sort_order` is `INTEGER NOT NULL DEFAULT 0`
-      (`src/db/schema.ts:167`) — the fallback can never run.
-- [ ] 🐞 **Before anyone drags, every goal has `sort_order = 0`**, so ties break on list
+- ~~🐞 **`priority` is dead code.**~~ **Fixed — revived, not removed** (#15). Now
+  a real Emergency/Need/Want protect-from-raid tag with a picker in both goal
+  sheets; the list is grouped into three sections by it.
+- ~~🐞 **Before anyone drags, every goal has `sort_order = 0`**, so ties break on list
       order and **the newest goal is both funded first and raided first**. Funding and
-      raiding are meant to be mirror images; they only become so after a manual drag.
-- [ ] 🐞 **Reorder writes an incomplete permutation.** `savings.tsx:181` passes only
+      raiding are meant to be mirror images; they only become so after a manual drag.~~
+      **Done** — ties now break in reverse for the raid, restoring the mirror.
+- ~~🐞 **Reorder writes an incomplete permutation.** `savings.tsx:181` passes only
       *active* goals to the drag list, and `reorderGoals` writes `sort_order = i` for just
-      those ids (`savings.ts:106-110`) — completed goals keep stale values and interleave.
-- [ ] 🐞 **A completed goal can be raided.** The filter checks `locked` and `saved > 0`,
-      never `saved >= target` (`savingsEngine.ts:104`).
-- [ ] 🐞 **The raid prompt hides the amounts** — `savings.tsx:127` lists goal names only,
-      though `withdrawals` carries `amount`. You approve a raid without seeing ₹.
+      those ids (`savings.ts:106-110`) — completed goals keep stale values and interleave.~~
+      **Done** — untouched ids are appended after the ranked block, ordered by their prior
+      `sort_order`/`created_at`, so every goal gets a value: a total permutation.
+- ~~🐞 **A completed goal can be raided.** The filter checks `locked` and `saved > 0`,
+      never `saved >= target` (`savingsEngine.ts:104`).~~ **Done** — `planOverspendRaid`
+      now excludes any goal where `saved >= target`.
+- ~~🐞 **The raid prompt hides the amounts** — `savings.tsx:127` lists goal names only,
+      though `withdrawals` carries `amount`. You approve a raid without seeing ₹.~~ **Done**
+      — the prompt reads `{name} {amount}` per goal.
 - [ ] **There is no surplus sweep at all.** Nothing pushes an underspent month into goals;
       the only automatic inflow is the fixed per-goal allocation.
 
-**Proposal:** one number per row (progress), detail on tap; **separate "fund first" from
-"protect from raid"** instead of overloading one drag axis; show ₹ per goal in the raid
-prompt; add the surplus sweep as an explicit opt-in.
+**Proposal:** one number per row (progress), detail on tap; ~~separate "fund first" from
+"protect from raid" instead of overloading one drag axis~~ **done** — the
+Emergency/Need/Want tag is the protect axis, drag stays the fund axis within a
+tag (#15); ~~show ₹ per goal in the raid prompt~~ **done**; add the surplus sweep
+as an explicit opt-in — still open.
 
 ### 4.5 Scan & Pay
 
-- [ ] **QR from a photo needs no new dependency.** `expo-camera` ships `scanFromURLAsync`
+- ~~**QR from a photo needs no new dependency.** `expo-camera` ships `scanFromURLAsync`
       (**called nowhere** — grep returns 0) and `expo-image-picker` is already installed for
       receipts. Both scanners are live-camera only (`ScanPaySheet.tsx:210`,
-      `UpiQrScanner.tsx:56`). Cheap win.
+      `UpiQrScanner.tsx:56`). Cheap win.~~ **Done** — `src/lib/qrFromImage.ts`, wired into
+      both scanners.
 - [ ] **Why the UPI ID is kept:** it is a *settlement identity* — theirs to pay, yours to be
-      paid (`person.upi_vpa`, read by `TransferBody.tsx:97` and the request-QR flow). Scan &
-      Pay does **not** use it; that payee VPA is never persisted.
-- [ ] **Say the quiet part on screen.** PhonePe, Paytm, Amazon Pay and WhatsApp reject
+      paid (`person.upi_vpa`, read by `useAddTxnForm.ts:244-264` and the request-QR flow —
+      moved out of `TransferBody.tsx` when it relocated into `finance/add/` and stopped
+      computing its own payee/hand-off). Scan & Pay does **not** use it; that payee VPA is
+      never persisted.
+- ~~**Say the quiet part on screen.** PhonePe, Paytm, Amazon Pay and WhatsApp reject
       externally-built intents (`⛔ F8`), so for those the "payment option" is cosmetic —
-      the app opens bare and you re-enter the amount.
+      the app opens bare and you re-enter the amount.~~ **Done** — `useUpiHandoff.ts:98-100`'s
+      `handoffVerb()` + `ScanPaySheet.tsx:328-334`'s *"Opens {app} — enter it there"* copy.
 
 ---
 
@@ -641,11 +705,26 @@ Not blockers. Listed so nobody re-discovers them as bugs.
 
 ---
 
-## 6b. Server, login and sync — requirements *(raised 2026-08-11)*
+## 6b. Server, login and sync — requirements *(raised 2026-08-11; **S1 built 2026-08-17**)*
 
 **This is not a feature. It changes what the app is** — from local-first with no server, to
-client–server with accounts. Financial data leaves the device, so the "nothing leaves your
-device" copy becomes false wherever it appears.
+client–server with accounts. ~~Financial data leaves the device, so the "nothing leaves your
+device" copy becomes false wherever it appears.~~
+
+**Status: S1 is built and in the repo, undeployed.** `server/api/` (Cloudflare Worker: D1 + R2 +
+Email Sending) plus the client side — `src/lib/serverApi.ts`, `app/settings/account.tsx`,
+`app/auth.tsx`, and server backup/restore rows in `app/settings/backup.tsx`. Two things kept the
+change from redefining the app:
+
+- **It is opt-in twice.** No `EXPO_PUBLIC_API_URL` in the build ⇒ no account UI, no requests at
+  all. With it set, still nothing leaves until the user signs in *and* taps a backup action.
+- **Financial data still does not leave in readable form.** What goes up is the same
+  passphrase-encrypted envelope `lib/backup.ts` already built for the share sheet. The server
+  holds email + name + avatar + opaque blobs. There is no sync — the ledger is still local.
+
+Remaining before it can be used by anyone: a domain onboarded to Email Sending, `wrangler deploy`,
+`EXPO_PUBLIC_API_URL` set, and a native rebuild (new dep: `expo-secure-store`, where the session
+token lives). S2/S3 are untouched.
 
 ### What was asked, restated precisely
 
@@ -675,6 +754,13 @@ Two consequences, recorded as fact rather than as an argument to revisit:
 - Adding encryption later is expensive — re-keying cannot run server-side, since the server
   will not hold keys. Not a reason to do it now; a reason not to promise it.
 
+**What S1 actually shipped is stronger than that bar, for free** *(2026-08-17)*: backups are the
+existing `encryptPayload` envelope, so the server stores ciphertext it cannot open and the
+passphrase never leaves the phone. No new crypto was written — the client-side encryption already
+existed for the share-sheet flow, and the server just never learned how to read it. The decision
+above still stands for **S2/S3**, where per-record sync genuinely would need server-readable data;
+this note records only that S1 did not have to pay that price.
+
 ### Finding 1 — two different products are conflated here
 
 | | Needs | Size |
@@ -685,12 +771,38 @@ Two consequences, recorded as fact rather than as an argument to revisit:
 They share only the login. Backup delivers most of the immediate value — *"I lost my
 phone"* is the real pain today — for a fraction of the work.
 
-### Finding 2 — the schema is already well positioned
+### Finding 2 — ~~the schema is already well positioned~~ **only `txn` is** ⚠️ *(corrected 2026-08-17)*
 
-- `txn` carries `created_at`, `updated_at` **and** `is_deleted` (`src/db/schema.ts:73-75`) —
-  the three fields last-write-wins sync needs, soft deletes included.
+The original claim was that "the schema is already well positioned… `created_at`,
+`updated_at` and `is_deleted` — the three fields last-write-wins sync needs." **That is true
+of `txn` and of no other table.** Audited column-by-column against `src/db/schema.ts`:
+
+| Table | Has | Missing |
+|---|---|---|
+| `txn` | `created_at`, `updated_at`, `is_deleted` | — ✅ |
+| `budget_group`, `recur_skip`, `savings_goal`, `savings_txn` | `created_at` | `updated_at`, `is_deleted` |
+| `person`, `group_member`, `category`, `category_budget`, `settings` | — | **both** |
+
+Why it matters, in the two ways it goes wrong:
+
+- **No `updated_at` → no last-write-wins.** There is nothing to compare, so "newest wins"
+  has no meaning for a renamed person, an edited budget line or a moved goal.
+- **No `is_deleted` → deletes cannot propagate.** Device B does not learn a row was
+  removed; it still holds it, and pushes it back. Delete a friend on your phone, and your
+  tablet quietly restores them.
+
+So S2 does **not** start with network code. It starts with a migration across ~9 tables plus
+every write path that touches them, using the guarded one-time rebuild pattern
+`applyCategoryGlobalMigration` / `applyGoalPriorityRevival` already establish — and a
+scanning test in the shape of `txnInvariant.test.ts` so it cannot rot afterwards.
+
+`txn_payment` / `txn_share` / `line_item` are exempt on purpose: they sync **inside** the
+txn document (Finding 3), never as rows of their own.
+
+What the original finding got right, and still stands:
+
 - `person.remote_uid` (`src/db/schema.ts:22`) was reserved for exactly this and is still
-  unused (`persons.ts:52` writes `null`). It stops being dead schema.
+  unused (`persons.ts:54` writes `null`). It stops being dead schema.
 
 ### Finding 3 — sync a transaction as one document, never row-by-row ⚠️
 
@@ -701,11 +813,11 @@ whole document; never per row.
 
 ### Recommendation — a ladder
 
-| Phase | What |
-|---|---|
-| **S1** | Login + backup & restore |
-| **S2** | Multi-device sync for **one** user |
-| **S3** | Multi-user group sync |
+| Phase | What | Status |
+|---|---|---|
+| **S1** | Login + backup & restore | **Built 2026-08-17**, undeployed — `server/api/README.md` |
+| **S2** | Multi-device sync for **one** user | Not started |
+| **S3** | Multi-user group sync | Not started |
 
 ### Answering "can we just do the group part for V2?" — no, and here is why
 
@@ -728,24 +840,70 @@ And **the group part is the hardest rung, not a shortcut past the others**:
 round-trip. Paired with the §3.4 nudge, one-sided tracking works: you keep the book, you
 remind, they pay. That is how most people use a split app regardless.
 
+### Identity model — decided 2026-08-17
+
+Asked and answered in one pass, after the observation that **this is a personal-finance app
+first and a splitting app second** — which is what killed the username.
+
+| Decision | Answer | Why this one |
+|---|---|---|
+| **Phone number** | On the account, **unverified** | Verification means an SMS provider, India's DLT registration and per-message cost, plus a second auth path to maintain — before the pilot has a user. The magic link stays the only proof of identity. A `phone_verified` flag can be added later without a migration. |
+| **Finding friends** | **No username.** Invite link / QR | A handle is a namespace to allocate, moderate and defend, for a social gesture most users make once. Nothing is searchable, so nobody can check whether a number they hold uses a finance app. Reuses the QR machinery already built for UPI (`RequestQrSheet`, `UpiQrScanner`, `qrFromImage.ts`). |
+| **A friend's number** | The **local value always wins** | What the account holds is a default offered once, not a binding. You may know a different number for someone than the one they signed up with, and the app must not "correct" you. |
+| **Adding a friend** | Stays **local, offline, no account** | Linking is additive. The app's real advantage — tracking a split with someone who will never install it — is not traded away for identity tidiness. |
+| **Sharing your number** | Per link, each side controls their own | This is what "share it with *some* friends" means concretely: a flag on the link row, not a global profile setting. |
+
+### Pre-mortem — nine ways this goes wrong *(2026-08-17)*
+
+Found by auditing the code against the design, before any of it was written. Each cites what
+it was found in. Recorded here because a pre-mortem is worth far more before the code exists
+than after.
+
+| # | Fault | Wall |
+|---|---|---|
+| **F1** | An invite link is **made to be forwarded** — first stranger to tap gets linked, and gets your number if that flag is on | **Sender approves the claim.** Tapping creates a pending request naming who claimed it; nothing binds until approval |
+| **F2** | "Stop sharing my number" **cannot take it back** — it is already on their device | Word it as a disclosure ("Shared with Rohan on 12 Aug"), never as a revocable permission |
+| **F3** | Document-level LWW **silently discards a co-editor's edit**, and the shares-sum-to-payments invariant still passes | **Compare-and-set** on `updated_at`; the server rejects a stale write and the app raises a conflict. Never silent LWW on money |
+| **F4** | `attachment_uri` is a `file://` path from **another device** — "Receipt attached" over nothing | Rows only; photos never sync, and the receiving device nulls the URI through the helper `restorePhotoFiles` already uses |
+| **F5** | `seed.ts` writes `is_me = 1` with a fresh `uuid()` per install, so **one account gets two "me" rows** — and every my-share figure silently reads one of them | Bind the local `is_me` row to the account (`person.remote_uid`) at sign-in; sync maps the remote me onto it rather than inserting |
+| **F6** | `category` has `UNIQUE(name, kind)` **and** an existing `category_tombstone`; adding `is_deleted` means delete-then-re-add "Groceries" fails | No `is_deleted` on `category` — sync it through the tombstone table that exists for this |
+| **F7** | `settings` holds the money profile **and one-time migration flags** (`schema.ts:771-786`); syncing it wholesale makes a device **skip a migration and record it as done** | Sync an explicit key allowlist. Migration flags are device state and never in it |
+| **F8** | Email is the only identity and **cannot be changed or merged** — a typo at sign-in is a second account with none of your backups | A change-email flow, or at minimum show the signed-in email wherever a restore is offered |
+| **F9** | Restore replaces everything **and, with sync on, propagates** — today's Alert says "this device", which stops being true | Restore is refused while sync is on; turn sync off first |
+
 ### Decisions still open
 
-- [ ] **Identity.** *Recommendation: Sign in with Apple* — free, no phone-OTP cost (Indian
-      SMS OTP also needs DLT registration), gives a stable ID plus a relay email, and the
-      paid Apple team is already Gate 0. Email magic-link as the Android path.
-- [ ] **R6's blocking rule.** As stated — a group syncs only once *every* member has joined
-      — one person who never installs kills the group permanently. *Recommendation: sync
-      among joined members; everyone else stays a local-only participant exactly as they are
-      today, clearly labelled.* That is a strict superset of current behaviour.
-- [ ] **R4 granularity.** "Choose what to sync" is easy per *table*, and near-impossible per
-      *row* once groups are shared — a group cannot sync if you withhold half its
-      transactions.
+- [x] **Identity — decided 2026-08-17: email magic link only, no password, no Sign in with
+      Apple.** One code path on both platforms, nothing gated behind Gate 0, and no SMS/DLT
+      cost. The link is delivered by Cloudflare Email Sending from the same account the Worker
+      runs on, and lands via `https://…/auth/open` → `budgetsplit:///auth?token=…` (mail clients
+      won't render a custom scheme). Sign in with Apple stays possible later — it would add a
+      second way to reach the same `users` row, not replace this one.
+- [x] **R6's blocking rule — DECIDED 2026-08-17: sync among whoever has joined.** Members with
+      accounts sync; everyone else stays a local-only participant, clearly labelled, behaving
+      exactly as they do today. Chosen because it is a **strict superset of current behaviour**
+      — nothing gets worse for anyone — and because the literal reading (all-or-nothing) lets
+      one person who never installs freeze a group for everybody, and that hold-out is usually
+      the person you most need to track. Rejected a per-group toggle: it asks the user to pick
+      between two behaviours neither of which they have seen yet.
+- [x] **R4 granularity — DECIDED 2026-08-17: per data type**, not per row. You choose by kind
+      (personal transactions, people details, goals, budgets); a **shared group always syncs as
+      a whole unit**, which is what keeps splits balanced — see Finding 3 above: a txn plus its
+      `txn_payment` and `txn_share` rows is one atomic fact. Per-row withholding was the literal
+      ask and is where wrong-money bugs live: a group whose members each hold back half its
+      transactions cannot produce a balance anyone agrees with. All-or-nothing per device was
+      rejected as dropping R4 entirely.
 - [ ] **Non-engineering cost.** India's DPDP obligations once personal data sits on a
       server, a rewritten privacy policy, hosting, uptime and someone on call.
-- [ ] **Reword "nothing leaves your device"** the day a server appears — it is in
-      `VOICE_SHORTCUT_PRIVACY` and the store listing.
+- [x] **Reword "nothing leaves your device"** — done 2026-08-17 in the same change that shipped
+      S1: `VOICE_SHORTCUT_PRIVACY`, `help.tsx`'s "Offline by default", `Onboarding.tsx`'s "No
+      account needed", the backup screen's explainer, and `FEATURES_AND_FLOWS.md` §19. All now
+      say *nothing is uploaded unless you ask*, and name both exceptions (cloud receipt scan,
+      server backup). **The store listing is still yours to update** — it isn't in this repo.
+- [ ] **Privacy policy + DPDP.** Unchanged by S1 being opt-in: the moment one real user signs in,
+      an email address is personal data on a server you operate.
 
-**Not V2.** Revisit as **V3, starting at S1**.
+**S1 done. S2/S3 remain V3.**
 
 ---
 

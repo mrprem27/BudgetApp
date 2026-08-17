@@ -70,6 +70,23 @@ flag changes the tab bar.
 
 ---
 
+## Sync prerequisites (2026-08-17)
+
+**Only `txn` carries the fields sync needs.** `updated_at` + `is_deleted` exist on `txn`
+(`src/db/schema.ts:73-75`) and nowhere else: `budget_group`, `recur_skip`, `savings_goal`
+and `savings_txn` have `created_at` alone, while `person`, `group_member`, `category`,
+`category_budget` and `settings` have neither. Without `updated_at` last-write-wins has
+nothing to compare; without `is_deleted` a delete cannot propagate, so the other device
+keeps the row and pushes it back.
+
+Tracked here rather than only in the launch checklist because it outlives the sync decision:
+it is a schema gap in the app as it stands today, and it is the bulk of S2's cost. Two
+carve-outs already decided: `category` uses the existing `category_tombstone` instead of an
+`is_deleted` column (it has `UNIQUE(name, kind)`, so a soft-deleted row would block
+re-adding the same name), and `settings` is never synced as a table because it holds
+one-time migration flags (`schema.ts:771-786`) alongside real user data. See
+`V2_LAUNCH_CHECKLIST.md` §6b Finding 2 and the F1–F9 pre-mortem.
+
 ## Open money-model gaps (2026-08-08)
 
 **Card repayment is not modelled.** `pay_method = card` now correctly routes spend to
@@ -497,8 +514,8 @@ fixed, each for a stated reason.
 
 | Item | Why it's deferred, not forgotten |
 |---|---|
-| **Attachment files orphan on delete** | `softDeleteTxn` ([transactions.ts](../src/db/queries/transactions.ts)) and `updateItemizedTxn` never unlink the receipt file, and `avatar.ts` writes a new timestamped image on every pick without removing the old one. **Unlinking on delete would be wrong**: a soft-deleted transaction is restorable through the Undo toast, so deleting its photo would silently break restore. The correct fix is a reaper over rows deleted more than N days ago — its own change, with its own tests. Mitigated meanwhile by **Delete all receipt photos** and **Clear cached exports** on `settings/storage.tsx`. |
-| **`expo-file-system/legacy` may already be broken** | `avatar.ts` and `ocrProviders/gemini.ts` still call the legacy API, while [pdfjsCache.ts](../src/lib/pdfjsCache.ts)'s own comment states *"the legacy readAsStringAsync/downloadAsync throw at runtime in SDK 56."* Either that comment is wrong or those two paths are dead. Untested either way — jest stubs the module. Worth a device check. |
+| ~~**Attachment files orphan on delete**~~ | **Closed 2026-08-17**, as three separate fixes rather than one — which is why it looked like a single item for so long. (1) **Reaper**: `reapDeletedAttachments(db, maxAgeMs)` ([transactions.ts](../src/db/queries/transactions.ts)) nulls and returns the URIs of receipts on rows soft-deleted more than 30 days ago; `app/_layout.tsx` runs it at cold start and on foreground, alongside `materializeDueOccurrences`. The Undo toast's window is ~5s, so nothing restorable is touched. (2) **Itemized replace**: `useItemizedForm` now keeps the original `attachment_uri` in a ref and unlinks it after a save that changed it — compare-and-unlink, no reaper needed. (3) **Avatar replace**: both pick sites (`friends.tsx`, `settings.tsx`) unlink the image they replaced. Covered by `attachmentReaper.test.ts`. |
+| **`expo-file-system/legacy` may already be broken** | `avatar.ts` and `ocrProviders/gemini.ts` still call the legacy API. The contradicting claim used to live in `pdfjsCache.ts` (*"the legacy readAsStringAsync/downloadAsync throw at runtime in SDK 56"*); that file no longer downloads anything as of 2026-08-17 (pdf.js is bundled) and the comment is gone with it, so the question is now **only** about those two callers. Item 9 in the launch checklist reached the same answer from the other side: the legacy API *is* implemented in `expo-file-system@56.0.8`. Still worth one device smoke test — jest stubs the module either way. |
 | **No background drain** | Voice captures are filed at launch and on every foreground, which covers the realistic cases without a native dependency. `expo-background-task` would make it opportunistically sooner, at the cost of a new native module and an OS-scheduled path that fails silently. Not worth it until the file capture is proven in daily use. |
 | ~~`VOICE_SHORTCUT_URL` is null~~ | **Closed 2026-08-09.** Both shortcuts authored and shared; each command in `VOICE_COMMANDS` now carries its own `installUrl`, and the manual steps moved behind a disclosure as the fallback. ⚠️ Editing a shortcut invalidates its link — Apple keeps serving the shared version, so a re-share needs the constant replaced. |
 | ~~Shortcuts→Documents write is unverified~~ | **Closed 2026-08-09** — the Shortcut's *Save File* destination picker reaches `On My iPhone → BudgetSplit → voice-inbox` on device, and captures are filed. `Subpath` is relative to that destination and cannot navigate to it, which was the one real trap. |
