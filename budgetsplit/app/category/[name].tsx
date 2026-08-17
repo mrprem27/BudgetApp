@@ -22,6 +22,7 @@ import { loadCategoryDetail, categoryPeriodBudget } from '../../src/lib/category
 import { categoryVisual } from '../../src/constants/categories';
 import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../src/lib/money';
+import { myShareOf, myShareOrTotal } from '../../src/lib/splitMath';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
@@ -47,7 +48,6 @@ function paramToPeriod(p?: string): Period {
 }
 
 // My share of each expense (personal entries: full; group entries: my split).
-const myShareOf = (t: TxnWithSplits, myId: string) => t.shares.find(sh => sh.personId === myId)?.amount ?? 0;
 const sumMyShare = (arr: TxnWithSplits[], myId: string) =>
   arr.reduce((s, t) => s + myShareOf(t, myId), 0);
 
@@ -293,7 +293,7 @@ export default function CategoryDetailScreen() {
               <Card padded>
                 <Text style={styles.cardLabel}>Recurring</Text>
                 {recurRules.map(r => {
-                  const mine = myShareOf(r, myId) || r.shares.reduce((s, x) => s + x.amount, 0);
+                  const mine = myShareOrTotal(r, myId);
                   const name = (r.note && r.note.trim()) || r.category;
                   return (
                     <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/group/${r.group_id}/recurring?focus=${r.id}`)} accessibilityRole="button">

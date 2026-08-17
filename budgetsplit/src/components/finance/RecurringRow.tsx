@@ -7,6 +7,7 @@ import { categoryVisual } from '../../constants/categories';
 import { asFeather } from '../../constants/palette';
 import { freqWord } from '../../lib/groupDetail';
 import { nextOccurrenceOnOrAfter } from '../../lib/recurrence';
+import { myShareOrTotal, txnTotal } from '../../lib/splitMath';
 import { colors, layout } from '../tokens';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 
@@ -37,11 +38,7 @@ export function RecurringRow({ rule, meId, onPress, showNext, showShareLabel }: 
   const visual = categoryVisual(rule.category);
   const name = rule.note?.trim() || rule.category;
 
-  const total = rule.shares.reduce((s, x) => s + x.amount, 0)
-    || rule.payments.reduce((s, p) => s + p.amount, 0);
-  const amount = meId
-    ? rule.shares.find(s => s.personId === meId)?.amount ?? total
-    : total;
+  const amount = meId ? myShareOrTotal(rule, meId) : txnTotal(rule);
 
   const next = showNext ? nextOccurrenceOnOrAfter(rule, Date.now()) : null;
   const paused = rule.recur_state !== 'active' ? `${rule.recur_state} · ` : '';

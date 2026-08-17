@@ -1,4 +1,5 @@
 import { nextUnskippedOccurrence } from './recurrence';
+import { myShareOrTotal } from './splitMath';
 import type { TxnWithSplits } from '../db/queries/transactions';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,13 +17,6 @@ export type UpcomingItem = {
   /** Whole days from now until the occurrence (0 = today). */
   daysUntil: number;
 };
-
-function myShareOf(txn: TxnWithSplits, meId: string): number {
-  const mine = txn.shares.find(s => s.personId === meId)?.amount;
-  if (mine !== undefined) return mine;
-  // Not in the split (or income) — fall back to the full amount of the occurrence.
-  return txn.shares.reduce((sum, s) => sum + s.amount, 0);
-}
 
 /**
  * Project the next upcoming expense occurrences from active recurring series,
@@ -58,7 +52,7 @@ export function buildUpcoming(
       id: txn.id,
       name: (txn.note && txn.note.trim()) || txn.category,
       category: txn.category,
-      amount: myShareOf(txn, meId),
+      amount: myShareOrTotal(txn, meId),
       dateMs: next,
       daysUntil: Math.max(0, Math.round((next - nowMs) / DAY_MS)),
     });

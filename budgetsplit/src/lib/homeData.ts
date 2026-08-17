@@ -11,6 +11,7 @@ import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
+import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
@@ -96,11 +97,11 @@ export async function loadHomeData(
     for (const txn of txns) {
       if (txn.is_deleted) continue;
       if (txn.kind === 'expense') {
-        const myShare = txn.shares.find(s => s.personId === me.id)?.amount ?? 0;
+        const myShare = myShareOf(txn, me.id);
         sp += myShare;
         if (myShare > 0) catMap[txn.category] = (catMap[txn.category] ?? 0) + myShare;
       } else if (txn.kind === 'income') {
-        inc += txn.payments.find(p => p.personId === me.id)?.amount ?? 0;
+        inc += myIncomeOf(txn, me.id);
       }
     }
 
@@ -128,7 +129,7 @@ export async function loadHomeData(
     let prevSp = 0;
     for (const t of prevTxns) {
       if (t.is_deleted || t.kind !== 'expense') continue;
-      prevSp += t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+      prevSp += myShareOf(t, me.id);
     }
 
     // Who owes whom — single source of truth (per-person, after all settlements),
@@ -201,7 +202,7 @@ export async function loadHomeData(
       const lmCat: Record<string, number> = {};
       for (const t of lmTxns) {
         if (t.is_deleted || t.kind !== 'expense') continue;
-        const share = t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+        const share = myShareOf(t, me.id);
         if (share <= 0) continue;
         lmSpend += share;
         lmCat[t.category] = (lmCat[t.category] ?? 0) + share;

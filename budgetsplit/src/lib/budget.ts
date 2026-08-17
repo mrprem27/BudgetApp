@@ -7,6 +7,7 @@ import type { BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getCategoryBudgets, getMyGlobalBudgetRows } from '../db/queries/categoryBudgets';
 import { OTHERS_LABEL } from './categoryFold';
+import { myShareOf } from './splitMath';
 import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudgets';
 
 export type Period = 'daily' | 'monthly' | 'yearly';
@@ -233,7 +234,7 @@ export async function getCategorySpending(
   for (const t of txns) {
     if (t.kind !== 'expense') continue;
     const amt = meId
-      ? (t.shares.find(sh => sh.personId === meId)?.amount ?? 0)
+      ? myShareOf(t, meId)
       : t.shares.reduce((s, sh) => s + sh.amount, 0);
     if (amt === 0) continue;
     map[t.category] = (map[t.category] ?? 0) + amt;

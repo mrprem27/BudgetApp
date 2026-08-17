@@ -4,6 +4,7 @@
 // Budgets/"spending" still use your share; this is the cash-timing view.
 
 import { PayMethod } from '../constants/enums';
+import { myShareOf, myPaidOf } from './splitMath';
 
 export type CashTxn = {
   kind: string;
@@ -76,8 +77,8 @@ export function computeCash(
   let income = 0, paidExpenses = 0, settledOut = 0, settledIn = 0, cardSpend = 0;
   for (const t of txns) {
     if (t.is_deleted) continue;
-    const pay = t.payments.find(p => p.personId === myId)?.amount ?? 0;
-    const share = t.shares.find(s => s.personId === myId)?.amount ?? 0;
+    const pay = myPaidOf(t, myId);
+    const share = myShareOf(t, myId);
     if (t.kind === 'income') income += pay;
     else if (t.kind === 'expense') {
       if (t.pay_method === PayMethod.Card) {

@@ -40,6 +40,7 @@ import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
+import { myShareOrTotal } from '../src/lib/splitMath';
 import { haptic } from '../src/lib/haptics';
 import { buildGroupExportCsv } from '../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
@@ -302,7 +303,7 @@ export default function PersonalScreen() {
               ) : recurGroups.map(rg => {
                 const isOpen = !collapsed.has(rg.groupId);
                 const monthly = rg.rules.reduce((s, r) => {
-                  const mine = r.shares.find(x => x.personId === myId)?.amount ?? r.shares.reduce((a, x) => a + x.amount, 0);
+                  const mine = myShareOrTotal(r, myId);
                   return s + (r.recur_freq ? recurringMonthlyEquivalent(mine, r.recur_freq) : 0);
                 }, 0);
                 return (

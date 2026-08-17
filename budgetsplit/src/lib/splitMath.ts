@@ -1,4 +1,4 @@
-import { parseToPaise, splitEqual, splitByPercent, splitByShares } from './money';
+import { parseToPaise, splitByMode } from './money';
 import type { SplitMode } from '../constants/enums';
 import type { Person } from '../db/queries/persons';
 
@@ -11,21 +11,61 @@ export type Share = { personId: string; amount: number };
 
 /**
  * My paise share of a transaction — the basis Home, budgets and afford all use.
- * Not in the split → 0 (I didn't spend it). `lib/upcoming` keeps its own
- * fallback-to-total for unsplit projections, so it is not a caller.
- * First shared version of a calc still inlined at ~30 sites; see V2-18.
+ * Not in the split → 0 (I didn't spend it). Use this for ANALYSIS (what did I
+ * actually spend); use {@link myShareOrTotal} for PROJECTIONS.
  */
 export function myShareOf(txn: { shares: readonly Share[] }, meId: string): number {
   return txn.shares.find(s => s.personId === meId)?.amount ?? 0;
 }
 
 /**
- * My paise portion of an **income** transaction — the mirror of `myShareOf`.
- * Income is attributed by who received it (`payments`), not by who owes a share,
- * so the two kinds read different tables and must not be collapsed into one call.
+ * My paise share, falling back to the occurrence's full amount when I'm not in
+ * the split. The PROJECTION basis: an unsplit upcoming bill is presumed mine
+ * (someone has to pay it and it's on my list), whereas in analysis the same
+ * absence means "not my spend". Every projection surface (upcoming, recurring
+ * rows, afford's committed bills) must use this one, so the two fallbacks can
+ * never disagree per-screen again.
+ */
+export function myShareOrTotal(
+  txn: { shares: readonly Share[]; payments: readonly Share[] },
+  meId: string,
+): number {
+  const mine = txn.shares.find(s => s.personId === meId)?.amount;
+  if (mine !== undefined) return mine;
+  const shareTotal = txn.shares.reduce((sum, s) => sum + s.amount, 0);
+  return shareTotal || txn.payments.reduce((s, p) => s + p.amount, 0);
+}
+
+/**
+ * The transaction's own total, kind-agnostic: what was PAID for it. Payments
+ * is the side every kind fills (income lands there; an expense's payments must
+ * equal its shares to save), so it is the canonical row total; shares are the
+ * fallback for legacy rows with no payments. Replaces four divergent inline
+ * versions (group CSV export, report export, report list, search — which
+ * disagreed with each other for the same row).
+ */
+export function txnTotal(txn: { payments: readonly Share[]; shares: readonly Share[] }): number {
+  const paid = txn.payments.reduce((s, p) => s + p.amount, 0);
+  if (paid > 0) return paid;
+  return txn.shares.reduce((s, x) => s + x.amount, 0);
+}
+
+/**
+ * My paise on the payments side: what I paid (expense/settlement) or received
+ * (income). The payments-side mirror of `myShareOf`.
+ */
+export function myPaidOf(txn: { payments: readonly Share[] }, meId: string): number {
+  return txn.payments.find(p => p.personId === meId)?.amount ?? 0;
+}
+
+/**
+ * My paise portion of an **income** transaction — semantic alias of
+ * {@link myPaidOf}. Income is attributed by who received it (`payments`), not
+ * by who owes a share, so the two kinds read different tables and must not be
+ * collapsed into one call.
  */
 export function myIncomeOf(txn: { payments: readonly Share[] }, meId: string): number {
-  return txn.payments.find(p => p.personId === meId)?.amount ?? 0;
+  return myPaidOf(txn, meId);
 }
 
 export type ShareInputs = {
@@ -38,35 +78,20 @@ export type ShareInputs = {
   ratios: Record<string, string>;
 };
 
-/** Resolve each included member's share (paise) for the chosen split mode. */
+/**
+ * Resolve each included member's share (paise) for the chosen split mode.
+ * Thin adapter over {@link splitByMode} — the one split engine — so Quick Add
+ * can never disagree with Review/Itemized/import about what a mode means.
+ */
 export function computeShares(i: ShareInputs): Share[] {
   const selected = i.members.filter(m => i.splitMembers.includes(m.id));
   if (selected.length === 0) return [];
-
-  if (i.splitType === 'equal') {
-    const amounts = splitEqual(i.total, selected.length);
-    return selected.map((m, idx) => ({ personId: m.id, amount: amounts[idx] }));
-  }
-  if (i.splitType === 'exact') {
-    return selected.map(m => ({ personId: m.id, amount: parseToPaise(i.exactAmounts[m.id] ?? '0') }));
-  }
-  if (i.splitType === 'percent') {
-    const pcts = selected.map(m => {
-      const p = parseInt(i.percentages[m.id] ?? '0', 10);
-      return Number.isFinite(p) ? p : 0;
-    });
-    const amounts = splitByPercent(i.total, pcts);
-    return selected.map((m, idx) => ({ personId: m.id, amount: amounts[idx] }));
-  }
-  if (i.splitType === 'shares') {
-    const rs = selected.map(m => {
-      const r = parseInt(i.ratios[m.id] ?? '1', 10);
-      return Number.isFinite(r) ? r : 1;
-    });
-    const amounts = splitByShares(i.total, rs);
-    return selected.map((m, idx) => ({ personId: m.id, amount: amounts[idx] }));
-  }
-  return [];
+  const values =
+    i.splitType === 'exact' ? i.exactAmounts :
+    i.splitType === 'percent' ? i.percentages :
+    i.splitType === 'shares' ? i.ratios : {};
+  const byId = splitByMode(i.total, selected.map(m => m.id), i.splitType, values);
+  return selected.map(m => ({ personId: m.id, amount: byId[m.id] ?? 0 }));
 }
 
 /**

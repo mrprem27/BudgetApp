@@ -18,6 +18,7 @@ import { getMe } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
 import { parseTags } from '../src/lib/tags';
 import { formatRupees, formatCompact } from '../src/lib/money';
+import { txnTotal } from '../src/lib/splitMath';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL, SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type TxnKind, type SearchSource } from '../src/constants/enums';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
@@ -31,10 +32,6 @@ type MoreRow = { _more: true; section: string; count: number; monthName: string 
 type Row = TxnWithSplits | MoreRow;
 type MonthSection = { title: string; data: Row[] };
 const isMore = (r: Row): r is MoreRow => (r as MoreRow)._more === true;
-
-function txnTotal(t: TxnWithSplits): number {
-  return t.payments.reduce((s, p) => s + p.amount, 0);
-}
 
 export default function SearchScreen() {
   const router = useRouter();

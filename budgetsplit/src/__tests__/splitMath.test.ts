@@ -1,4 +1,5 @@
-import { computeShares, computePayments, validateShares } from '../lib/splitMath';
+import { computeShares, computePayments, validateShares, myShareOf, myShareOrTotal, myPaidOf, txnTotal } from '../lib/splitMath';
+import { splitByMode } from '../lib/money';
 import type { Person } from '../db/queries/persons';
 
 const p = (id: string): Person => ({ id, name: id, avatar_color: '#20C4B8', is_me: 0, image_uri: null } as any);
@@ -31,6 +32,62 @@ describe('computeShares', () => {
 
   it('returns [] when nobody is included', () => {
     expect(computeShares({ members, splitMembers: [], splitType: 'equal', total: 10000, exactAmounts: {}, percentages: {}, ratios: {} })).toEqual([]);
+  });
+
+  // D5: an explicit 0 shares input EXCLUDES the person. Regression for the
+  // split-engine disagreement where splitByMode coerced 0 → a full share, so
+  // the same saved split owed different amounts in Add vs Review.
+  it('an explicit 0 shares ratio excludes that person', () => {
+    const s = computeShares({ members, splitMembers: ['a', 'b'], splitType: 'shares', total: 9000, exactAmounts: {}, percentages: {}, ratios: { a: '0', b: '3' } });
+    expect(s).toEqual([{ personId: 'a', amount: 0 }, { personId: 'b', amount: 9000 }]);
+  });
+
+  it('agrees with splitByMode for a 0-shares entry (the engines are one)', () => {
+    const byMode = splitByMode(9000, ['a', 'b'], 'shares', { a: '0', b: '3' });
+    expect(byMode).toEqual({ a: 0, b: 9000 });
+  });
+
+  it('a blank shares input still defaults to one share', () => {
+    const byMode = splitByMode(9000, ['a', 'b'], 'shares', { b: '2' });
+    expect(byMode).toEqual({ a: 3000, b: 6000 });
+  });
+});
+
+describe('share accessors', () => {
+  const txn = {
+    payments: [{ personId: 'a', amount: 9000 }],
+    shares: [{ personId: 'a', amount: 3000 }, { personId: 'b', amount: 6000 }],
+  };
+
+  it('myShareOf: my share, 0 when not in the split (analysis basis)', () => {
+    expect(myShareOf(txn, 'b')).toBe(6000);
+    expect(myShareOf(txn, 'z')).toBe(0);
+  });
+
+  it('myShareOrTotal: my share, full amount when not in the split (projection basis)', () => {
+    expect(myShareOrTotal(txn, 'b')).toBe(6000);
+    expect(myShareOrTotal(txn, 'z')).toBe(9000);
+  });
+
+  it('myShareOrTotal: an explicit 0 share stays 0 (not coerced to the total)', () => {
+    const t = { payments: [], shares: [{ personId: 'a', amount: 0 }, { personId: 'b', amount: 9000 }] };
+    expect(myShareOrTotal(t, 'a')).toBe(0);
+  });
+
+  it('myShareOrTotal: empty shares fall back to the payments side', () => {
+    const t = { payments: [{ personId: 'a', amount: 5000 }], shares: [] };
+    expect(myShareOrTotal(t, 'b')).toBe(5000);
+  });
+
+  it('myPaidOf: my payments-side amount', () => {
+    expect(myPaidOf(txn, 'a')).toBe(9000);
+    expect(myPaidOf(txn, 'b')).toBe(0);
+  });
+
+  it('txnTotal: payments first, shares fallback, zero when both empty', () => {
+    expect(txnTotal(txn)).toBe(9000);
+    expect(txnTotal({ payments: [], shares: txn.shares })).toBe(9000);
+    expect(txnTotal({ payments: [], shares: [] })).toBe(0);
   });
 });
 

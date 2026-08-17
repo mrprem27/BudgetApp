@@ -8,6 +8,7 @@ import { PressableScale } from '../ui/PressableScale';
 import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space, layout } from '../tokens';
 import { formatRupees, formatCompact } from '../../lib/money';
+import { myShareOf, myPaidOf } from '../../lib/splitMath';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { Person } from '../../db/queries/persons';
@@ -47,7 +48,7 @@ function highlightParts(title: string, term: string): { text: string; hit: boole
 export const TransactionRow = React.memo(function TransactionRow({
   txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
 }: Props) {
-  const myShare = txn.shares.find(s => s.personId === myId)?.amount ?? 0;
+  const myShare = myShareOf(txn, myId);
   const personOf = (pid?: string) => members?.find(m => m.id === pid);
   const nameOf = (pid?: string) => personOf(pid)?.name ?? 'Someone';
 
@@ -58,7 +59,7 @@ export const TransactionRow = React.memo(function TransactionRow({
   // rendered as overlapping avatars in place of the category icon.
   let settlementPair: { from?: Person; to?: Person } | null = null;
   if (txn.kind === 'income') {
-    displayAmount = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
+    displayAmount = myPaidOf(txn, myId);
   } else if (txn.kind === 'settlement') {
     const fromId = txn.payments[0]?.personId;
     const toId = txn.shares[0]?.personId;
@@ -91,7 +92,7 @@ export const TransactionRow = React.memo(function TransactionRow({
   // Attribution — shown on the RIGHT side below the amount.
   let attribution: { text: string; color: string } | null = null;
   if (members && !isPersonal && txn.kind === 'expense') {
-    const myPaid = txn.payments.find(p => p.personId === myId)?.amount ?? 0;
+    const myPaid = myPaidOf(txn, myId);
     const lent = myPaid - myShare;
     if (lent > 0) {
       attribution = { text: `lent ${formatCompact(lent)}`, color: colors.income };

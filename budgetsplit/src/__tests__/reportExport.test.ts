@@ -42,19 +42,23 @@ describe('buildReportCsv', () => {
   });
 
   it('converts paise to a 2-decimal rupee amount', async () => {
-    mockRange.mockResolvedValue([txn({ shares: [{ personId: 'p1', amount: 123456 }] })]);
+    mockRange.mockResolvedValue([txn({ payments: [{ personId: 'p1', amount: 123456 }], shares: [{ personId: 'p1', amount: 123456 }] })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
     expect(splitCsvLine(csv.split('\n')[1])[4]).toBe('1234.56');
   });
 
-  it('totals income from payments and expenses from shares', async () => {
+  // Canonical row total (txnTotal): the payments side for every kind — income has
+  // no shares, and a balanced expense's payments equal its shares — with shares as
+  // the fallback for legacy rows that recorded no payments.
+  it('totals every kind from payments, falling back to shares', async () => {
     mockRange.mockResolvedValue([
       txn({ kind: 'income', payments: [{ personId: 'p1', amount: 500000 }], shares: [] }),
-      txn({ id: 't2', kind: 'expense', payments: [{ personId: 'p1', amount: 90000 }], shares: [{ personId: 'p1', amount: 30000 }] }),
+      txn({ id: 't2', kind: 'expense', payments: [{ personId: 'p1', amount: 90000 }], shares: [{ personId: 'p1', amount: 90000 }] }),
+      txn({ id: 't3', kind: 'expense', payments: [], shares: [{ personId: 'p1', amount: 30000 }] }),
     ]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
     const amounts = csv.split('\n').slice(1).map(l => splitCsvLine(l)[4]);
-    expect(amounts).toEqual(['5000.00', '300.00']);
+    expect(amounts).toEqual(['5000.00', '900.00', '300.00']);
   });
 
   it('formats the date as yyyy-MM-dd (no time component)', async () => {

@@ -3,6 +3,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { csvQuote } from './importParse';
 import { formatRupees } from './money';
+import { txnTotal } from './splitMath';
 import type { BudgetGroup } from '../db/queries/groups';
 
 /**
@@ -29,11 +30,7 @@ export async function buildReportCsv(
     const txns = await getTransactionsInRange(db, g.id, fromMs, toMs);
     for (const t of txns) {
       const date = format(new Date(t.date), 'yyyy-MM-dd');
-      // Income has no shares — its amount lives on the payment side.
-      const paise = t.kind === 'income'
-        ? t.payments.reduce((s, p) => s + p.amount, 0)
-        : t.shares.reduce((s, sh) => s + sh.amount, 0);
-      const amt = (paise / 100).toFixed(2);
+      const amt = (txnTotal(t) / 100).toFixed(2);
       // Every quoted field goes through csvQuote — group name and category can
       // contain a quote just as easily as the note can.
       lines.push(`${date},${csvQuote(g.name)},${csvQuote(t.category)},${t.kind},${amt},${csvQuote(t.note)}`);
@@ -61,9 +58,7 @@ export async function buildReportHtml(
     const rows = txns
       .sort((a, b) => b.date - a.date)
       .map(t => {
-        const amt = t.kind === 'income'
-          ? t.payments.reduce((x, p) => x + p.amount, 0)
-          : t.shares.reduce((x, sh) => x + sh.amount, 0);
+        const amt = txnTotal(t);
         // Print-safe (dark-on-white) amount colors — the PDF is a light document.
         const color = t.kind === 'income' ? '#0E7C5A' : '#C0392B';
         return `<tr>

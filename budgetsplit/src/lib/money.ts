@@ -1,4 +1,5 @@
 import { CURRENCY_MAP, DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
+import type { SplitMode } from '../constants/enums';
 
 export function formatRupees(paise: number): string {
   return '₹' + (paise / 100).toLocaleString('en-IN', {
@@ -130,6 +131,16 @@ export function parseToPaise(input: string): number {
   return Math.min(Math.round(n * 100), MAX_PAISE);
 }
 
+/**
+ * Exact inverse of {@link parseToPaise} for pre-filling an amount input:
+ * paise → the raw string an amount field holds ("1500.5", not "₹1,500.50").
+ * 0 → '' so an untouched field shows its placeholder, not a literal zero.
+ */
+export function paiseToInput(paise: number): string {
+  if (!isFinite(paise) || paise === 0) return '';
+  return (paise / 100).toString();
+}
+
 /** Compact ₹ axis/short label, e.g. ₹0, ₹450, ₹12K, ₹2L, ₹1Cr. Accepts the
  *  string gifted-charts passes to formatYLabel, or a number. */
 export function formatAxisShort(v: string | number): string {
@@ -173,16 +184,22 @@ export function splitByShares(total: number, ratios: number[]): number[] {
 }
 
 /**
- * Split a total (paise) among member ids by mode → { id: paise }. The single
- * split engine reused by Quick, Itemized and the import group-split. `values`
- * holds the per-member raw input (₹ for exact, % for percent, count for shares);
- * ignored for equal. Exact reads inputs verbatim (any shortfall is the user's
- * remainder to reconcile).
+ * Split a total (paise) among member ids by mode → { id: paise }. THE single
+ * split engine — Quick Add (via `splitMath.computeShares`), Itemized, Review
+ * commit and the import group-split all resolve through here, so the modes
+ * can't drift. `values` holds the per-member raw input (₹ for exact, % for
+ * percent, count for shares); ignored for equal. Exact reads inputs verbatim
+ * (any shortfall is the user's remainder to reconcile).
+ *
+ * An explicit `0` share/percent EXCLUDES that person (they owe nothing);
+ * only a blank/unparseable shares input defaults to 1. This previously
+ * disagreed with `computeShares` (0 was coerced to a full share here), so the
+ * same saved split produced different owed amounts in Add vs Review.
  */
 export function splitByMode(
   total: number,
   ids: string[],
-  mode: 'equal' | 'exact' | 'percent' | 'shares',
+  mode: SplitMode,
   values: Record<string, string>,
 ): Record<string, number> {
   const out: Record<string, number> = {};
@@ -194,7 +211,7 @@ export function splitByMode(
     const amts = splitByPercent(total, pcts);
     ids.forEach((id, i) => { out[id] = amts[i]; });
   } else if (mode === 'shares') {
-    const rs = ids.map(id => { const r = parseInt(values[id] ?? '1', 10); return Number.isFinite(r) && r > 0 ? r : 1; });
+    const rs = ids.map(id => { const r = parseInt(values[id] ?? '1', 10); return Number.isFinite(r) && r >= 0 ? r : 1; });
     const amts = splitByShares(total, rs);
     ids.forEach((id, i) => { out[id] = amts[i]; });
   } else {

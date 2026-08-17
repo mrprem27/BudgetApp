@@ -22,6 +22,7 @@ import { getCategories } from '../src/db/queries/categories';
 import { getMe } from '../src/db/queries/persons';
 import { getTransactionsInRange, type TxnWithSplits } from '../src/db/queries/transactions';
 import { OTHERS_LABEL } from '../src/lib/categoryFold';
+import { txnTotal } from '../src/lib/splitMath';
 import { haptic } from '../src/lib/haptics';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 
@@ -44,13 +45,9 @@ const TYPE_TABS = [
   { key: 'settlement', label: 'Transfers' },
 ];
 
-// Full transaction magnitude (all shares/payments), used for the "Largest" sort
-// and the header total — matches how Reports totals categories.
-function txnAmount(t: TxnWithSplits): number {
-  return t.kind === 'income'
-    ? t.payments.reduce((s, p) => s + p.amount, 0)
-    : t.shares.reduce((s, sh) => s + sh.amount, 0);
-}
+// Full transaction magnitude via the canonical txnTotal, used for the
+// "Largest" sort and the header totals — matches Reports and Search.
+const txnAmount = txnTotal;
 
 function parseMonth(m?: string): Date {
   const parts = (m ?? '').split('-');

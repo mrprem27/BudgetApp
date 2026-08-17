@@ -11,6 +11,7 @@ import { getMe } from './persons';
 import { getTransactionsInRange, type TxnWithSplits } from './transactions';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
 import { recurringMonthlyEquivalent } from '../../lib/recurrence';
+import { myShareOf } from '../../lib/splitMath';
 import { getCategoriesByFrequency, type Category } from './categories';
 import { getMyGlobalBudgetRows, type BudgetCadence } from './categoryBudgets';
 import { startOfMonth, endOfMonth, getDaysInMonth, getDate, subMonths } from 'date-fns';
@@ -383,7 +384,7 @@ export async function getCategorySpend30d(db: SQLite.SQLiteDatabase): Promise<Ca
   const map: Record<string, number> = {};
   for (const t of txns) {
     if (t.is_deleted || t.kind !== 'expense') continue;
-    const mine = t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+    const mine = myShareOf(t, me.id);
     if (mine > 0) map[t.category] = (map[t.category] ?? 0) + mine;
   }
   return Object.entries(map).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
@@ -516,7 +517,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   ]);
 
   const myShare = (t: { shares: Array<{ personId: string; amount: number }> }) =>
-    t.shares.find(s => s.personId === me.id)?.amount ?? 0;
+    myShareOf(t, me.id);
 
   // This-month spend per category (my share).
   const spentThisMonth: Record<string, number> = {};

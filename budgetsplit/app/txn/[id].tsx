@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { format } from 'date-fns';
 import { PAY_METHOD_LABEL } from '../../src/constants/enums';
+import { myShareOf, myPaidOf, txnTotal } from '../../src/lib/splitMath';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, radius, layout, shadow } from '../../src/constants/layout';
@@ -92,7 +93,7 @@ export default function TxnDetailScreen() {
   const nameOf = (pid: string) => members.find(m => m.id === pid)?.name ?? 'Someone';
   const imageOf = (pid: string) => members.find(m => m.id === pid)?.image_uri ?? null;
   const vis = categoryVisual(txn.category);
-  const total = txn.payments.reduce((s, p) => s + p.amount, 0);
+  const total = txnTotal(txn);
   const tags = parseTags(txn.tags);
   const isSettlement = txn.kind === 'settlement';
   const isIncome = txn.kind === 'income';
@@ -147,8 +148,8 @@ export default function TxnDetailScreen() {
           )}
           {/* Cash vs consumption: what you paid out of pocket vs your share. */}
           {!isPersonal && !isIncome && !isSettlement && (() => {
-            const myPaid = txn.payments.find(p => p.personId === me?.id)?.amount ?? 0;
-            const myShare = txn.shares.find(s => s.personId === me?.id)?.amount ?? 0;
+            const myPaid = myPaidOf(txn, me?.id ?? '');
+            const myShare = myShareOf(txn, me?.id ?? '');
             if (myPaid === myShare) return null;
             return <Text style={styles.heroCashLine}>You paid {formatRupees(myPaid)} · your share {formatRupees(myShare)}</Text>;
           })()}

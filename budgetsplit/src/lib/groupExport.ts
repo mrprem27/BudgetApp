@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { getTransactionsForGroup, type TxnWithSplits } from '../db/queries/transactions';
 import type { BudgetGroup } from '../db/queries/groups';
 import { GROUP_EXPORT_HEADER, csvQuote } from './importParse';
+import { txnTotal } from './splitMath';
 
 /**
  * CSV export of logged transactions — a human-readable, re-importable dump that
@@ -18,18 +19,9 @@ export type GroupExportResult = {
   rowCount: number;
 };
 
-/** Row total in paise: income sits on the payment side, else on shares (fall back
- *  to payments when a row has no shares). */
-function rowTotalPaise(t: TxnWithSplits): number {
-  const pay = t.payments.reduce((s, p) => s + p.amount, 0);
-  if (t.kind === 'income') return pay;
-  const share = t.shares.reduce((s, sh) => s + sh.amount, 0);
-  return share || pay;
-}
-
 function rowLine(groupName: string, t: TxnWithSplits): string {
   const date = format(new Date(t.date), 'yyyy-MM-dd HH:mm');
-  const amount = (rowTotalPaise(t) / 100).toFixed(2);
+  const amount = (txnTotal(t) / 100).toFixed(2);
   return `${date},${csvQuote(groupName)},${csvQuote(t.category)},${t.kind},${amount},${csvQuote(t.note)}`;
 }
 

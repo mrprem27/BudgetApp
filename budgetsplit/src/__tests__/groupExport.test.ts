@@ -182,9 +182,16 @@ describe('round-trip through the import parser', () => {
   });
 
   it('preserves the amount through the round-trip', async () => {
-    mockGet.mockResolvedValue([txn({ shares: [{ personId: 'p1', amount: 123456 }] })]);
+    mockGet.mockResolvedValue([txn({ payments: [{ personId: 'p1', amount: 123456 }], shares: [{ personId: 'p1', amount: 123456 }] })]);
     const { csv } = await buildGroupExportCsv(db, group('g1', 'Trip'));
     const [row] = parseBudgetSplitExport(csv).rows;
     expect(row.amount).toBe(123456);
+  });
+
+  // Legacy rows with no recorded payments still export their shares total.
+  it('falls back to the shares total when a row has no payments', async () => {
+    mockGet.mockResolvedValue([txn({ payments: [], shares: [{ personId: 'p1', amount: 45600 }] })]);
+    const { csv } = await buildGroupExportCsv(db, group('g1', 'Trip'));
+    expect(parseBudgetSplitExport(csv).rows[0].amount).toBe(45600);
   });
 });
