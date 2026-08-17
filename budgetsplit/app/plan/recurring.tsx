@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { format } from 'date-fns';
 import { colors } from '../../src/constants/colors';
 import { type } from '../../src/constants/typography';
 import { space, layout } from '../../src/constants/layout';
@@ -23,18 +22,18 @@ import { useContentInset } from '../../src/hooks/useContentInset';
 import { useRecurringActions } from '../../src/hooks/useRecurringActions';
 import { getAllGroups } from '../../src/db/queries/groups';
 import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
-import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from '../../src/lib/recurrence';
-import type { RecurFreq } from '../../src/constants/enums';
+import { nextUnskippedOccurrence, recurringMonthlyEquivalent, freqLabel } from '../../src/lib/recurrence';
+import { shortDate } from '../../src/lib/dateFormat';
+import { myShareOrTotal, myIncomeOf, txnTotal } from '../../src/lib/splitMath';
+import { getMe } from '../../src/db/queries/persons';
+import type { RecurFreq, TxnKind } from '../../src/constants/enums';
 import { formatCompact } from '../../src/lib/money';
 import { alpha } from '../../src/theme';
 
-type Sub = { id: string; groupId: string; name: string; category: string; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null };
+type Sub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null };
 
-// Normalise a recurring charge to a per-month figure for the running total.
+// Normalise a recurring charge to a per-month figure for the running totals.
 const toMonthly = recurringMonthlyEquivalent;
-function cadenceLabel(freq: string): string {
-  return freq === 'daily' ? 'daily' : freq === 'weekly' ? 'weekly' : freq === 'yearly' ? 'yearly' : freq === 'custom' ? 'custom' : 'monthly';
-}
 
 /**
  * The recurring **inventory** — one row per rule, with the actions that change it.
@@ -54,16 +53,25 @@ export default function RecurringScreen() {
     const now = Date.now();
     const grps = await getAllGroups(db);
     const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const rules = byGroup.flat().filter(t => t.kind === 'expense' && t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
+    // Every kind: recurring income (salary) belongs on this screen too — it was
+    // invisible everywhere until it first materialized, which made onboarding's
+    // income answer look like it did nothing.
+    const rules = byGroup.flat().filter(t => t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
     // Skips have to be loaded, not inferred: "next" must be the next date that actually
     // happens, not the next one the schedule would produce.
     const skips = await getSkipsMap(db, rules.map(r => r.id));
+    const meRow = await getMe(db);
     const list: Sub[] = rules.map(t => ({
       id: t.id,
       groupId: t.group_id,
       name: (t.note && t.note.trim()) || t.category,
       category: t.category,
-      amount: t.shares.reduce((s, sh) => s + sh.amount, 0),
+      kind: t.kind,
+      // My share — the only basis that sums honestly with budgets and afford.
+      // Income is attributed by payments, so it reads the other side.
+      amount: meRow
+        ? (t.kind === 'income' ? myIncomeOf(t, meRow.id) : myShareOrTotal(t, meRow.id))
+        : txnTotal(t),
       freq: t.recur_freq!,
       interval: t.recur_interval,
       nextMs: nextUnskippedOccurrence(t, now, skips.get(t.id)),
@@ -74,7 +82,12 @@ export default function RecurringScreen() {
 
   const subs = data ?? [];
   const { skipNext, pause, end } = useRecurringActions(reload);
-  const monthlyTotal = subs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  // Never one total across kinds (AGENTS §12): money out and money in are
+  // summed and shown separately.
+  const outSubs = subs.filter(s => s.kind !== 'income');
+  const inSubs = subs.filter(s => s.kind === 'income');
+  const monthlyOut = outSubs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  const monthlyIn = inSubs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
   const nextUp = subs.find(s => s.nextMs != null);
 
   if (error) {
@@ -103,55 +116,63 @@ export default function RecurringScreen() {
           />
         ) : subs.length > 0 ? (
           <>
-            {/* The one hero figure on this screen (AGENTS §1). */}
+            {/* The one hero figure on this screen (AGENTS §1): my monthly
+                commitment. Income is its own labelled figure, never merged. */}
             <Card padded style={styles.totalCard}>
               <View style={styles.totalRow}>
                 <View style={styles.totalLeft}>
-                  <Text style={styles.totalLabel}>Monthly total</Text>
-                  <AmountText paise={monthlyTotal} size="xl" forceColor={colors.textPrimary} />
-                  <Text style={styles.totalSub}>≈ {formatCompact(monthlyTotal * 12)} a year</Text>
+                  <Text style={styles.totalLabel}>Money out · your share</Text>
+                  <AmountText paise={monthlyOut} size="xl" forceColor={colors.textPrimary} />
+                  <Text style={styles.totalSub}>
+                    ≈ {formatCompact(monthlyOut * 12)} a year
+                    {monthlyIn > 0 ? ` · +${formatCompact(monthlyIn)}/mo in` : ''}
+                  </Text>
                 </View>
                 <View style={styles.totalRight}>
                   <Text style={styles.totalCount}>{subs.length} active</Text>
                   {nextUp?.nextMs != null && (
-                    <Text style={styles.totalNext}>next {format(nextUp.nextMs, 'd MMM')}</Text>
+                    <Text style={styles.totalNext}>next {shortDate(nextUp.nextMs)}</Text>
                   )}
                 </View>
               </View>
             </Card>
 
-            <SectionHeader title="Active" right={<Text style={styles.count}>{subs.length}</Text>} />
-            <Card clip>
-              {subs.map((s, i) => {
-                const vis = categoryVisual(s.category);
-                return (
-                  <View key={s.id}>
-                    {i > 0 && <Divider indent="none" />}
-                    <ListRow
-                      leading={
-                        <IconCircle
-                          icon={asFeather(vis?.icon, 'refresh-cw')}
-                          size={layout.avatarSize}
-                          color={vis?.color ?? colors.accent}
+            {([['Money out', outSubs], ['Money in', inSubs]] as const).map(([title, rows]) => rows.length === 0 ? null : (
+              <View key={title}>
+                <SectionHeader title={title} right={<Text style={styles.count}>{rows.length}</Text>} />
+                <Card clip>
+                  {rows.map((s, i) => {
+                    const vis = categoryVisual(s.category);
+                    return (
+                      <View key={s.id}>
+                        {i > 0 && <Divider indent="none" />}
+                        <ListRow
+                          leading={
+                            <IconCircle
+                              icon={asFeather(vis?.icon, s.kind === 'income' ? 'trending-up' : 'refresh-cw')}
+                              size={layout.avatarSize}
+                              color={vis?.color ?? (s.kind === 'income' ? colors.income : colors.accent)}
+                            />
+                          }
+                          title={s.name}
+                          subtitle={`${s.category} · ${freqLabel(s.freq, s.interval)}${s.nextMs != null ? ` · next ${shortDate(s.nextMs)}` : ''}`}
+                          value={<AmountText paise={s.amount} size="sm" forceColor={s.kind === 'income' ? colors.income : colors.textPrimary} rounded />}
+                          onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
+                          accessibilityLabel={`${s.name}, ${freqLabel(s.freq, s.interval)}`}
                         />
-                      }
-                      title={s.name}
-                      subtitle={`${s.category} · ${cadenceLabel(s.freq)}${s.nextMs != null ? ` · next ${format(s.nextMs, 'd MMM')}` : ''}`}
-                      value={<AmountText paise={s.amount} size="sm" forceColor={colors.textPrimary} rounded />}
-                      onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
-                      accessibilityLabel={`${s.name}, ${cadenceLabel(s.freq)}`}
-                    />
-                    {/* Real buttons, not caption-sized text links. All three were ~13px
-                        tap targets — far under AGENTS §6 — and one of them is destructive. */}
-                    <View style={styles.actionRow}>
-                      <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
-                      <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />
-                      <SecondaryButton label="Stop" size="sm" danger onPress={() => end(s.id)} style={styles.actionBtn} />
-                    </View>
-                  </View>
-                );
-              })}
-            </Card>
+                        {/* Real buttons, not caption-sized text links. All three were ~13px
+                            tap targets — far under AGENTS §6 — and one of them is destructive. */}
+                        <View style={styles.actionRow}>
+                          <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
+                          <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />
+                          <SecondaryButton label="Stop" size="sm" danger onPress={() => end(s.id)} style={styles.actionBtn} />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </Card>
+              </View>
+            ))}
 
             <Text style={styles.footHint}>Tap a row to manage its schedule.</Text>
           </>
