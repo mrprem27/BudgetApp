@@ -8,7 +8,7 @@ import { settings } from '../lib/settings';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory, getGoalHistoryCount,
   fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
-  type SavingsTxn, type SavingsFrequency,
+  type SavingsTxn, type SavingsFrequency, type Priority,
 } from '../db/queries/savings';
 import { useUndo } from '../components/system/UndoToast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
@@ -34,6 +34,7 @@ export function useSavingsGoalScreen(id: string) {
   const [adjustAlloc, setAdjustAlloc] = useState('');
   const [adjustFreq, setAdjustFreq] = useState<SavingsFrequency>('monthly');
   const [adjustDate, setAdjustDate] = useState<number | null>(null);
+  const [adjustPriority, setAdjustPriority] = useState<Priority>('need');
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [amt, setAmt] = useState('');
   const [showLockExplainer, setShowLockExplainer] = useState(false);
@@ -99,6 +100,7 @@ export function useSavingsGoalScreen(id: string) {
     setAdjustAlloc(goal.allocation > 0 ? (goal.allocation / 100).toString() : '');
     setAdjustFreq(goal.frequency ?? 'monthly');
     setAdjustDate(goal.target_date ?? null);
+    setAdjustPriority(goal.priority);
     setShowAdjust(true);
   }
 
@@ -111,7 +113,7 @@ export function useSavingsGoalScreen(id: string) {
       await updateGoal(db, id, {
         name: adjustName.trim(),
         target: newTarget,
-        priority: goal.priority,
+        priority: adjustPriority,
         category: goal.category,
         icon: goal.icon,
         color: goal.color,
@@ -184,7 +186,8 @@ export function useSavingsGoalScreen(id: string) {
     // adjust sheet
     showAdjust, setShowAdjust, adjustName, setAdjustName,
     adjustTarget, setAdjustTarget, adjustAlloc, setAdjustAlloc,
-    adjustFreq, setAdjustFreq, adjustDate, setAdjustDate, adjustSaving,
+    adjustFreq, setAdjustFreq, adjustDate, setAdjustDate,
+    adjustPriority, setAdjustPriority, adjustSaving,
     openAdjust, handleAdjust,
     // misc
     celebrate, setCelebrate, toggleLock, confirmDelete,

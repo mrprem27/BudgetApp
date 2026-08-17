@@ -21,6 +21,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DraggableList } from '../../src/components/ui/DraggableList';
 import { Input } from '../../src/components/ui/Input';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { TabPills } from '../../src/components/ui/TabPills';
 
 import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { GoalCard } from '../../src/components/finance/plan/GoalCard';
@@ -48,6 +49,16 @@ function deadlineOn(dateMs: number | null, months: number | null): boolean {
 }
 
 import { type Priority, type SavingsFrequency } from '../../src/db/queries/savings';
+import { PRIORITY, PRIORITY_LABEL } from '../../src/constants/enums';
+
+// Order matches funding/raid weight: Emergency funds first & is never raided;
+// Want funds last & is raided first. See src/lib/savingsEngine.ts.
+const PRIORITY_TABS = PRIORITY.map(p => ({ key: p, label: PRIORITY_LABEL[p] }));
+const PRIORITY_HINT: Record<Priority, string> = {
+  emergency: 'Never dipped into if an overspend has to cover itself from goals.',
+  need: 'Dipped into only after every Want goal is used up.',
+  want: 'The first goals an overspend dips into, if any.',
+};
 
 import type { MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
@@ -168,38 +179,49 @@ export default function SavingsScreen() {
 
         {/* Savings insights moved to the global Insights screen (header link above). */}
 
-        {/* Goals — active are drag-rankable for funding priority; completed sink to the bottom */}
+        {/* Goals — three sections by priority tag (Emergency/Need/Want), each its
+            own drag-rankable list for funding order within that tag; completed
+            sink to the bottom, unsectioned. See src/lib/savingsEngine.ts for why
+            the tag is the coarse order and drag is only the fine one. */}
         {flags.savingsGoals && (goals.length > 0 ? (() => {
           const activeGoals = goals.filter(g => (saved[g.id] ?? 0) < g.target);
           const completedGoals = goals.filter(g => (saved[g.id] ?? 0) >= g.target);
+          const byTag = (tag: Priority) => activeGoals.filter(g => g.priority === tag);
           return (
           <>
             <View style={styles.sectionHead}>
-              <View>
-                <Text style={styles.sectionTitle}>Goals</Text>
-                {activeGoals.length > 1 && <Text style={styles.sectionHint}>Hold &amp; drag to set funding priority</Text>}
-              </View>
+              <Text style={styles.sectionTitle}>Goals</Text>
               <TouchableOpacity style={styles.newPill} onPress={() => { resetNew(); setShowNew(true); }} accessibilityRole="button">
                 <Feather name="plus" size={13} color={colors.accent} />
                 <Text style={styles.newPillText}>New</Text>
               </TouchableOpacity>
             </View>
-            {activeGoals.length > 0 && (
-              <DraggableList
-                data={activeGoals}
-                keyExtractor={(g) => g.id}
-                onReorder={handleReorder}
-                renderItem={(g, isActive) => (
-                  <GoalCard
-                    goal={g}
-                    saved={saved[g.id] ?? 0}
-                    isActive={isActive}
-                    onPress={() => router.push(`/savings/${g.id}`)}
-                    onAdd={() => { setFundAmt(''); setFundGoalId(g.id); }}
+            {PRIORITY.map(tag => {
+              const tagGoals = byTag(tag);
+              if (tagGoals.length === 0) return null;
+              return (
+                <View key={tag} style={styles.tagSection}>
+                  <Text style={styles.tagLabel}>
+                    {PRIORITY_LABEL[tag].toUpperCase()}
+                    {tagGoals.length > 1 ? ' · HOLD & DRAG TO REORDER' : ''}
+                  </Text>
+                  <DraggableList
+                    data={tagGoals}
+                    keyExtractor={(g) => g.id}
+                    onReorder={handleReorder}
+                    renderItem={(g, isActive) => (
+                      <GoalCard
+                        goal={g}
+                        saved={saved[g.id] ?? 0}
+                        isActive={isActive}
+                        onPress={() => router.push(`/savings/${g.id}`)}
+                        onAdd={() => { setFundAmt(''); setFundGoalId(g.id); }}
+                      />
+                    )}
                   />
-                )}
-              />
-            )}
+                </View>
+              );
+            })}
             {completedGoals.length > 0 && (
               <View style={styles.completedSection}>
                 <Text style={styles.completedLabel}>COMPLETED · {completedGoals.length}</Text>
@@ -280,9 +302,19 @@ export default function SavingsScreen() {
 
           <Text style={styles.fieldLabel}>Target amount</Text>
           <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" style={styles.inputGap} />
-          {/* Priority is set by drag order in the Goals list — no bucket picker here. */}
 
-          <Text style={styles.fieldLabel}>Icon</Text>
+          {/* Protect-from-raid tag, not the funding order — that's still drag
+              order within the section this goal lands in. */}
+          <Text style={styles.fieldLabel}>Priority</Text>
+          <TabPills
+            tabs={PRIORITY_TABS}
+            active={priority}
+            onChange={(k) => setPriority(k as Priority)}
+            size="sm"
+          />
+          <Text style={styles.deadlineHint}>{PRIORITY_HINT[priority]}</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Icon</Text>
           <View style={styles.iconGrid}>
             {GOAL_ICONS.map(ic => (
               <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} accessibilityState={{ selected: icon === ic }} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
@@ -352,6 +384,8 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.xs },
   sectionTitle: { ...type.subheading, color: colors.textPrimary },
   sectionHint: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  tagSection: { gap: space.sm },
+  tagLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   completedSection: { marginTop: space.md, gap: space.sm },
   completedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   // Insights sections

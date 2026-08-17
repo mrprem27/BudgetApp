@@ -169,7 +169,10 @@ CREATE TABLE IF NOT EXISTS savings_goal (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
   target       INTEGER NOT NULL,        -- paise
-  priority     TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('high','medium','low')),
+  -- Protect-from-raid classification, NOT the funding order (that's sort_order
+  -- below). 'emergency' goals are never raid-eligible; 'want' is raided before
+  -- 'need'. See planOverspendRaid (savingsEngine.ts).
+  priority     TEXT NOT NULL DEFAULT 'need' CHECK(priority IN ('emergency','need','want')),
   category     TEXT,
   icon         TEXT,
   color        TEXT,
@@ -453,6 +456,118 @@ export async function applyOneTimeFixes(
   return ran;
 }
 
+/**
+ * Phase GC: collapse the per-group `category` rows into a single GLOBAL catalog
+ * (group_id NULL = global), deduped by (name, kind). Exported so the test that
+ * proves this survives a *populated* pre-migration database
+ * (categoryGlobalMigration.test.ts) runs the same SQL `openDB` runs — not a
+ * hand-copied stand-in that could silently drift from it.
+ *
+ * Safe by construction for every other table: `txn.category` and
+ * `category_budget.category` are plain name strings, never a foreign key to
+ * `category.id`, so recreating this table with fresh ids/no group_id cannot
+ * orphan a transaction or a budget line. `GROUP BY name, kind` keeps kinds
+ * separate on purpose — `Rent`/`Other` are seeded as both `expense` and
+ * `transfer`, and collapsing across kind would fold two real categories into
+ * one (see `TXN_KIND_FOR_CATEGORY`).
+ */
+export const CATEGORY_GLOBAL_V1_SQL = `
+  PRAGMA foreign_keys=OFF;
+  BEGIN TRANSACTION;
+  CREATE TABLE category_g (
+    id        TEXT PRIMARY KEY,
+    group_id  TEXT REFERENCES budget_group(id),
+    name      TEXT NOT NULL,
+    icon      TEXT,
+    color     TEXT,
+    kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
+    section   TEXT,
+    UNIQUE(name, kind)
+  );
+  INSERT INTO category_g (id, group_id, name, icon, color, kind, section)
+    SELECT id, NULL, name, icon, color, kind, section FROM category GROUP BY name, kind;
+  DROP TABLE category;
+  ALTER TABLE category_g RENAME TO category;
+  COMMIT;
+  PRAGMA foreign_keys=ON;
+`;
+
+/**
+ * Runs `CATEGORY_GLOBAL_V1_SQL` at most once, engine-agnostic (callbacks, not a
+ * driver) so the test can drive it with `node:sqlite` exactly like
+ * `applyOneTimeFixes`. Returns whether it ran.
+ */
+export async function applyCategoryGlobalMigration(
+  isDone: () => Promise<boolean>,
+  exec: (sql: string) => Promise<void>,
+  markDone: () => Promise<void>,
+): Promise<boolean> {
+  if (await isDone()) return false;
+  await exec(CATEGORY_GLOBAL_V1_SQL);
+  await markDone();
+  return true;
+}
+
+/**
+ * One-time rebuild: `savings_goal.priority` shipped as
+ * `CHECK(priority IN ('high','medium','low'))` — buckets that funding
+ * (`sort_order`/drag) replaced and that no UI has ever offered a picker for
+ * (see `src/lib/savingsEngine.ts`'s `rankKey` comment). Repurposed rather than
+ * deleted: a protect-from-raid tag, `CHECK(priority IN ('emergency','need','want'))`.
+ *
+ * SQLite can't `ALTER` a `CHECK`, so the table is rebuilt, remapping existing
+ * values with a `CASE`: `medium → need` (every real goal today — nothing has
+ * ever moved a row off the default), `high → emergency` / `low → want`
+ * (demo-data-only, since no real UI ever set these). `id`s are preserved
+ * unchanged, so `savings_txn.goal_id` (a plain column, not an enforced FK)
+ * cannot be orphaned by the rebuild.
+ */
+export const GOAL_PRIORITY_REVIVE_SQL = `
+  PRAGMA foreign_keys=OFF;
+  BEGIN TRANSACTION;
+  CREATE TABLE savings_goal_new (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    target       INTEGER NOT NULL,
+    priority     TEXT NOT NULL DEFAULT 'need' CHECK(priority IN ('emergency','need','want')),
+    category     TEXT,
+    icon         TEXT,
+    color        TEXT,
+    allocation   INTEGER NOT NULL DEFAULT 0,
+    frequency    TEXT NOT NULL DEFAULT 'none' CHECK(frequency IN ('daily','weekly','monthly','yearly','none')),
+    locked       INTEGER NOT NULL DEFAULT 0,
+    is_archived  INTEGER NOT NULL DEFAULT 0,
+    last_auto_at INTEGER,
+    target_date  INTEGER,
+    sort_order   INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL
+  );
+  INSERT INTO savings_goal_new (id,name,target,priority,category,icon,color,allocation,frequency,locked,is_archived,last_auto_at,target_date,sort_order,created_at)
+    SELECT id,name,target,
+      CASE priority WHEN 'high' THEN 'emergency' WHEN 'low' THEN 'want' ELSE 'need' END,
+      category,icon,color,allocation,frequency,locked,is_archived,last_auto_at,target_date,sort_order,created_at
+    FROM savings_goal;
+  DROP TABLE savings_goal;
+  ALTER TABLE savings_goal_new RENAME TO savings_goal;
+  COMMIT;
+  PRAGMA foreign_keys=ON;
+`;
+
+/**
+ * Runs `GOAL_PRIORITY_REVIVE_SQL` at most once, detected the same way as the
+ * txn/category CHECK rebuilds above: by the absence of the new constraint's
+ * value in the table's own stored DDL, not a settings flag.
+ */
+export async function applyGoalPriorityRevival(
+  getStoredDdl: () => Promise<string | null>,
+  exec: (sql: string) => Promise<void>,
+): Promise<boolean> {
+  const ddl = await getStoredDdl();
+  if (!ddl || ddl.includes("'emergency'")) return false;
+  await exec(GOAL_PRIORITY_REVIVE_SQL);
+  return true;
+}
+
 export const INDEXES = `
     -- Budget uniqueness, in two halves on purpose.
     --
@@ -621,6 +736,21 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // rather than the budget data being put at risk.
   }
 
+  // One-time rebuild: revive `savings_goal.priority` as a protect-from-raid tag.
+  // See applyGoalPriorityRevival for what/why; exported so
+  // goalPriorityMigration.test.ts runs the exact same SQL as this launch does.
+  try {
+    await applyGoalPriorityRevival(
+      async () => (await db.getFirstAsync<{ sql: string }>(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='savings_goal'",
+      ))?.sql ?? null,
+      (sql) => db.execAsync(sql),
+    );
+  } catch {
+    // Leave the old table intact if the rebuild fails; goals keep their stale
+    // high/medium/low values rather than the goal data being put at risk.
+  }
+
   // Hot-path indexes + budget uniqueness. Exported as `INDEXES` (not inline in
   // SCHEMA) for two reasons: the one-time txn rebuild above drops and recreates
   // the txn table, which would wipe any index defined alongside it; and the test
@@ -647,34 +777,14 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     (key) => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", [key]).then(() => undefined),
   );
 
-  // Phase GC: collapse the per-group category rows into a single GLOBAL catalog
-  // (group_id NULL = global), deduped by (name, kind). One-time, flagged — the
-  // rebuild also drops the old NOT NULL on group_id and adds UNIQUE(name,kind).
+  // Phase GC: collapse the per-group category rows into a single GLOBAL catalog.
+  // One-time, flagged — see CATEGORY_GLOBAL_V1_SQL for what it does and why it's safe.
   try {
-    const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key='category_global_v1'");
-    if (!done) {
-      await db.execAsync(`
-        PRAGMA foreign_keys=OFF;
-        BEGIN TRANSACTION;
-        CREATE TABLE category_g (
-          id        TEXT PRIMARY KEY,
-          group_id  TEXT REFERENCES budget_group(id),
-          name      TEXT NOT NULL,
-          icon      TEXT,
-          color     TEXT,
-          kind      TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('expense','income','transfer')),
-          section   TEXT,
-          UNIQUE(name, kind)
-        );
-        INSERT INTO category_g (id, group_id, name, icon, color, kind, section)
-          SELECT id, NULL, name, icon, color, kind, section FROM category GROUP BY name, kind;
-        DROP TABLE category;
-        ALTER TABLE category_g RENAME TO category;
-        COMMIT;
-        PRAGMA foreign_keys=ON;
-      `);
-      await db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES ('category_global_v1', '1')");
-    }
+    await applyCategoryGlobalMigration(
+      async () => !!(await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key='category_global_v1'")),
+      (sql) => db.execAsync(sql),
+      () => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES ('category_global_v1', '1')").then(() => undefined),
+    );
   } catch {
     // Leave categories as-is if the global migration fails.
   }

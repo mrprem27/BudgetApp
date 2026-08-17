@@ -2,7 +2,6 @@ import {
   differenceInCalendarDays, differenceInCalendarMonths, differenceInCalendarYears,
   addDays, addWeeks, addMonths, addYears,
 } from 'date-fns';
-import { PRIORITY_RANK } from './savings';
 import type { Priority, SavingsFrequency } from '../db/queries/savings';
 
 /** Whole periods elapsed between the schedule anchor and now. */
@@ -36,25 +35,24 @@ export type GoalLike = {
   allocation: number;
   frequency: SavingsFrequency;
   priority: Priority;
-  /** Manual drag rank — when present it drives funding order; falls back to priority. */
+  /** Manual drag rank — fine-grained order *within* a `priority` tag. */
   sort_order?: number;
   anchor: number; // last_auto_at ?? created_at
 };
 
+/** `emergency` funds first, then `need`, then `want` — the coarse fund-order tag. */
+const fundTagRank = (p: Priority) => (p === 'emergency' ? 0 : p === 'need' ? 1 : 2);
+
 /**
- * Funding order key — the manual drag rank, and nothing else.
+ * Funding order key: the tag (coarse), then the manual drag rank (fine).
  *
- * This was `g.sort_order ?? PRIORITY_RANK[g.priority]`, and the fallback could
- * **never run**: `savings_goal.sort_order` is `INTEGER NOT NULL DEFAULT 0`, so it
- * is never null or undefined for a row read from the database. The High/Med/Low
- * buckets were replaced by drag ordering and no UI has set `priority` since —
- * `setPriority` is still destructured in `app/(tabs)/savings.tsx` and never
- * called — so every real goal carries the default 'medium' anyway.
- *
- * Left as one axis on purpose. The `priority` column, its enum and its use in
- * `savingsInsights` scoring are vestigial rather than harmful, and pulling them
- * out touches ten files of money-handling code; that is its own change, tracked
- * on the checklist, not a tail-end sweep.
+ * Goal cards are organized into three sections by `priority` — Emergency,
+ * Need, Want — so that's the natural primary order for money too: fund your
+ * emergency buffer first, then needs, then wants. `sort_order` (drag) breaks
+ * ties *within* a section, letting you pick which Need (say) fills up first
+ * without it ever jumping ahead of an Emergency goal. `planOverspendRaid`
+ * below is this order's exact mirror — the same reason `want` is raided
+ * before `need` and `emergency` isn't raided at all.
  */
 const rankKey = (g: { sort_order?: number }) => g.sort_order ?? 0;
 
@@ -63,10 +61,11 @@ export type AutoAllocation = { goalId: string; amount: number; newAnchor: number
 /**
  * Plan scheduled auto-funding (pure). Each eligible goal is due its fixed
  * allocation × elapsed periods (capped at what's left to its target). Due
- * amounts are funded directly from available cash in priority order (High →
- * Medium → Low). The schedule anchor only advances for periods actually funded
- * (or for completed goals), so short cash back-funds gradually rather than
- * skipping periods. Returns only goals whose anchor moves and/or get funded.
+ * amounts are funded directly from available cash in priority order
+ * (Emergency → Need → Want, drag rank within each). The schedule anchor only
+ * advances for periods actually funded (or for completed goals), so short
+ * cash back-funds gradually rather than skipping periods. Returns only goals
+ * whose anchor moves and/or get funded.
  */
 export function planAutoAllocations(
   goals: GoalLike[],
@@ -84,7 +83,8 @@ export function planAutoAllocations(
     })
     .filter(x => x.periods >= 1);
 
-  eligible.sort((a, b) => rankKey(a.g) - rankKey(b.g) || a.g.anchor - b.g.anchor);
+  eligible.sort((a, b) =>
+    fundTagRank(a.g.priority) - fundTagRank(b.g.priority) || rankKey(a.g) - rankKey(b.g) || a.g.anchor - b.g.anchor);
 
   let cashLeft = Math.max(0, availableCash);
   const out: AutoAllocation[] = [];
@@ -101,7 +101,7 @@ export function planAutoAllocations(
   return out;
 }
 
-// --- Overspend raid (protect high-priority goals) ------------------------
+// --- Overspend raid (protect emergency goals, then need, before want) ----
 
 export type RaidGoal = {
   id: string; priority: Priority; locked: number; sort_order?: number;
@@ -110,26 +110,36 @@ export type RaidGoal = {
 };
 export type GoalRaid = { goalId: string; amount: number };
 
+/** `want` goals are raided before `need`; `emergency` is filtered out entirely, above. */
+const raidTagRank = (p: Priority) => (p === 'want' ? 0 : 1);
+
 /**
- * Cover a cash overspend by pulling money out of the lowest-priority *unlocked*
- * goals first, until the `deficit` is covered (or goals run dry). Locked,
- * completed and higher-priority goals are protected; investments are never
- * touched. Pure.
+ * Cover a cash overspend by pulling money out of goals, until the `deficit` is
+ * covered (or goals run dry). Three protections, in order:
+ *
+ * 1. `priority === 'emergency'` is never raid-eligible at all — stronger than
+ *    `locked`, which stays an independent, user-togglable override any goal
+ *    (of any tag) can also set.
+ * 2. Among the rest, `want` goals are raided before `need` — the coarse
+ *    protect-order the tag exists for.
+ * 3. Within a tag, `sort_order` (drag rank) breaks ties, mirroring funding
+ *    order in reverse — see the tie-break note below.
+ *
+ * Completed goals are never touched either way (they're the reward the whole
+ * feature exists to produce), and investments are never touched. Pure.
  */
 export function planOverspendRaid(goals: RaidGoal[], saved: Record<string, number>, deficit: number): GoalRaid[] {
   if (deficit <= 0) return [];
   const order = goals
-    // A finished goal is the one thing a raid must not touch: it is the reward the
-    // whole feature exists to produce, and taking money back out silently un-finishes
-    // it. The filter checked `locked` and `saved > 0` but never `saved >= target`.
-    .filter(g => g.locked !== 1 && (saved[g.id] ?? 0) > 0 && (saved[g.id] ?? 0) < g.target)
-    // Raiding is the mirror of funding, so ties must break the *opposite* way.
-    // Before anyone drags, every goal has `sort_order = 0` (INTEGER NOT NULL
-    // DEFAULT 0), so every comparison tied and a stable sort left both orders
-    // identical to the input — making the newest goal funded first *and* raided
-    // first. Reversing the index on a tie restores the mirror without a drag.
+    .filter(g => g.priority !== 'emergency' && g.locked !== 1 && (saved[g.id] ?? 0) > 0 && (saved[g.id] ?? 0) < g.target)
+    // Within a tag, raiding is the mirror of funding, so ties must break the
+    // *opposite* way. Before anyone drags, every goal has `sort_order = 0`
+    // (INTEGER NOT NULL DEFAULT 0), so every comparison tied and a stable sort
+    // left both orders identical to the input — making the newest goal funded
+    // first *and* raided first. Reversing the index on a tie restores the
+    // mirror without a drag.
     .map((g, i) => ({ g, i }))
-    .sort((a, b) => (rankKey(b.g) - rankKey(a.g)) || (b.i - a.i))
+    .sort((a, b) => (raidTagRank(a.g.priority) - raidTagRank(b.g.priority)) || (rankKey(b.g) - rankKey(a.g)) || (b.i - a.i))
     .map(x => x.g);
 
   let left = deficit;

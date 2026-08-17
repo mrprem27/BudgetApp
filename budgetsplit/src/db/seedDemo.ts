@@ -306,46 +306,48 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   });
 
   // --- Savings: goals funded directly from cash (funded / reached / empty / deadline / w-draw)
-  const emergency = await insertGoal(db, { name: 'Emergency Fund', target: R(100000), priority: 'high', icon: 'shield', color: '#0EA5E9', allocation: R(5000), frequency: 'monthly', locked: true });
-  await fundGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked
-  const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'medium', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
+  // `priority` (emergency/need/want) is a real protect-from-raid tag now, so these
+  // values are chosen to demonstrate all three list sections, not just flavor text.
+  const emergency = await insertGoal(db, { name: 'Emergency Fund', target: R(100000), priority: 'emergency', icon: 'shield', color: '#0EA5E9', allocation: R(5000), frequency: 'monthly', locked: true });
+  await fundGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked AND emergency-tagged
+  const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'want', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
   await fundGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
-  const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'medium', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
+  const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'need', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
   await fundGoal(db, laptop.id, R(15000), 'manual');                              // partial
-  const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'low', icon: 'globe', color: '#34D399', allocation: R(3000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
+  const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'want', icon: 'globe', color: '#34D399', allocation: R(3000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
   await fundGoal(db, vacation.id, R(4000), 'manual');
   await fundGoal(db, vacation.id, R(1000), 'auto');                                // auto-funded slice
   await withdrawFromGoal(db, vacation.id, R(2000), 'Changed plans');                    // withdrawal history → net ₹3,000
-  const gift = await insertGoal(db, { name: 'Anniversary Gift', target: R(5000), priority: 'medium', icon: 'gift', color: '#F9A8D4' });
+  const gift = await insertGoal(db, { name: 'Anniversary Gift', target: R(5000), priority: 'want', icon: 'gift', color: '#F9A8D4' });
   await fundGoal(db, gift.id, R(6000), 'manual');                                  // OVER-funded (120%) edge case
-  const overdue = await insertGoal(db, { name: 'Tax Payment', target: R(40000), priority: 'high', icon: 'percent', color: '#FCD34D', target_date: Date.now() - 10 * 86400000 });
+  const overdue = await insertGoal(db, { name: 'Tax Payment', target: R(40000), priority: 'need', icon: 'percent', color: '#FCD34D', target_date: Date.now() - 10 * 86400000 });
   await fundGoal(db, overdue.id, R(20000), 'manual');                              // 50% funded, deadline PAST → overdue edge case
   // PRIMED FLOW: 97.5% funded → add just ₹500 to hit 100% and fire GoalCelebration.
-  const almost = await insertGoal(db, { name: 'Weekend Getaway', target: R(20000), priority: 'medium', icon: 'map', color: '#2DD4BF' });
+  const almost = await insertGoal(db, { name: 'Weekend Getaway', target: R(20000), priority: 'want', icon: 'map', color: '#2DD4BF' });
   await fundGoal(db, almost.id, R(19500), 'manual');
-  const phone = await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'low', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
+  const phone = await insertGoal(db, { name: 'New Phone', target: R(60000), priority: 'want', icon: 'smartphone', color: '#38BDF8' }); // 0% funded
 
   /*
-   * Set the funding order explicitly.
+   * Set the drag rank within each priority tag explicitly.
    *
-   * The `priority: high|medium|low` above is decoration — nothing reads it. Order
-   * is `sort_order`, and `insertGoal` appends, so the demo's stated intent
-   * ("Emergency Fund is high, Europe Vacation is low") did not match the order the
-   * engine would actually fund or raid in: the overdue Tax Payment sat sixth and a
-   * low-priority vacation sat fourth.
-   *
-   * Written through `reorderGoals` rather than by hand, so the demo exercises the
-   * same total-permutation write a user's drag does. Funded first → raided last.
+   * Funding/raiding is tag-first now (emergency → need → want; want raided
+   * before need; emergency never raided — see `savingsEngine.ts`), and
+   * `sort_order` only breaks ties *within* a tag. `insertGoal` appends, so
+   * without this the intended within-tag order (overdue tax before a
+   * half-funded laptop; the reached trip before a barely-started phone) would
+   * just be creation order. Written through `reorderGoals` rather than by
+   * hand, so the demo exercises the same total-permutation write a user's
+   * drag does.
    */
   await reorderGoals(db, [
-    emergency.id,  // locked, high — must never be raided first
-    overdue.id,    // deadline already past
-    trip.id,       // deadline in 60 days
-    almost.id,     // one tap from completion
-    laptop.id,
-    gift.id,
-    vacation.id,   // distant deadline
-    phone.id,      // untouched, lowest — the first thing an overspend takes
+    emergency.id, // only emergency-tagged goal — order among peers is moot
+    overdue.id,   // need: deadline already past, funds before the laptop
+    laptop.id,    // need
+    trip.id,      // want: reached — funds/raids first among want goals
+    almost.id,    // want: one tap from completion
+    gift.id,      // want
+    vacation.id,  // want: distant deadline
+    phone.id,     // want: untouched — the first thing an overspend takes
   ]);
 
   // --- Uncategorized: a co-member (Aarav) used a category that ISN'T in your

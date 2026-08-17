@@ -69,7 +69,7 @@ export function generateInsights(
     const pct = Math.round((g.saved / g.target) * 100);
 
     if (pct >= 70) {
-      cands.push({ icon: 'trending-up', tone: 'progress', goalId: g.id, score: 62 + (g.priority === 'high' ? 12 : 0), text: `You're closer than you think — only ${fmt(g.remaining)} left on your ${g.name} goal.` });
+      cands.push({ icon: 'trending-up', tone: 'progress', goalId: g.id, score: 62 + (g.priority === 'emergency' ? 12 : 0), text: `You're closer than you think — only ${fmt(g.remaining)} left on your ${g.name} goal.` });
     } else if (pct >= 35) {
       cands.push({ icon: 'zap', tone: 'achieve', goalId: g.id, score: 36, text: `You're ${pct}% of the way to your ${g.name} goal — keep going.` });
     }

@@ -4,7 +4,7 @@ const z = () => 0; // deterministic: no jitter
 
 const goal = (over: Partial<InsightContext['goals'][0]> = {}) => ({
   id: 'g1', name: 'Headphones', saved: 0, target: 10000, remaining: 10000,
-  priority: 'high' as const, allocation: 0, frequency: 'none' as const, ...over,
+  priority: 'emergency' as const, allocation: 0, frequency: 'none' as const, ...over,
 });
 
 describe('generateInsights', () => {
@@ -39,7 +39,7 @@ describe('generateInsights', () => {
     const ctx: InsightContext = {
       goals: [
         goal({ id: 'a', name: 'Phone', saved: 8000, target: 10000, remaining: 2000 }),
-        goal({ id: 'b', name: 'Trip', saved: 1000, target: 50000, remaining: 49000, priority: 'low' }),
+        goal({ id: 'b', name: 'Trip', saved: 1000, target: 50000, remaining: 49000, priority: 'want' }),
       ],
       spend: [{ category: 'Coffee', amount: 6000 }, { category: 'Shopping', amount: 4000 }],
     };
@@ -56,9 +56,9 @@ describe('generateInsights', () => {
 describe('generateInsights is stable across refreshes', () => {
   const ctx: InsightContext = {
     goals: [
-      { id: 'a', name: 'Laptop', target: 100000, saved: 75000, remaining: 25000, allocation: 5000, frequency: 'monthly', priority: 'high' },
-      { id: 'b', name: 'Trip', target: 200000, saved: 20000, remaining: 180000, allocation: 4000, frequency: 'monthly', priority: 'medium' },
-      { id: 'c', name: 'Phone', target: 60000, saved: 60000, remaining: 0, allocation: 0, frequency: 'none', priority: 'low' },
+      { id: 'a', name: 'Laptop', target: 100000, saved: 75000, remaining: 25000, allocation: 5000, frequency: 'monthly', priority: 'emergency' },
+      { id: 'b', name: 'Trip', target: 200000, saved: 20000, remaining: 180000, allocation: 4000, frequency: 'monthly', priority: 'need' },
+      { id: 'c', name: 'Phone', target: 60000, saved: 60000, remaining: 0, allocation: 0, frequency: 'none', priority: 'want' },
     ] as InsightContext['goals'],
     spend: [
       { category: 'Food', amount: 30000 },

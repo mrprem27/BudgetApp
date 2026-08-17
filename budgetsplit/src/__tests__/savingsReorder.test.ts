@@ -16,7 +16,7 @@ async function seed() {
     await db.runAsync(
       `INSERT INTO savings_goal (id, name, target, priority, allocation, frequency, locked, is_archived, sort_order, created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, id, 100000, 'medium', 0, 'none', 0, 0, order, created],
+      [id, id, 100000, 'need', 0, 'none', 0, 0, order, created],
     );
   }
   return db;

@@ -1,4 +1,4 @@
-import type { Priority, SavingsFrequency } from '../db/queries/savings';
+import type { SavingsFrequency } from '../db/queries/savings';
 
 export type GoalProgress = { saved: number; target: number; remaining: number; pct: number; rawPct: number; over: number; done: boolean };
 
@@ -46,8 +46,6 @@ export function monthlyContribution(allocation: number, frequency: SavingsFreque
     default: return 0;
   }
 }
-
-export const PRIORITY_RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 const MS_PER_MONTH = 30 * 86400000;
 

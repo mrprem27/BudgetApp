@@ -15,11 +15,17 @@ import { GoalCelebration } from '../../src/components/finance/GoalCelebration';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { TabPills } from '../../src/components/ui/TabPills';
 import { LockExplainerSheet } from '../../src/components/finance/plan/LockExplainerSheet';
 import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
+import { PRIORITY, PRIORITY_LABEL } from '../../src/constants/enums';
 
-import type { SavingsTxn, SavingsFrequency } from '../../src/db/queries/savings';
+import type { SavingsTxn, SavingsFrequency, Priority } from '../../src/db/queries/savings';
+
+// Order matches funding/raid weight: Emergency funds first & is never raided;
+// Want funds last & is raided first. See src/lib/savingsEngine.ts.
+const PRIORITY_TABS = PRIORITY.map(p => ({ key: p, label: PRIORITY_LABEL[p] }));
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useSavingsGoalScreen } from '../../src/hooks/useSavingsGoalScreen';
 import { alpha } from '../../src/theme';
@@ -58,7 +64,8 @@ export default function GoalDetailScreen() {
     handleAdd, handleWithdraw,
     showAdjust, setShowAdjust, adjustName, setAdjustName,
     adjustTarget, setAdjustTarget, adjustAlloc, setAdjustAlloc,
-    adjustFreq, setAdjustFreq, adjustDate, setAdjustDate, adjustSaving,
+    adjustFreq, setAdjustFreq, adjustDate, setAdjustDate,
+    adjustPriority, setAdjustPriority, adjustSaving,
     openAdjust, handleAdjust,
     celebrate, setCelebrate, toggleLock, confirmDelete,
     showLockExplainer, setShowLockExplainer, confirmLockExplainer,
@@ -293,6 +300,16 @@ export default function GoalDetailScreen() {
           placeholderTextColor={colors.textMuted}
           accessibilityLabel="Target amount"
         />
+        {/* Protect-from-raid tag, not the funding order — that's still drag
+            order within the section this goal lands in. */}
+        <Text style={styles.adjLabel}>Priority</Text>
+        <TabPills
+          tabs={PRIORITY_TABS}
+          active={adjustPriority}
+          onChange={(k) => setAdjustPriority(k as Priority)}
+          size="sm"
+        />
+
         <Text style={styles.adjLabel}>Auto-save per period (optional)</Text>
         <TextInput
           style={styles.adjInput}

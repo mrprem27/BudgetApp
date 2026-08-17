@@ -231,9 +231,20 @@ export type BudgetPeriod = typeof BUDGET_PERIOD[number];
 
 // --- Savings -------------------------------------------------------------
 
-/** `savings_goal.priority CHECK(priority IN ('high','medium','low'))`. */
-export const PRIORITY = ['high', 'medium', 'low'] as const;
+/**
+ * `savings_goal.priority CHECK(priority IN ('emergency','need','want'))`.
+ * A protect-from-raid tag, not a funding order — that's `sort_order`
+ * (drag rank). `emergency` goals are never raid-eligible; `want` is raided
+ * before `need`. See `planOverspendRaid` in `src/lib/savingsEngine.ts`.
+ */
+export const PRIORITY = ['emergency', 'need', 'want'] as const;
 export type Priority = typeof PRIORITY[number];
+
+export const PRIORITY_LABEL: Record<Priority, string> = {
+  emergency: 'Emergency',
+  need: 'Need',
+  want: 'Want',
+};
 
 /** `savings_goal.frequency CHECK(... IN ('daily','weekly','monthly','yearly','none'))`. */
 export const SAVINGS_FREQUENCY = ['daily', 'weekly', 'monthly', 'yearly', 'none'] as const;

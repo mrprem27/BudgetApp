@@ -40,7 +40,7 @@ export function useSavingsTab() {
   const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
-  const [priority, setPriority] = useState<Priority>('medium');
+  const [priority, setPriority] = useState<Priority>('need');
   const [icon, setIcon] = useState(GOAL_ICONS[0]);
   const [color, setColor] = useState(GOAL_COLORS[0]);
   const [allocation, setAllocation] = useState('');
@@ -147,7 +147,7 @@ export function useSavingsTab() {
   }
 
   function resetNew() {
-    setName(''); setTarget(''); setPriority('medium'); setIcon(GOAL_ICONS[0]);
+    setName(''); setTarget(''); setPriority('need'); setIcon(GOAL_ICONS[0]);
     setColor(GOAL_COLORS[0]); setAllocation(''); setFrequency('none'); setNewDate(null);
   }
 
