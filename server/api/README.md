@@ -132,8 +132,11 @@ npx wrangler login
 npx wrangler d1 create budgetsplit-api
 npx wrangler d1 migrations apply budgetsplit-api --remote
 
-# 2. R2 — private bucket, holds backups/ and avatars/
-npx wrangler r2 bucket create budgetsplit-files
+# 2. Blob storage — KV needs no card and no dashboard opt-in, so it is the
+#    default. (R2 is better and takes over automatically once bound, but it must
+#    be enabled from the dashboard first, which can ask for a payment method.)
+npx wrangler kv namespace create BLOBS      # paste the id into wrangler.toml
+# optional, later: npx wrangler r2 bucket create budgetsplit-files
 
 # 3. Email — sign up at brevo.com (free: 300/day, no card), verify ONE sender
 #    address by clicking the link they email you (a Gmail address is fine —
@@ -146,8 +149,22 @@ curl https://budgetsplit-api.<your-subdomain>.workers.dev/health
 # → {"ok":true,"mail":"brevo"}   ← "none" means email is not configured yet
 ```
 
-`/health` reports which provider is live on purpose: a deploy that cannot send
-should be visible from a curl, not from a user's failed sign-in.
+`/health` reports which provider and which store are live on purpose: a deploy
+that cannot send, or cannot keep a backup, should be visible from a curl rather
+than from a user's failed sign-in.
+
+### Storage: KV by default, R2 when available
+
+`storage.ts` prefers R2 and falls back to KV, so the same code runs either way.
+The only difference that leaks out is the size cap — KV stops at 25 MiB per
+value, R2 does not — and `POST /backups` reads that from the live backend rather
+than a constant, so an oversized backup is refused *before* the upload rather
+than discovered after it. KV's other free-plan limits (1 GB total, 1k writes/day)
+are far beyond a personal ledger's needs; a rows-only backup is tens of KB.
+
+If neither is bound, backup and avatar routes answer `503
+E_STORAGE_UNCONFIGURED` and everything else — sign-in, profile, linking — works
+untouched.
 
 ### Switching to Cloudflare Email Sending later
 

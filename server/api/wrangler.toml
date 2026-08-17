@@ -34,6 +34,16 @@ database_id = "a493fbe0-3515-4b9a-ba7c-dd2d72bc4bd8"
 # binding = "FILES"
 # bucket_name = "budgetsplit-files"
 
+# --- KV: the no-card blob store (backups + avatars) ---
+# Used only when R2 above is absent. KV is on the Workers Free plan with no
+# payment method and no dashboard opt-in, which is the entire reason it is here:
+# 1 GB total, 25 MiB per value, 1k writes/day. `storage.ts` prefers R2 when both
+# are bound, so enabling R2 later needs no code change.
+# Created with: wrangler kv namespace create BLOBS
+[[kv_namespaces]]
+binding = "BLOBS"
+id = "2c65354286c243cd958320b83a88c538"
+
 # --- Email: magic-link delivery ---
 # DEFAULT (free): an HTTP provider, no domain and no card required.
 #   1. Sign up at brevo.com (free tier: 300 emails/day)

@@ -53,6 +53,7 @@ import {
   type UserRow,
 } from './types';
 import { mailProvider, sendMail } from './mailer';
+import { storage } from './storage';
 
 const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at';
 
@@ -95,7 +96,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     // `mail` is included so a deploy that can't actually send is visible from a
     // curl rather than from a user's failed sign-in.
     return method === 'GET'
-      ? json({ ok: true, mail: mailProvider(env), storage: env.FILES ? 'r2' : 'none' })
+      ? json({ ok: true, mail: mailProvider(env), storage: storage(env)?.kind ?? 'none' })
       : methodNotAllowed('GET');
   }
 
@@ -359,8 +360,9 @@ async function patchMe(request: Request, env: Env, url: URL): Promise<Response> 
       if (!/^https:\/\//i.test(value)) return badRequest('avatarUrl must be an absolute https URL, or null');
     }
     // Clearing (or replacing with an external URL) orphans our own R2 object.
-    if (env.FILES && auth.user.avatar_url && isAvatarKey(auth.user.avatar_url) && value !== auth.user.avatar_url) {
-      await env.FILES.delete(auth.user.avatar_url);
+    const files = storage(env);
+    if (files && auth.user.avatar_url && isAvatarKey(auth.user.avatar_url) && value !== auth.user.avatar_url) {
+      await files.delete(auth.user.avatar_url);
     }
     sets.push('avatar_url = ?');
     binds.push(value);
@@ -386,7 +388,7 @@ async function patchMe(request: Request, env: Env, url: URL): Promise<Response> 
 async function putAvatar(request: Request, env: Env, url: URL): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
-  const files = env.FILES;
+  const files = storage(env);
   if (!files) return noStorage();
 
   const declaredType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
@@ -416,7 +418,7 @@ async function putAvatar(request: Request, env: Env, url: URL): Promise<Response
   }
 
   const key = avatarKey(auth.user.id);
-  await files.put(key, bytes, { httpMetadata: { contentType } });
+  await files.put(key, bytes, contentType);
   await env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(key, auth.user.id).run();
   return json({ user: toUserDto({ ...auth.user, avatar_url: key }, url.origin) });
 }
@@ -436,7 +438,7 @@ function decodeBase64(value: string): Uint8Array | null {
 async function getAvatar(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
-  const files = env.FILES;
+  const files = storage(env);
   if (!files) return noStorage();
   const stored = auth.user.avatar_url;
   if (!stored || !isAvatarKey(stored)) return notFound('No uploaded avatar');
@@ -445,7 +447,7 @@ async function getAvatar(request: Request, env: Env): Promise<Response> {
   if (!object) return notFound('No uploaded avatar');
   return new Response(object.body, {
     headers: {
-      'content-type': object.httpMetadata?.contentType ?? 'application/octet-stream',
+      'content-type': object.contentType,
       // The key is stable across replacements, so a cached copy would go stale
       // the moment the user changes their picture.
       'cache-control': 'no-cache',
@@ -672,23 +674,27 @@ async function deleteLink(request: Request, env: Env, id: string): Promise<Respo
 async function createBackup(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
-  const files = env.FILES;
+  const files = storage(env);
   if (!files) return noStorage();
 
+  // The cap is whatever THIS deployment's backend accepts, not a constant: KV
+  // stops at 25 MiB where R2 keeps going, and discovering that *after* a
+  // successful upload would be the worst possible moment to learn it.
+  const limit = Math.min(MAX_BACKUP_BYTES, files.maxBytes);
   const declared = Number(request.headers.get('content-length') ?? '');
-  if (Number.isFinite(declared) && declared > MAX_BACKUP_BYTES) {
-    return payloadTooLarge(`Backup is larger than ${MAX_BACKUP_BYTES} bytes`);
+  if (Number.isFinite(declared) && declared > limit) {
+    return payloadTooLarge(`Backup is larger than ${limit} bytes`);
   }
   const bytes = await request.arrayBuffer();
   if (bytes.byteLength === 0) return badRequest('Empty backup body');
-  if (bytes.byteLength > MAX_BACKUP_BYTES) {
-    return payloadTooLarge(`Backup is larger than ${MAX_BACKUP_BYTES} bytes`);
+  if (bytes.byteLength > limit) {
+    return payloadTooLarge(`Backup is larger than ${limit} bytes`);
   }
 
   const id = newId();
   const createdAt = Date.now();
   const key = `backups/${auth.user.id}/${createdAt}-${id}.enc`;
-  await files.put(key, bytes, { httpMetadata: { contentType: 'application/octet-stream' } });
+  await files.put(key, bytes, 'application/octet-stream');
   // R2 first, then D1: an object with no row is invisible dead storage the prune
   // below will never see, but a row with no object is a restore that 404s at the
   // worst possible moment. Prefer the leak.
@@ -712,7 +718,7 @@ async function pruneOldBackups(env: Env, userId: string): Promise<number> {
   const rows = stale.results ?? [];
   if (rows.length === 0) return 0;
 
-  await env.FILES?.delete(rows.map(r => r.r2_key));
+  await storage(env)?.delete(rows.map(r => r.r2_key));
   await env.DB.prepare(
     `DELETE FROM backups WHERE id IN (${rows.map(() => '?').join(',')})`,
   ).bind(...rows.map(r => r.id)).run();
@@ -731,7 +737,7 @@ async function listBackups(request: Request, env: Env): Promise<Response> {
 async function downloadBackup(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
-  const files = env.FILES;
+  const files = storage(env);
   if (!files) return noStorage();
   const row = await ownedBackup(env, auth, id);
   if (!row) return notFound('No such backup');
@@ -755,7 +761,7 @@ async function deleteBackup(request: Request, env: Env, id: string): Promise<Res
   const row = await ownedBackup(env, auth, id);
   if (!row) return notFound('No such backup');
 
-  await env.FILES?.delete(row.r2_key);
+  await storage(env)?.delete(row.r2_key);
   await env.DB.prepare('DELETE FROM backups WHERE id = ?').bind(row.id).run();
   return json({ ok: true });
 }

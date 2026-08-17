@@ -15,8 +15,15 @@ export interface Env {
    * exist, so a first deploy may not have it — and sign-in and linking need no
    * storage whatsoever. The routes that do need it answer 503 with a message
    * naming the fix, rather than the whole Worker refusing to deploy.
+   *
+   * Preferred when present; `BLOBS` (KV) is the no-card fallback. See `storage.ts`.
    */
   FILES?: R2Bucket;
+  /**
+   * KV fallback for the same blobs. Part of the Workers free plan with no
+   * payment method and no dashboard opt-in, which is exactly why it exists here.
+   */
+  BLOBS?: KVNamespace;
   /**
    * Cloudflare Email Sending. **Optional** — the binding requires Workers Paid,
    * so a free deployment has no `[[send_email]]` block at all and uses
