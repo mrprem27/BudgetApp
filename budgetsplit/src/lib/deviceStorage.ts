@@ -113,16 +113,6 @@ export function clearExportCache(): number {
   return removed;
 }
 
-/**
- * The pdf.js runtime, downloaded once so Paytm PDF statements can be parsed on-device
- * (`pdfjsCache.ts`). Roughly 2 MB, in Documents rather than the cache — so it survives a
- * cache purge on purpose, and the Storage screen reports it separately rather than letting
- * it inflate the receipts figure.
- */
-export function getPdfjsStorage(): DirUsage {
-  return dirUsage(new Directory(Paths.document, 'pdfjs'));
-}
-
 /** Profile photos for you and your friends (`avatar.ts`). Small, but real. */
 export function getAvatarStorage(): DirUsage {
   return dirUsage(new Directory(Paths.document, 'avatars'));

@@ -69,6 +69,12 @@ export class File {
     return state.entries.find(e => e.name === this.name)?.content ?? '';
   }
 
+  /** Same content as `text()`, base64-encoded — what `serverApi.uploadAvatar`
+   *  sends, since React Native's fetch has no dependable binary body. */
+  async base64(): Promise<string> {
+    return Buffer.from(await this.text(), 'utf8').toString('base64');
+  }
+
   delete(): void {
     if (state.undeletable.has(this.name)) throw new Error('locked');
     state.entries = state.entries.filter(e => e.name !== this.name);

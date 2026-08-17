@@ -16,7 +16,7 @@ import { haptic } from '../../src/lib/haptics';
 import { getAttachmentStorage, clearAllAttachmentFiles } from '../../src/lib/attachment';
 import { clearAllAttachmentRefs } from '../../src/db/queries/transactions';
 import {
-  freeBytes, totalBytes, getCacheStorage, getPdfjsStorage, getAvatarStorage, clearExportCache,
+  freeBytes, totalBytes, getCacheStorage, getAvatarStorage, clearExportCache,
 } from '../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, storageAdvice, formatBytes, allowsAttachments } from '../../src/lib/storage';
 
@@ -41,7 +41,6 @@ export default function StorageSettingsScreen() {
     total: totalBytes(),
     receipts: getAttachmentStorage(),
     cache: getCacheStorage(),
-    pdfjs: getPdfjsStorage(),
     avatars: getAvatarStorage(),
   }), []);
 
@@ -51,9 +50,8 @@ export default function StorageSettingsScreen() {
   const advice = storageAdvice(verdict);
   const receipts = data?.receipts ?? { count: 0, bytes: 0 };
   const cache = data?.cache ?? { count: 0, bytes: 0 };
-  const pdfjs = data?.pdfjs ?? { count: 0, bytes: 0 };
   const avatars = data?.avatars ?? { count: 0, bytes: 0 };
-  const appTotal = receipts.bytes + cache.bytes + pdfjs.bytes + avatars.bytes;
+  const appTotal = receipts.bytes + cache.bytes + avatars.bytes;
 
   const tint = verdict === StorageVerdict.Ample ? colors.accent
     : verdict === StorageVerdict.Low ? colors.textSecondary
@@ -157,13 +155,6 @@ export default function StorageSettingsScreen() {
               title="Cached exports"
               subtitle="Copies made for sharing and importing"
               value={formatBytes(cache.bytes)}
-            />
-            <Divider indent="text" />
-            <ListRow
-              icon="file-text" iconColor={colors.textSecondary}
-              title="PDF statement reader"
-              subtitle={pdfjs.count === 0 ? 'Not downloaded' : 'Downloaded once, reused'}
-              value={formatBytes(pdfjs.bytes)}
             />
             <Divider indent="text" />
             <ListRow

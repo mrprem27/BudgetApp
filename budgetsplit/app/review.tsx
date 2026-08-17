@@ -513,7 +513,11 @@ export default function ReviewScreen() {
       {!loading && (narrowed || activeView) && pending.length > 0 && (
         <Banner
           icon={activeView ? 'bookmark' : focusActive ? 'crosshair' : 'filter'}
-          text={`${activeView ? activeView.name : focusActive ? 'Focus' : 'Filtered'} · ${visibleRows.length} of ${pending.length}${activePayerName ? ` · paid by ${activePayerName}` : ''}`}
+          text={activeView ? activeView.name : focusActive ? 'Focus' : 'Filtered'}
+          // Kept out of `text` on purpose — appended into one string, a long
+          // saved-view name pushes exactly this off the end, which is the one
+          // thing being scanned. Same fix as the review source tabs' `badge`.
+          badge={`${visibleRows.length} of ${pending.length}${activePayerName ? ` · paid by ${activePayerName}` : ''}`}
           actionLabel="Show all"
           onAction={exitFocus}
         />

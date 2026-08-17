@@ -12,12 +12,15 @@ import { AmountCalculatorSheet } from './AmountCalculatorSheet';
 import { VoiceEntrySheet } from './VoiceEntrySheet';
 import { DatePickerSheet } from '../../ui/DatePickerSheet';
 import { TimePickerSheet } from '../../ui/TimePickerSheet';
+import { UpiUriSheet } from '../UpiUriSheet';
+import { RequestQrSheet } from '../RequestQrSheet';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 
 /** Which overlay is open. One at a time — they're all modal. */
 export type QuickAddSheet =
   | 'split' | 'payers' | 'date' | 'endDate' | 'destination'
-  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | 'voice' | null;
+  | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | 'voice'
+  | 'upiUri' | 'requestQr' | null;
 
 type Form = ReturnType<typeof useAddTxnForm>;
 
@@ -196,6 +199,27 @@ export function QuickAddSheets({
           }
           onCloseTransferSlot();
         }}
+      />
+
+      {/* Moved out of TransferBody, which used to mount these from its own local
+          state — breaking the one-overlay-at-a-time invariant this file exists
+          to enforce. No `opts`: settling up has no code to scan, which is what
+          decides where a blocked app lands. Passing nothing here is the same
+          as what `pay` passes. */}
+      <UpiUriSheet
+        visible={open === 'upiUri'}
+        onClose={onClose}
+        request={f.transferPayee}
+        apps={f.transferHandoff.apps}
+      />
+
+      <RequestQrSheet
+        visible={open === 'requestQr'}
+        onClose={onClose}
+        vpa={f.me?.upi_vpa ?? null}
+        name={f.me?.name}
+        amountPaise={f.total}
+        payerName={f.transferFrom && f.transferFrom.id !== f.me?.id ? f.transferFrom.name.split(' ')[0] : undefined}
       />
     </>
   );

@@ -1,23 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, Alert, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout } from '../tokens';
-import { MemberAvatar } from './MemberAvatar';
-import { PayMethodSelector } from './PayMethodSelector';
-import { formatRupees } from '../../lib/money';
-import { buildUpiUri, buildUpiRequestUri } from '../../lib/upiIntent';
-import { RequestQrSheet } from './RequestQrSheet';
-import { UpiUriSheet } from './UpiUriSheet';
-import { useUpiHandoff, handoffVerb } from '../../hooks/useUpiHandoff';
-import { haptic } from '../../lib/haptics';
-import type { Person } from '../../db/queries/persons';
-import type { TransferScopes } from '../../lib/settleScope';
-import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../constants/enums';
-import type { PayMethod } from '../../constants/enums';
-import { alpha } from '../../theme';
+import { colors, type, space, radius, layout } from '../../tokens';
+import { MemberAvatar } from '../MemberAvatar';
+import { PayMethodSelector } from '../PayMethodSelector';
+import { formatRupees } from '../../../lib/money';
+import { handoffVerb, type UpiHandoff } from '../../../hooks/useUpiHandoff';
+import type { UpiRequest } from '../../../lib/upiIntent';
+import { haptic } from '../../../lib/haptics';
+import type { Person } from '../../../db/queries/persons';
+import type { TransferScopes } from '../../../lib/settleScope';
+import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../../constants/enums';
+import type { PayMethod } from '../../../constants/enums';
+import { alpha } from '../../../theme';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, ReduceMotion } from 'react-native-reanimated';
-import { PressableScale } from '../ui/PressableScale';
-import { useFeatureFlags } from '../system/FeatureFlagsProvider';
+import { PressableScale } from '../../ui/PressableScale';
 
 type Props = {
   me: Person | null;
@@ -36,13 +33,24 @@ type Props = {
   onNote: (t: string) => void;
   /** Amount being settled, in paise — drives the UPI handoff. */
   amountPaise?: number;
+  /** Computed by `useAddTxnForm` (`transferPayee`/`transferHandoff`/etc.) —
+   *  shared with `QuickAddSheets`, which mounts the two sheets below, so
+   *  neither this component nor that one duplicates the UPI logic. */
+  payee: UpiRequest | null;
+  handoff: UpiHandoff;
+  canPay: boolean;
+  canRequest: boolean;
+  onOpenUpiUri: () => void;
+  onOpenRequestQr: () => void;
 };
 
 /** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient.
  *  The transfer reason is a real 'transfer' category picked via the shared
  *  category pill in Quick Add (same UI as Expense/Income). */
-export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, payMethod, onPayMethod, note, onNote, amountPaise = 0 }: Props) {
-  const { flags } = useFeatureFlags();
+export function TransferBody({
+  me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, payMethod, onPayMethod, note, onNote,
+  amountPaise = 0, payee, handoff, canPay, canRequest, onOpenUpiUri, onOpenRequestQr,
+}: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
   const nameOf = (p: Person | null, fallback: string) => p ? (p.id === me?.id ? 'You' : p.name.split(' ')[0]) : fallback;
@@ -92,47 +100,9 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
     }
   }
 
-  // Only when we know who is being paid, have their handle, and have an amount.
-  // No VPA → no button, and settling behaves exactly as it did before.
-  const payee = flags.upiSettle && to && to.id !== me?.id && to.upi_vpa && amountPaise > 0
-    // Settling up with a friend is always person-to-person, so no `tr` — see UpiRequest.
-    ? { vpa: to.upi_vpa, name: to.name, amountPaise, note: note || 'BudgetSplit settle up', kind: 'person' as const }
-    : null;
-  // Every hand-off rule — the Android/iOS split, the remembered app, the picker —
-  // lives in the hook, so this path and Scan & Pay cannot drift apart again.
-  const handoff = useUpiHandoff(
-    'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here — or record this settlement manually.',
-  );
-  // A malformed VPA yields no URI at all, so there is nothing to offer.
-  const canPay = !!payee && !!buildUpiUri(payee);
-
   function payViaUpi() {
     if (payee) handoff.pay(payee);
   }
-
-  /**
-   * The other direction, which had no affordance at all.
-   *
-   * `payee` above requires `to.id !== me.id`, so when the money is owed *to* you this
-   * block rendered nothing — the one case the hand-off could never serve, since we
-   * cannot reach into someone else's phone to open their UPI app.
-   *
-   * A QR does reach it, and better than an intent would: the payer's own camera starts
-   * the payment inside their own app, so there is no external intent for PhonePe or
-   * Paytm to refuse. See `RequestQrSheet`.
-   *
-   * Needs your handle set — Settings › Getting paid. Deliberately hidden rather than
-   * shown-then-explained: the escape from here would be a route change out of a
-   * half-filled wizard, which costs more than the row is worth.
-   */
-  const canRequest = flags.upiSettle
-    && !!me?.upi_vpa
-    && to?.id === me.id
-    && !!from && from.id !== me.id
-    && amountPaise > 0
-    && !!buildUpiRequestUri(me.upi_vpa, me.name, amountPaise);
-  const [showRequest, setShowRequest] = React.useState(false);
-  const [showUris, setShowUris] = React.useState(false);
 
   return (
     <View style={styles.wrap}>
@@ -209,7 +179,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
             // Long-press reveals the exact URIs, and lets a blocked app be handed a payment
             // deliberately — see UpiUriSheet. Settling up is where a P2P route actually gets
             // tested, so the sheet has to be reachable from here and not only from Scan & Pay.
-            onLongPress={() => setShowUris(true)}
+            onLongPress={onOpenUpiUri}
             accessibilityRole="button"
             accessibilityLabel={`Pay ${formatRupees(amountPaise)} to ${nameOf(to, 'them')} via UPI`}
           >
@@ -248,7 +218,7 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
           <Text style={styles.label}>GET PAID</Text>
           <TouchableOpacity
             style={styles.upiBtn}
-            onPress={() => setShowRequest(true)}
+            onPress={onOpenRequestQr}
             accessibilityRole="button"
             accessibilityLabel={`Show a QR code for ${nameOf(from, 'them')} to scan and pay ${formatRupees(amountPaise)}`}
           >
@@ -260,24 +230,6 @@ export function TransferBody({ me, persons, fromId, toId, onPickSlot, onSwap, sc
           <Text style={styles.upiHint}>They scan it from their phone. Save here to record it.</Text>
         </>
       )}
-
-      {/* No `opts`: settling up has no code to scan, which is what decides where a blocked
-          app lands. Passing nothing here is the same as what `pay` passes. */}
-      <UpiUriSheet
-        visible={showUris}
-        onClose={() => setShowUris(false)}
-        request={payee}
-        apps={handoff.apps}
-      />
-
-      <RequestQrSheet
-        visible={showRequest}
-        onClose={() => setShowRequest(false)}
-        vpa={me?.upi_vpa ?? null}
-        name={me?.name}
-        amountPaise={amountPaise}
-        payerName={from && from.id !== me?.id ? from.name.split(' ')[0] : undefined}
-      />
 
       <Text style={styles.label}>NOTES</Text>
       <TextInput

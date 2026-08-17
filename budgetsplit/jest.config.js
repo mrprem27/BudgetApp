@@ -19,10 +19,17 @@ module.exports = {
     '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo/virtual/env$': '<rootDir>/src/__tests__/__mocks__/expoVirtualEnv.js',
     '^expo-image-picker$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    // Ships ESM `import` syntax this config doesn't transform. Real SHA-256
+    // (via Node's crypto), not an empty stub — see the mock's own comment.
+    '^expo-crypto$': '<rootDir>/src/__tests__/__mocks__/expoCrypto.js',
     // Ships untransformed ESM; needs a real (empty) glyphMap, see the mock.
     '^@expo/vector-icons$': '<rootDir>/src/__tests__/__mocks__/vectorIcons.js',
     // Real in-memory implementation (not an empty stub) so the AsyncStorage-backed
     // settings stores can be tested for their get/set/default behaviour.
     '^@react-native-async-storage/async-storage$': '<rootDir>/src/__tests__/__mocks__/asyncStorage.js',
+    // Same reasoning as AsyncStorage: `serverApi`'s session handling is only
+    // testable if the keychain genuinely round-trips.
+    '^expo-secure-store$': '<rootDir>/src/__tests__/__mocks__/expoSecureStore.js',
+    '^expo-device$': '<rootDir>/src/__tests__/__mocks__/expoDevice.js',
   },
 };

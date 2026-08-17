@@ -17,7 +17,7 @@ import { Screen } from '../../src/components/ui/Screen';
 import { ModalHeader } from '../../src/components/ui/ModalHeader';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
-import { TransferBody } from '../../src/components/finance/TransferBody';
+import { TransferBody } from '../../src/components/finance/add/TransferBody';
 import { AmountField } from '../../src/components/finance/add/AmountField';
 import { CategoryDatePills } from '../../src/components/finance/add/CategoryDatePills';
 import { Input } from '../../src/components/ui/Input';
@@ -194,13 +194,15 @@ export default function QuickAddScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           {!isEditing && !isRecurEdit && (
-            <TabPills
-              tabs={tabs}
-              active={kind}
-              onChange={(k) => f.onSelectKind(k as typeof kind)}
-              activeColor={accent}
-              size="lg"
-            />
+            <View style={styles.formBlock}>
+              <TabPills
+                tabs={tabs}
+                active={kind}
+                onChange={(k) => f.onSelectKind(k as typeof kind)}
+                activeColor={accent}
+                size="lg"
+              />
+            </View>
           )}
 
           {/* One context pill for both kinds — an expense's destination and a
@@ -208,18 +210,20 @@ export default function QuickAddScreen() {
               belong in the same place. Transfer used to ask it again further down the
               form with its own chip row. */}
           {kind === 'expense' && (
-            <ContextPill
-              icon={asFeather(f.selectedGroup?.icon, 'layers')}
-              label={f.selectedGroup?.name ?? 'Personal'}
-              detail={
-                f.members.length > 1
-                  ? `${f.members.length} people · ${SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase()}`
-                  : 'just you'
-              }
-              tint={f.selectedGroup?.color ?? accent}
-              onPress={() => open('destination')}
-              accessibilityLabel={`Goes to ${f.selectedGroup?.name ?? 'Personal'}. Change`}
-            />
+            <View style={styles.formBlock}>
+              <ContextPill
+                icon={asFeather(f.selectedGroup?.icon, 'layers')}
+                label={f.selectedGroup?.name ?? 'Personal'}
+                detail={
+                  f.members.length > 1
+                    ? `${f.members.length} people · ${SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase()}`
+                    : 'just you'
+                }
+                tint={f.selectedGroup?.color ?? accent}
+                onPress={() => open('destination')}
+                accessibilityLabel={`Goes to ${f.selectedGroup?.name ?? 'Personal'}. Change`}
+              />
+            </View>
           )}
 
           {/* Always rendered, unlike before. `computeTransferScopes` only runs once BOTH people
@@ -228,16 +232,18 @@ export default function QuickAddScreen() {
               already the default (`useAddTxnForm`), so there was a real value going unshown.
               The amount fills in once the scopes arrive. */}
           {kind === 'transfer' && (
-            <ContextPill
-              icon={f.transferScope === TRANSFER_SCOPE_ALL ? 'layers' : 'users'}
-              label={f.transferScope === TRANSFER_SCOPE_ALL
-                ? 'All groups'
-                : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.name ?? 'Group'}
-              detail={scopeDetail}
-              tint={accent}
-              onPress={() => open('scope')}
-              accessibilityLabel="Choose what you're settling"
-            />
+            <View style={styles.formBlock}>
+              <ContextPill
+                icon={f.transferScope === TRANSFER_SCOPE_ALL ? 'layers' : 'users'}
+                label={f.transferScope === TRANSFER_SCOPE_ALL
+                  ? 'All groups'
+                  : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.name ?? 'Group'}
+                detail={scopeDetail}
+                tint={accent}
+                onPress={() => open('scope')}
+                accessibilityLabel="Choose what you're settling"
+              />
+            </View>
           )}
 
           {/* Dictate and adjust live as icon discs under the amount (`AmountField`), not as
@@ -245,24 +251,28 @@ export default function QuickAddScreen() {
               every kind including transfer; it is withheld only while editing, where
               re-dictating would silently overwrite fields you came here to change. Not on the
               tab-bar FAB long-press either: `(tabs)/_layout.tsx:135` already binds that. */}
-          <AmountField
-            amountText={f.amountText}
-            onChangeText={f.setAmountText}
-            kind={kind}
-            autoFocus={!isEditing}
-            transferScopeBal={f.transferScopeBal}
-            onOpenCalculator={() => open('calc')}
-            onOpenVoice={!isEditing && !isRecurEdit && flags.voiceEntry ? () => open('voice') : undefined}
-          />
+          <View style={styles.formBlock}>
+            <AmountField
+              amountText={f.amountText}
+              onChangeText={f.setAmountText}
+              kind={kind}
+              autoFocus={!isEditing}
+              transferScopeBal={f.transferScopeBal}
+              onOpenCalculator={() => open('calc')}
+              onOpenVoice={!isEditing && !isRecurEdit && flags.voiceEntry ? () => open('voice') : undefined}
+            />
+          </View>
 
-          <CategoryDatePills
-            kind={kind}
-            accent={accent}
-            selectedCategory={f.selectedCategory}
-            onCategory={() => { Keyboard.dismiss(); setShowCatPicker(true); }}
-            txnDate={f.txnDate}
-            onDate={() => open('date')}
-          />
+          <View style={styles.formBlock}>
+            <CategoryDatePills
+              kind={kind}
+              accent={accent}
+              selectedCategory={f.selectedCategory}
+              onCategory={() => { Keyboard.dismiss(); setShowCatPicker(true); }}
+              txnDate={f.txnDate}
+              onDate={() => open('date')}
+            />
+          </View>
 
           <CategoryPicker
             categories={f.categories}
@@ -284,21 +294,29 @@ export default function QuickAddScreen() {
           />
 
           {kind === 'transfer' && (
-            <TransferBody
-              me={f.me}
-              persons={f.allPersons}
-              fromId={f.transferFromId}
-              toId={f.transferToId}
-              onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
-              onSwap={() => { f.setTransferFromId(f.transferToId); f.setTransferToId(f.transferFromId); }}
-              scopes={f.transferScopes}
-              scope={f.transferScope}
-              payMethod={f.payMethod}
-              onPayMethod={f.setPayMethod}
-              note={f.transferNote}
-              onNote={f.setTransferNote}
-              amountPaise={f.total}
-            />
+            <View style={styles.formBlock}>
+              <TransferBody
+                me={f.me}
+                persons={f.allPersons}
+                fromId={f.transferFromId}
+                toId={f.transferToId}
+                onPickSlot={(slot) => { Keyboard.dismiss(); setTransferSlot(slot); }}
+                onSwap={() => { f.setTransferFromId(f.transferToId); f.setTransferToId(f.transferFromId); }}
+                scopes={f.transferScopes}
+                scope={f.transferScope}
+                payMethod={f.payMethod}
+                onPayMethod={f.setPayMethod}
+                note={f.transferNote}
+                onNote={f.setTransferNote}
+                amountPaise={f.total}
+                payee={f.transferPayee}
+                handoff={f.transferHandoff}
+                canPay={f.canPayTransferUpi}
+                canRequest={f.canRequestTransferQr}
+                onOpenUpiUri={() => open('upiUri')}
+                onOpenRequestQr={() => open('requestQr')}
+              />
+            </View>
           )}
 
           {kind !== 'transfer' && (
@@ -307,41 +325,47 @@ export default function QuickAddScreen() {
                   Note. `ui/Input` rather than a bespoke card input, so this field and the
                   Note sheet share one surface — they used to be `bgCard` here and
                   `bgInput` there, two looks for one value — and so it gets a focus ring. */}
-              <Input
-                value={flags.smartCategory ? f.title : f.note}
-                onChangeText={flags.smartCategory ? f.onTitleChange : f.setNote}
-                icon="edit-3"
-                placeholder={flags.smartCategory
-                  ? (kind === 'income' ? 'e.g. Salary, Freelance, Dividend' : 'e.g. Uber, Groceries, Netflix')
-                  : (kind === 'income' ? 'Source (optional)' : 'Note (optional)')}
-                maxLength={80}
-                autoCapitalize="sentences"
-                accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
-              />
+              <View style={styles.formBlock}>
+                <Input
+                  value={flags.smartCategory ? f.title : f.note}
+                  onChangeText={flags.smartCategory ? f.onTitleChange : f.setNote}
+                  icon="edit-3"
+                  placeholder={flags.smartCategory
+                    ? (kind === 'income' ? 'e.g. Salary, Freelance, Dividend' : 'e.g. Uber, Groceries, Netflix')
+                    : (kind === 'income' ? 'Source (optional)' : 'Note (optional)')}
+                  maxLength={80}
+                  autoCapitalize="sentences"
+                  accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
+                />
+              </View>
 
               {kind === 'expense' && nudgeColor != null && f.nudgeRemaining != null && f.selectedCategory && (
-                <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} afford={f.affordResult} />
+                <View style={styles.formBlock}>
+                  <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} afford={f.affordResult} />
+                </View>
               )}
 
               {/* Split is core to a shared expense, so it sits above the optional
                   details — it used to render below the "More options" accordion,
                   which pushed it off-screen the moment that was expanded. */}
               {kind === 'expense' && f.members.length > 1 && f.total > 0 && (
-                <SplitSummary
-                  members={f.members}
-                  splitMembers={f.splitMembers}
-                  splitType={f.splitType}
-                  total={f.total}
-                  payments={f.payments}
-                  meId={f.me?.id}
-                  accent={accent}
-                  onOpenSplit={() => open('split')}
-                  onOpenPayers={() => open('payers')}
-                />
+                <View style={styles.formBlock}>
+                  <SplitSummary
+                    members={f.members}
+                    splitMembers={f.splitMembers}
+                    splitType={f.splitType}
+                    total={f.total}
+                    payments={f.payments}
+                    meId={f.me?.id}
+                    accent={accent}
+                    onOpenSplit={() => open('split')}
+                    onOpenPayers={() => open('payers')}
+                  />
+                </View>
               )}
 
               {kind === 'expense' && f.total > 0 && (f.paymentRemainder !== 0 || f.remainder !== 0) && (
-                <Text style={styles.remainderWarning}>
+                <Text style={[styles.remainderWarning, styles.formBlock]}>
                   {f.paymentRemainder !== 0
                     ? f.paymentRemainder > 0 ? `${formatRupees(f.paymentRemainder)} left to assign payers` : `${formatRupees(-f.paymentRemainder)} over-assigned to payers`
                     : f.remainder > 0 ? `${formatRupees(f.remainder)} unassigned` : `${formatRupees(-f.remainder)} over-assigned`}
@@ -408,6 +432,10 @@ export default function QuickAddScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   save: { ...type.button },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.md },
+  // No container `gap` — a block that renders its own top margin (e.g.
+  // SplitSummary's header) would silently stack with it (AGENTS.md §3/§12).
+  // Each block gets its own `formBlock` margin instead.
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.md },
+  formBlock: { marginBottom: space.md },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
 });

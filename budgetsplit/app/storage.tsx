@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../src/constants/colors';
@@ -31,6 +31,14 @@ export default function StorageScreen() {
   const { refresh } = useDataRefresh();
   const { setFlag } = useFeatureFlags();
   const [busy, setBusy] = useState(false);
+
+  // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
+  // is already __DEV__-gated, but this screen can replace or erase a user's entire
+  // dataset (loadDemoData/resetToEmpty below), so a stray deep link or old muscle
+  // memory must not reach it in a release/TestFlight build either.
+  useFocusEffect(useCallback(() => {
+    if (!__DEV__) router.back();
+  }, [router]));
 
   // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
   // imports/deletes made elsewhere. getAttachmentStorage is sync; db is unused here.

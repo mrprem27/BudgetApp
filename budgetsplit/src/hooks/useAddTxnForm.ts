@@ -26,6 +26,8 @@ import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useStore } from '../store';
 import { useLocationCapture } from './useLocationCapture';
+import { useUpiHandoff } from './useUpiHandoff';
+import { buildUpiUri, buildUpiRequestUri } from '../lib/upiIntent';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
@@ -228,6 +230,38 @@ export function useAddTxnForm(params: AddTxnParams) {
   const transferScopeBal = transferScope === TRANSFER_SCOPE_ALL
     ? (transferScopes?.all.amount ?? 0)
     : (transferScopes?.groups.find(g => g.groupId === transferScope)?.amount ?? 0);
+
+  /**
+   * UPI hand-off for the Transfer flow. Lifted here (out of `TransferBody`) so
+   * both it and `QuickAddSheets` — siblings under `quick.tsx`, neither the
+   * other's parent — can read the same `payee`/`handoff` once `TransferBody`
+   * no longer mounts `UpiUriSheet`/`RequestQrSheet` itself.
+   */
+  const transferFrom = allPersons.find(p => p.id === transferFromId) ?? null;
+  const transferTo = allPersons.find(p => p.id === transferToId) ?? null;
+  // Only when we know who is being paid, have their handle, and have an amount.
+  // No VPA → no button, and settling behaves exactly as it did before.
+  const transferPayee = flags.upiSettle && transferTo && transferTo.id !== me?.id && transferTo.upi_vpa && total > 0
+    // Settling up with a friend is always person-to-person, so no `tr` — see UpiRequest.
+    ? { vpa: transferTo.upi_vpa, name: transferTo.name, amountPaise: total, note: transferNote || 'BudgetSplit settle up', kind: 'person' as const }
+    : null;
+  // Every hand-off rule — the Android/iOS split, the remembered app, the picker —
+  // lives in the hook, so this path and Scan & Pay cannot drift apart again.
+  const transferHandoff = useUpiHandoff(
+    'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here — or record this settlement manually.',
+  );
+  // A malformed VPA yields no URI at all, so there is nothing to offer.
+  const canPayTransferUpi = !!transferPayee && !!buildUpiUri(transferPayee);
+  // The other direction: money owed *to* you. Needs your handle set — Settings
+  // › Getting paid. A QR reaches it better than an intent would: the payer's
+  // own camera starts the payment inside their own app, so there is no
+  // external intent for PhonePe/Paytm to refuse.
+  const canRequestTransferQr = flags.upiSettle
+    && !!me?.upi_vpa
+    && transferTo?.id === me?.id
+    && !!transferFrom && transferFrom.id !== me.id
+    && total > 0
+    && !!buildUpiRequestUri(me.upi_vpa, me.name, total);
 
   // Shared with voice capture (`lib/voiceDrain`) so a dictated transaction and a typed one
   // compose the same stored note.
@@ -590,6 +624,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     // transfer
     allPersons, personNet, transferFromId, setTransferFromId, transferToId, setTransferToId,
     transferScope, setTransferScope, transferScopes, transferNote, setTransferNote, transferScopeBal,
+    transferFrom, transferTo, transferPayee, transferHandoff, canPayTransferUpi, canRequestTransferQr,
     payMethod, setPayMethod,
     // recurring
     recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,

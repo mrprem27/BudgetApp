@@ -8,6 +8,13 @@ type Props = {
   icon: keyof typeof Feather.glyphMap;
   /** The message. Truncates to one line — a banner is a status, not a paragraph. */
   text: string;
+  /**
+   * A short, fixed trailing fact that must survive `text` truncating — a count,
+   * "N of M", "paid by X". Same reasoning as `TabPills`' `badge` prop: appended
+   * into `text` itself, a long value at the end is exactly what gets cut when
+   * the label runs long, and the count/fact is usually the thing being scanned.
+   */
+  badge?: string;
   /** Trailing text action ("Show all", "Review"). */
   actionLabel?: string;
   onAction?: () => void;
@@ -36,18 +43,19 @@ type Props = {
  * to be the same number, so the two strips stacked on one screen only *looked*
  * consistent by coincidence.
  */
-export function Banner({ icon, text, actionLabel, onAction, onDismiss, onPress, tone = colors.accent, inset = true }: Props) {
+export function Banner({ icon, text, badge, actionLabel, onAction, onDismiss, onPress, tone = colors.accent, inset = true }: Props) {
   const body = (
     <>
       <Feather name={icon} size={14} color={tone} />
       <Text style={styles.text} numberOfLines={1}>{text}</Text>
+      {badge && <Text style={styles.badge} numberOfLines={1}>{badge}</Text>}
     </>
   );
 
   return (
     <View style={[styles.banner, !inset && styles.flush, { borderColor: alpha(tone, 33) }]}>
       {onPress ? (
-        <TouchableOpacity style={styles.pressBody} onPress={onPress} accessibilityRole="button" accessibilityLabel={text}>
+        <TouchableOpacity style={styles.pressBody} onPress={onPress} accessibilityRole="button" accessibilityLabel={badge ? `${text}, ${badge}` : text}>
           {body}
         </TouchableOpacity>
       ) : body}
@@ -82,5 +90,7 @@ const styles = StyleSheet.create({
   flush: { marginHorizontal: 0 },
   pressBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm },
   text: { ...type.labelSemi, color: colors.textPrimary, flex: 1 },
+  // Not `flex` — this is the part that must never shrink or truncate away.
+  badge: { ...type.labelSemi, color: colors.textPrimary, flexShrink: 0 },
   action: { ...type.labelSemi },
 });
