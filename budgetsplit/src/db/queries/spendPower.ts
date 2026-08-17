@@ -5,11 +5,12 @@ import { expandUpcoming } from '../../lib/upcoming';
 import { myShareOf } from '../../lib/splitMath';
 import { monthlyContribution } from '../../lib/savings';
 import { getCashPosition, getGoals, getGoalSavedMap } from './savings';
-import { getAllGroups } from './groups';
+import { getAllGroups, personalGroupOf } from './groups';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
-import { getTransactionsInRange } from './transactions';
+import { getTransactionsInRange, insertTxn } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
+import { PayMethod } from '../../constants/enums';
 
 export type GoalFundingStatus = {
   /** Monthly goal-funding commitment across active, uncompleted goals (paise). */
@@ -92,5 +93,33 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
     upcomingBills,
     goalRemaining: funding.remaining,
     netIOwe: exposure.owe,
+  });
+}
+
+/**
+ * Log a card-bill payment: ONE settlement row in the personal ledger with
+ * `pay_method = 'card'` — the marker `computeCash`/`CASH_TOTALS_SQL` read to
+ * move the same amount out of cash (settledOut) AND off the card debt
+ * (cardSpend goes down). Shows in the ledger like any transfer, is excluded
+ * from spend analysis like any settlement, and finally gives `creditUsed` a
+ * way down between Plan edits. The full accounts model stays future work; this
+ * row is designed to survive it (it is just a settlement with a pay method).
+ */
+export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number, note?: string): Promise<string> {
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('Card payment needs a positive amount');
+  const me = await getMe(db);
+  if (!me) throw new Error('No current user');
+  const personal = personalGroupOf(await getAllGroups(db));
+  if (!personal) throw new Error('No personal group');
+  return insertTxn(db, {
+    groupId: personal.id,
+    kind: 'settlement',
+    entryMode: 'quick',
+    date: Date.now(),
+    category: 'Repayment',
+    note: note ?? 'Card bill payment',
+    payMethod: PayMethod.Card,
+    payments: [{ personId: me.id, amount: amountPaise }],
+    shares: [],
   });
 }

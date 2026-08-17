@@ -405,7 +405,7 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
   // any Plan edit re-based the window and erased the card spend it was measuring.
   const profile = await getMoneyProfile(db);
   const [row, savedTotal] = await Promise.all([
-    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, me.id, me.id, Date.now()]),
+    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, profile.cardBaselineAt ?? 0, me.id, me.id, Date.now()]),
     getTotalSaved(db),
   ]);
   const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };

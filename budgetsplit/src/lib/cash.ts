@@ -88,7 +88,16 @@ export function computeCash(
         paidExpenses += pay;                                   // cash out the moment you paid
       }
     }
-    else if (t.kind === 'settlement') { settledOut += pay; settledIn += share; }
+    else if (t.kind === 'settlement') {
+      settledOut += pay; settledIn += share;
+      // A card-bill payment (settlement with pay_method 'card'): the cash left
+      // via settledOut above, and the same amount comes off the card debt —
+      // creditUsed's one way down between Plan edits. Baseline-bounded exactly
+      // like card spend: rows at/before the stated balance are already in it.
+      if (t.pay_method === PayMethod.Card && (cardBaselineMs == null || (t.date ?? 0) > cardBaselineMs)) {
+        cardSpend -= pay;
+      }
+    }
   }
   return cashPositionFromTotals({ income, paidExpenses, settledOut, settledIn, cardSpend }, savings, openingCash);
 }
@@ -132,11 +141,13 @@ export function computeTotalMoney(cash: CashPosition, profile: MoneyProfile): To
   // and nothing has to be mutated on every write. Clamped to the limit because a
   // stale baseline plus new spend could otherwise exceed it.
   //
-  // Repayment is NOT modelled: the app has no concept of paying a card bill, so this
-  // figure only grows between Plan edits. Re-entering the balance is the reset.
+  // `cardSpend` is a NET delta: card purchases add, card-bill payments subtract
+  // (see cash.ts settlement branch / CASH_TOTALS_SQL), so it may legitimately be
+  // negative — a repayment larger than post-baseline spend brings the stated
+  // balance itself down. The outer clamp keeps the result at ≥ 0.
   const creditUsed = Math.min(
     creditLimit > 0 ? creditLimit : Number.MAX_SAFE_INTEGER,
-    Math.max(0, profile.creditUsed) + Math.max(0, cash.cardSpend ?? 0),
+    Math.max(0, Math.max(0, profile.creditUsed) + (cash.cardSpend ?? 0)),
   );
   const creditAvailable = Math.max(0, creditLimit - creditUsed);
   const yourMoney = cashAvailable + investments;

@@ -28,7 +28,7 @@ const MONTH = 30 * 24 * 60 * 60 * 1000;
  * figures with no bank feed, so a staleness badge is the difference between an
  * honest snapshot and a confident-looking number nobody's touched in months.
  */
-export function TotalMoneyCard({ money, updatedAt, onEdit }: { money: TotalMoney; updatedAt?: number | null; onEdit: () => void }) {
+export function TotalMoneyCard({ money, updatedAt, onEdit, onPayCardBill }: { money: TotalMoney; updatedAt?: number | null; onEdit: () => void; onPayCardBill?: () => void }) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
   // <7d: no badge (don't clutter a freshly-edited card). 7-30d: neutral. >30d
@@ -62,6 +62,14 @@ export function TotalMoneyCard({ money, updatedAt, onEdit }: { money: TotalMoney
       {/* Headroom, deliberately outside both figures. */}
       <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
       <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
+
+      {/* Card debt has a real way down now — not just re-typing the balance. */}
+      {money.creditUsed > 0 && onPayCardBill && (
+        <PressableScale style={styles.payBillBtn} onPress={onPayCardBill} accessibilityLabel="Pay card bill">
+          <Feather name="corner-up-left" size={14} color={colors.accent} />
+          <Text style={styles.payBillText}>Paid your card bill? Log it</Text>
+        </PressableScale>
+      )}
     </PressableScale>
   );
 }
@@ -99,4 +107,6 @@ const styles = StyleSheet.create({
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3, paddingLeft: space.md },
   subLabel: { ...type.caption, color: colors.textMuted },
   subValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
+  payBillBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, paddingVertical: space.smd, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent, minHeight: 44 },
+  payBillText: { ...type.labelSemi, color: colors.accent },
 });

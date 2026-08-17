@@ -112,6 +112,32 @@ describe('computeTotalMoney', () => {
     expect(tm.creditAvailable).toBe(10000);
     expect(tm.total).toBe(8000); // -2000 + 0 investments + 10000 credit
   });
+
+  // Card repayment end-to-end: the settlement-with-card row lowers creditUsed
+  // through the same baseline-delta model, and cash leaves via settledOut.
+  it('a card-bill payment brings creditUsed down between Plan edits', () => {
+    const txns = [
+      { kind: 'expense',    pay_method: 'card', date: 10, payments: [{ personId: ME, amount: 10000 }], shares: [{ personId: ME, amount: 10000 }] },
+      { kind: 'settlement', pay_method: 'card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
+    ];
+    const pos = computeCash(txns, ME, 0, 50000);
+    const tm = computeTotalMoney(pos, profile({ creditLimit: 100000, creditUsed: 0 }));
+    expect(tm.creditUsed).toBe(4000);          // 10000 spent − 6000 repaid
+    expect(pos.available).toBe(50000 - 6000);  // only the repayment moved cash
+  });
+
+  it('a repayment larger than post-baseline spend reduces the stated balance itself', () => {
+    const txns = [
+      { kind: 'settlement', pay_method: 'card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
+    ];
+    const pos = computeCash(txns, ME, 0, 50000);
+    // Stated balance ₹80 minus ₹60 repayment → ₹20 left on the card.
+    const tm = computeTotalMoney(pos, profile({ creditLimit: 100000, creditUsed: 8000 }));
+    expect(tm.creditUsed).toBe(2000);
+    // And it can never go below zero, however large the repayment.
+    const over = computeTotalMoney(pos, profile({ creditLimit: 100000, creditUsed: 1000 }));
+    expect(over.creditUsed).toBe(0);
+  });
 });
 
 describe('computeCash — card spend is debt, not cash', () => {

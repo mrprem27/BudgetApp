@@ -27,6 +27,7 @@ import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { GoalCard } from '../../src/components/finance/plan/GoalCard';
 import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard';
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
+import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
@@ -93,6 +94,7 @@ export default function SavingsScreen() {
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
+    showPayCardBill, setShowPayCardBill, handlePayCardBill,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
@@ -128,7 +130,7 @@ export default function SavingsScreen() {
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Total Money — cash + investments + available credit, with breakdown */}
-        {money && <TotalMoneyCard money={money} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} />}
+        {money && <TotalMoneyCard money={money} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} onPayCardBill={() => setShowPayCardBill(true)} />}
 
         {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
             money during app boot and tell you afterwards. */}
@@ -275,6 +277,13 @@ export default function SavingsScreen() {
         // the number above it is how you talk someone into saving a stale figure.
         initial={{ ...profile, creditUsed: money?.creditUsed ?? profile.creditUsed }}
         onSave={handleSaveMoney}
+      />
+
+      <PayCardBillSheet
+        visible={showPayCardBill}
+        onClose={() => setShowPayCardBill(false)}
+        creditUsed={money?.creditUsed ?? 0}
+        onPay={handlePayCardBill}
       />
 
       {/* Fund a goal directly from cash */}

@@ -44,9 +44,9 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
 }
 
 function sqlTotals(db: DatabaseSync, meId: string, cutoff: number, cardBaseline = 0): CashTotals {
-  // Bind order follows the `?` positions in the SQL text: the card-baseline filter
-  // lives in the SELECT, so it binds first.
-  const row = db.prepare(CASH_TOTALS_SQL).get(cardBaseline, meId, meId, cutoff) as Record<string, number>;
+  // Bind order follows the `?` positions in the SQL text: the two card-baseline
+  // filters (spend, repayment) live in the SELECT, so they bind first.
+  const row = db.prepare(CASH_TOTALS_SQL).get(cardBaseline, cardBaseline, meId, meId, cutoff) as Record<string, number>;
   return {
     income: Number(row.income),
     paidExpenses: Number(row.paidExpenses),
@@ -123,6 +123,31 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
     assertParity(fx, 0, 0, 500);
     const after = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 500), 0, 0);
     expect(after.cardSpend).toBe(3000);
+  });
+
+  // Card repayment: a settlement with pay_method 'card' takes cash out AND the
+  // same amount off card debt — creditUsed's one way down between Plan edits.
+  it('a card-bill settlement lowers card debt and cash together', () => {
+    const fx: Fixture[] = [
+      { id: 'e1', kind: 'expense',    is_deleted: 0, recur_freq: null, date: 500, pay_method: 'card', payments: [{ person: ME, amount: 10000 }], shares: [{ person: ME, amount: 10000 }] },
+      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 800, pay_method: 'card', payments: [{ person: ME, amount: 6000 }], shares: [] },
+    ];
+    assertParity(fx, 0, 0);
+    const pos = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 0), 0, 0);
+    expect(pos.cardSpend).toBe(4000);       // 10000 spent − 6000 repaid
+    expect(pos.settledOut).toBe(6000);      // the cash genuinely left
+    expect(pos.available).toBe(-6000);      // only the repayment moved cash
+  });
+
+  it('honours the baseline cutoff for repayments exactly like spend', () => {
+    const fx: Fixture[] = [
+      { id: 'p0', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'card', payments: [{ person: ME, amount: 2000 }], shares: [] },
+      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 900, pay_method: 'card', payments: [{ person: ME, amount: 3000 }], shares: [] },
+    ];
+    // Baseline at 500: the earlier repayment is already inside the stated balance.
+    assertParity(fx, 0, 0, 500);
+    const pos = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 500), 0, 0);
+    expect(pos.cardSpend).toBe(-3000);
   });
 
   it('handles empty data', () => {

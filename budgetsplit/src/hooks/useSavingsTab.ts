@@ -10,6 +10,7 @@ import {
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../db/queries/savings';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
+import { payCardBill } from '../db/queries/spendPower';
 import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import type { MoneyProfile } from '../lib/cash';
@@ -34,6 +35,7 @@ export function useSavingsTab() {
   const [applied, setApplied] = useState<OverspendRaid | null>(null);
 
   const [showMoneyEditor, setShowMoneyEditor] = useState(false);
+  const [showPayCardBill, setShowPayCardBill] = useState(false);
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
   const [fundAmt, setFundAmt] = useState('');
 
@@ -93,6 +95,14 @@ export function useSavingsTab() {
     await setMoneyProfile(db, p);
     haptic.success();
     setShowMoneyEditor(false);
+    await reload();
+    refresh();
+  }
+
+  async function handlePayCardBill(amountPaise: number) {
+    await payCardBill(db, amountPaise);
+    haptic.success();
+    setShowPayCardBill(false);
     await reload();
     refresh();
   }
@@ -179,6 +189,7 @@ export function useSavingsTab() {
     overspend, setOverspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     // money editor
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
+    showPayCardBill, setShowPayCardBill, handlePayCardBill,
     // fund a goal
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     // new-goal form
