@@ -1,4 +1,3 @@
-import * as SecureStore from 'expo-secure-store';
 import * as Device from 'expo-device';
 import { File } from 'expo-file-system';
 
@@ -18,6 +17,43 @@ import { File } from 'expo-file-system';
  */
 
 const SESSION_KEY = 'budgetsplit.session.v1';
+
+type SecureStoreModule = {
+  getItemAsync(key: string): Promise<string | null>;
+  setItemAsync(key: string, value: string): Promise<void>;
+  deleteItemAsync(key: string): Promise<void>;
+};
+
+/**
+ * `expo-secure-store` is a **native** module, and this file is imported by a
+ * route — which expo-router loads eagerly at startup. A top-level
+ * `import * as SecureStore` therefore meant that a JS bundle running on a native
+ * build without the module (an OTA update ahead of its binary, or a stale dev
+ * client) **crashed the whole app on launch**, not just the account screen:
+ *
+ *     Error: Cannot find native module 'ExpoSecureStore'
+ *
+ * A local-first app must not die because an optional feature's dependency is
+ * absent. Required lazily and cached, so a missing module degrades to "no
+ * account UI" — which is exactly what an unconfigured build already looks like.
+ *
+ * `undefined` = not yet attempted, `null` = attempted and unavailable.
+ */
+let secureStore: SecureStoreModule | null | undefined;
+
+function keychain(): SecureStoreModule | null {
+  if (secureStore !== undefined) return secureStore;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    secureStore = require('expo-secure-store') as SecureStoreModule;
+  } catch {
+    secureStore = null;
+  }
+  return secureStore;
+}
+
+/** The session has nowhere safe to live, so the account layer stays off. */
+export const secureStorageAvailable = (): boolean => keychain() !== null;
 
 export type ServerUser = {
   id: string;
@@ -79,14 +115,21 @@ export function serverBaseUrl(): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/** Gate every piece of account UI on this — an unconfigured build shows none of it. */
-export const serverConfigured = (): boolean => serverBaseUrl() !== null;
+/**
+ * Gate every piece of account UI on this — an unconfigured build shows none of
+ * it, and neither does a build whose native keychain module is missing. The
+ * second half matters: without somewhere to keep a bearer token, offering
+ * sign-in would be offering something that cannot work.
+ */
+export const serverConfigured = (): boolean => serverBaseUrl() !== null && secureStorageAvailable();
 
 // --- Session storage ------------------------------------------------------
 
 export async function getStoredSession(): Promise<ServerSession | null> {
+  const store = keychain();
+  if (!store) return null;
   try {
-    const raw = await SecureStore.getItemAsync(SESSION_KEY);
+    const raw = await store.getItemAsync(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ServerSession>;
     if (typeof parsed.token !== 'string' || !parsed.token || !parsed.user) return null;
@@ -99,11 +142,15 @@ export async function getStoredSession(): Promise<ServerSession | null> {
 }
 
 async function storeSession(session: ServerSession): Promise<void> {
-  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
+  const store = keychain();
+  // Refuse loudly rather than hold a credential in memory only: a "signed in"
+  // state that evaporates on the next launch is worse than not signing in.
+  if (!store) throw new ServerNotConfiguredError();
+  await store.setItemAsync(SESSION_KEY, JSON.stringify(session));
 }
 
 async function clearSession(): Promise<void> {
-  try { await SecureStore.deleteItemAsync(SESSION_KEY); } catch { /* already gone */ }
+  try { await keychain()?.deleteItemAsync(SESSION_KEY); } catch { /* already gone */ }
 }
 
 // --- Transport ------------------------------------------------------------

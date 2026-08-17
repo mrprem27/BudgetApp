@@ -299,3 +299,45 @@ describe('linking', () => {
     await expect(listPendingClaims()).resolves.toEqual([]);
   });
 });
+
+describe('a missing native keychain module', () => {
+  /**
+   * The crash this guards against: `expo-secure-store` is native, this module is
+   * imported by a route, and expo-router loads every route at startup — so on a
+   * binary without the module, `Cannot find native module 'ExpoSecureStore'`
+   * took down the whole app at launch. An optional account feature must never be
+   * able to do that to a local-first app.
+   */
+  const loadWithoutKeychain = () => {
+    jest.resetModules();
+    jest.doMock('expo-secure-store', () => { throw new Error("Cannot find native module 'ExpoSecureStore'"); });
+    jest.doMock('expo-file-system', () => require('./__mocks__/expoFileSystem'));
+    return require('../lib/serverApi') as typeof import('../lib/serverApi');
+  };
+
+  afterEach(() => { jest.resetModules(); });
+
+  it('imports without throwing', () => {
+    expect(() => loadWithoutKeychain()).not.toThrow();
+  });
+
+  it('reports itself unconfigured, so no account UI is offered', () => {
+    const api = loadWithoutKeychain();
+    expect(api.secureStorageAvailable()).toBe(false);
+    // The URL is set — it is the keychain alone that turns the feature off.
+    expect(api.serverBaseUrl()).toBe(BASE);
+    expect(api.serverConfigured()).toBe(false);
+  });
+
+  it('reads as signed out rather than throwing', async () => {
+    await expect(loadWithoutKeychain().getStoredSession()).resolves.toBeNull();
+  });
+
+  it('refuses to complete a sign-in it could not persist', async () => {
+    const api = loadWithoutKeychain();
+    mockFetch({ body: { sessionToken: 'tok-123', user: USER } });
+    // Better than appearing signed in until the next launch, which is what
+    // holding the token in memory only would have produced.
+    await expect(api.verifyMagicLink('a'.repeat(32))).rejects.toBeInstanceOf(api.ServerNotConfiguredError);
+  });
+});
