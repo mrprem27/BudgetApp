@@ -18,8 +18,11 @@
  *     ₹-heavy day like rent can't blow up the estimate); past ~K days the live
  *     run-rate dominates.
  *
- * Floored at `spentSoFar` (a month can't end below what's already spent). All
- * amounts are integer paise.
+ * Floored at `spentSoFar + committedRemaining` — a month can't end below what's
+ * already spent plus the recurring bills KNOWN to be still due this month (the
+ * statistical line used to ignore the ₹22,000 rent rule due on the 28th unless
+ * last month's rent happened to be inside the prior). All amounts are integer
+ * paise.
  */
 
 export type ForecastBasis = 'insufficient' | 'run-rate' | 'blended';
@@ -45,7 +48,11 @@ export function forecastMonthEnd(
   dayOfMonth: number,
   daysInMonth: number,
   priorMonthTotal = 0,
+  /** My-share sum of recurring occurrences still due before month-end
+   *  (`expandUpcoming`). A floor, not a second model: known bills are facts. */
+  committedRemaining = 0,
 ): Forecast {
+  const committed = Number.isFinite(committedRemaining) ? Math.max(0, committedRemaining) : 0;
   if (
     !Number.isFinite(spentSoFar) ||
     !Number.isFinite(dayOfMonth) ||
@@ -54,7 +61,7 @@ export function forecastMonthEnd(
     dayOfMonth > daysInMonth ||
     spentSoFar <= 0
   ) {
-    return { ready: false, projected: Math.max(0, Math.round(spentSoFar) || 0), basis: 'insufficient', credibility: 0 };
+    return { ready: false, projected: Math.max(0, Math.round(spentSoFar) || 0) + committed, basis: 'insufficient', credibility: 0 };
   }
 
   const runRate = (spentSoFar / dayOfMonth) * daysInMonth;
@@ -72,7 +79,8 @@ export function forecastMonthEnd(
     basis = 'run-rate';
   }
 
-  projected = Math.max(projected, spentSoFar); // can't end below what's already spent
+  // Can't end below what's already spent plus the bills still known to be due.
+  projected = Math.max(projected, spentSoFar + committed);
   return { ready: true, projected: Math.round(projected), basis, credibility };
 }
 

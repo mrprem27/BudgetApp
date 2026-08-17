@@ -7,6 +7,8 @@ import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { buildSavingsInsights } from '../db/queries/savings';
 import { myShareOf } from './splitMath';
+import { expandUpcoming } from './upcoming';
+import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 
@@ -78,7 +80,14 @@ export async function loadInsightsData(
      * an early month degrades honestly instead of shouting a number.
      */
     const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
-    const fc = forecastMonthEnd(monthSpend, dayOfMonth, daysInMonth, priorMonthTotal);
+    // Known recurring bills still due this month floor the forecast (same
+    // wiring as Home and Afford — one model, one floor).
+    const monthEndMs = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    const recurRules = (await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)))).flat();
+    const recurSkips = await getSkipsMap(db, recurRules.map(r => r.id));
+    const committedRemaining = expandUpcoming(recurRules, meId, now.getTime(), monthEndMs, recurSkips)
+      .reduce((s, o) => s + o.amount, 0);
+    const fc = forecastMonthEnd(monthSpend, dayOfMonth, daysInMonth, priorMonthTotal, committedRemaining);
     const projected = Math.round(fc.projected);
 
     // Month-end forecast graph (moved here from Reports): a solid "spent so far"

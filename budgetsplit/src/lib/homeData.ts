@@ -15,7 +15,7 @@ import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
-import { buildUpcoming, type UpcomingItem } from './upcoming';
+import { buildUpcoming, expandUpcoming, type UpcomingItem } from './upcoming';
 import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
 import type { ForecastShift } from '../components/finance/home/ForecastCard';
@@ -207,7 +207,12 @@ export async function loadHomeData(
         lmSpend += share;
         lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
       }
-      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend);
+      // Known committed bills still due this month floor the forecast — the
+      // rules and skips are already loaded for "Coming up" just above.
+      const committedRemaining = expandUpcoming(
+        upcomingRules, me.id, Date.now(), endOfMonth(now).getTime(), upcomingSkips,
+      ).reduce((s, o) => s + o.amount, 0);
+      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, committedRemaining);
       // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
       topShift = Object.entries(catMap)
         .filter(([cat]) => lmCat[cat])

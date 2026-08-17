@@ -59,6 +59,34 @@ describe('forecastMonthEnd', () => {
   });
 });
 
+// D-plan 3.4 regression: known committed bills are a FLOOR, not a suggestion.
+// Reverting the committedRemaining wiring makes these fail.
+describe('forecastMonthEnd — committed-bills floor', () => {
+  it('never projects below spent + committed bills still due', () => {
+    // Run-rate would say ~₹2,000; rent of ₹22,000 is still due this month.
+    const fc = forecastMonthEnd(100000, 15, 30, 0, 2200000);
+    expect(fc.ready).toBe(true);
+    expect(fc.projected).toBe(100000 + 2200000);
+  });
+
+  it('leaves the statistical projection alone when it already covers the bills', () => {
+    const noFloor = forecastMonthEnd(1500000, 15, 30, 0, 0);
+    const withSmallCommit = forecastMonthEnd(1500000, 15, 30, 0, 100000);
+    expect(withSmallCommit.projected).toBe(noFloor.projected);
+  });
+
+  it('adds committed bills even when not ready (day 1 of the month)', () => {
+    const fc = forecastMonthEnd(50000, 1, 30, 0, 2200000);
+    expect(fc.ready).toBe(false);
+    expect(fc.projected).toBe(50000 + 2200000);
+  });
+
+  it('ignores a negative/NaN committed value', () => {
+    expect(forecastMonthEnd(600000, 6, 30, 0, -5).projected).toBe(forecastMonthEnd(600000, 6, 30, 0, 0).projected);
+    expect(forecastMonthEnd(600000, 6, 30, 0, NaN).projected).toBe(forecastMonthEnd(600000, 6, 30, 0, 0).projected);
+  });
+});
+
 describe('projectedAtDay', () => {
   it('returns the running total for days at/before today', () => {
     expect(projectedAtDay(600000, 6, 30, 3000000, 6)).toBe(600000);

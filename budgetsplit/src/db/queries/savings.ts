@@ -573,8 +573,9 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   // reminders show. `expandUpcoming` counts each remaining occurrence, so a
   // weekly bill contributes every week left this month, not just the next one.
   const skipsBySeries = await getSkipsMap(db, recurRules.map(r => r.id));
-  upcomingBills += expandUpcoming(recurRules, me.id, now, monthEnd, skipsBySeries)
+  const committedRecurring = expandUpcoming(recurRules, me.id, now, monthEnd, skipsBySeries)
     .reduce((sum, item) => sum + item.amount, 0);
+  upcomingBills += committedRecurring;
 
   // Budgets, normalized to a monthly figure. `budgetEquivalent` is the one source
   // (this file used to carry its own copy that divided yearly lines by 12 — a
@@ -622,7 +623,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
   const priorMonthTotal = lastMonthTxns
     .filter(t => !t.is_deleted && t.kind === 'expense')
     .reduce((a, t) => a + myShare(t), 0);
-  const fc = forecastMonthEnd(monthSpentSoFar, getDate(today), daysInMonth, priorMonthTotal);
+  const fc = forecastMonthEnd(monthSpentSoFar, getDate(today), daysInMonth, priorMonthTotal, committedRecurring);
   const budgetTotal = Object.values(budgetByCat).reduce((a, b) => a + b, 0);
   const projection = fc.ready && budgetTotal > 0
     ? { projectedMonthEnd: fc.projected, budget: budgetTotal }
