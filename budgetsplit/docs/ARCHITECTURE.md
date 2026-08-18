@@ -3,7 +3,7 @@
 > **Single source of truth for how the app is built.** Companion docs:
 > [FEATURES_AND_FLOWS.md](./FEATURES_AND_FLOWS.md) (what every screen does, every state, and the
 > cross-cutting validation / permission / notification / network rules) and
-> [DEBT_TRACKER.md](./DEBT_TRACKER.md) (known debt). Build/design rules live in
+> [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) (open debt + everything pre-release). Build/design rules live in
 > [../AGENTS.md](../AGENTS.md).
 
 > ⚠️ **Status (reconciled 2026-07-28).** Written as a pre-refactor baseline and updated
@@ -13,7 +13,7 @@
 > `/settle` screen, `Card.tsx`, `computeNet` and `getDashboardInsights`/`rankInsights` are
 > **deleted**. Screen logic now lives in `src/hooks/use*Screen|Form|Tab` and `src/lib/*Data`
 > rather than inline (see §Layering). The dead `settings` table + columns in §5 remain on
-> purpose. Anything still inaccurate belongs in [DEBT_TRACKER.md](./DEBT_TRACKER.md).
+> purpose. Anything still inaccurate belongs in [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).
 >
 > **2026-08-04 — the repo is no longer client-only.** `server/receipt-ocr-proxy/` (a Cloudflare
 > Worker) was added with receipt scanning, and the app now makes an outbound request that carries
@@ -248,7 +248,7 @@ Twelve files. Multi-table writes use `withTransactionAsync`. `splitRecurringSeri
 now atomic (the new rule and the cap of the old one commit together, so a mid-way failure
 can't leave two overlapping active rules). One known gap remains: `runLeftoverSweep` mixes
 an AsyncStorage marker with DB writes — it's idempotent, and tracked in
-[DEBT_TRACKER.md](./DEBT_TRACKER.md).
+[RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).
 
 | File | Responsibility |
 |---|---|

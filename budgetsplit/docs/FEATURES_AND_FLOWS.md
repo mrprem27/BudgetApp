@@ -21,7 +21,7 @@
 > sections; there are **7 pay methods**, not 3; goal funding
 > is `fundGoal` with **no pool**. Every route now carries a documented state set (§20).
 >
-> **Revised 2026-08-18** (pre-pilot consistency pass — see `PILOT_READINESS_REVIEW.md`):
+> **Revised 2026-08-18** (pre-pilot consistency pass — see `RELEASE_CHECKLIST.md`):
 > onboarding is now **9 stages**, of which one (`summary`) asks nothing; the feature
 > carousel, the `payoff` beat and the `committing` stage are gone.
 
@@ -75,7 +75,7 @@ the backup reminder — then offers "Log your first expense". It replaced a forw
 `payoff` beat and a `committing` stage whose three-phase checklist was ~1.7s of manufactured
 waiting over a write that completes in milliseconds. Every other stage now changes something
 the user can see; the four-slide feature carousel, which asked nothing and changed nothing,
-was deleted (`PILOT_READINESS_REVIEW.md` D4).
+was deleted (`RELEASE_CHECKLIST.md`, appendix).
 
 **Shared chrome.** Every non-hero stage renders through `StepScaffold` (back + one progress bar
 in a single top row, scrolling body, pinned `StepFooter`). Before this, the back chevron was
@@ -389,7 +389,7 @@ Body order, top to bottom:
 
 **Time-of-day** — a chip showing `h:mm a`, opening the existing `TimePickerSheet`. `txn.date` was always epoch ms and Review always rendered the time; Add was the only place that discarded it. Always filled (the time is real whether or not it was chosen), and setting it preserves the calendar date while zeroing seconds.
 
-**Income asks where the money landed.** The pay-method chip is the same `txn.pay_method` field read the other way round: for income the sheet is titled **"Where did it land?"** and offers only `INCOME_LANDING` (Bank · Cash · Wallet · UPI), defaulting to **Bank** — salary is the common case, and the spending default (UPI) isn't a place money arrives into. This is deliberately a view over the existing column, **not** an accounts model; accounts as real entities with balances is a separate open design (see `DEBT_TRACKER.md`).
+**Income asks where the money landed.** The pay-method chip is the same `txn.pay_method` field read the other way round: for income the sheet is titled **"Where did it land?"** and offers only `INCOME_LANDING` (Bank · Cash · Wallet · UPI), defaulting to **Bank** — salary is the common case, and the spending default (UPI) isn't a place money arrives into. This is deliberately a view over the existing column, **not** an accounts model; accounts as real entities with balances is a separate open design (see `RELEASE_CHECKLIST.md` §5).
 
 **The budget insight is one line.** `BudgetNudge` shows the /afford warning when there is one, otherwise "₹X left in {cat} this month" — a single tinted line under the category pills, not a bordered card. It used to stack two bordered strips with status dots, which made ordinary information look like two error states.
 
@@ -462,7 +462,7 @@ with the state and names the consequence either way, and it is **deliberately no
 off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which it isn't.
 
 > Receipt scanning itself still has **no on/off switch** — it ships unflagged, so the Scan
-> button can't be hidden. Tracked as [DEBT_TRACKER.md](./DEBT_TRACKER.md) F7.
+> button can't be hidden. Tracked in [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) §5.
 
 ---
 
@@ -1359,7 +1359,7 @@ has no account UI at all, and nothing is uploaded. Backed by the Worker in `serv
 
 **What the account is for, and what it is not.** It buys off-device encrypted backups and nothing
 else. The ledger stays local-first, there is no sync (that's phase S2) and no shared groups
-(S3) — see `docs/V2_LAUNCH_CHECKLIST.md` §6b. Backups are encrypted **on the phone** by
+(S3) — see `docs/RELEASE_CHECKLIST.md` §3.1 and §6. Backups are encrypted **on the phone** by
 `lib/backup.ts` before upload, with a passphrase the server never receives, so a leaked bucket is
 unreadable and a leaked D1 gives up email addresses and nothing about anyone's money. The
 server keeps the newest **10** snapshots per account and prunes older ones on upload.
@@ -1374,7 +1374,7 @@ an email and — only if switched on — a phone number. It is **not** group sha
 
 **There is no username, no directory and no lookup** — not by email, not by phone. The only
 way to reach an account is a link its owner generated. That is a deliberate product call
-recorded in `V2_LAUNCH_CHECKLIST.md` §6b: this is a personal-finance app first, and a
+recorded in `RELEASE_CHECKLIST.md` §6: this is a personal-finance app first, and a
 searchable handle is social furniture it does not need — with the side benefit that nobody
 can check whether a number they hold belongs to someone using a finance app.
 
