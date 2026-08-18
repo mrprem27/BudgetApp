@@ -13,6 +13,10 @@ built), `AGENTS.md` (build/design rules), and the dated analyses
 (`V2_PRODUCT_REVIEW.md`, `AUDIT*.md`, `COMPETITIVE_ANALYSIS.md`,
 `PERSONAL_REDESIGN.md`).
 
+**Interactive version:** <https://claude.ai/code/artifact/c81d7ac6-60f3-4bad-b542-ed99c3eed37c>
+— same content, but tickable on the phone while you walk the app, with a notes
+box per screen and a "copy feedback" button that collects what you flagged.
+
 **Rules for this file:** tick a box only when the thing is true on a device, not
 when the code is written. Never delete a line — strike it and date it. Every
 claim cites `file:line` or it gets deleted rather than debated.
@@ -116,21 +120,265 @@ Run it in two once-per-session passes as well: **Reduce Motion on**, and
       gone**), dev-screen gate, Review banner fix, Transfer sheet move.
 - [ ] Review's saved views / filters / bulk actions — built, never device-tested.
 
-### 2.3 The full sweep
+### 2.3 The full sweep — 36 screens, 106 checks
 
-Roughly **38 screens** (`S-03` … `S-39`) in four blocks — 12 new/unverified,
-6 money-critical, 7 analytics/data-in, ~13 config/utility — plus 10 house rules
-checked on every screen (touch targets, empty states, card grouping, dividers,
-bottom padding, pull-to-refresh, haptics, icons, spacing tokens, colour tokens).
-The per-screen detail lived in `UI_UX_SWEEP.md`; walk the app screen by screen
-against `AGENTS.md` §1–§12 instead.
+Blocks run in order of risk: **stop after any block and you have still covered
+what matters most.** There is an interactive version of exactly this list (with
+a per-screen notes box and a "copy feedback" button) linked at the top of this
+file.
 
-- [ ] Block A — the 12 never-rendered screens (Settings, Account, Linked people,
-      Invite landing, Sign-in callback, Backup & restore, People, Plan, Goal
-      detail, Afford, Review, Quick Add).
-- [ ] Block B — money-critical screens.
-- [ ] Block C — analytics + data-in.
-- [ ] Block D — config/utility.
+| | House rule — true on every screen |
+|---|---|
+| `§1` | One hero per screen — two numbers competing to be biggest is a failure |
+| `§2` | Empty states have all four parts: icon, title, explanation, button |
+| `§3` | Nothing floats bare on the background — rows and fields live in a card |
+| `§4` | Rows ≥52pt, and values don't truncate (“Househol…”) |
+| `§6` | Touch targets ≥44pt — no tap that needs aiming |
+| `§9` | Spacing comes from the scale — no gap that looks like a mistake |
+| `§11` | Motion is polish, never the only signal that something changed |
+| `§12` | Card-grouped rows stay contiguous — no list sliced into slabs |
+| `—` | Nothing hides under the FAB, the tab bar, or the notch |
+
+#### Block A — New or changed today (never seen on device)
+
+Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
+
+- [ ] **S-06 Settings** — `app/(tabs)/settings.tsx`  
+      Open: Settings tab  
+      *Changed:* Account section added; section spacing now computed, not hardcoded
+      - [ ] Account section appears, directly under the profile card
+      - [ ] Profile subtitle shows your email when signed in, else “Offline-first · sign in to back up”
+      - [ ] First section isn't double-spaced from the profile card; none is crushed
+      - [ ] Version row shows NO “tap 7×” hint — that's dev-only now
+
+- [ ] **S-36 Account** — `app/settings/account.tsx`  
+      Open: Settings → Account  
+      *Changed:* Entire screen is new
+      - [ ] Signed out: the card reads as an invitation, not a warning
+      - [ ] Keyboard doesn't cover the “Email me a sign-in link” button
+      - [ ] After sending, “Check your inbox” names the address you typed
+      - [ ] Signed in: avatar, name, email and device line read as one identity block
+      - [ ] Sign out looks destructive without shouting
+
+- [ ] **S-38 Linked people** — `app/settings/linked.tsx`  
+      Open: Settings → Account → Linked people  
+      *Changed:* Entire screen is new
+      - [ ] Empty state explains what linking is FOR, not just that there's nothing
+      - [ ] The QR is big enough to scan from another phone across a table
+      - [ ] A pending claim shows name AND email — enough to recognise someone
+      - [ ] “Link” / “Not them” read as a real decision, not a confirm dialog
+      - [ ] The share-my-number explanation is legible and doesn't wrap oddly
+
+- [ ] **S-39 Invite landing** — `app/link.tsx`  
+      Open: Tap an invite link  
+      *Changed:* New
+      - [ ] “Asked to link” reads as success, not as an error or a hang
+      - [ ] Signed-out path offers sign-in instead of dead-ending
+
+- [ ] **S-37 Sign-in callback** — `app/auth.tsx`  
+      Open: Tap the link in the sign-in email  
+      *Changed:* New — this is the screen that showed “unmatched route” before the rebuild
+      - [ ] The spinner is brief and doesn't flash
+      - [ ] Lands on Account, signed in, with no visible double-navigation
+      - [ ] An expired link explains what to do next
+
+- [ ] **S-34 Backup & restore** — `app/settings/backup.tsx`  
+      Open: Settings → Backup & restore  
+      *Changed:* Server backup/restore rows, the picker sheet, the explainer copy
+      - [ ] Explainer copy changes when signed in, and reads true
+      - [ ] The two server rows sit in the same card as the file rows, not a separate slab
+      - [ ] Restore sheet: date + size legible; trash icon tappable without hitting the row
+      - [ ] The red warning still reads as the last word on the screen
+
+- [ ] **S-26 People** — `app/friends.tsx`  
+      Open: Settings → People  
+      *Changed:* Phone field added to the rename sheet
+      - [ ] Three fields (name, UPI ID, phone) don't push Save off-screen with the keyboard up
+      - [ ] The phone hint reads sensibly under the field
+      - [ ] Balance chips still align now the sheet is taller
+
+- [ ] **S-05 Plan** — `app/(tabs)/savings.tsx`  
+      Open: Plan tab  
+      *Changed:* Three-section layout, priority picker, funding and raid order
+      - [ ] Goals render as THREE sections (Emergency / Need / Want), not one flat list
+      - [ ] A section with one goal shows no “hold & drag” hint
+      - [ ] Dragging reorders within a section and never across
+      - [ ] The section header reads as a header, not another goal card
+      - [ ] The hint under each title explains the tag without being a paragraph
+
+- [ ] **S-17 Goal detail** — `app/savings/[id].tsx`  
+      Open: Plan → any goal  
+      *Changed:* Priority picker in the Adjust sheet
+      - [ ] The Adjust sheet's priority picker reads as “pick exactly one”
+      - [ ] Changing the tag moves the goal to the right section on the way back
+      - [ ] The card isn't busier than before
+
+- [ ] **S-33 Afford check** — `app/afford.tsx`  
+      Open: Home → Can I afford this  
+      *Changed:* Frequency chips, owed-to-you row, real upcoming bills
+      - [ ] “How often?” chips read as one-of-four, with Once clearly the default
+      - [ ] Picking a frequency changes the reasoning, not just the number
+      - [ ] “Owed to you (not counted above)” is clearly excluded, not another balance
+      - [ ] The verdict is still the hero — the new rows didn't demote it
+
+- [ ] **S-19 Review** — `app/review.tsx`  
+      Open: Home → inbox badge → Review  
+      *Changed:* Banner badge fix. Never device-tested at all
+      - [ ] Saved-view banner shows the count AND payer even with a long view name
+      - [ ] Source tabs still show counts when labels are long
+      - [ ] Bulk select / focus / saved views feel discoverable, not buried in ⋯
+
+- [ ] **S-07 Quick Add** — `app/add/quick.tsx`  
+      Open: ＋ → any kind  
+      *Changed:* Container gap → per-block margins; TransferBody moved; its sheets now open through the shared overlay
+      - [ ] Spacing between form blocks is even — no doubled or crushed gaps
+      - [ ] Transfer → Pay by UPI / Show QR opens exactly one sheet at a time
+      - [ ] Amount stays the hero as the form grows
+      - [ ] Save in the header reads as the commit action, opposite the ✕
+
+#### Block B — Money-critical (a UI slip becomes a money slip)
+
+- [ ] **S-03 Home** — `app/(tabs)/index.tsx`  
+      Open: Home tab
+      - [ ] One hero number dominates; tiles support rather than compete
+      - [ ] Owe AND owed both show when both exist — never as one net figure
+      - [ ] “Coming up” shows the near-due rules from demo data
+      - [ ] The last card clears the FAB and the tab bar
+
+- [ ] **S-09 Group detail** — `app/group/[id].tsx`  
+      Open: Groups → any group
+      - [ ] Tabs (Expenses / Budget / Members) don't truncate
+      - [ ] The balance card says who owes whom in words, not just numbers
+      - [ ] A settled group shows the check-circle state, not blankness
+
+- [ ] **S-11 Members & settle** — `app/group/[id]/members.tsx`  
+      Open: Group → Members
+      - [ ] Each balance is readable at a glance and correctly signed
+      - [ ] Settle states amount and direction before you commit
+      - [ ] Swipe-remove blocked with a reason where a balance exists
+
+- [ ] **S-10 Budgets (mine + group)** — `app/budget.tsx · group/[id]/budget.tsx`  
+      Open: Settings → My Budget; Group → Budget
+      - [ ] Over / near / under differ without relying on colour alone
+      - [ ] The group editor says “my share” where that's what it means
+      - [ ] Long category names don't truncate the amount beside them
+
+- [ ] **S-14 Personal** — `app/personal.tsx`  
+      Open: Home → Personal
+      - [ ] Section headers space the blocks; rows inside a card stay contiguous
+      - [ ] Empty state has all four parts
+      - [ ] Nothing hides behind the FAB
+
+- [ ] **S-08 Itemized bill** — `app/add/itemized.tsx`  
+      Open: ＋ → expense → Split by items
+      - [ ] You always know which step you're on
+      - [ ] “Must equal total ₹X” is impossible to miss when payers don't balance
+      - [ ] A failed scan doesn't strand you
+
+- [ ] **S-15 Transaction detail** — `app/txn/[id].tsx`  
+      Open: Any transaction
+      - [ ] Amount is the hero; shares and payments read as supporting detail
+      - [ ] Receipt thumbnail opens and closes cleanly
+      - [ ] History reads as a timeline, not a debug dump
+
+#### Block C — Analytics and data-in (dense — where truncation hides)
+
+- [ ] **S-20 Reports** — `app/reports.tsx`  
+      Open: Settings → Reports & export
+      - [ ] Donut legend labels don't truncate; slices are distinguishable
+      - [ ] Month selector can't go past the current month
+      - [ ] “Top categories” and “Biggest expense” agree with the donut
+
+- [ ] **S-21 Report transactions** — `app/report-transactions.tsx`  
+      Open: Reports → tap a donut slice
+      - [ ] The filter says what it filters, and “All” really includes transfers
+      - [ ] No single “total” spanning income, expense and transfer
+
+- [ ] **S-22 Insights** — `app/insights.tsx`  
+      Open: Home → Insights
+      - [ ] X-axis day labels are whole numbers, not “1…” “2…”
+      - [ ] Forecast hero and chart tell the same story
+      - [ ] Ten cards don't read as ten equal shouts
+
+- [ ] **S-16 Category detail** — `app/category/[name].tsx`  
+      Open: Reports or Home → a category
+      - [ ] Skeleton appears while loading, not a blank screen
+      - [ ] No dead space under the header
+
+- [ ] **S-23 Search** — `app/search.tsx`  
+      Open: Home → search
+      - [ ] The chip row's edge fade reads as “more to scroll”
+      - [ ] Empty copy switches between “Search your transactions” and “No matches”
+
+- [ ] **S-18 Import** — `app/import.tsx`  
+      Open: Settings → Import transactions
+      - [ ] Gibberish → “No transactions found” is helpful, not a dead end
+      - [ ] A scanned PDF explains the 0-characters case in plain words
+
+- [ ] **S-28 Audit log** — `app/history.tsx`  
+      Open: Settings → Audit log
+      - [ ] Dots and EDIT/DEL badges are legible at row size
+      - [ ] “Load older” doesn't jump the scroll position
+
+#### Block D — Config and utility (lower risk — do it last)
+
+- [ ] **S-04 Groups** — `app/(tabs)/groups.tsx`  
+      Open: Groups tab
+      - [ ] “No groups yet” and “No archived groups” aren't equal-weight empties
+      - [ ] Group cards clear the FAB
+
+- [ ] **S-25 Categories** — `app/categories.tsx`  
+      Open: Settings → Categories
+      - [ ] Kind tabs read as one-of-three
+      - [ ] The Uncategorized section explains what “adopt” does
+
+- [ ] **S-24 Feature management** — `app/features.tsx`  
+      Open: Settings → Feature management
+      - [ ] “Always on” pillars visibly differ from switchable modules
+      - [ ] Turning splitting off names how many balances would disappear
+      - [ ] Cloud Receipt Scanning row isn't dimmed when off
+
+- [ ] **S-31 Notifications** — `app/settings/notifications.tsx`  
+      Open: Settings → Notifications
+      - [ ] Denied-permission banner offers Open Settings
+      - [ ] Test notification confirms it fired
+
+- [ ] **S-35 Voice entry** — `app/settings/voice.tsx`  
+      Open: Settings → Voice entry  
+      *Changed:* Privacy copy no longer absolute
+      - [ ] Setup steps are followable without prior context
+      - [ ] The privacy line reads honestly — it changed today
+
+- [ ] **S-27a Storage** — `app/settings/storage.tsx`  
+      Open: Settings → Storage  
+      *Changed:* pdf.js row removed
+      - [ ] Free space is the hero; the breakdown supports it
+      - [ ] The pdf.js row is GONE — it's bundled now
+      - [ ] Both reclaim actions say what they will and won't delete
+
+- [ ] **S-30 Reminders & recurring** — `app/reminders.tsx · plan/recurring.tsx`  
+      Open: Home → Coming up; Plan → Recurring
+      - [ ] Next-occurrence dates read unambiguously
+      - [ ] Skip / Pause / Stop are distinguishable and look reversible
+      - [ ] The monthly-equivalent total is labelled as an equivalent, not a charge
+
+- [ ] **S-13 Edit group** — `app/group/[id]/edit.tsx`  
+      Open: Group → ⋯ → Edit
+      - [ ] Icon and colour pickers show the current selection clearly
+      - [ ] Archive vs delete differ in weight
+
+- [ ] **S-29 Help** — `app/help.tsx`  
+      Open: Settings → Help & Feedback  
+      *Changed:* Privacy copy
+      - [ ] Accordions open smoothly; copy matches what the app now does
+      - [ ] “Offline by default” reads true — it changed today
+
+- [ ] **S-27 Storage (dev)** — `app/storage.tsx`  
+      Open: Settings → version ×7  
+      *Changed:* Gated to __DEV__
+      - [ ] Reachable ONLY in a dev build
+      - [ ] Load demo data / Erase all data are unmistakably destructive
+
 
 ### 2.4 UPI / payments — never verified where it matters
 
