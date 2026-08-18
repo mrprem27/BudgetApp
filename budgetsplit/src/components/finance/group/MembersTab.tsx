@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { monthShort } from '../../../lib/dateFormat';
 import { colors, type, space, radius, shadow, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatCompact } from '../../../lib/money';
@@ -88,7 +88,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
             const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
             const sub = isLargest && !m.is_me
               ? 'Largest contributor'
-              : m.joined_at ? `Joined ${format(m.joined_at, 'MMM yyyy')}` : '';
+              : m.joined_at ? `Joined ${monthShort(m.joined_at)}` : '';
             const balLabel = v > 0 ? 'is owed' : v < 0 ? (m.is_me ? 'you owe' : 'owes') : 'settled';
             return (
               <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>

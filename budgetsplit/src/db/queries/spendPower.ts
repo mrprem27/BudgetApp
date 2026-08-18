@@ -1,10 +1,14 @@
 import * as SQLite from 'expo-sqlite';
-import { startOfMonth, endOfMonth } from 'date-fns';
-import { computeSafeToSpend, goalRemainingThisCycle, type SafeToSpend } from '../../lib/safeToSpend';
+import { startOfMonth } from 'date-fns';
+import {
+  computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,
+  everydaySpendAhead, STS_HORIZON_DAYS, EVERYDAY_WINDOW_DAYS, type SafeToSpend,
+} from '../../lib/safeToSpend';
+import { DAILY_SPEND_SQL, bucketsFromDailyRows, type DailySpendRow } from './spendRateQuery';
 import { expandUpcoming } from '../../lib/upcoming';
 import { myShareOf } from '../../lib/splitMath';
 import { monthlyContribution } from '../../lib/savings';
-import { getCashPosition, getGoals, getGoalSavedMap } from './savings';
+import { getCashPosition, getGoals, getGoalSavedMap, getTotalMoney } from './savings';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
 import { getTransactionsInRange, insertTxn } from './transactions';
@@ -56,44 +60,65 @@ export async function getGoalFundingStatus(db: SQLite.SQLiteDatabase, nowMs: num
   };
 }
 
+const DAY_MS = 86_400_000;
+const EMPTY_PARTS = {
+  available: 0, upcomingBills: 0, cardRepayment: 0,
+  goalRemaining: 0, netIOwe: 0, everydaySpend: 0,
+};
+
 /**
  * Assemble Safe-to-Spend (see `lib/safeToSpend.ts` for the formula and why
- * each term has exactly one source). Horizon: month-end. Used by Home's hero
- * and by Afford's cash gate — one number, two readers, zero drift.
+ * each term has exactly one source). Horizon: a rolling `STS_HORIZON_DAYS`, so
+ * the figure can't peak on the 28th with rent three days out. Used by Home's
+ * strip and by Afford's cash gate — one number, two readers, zero drift.
  */
 export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpend> {
   const me = await getMe(db);
-  if (!me) return computeSafeToSpend({ available: 0, upcomingBills: 0, goalRemaining: 0, netIOwe: 0 });
+  if (!me) return computeSafeToSpend(EMPTY_PARTS, { daysLeft: STS_HORIZON_DAYS, dailyRate: null });
 
-  const today = new Date(nowMs);
-  const monthEndMs = endOfMonth(today).getTime();
+  const horizonMs = nowMs + STS_HORIZON_DAYS * DAY_MS;
+  const windowStartMs = nowMs - EVERYDAY_WINDOW_DAYS * DAY_MS;
 
-  const [pos, groups, funding, exposure, futureTxns] = await Promise.all([
+  const [pos, money, groups, funding, exposure, futureTxns, dailyRows] = await Promise.all([
     getCashPosition(db),
+    // Card debt never lowered `available` (it is debt, not cash out), so this is
+    // the only place it is claimed — see the header of lib/safeToSpend.ts.
+    getTotalMoney(db),
     getAllGroups(db),
     getGoalFundingStatus(db, nowMs),
     getMyExposure(db, me.id),
     // Already-logged future-dated one-offs (recurring occurrences are never
     // materialized ahead of now, so these are disjoint from the expansion).
-    getTransactionsInRange(db, null, nowMs, monthEndMs),
+    getTransactionsInRange(db, null, nowMs, horizonMs),
+    // Trailing window for the everyday rate, aggregated in SQL rather than
+    // loading 90 days of rows + splits — this function runs on Home, on Afford,
+    // and after every expense save.
+    db.getAllAsync<DailySpendRow>(DAILY_SPEND_SQL, [windowStartMs, me.id, windowStartMs, nowMs]),
   ]);
 
   const recurRules = (await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)))).flat();
   const skips = await getSkipsMap(db, recurRules.map(r => r.id));
 
-  let upcomingBills = expandUpcoming(recurRules, me.id, nowMs, monthEndMs, skips)
+  let upcomingBills = expandUpcoming(recurRules, me.id, nowMs, horizonMs, skips)
     .reduce((s, o) => s + o.amount, 0);
   for (const t of futureTxns) {
     if (t.is_deleted || t.kind !== 'expense') continue;
     upcomingBills += myShareOf(t, me.id);
   }
 
-  return computeSafeToSpend({
-    available: pos.available,
-    upcomingBills,
-    goalRemaining: funding.remaining,
-    netIOwe: exposure.owe,
-  });
+  const dailyRate = typicalDailySpend(bucketsFromDailyRows(dailyRows, windowStartMs, nowMs));
+
+  return computeSafeToSpend(
+    {
+      available: pos.available,
+      upcomingBills,
+      cardRepayment: money.creditUsed,
+      goalRemaining: funding.remaining,
+      netIOwe: exposure.owe,
+      everydaySpend: everydaySpendAhead(dailyRate, STS_HORIZON_DAYS),
+    },
+    { daysLeft: STS_HORIZON_DAYS, dailyRate },
+  );
 }
 
 /**

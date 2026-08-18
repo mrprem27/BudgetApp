@@ -1,4 +1,4 @@
-import { colors } from '../constants/colors';
+import { colors } from '../theme';
 
 /**
  * The single, canonical interpretation of an Owe/Owed balance for the whole app.

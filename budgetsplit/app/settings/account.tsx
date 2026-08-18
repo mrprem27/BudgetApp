@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { format } from 'date-fns';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, layout } from '../../src/constants/layout';
+import { fullDate } from '../../src/lib/dateFormat';
+import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
 import { Input } from '../../src/components/ui/Input';
@@ -170,7 +168,7 @@ export default function AccountScreen() {
               <Text style={styles.profileName}>{session.user.name ?? me?.name ?? 'No name yet'}</Text>
               <Text style={styles.profileEmail}>{session.user.email}</Text>
               <Text style={styles.profileMeta}>
-                Signed in on {deviceLabel()} · account created {format(new Date(session.user.createdAt), 'd MMM yyyy')}
+                Signed in on {deviceLabel()} · account created {fullDate(new Date(session.user.createdAt))}
               </Text>
             </Card>
 

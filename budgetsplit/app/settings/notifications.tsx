@@ -5,9 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import * as Notifications from 'expo-notifications';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import {
@@ -18,7 +16,6 @@ import { sendTestReminder } from '../../src/lib/notifications';
 import { TimePickerSheet } from '../../src/components/ui/TimePickerSheet';
 import { settings } from '../../src/lib/settings';
 import { haptic } from '../../src/lib/haptics';
-import { alpha } from '../../src/theme';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 

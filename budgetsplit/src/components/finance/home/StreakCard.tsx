@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../../constants/colors';
-import { type } from '../../../constants/typography';
-import { space, radius, shadow } from '../../../constants/layout';
+import { colors, type, space, radius, shadow } from '../../../theme';
 
 interface Props {
   streak: number;

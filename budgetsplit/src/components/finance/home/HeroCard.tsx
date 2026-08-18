@@ -5,7 +5,6 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { AmountText } from '../../ui/AmountText';
 import { formatCompact, formatChangeMagnitude } from '../../../lib/money';
-import type { SafeToSpend } from '../../../lib/safeToSpend';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -16,10 +15,6 @@ const RING_R = (RING - RING_STROKE) / 2;
 const RING_CIRC = 2 * Math.PI * RING_R;
 
 type Props = {
-  /** Safe-to-Spend — the headline (null hides it and falls back to spent-led). */
-  sts?: SafeToSpend | null;
-  /** Tap handler for the StS figure — opens the breakdown sheet. */
-  onPressSts?: () => void;
   /** My spend (paise) for the active period. */
   spent: number;
   /** UPPERCASE label e.g. "SPENT THIS MONTH". */
@@ -40,22 +35,33 @@ type Props = {
   healthColor?: string;
   /** Tap handler for the ring — opens the health breakdown sheet. */
   onPressHealth?: () => void;
+  /** Tap handler for the over-budget pace row — routes to the overspend breakdown. */
+  onPressOver?: () => void;
   /** While a period switch is loading, hide the delta so it doesn't flash a stale value. */
   settling?: boolean;
 };
 
 /**
- * The single hero of Home — leads with **Safe-to-Spend** (what you can spend
- * before month-end without touching bills, goals, or money that's owed — see
- * `lib/safeToSpend.ts`), the number Simple Bank proved users should see first.
- * Tapping it opens the subtraction breakdown. The period spend + delta sit on
- * the line beneath; the budget pace bar and the health ring keep their places.
+ * The single hero of Home: what you spent in the selected period, and nothing
+ * measured any other way.
+ *
+ * That constraint is the whole design. This card briefly led with Safe-to-Spend,
+ * and the result was three time bases stacked in one card — a horizon-scoped
+ * headline over a period-scoped spend figure over a bar showing
+ * `spent / budgetAllocated`, with the Today/Month/Year pills that drive two of
+ * the three sitting *below* the card. The bar is the card's loudest element and
+ * it was explaining a number that wasn't the headline.
+ *
+ * So: one quantity, one time base, everything answering to the same pills. The
+ * horizon-scoped figure moved out to `StsStrip`, above this card, where being
+ * unaffected by the pills is legible instead of contradictory.
+ *
  * Every line is a fixed height so the card never jumps between states.
  */
 export function HeroCard({
-  sts = null, onPressSts, spent, periodLabel, budgetAllocated, prevSpending, prevLabel,
+  spent, periodLabel, budgetAllocated, prevSpending, prevLabel,
   obfuscate = false, healthScore = null, healthLocked = false, healthColor = colors.accent,
-  onPressHealth, settling = false,
+  onPressHealth, onPressOver, settling = false,
 }: Props) {
   const hasBudget = budgetAllocated > 0;
   const util = hasBudget ? Math.round((spent / budgetAllocated) * 100) : 0;
@@ -64,8 +70,11 @@ export function HeroCard({
   // different meanings and shouldn't share a color.
   const paceColor = over ? colors.healthRed : util >= 80 ? colors.healthAmber : colors.income;
   const barPct = Math.min(100, Math.max(0, util));
-  // Over budget reads better as a multiple ("1.2× budget") than as ">100%".
+  // Over budget reads better as a multiple ("1.2× budget") than as ">100%" — but
+  // the multiple is the *secondary* framing now. The rupees over is what a user
+  // can act on, so it leads and the multiple sits in the sub-slot.
   const overMultiple = hasBudget ? (spent / budgetAllocated).toFixed(1).replace(/\.0$/, '') : '0';
+  const overAmount = hasBudget ? Math.max(0, spent - budgetAllocated) : 0;
 
   const delta = spent - prevSpending;
   const deltaPct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
@@ -150,83 +159,66 @@ export function HeroCard({
         </TouchableOpacity>
       )}
 
-      {sts ? (
-        <>
-          <Text style={[styles.label, (showRing || healthLocked) && styles.gutter]}>Safe to spend · to month-end</Text>
-          {/* The headline: StS, tappable for the subtraction breakdown. Negative
-              is shown honestly in red — over-committed IS the answer. */}
-          <TouchableOpacity
-            onPress={onPressSts}
-            disabled={!onPressSts}
-            accessibilityRole="button"
-            accessibilityLabel="Safe to spend, view breakdown"
-          >
-            <View style={styles.numberRow}>
-              {obfuscate
-                ? <Text style={styles.obfuscated}>₹ ••••</Text>
-                : <AmountText paise={sts.amount} size="xl" forceColor={sts.amount < 0 ? colors.healthRed : colors.textPrimary} compact />
-              }
-              {!obfuscate && !!onPressSts && (
-                <Feather name="chevron-right" size={18} color={colors.textMuted} style={styles.stsChevron} />
-              )}
-            </View>
-          </TouchableOpacity>
-          {/* Period spend + delta on one fixed-height line beneath the headline. */}
-          <View style={styles.deltaWrap}>
-            {!obfuscate && (
-              <Text style={styles.spentText} numberOfLines={1}>
-                {formatCompact(spent)} {periodLabel.toLowerCase()}
-              </Text>
-            )}
-            {showDelta && (
-              <>
-                <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={deltaColor} />
-                <Text style={[styles.deltaText, { color: deltaColor }]} numberOfLines={1}>
-                  {formatChangeMagnitude(deltaPct ?? 0)} vs {prevLabel}
-                </Text>
-              </>
-            )}
-          </View>
-        </>
-      ) : (
-        <>
-          <Text style={[styles.label, (showRing || healthLocked) && styles.gutter]}>{periodLabel}</Text>
-          {/* Fallback (no StS yet): spent-led hero, exactly the old layout. */}
-          <View style={styles.numberRow}>
-            {obfuscate
-              ? <Text style={styles.obfuscated}>₹ ••••</Text>
-              : <AmountText paise={spent} size="xl" forceColor={colors.textPrimary} compact zeroDash />
-            }
-          </View>
-          <View style={styles.deltaWrap}>
-            {showDelta && (
-              <>
-                <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={deltaColor} />
-                <Text style={[styles.deltaText, { color: deltaColor }]} numberOfLines={1}>
-                  {formatChangeMagnitude(deltaPct ?? 0)} vs {prevLabel}
-                </Text>
-              </>
-            )}
-          </View>
-        </>
-      )}
+      <Text style={[styles.label, (showRing || healthLocked) && styles.gutter]}>{periodLabel}</Text>
+      <View style={styles.numberRow}>
+        {obfuscate
+          ? <Text style={styles.obfuscated}>₹ ••••</Text>
+          : <AmountText paise={spent} size="xl" forceColor={colors.textPrimary} compact zeroDash />
+        }
+      </View>
+      <View style={styles.deltaWrap}>
+        {showDelta && (
+          <>
+            <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={deltaColor} />
+            <Text style={[styles.deltaText, { color: deltaColor }]} numberOfLines={1}>
+              {formatChangeMagnitude(deltaPct ?? 0)} vs {prevLabel}
+            </Text>
+          </>
+        )}
+      </View>
 
       {/* Track — always present (muted when no budget) so height is constant. */}
       <View style={styles.track}>
         {hasBudget && <Animated.View style={[styles.fill, { backgroundColor: paceColor, transform: [{ scaleX: barAnim }] }]} />}
       </View>
 
-      {/* Secondary row — always one line tall, content varies by state. */}
+      {/* Secondary row — always one line tall, content varies by state.
+          When over, the row becomes a way out. It used to read "1.2× budget"
+          and stop there: the second-loudest thing on Home, in red, on every
+          launch, with nothing to do about it. A multiple is also the least
+          actionable form of the fact — "₹4,200 over" is a number you can go
+          find. Rebalancing was the obvious target and is the wrong one: it
+          trades headroom *between categories* and cannot raise the month's
+          total, which is what has already gone. Insights is where the
+          driving-overspend breakdown and "what to cut" actually live. */}
       <View style={styles.paceRow}>
         {hasBudget ? (
           <>
-            <View style={styles.paceLeft}>
-              <View style={[styles.dot, { backgroundColor: paceColor }]} />
-              <Text style={[styles.paceText, { color: paceColor }]}>
-                {over ? `${overMultiple}× budget` : `On pace · ${util}%`}
-              </Text>
-            </View>
-            <Text style={styles.paceSub}>Budget {formatCompact(budgetAllocated)}</Text>
+            {over && onPressOver ? (
+              <TouchableOpacity
+                onPress={onPressOver}
+                style={styles.paceLeft}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`${formatCompact(overAmount)} over budget, see what drove it`}
+              >
+                <View style={[styles.dot, { backgroundColor: paceColor }]} />
+                <Text style={[styles.paceText, { color: paceColor }]}>
+                  {formatCompact(overAmount)} over
+                </Text>
+                <Feather name="chevron-right" size={13} color={paceColor} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.paceLeft}>
+                <View style={[styles.dot, { backgroundColor: paceColor }]} />
+                <Text style={[styles.paceText, { color: paceColor }]}>
+                  {over ? `${formatCompact(overAmount)} over` : `On pace · ${util}%`}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.paceSub}>
+              {over ? `${overMultiple}× budget` : `Budget ${formatCompact(budgetAllocated)}`}
+            </Text>
           </>
         ) : (
           <Text style={styles.empty}>Set a budget to track your pace</Text>
@@ -247,8 +239,6 @@ const styles = StyleSheet.create({
   numberRow: { flexDirection: 'row', alignItems: 'flex-end' },
   deltaWrap: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 6, height: 16 },
   deltaText: { ...type.label },
-  spentText: { ...type.label, color: colors.textSecondary },
-  stsChevron: { marginLeft: space.xs, marginBottom: space.sm },
   track: { height: 4, backgroundColor: colors.bgElevated, borderRadius: 2, marginTop: space.md, marginBottom: space.sm, overflow: 'hidden' },
   fill: { height: 4, width: '100%', borderRadius: 2, transformOrigin: 'left' },
   // minHeight keeps the row exactly one line tall in every state → no jump.

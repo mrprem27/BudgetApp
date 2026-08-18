@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { shortDate } from '../../lib/dateFormat';
 import { AmountText } from '../ui/AmountText';
 import { IconCircle } from '../ui/IconCircle';
 import { PressableScale } from '../ui/PressableScale';
@@ -169,7 +169,7 @@ export const TransactionRow = React.memo(function TransactionRow({
         ) : null}
         {/* Date (cross-group list) */}
         {showDate && Number.isFinite(txn.date) ? (
-          <Text style={styles.date}>{format(new Date(txn.date), 'd MMM')}</Text>
+          <Text style={styles.date}>{shortDate(new Date(txn.date))}</Text>
         ) : null}
       </View>
     </PressableScale>

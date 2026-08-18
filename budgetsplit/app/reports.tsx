@@ -11,13 +11,12 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { addMonths, subMonths, format } from 'date-fns';
+import { monthLabel } from '../src/lib/dateFormat';
 import { Feather } from '@expo/vector-icons';
 import { CategoryDonut } from '../src/components/finance/CategoryDonut';
 import { CategoryRankList } from '../src/components/finance/home/CategoryRankList';
 import { TrendBars } from '../src/components/finance/TrendBars';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout } from '../src/constants/layout';
+import { colors, type, space, radius, layout, alpha } from '../src/theme';
 
 import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
@@ -37,7 +36,6 @@ import type { BudgetGroup } from '../src/db/queries/groups';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../src/lib/reportsData';
-import { alpha } from '../src/theme';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 
 export default function ReportsScreen() {
@@ -196,7 +194,7 @@ export default function ReportsScreen() {
         >
           <Feather name="chevron-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.monthLabel}>{format(month, 'MMMM yyyy')}</Text>
+        <Text style={styles.monthLabel}>{monthLabel(month)}</Text>
         <TouchableOpacity
           onPress={() => canGoNext && setMonth(m => addMonths(m, 1))}
           disabled={!canGoNext}

@@ -2,12 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { format, addMonths } from 'date-fns';
+import { addMonths } from 'date-fns';
+import { fullDate, monthLabel, monthShort } from '../../src/lib/dateFormat';
 import Svg, { Circle } from 'react-native-svg';
-import { colors } from '../../src/constants/colors';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { asFeather } from '../../src/constants/palette';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
@@ -17,7 +16,7 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { LockExplainerSheet } from '../../src/components/finance/plan/LockExplainerSheet';
-import { formatRupees, formatCompact, parseToPaise } from '../../src/lib/money';
+import { formatRupees, formatCompact, parseToPaise, paiseToInput } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
 import { PRIORITY, PRIORITY_LABEL } from '../../src/constants/enums';
 
@@ -28,7 +27,6 @@ import type { SavingsTxn, SavingsFrequency, Priority } from '../../src/db/querie
 const PRIORITY_TABS = PRIORITY.map(p => ({ key: p, label: PRIORITY_LABEL[p] }));
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { useSavingsGoalScreen } from '../../src/hooks/useSavingsGoalScreen';
-import { alpha } from '../../src/theme';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -145,7 +143,7 @@ export default function GoalDetailScreen() {
           <Text style={styles.heroName}>{goal.name}</Text>
           <Text style={styles.heroDate}>
             {hasDate
-              ? `${format(goal.target_date!, 'MMM yyyy')} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} away`}`
+              ? `${monthShort(goal.target_date!)} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} away`}`
               : (isOverfunded ? 'Overfunded' : 'No deadline set')}
           </Text>
 
@@ -185,7 +183,7 @@ export default function GoalDetailScreen() {
             ) : (
               <View style={[styles.monthlyNudge, { borderColor: alpha(colors.income, 27) }]}>
                 <View style={[styles.nudgeDot, { backgroundColor: colors.income }]} />
-                <Text style={[styles.nudgeText, { color: colors.income }]}>On track to finish by {format(goal.target_date!, 'MMM yyyy')}</Text>
+                <Text style={[styles.nudgeText, { color: colors.income }]}>On track to finish by {monthShort(goal.target_date!)}</Text>
               </View>
             )
           ) : (
@@ -204,7 +202,7 @@ export default function GoalDetailScreen() {
               <TouchableOpacity style={styles.surplusBtn} onPress={() => router.push('/savings')} accessibilityRole="button">
                 <Text style={styles.surplusBtnText}>New goal</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.surplusBtn} onPress={() => { setAmt((surplus / 100).toString()); setShowWithdraw(true); }} accessibilityRole="button">
+              <TouchableOpacity style={styles.surplusBtn} onPress={() => { setAmt(paiseToInput(surplus)); setShowWithdraw(true); }} accessibilityRole="button">
                 <Text style={styles.surplusBtnText}>Withdraw {formatCompact(surplus)}</Text>
               </TouchableOpacity>
             </View>
@@ -224,7 +222,7 @@ export default function GoalDetailScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.histLabel}>{m.label}{h.source === 'auto' ? ' · auto' : ''}</Text>
-                    <Text style={styles.histDate}>{format(new Date(h.date), 'dd MMM yyyy')}</Text>
+                    <Text style={styles.histDate}>{fullDate(new Date(h.date))}</Text>
                   </View>
                   <Text style={[styles.histAmt, { color: h.kind === 'withdraw' ? colors.expense : colors.income }]}>
                     {h.kind === 'withdraw' ? '−' : '+'}{formatRupees(h.amount)}
@@ -353,7 +351,7 @@ export default function GoalDetailScreen() {
             );
           })}
         </View>
-        {adjustDate != null && <Text style={styles.deadlineHint}>Target: {format(adjustDate, 'MMMM yyyy')}</Text>}
+        {adjustDate != null && <Text style={styles.deadlineHint}>Target: {monthLabel(adjustDate)}</Text>}
 
         <PrimaryButton
           label="Save changes"

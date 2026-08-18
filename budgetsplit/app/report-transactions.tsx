@@ -3,9 +3,8 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { startOfMonth, endOfMonth, addMonths, subMonths, format } from 'date-fns';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, layout } from '../src/constants/layout';
+import { monthLabel } from '../src/lib/dateFormat';
+import { colors, type, space, layout } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -189,7 +188,7 @@ export default function ReportTransactionsScreen() {
                 <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
                   <Feather name="chevron-left" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
-                <Text style={styles.monthLabel}>{format(month, 'MMMM yyyy')}</Text>
+                <Text style={styles.monthLabel}>{monthLabel(month)}</Text>
                 <TouchableOpacity
                   onPress={() => !isCurrentMonth && shiftMonth(1)}
                   disabled={isCurrentMonth}

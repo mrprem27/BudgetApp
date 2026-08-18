@@ -43,6 +43,10 @@ type Props = {
   canRequest: boolean;
   onOpenUpiUri: () => void;
   onOpenRequestQr: () => void;
+  /** `before` stores the resolved settlement so the app can ask "did that go
+   *  through?" on return; `onCancel` drops it again when no app ever opened.
+   *  Both come from `useAddTxnForm` — see `transferHandoffHooks`. */
+  handoffHooks: { before: () => Promise<void>; onCancel: () => Promise<void> };
 };
 
 /** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient.
@@ -50,7 +54,7 @@ type Props = {
  *  category pill in Quick Add (same UI as Expense/Income). */
 export function TransferBody({
   me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, payMethod, onPayMethod, note, onNote,
-  amountPaise = 0, payee, handoff, canPay, canRequest, onOpenUpiUri, onOpenRequestQr,
+  amountPaise = 0, payee, handoff, canPay, canRequest, onOpenUpiUri, onOpenRequestQr, handoffHooks,
 }: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
   const to = persons.find(p => p.id === toId) ?? null;
@@ -105,7 +109,10 @@ export function TransferBody({
   }
 
   function payViaUpi() {
-    if (payee) handoff.pay(payee);
+    // `before` is awaited ahead of the app switch by `useUpiHandoff` — after
+    // `openURL` we would be racing our own suspension, and losing that race loses
+    // the record of what we just handed off.
+    if (payee) handoff.pay(payee, handoffHooks);
   }
 
   return (
@@ -210,10 +217,11 @@ export function TransferBody({
             </View>
           )}
           {/* Opens their UPI app pre-filled; the money moves between their own
-              accounts. Saving stays a separate, explicit step — this app never
-              sees whether the payment actually went through, so it must not
-              record a settlement it did not observe. */}
-          <Text style={styles.upiHint}>Opens your UPI app. Come back and save to record it.</Text>
+              accounts. The app still never records a settlement it did not
+              observe — it cannot observe one — but it no longer leaves the whole
+              burden on the user remembering to return and press Save. It asks
+              once, on the way back, while they still know the answer. */}
+          <Text style={styles.upiHint}>Opens your UPI app. We&apos;ll ask if it went through when you come back.</Text>
         </>
       )}
 

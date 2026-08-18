@@ -9,16 +9,13 @@ import { getAllGroups } from '../src/db/queries/groups';
 import { getMe } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
 import { formatRupees } from '../src/lib/money';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { SheetModal } from '../src/components/ui/SheetModal';
 import { FEATURE_KEYS } from '../src/lib/featureFlags';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../src/lib/personaDefaults';
 import { haptic } from '../src/lib/haptics';
-import { alpha } from '../src/theme';
 
 // The pillar is always on — the app's reason to exist. It shows a "Core" badge
 // instead of a toggle so users understand they can't switch off the basics.

@@ -3,7 +3,7 @@ import { loadInsightsData } from '../lib/insightsData';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { getAllGroups } from '../db/queries/groups';
 import { getAffordSnapshot, insertGoal, fundGoal } from '../db/queries/savings';
-import { endOfMonth } from 'date-fns';
+import { STS_HORIZON_DAYS } from '../lib/safeToSpend';
 import { createTestDb, addPerson, addGroup, addMember, addSimpleExpense, addTxn, addCategory, setCategoryBudget, type TestDb } from './helpers/testDb';
 import type * as SQLite from 'expo-sqlite';
 
@@ -352,16 +352,20 @@ describe('getAffordSnapshot — committed bills', () => {
   // made the first occurrence land on the very millisecond the engine reads the
   // clock, so inclusion flipped run to run).
   const dailyAnchor = () => Date.now() - DAY + 60_000;
-  /** Occurrences of a daily series anchored `anchor` that land in (now, monthEnd]. */
+  /**
+   * Occurrences of a daily series anchored `anchor` inside the Safe-to-Spend
+   * horizon. Rolling `STS_HORIZON_DAYS`, deliberately *not* month-end: a calendar
+   * horizon shows its best figure on the 28th, with rent three days out.
+   */
   const dailyOccurrencesLeft = (anchor: number): number => {
-    const monthEnd = endOfMonth(new Date()).getTime();
     const now = Date.now();
+    const horizon = now + STS_HORIZON_DAYS * DAY;
     let n = 0;
-    for (let t = anchor; t <= monthEnd; t += DAY) if (t >= now) n++;
+    for (let t = anchor; t <= horizon; t += DAY) if (t >= now) n++;
     return n;
   };
 
-  it('counts EVERY remaining occurrence of an active recurring expense this month', async () => {
+  it('counts EVERY occurrence of an active recurring expense inside the horizon', async () => {
     const { db, me, personal } = setup();
     // A daily rule "anchored" yesterday — occurrences are imminent and reliably
     // within this month, the same convention the income tests above use.
@@ -403,11 +407,11 @@ describe('getAffordSnapshot — committed bills', () => {
       recurFreq: 'daily',
     });
     const snap = await getAffordSnapshot(asDb(db));
-    // The one-off may or may not fall inside this month; assert the recurring
-    // expansion and the one-off's contribution independently of month boundaries.
+    // A +5-day one-off is unconditionally inside a rolling 30-day horizon, so
+    // this can assert exactly. Under the old month-end horizon it could land
+    // either side of the boundary, which is why this used to allow two answers.
     const recurringPart = dailyOccurrencesLeft(anchor) * 150000;
-    expect(snap.upcomingBills).toBeGreaterThanOrEqual(recurringPart);
-    expect([recurringPart, recurringPart + 200000]).toContain(snap.upcomingBills);
+    expect(snap.upcomingBills).toBe(recurringPart + 200000);
   });
 
   it('counts my share of a SHARED group recurring bill (all groups, my-share basis)', async () => {

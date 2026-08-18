@@ -15,7 +15,7 @@ import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categ
 import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement } from '../db/queries/transactions';
 import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseTags } from '../lib/tags';
-import { parseToPaise, formatRupees } from '../lib/money';
+import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { evaluateAfford } from '../lib/afford';
@@ -24,6 +24,9 @@ import { saveFailureMessage } from '../lib/dbErrors';
 import { composeTitleNote } from '../lib/txnNote';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
+import { useToast } from '../components/system/Toast';
+import { getSafeToSpend } from '../db/queries/spendPower';
+import { setPendingSettlement } from '../lib/pendingSettlement';
 import { useStore } from '../store';
 import { useLocationCapture } from './useLocationCapture';
 import { useUpiHandoff } from './useUpiHandoff';
@@ -56,6 +59,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   const router = useRouter();
   const { flags } = useFeatureFlags();
   const { refresh } = useDataRefresh();
+  const { showToast } = useToast();
 
   // groups + me come from the hydrated zustand store (single source of truth).
   // The mount effect below has a cold-start query fallback for the first-ever open
@@ -66,7 +70,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [kind, setKind] = useState<AddKind>(
     paramKind === AddKind.Income ? AddKind.Income : paramKind === AddKind.Transfer ? AddKind.Transfer : AddKind.Expense,
   );
-  const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? (parseInt(paramAmount, 10) / 100).toString() : '');
+  const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? paiseToInput(parseInt(paramAmount, 10)) : '');
   const [allPersons, setAllPersons] = useState<Person[]>([]);
   const [personNet, setPersonNet] = useState<Record<string, number>>({});
   const [transferFromId, setTransferFromId] = useState(paramFrom ?? '');
@@ -171,7 +175,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           setKind(txn.kind === 'income' ? AddKind.Income : txn.kind === 'settlement' ? AddKind.Transfer : AddKind.Expense);
           setTxnDate(txn.date);
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
-          setAmountText((total / 100).toString());
+          setAmountText(paiseToInput(total));
           setNote(txn.note ?? '');
           setPayMethod(txn.pay_method ?? PayMethod.Upi);
 
@@ -185,8 +189,8 @@ export function useAddTxnForm(params: AddTxnParams) {
           if (txn.kind === 'expense' && !personalGroup) {
             setSplitType('exact');
             setSplitMembers(txn.shares.map(s => s.personId));
-            setExactAmounts(Object.fromEntries(txn.shares.map(s => [s.personId, (s.amount / 100).toString()])));
-            setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, (p.amount / 100).toString()])));
+            setExactAmounts(Object.fromEntries(txn.shares.map(s => [s.personId, paiseToInput(s.amount)])));
+            setPayerAmounts(Object.fromEntries(txn.payments.map(p => [p.personId, paiseToInput(p.amount)])));
           }
           if (recurEditId && txn.recur_freq) {
             setRecurEnabled(true);
@@ -262,6 +266,40 @@ export function useAddTxnForm(params: AddTxnParams) {
     && !!transferFrom && transferFrom.id !== me.id
     && total > 0
     && !!buildUpiRequestUri(me.upi_vpa, me.name, total);
+
+  /**
+   * Remember the settle-up we are about to hand off, so the app can ask about it
+   * on return instead of relying on the user coming back and pressing Save.
+   *
+   * Runs *before* `Linking.openURL` — after the switch we are racing our own
+   * suspension, and losing that race loses the record (see `useUpiHandoff`).
+   *
+   * The **resolved plan** is stored, not the inputs. `planAllGroupsSettlement`
+   * reads live balances, so re-planning at confirm time could settle a different
+   * group than the one the user was looking at when they paid — the same reason
+   * `applyOverspendRaid` takes its withdrawals rather than recomputing them.
+   */
+  const transferHandoffHooks = {
+    before: async () => {
+      if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
+      const plans = buildTransferPlans();
+      if (plans.length === 0) return; // nothing to record; Save shows the real error
+      await setPendingSettlement({
+        plans,
+        amountPaise: total,
+        payeeName: transferTo?.name ?? 'them',
+        category: selectedCategory?.name ?? 'Settlement',
+        note: transferNote.trim() || undefined,
+        payMethod,
+        date: txnDate,
+        startedAt: Date.now(),
+      });
+    },
+    // The launch failed or the picker was dismissed, so no app ever opened and
+    // there is nothing to ask about. Leaving the record would prompt "did that
+    // payment go through?" for a payment that never started.
+    onCancel: async () => { await setPendingSettlement(null); },
+  };
 
   // Shared with voice capture (`lib/voiceDrain`) so a dictated transaction and a typed one
   // compose the same stored note.
@@ -365,7 +403,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     amountPaise: number; category: string | null; dateMs: number | null; note: string;
     personId?: string | null;
   }) {
-    if (draft.amountPaise > 0) setAmountText((draft.amountPaise / 100).toString());
+    if (draft.amountPaise > 0) setAmountText(paiseToInput(draft.amountPaise));
     if (draft.category) {
       const hit = categories.find(c => c.name === draft.category);
       if (hit) { setSelectedCategory(hit); setCatManual(true); }
@@ -403,8 +441,36 @@ export function useAddTxnForm(params: AddTxnParams) {
     await loadGroup(gid, me, selectedCategory?.name);
   }
 
+  /**
+   * Which settlement rows this transfer becomes. One source, two readers: the Save
+   * path writes them now, and the UPI hand-off stores them to write on confirm.
+   * They were the same twelve lines in both places before the hand-off learned to
+   * remember, and a settlement plan that differs by route is a balance that differs
+   * by route.
+   *
+   * Empty means the two people share no group — the callers decide how loudly to
+   * say so, because Save can show an alert and a hand-off cannot.
+   */
+  function buildTransferPlans(): Array<{ groupId: string; from: string; to: string; amount: number }> {
+    if (!transferFromId || !transferToId) return [];
+    const plans = transferScope === TRANSFER_SCOPE_ALL
+      ? planAllGroupsSettlement(transferScopes ?? { groups: [], all: { amount: 0, from: transferFromId, to: transferToId } }, total, transferFromId, transferToId)
+      : [{ groupId: transferScope, from: transferFromId, to: transferToId, amount: total }];
+    if (plans.length > 0) return plans;
+    // "All groups" with nothing owed anywhere: fall back to the first shared group
+    // so an early repayment still lands somewhere real.
+    const firstGroup = transferScopes?.groups[0];
+    if (!firstGroup) return [];
+    return [{ groupId: firstGroup.groupId, from: transferFromId, to: transferToId, amount: total }];
+  }
+
   async function handleSaveTransfer() {
     if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
+    // Saving by hand settles the same hand-off, so drop the remembered one first.
+    // Without this, someone who pays via UPI and then taps Save gets asked about it
+    // on the next foreground and can record the settlement a second time — the
+    // duplicate guard only covers expenses.
+    setPendingSettlement(null).catch(() => {});
     const transferCategory = selectedCategory?.name ?? 'Settlement';
     const transferFullNote = transferNote.trim() || undefined;
     setSaving(true);
@@ -422,15 +488,11 @@ export function useAddTxnForm(params: AddTxnParams) {
         return;
       }
 
-      const plans = transferScope === TRANSFER_SCOPE_ALL
-        ? planAllGroupsSettlement(transferScopes ?? { groups: [], all: { amount: 0, from: transferFromId, to: transferToId } }, total, transferFromId, transferToId)
-        : [{ groupId: transferScope, from: transferFromId, to: transferToId, amount: total }];
-
-      let finalPlans = plans;
+      const finalPlans = buildTransferPlans();
       if (finalPlans.length === 0) {
-        const firstGroup = transferScopes?.groups[0];
-        if (!firstGroup) { Alert.alert('No shared group', 'These two people don’t share a group to transfer in.'); setSaving(false); return; }
-        finalPlans = [{ groupId: firstGroup.groupId, from: transferFromId, to: transferToId, amount: total }];
+        Alert.alert('No shared group', 'These two people don’t share a group to transfer in.');
+        setSaving(false);
+        return;
       }
 
       for (const p of finalPlans) {
@@ -451,6 +513,33 @@ export function useAddTxnForm(params: AddTxnParams) {
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * Say what the money you just logged left behind.
+   *
+   * Manual entry happens *after* the spend, so this screen is a consequence
+   * surface, not a decision one — and consequence is exactly what's missing.
+   * CHI 2024 (`From Cash to Cashless`, 276 surveyed / 34 usability-tested) found
+   * ~75% of Indian UPI users spend more since switching, and attributes it to
+   * the payment being intangible: nothing pushes back. Seeing what a purchase
+   * cost you, in the seconds after logging it, is the cheapest thing that does.
+   *
+   * Deliberately fire-and-forget: this runs after the write has already
+   * succeeded and the screen is dismissing, so a failure here must never surface
+   * as a save error. No toast is strictly better than a wrong one.
+   */
+  function showSpendConsequence() {
+    if (kind !== 'expense') return;
+    getSafeToSpend(db)
+      .then(sts => {
+        if (sts.amount < 0) {
+          showToast({ message: `That puts you ${formatRupees(-sts.amount)} over what's yours to spend.`, icon: 'alert-triangle', tone: 'bad' });
+        } else {
+          showToast({ message: `${formatRupees(sts.amount)} left to spend over ${sts.daysLeft} days.`, icon: 'trending-down' });
+        }
+      })
+      .catch(() => {});
   }
 
   /**
@@ -566,6 +655,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         });
         haptic.success();
         refresh();
+        showSpendConsequence();
         if (opts?.onSaved) opts.onSaved(newId);
         else router.back();
       };
@@ -625,6 +715,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     allPersons, personNet, transferFromId, setTransferFromId, transferToId, setTransferToId,
     transferScope, setTransferScope, transferScopes, transferNote, setTransferNote, transferScopeBal,
     transferFrom, transferTo, transferPayee, transferHandoff, canPayTransferUpi, canRequestTransferQr,
+    transferHandoffHooks,
     payMethod, setPayMethod,
     // recurring
     recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,

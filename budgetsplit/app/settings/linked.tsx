@@ -2,10 +2,9 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch, Share } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
+import { shortDate } from '../../src/lib/dateFormat';
 import QRCode from 'react-native-qrcode-svg';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, layout } from '../../src/constants/layout';
+import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -251,7 +250,7 @@ export default function LinkedPeopleScreen() {
             </View>
             <Text style={styles.sheetHint}>
               Let them scan this, or send the link. It works once, expires{' '}
-              {format(new Date(invite.expiresAt), 'd MMM')}, and you’ll be asked to confirm
+              {shortDate(new Date(invite.expiresAt))}, and you’ll be asked to confirm
               it’s them before anything links.
             </Text>
             <PrimaryButton

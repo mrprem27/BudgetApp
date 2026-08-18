@@ -6,9 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { type } from '../../constants/typography';
-import { space, radius, layout } from '../../constants/layout';
+import { colors, type, space, radius, layout } from '../../theme';
 import { PERSONA_OPTIONS, personaTrims, type OnboardingIntent } from '../../lib/personaDefaults';
 import { useOnboardingForm, stepPosition } from '../../hooks/useOnboardingForm';
 import { GROUP_COLORS } from '../../constants/palette';
@@ -116,7 +114,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
             <FadeIn delay={4520} offset={10} style={styles.taglineWrap}>
-              <Text style={styles.tagline}>Budget your money and split bills — all on your phone, nothing in the cloud.</Text>
+              {/* "No bank login" leads, ahead of "nothing in the cloud". It is the
+                  concrete, checkable version of the same promise — every competitor
+                  in this market either asks for a bank connection or reads your SMS,
+                  and this is the one line that separates the app from both. The
+                  vaguer cloud claim follows it rather than standing alone. */}
+              <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, nothing leaves your phone.</Text>
             </FadeIn>
             <FadeIn delay={4760} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
@@ -274,7 +277,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           onBack={() => setStage('income')}
           {...(stepPosition('money', intent) ?? {})}
           title="What do you have right now?"
-          subtitle="Sets up Available Money on the Plan screen — and your Safe-to-Spend on Home. Rough numbers are fine."
+          subtitle="Sets up Available Money on the Plan screen — and what's yours to spend on Home. Rough numbers are fine."
           footer={
             <StepFooter
               primaryLabel="Continue"
@@ -481,8 +484,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
           {/* V2-02: everything lives only on this phone, and the backup nudge is the
               one mitigation for losing it. Stated here, defaulted on in the commit. */}
+          {/* The permissions step is where a user is deciding how much to trust this,
+              so it is the right place to say what will *never* be asked for — next to
+              what is being asked for right now. */}
           <Text style={styles.dataNote}>
-            Everything stays on this phone — no account, nothing uploaded. We&apos;ll nudge you monthly to back up (Settings → Backup), because a lost phone is the one thing this can&apos;t survive.
+            Everything stays on this phone — no account, nothing uploaded. We never ask for your bank login and never read your messages. We&apos;ll nudge you monthly to back up (Settings → Backup), because a lost phone is the one thing this can&apos;t survive.
           </Text>
         </StepScaffold>
       )}

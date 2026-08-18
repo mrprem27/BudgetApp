@@ -4,8 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../src/constants/colors';
-import { space, layout } from '../src/constants/layout';
+import { colors, space, layout, alpha } from '../src/theme';
 import { reviewStyles as styles } from '../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -55,13 +54,12 @@ import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '.
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useContentInset } from '../src/hooks/useContentInset';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
-import { useUndo } from '../src/components/system/UndoToast';
+import { useToast } from '../src/components/system/Toast';
 import { haptic } from '../src/lib/haptics';
 import { saveFailureMessage } from '../src/lib/dbErrors';
 import {
   type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL,
 } from '../src/constants/enums';
-import { alpha } from '../src/theme';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
@@ -74,7 +72,7 @@ export default function ReviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
   const { flags } = useFeatureFlags();
   const [recurCandidates, setRecurCandidates] = useState<RecurringCandidate[]>([]);
   const [showRecurSheet, setShowRecurSheet] = useState(false);

@@ -7,7 +7,7 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { insertCategory } from '../../src/db/queries/categories';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
@@ -26,7 +26,6 @@ import { PayMethodSheet } from '../../src/components/finance/add/PayMethodSheet'
 import { PAY_METHOD_LABEL, AddKind } from '../../src/constants/enums';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
-import { alpha } from '../../src/theme';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 /**

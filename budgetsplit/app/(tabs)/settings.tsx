@@ -9,9 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, layout, radius, shadow } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
 import { formatAgoCompact } from '../../src/lib/time';
 import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa } from '../../src/db/queries/persons';
@@ -452,7 +450,7 @@ export default function SettingsScreen() {
           accessibilityLabel="App version"
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
-          <Text style={styles.aboutSub}>Offline-first · No accounts · No tracking</Text>
+          <Text style={styles.aboutSub}>No bank login · No accounts · No tracking</Text>
           <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
           {__DEV__ && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
         </TouchableOpacity>

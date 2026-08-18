@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../../tokens';
-import { formatRupees } from '../../../lib/money';
+import { formatRupees, paiseToInput } from '../../../lib/money';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { MemberAvatar } from '../MemberAvatar';
@@ -46,7 +46,7 @@ export function PayersSheet({
       ))}
       <TouchableOpacity
         style={styles.payerQuickBtn}
-        onPress={() => me && setPayerAmounts({ [me.id]: (total / 100).toString() })}
+        onPress={() => me && setPayerAmounts({ [me.id]: paiseToInput(total) })}
         accessibilityRole="button"
       >
         <Feather name="user" size={14} color={colors.accent} />

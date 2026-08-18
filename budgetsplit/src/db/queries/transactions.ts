@@ -490,7 +490,7 @@ export async function softDeleteTxn(
 /**
  * Unlink receipt files belonging to transactions soft-deleted more than
  * `maxAgeMs` ago. There's no "recently deleted" browsing screen — the only
- * way back is the ~5s Undo toast (`UndoToast.tsx`'s `UNDO_MS`) right after
+ * way back is the ~5s Undo toast (`Toast.tsx`'s `UNDO_MS`) right after
  * delete — so a row still `is_deleted=1` well past that is not coming back,
  * and its photo would otherwise sit on disk forever (softDeleteTxn never
  * touches `attachment_uri`). This module has no native file IO (AGENTS.md's

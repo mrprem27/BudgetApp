@@ -1,9 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, layout } from '../../src/constants/layout';
+import { colors, type, space, layout, alpha } from '../../src/theme';
 import { categoryVisual } from '../../src/constants/categories';
 import { asFeather } from '../../src/constants/palette';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -28,7 +26,6 @@ import { myShareOrTotal, myIncomeOf, txnTotal } from '../../src/lib/splitMath';
 import { getMe } from '../../src/db/queries/persons';
 import type { RecurFreq, TxnKind } from '../../src/constants/enums';
 import { formatCompact } from '../../src/lib/money';
-import { alpha } from '../../src/theme';
 
 type Sub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null };
 

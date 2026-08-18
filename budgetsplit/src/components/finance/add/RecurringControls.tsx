@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Switch, Keyboard } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { fullDate } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
 import { TabPills } from '../../ui/TabPills';
 import { IconCircle } from '../../ui/IconCircle';
@@ -116,7 +116,7 @@ export function RecurringControls({
       {/* Next charge — the occurrence after the start date */}
       <View style={styles.recurRow}>
         <Text style={styles.recurRowLabel}>Next charge</Text>
-        <Chip label={format(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)), 'd MMM yyyy')} />
+        <Chip label={fullDate(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)))} />
       </View>
 
       {/* Ends — Never / On date / After N */}
@@ -131,7 +131,7 @@ export function RecurringControls({
         {endMode === RecurEndMode.Date && endMs != null && (
           <TouchableOpacity style={styles.recurEndDate} onPress={() => { Keyboard.dismiss(); onPickEndDate(); }} accessibilityRole="button" accessibilityLabel="Change end date">
             <Feather name="calendar" size={13} color={colors.settle} />
-            <Text style={styles.recurEndDateText}>Ends {format(new Date(endMs), 'd MMM yyyy')}</Text>
+            <Text style={styles.recurEndDateText}>Ends {fullDate(new Date(endMs))}</Text>
           </TouchableOpacity>
         )}
         {endMode === RecurEndMode.Count && (

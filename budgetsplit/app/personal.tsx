@@ -4,9 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { TabPills } from '../src/components/ui/TabPills';
 import { Chip } from '../src/components/ui/Chip';
@@ -44,7 +42,6 @@ import { myShareOrTotal } from '../src/lib/splitMath';
 import { haptic } from '../src/lib/haptics';
 import { buildGroupExportCsv } from '../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
-import { alpha } from '../src/theme';
 
 type TabKey = 'activity' | 'budget' | 'recurring';
 const TABS: { key: TabKey; label: string }[] = [

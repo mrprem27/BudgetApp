@@ -1,5 +1,5 @@
 import { oweView } from '../lib/owe';
-import { colors } from '../constants/colors';
+import { colors } from '../theme';
 import { summarizeExposure } from '../db/queries/balances';
 import type { FriendBalance } from '../db/queries/balances';
 

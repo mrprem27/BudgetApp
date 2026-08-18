@@ -8,9 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { useStore } from '../../src/store';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
@@ -38,7 +36,6 @@ import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palett
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
-import { alpha } from '../../src/theme';
 
 type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number };
 

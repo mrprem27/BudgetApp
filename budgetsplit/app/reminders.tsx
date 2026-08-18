@@ -3,10 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { shortDate } from '../src/lib/dateFormat';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { categoryVisual } from '../src/constants/categories';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -23,7 +21,6 @@ import { buildUpcoming, type UpcomingItem } from '../src/lib/upcoming';
 import { formatRupees, formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { IconCircle } from '../src/components/ui/IconCircle';
-import { alpha } from '../src/theme';
 
 type SettleReminder = { from: string; to: string; amount: number; counterpart: Person; iOwe: boolean };
 
@@ -94,7 +91,7 @@ export default function RemindersScreen() {
                         <Text style={styles.rowTitle} numberOfLines={1}>{b.name}</Text>
                         <View style={styles.dueChip}><Text style={styles.dueChipText}>{dueLabel(b.daysUntil)}</Text></View>
                       </View>
-                      <Text style={styles.rowSub}>{formatRupees(b.amount)} · {format(b.dateMs, 'd MMM')}</Text>
+                      <Text style={styles.rowSub}>{formatRupees(b.amount)} · {shortDate(b.dateMs)}</Text>
                       <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button">
                         <Text style={styles.actionBtnText}>Log payment</Text>
                       </TouchableOpacity>

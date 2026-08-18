@@ -19,6 +19,8 @@
  * balance. All money is integer paise.
  */
 
+import { computeSafeToSpend } from './safeToSpend';
+
 export enum AffordVerdict {
   Comfortable = 'comfortable',
   Tight = 'tight',
@@ -94,12 +96,16 @@ export type AffordContext = {
   amount: number;
   /** Spendable cash right now (paise). */
   available: number;
-  /** Bills already committed for the rest of this month (paise, clamped ≥ 0). */
+  /** Bills already committed for the rest of the horizon (paise, clamped ≥ 0). */
   upcomingBills: number;
+  /** Card balance still to repay (paise, clamped ≥ 0). */
+  cardRepayment?: number;
   /** Goal contributions still due this cycle, unfunded (paise, clamped ≥ 0). */
   goalRemaining?: number;
   /** What I owe people net of settlements (paise, clamped ≥ 0) — their money. */
   netIOwe?: number;
+  /** Everyday (non-bill) spending still to come before the horizon (paise). */
+  everydaySpend?: number;
   /** Typical monthly income (paise, > 0 to engage the income-share axis). */
   monthlyIncome?: number;
   /**
@@ -169,13 +175,20 @@ export function incomeSharePct(share: number | undefined): string {
 export function evaluateAfford(ctx: AffordContext): AffordResult {
   const amount = Math.max(0, ctx.amount);
   const available = ctx.available;
-  const upcomingBills = Math.max(0, ctx.upcomingBills);
-  const goalRemaining = Math.max(0, ctx.goalRemaining ?? 0);
-  const netIOwe = Math.max(0, ctx.netIOwe ?? 0);
 
-  // The cash gate IS Safe-to-Spend (lib/safeToSpend) — one formula, shared with
-  // Home's hero, so "can I afford ₹X" is exactly "is X within that number".
-  const freeToSpend = available - upcomingBills - goalRemaining - netIOwe;
+  // The cash gate IS Safe-to-Spend — *called*, not re-derived. This used to
+  // repeat the subtraction inline under a comment claiming it was one formula,
+  // which meant every new StS term (card repayment, everyday spend) would have
+  // silently skipped Afford and let the two screens disagree about the same
+  // question. Delegating is what makes the claim true.
+  const freeToSpend = computeSafeToSpend({
+    available,
+    upcomingBills: ctx.upcomingBills,
+    cardRepayment: ctx.cardRepayment ?? 0,
+    goalRemaining: ctx.goalRemaining ?? 0,
+    netIOwe: ctx.netIOwe ?? 0,
+    everydaySpend: ctx.everydaySpend ?? 0,
+  }).amount;
   const remaining = freeToSpend - amount;
   const bufferTarget = Math.max(0, available * SAFETY_BUFFER_RATIO);
 

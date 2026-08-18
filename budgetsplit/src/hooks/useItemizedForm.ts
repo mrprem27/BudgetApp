@@ -12,7 +12,7 @@ import {
   insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems,
   type ItemizedAdjustmentType,
 } from '../db/queries/transactions';
-import { parseToPaise } from '../lib/money';
+import { parseToPaise, paiseToInput } from '../lib/money';
 import {
   computeAdjustedTotal, computeItemSubtotal, computePerPersonShares,
   type LineItemDraft, type Adjustment,
@@ -169,7 +169,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
             id: li.id,
             name: li.name,
             qty: String(li.qty),
-            unitPrice: (li.unit_price / 100).toString(),
+            unitPrice: paiseToInput(li.unit_price),
             assignedTo: (() => { try { return JSON.parse(li.assigned_to) as string[]; } catch { return []; } })(),
             splitMode: (li.split_mode ?? undefined) as SplitMode | undefined,
             splitValues: (() => { try { return li.split_values ? JSON.parse(li.split_values) as Record<string, string> : undefined; } catch { return undefined; } })(),
@@ -178,7 +178,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
             try { setAdjustments(JSON.parse(t.adjustments) as Adjustment[]); } catch { /* ignore */ }
           }
           const payerMap: Record<string, string> = {};
-          for (const p of t.payments) payerMap[p.personId] = (p.amount / 100).toString();
+          for (const p of t.payments) payerMap[p.personId] = paiseToInput(p.amount);
           setPayerAmounts(payerMap);
         }
         return;

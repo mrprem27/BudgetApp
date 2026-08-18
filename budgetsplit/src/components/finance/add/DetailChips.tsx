@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { format } from 'date-fns';
+import { timeOfDay } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';
@@ -142,12 +142,12 @@ export function DetailChips({
         {/* Always filled — the time is real whether or not it was chosen, so there is no
             "unset" state to offer. Same shape as the pay-method chip. */}
         <Chip
-          label={format(txnDate, 'h:mm a')}
+          label={timeOfDay(txnDate)}
           icon="clock"
           selected
           accent={accent}
           onPress={onOpenTime}
-          accessibilityLabel={`Time: ${format(txnDate, 'h:mm a')}. Change`}
+          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
         />
 
         {onCaptureLocation && (

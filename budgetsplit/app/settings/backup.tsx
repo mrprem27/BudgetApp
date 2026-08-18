@@ -6,10 +6,8 @@ import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
-import { format } from 'date-fns';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { dateTime } from '../../src/lib/dateFormat';
+import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { IconCircle } from '../../src/components/ui/IconCircle';
@@ -165,7 +163,7 @@ export default function BackupScreen() {
   function handleDeleteServerBackup(backup: ServerBackup) {
     Alert.alert(
       'Delete this backup?',
-      `The copy from ${format(new Date(backup.createdAt), 'd MMM yyyy, h:mm a')} is removed from your account. Anything on this device is untouched.`,
+      `The copy from ${dateTime(new Date(backup.createdAt))} is removed from your account. Anything on this device is untouched.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -210,7 +208,7 @@ export default function BackupScreen() {
   }
 
   function confirmRestore(payload: BackupPayload) {
-    const when = format(new Date(payload.createdAt), 'd MMM yyyy, h:mm a');
+    const when = dateTime(new Date(payload.createdAt));
     Alert.alert(
       'Restore this backup?',
       `This replaces ALL current data on this device with the backup from ${when}. This cannot be undone.`,
@@ -262,7 +260,7 @@ export default function BackupScreen() {
               : 'Your data lives only on this device — nothing is uploaded. Create an encrypted backup file and save it to Files, iCloud Drive, or Google Drive so you can recover everything if you lose this phone.'}
           </Text>
           {lastBackupAt != null && (
-            <Text style={styles.lastBackup}>Last backup: {format(new Date(lastBackupAt), 'd MMM yyyy, h:mm a')}</Text>
+            <Text style={styles.lastBackup}>Last backup: {dateTime(new Date(lastBackupAt))}</Text>
           )}
         </View>
 

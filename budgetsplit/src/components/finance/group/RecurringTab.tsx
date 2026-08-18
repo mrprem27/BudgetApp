@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatRupees } from '../../../lib/money';

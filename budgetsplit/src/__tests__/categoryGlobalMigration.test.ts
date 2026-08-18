@@ -2,8 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { applyCategoryGlobalMigration } from '../db/schema';
 
 // `category_global_v1` (CATEGORY_GLOBAL_V1_SQL in schema.ts) had never been run
-// against a populated pre-existing database — docs/V2_LAUNCH_CHECKLIST.md §1 flagged
+// against a populated pre-existing database — docs/RELEASE_CHECKLIST.md §1 flagged
 // it as a ship blocker because it drops and rebuilds the whole `category` table.
+// This file *is* that rehearsal, which is why the blocker is now closed there.
 // `openTestDb()` can't stand in here: SCHEMA already declares the *post*-migration
 // shape, so a harness built from it never has anything to collapse. These tests
 // build the actual pre-migration shape a real device has on disk — per-group rows,

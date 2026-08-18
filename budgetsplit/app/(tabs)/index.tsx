@@ -6,9 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getDate, getDaysInMonth } from 'date-fns';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, layout, radius } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { useStore } from '../../src/store';
 
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -28,6 +26,7 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { StsSheet } from '../../src/components/finance/home/StsSheet';
+import { StsStrip } from '../../src/components/finance/home/StsStrip';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
 import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
@@ -36,7 +35,6 @@ import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
-import { alpha } from '../../src/theme';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -289,9 +287,11 @@ export default function DashboardScreen() {
               </>
             ) : (
             <>
+            {/* Horizon-scoped, so it sits *outside* the card the period pills
+                drive — see StsStrip's header for why it stopped being the hero. */}
+            <StsStrip sts={sts} onPress={() => setShowSts(true)} obfuscate={hideAmounts} />
+
             <HeroCard
-              sts={sts}
-              onPressSts={() => setShowSts(true)}
               spent={spending}
               periodLabel={PERIOD_LABEL[tab]}
               budgetAllocated={paceAllocated}
@@ -302,6 +302,7 @@ export default function DashboardScreen() {
               healthLocked={!!health && !health.gate.ok}
               healthColor={health ? healthBandColor(health.band) : colors.accent}
               onPressHealth={() => setShowHealth(true)}
+              onPressOver={() => router.push('/insights')}
             />
 
             <View style={styles.tabRow}>

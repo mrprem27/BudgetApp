@@ -6,9 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { getDate, getDaysInMonth, format } from 'date-fns';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { monthLabel } from '../src/lib/dateFormat';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { categoryVisual } from '../src/constants/categories';
 import { asFeather } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
@@ -25,7 +24,6 @@ import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/m
 import { loadInsightsData } from '../src/lib/insightsData';
 import { plotWidth, axisSpacing } from '../src/lib/chartAxis';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
-import { alpha } from '../src/theme';
 
 function insightTint(tone: Insight['tone']): string {
   switch (tone) {
@@ -112,7 +110,7 @@ export default function InsightsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.eyebrow}>{format(today, 'MMMM yyyy')} · {dayOfMonth} days in</Text>
+        <Text style={styles.eyebrow}>{monthLabel(today)} · {dayOfMonth} days in</Text>
 
         {/* One note for the whole screen — velocity, forecast and what-if share the sample. */}
         {!loading && !nothingYet && (
@@ -335,12 +333,17 @@ export default function InsightsScreen() {
           </>
         )}
 
+        {/* The CTA is the point, not decoration: this screen has nothing to show
+            until expenses exist, so the only useful thing it can offer is the way
+            to create one. Was the last empty state in the app without one. */}
         {nothingYet && (
           <EmptyState
             icon="bar-chart-2"
             title="No insights yet"
             body="Log a few expenses and split with a group — patterns, alerts, and balances show up here."
             tint={colors.textSecondary}
+            actionLabel="Add an expense"
+            onAction={() => router.push('/add/quick')}
           />
         )}
       </ScrollView>

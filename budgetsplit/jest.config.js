@@ -16,6 +16,10 @@ module.exports = {
     // in src/db/queries unexecutable, which is how nine wrong-money bugs shipped green.
     '^expo-sqlite$': '<rootDir>/src/__tests__/__mocks__/expoSqlite.js',
     '^react-native-get-random-values$': '<rootDir>/src/__tests__/__mocks__/empty.js',
+    // Minimal Alert/Platform stand-in, NOT an empty stub — the real package ships
+    // untransformed Flow ESM, which made `lib/confirm.ts` and both money-confirming
+    // callers (`confirmPayment`, `confirmSettlement`) untestable. See the mock.
+    '^react-native$': '<rootDir>/src/__tests__/__mocks__/reactNative.js',
     '^expo-ocr$': '<rootDir>/src/__tests__/__mocks__/empty.js',
     '^expo/virtual/env$': '<rootDir>/src/__tests__/__mocks__/expoVirtualEnv.js',
     '^expo-image-picker$': '<rootDir>/src/__tests__/__mocks__/empty.js',

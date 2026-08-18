@@ -2,7 +2,7 @@ import type { BudgetCadence, BudgetLevel, CategoryBudget } from '../db/queries/c
 import type { Category } from '../db/queries/categories';
 import { categorySection, SECTION_ORDER } from '../constants/categories';
 import { OTHERS_LABEL } from './categoryFold';
-import { parseToPaise } from './money';
+import { parseToPaise, paiseToInput } from './money';
 
 /**
  * Pure logic for the budget editor. Lives here rather than in the screen because
@@ -48,7 +48,7 @@ export function seedBudgetForms(
     if (r.amount <= 0 || !catalogNames.has(r.category)) continue;
     const form = r.person_id === null ? forms.group : r.person_id === meId ? forms.personal : null;
     if (!form) continue;
-    form.amounts[r.category] = (r.amount / 100).toString();
+    form.amounts[r.category] = paiseToInput(r.amount);
     form.cadences[r.category] = r.cadence;
     if (r.person_id === null) inherited[r.category] = { amount: r.amount, cadence: r.cadence };
   }

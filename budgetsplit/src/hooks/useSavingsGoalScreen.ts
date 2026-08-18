@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
-import { parseToPaise, formatRupees } from '../lib/money';
+import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { haptic } from '../lib/haptics';
 import { settings } from '../lib/settings';
 import {
@@ -10,7 +10,7 @@ import {
   fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
   type SavingsTxn, type SavingsFrequency, type Priority,
 } from '../db/queries/savings';
-import { useUndo } from '../components/system/UndoToast';
+import { useToast } from '../components/system/Toast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
 
@@ -22,7 +22,7 @@ import { useScreenData } from './useScreenData';
 export function useSavingsGoalScreen(id: string) {
   const db = useSQLiteContext();
   const router = useRouter();
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
   const { refresh } = useDataRefresh();
 
   const [showAdd, setShowAdd] = useState(false);
@@ -96,8 +96,10 @@ export function useSavingsGoalScreen(id: string) {
   function openAdjust() {
     if (!goal) return;
     setAdjustName(goal.name);
-    setAdjustTarget((goal.target / 100).toString());
-    setAdjustAlloc(goal.allocation > 0 ? (goal.allocation / 100).toString() : '');
+    setAdjustTarget(paiseToInput(goal.target));
+    // No `> 0 ?` guard needed — `paiseToInput` already returns '' for zero, which
+    // is the whole reason it exists (an untouched field shows its placeholder).
+    setAdjustAlloc(paiseToInput(goal.allocation));
     setAdjustFreq(goal.frequency ?? 'monthly');
     setAdjustDate(goal.target_date ?? null);
     setAdjustPriority(goal.priority);

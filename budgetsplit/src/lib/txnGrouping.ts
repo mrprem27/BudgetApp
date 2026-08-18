@@ -1,4 +1,5 @@
 import { isSameDay, isSameYear, format, subDays } from 'date-fns';
+import { shortDate, fullDate } from './dateFormat';
 
 /**
  * Label for a date section header: "Today", "Yesterday", "14 Jun", or
@@ -11,7 +12,7 @@ import { isSameDay, isSameYear, format, subDays } from 'date-fns';
 export function dateSectionLabel(date: Date, now: Date = new Date()): string {
   if (isSameDay(date, now)) return 'Today';
   if (isSameDay(date, subDays(now, 1))) return 'Yesterday';
-  return isSameYear(date, now) ? format(date, 'd MMM') : format(date, 'd MMM yyyy');
+  return isSameYear(date, now) ? shortDate(date) : fullDate(date);
 }
 
 /**

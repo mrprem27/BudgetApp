@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { colors, type, space, radius, layout } from '../../tokens';
-import { formatRupees, parseToPaise } from '../../../lib/money';
+import { formatRupees, parseToPaise, paiseToInput } from '../../../lib/money';
 import { haptic } from '../../../lib/haptics';
 import { applyStep, stepIsUsable, divisionRemainder, operandKind, type CalcOp } from '../../../lib/amountCalc';
 import { alpha } from '../../../theme';
@@ -81,7 +81,7 @@ export function AmountCalculatorSheet({ visible, onClose, amountText, onApply, a
     // A pending step is applied on Done rather than silently discarded — someone who
     // types "÷ 3" and taps Done means it.
     const final = usable ? preview : acc;
-    onApply((final / 100).toString());
+    onApply(paiseToInput(final));
     onClose();
   };
 

@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { monthShort } from './dateFormat';
 import { formatCompact } from './money';
 import { estimatedCompletion } from './savings';
 import type { Priority, SavingsFrequency } from '../db/queries/savings';
@@ -76,7 +76,7 @@ export function generateInsights(
 
     const est = estimatedCompletion(g.remaining, g.allocation, g.frequency);
     if (est) {
-      cands.push({ icon: 'calendar', tone: 'motivate', goalId: g.id, score: 40, text: `At ${fmt(g.allocation)}/${g.frequency}, you'll reach your ${g.name} goal by ${format(est.date, 'MMM yyyy')}.` });
+      cands.push({ icon: 'calendar', tone: 'motivate', goalId: g.id, score: 40, text: `At ${fmt(g.allocation)}/${g.frequency}, you'll reach your ${g.name} goal by ${monthShort(est.date)}.` });
     }
 
     for (const s of topSpend) {

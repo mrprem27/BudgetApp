@@ -12,7 +12,7 @@ import {
 import { getGroupById } from '../db/queries/groups';
 import { getGroupMembers, getMe } from '../db/queries/persons';
 import { getAuditLog } from '../db/queries/audit';
-import { useUndo } from '../components/system/UndoToast';
+import { useToast } from '../components/system/Toast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
 import type { TxnDetailData } from '../lib/txnDetail';
@@ -25,7 +25,7 @@ import type { TxnDetailData } from '../lib/txnDetail';
 export function useTxnDetail(id: string) {
   const db = useSQLiteContext();
   const router = useRouter();
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
   const { refresh } = useDataRefresh();
   const [showAttachment, setShowAttachment] = useState(false);
 

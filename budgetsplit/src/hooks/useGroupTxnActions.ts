@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { softDeleteTxn, restoreTxn } from '../db/queries/transactions';
-import { useUndo } from '../components/system/UndoToast';
+import { useToast } from '../components/system/Toast';
 import { isRecurInstance } from '../lib/groupDetail';
 import { haptic } from '../lib/haptics';
 import type { TxnWithSplits } from '../db/queries/transactions';
@@ -19,7 +19,7 @@ import type { TxnWithSplits } from '../db/queries/transactions';
 export function useGroupTxnActions(groupId: string | null, reload: () => Promise<void> | void) {
   const db = useSQLiteContext();
   const router = useRouter();
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
 
   async function deleteTxn(targetId: string, cascade: boolean, message: string) {
     await softDeleteTxn(db, targetId, cascade);

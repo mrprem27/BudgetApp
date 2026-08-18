@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Image, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors } from '../../constants/colors';
-import { space } from '../../constants/layout';
+import { colors, space } from '../../theme';
 
 const LOGO = require('../../../assets/splash-icon.png');
 

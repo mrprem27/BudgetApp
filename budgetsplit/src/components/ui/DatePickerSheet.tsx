@@ -5,6 +5,7 @@ import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, subMonths, isSameDay, isSameMonth, format,
 } from 'date-fns';
+import { monthLabel } from '../../lib/dateFormat';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from './SheetModal';
 
@@ -47,7 +48,7 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
         <TouchableOpacity onPress={() => setViewMonth(m => subMonths(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
           <Feather name="chevron-left" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.monthLabel}>{format(viewMonth, 'MMMM yyyy')}</Text>
+        <Text style={styles.monthLabel}>{monthLabel(viewMonth)}</Text>
         <TouchableOpacity onPress={() => setViewMonth(m => addMonths(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Next month">
           <Feather name="chevron-right" size={22} color={colors.textPrimary} />
         </TouchableOpacity>

@@ -8,9 +8,16 @@ export type BudgetGroup = {
   name: string;
   icon: string;
   color: string;
-  limit_daily: number | null;
-  limit_monthly: number | null;
-  limit_yearly: number | null;
+  /**
+   * `limit_daily` / `limit_monthly` / `limit_yearly` are deliberately absent.
+   *
+   * The columns still exist on `budget_group` (dropping one in SQLite needs a
+   * table rebuild, which is not worth a migration for three unused fields), but
+   * nothing has ever written them — see the REMOVED note in `lib/budget.ts`, which
+   * explains they were a second, contradictory answer to "does unused budget roll
+   * over?" alongside category budgets. Carrying them on the type advertised a
+   * group-level budget the app does not have.
+   */
   carry_over: number;
   is_shared: number;
   is_archived: number;
@@ -158,7 +165,7 @@ export async function insertGroup(
     // no longer seed their own copies.
   });
 
-  return { id, name, icon, color, limit_daily: null, limit_monthly: null, limit_yearly: null, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creator };
+  return { id, name, icon, color, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creator };
 }
 
 export async function setSimplifyDebt(

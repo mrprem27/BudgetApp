@@ -27,7 +27,7 @@ import { DetailChips } from '../../src/components/finance/add/DetailChips';
 import { SplitSummary } from '../../src/components/finance/add/SplitSummary';
 import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance/add/QuickAddSheets';
 import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
-import { useUndo } from '../../src/components/system/UndoToast';
+import { useToast } from '../../src/components/system/Toast';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
@@ -60,7 +60,7 @@ export default function QuickAddScreen() {
   // Set once the draft is in and the phrase looked confident; consumed by the auto-save pass.
   const autoSaveWanted = useRef(false);
   const autoSaved = useRef(false);
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
   const { refresh } = useDataRefresh();
   // Group and person names are what `routeVoiceDraft` checks a phrase against — naming either
   // means the entry needs a decision, so it stays on the form instead of posting itself.
@@ -313,6 +313,7 @@ export default function QuickAddScreen() {
                 handoff={f.transferHandoff}
                 canPay={f.canPayTransferUpi}
                 canRequest={f.canRequestTransferQr}
+                handoffHooks={f.transferHandoffHooks}
                 onOpenUpiUri={() => open('upiUri')}
                 onOpenRequestQr={() => open('requestQr')}
               />

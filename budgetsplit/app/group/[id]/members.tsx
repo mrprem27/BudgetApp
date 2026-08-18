@@ -6,15 +6,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../../src/constants/colors';
-import { type } from '../../../src/constants/typography';
-import { space, radius, shadow, layout } from '../../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import { useUndo } from '../../../src/components/system/UndoToast';
+import { useToast } from '../../../src/components/system/Toast';
 import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
@@ -38,7 +36,7 @@ export default function MembersScreen() {
   const db = useSQLiteContext();
   const { refresh } = useDataRefresh();
   const router = useRouter();
-  const { showUndo } = useUndo();
+  const { showUndo } = useToast();
   const [showAdd, setShowAdd] = useState(false);
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);

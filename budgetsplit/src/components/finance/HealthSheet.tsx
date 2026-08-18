@@ -143,7 +143,10 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
             })}
           </Card>
 
-          {/* Biggest improvement — projection recomputed from the real formula */}
+          {/* Biggest improvement — projection recomputed from the real formula.
+              When from and to are equal the engine is naming the weakest factor
+              without projecting a gain (see `suggestImprovement`), so the score
+              row is omitted rather than rendering "47 → 47". */}
           {improvement && (
             <Card padded style={styles.improveCard}>
               <View style={styles.improveRow}>
@@ -151,11 +154,13 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
                 <View style={styles.factorMid}>
                   <Text style={styles.improveTitle}>{improvement.title}</Text>
                   <Text style={styles.factorDetail}>{improvement.detail}</Text>
-                  <View style={styles.improveScoreRow}>
-                    <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
-                    <Feather name="arrow-right" size={14} color={colors.income} />
-                    <Text style={styles.improveTo}>{improvement.toScore}</Text>
-                  </View>
+                  {improvement.toScore > improvement.fromScore && (
+                    <View style={styles.improveScoreRow}>
+                      <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
+                      <Feather name="arrow-right" size={14} color={colors.income} />
+                      <Text style={styles.improveTo}>{improvement.toScore}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </Card>

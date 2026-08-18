@@ -114,4 +114,44 @@ describe('suggestImprovement', () => {
     const i = inputs();
     expect(suggestImprovement(i, computeHealthScore(i))).toBeNull();
   });
+
+  /**
+   * Null is reserved for a *good* score. A low one must always come with something
+   * to read — the app telling you that you are doing badly and then declining to
+   * say at what is the guilt cycle in its purest form, and it was reachable: every
+   * lever can miss the ≥5-point materiality bar, and `Cash runway` / `Bills covered`
+   * have no lever at all (they move by saving, which the other levers express).
+   */
+  describe('never goes silent on a weak score', () => {
+    /** Weak everywhere, and weakest on a factor with no projectable lever. */
+    const struggling = inputs({
+      income90: 3000000, spend90: 2900000, liquid: 100000,
+      upcomingBills: 5000000, creditUsed: 0, netIOwe: 0,
+      budgetSpent: 3400000, goalCommitMonthly: 0, goalFundedThisMonth: 0, goalsCount: 0,
+    });
+
+    it('names the weakest factor when nothing projects', () => {
+      const r = computeHealthScore(struggling);
+      expect(r.band).not.toBe('healthy');
+      const imp = suggestImprovement(struggling, r);
+      expect(imp).not.toBeNull();
+      expect(imp!.detail.length).toBeGreaterThan(0);
+      expect(imp!.factorLabel).toBeTruthy();
+    });
+
+    it('claims no gain it cannot deliver', () => {
+      const r = computeHealthScore(struggling);
+      const imp = suggestImprovement(struggling, r);
+      // Equal scores are the *proof* the fallback ran rather than a lever, and the
+      // signal `HealthSheet` reads to hide the "47 → 58" row entirely. Asserting
+      // `>=` here would have passed on either branch and tested nothing.
+      expect(imp!.fromScore).toBe(r.score);
+      expect(imp!.toScore).toBe(imp!.fromScore);
+    });
+
+    it('still says nothing while the score is gated', () => {
+      const gated = inputs({ ...struggling, dataDays: 3, txnCount: 2 });
+      expect(suggestImprovement(gated, computeHealthScore(gated))).toBeNull();
+    });
+  });
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { monthShort } from '../../../lib/dateFormat';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { asFeather } from '../../../constants/palette';
 import { formatCompact } from '../../../lib/money';
@@ -56,7 +56,7 @@ export function GoalCard({
               <Text style={[styles.goalSub, completed && { color: colors.income }]} numberOfLines={1}>
                 {completed
                   ? `Reached · ${formatCompact(p.saved)} saved`
-                  : hasDate ? `${format(g.target_date!, 'MMM yyyy')} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'}`}` : 'No deadline'}
+                  : hasDate ? `${monthShort(g.target_date!)} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'}`}` : 'No deadline'}
               </Text>
             </View>
             <Text style={styles.goalAmt}>{formatCompact(p.saved)} / {formatCompact(p.target)}</Text>

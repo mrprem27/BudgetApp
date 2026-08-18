@@ -3,10 +3,9 @@ import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, Text
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { format, startOfMonth } from 'date-fns';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout } from '../src/constants/layout';
+import { startOfMonth } from 'date-fns';
+import { monthLabel } from '../src/lib/dateFormat';
+import { colors, type, space, radius, layout } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -88,7 +87,7 @@ export default function SearchScreen() {
     const map = new Map<string, TxnWithSplits[]>();
     for (const t of filtered) {
       const d = new Date(t.created_at);
-      const key = isFinite(d.getTime()) ? format(startOfMonth(d), 'MMMM yyyy').toUpperCase() : 'OLDER';
+      const key = isFinite(d.getTime()) ? monthLabel(startOfMonth(d)).toUpperCase() : 'OLDER';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(t);
     }

@@ -338,21 +338,48 @@ function buildLever(label: string, input: HealthInputs, fromScore: number): Heal
 }
 
 /**
- * The single highest-impact, achievable improvement — or null when the score is
- * already strong / nothing actionable moves it. The projected score is computed
- * by re-running the real scoring formula, so it can never be a fake figure.
+ * The single highest-impact, achievable improvement.
+ *
+ * Null is reserved for **a score that is already strong**. It must never come
+ * back for a weak one: a low number with no explanation is the guilt cycle in
+ * its purest form — the app tells you that you are doing badly and then declines
+ * to say at what. Two gaps used to reach that state, and both are now covered:
+ *
+ * - Every projected lever failed the ≥5-point materiality bar, or the weakest
+ *   factor had no lever at all (`Cash runway` and `Bills covered` move by saving,
+ *   which the other levers already express). → fall back to naming the weakest
+ *   factor and what it is measuring, without projecting a number.
+ * - No factor had a `gap >= 20`, yet the total is still low because several
+ *   factors are each moderately down. → the same fallback, on the weakest of them.
+ *
+ * A projected score is always the true recomputed result — the fallback simply
+ * declines to project rather than inventing one.
  */
 export function suggestImprovement(input: HealthInputs, result: HealthResult): HealthImprovement | null {
   if (!result.gate.ok) return null;
-  const ranked = result.factors
+
+  const byGap = result.factors
     .map(f => ({ f, gap: f.max - f.points }))
-    .filter(x => x.gap >= 20)
+    .filter(x => x.gap > 0)
     .sort((a, b) => b.gap - a.gap);
 
-  for (const { f } of ranked) {
+  for (const { f } of byGap) {
+    if (f.max - f.points < 20) break; // ranked, so nothing below this qualifies either
     const built = buildLever(f.label, input, result.score);
     // A lever must be material: nudging 95→98 is noise, not advice.
     if (built && built.toScore - built.fromScore >= 5) return built;
   }
-  return null;
+
+  // Nothing projectable. Say what is weakest anyway, rather than going silent on
+  // a user whose score is low — but only when the score actually warrants it.
+  if (result.band === 'healthy') return null;
+  const weakest = byGap[0];
+  if (!weakest) return null;
+  return {
+    factorLabel: weakest.f.label,
+    title: `Where you're losing most: ${weakest.f.label.toLowerCase()}`,
+    detail: weakest.f.detail,
+    fromScore: result.score,
+    toScore: result.score, // no projection claimed — see the note above
+  };
 }

@@ -487,7 +487,10 @@ const AFFORD_DAY_MS = 86_400_000;
  * and the inputs reproducible.
  */
 export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<AffordSnapshot> {
-  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, sts: computeSafeToSpend({ available: 0, upcomingBills: 0, goalRemaining: 0, netIOwe: 0 }), owedToMe: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
+  const emptySts = computeSafeToSpend({
+    available: 0, upcomingBills: 0, cardRepayment: 0, goalRemaining: 0, netIOwe: 0, everydaySpend: 0,
+  });
+  const empty: AffordSnapshot = { available: 0, upcomingBills: 0, sts: emptySts, owedToMe: 0, monthlyIncome: 0, incomeSource: 'none', categories: [], byCategory: {}, projection: null, goalPacing: null };
   const me = await getMe(db);
   if (!me) return empty;
 

@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { getDate, getDaysInMonth } from 'date-fns';
-import { colors } from '../constants/colors';
+import { colors } from '../theme';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';

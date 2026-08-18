@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { fullDate, dateTime } from '../../../lib/dateFormat';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { ListRow } from '../../ui/ListRow';
@@ -51,7 +51,7 @@ export function ServerBackupSheet({ visible, onClose, backups, loading, error, o
               {i > 0 && <Divider indent="text" />}
               <ListRow
                 icon="clock"
-                title={format(new Date(backup.createdAt), 'd MMM yyyy, h:mm a')}
+                title={dateTime(new Date(backup.createdAt))}
                 subtitle={formatBytes(backup.sizeBytes)}
                 onPress={busyId ? undefined : () => onPick(backup)}
                 value={busyId === backup.id ? (
@@ -61,7 +61,7 @@ export function ServerBackupSheet({ visible, onClose, backups, loading, error, o
                     onPress={() => onDelete(backup)}
                     hitSlop={10}
                     accessibilityRole="button"
-                    accessibilityLabel={`Delete the backup from ${format(new Date(backup.createdAt), 'd MMM yyyy')}`}
+                    accessibilityLabel={`Delete the backup from ${fullDate(new Date(backup.createdAt))}`}
                   >
                     <Feather name="trash-2" size={16} color={colors.textMuted} />
                   </TouchableOpacity>

@@ -4,12 +4,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image, M
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useScreenData } from '../../src/hooks/useScreenData';
-import { format } from 'date-fns';
+import { dateTime, fullDate } from '../../src/lib/dateFormat';
 import { PAY_METHOD_LABEL } from '../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../src/lib/splitMath';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -25,7 +23,6 @@ import { IconCircle } from '../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../src/hooks/useTxnDetail';
 import { Chip } from '../../src/components/ui/Chip';
 import { parseTags } from '../../src/lib/tags';
-import { alpha } from '../../src/theme';
 
 const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
   created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
@@ -157,7 +154,7 @@ export default function TxnDetailScreen() {
 
         {/* Meta */}
         <View style={styles.card}>
-          <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()} />
+          <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? dateTime(d) : '—'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
           {txn.pay_method && (
@@ -187,7 +184,7 @@ export default function TxnDetailScreen() {
                   <Feather name="repeat" size={13} color={colors.accent} />
                   <Text style={styles.recurText} numberOfLines={1}>
                     {parentRule
-                      ? `Schedule started ${format(new Date(parentRule.date), 'dd MMM yyyy')}`
+                      ? `Schedule started ${fullDate(new Date(parentRule.date))}`
                       : `Created by recurring schedule`}
                   </Text>
                   <Feather name="chevron-right" size={15} color={colors.textMuted} />
@@ -369,7 +366,7 @@ export default function TxnDetailScreen() {
                 </View>
                 <View style={[styles.histContent, !last && { paddingBottom: space.md }]}>
                   <Text style={styles.histText}>{h.summary}</Text>
-                  <Text style={styles.histTime}>{(() => { const d = new Date(h.created_at); return isFinite(d.getTime()) ? format(d, 'dd MMM yyyy · h:mm a') : '—'; })()}</Text>
+                  <Text style={styles.histTime}>{(() => { const d = new Date(h.created_at); return isFinite(d.getTime()) ? dateTime(d) : '—'; })()}</Text>
                 </View>
               </View>
             );

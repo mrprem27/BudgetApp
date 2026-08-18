@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { format, isSameDay } from 'date-fns';
+import { shortDate } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
 import { IconCircle } from '../../ui/IconCircle';
 import { colors, space } from '../../tokens';
@@ -56,7 +57,7 @@ export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate,
       <Chip
         chevron
         icon="calendar"
-        label={isToday ? 'Today' : format(new Date(txnDate), 'd MMM')}
+        label={isToday ? 'Today' : shortDate(new Date(txnDate))}
         onPress={onDate}
         accessibilityLabel={`Date: ${isToday ? 'today' : format(new Date(txnDate), 'd MMMM yyyy')}`}
       />

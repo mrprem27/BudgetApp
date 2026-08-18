@@ -6,9 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout } from '../src/constants/layout';
+import { colors, type, space, radius, layout, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { parseAnyText, parseAnyWorkbook, type DetectedParse, type PasteSource } from '../src/lib/importDetect';
@@ -22,7 +20,6 @@ import { insertPending } from '../src/db/queries/pending';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { haptic } from '../src/lib/haptics';
 import { IconCircle } from '../src/components/ui/IconCircle';
-import { alpha } from '../src/theme';
 
 const SAMPLE = '2026-06-01, Swiggy order, -450\n2026-06-02, Salary, 85000\n2026-06-03, Uber, -220';
 

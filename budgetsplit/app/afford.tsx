@@ -3,9 +3,7 @@ import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Scro
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
@@ -17,7 +15,6 @@ import {
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
-import { alpha } from '../src/theme';
 
 const NECESSITY_OPTS: { key: AffordNecessity; label: string; color: string }[] = [
   { key: AffordNecessity.Need,  label: 'Need it',  color: colors.income },
@@ -77,10 +74,14 @@ export default function AffordScreen() {
   const result: AffordResult = useMemo(() => {
     const ctx: AffordContext = {
       amount, available, upcomingBills: upcoming,
-      // Complete the Safe-to-Spend gate (same figure as Home's hero): goal
-      // contributions still due, and money that is really other people's.
+      // Complete the Safe-to-Spend gate (the same figure Home's strip shows):
+      // card balance to repay, goal contributions still due, money that is
+      // really other people's, and the everyday spending still ahead. Every
+      // term or the two screens answer the same question differently.
+      cardRepayment: snap?.sts.cardRepayment,
       goalRemaining: snap?.sts.goalRemaining,
       netIOwe: snap?.sts.netIOwe,
+      everydaySpend: snap?.sts.everydaySpend,
       monthlyIncome: incomeSource !== 'none' && monthlyIncome > 0 ? monthlyIncome : undefined,
       recurringMonthlyEquivalent: frequency !== 'once'
         ? Math.round(amount * FREQUENCY_PER_MONTH[frequency])
@@ -106,6 +107,17 @@ export default function AffordScreen() {
   // and the screen confidently answers "no" before it knows anything.
   const showResult = amount > 0 && !!snap;
   const { verdict, freeToSpend, remaining, reasons, categoryAfter, categoryCap, incomeShare, projectedAfter, goalImpact } = result;
+
+  /** Every claim the gate subtracts, in the order Safe-to-Spend applies them.
+   *  Sourced from `snap.sts` rather than restated, so the breakdown can't fall
+   *  out of step with the figure it is explaining. */
+  const stsClaims: Array<{ label: string; amount: number }> = [
+    { label: `Upcoming bills (next ${snap?.sts.daysLeft ?? 30} days)`, amount: upcoming },
+    { label: 'Card to repay', amount: snap?.sts.cardRepayment ?? 0 },
+    { label: 'Goal contributions still due', amount: snap?.sts.goalRemaining ?? 0 },
+    { label: 'You owe people', amount: snap?.sts.netIOwe ?? 0 },
+    { label: 'Everyday spending ahead', amount: snap?.sts.everydaySpend ?? 0 },
+  ];
 
   const V = {
     [AffordVerdict.Comfortable]: { color: colors.income, emoji: '🎉', title: 'Yes — you can afford it' },
@@ -251,38 +263,22 @@ export default function AffordScreen() {
                 </View>
               </>
             )}
-            {upcoming > 0 && (
-              <>
+            {/* One row per claim, driven off the same `sts` the gate uses — so a
+                new Safe-to-Spend term can never subtract silently here. */}
+            {stsClaims.map(c => c.amount > 0 && (
+              <React.Fragment key={c.label}>
                 <View style={styles.breakdownDivider} />
                 <View style={styles.cashRow}>
-                  <Text style={styles.cashLabel}>− Upcoming bills this month</Text>
-                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(upcoming)}</Text>
+                  <Text style={styles.cashLabel}>− {c.label}</Text>
+                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(c.amount)}</Text>
                 </View>
-              </>
-            )}
-            {!!snap?.sts.goalRemaining && snap.sts.goalRemaining > 0 && (
+              </React.Fragment>
+            ))}
+            {stsClaims.some(c => c.amount > 0) && (
               <>
                 <View style={styles.breakdownDivider} />
                 <View style={styles.cashRow}>
-                  <Text style={styles.cashLabel}>− Goal contributions still due</Text>
-                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(snap.sts.goalRemaining)}</Text>
-                </View>
-              </>
-            )}
-            {!!snap?.sts.netIOwe && snap.sts.netIOwe > 0 && (
-              <>
-                <View style={styles.breakdownDivider} />
-                <View style={styles.cashRow}>
-                  <Text style={styles.cashLabel}>− You owe people</Text>
-                  <Text style={[styles.cashVal, { color: colors.expense }]}>{formatRupees(snap.sts.netIOwe)}</Text>
-                </View>
-              </>
-            )}
-            {(upcoming > 0 || (snap?.sts.goalRemaining ?? 0) > 0 || (snap?.sts.netIOwe ?? 0) > 0) && (
-              <>
-                <View style={styles.breakdownDivider} />
-                <View style={styles.cashRow}>
-                  <Text style={[styles.cashLabel, { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' }]}>Safe to spend</Text>
+                  <Text style={[styles.cashLabel, { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' }]}>Yours to spend</Text>
                   <Text style={[styles.cashVal, { color: freeToSpend >= 0 ? colors.income : colors.expense }]}>{formatRupees(freeToSpend)}</Text>
                 </View>
               </>

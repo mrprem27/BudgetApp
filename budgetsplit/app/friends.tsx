@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput 
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, shadow, layout } from '../src/constants/layout';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
@@ -26,7 +24,6 @@ import type { Person } from '../src/db/queries/persons';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useStore } from '../src/store';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
-import { alpha } from '../src/theme';
 import { PersonNameSheet } from '../src/components/finance/PersonNameSheet';
 
 export default function FriendsScreen() {

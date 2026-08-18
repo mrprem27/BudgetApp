@@ -6,10 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, gradients } from '../tokens';
-import { layout } from '../../constants/layout';
+import { layout, alpha } from '../../theme';
 import type { FeatherName } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
-import { alpha } from '../../theme';
 
 export type Action = {
   label: string;

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { shortDate } from '../../../lib/dateFormat';
 import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';
 import { Chip } from '../../ui/Chip';
@@ -147,7 +147,7 @@ export function VoiceEntrySheet({
             <Row
               icon="calendar"
               label="Date"
-              value={draft.dateMs ? format(draft.dateMs, 'd MMM') : 'today'}
+              value={draft.dateMs ? shortDate(draft.dateMs) : 'today'}
               tint={colors.textMuted}
             />
             {!!draft.note && <Row icon="align-left" label="Note" value={draft.note} tint={colors.textMuted} />}

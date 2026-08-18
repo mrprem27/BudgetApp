@@ -8,13 +8,12 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { ScanPaySheet } from '../../src/components/finance/ScanPaySheet';
 import { setPendingPayment } from '../../src/lib/pendingPayment';
 import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
+import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, gradients } from '../../src/constants/colors';
-import { layout, shadow, space, radius } from '../../src/constants/layout';
-import { type } from '../../src/constants/typography';
+import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
@@ -60,6 +59,11 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
     const sub = AppState.addEventListener('change', state => {
       if (state !== 'active') return;
       askAboutPendingPayment(db).then(filed => { if (filed) refresh(); }).catch(() => {});
+      // Same question for a settle-up hand-off, which previously had no way back at
+      // all: "come back and save to record it" put the whole burden on the user
+      // remembering, and a payment that happened but never got recorded leaves the
+      // balance wrong for two people.
+      askAboutPendingSettlement(db).then(filed => { if (filed) refresh(); }).catch(() => {});
       drainVoiceInbox(db).then(r => { if (r.saved + r.queued > 0) refresh(); }).catch(() => {});
     });
     return () => sub.remove();

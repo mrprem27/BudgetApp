@@ -45,10 +45,17 @@ claim cites `file:line` or it gets deleted rather than debated.
       **silently**. `EXPO_PUBLIC_*` bakes into the bundle at build time, so a
       clean checkout, a stale Metro cache or an EAS build without `.env` gets
       `undefined`. See `.env.example`.
-- [ ] **Rehearse `category_global_v1` against a populated database.**
-      `src/db/schema.ts:523` **drops and rebuilds the `category` table** and has
-      never run against real data. Highest-risk migration in the app. Restore a
-      real backup to a scratch device and run it there first.
+- [x] ~~**Rehearse `category_global_v1` against a populated database.**~~
+      **Closed 2026-08-19 — the rehearsal exists as a test.**
+      `src/__tests__/categoryGlobalMigration.test.ts` builds the *actual*
+      pre-migration shape a real device has on disk (per-group rows,
+      `group_id NOT NULL`, no `UNIQUE(name, kind)`) and runs the real migration SQL
+      against it via `node:sqlite`, covering dedupe by `(name, kind)`, kind
+      separation, idempotency on a second launch, a safe no-op on an
+      already-migrated DB, and data left intact when the migration throws
+      mid-flight. That is stronger than a one-off scratch-device run, because it
+      re-runs on every commit. Note also that pilot users install fresh, so this
+      migration never executes against their data at all.
 - [ ] **Confirm demo/seed data is off** in release builds. `seedDemo.ts` and the
       CSV export's hardcoded demo-row signatures drift apart by design.
 - [ ] **Rotate the Brevo API key.** It was pasted into a chat transcript and is a
@@ -86,8 +93,37 @@ Run it in two once-per-session passes as well: **Reduce Motion on**, and
 
 ### 2.1 Changed by the pre-pilot consistency pass — highest risk, verify first
 
-- [ ] **Home's hero now leads with Safe-to-Spend.** The single biggest visual
-      change in the app. Tap-through breakdown should name every subtraction.
+- [ ] **Home's hero leads with spend again; Safe-to-Spend moved to a strip above
+      it, relabelled "yours to spend".** It briefly *was* the hero, and that put
+      three time bases in one card — a horizon-scoped headline over a
+      period-scoped spend figure over a `spent ÷ budget` bar, with the
+      Today/Month/Year pills that drive two of the three sitting *below* the card.
+      **Switch Today → Month → Year and watch:** everything inside the card must
+      move together, and the strip above must not. Card height must not jump.
+      Tap-through breakdown should still name every subtraction.
+- [ ] **Safe-to-Spend subtracts two more things.** Card balance to repay (card
+      spend never lowered cash, so nothing claimed it before) and everyday
+      spending ahead (a trimmed daily rate × days left). Expect the figure to
+      **drop**, sometimes below zero — that is the correction, not a bug. Horizon
+      is now a rolling 30 days, not month-end, so a bill early next month is
+      already visible late this month.
+- [ ] **A toast after logging an expense** says what it left behind. Fires after
+      the Add screen dismisses; must never appear on income or a transfer, and a
+      failure to compute it must never look like a failed save.
+- [ ] **Settle-up now asks "did that payment go through?"** on return from the UPI
+      app, the same prompt Scan & Pay has always had. Verify: settle via UPI →
+      background → return, the prompt appears **once**; *no* writes nothing; *yes*
+      writes exactly one settlement per group with the right direction and scope.
+      Return after 6 h → no prompt. Bounce straight back (under 5 s) → no prompt.
+      Then the double-write guard: settle via UPI, return, and tap **Save** by hand
+      — exactly one settlement should exist, not two.
+- [ ] **Dates render identically everywhere now.** The sweep replaced inline
+      patterns that *contradicted* `dateFormat.ts` — "04 Jun 2026" vs "4 Jun 2026",
+      "Jun 2026" vs "June 2026", and a datetime that used a comma on the backup
+      screens and a middot on transaction detail. Spot-check transaction detail,
+      backup, audit log, goal cards and group recurring.
+- [ ] **44 files moved from the `src/constants/*` shims to `src/theme`.** No visual
+      change intended — if anything looks mis-tinted or mis-spaced, this is why.
 - [ ] **Health scores changed for everyone.** Four equal-weighted pillars
       (Spend / Save / Borrow / Plan), tiers Vulnerable / Coping / Healthy. A new
       user must see a **locked ring + unlock checklist**, never a number.
@@ -423,12 +459,31 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       entitlement check or purchase SDK exists anywhere, and that absence is
       intentional. **Feature flags are user preferences, never entitlements** —
       do not repurpose them.
+- [ ] **"Safe to Spend" is a trademark — check it before any public launch.**
+      Simple Bank registered it and enforced it (cease-and-desist to Monzo, then
+      Mondo, in 2015). Simple was shut down by PNC in 2021, so the mark may have
+      lapsed through non-use — **that is an assumption, not a finding.** Irrelevant
+      for a closed pilot. The visible copy is now "yours to spend"; the internal
+      identifiers (`safeToSpend.ts`, `SafeToSpend`, `sts`) still use the term.
+- [ ] **Ad-supported or aggregate use of spend data.** Raised, not decided. The
+      app is local-first with no account required, which is the pitch competitors
+      in this space use verbatim — and it is currently true of this codebase.
+      Ad targeting or aggregate resale would need explicit opt-in, a rewritten
+      privacy policy, and a story for demo rows, and would spend the credibility
+      the derived numbers depend on. Decide deliberately, not by drift.
 - [ ] **The non-engineering cost of running a server.** DPDP obligations, a
       rewritten privacy policy, hosting, uptime, someone on call.
-- [ ] **Per-app UPI payload quirks are dead on Android.** CRED receives `mode=04`
-      (the parameter it is pinned to avoid) and Airtel loses the `tr` it paid
-      with. Structural — the OS chooser means the target app is unknowable. Needs
-      a decision, not a patch.
+- [ ] **Per-app UPI payload quirks do not survive the Android port.** Corrected
+      2026-08-19 — the previous wording had this backwards. **Every per-app result
+      on record is iOS** (`upiIntent.ts:20-23`): on Android `useUpiApps` returns
+      null, so `spec` is always null and no per-app prefix or `blocked` flag is ever
+      reached. PhonePe there gets the generic `upi://pay` through the OS chooser and
+      **has never been tested.** So the quirks are not "dead on Android", they are
+      *unreachable* there, and the whole per-app table is untested on the platform
+      the pilot is heading to. Also corrected: Airtel did not lose `tr` — it **paid**
+      with `mode` and `tr` both present (`upiIntent.ts:277-280`) and is the only app
+      that gets `tr` on a P2P transfer. CRED is the one pinned to no `mode` at all.
+      Needs a device pass on Android, not a patch.
 
 ### 3.1 Identity / sync pre-mortem — hold these lines in S2/S3
 
@@ -449,9 +504,61 @@ constraints to design against.
 
 ---
 
+## 3.2 Market and platform — decided 2026-08-19
+
+**India is the pilot market.** The two markets want opposite things and one feature
+set serving both is second-best in each, so the not-doing list is explicit:
+**parked deliberately** are bank sync (Plaid has no meaningful India coverage, and a
+broken link is the top churn cause anyway), couples with two logins and
+yours/mine/ours labelling, multi-currency at 150+ with FX rates, one-number "flex"
+budgeting (it contradicts the granular category charts India asks for), and
+investment/net-worth depth. **Sync survives on both sides** — India wants it as the
+family view, the US as couples — and is the only parked item whose cost is a schema
+migration rather than a feature (§5, "Schema gap: sync prerequisites").
+
+The audience is **young urban India**: Gen Z, working professionals, students,
+couples and friends settling in cities — which is precisely the Splitwise use case.
+Not rural, not traditional-household. `src/constants/categories.ts:9-15` already
+says it targets this persona and does; **the category list needs no reseed.**
+
+**Launch order:** finish features → port to Android → buy the developer account →
+build assistant + developer-facing features → publish.
+
+- [ ] **Android port: budget a new OCR native module.** `modules/expo-ocr` declares
+      `"platforms": ["apple"]` with no Android source, and the entry point is gated
+      `Platform.OS === 'ios'` (`app/add/itemized.tsx:90`). `receiptScan` defaults on,
+      so the feature *looks* shipped — on Android it will not exist. ML Kit Text
+      Recognition is the counterpart. Competitors lead their marketing with this.
+- [ ] **Android capture: pick one route and argue it well.** Both are Play-gated and
+      doing both doubles the review surface rather than giving a fallback. SMS is
+      restricted to default handlers plus a fixed exception list and the spyware
+      clause **names budgeting apps by category** (tightened again 2026-07-15).
+      Notification listening is arguably harder — flagged as high-risk for financial
+      fraud, Play Protect blocks sideloaded apps declaring it, and Play wants a
+      "genuine core function". Either way the **Financial features declaration** is
+      required, and Google has taken enforcement action against 3,500 lending apps in
+      India. Submit early enough to survive one rejection round. Today `sms` and
+      `notification` exist as `TxnSource` values and **nowhere else**.
+- [ ] **Do not plan Siri and "Hey Google" as one task.** App Intents are shippable
+      (behind Gate 0). Google began removing Assistant from phones **2026-09-04**,
+      Gemini does not invoke the old `shortcuts.xml` App Actions, and the successor
+      **AppFunctions** was private-preview as of May 2026. Ship iOS; park Android on
+      AppFunctions going public. **App Intents are not capture** — they are faster
+      manual entry. iOS has no automatic capture route at all.
+
+---
+
 ## 4 · Known and accepted for the pilot
 
 Recorded so nobody re-discovers them as bugs.
+
+- **Three red surfaces stack on every Home open** — the Safe-to-Spend strip
+  ("over-committed"), the pace row ("₹4,200 over") and the health ring. Retention
+  research names a "guilt cycle": two or three months of red and users conclude they
+  are bad at budgeting and leave. The 2026-08-19 pass gave each one a next action and
+  renamed the band that judged the person ("Vulnerable" → "Stretched thin"), but
+  deliberately **did not** move any threshold or de-duplicate the three. Whether
+  three at once is too many is a question only real users can settle.
 
 - **`openDB()` re-runs ~40 `ALTER`s every launch.** Cold-start cost, accepted.
 - **`PRAGMA foreign_keys` is OFF** on the live connection (ON only during
@@ -503,25 +610,27 @@ Each line is real, evidenced, and not blocking the pilot.
 - **`help.tsx` is a third collapsible**, structurally unlike the other two (bare
   header + card body, plus a nested item-level accordion). Converting to
   `SectionCard` adds card chrome — a real visual change.
-- **Insights' empty state has no CTA** (`app/insights.tsx:339`), against
-  `AGENTS.md` §2. Every other screen complies.
 - **`TransactionRow` never displays pay method.** Captured everywhere now,
   shown only in Review and on transaction detail. A density question, not a bug.
-- **~12 inline `date-fns` patterns and ~15 inlined `(x/100).toString()` calls**
-  remain after `dateFormat.ts` and `paiseToInput` landed. Correct today;
-  mechanical to convert.
-- **45 files still import `src/constants/*` shims** instead of the canonical
-  `src/theme`. Nothing is broken — the shims re-export — but two import paths for
-  one token set is drift.
-- **`add/quick.tsx` keeps a container `gap`**, so `SectionHeader` margins add up
-  (the 40px found under Split). Patched at the header; removing the gap re-spaces
-  all nine blocks and belongs in its own change.
-- **`TransferBody` lives outside `finance/add/`** and mounts its own sheets,
-  breaking the one-overlay-at-a-time invariant `QuickAddSheets` enforces.
+- **`budget_group.limit_daily/monthly/yearly` still exist as columns.** Removed
+  from the `BudgetGroup` type on 2026-08-19 — nothing ever wrote them, so the type
+  was advertising a group-level budget the app does not have. The physical columns
+  stay: dropping one in SQLite needs a table rebuild, which is not worth a
+  migration for three fields nobody reads. `person.remote_uid` is **not** dead —
+  §3.1 F5 reserves it for the duplicate-`is_me` fix.
 - **Transfer has no `DetailChips`** — no tags, receipt, time, location or repeat;
   its note writes `transferNote`, a *different field* from every other kind's
   `note`. Consolidating means deciding which fields a settlement legitimately
   has, which is a product question.
+
+> **Five bullets were deleted from this list on 2026-08-19.** Two were already
+> fixed and never struck: `TransferBody` living outside `finance/add/` and
+> `add/quick.tsx`'s container `gap`, both closed by commit `3955c36` (17 Aug),
+> which updated the §2.1 entry and left these behind. Three were closed by the
+> 2026-08-19 pass: Insights' empty-state CTA, the inline `date-fns` patterns, and
+> the 44 `src/constants/*` shim importers.
+> An open-debt list that overstates itself costs more than it saves: **verify
+> a bullet against the tree before acting on it, and delete it the moment it lands.**
 
 ### Schema gap: sync prerequisites
 
@@ -562,6 +671,7 @@ without this; the rest waits for the per-method baselines pass, which touches
 | **In-app mic capture** | On-device recognition, live partial transcript, insert on silence. **No first-party Expo speech-to-text exists** (`expo-speech` is TTS); needs a native module on the `modules/expo-ocr` precedent | You want the Shortcuts round trip gone |
 | **Widget** | Scope genuinely undecided — balance? today's spend? quick-add? | You answer that **and** Gate 0 clears |
 | **WhatsApp reminder composer** | Framing decided, phone field already shipped; only the compose step is left | **Any time — it's small** |
+| **Repayment likelihood → expected recovery** | Per-person "how likely is this to come back", turning owed-to-me from a face value into an expected one, and ordering who to chase first. Three constraints decided up front: it stays **out of Safe-to-Spend** (every term there is certain money, and a probabilistic one makes the headline a guess); the maths is **Σ(amount × probability)**, not an average or median of probabilities — a median discards the amounts, so a 20%-likely ₹40,000 would rank below a 90%-likely ₹200; and the rating **never syncs**, because at S3 it could reach the person being rated | The WhatsApp composer ships — this is what gives it an order |
 | **Goals surplus sweep** | Nothing pushes an underspent month into goals; the only automatic inflow is the fixed per-goal allocation. Must be explicit opt-in | **Any time** |
 | **Scheduled reminder nudge** | Needs an overdue scan, a per-person cooldown store, notification routing, and a cadence that cannot be guessed from an empty pilot. Get it wrong and users disable notifications, losing the channel permanently | The manual composer ships first — it is a strict prerequisite |
 | **Insights three-tier restructure** | One always-present headline (today it renders *only* when overspending, `insights.tsx:99`), then Fact, then Forecast. Rows 6/7/8/10 are four hand-written variants of one row | Post-pilot polish |
@@ -660,8 +770,10 @@ cash out. Import guessed categories from the seed list rather than the user's.
 
 **Rebuilt** — the health score paid an **empty database 59/100 "Fair"** from
 neutral defaults; it is now four equal-weighted pillars with a minimum-data gate
-(no number below 30 days of history, one income and 10 transactions). Home leads
-with **Safe-to-Spend** (`liquid − my-share bills − unfunded goal contributions −
-net owed`, one assembly with two readers). Card repayment is modelled. Onboarding
-was rebuilt so every answer lands somewhere visible — of eight questions, only
-three used to.
+(no number below 30 days of history, one income and 10 transactions).
+**Safe-to-Spend** (`liquid − bills − card − goals − owed − everyday`, one assembly
+with two readers) leads a quiet strip above Home's hero; the hero itself stays on
+period spend, because a horizon-scoped headline inside a card the period pills
+drive contradicted its own control. Card repayment is modelled. Onboarding was
+rebuilt so every answer lands somewhere visible — of eight questions, only three
+used to.

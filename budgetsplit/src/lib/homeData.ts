@@ -176,8 +176,10 @@ export async function loadHomeData(
     const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
     const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
 
-    // Safe-to-Spend — Home's headline (D10). Month-scoped regardless of the
-    // Today/Month/Year selector: it answers "right now, to month-end".
+    // Safe-to-Spend — the strip above the hero, not the hero itself. Scoped to a
+    // rolling horizon regardless of the Today/Month/Year selector, which is
+    // exactly why it renders *outside* the card those pills drive: inside, it
+    // read as a headline that ignored its own control (see `StsStrip`).
     const sts = await getSafeToSpend(db);
 
     // ── Health score inputs: the four FinHealth-style pillars, each term from

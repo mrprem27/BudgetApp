@@ -3,11 +3,10 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { format, isSameDay, isYesterday, startOfDay, startOfMonth, subDays } from 'date-fns';
+import { isSameDay, isYesterday, startOfDay, startOfMonth, subDays } from 'date-fns';
+import { shortDate, fullDate, timeOfDay } from '../src/lib/dateFormat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../src/constants/colors';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
+import { colors, type, space, radius, layout, shadow } from '../src/theme';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
@@ -61,7 +60,7 @@ function dateLabel(d: Date): string {
   const now = new Date();
   if (isSameDay(d, now)) return 'TODAY';
   if (isYesterday(d)) return 'YESTERDAY';
-  return format(d, 'dd MMM yyyy').toUpperCase();
+  return fullDate(d).toUpperCase();
 }
 
 function rangeStart(range: string): number | undefined {
@@ -91,7 +90,9 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
           const badge = BADGE_LABEL[item.action];
           const itemDate = new Date(item.created_at);
           const dateStr = isFinite(itemDate.getTime())
-            ? (isSameDay(itemDate, new Date()) ? `Today ${format(itemDate, 'h:mm a')}` : `${format(itemDate, 'MMM d')} · ${format(itemDate, 'h:mm a')}`)
+            // Was `'MMM d'` here — "Jun 14" — against `'d MMM'` everywhere else.
+            // Exactly the drift `dateFormat.ts`'s header was written about.
+            ? (isSameDay(itemDate, new Date()) ? `Today ${timeOfDay(itemDate)}` : `${shortDate(itemDate)} · ${timeOfDay(itemDate)}`)
             : '';
           const amtColor = item.action === 'settled' ? colors.income : item.action === 'deleted' || item.action === 'created' ? colors.expense : undefined;
 

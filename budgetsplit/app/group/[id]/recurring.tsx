@@ -4,10 +4,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { colors } from '../../../src/constants/colors';
-import { type } from '../../../src/constants/typography';
-import { space, radius, layout, shadow } from '../../../src/constants/layout';
+import { fullDate } from '../../../src/lib/dateFormat';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
@@ -18,7 +16,6 @@ import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 import { nextOccurrenceOnOrAfter, freqLabel } from '../../../src/lib/recurrence';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
-import { alpha } from '../../../src/theme';
 
 type Rule = TxnWithSplits;
 
@@ -129,7 +126,7 @@ export default function RecurringScreen() {
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Text style={styles.metaLabel}>Started</Text>
-                    <Text style={styles.metaVal}>{format(new Date(r.date), 'dd MMM yyyy')}</Text>
+                    <Text style={styles.metaVal}>{fullDate(new Date(r.date))}</Text>
                   </View>
                   <View style={styles.metaItem}>
                     <Text style={styles.metaLabel}>
@@ -137,8 +134,8 @@ export default function RecurringScreen() {
                     </Text>
                     <Text style={styles.metaVal}>
                       {r.recur_state === 'active'
-                        ? (next ? format(next, 'dd MMM yyyy') : r.recur_end ? format(new Date(r.recur_end), 'dd MMM yyyy') : '—')
-                        : r.recur_end ? format(new Date(r.recur_end), 'dd MMM yyyy') : '—'}
+                        ? (next ? fullDate(next) : r.recur_end ? fullDate(new Date(r.recur_end)) : '—')
+                        : r.recur_end ? fullDate(new Date(r.recur_end)) : '—'}
                     </Text>
                   </View>
                 </View>

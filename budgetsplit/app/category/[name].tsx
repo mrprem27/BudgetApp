@@ -7,9 +7,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear,
   getDaysInMonth, getDaysInYear,
 } from 'date-fns';
-import { colors } from '../../src/constants/colors';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -31,7 +29,6 @@ import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { Divider } from '../../src/components/ui/Divider';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { useContentInset } from '../../src/hooks/useContentInset';
-import { alpha } from '../../src/theme';
 
 type Period = 'day' | 'month' | 'year';
 const PERIODS: { key: Period; label: string }[] = [

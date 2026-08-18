@@ -5,9 +5,7 @@ import {
 import * as LocalAuthentication from 'expo-local-authentication';
 import { settings } from '../../lib/settings';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { type } from '../../constants/typography';
-import { space, radius } from '../../constants/layout';
+import { colors, type, space, radius } from '../../theme';
 import { IconCircle } from '../ui/IconCircle';
 
 const LOGO = require('../../../assets/splash-icon.png');

@@ -7,10 +7,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../src/constants/colors';
+import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { CATEGORY_KIND, type CategoryKind } from '../src/constants/enums';
-import { type } from '../src/constants/typography';
-import { space, radius, layout, shadow } from '../src/constants/layout';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { Input } from '../src/components/ui/Input';
@@ -31,7 +29,6 @@ import {
 } from '../src/constants/palette';
 import type { Category } from '../src/db/queries/categories';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-import { alpha } from '../src/theme';
 import { SectionCard } from '../src/components/ui/SectionCard';
 
 

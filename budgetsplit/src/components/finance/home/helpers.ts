@@ -19,12 +19,21 @@ export function healthBandColor(band: HealthBand): string {
   }
 }
 
-/** Short human label for a health tier. */
+/**
+ * Short human label for a health tier.
+ *
+ * The bottom band says **"Stretched thin"**, not "Vulnerable". Same threshold,
+ * same score, different object: one describes the money, the other diagnoses the
+ * person. Retention research names a "guilt cycle" — two or three months of red
+ * and users conclude they are bad at budgeting and leave — and a word that reads
+ * as a verdict on them is the cheapest way to start it. The number is unchanged
+ * and nothing is hidden; only what it is a statement *about* is.
+ */
 export function healthBandLabel(band: HealthBand): string {
   switch (band) {
     case 'healthy':    return 'Healthy';
     case 'coping':     return 'Coping';
-    case 'vulnerable': return 'Vulnerable';
+    case 'vulnerable': return 'Stretched thin';
   }
 }
 

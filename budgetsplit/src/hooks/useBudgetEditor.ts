@@ -14,7 +14,7 @@ import { getGroupMembers, getMe } from '../db/queries/persons';
 import { canEditGroupBudget } from '../lib/permissions';
 import { categoryVisual } from '../constants/categories';
 import { haptic } from '../lib/haptics';
-import { parseToPaise } from '../lib/money';
+import { parseToPaise, paiseToInput } from '../lib/money';
 import { rollUpBudgets } from '../lib/budget';
 import {
   budgetEditorCopy, budgetEntriesToSave, budgetFormDirty, budgetLevelControlVisible,
@@ -143,7 +143,7 @@ export function useBudgetEditor(opts: { scope: BudgetScope; groupId?: string; fo
     const line = inherited[category];
     if (!line) return;
     updateForm(f => ({
-      amounts: { ...f.amounts, [category]: (line.amount / 100).toString() },
+      amounts: { ...f.amounts, [category]: paiseToInput(line.amount) },
       cadences: { ...f.cadences, [category]: line.cadence },
     }));
   }

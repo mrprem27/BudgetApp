@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 import Svg, { G, Path, Circle } from 'react-native-svg';
-import { colors } from '../../constants/colors';
+import { colors } from '../../theme';
 
 const AG = Animated.createAnimatedComponent(G);
 const ACircle = Animated.createAnimatedComponent(Circle);

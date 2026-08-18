@@ -1532,7 +1532,7 @@ Editing takes the same path via `updateTxn`; a recurring-rule edit goes through
 |---|---|---|
 | 1 | Entry: Home balance strip, Groups "People", group balance card, Friends, Reminders — all push `/add/quick?kind=transfer&to=…` | various |
 | 2 | `computeTransferScopes` builds the per-group and global pair balance using the same `simplify` as everywhere else | `src/lib/settleScope.ts:30-54` |
-| 3 | User picks a scope (one group, or "All groups") and an amount | `components/finance/TransferBody.tsx` |
+| 3 | User picks a scope (one group, or "All groups") and an amount | `components/finance/add/TransferBody.tsx` |
 | 4 | "All groups" → `planAllGroupsSettlement` distributes largest-first, remainder onto the last group | `src/lib/settleScope.ts:65-88` |
 | 5 | One `recordSettlement` per plan row → `insertTxn` with `kind='settlement'` | `transactions.ts:296-303` |
 | 6 | No shared group between the two people → explicit Alert, not a silent failure | `useAddTxnForm.ts:277` |

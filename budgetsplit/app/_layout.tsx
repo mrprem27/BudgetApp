@@ -20,14 +20,14 @@ import * as Notifications from 'expo-notifications';
 import { rescheduleReminders } from '../src/lib/reminders';
 import { routeForReminder } from '../src/lib/notificationRoutes';
 import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
-import { colors } from '../src/constants/colors';
+import { colors } from '../src/theme';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
 import { FeatureFlagsProvider, FlagsGate } from '../src/components/system/FeatureFlagsProvider';
 import { DataRefreshProvider } from '../src/components/system/DataRefreshProvider';
 import { StoreHydrator } from '../src/components/system/StoreHydrator';
-import { UndoProvider } from '../src/components/system/UndoToast';
+import { ToastProvider } from '../src/components/system/Toast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
 
@@ -144,7 +144,7 @@ export default function RootLayout() {
           <FlagsGate>
           <DataRefreshProvider>
           <StoreHydrator />
-          <UndoProvider>
+          <ToastProvider>
           <StatusBar style="light" />
           <LockGate>
             <OnboardingGate>
@@ -162,7 +162,7 @@ export default function RootLayout() {
               </Stack>
             </OnboardingGate>
           </LockGate>
-          </UndoProvider>
+          </ToastProvider>
           </DataRefreshProvider>
           </FlagsGate>
           </FeatureFlagsProvider>

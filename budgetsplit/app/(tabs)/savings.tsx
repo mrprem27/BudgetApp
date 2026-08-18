@@ -7,10 +7,8 @@ import {
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../../src/constants/colors';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { asFeather, GOAL_COLORS, GOAL_ICONS } from '../../src/constants/palette';
-import { type } from '../../src/constants/typography';
-import { space, radius, layout } from '../../src/constants/layout';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
@@ -31,7 +29,8 @@ import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillS
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
-import { format, addMonths } from 'date-fns';
+import { addMonths } from 'date-fns';
+import { monthLabel } from '../../src/lib/dateFormat';
 
 // Goal deadline as quick durations (avoids a fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -67,7 +66,6 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useSavingsTab } from '../../src/hooks/useSavingsTab';
-import { alpha } from '../../src/theme';
 
 // Plan screen (design Screen 3) = Pool + Goals + Upcoming + Forecast only.
 // Everything else the app had is hidden behind this toggle for now — handle later.
@@ -364,7 +362,7 @@ export default function SavingsScreen() {
               );
             })}
           </View>
-          {newDate != null && <Text style={styles.deadlineHint}>Target: {format(newDate, 'MMMM yyyy')}</Text>}
+          {newDate != null && <Text style={styles.deadlineHint}>Target: {monthLabel(newDate)}</Text>}
 
           <PrimaryButton label="Create goal" onPress={handleCreate} disabled={!name.trim() || parseToPaise(target) <= 0} style={{ marginTop: space.md }} />
         </KeyboardAvoidingView>
