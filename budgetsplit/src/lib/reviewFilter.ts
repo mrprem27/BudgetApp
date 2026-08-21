@@ -1,5 +1,6 @@
 import { parseToPaise } from './money';
 import { wordsOf } from './smartCategoryLearn';
+import { TXN_SOURCE, type TxnSource } from '../constants/enums';
 
 /**
  * Pure filter engine for the Review focus-workspace. No React / DB / RN — the
@@ -98,6 +99,50 @@ export function deriveWorkingSet<T extends { id: string }>(
     narrowed: focusActive || hasFilters,
     distinctCats: Array.from(new Set(baseRows.map(categoryOf).filter(Boolean))),
   };
+}
+
+// --- Source grouping ---------------------------------------------------------
+
+/** Anything carrying a `source` column — kept structural so this stays DB-free. */
+export type SourceBearing = { source?: string | null };
+
+export function sourceOf(r: SourceBearing): TxnSource {
+  return (r.source ?? 'manual') as TxnSource;
+}
+
+/**
+ * Group the working set by source in one pass, for the tab strip, its counts and
+ * the section list. Those were three unmemoised scans over the whole inbox, on a
+ * screen that re-renders on every checkbox tap.
+ */
+export function groupBySource<T extends SourceBearing>(rows: readonly T[]): Map<TxnSource, T[]> {
+  const m = new Map<TxnSource, T[]>();
+  for (const r of rows) {
+    const s = sourceOf(r);
+    const list = m.get(s);
+    if (list) list.push(r); else m.set(s, [r]);
+  }
+  return m;
+}
+
+/** Sources actually present, in `TXN_SOURCE` order — never an empty tab. */
+export function presentSourcesOf(bySource: Map<TxnSource, unknown>): TxnSource[] {
+  return TXN_SOURCE.filter(src => bySource.has(src));
+}
+
+/**
+ * Sections for the list: one per present source on the All tab, or the single
+ * active source. Empty sources are dropped so a header never sits over nothing.
+ */
+export function sourceSections<T>(
+  active: TxnSource | null,
+  bySource: Map<TxnSource, T[]>,
+): { source: TxnSource; data: T[] }[] {
+  if (active) {
+    const data = bySource.get(active) ?? [];
+    return data.length ? [{ source: active, data }] : [];
+  }
+  return TXN_SOURCE.filter(src => bySource.has(src)).map(src => ({ source: src, data: bySource.get(src)! }));
 }
 
 export function isSimilarMerchant(a: string, b: string): boolean {

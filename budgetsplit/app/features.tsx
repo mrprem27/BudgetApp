@@ -13,6 +13,7 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { SheetModal } from '../src/components/ui/SheetModal';
+import { IconCircle } from '../src/components/ui/IconCircle';
 import { FEATURE_KEYS } from '../src/lib/featureFlags';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../src/lib/personaDefaults';
 import { haptic } from '../src/lib/haptics';
@@ -237,7 +238,7 @@ export default function FeaturesScreen() {
               <Text style={styles.sectionTitle}>Your setup</Text>
               <View style={styles.card}>
                 <TouchableOpacity style={styles.row} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Change my setup">
-                  <View style={styles.iconDot}><Text style={styles.emoji}>{opt?.emoji}</Text></View>
+                  <IconCircle icon={opt?.icon ?? 'layers'} size={32} color={colors.accent} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.label}>{opt?.label}</Text>
                     <Text style={styles.caption}>Sets the switches below. Change any one after.</Text>
@@ -302,7 +303,7 @@ export default function FeaturesScreen() {
             <View key={o.key}>
               {i > 0 && <View style={styles.divider} />}
               <TouchableOpacity style={styles.row} onPress={() => changeSetup(o.key)} accessibilityRole="button" accessibilityLabel={o.label}>
-                <View style={styles.iconDot}><Text style={styles.emoji}>{o.emoji}</Text></View>
+                <IconCircle icon={o.icon} size={32} color={colors.accent} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>{o.label}</Text>
                   <Text style={styles.caption}>{o.desc}</Text>
@@ -329,7 +330,6 @@ const styles = StyleSheet.create({
   iconDot: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
-  emoji: { fontSize: 16 },
   coreBadge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: space.xs, borderWidth: 1 },
   coreBadgeText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.md, lineHeight: 18 },

@@ -313,10 +313,28 @@ export type OverspendRaid = { withdrawals: { goalId: string; name: string; amoun
 export async function proposeOverspendRaid(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   const cash = await getCashPosition(db);
   if (cash.available >= 0) return { withdrawals: [], total: 0 };
+
+  // Money owed to me offsets the shortfall before any goal is touched: fronting a
+  // group bill drops cash by the full amount while most of it is on its way back,
+  // and `CASH_TOTALS_SQL` has no receivable term.
+  //
+  // Deliberately NOT mirrored into `lib/safeToSpend.ts`, which excludes owed-to-me
+  // on purpose (see its note at :30). A receivable is not spendable, but it IS a
+  // reason not to liquidate. Don't unify the two call sites.
+  //
+  // Only `expected` receivables offset. A balance you have written off is money you
+  // have decided is not coming back, so covering a shortfall with it would be
+  // covering it with nothing — and the cost of being wrong here is a liquidated
+  // savings goal.
+  const me = await getMe(db);
+  const owedToMe = me ? (await getMyExposure(db, me.id)).owedExpected : 0;
+  const shortfall = Math.max(0, -cash.available - owedToMe);
+  if (shortfall === 0) return { withdrawals: [], total: 0 };
+
   const [goals, saved] = await Promise.all([getGoals(db), getGoalSavedMap(db)]);
   const raids = planOverspendRaid(
     goals.map(g => ({ id: g.id, priority: g.priority, locked: g.locked, sort_order: g.sort_order, target: g.target })),
-    saved, -cash.available,
+    saved, shortfall,
   );
   const nameById = new Map(goals.map(g => [g.id, g.name]));
   return {

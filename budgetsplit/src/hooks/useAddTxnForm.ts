@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
-import { nthOccurrenceMs } from '../lib/recurrence';
+import { nthOccurrenceMs, normalizeRecurrence } from '../lib/recurrence';
 import { settings } from '../lib/settings';
 import { matchCategory } from '../lib/smartCategory';
 import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../lib/smartCategoryLearn';
@@ -15,6 +15,7 @@ import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categ
 import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement } from '../db/queries/transactions';
 import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseTags } from '../lib/tags';
+import { deleteAttachment } from '../lib/attachment';
 import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
@@ -34,7 +35,7 @@ import { buildUpiUri, buildUpiRequestUri } from '../lib/upiIntent';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
-import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, type TransferScope } from '../constants/enums';
+import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 
 export type AddTxnParams = {
@@ -89,7 +90,7 @@ export function useAddTxnForm(params: AddTxnParams) {
    */
   const [transferScope, setTransferScope] = useState<TransferScope>(TRANSFER_SCOPE_ALL);
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);  // Seeded from the user's default in the settings effect below.
   const [transferNote, setTransferNote] = useState('');
   const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState('');
@@ -111,6 +112,11 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
+  // The receipt this transaction had *before* any edit-mode change, captured once
+  // at load. Replacing or removing it overwrites `attachmentUri` itself, so
+  // without this the old file's path is gone by save time and never unlinked.
+  // A ref, not state — nothing should re-render off it. Mirrors `useItemizedForm`.
+  const originalAttachmentUriRef = useRef<string | null>(null);
   /** Free-form tags — the axis categories can't express (needs/wants, a trip name).
    *  Orthogonal to category: one category, any number of tags. */
   const [tags, setTags] = useState<string[]>([]);
@@ -120,6 +126,15 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [recurEndMode, setRecurEndMode] = useState<RecurEndMode>(RecurEndMode.Never);
   const [recurCount, setRecurCount] = useState('12');
+  /*
+   * Parked, not broken. There is no currency picker anywhere: `setCurrency` is not
+   * exported from this hook, `settings.setDefaultCurrency` has zero callers, and
+   * `budget_group.default_currency` is never read or written — so `txn.currency` is
+   * always written `undefined` and the app is INR-only. That matches the Currency
+   * row in Settings, which is deliberately inert for the pilot.
+   *
+   * The read path stays so that shipping a picker is one screen, not a migration.
+   */
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
 
@@ -165,6 +180,12 @@ export function useAddTxnForm(params: AddTxnParams) {
       getGroupsByRecentUse(db).then(setPickerGroups).catch(() => {});
       const savedCur = await settings.defaultCurrency();
       if (savedCur) setCurrency(savedCur as CurrencyCode);
+      // The user's usual pay method seeds a NEW entry only. An edit hydrates the
+      // row's own stored value below, and income overrides with the landing default.
+      if (!editId && !recurEditId) {
+        const savedPay = await settings.defaultPayMethod();
+        if (savedPay) setPayMethod(asPayMethod(savedPay));
+      }
 
       const loadId = editId ?? recurEditId;
       if (loadId) {
@@ -177,7 +198,19 @@ export function useAddTxnForm(params: AddTxnParams) {
           const total = txn.payments.reduce((a, p) => a + p.amount, 0);
           setAmountText(paiseToInput(total));
           setNote(txn.note ?? '');
-          setPayMethod(txn.pay_method ?? PayMethod.Upi);
+          // Income's pay method means "where did it land?", so an income row with
+          // no stored value must fall back to the landing default, not to UPI.
+          setPayMethod(txn.pay_method ?? (txn.kind === 'income' ? INCOME_LANDING_DEFAULT : PayMethod.Upi));
+          // Hydrated for EVERY load, not just a recurring one. This sat inside the
+          // `recurEditId` branch below, so opening a normal transaction to edit it
+          // left `tags` empty — and `handleSave` passes that straight to
+          // `updateTxn`, where `serializeTags([])` writes NULL. Editing a tagged
+          // transaction silently deleted its tags.
+          setTags(parseTags(txn.tags));
+          // Hydrated so the Receipt chip shows the receipt this row already has,
+          // instead of always rendering unset while an existing file sat on disk.
+          setAttachmentUri(txn.attachment_uri ?? null);
+          originalAttachmentUriRef.current = txn.attachment_uri ?? null;
 
           if (txn.kind === 'settlement') {
             setTransferFromId(txn.payments[0]?.personId ?? '');
@@ -197,14 +230,19 @@ export function useAddTxnForm(params: AddTxnParams) {
             setRecurFreq(txn.recur_freq);
             setRecurInterval(String(txn.recur_interval ?? 1));
             if (txn.recur_end) { setRecurEndMs(txn.recur_end); setRecurEndMode(RecurEndMode.Date); }
-            setTags(parseTags(txn.tags));
           }
         }
         return;
       }
 
       let gid = paramGroupId ?? grps[0]?.id ?? '';
-      if (kind === 'income') gid = grps.find(g => g.is_personal === 1)?.id ?? gid;
+      if (kind === 'income') {
+        gid = grps.find(g => g.is_personal === 1)?.id ?? gid;
+        // `onSelectKind` applies this when the Income pill is tapped, but a deep
+        // link (`/add/quick?kind=income`) never goes through it and landed on UPI
+        // — the wrong answer to "where did it land?" before the user sees it.
+        setPayMethod(INCOME_LANDING_DEFAULT);
+      }
       setSelectedGroupId(gid);
       const preCat = typeof paramCategory === 'string' && paramCategory ? paramCategory : undefined;
       if (gid) await loadGroup(gid, meRow, preCat, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
@@ -495,10 +533,16 @@ export function useAddTxnForm(params: AddTxnParams) {
         return;
       }
 
-      for (const p of finalPlans) {
+      for (const [i, p] of finalPlans.entries()) {
         await recordSettlement(db, {
           groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
           date: txnDate, note: transferFullNote, payMethod, category: transferCategory,
+          tags,
+          // The receipt goes on the FIRST plan only. Settling "all groups" writes one
+          // settlement per group, and two rows pointing at the same file would let
+          // `cleanupDeletedAttachments` unlink it when either is deleted — taking the
+          // survivor's receipt with it. Tags are just strings, so they can repeat.
+          attachmentUri: i === 0 ? attachmentUri ?? undefined : undefined,
         });
       }
       haptic.success();
@@ -576,12 +620,19 @@ export function useAddTxnForm(params: AddTxnParams) {
         }
       }
 
+      const recurNorm = normalizeRecurrence(recurFreq, parseInt(recurInterval, 10) || 1);
+
       if (isEditing) {
         await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind, date: txnDate,
           category: selectedCategory!.name, note: composedNote, payMethod, tags,
-          payments: finalPayments, shares: finalShares,
+          attachmentUri, payments: finalPayments, shares: finalShares,
         });
+        // Replacing or removing the receipt must unlink the old file, or it
+        // orphans on disk forever — nothing else ever revisits a transaction's
+        // *previous* attachment.
+        const original = originalAttachmentUriRef.current;
+        if (original && original !== attachmentUri) await deleteAttachment(original);
         haptic.success();
         router.back();
         return;
@@ -599,8 +650,8 @@ export function useAddTxnForm(params: AddTxnParams) {
           // them here silently stripped both from the series on every "this & future".
           tags,
           attachmentUri: attachmentUri ?? undefined,
-          recurFreq: recurFreq,
-          recurInterval: recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
+          recurFreq: recurNorm.freq,
+          recurInterval: recurNorm.interval,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
           payments: finalPayments, shares: finalShares,
         });
@@ -618,7 +669,9 @@ export function useAddTxnForm(params: AddTxnParams) {
         return;
       }
 
-      const recurIntervalN = recurFreq === 'custom' ? (parseInt(recurInterval, 10) || 1) : 1;
+      // Normalised before the end-date maths, so a "custom every 1 day" rule and a
+      // `daily` one land on the same occurrence dates as well as the same row shape.
+      const recurIntervalN = recurNorm.interval ?? 1;
       let recurEnd: number | undefined;
       if (recurEnabled) {
         if (recurEndMode === RecurEndMode.Date) {
@@ -637,7 +690,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           recurEnd = recurEndMs ?? undefined;
         } else if (recurEndMode === RecurEndMode.Count) {
           const n = Math.max(1, parseInt(recurCount, 10) || 1);
-          recurEnd = nthOccurrenceMs(txnDate, recurFreq, recurIntervalN, n);
+          recurEnd = nthOccurrenceMs(txnDate, recurNorm.freq, recurIntervalN, n);
         }
       }
 
@@ -646,8 +699,8 @@ export function useAddTxnForm(params: AddTxnParams) {
           groupId: selectedGroupId, kind, entryMode: 'quick', date: txnDate,
           category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri: attachmentUri ?? undefined,
-          recurFreq: recurEnabled ? recurFreq : undefined,
-          recurInterval: recurEnabled && recurFreq === 'custom' ? parseInt(recurInterval, 10) || 1 : undefined,
+          recurFreq: recurEnabled ? recurNorm.freq : undefined,
+          recurInterval: recurEnabled ? recurNorm.interval : undefined,
           recurEnd,
           lat: place?.lat, lng: place?.lng, placeLabel: place?.label ?? undefined,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,

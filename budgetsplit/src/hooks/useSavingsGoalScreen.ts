@@ -4,6 +4,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { haptic } from '../lib/haptics';
+import { confirmAsync } from '../lib/confirm';
+import { PRIORITY_LABEL } from '../constants/enums';
 import { settings } from '../lib/settings';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory, getGoalHistoryCount,
@@ -110,6 +112,29 @@ export function useSavingsGoalScreen(id: string) {
     if (!goal || adjustSaving) return;
     const newTarget = parseToPaise(adjustTarget);
     if (!adjustName.trim() || newTarget <= 0) return;
+
+    /*
+     * Priority is not a label — it decides whether an overspend may raid this goal
+     * (`planOverspendRaid` filters `emergency` out entirely and takes `want` before
+     * `need`). Changing it silently meant a goal could stop being protected, or
+     * start being the first one drained, with nothing said.
+     *
+     * Only a real change is gated; re-tapping the current tag saves as before.
+     */
+    if (adjustPriority !== goal.priority) {
+      const consequence = adjustPriority === 'emergency'
+        ? 'Emergency goals are never dipped into to cover an overspend.'
+        : adjustPriority === 'want'
+          ? 'Want goals are the first ones an overspend dips into.'
+          : 'Need goals are dipped into only after every Want goal is used up.';
+      const ok = await confirmAsync(
+        `Move “${goal.name}” to ${PRIORITY_LABEL[adjustPriority]}?`,
+        consequence,
+        'Move',
+      );
+      if (!ok) return;
+    }
+
     setAdjustSaving(true);
     try {
       await updateGoal(db, id, {

@@ -1,5 +1,6 @@
 import { DEFAULTS, setFlag, type FeatureFlags, type FeatureKey } from './featureFlags';
 import { settings } from './settings';
+import type { FeatherName } from '../constants/palette';
 
 /**
  * The persona picked on the onboarding intent screen.
@@ -21,11 +22,11 @@ export function asIntent(v: string | null | undefined): OnboardingIntent | null 
  * Feature Management's "Change my setup" row offers the same four choices and two
  * copies of this list would drift the moment one persona's wording changed.
  */
-export const PERSONA_OPTIONS: { key: OnboardingIntent; emoji: string; label: string; desc: string }[] = [
-  { key: 'personal',  emoji: '💰', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
-  { key: 'split',     emoji: '👥', label: 'Split with people',     desc: 'Trips and one-off group tabs — settle up when it ends' },
-  { key: 'household', emoji: '🏡', label: 'Share a household',     desc: 'Rent, bills and groceries with a partner or flatmates' },
-  { key: 'both',      emoji: '✨', label: 'Both',                  desc: 'Full experience — most popular' },
+export const PERSONA_OPTIONS: { key: OnboardingIntent; icon: FeatherName; label: string; desc: string }[] = [
+  { key: 'personal',  icon: 'pie-chart', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
+  { key: 'split',     icon: 'users',     label: 'Split with people',     desc: 'Trips and one-off group tabs — settle up when it ends' },
+  { key: 'household', icon: 'home',      label: 'Share a household',     desc: 'Rent, bills and groceries with a partner or flatmates' },
+  { key: 'both',      icon: 'layers',    label: 'Both',                  desc: 'Full experience — most popular' },
 ];
 
 /**

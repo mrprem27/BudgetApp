@@ -27,6 +27,7 @@ import { pickAndSaveAvatar } from '../../src/lib/avatar';
 import { deleteAttachment } from '../../src/lib/attachment';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { PayMethodSelector } from '../../src/components/finance/PayMethodSelector';
 import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
@@ -35,7 +36,7 @@ import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/stora
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
-import { asBudgetCadence } from '../../src/constants/enums';
+import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL } from '../../src/constants/enums';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useServerSession } from '../../src/hooks/useServerSession';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -113,6 +114,8 @@ export default function SettingsScreen() {
   const [hideAmounts, setHideAmounts] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
+  const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Upi);
+  const [showPayMethod, setShowPayMethod] = useState(false);
   const [showCadence, setShowCadence] = useState(false);
 
   const [devTaps, setDevTaps] = useState(0);
@@ -144,6 +147,7 @@ export default function SettingsScreen() {
       // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
       if (dc) setDefaultCadence(asBudgetCadence(dc));
+      setDefaultPay(asPayMethod(await settings.defaultPayMethod()));
     })();
   }, []));
 
@@ -192,6 +196,12 @@ export default function SettingsScreen() {
       haptic.error();
       Alert.alert('App lock is still on', 'Could not verify it is you, so nothing was changed.');
     }
+  }
+
+  async function pickPayMethod(m: PayMethod) {
+    setDefaultPay(m);
+    setShowPayMethod(false);
+    await settings.setDefaultPayMethod(m);
   }
 
   async function pickCadence(c: BudgetCadence) {
@@ -361,6 +371,8 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <SettingsRow icon="globe" label="Currency" value="INR" onPress={undefined} />
         <View style={settingsRowDivider} />
+        <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
+        <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { router.push('/features'); }} />
@@ -494,6 +506,12 @@ export default function SettingsScreen() {
         onSetUpiId={() => { setShowMyQr(false); setVpaText(me?.upi_vpa ?? ''); setShowVpa(true); }}
       />
 
+
+      {/* Reuses the Add screen's own picker, so the tiles here are the tiles the
+          preference actually seeds — not a second list that could drift from it. */}
+      <SheetModal visible={showPayMethod} onClose={() => setShowPayMethod(false)} title="How do you usually pay?" scroll={false}>
+        <PayMethodSelector value={defaultPay} onChange={pickPayMethod} />
+      </SheetModal>
 
       <SheetModal visible={showCadence} onClose={() => setShowCadence(false)} title="Default budget cadence" scroll={false}>
         {CADENCE_KEYS.map(c => (

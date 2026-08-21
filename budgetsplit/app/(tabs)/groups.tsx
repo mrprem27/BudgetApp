@@ -245,7 +245,14 @@ export default function GroupsScreen() {
               style={[styles.balRow, i < activeFriends.length - 1 && styles.balRowBorder]}
             >
               <MemberAvatar name={f.name} color={f.avatarColor} size={36} imageUri={f.imageUri} />
-              <View style={{ flex: 1 }}>
+              {/* The name opens what you've shared; Settle stays its own chip. The row
+                  only offered Settle, so a balance you didn't recognise had nowhere to go. */}
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                onPress={() => router.push(`/person/${f.personId}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`${f.name}, see shared transactions`}
+              >
                 <Text style={styles.balName} numberOfLines={1}>{f.name}</Text>
                 {(() => {
                   const ov = oweView(f.net);
@@ -255,7 +262,7 @@ export default function GroupsScreen() {
                     </Text>
                   );
                 })()}
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.settleChip}
                 onPress={() => router.push(`/add/quick?kind=transfer&to=${f.personId}`)}

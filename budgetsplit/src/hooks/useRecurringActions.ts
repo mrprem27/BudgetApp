@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useRouter } from 'expo-router';
 import {
   pauseRecurring, resumeRecurring, endRecurring, skipNextOccurrence, undoNextSkip,
 } from '../db/queries/recurring';
@@ -7,13 +8,14 @@ import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { haptic } from '../lib/haptics';
 
 /**
- * Pause / resume / skip / undo-skip / stop for one recurring rule.
+ * Edit / pause / resume / skip / undo-skip / stop for one recurring rule.
  *
  * Shared so the per-group list and the global Plan list can't drift: the global
  * list previously had none of these and could only bounce you into the group one.
  */
 export function useRecurringActions(reload: () => Promise<void> | void) {
   const db = useSQLiteContext();
+  const router = useRouter();
   const { refresh } = useDataRefresh();
 
   const fail = () => { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); };
@@ -56,6 +58,21 @@ export function useRecurringActions(reload: () => Promise<void> | void) {
     try { await resumeRecurring(db, ruleId); haptic.success(); await commit(); } catch { fail(); }
   }
 
+  /**
+   * Open the rule in the Add form to change its amount, category or schedule.
+   *
+   * `recurEditId` and `splitRecurringSeries` ("this & future") were fully built and
+   * **unreachable** — no screen navigated with the param, so the only way to change
+   * a rule was Stop and re-create it, which loses its history.
+   *
+   * Not offered for an ended series: `splitRecurringSeries` has no future occurrence
+   * to split there and correctly writes nothing, so the form would open on a rule it
+   * cannot save.
+   */
+  function edit(ruleId: string) {
+    router.push(`/add/quick?recurEditId=${ruleId}`);
+  }
+
   function end(ruleId: string) {
     Alert.alert('Stop this recurring transaction?', 'It stops generating new occurrences. Past ones stay in history.', [
       { text: 'Cancel', style: 'cancel' },
@@ -65,5 +82,5 @@ export function useRecurringActions(reload: () => Promise<void> | void) {
     ]);
   }
 
-  return { skipNext, undoSkip, pause, resume, end };
+  return { skipNext, undoSkip, pause, resume, edit, end };
 }

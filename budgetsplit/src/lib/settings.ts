@@ -21,11 +21,13 @@ const K = {
   saveLocation: 'save_location',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
+  defaultPayMethod: 'default_pay_method',
   appLastOpen: 'app_last_open',
   onboardingDone: 'onboarding_done',
   onboardingIntent: 'onboarding_intent',
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
+  goalReorderHintSeen: 'goal_reorder_hint_seen',
   scanPayHintPending: 'scan_pay_hint_pending',
   preferredUpiApp: 'preferred_upi_app',
   backupAnchorAt: 'backup_anchor_at',
@@ -85,6 +87,16 @@ export const settings = {
   setBudgetTarget: (v: number) => setNumber(K.budgetTarget, v),
   defaultCurrency: () => getString(K.defaultCurrency),
   setDefaultCurrency: (v: string) => setString(K.defaultCurrency, v),
+  /**
+   * How this user usually pays. A *capture* preference — it seeds the Add screen's
+   * pay-method chip so the common case needs no tap. It does not touch the money
+   * model: `lib/cash.ts` still branches on `PayMethod.Card` alone, and per-method
+   * balances stay parked (RELEASE_CHECKLIST post-pilot).
+   *
+   * Unset means UPI, which is what both Add forms hardcoded before this existed.
+   */
+  defaultPayMethod: () => getString(K.defaultPayMethod),
+  setDefaultPayMethod: (v: string) => setString(K.defaultPayMethod, v),
 
   // NOTE: `monthlyIncome` / `payday` accessors were removed — onboarding wrote
   // both and nothing ever read them. Onboarding's salary recurring rule already
@@ -106,6 +118,10 @@ export const settings = {
   // Goal "protect" (overspend-raid shield) one-time explainer
   lockExplainerSeen: () => getBool(K.lockExplainerSeen, false),
   setLockExplainerSeen: (v: boolean) => setBool(K.lockExplainerSeen, v),
+  // Goal reorder hint — retired the first time a drag actually lands, so it is a
+  // teaching line rather than permanent chrome.
+  goalReorderHintSeen: () => getBool(K.goalReorderHintSeen, false),
+  setGoalReorderHintSeen: (v: boolean) => setBool(K.goalReorderHintSeen, v),
   // Armed by onboarding, cleared the first time the FAB is touched. Defaults to
   // FALSE so an existing install never sees it — a coach mark for a gesture you may
   // have been using for months is noise, and it would sit on Home indefinitely for

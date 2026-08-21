@@ -88,3 +88,19 @@ export async function setMoneyProfile(
     }
   });
 }
+
+/**
+ * Delete every `money.*` row.
+ *
+ * `wipeAllData` deliberately spares the `settings` table — migration markers live
+ * there and must survive — but the money profile lives there too, so "Erase all
+ * data" left the previous cash, investments and credit balance in place. On a
+ * freshly-erased app, Plan still reported the demo's ₹3,00,000.
+ *
+ * A `LIKE 'money.%'` sweep rather than the six `KEYS` by name: the two timestamps
+ * are written implicitly by `setMoneyProfile`, so a named list is one more thing
+ * to keep in step with it.
+ */
+export async function clearMoneyProfile(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.runAsync("DELETE FROM settings WHERE key LIKE 'money.%'");
+}

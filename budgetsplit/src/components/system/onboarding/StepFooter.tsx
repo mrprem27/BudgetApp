@@ -32,7 +32,7 @@ export function StepFooter({
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.footer, { paddingBottom: insets.bottom + space.xl }]}>
+    <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
       <PrimaryButton label={primaryLabel} onPress={onPrimary} disabled={disabled} loading={loading} />
       {skipLabel && onSkip && (
         <TouchableOpacity

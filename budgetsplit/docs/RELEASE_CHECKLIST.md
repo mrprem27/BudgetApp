@@ -524,6 +524,24 @@ says it targets this persona and does; **the category list needs no reseed.**
 **Launch order:** finish features → port to Android → buy the developer account →
 build assistant + developer-facing features → publish.
 
+- [ ] **Android has NO keyboard handling at all — not one screen moves.** This is a
+      blocker, not polish: the app is unusable in portrait with a keyboard up. Three
+      causes stack. `app.json` sets no `softwareKeyboardLayoutMode`. Every
+      `KeyboardAvoidingView` in the app passes
+      `behavior={Platform.OS === 'ios' ? 'padding' : undefined}` — i.e. on Android a
+      KAV is a plain `View` and does nothing (the one exception, `add/quick.tsx`,
+      uses `'height'`, the jankiest RN behavior, with a magic 24pt offset). And
+      `automaticallyAdjustKeyboardInsets` — the fix used on onboarding, Review,
+      Categories, the account screen and `BudgetEditor` — is **iOS-only**. Expo
+      SDK 54+ also makes edge-to-edge mandatory, under which `adjustResize` no longer
+      resizes the window, so the platform fallback is a no-op too.
+      Worst case: `DraggableSheet` is the single KAV behind ~24 sheets that contain a
+      text field, **10 of which `autoFocus`** — so on Android those open with their
+      own field already focused and invisible. `ScanPaySheet` is one of them and is
+      reachable from every tab. Fix is `react-native-keyboard-controller` (one code
+      path, both platforms, edge-to-edge aware) plus a native rebuild; a
+      `softwareKeyboardLayoutMode: "pan"` config flag is the cheaper partial and needs
+      verifying against edge-to-edge before it is trusted.
 - [ ] **Android port: budget a new OCR native module.** `modules/expo-ocr` declares
       `"platforms": ["apple"]` with no Android source, and the entry point is gated
       `Platform.OS === 'ios'` (`app/add/itemized.tsx:90`). `receiptScan` defaults on,

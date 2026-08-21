@@ -60,10 +60,21 @@ export function StepScaffold({
         {step != null && total != null && <StepProgress step={step} total={total} />}
       </View>
 
+      {/*
+        The keyboard adjusts this scroll view's *inset*, never the page's height.
+
+        Onboarding used to sit in a `KeyboardAvoidingView behavior="padding"`,
+        which shrank the whole container — and because this content container is
+        `flexGrow: 1` + `justifyContent: 'center'`, every step re-centred itself
+        into a box half the height the moment a field took focus. Art, title and
+        subtitle all jumped. An inset lets the focused field scroll into view
+        while the layout stays exactly where it was.
+      */}
       <ScrollView
         style={styles.fill}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}
       >
         {!!art && <View style={styles.art}>{art}</View>}

@@ -121,3 +121,50 @@ describe('pending_txn carries a scanned location', () => {
     db.close();
   });
 });
+
+/**
+ * Sync groundwork: `pending_txn` carries who wrote a row and who it says paid.
+ *
+ * Nothing reads these yet — they exist so the sync-era rule in AGENTS §13 ("an
+ * entry waits for approval from everyone else it touches") doesn't owe a migration
+ * on the day it's built. Asserted now precisely *because* no feature would notice
+ * if they went missing.
+ */
+describe('pending_txn carries authorship', () => {
+  it('has the columns on a fresh database, defaulting to null', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(SCHEMA);
+    for (const m of COLUMN_MIGRATIONS.filter(s => /pending_txn ADD COLUMN (author|payer)_person_id/.test(s))) {
+      db.exec(m);
+    }
+    db.exec(`INSERT INTO pending_txn (id, date, amount, description, kind, direction, created_at)
+             VALUES ('a1', 1, 1, 'x', 'expense', 'debit', 1)`);
+    const row = db.prepare('SELECT author_person_id, payer_person_id FROM pending_txn WHERE id = ?').get('a1') as
+      { author_person_id: string | null; payer_person_id: string | null };
+    // Null is the honest default: every row today was written by the device owner,
+    // and claiming otherwise would be inventing provenance we never captured.
+    expect(row.author_person_id).toBeNull();
+    expect(row.payer_person_id).toBeNull();
+  });
+
+  it('applies cleanly to a database that predates them', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE pending_txn (
+        id TEXT PRIMARY KEY, date INTEGER NOT NULL, amount INTEGER NOT NULL,
+        description TEXT NOT NULL, kind TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'unknown',
+        created_at INTEGER NOT NULL
+      )
+    `);
+    db.exec(`INSERT INTO pending_txn (id, date, amount, description, kind, direction, created_at)
+             VALUES ('old', 1, 1, 'x', 'expense', 'debit', 1)`);
+
+    for (const m of COLUMN_MIGRATIONS.filter(s => /pending_txn ADD COLUMN (author|payer)_person_id/.test(s))) {
+      db.exec(m);
+    }
+    db.exec(`UPDATE pending_txn SET author_person_id = 'me', payer_person_id = 'alex' WHERE id = 'old'`);
+    const row = db.prepare('SELECT author_person_id, payer_person_id FROM pending_txn WHERE id = ?').get('old') as
+      { author_person_id: string; payer_person_id: string };
+    expect(row).toEqual({ author_person_id: 'me', payer_person_id: 'alex' });
+  });
+});

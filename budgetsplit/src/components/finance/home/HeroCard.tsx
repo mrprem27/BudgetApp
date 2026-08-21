@@ -2,10 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from '../../tokens';
+import { colors, type, space, radius, shadow, alpha } from '../../tokens';
 import { AmountText } from '../../ui/AmountText';
-import { formatCompact, formatChangeMagnitude } from '../../../lib/money';
-import { utilLabel } from '../../../lib/budget';
+import { formatCompact } from '../../../lib/money';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -31,6 +30,9 @@ type Props = {
   budgetExists?: boolean;
   /** 'daily' | 'monthly' | 'yearly' — names the period in the empty copy. */
   periodNoun?: string;
+  /** The part of `budgetSpent` that happened in a shared group — the bar's second
+   *  segment. Must be a subset of `budgetSpent`, not a figure of its own. */
+  budgetSpentShared?: number;
   /** Prior-period spend + its label, for the delta row when no budget exists. */
   prevSpending: number;
   prevLabel: string;
@@ -72,8 +74,12 @@ type Props = {
  *
  * Every line is a fixed height so the card never jumps between states.
  */
+/** Below this, the shared segment is a sliver that reads as a rendering glitch. */
+const MIN_SHARED_FRACTION = 0.05;
+/** The quieter weight of the same pace colour — never a second hue. */
+const SHARED_OPACITY = 40;
 export function HeroCard({
-  spent, periodLabel, budgetAllocated, budgetSpent, budgetExists = false, periodNoun = 'monthly',
+  spent, periodLabel, budgetAllocated, budgetSpent, budgetSpentShared = 0, budgetExists = false, periodNoun = 'monthly',
   prevSpending, prevLabel,
   obfuscate = false, healthScore = null, healthLocked = false, healthColor = colors.accent,
   onPressHealth, onPressPace, settling = false,
@@ -87,7 +93,6 @@ export function HeroCard({
   const barPct = Math.min(100, Math.max(0, util));
 
   const delta = spent - prevSpending;
-  const deltaPct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
   const up = delta > 0;
   const deltaColor = delta === 0 ? colors.textMuted : up ? colors.expense : colors.income;
 
@@ -101,6 +106,30 @@ export function HeroCard({
   useEffect(() => {
     Animated.timing(barAnim, { toValue: barPct / 100, duration: 450, useNativeDriver: true }).start();
   }, [barPct, barAnim]);
+
+  /*
+   * How much of the fill was shared, drawn as a second segment.
+   *
+   * Both layers anchor left and scale from 0, so they cannot sit side by side —
+   * which is why this draws the WHOLE fill in the quieter tint and then paints the
+   * personal part back over it at full strength. The seam between them lands at the
+   * personal figure without either layer needing a measured offset, so both stay on
+   * pure `scaleX` and the native driver (AGENTS §11).
+   *
+   * The tint is the pace colour at lower alpha, never a colour of its own: over
+   * budget is the louder fact, and a personal/group palette would outrank it.
+   *
+   * Below the threshold the seam is a sliver that reads as a rendering artefact,
+   * so the bar stays one solid colour.
+   */
+  const sharedFrac = budgetSpent > 0 ? Math.min(1, Math.max(0, budgetSpentShared / budgetSpent)) : 0;
+  const showShared = hasBudget && sharedFrac >= MIN_SHARED_FRACTION;
+  const personalAnim = useRef(new Animated.Value((barPct / 100) * (1 - sharedFrac))).current;
+  useEffect(() => {
+    Animated.timing(personalAnim, {
+      toValue: (barPct / 100) * (1 - sharedFrac), duration: 450, useNativeDriver: true,
+    }).start();
+  }, [barPct, sharedFrac, personalAnim]);
 
   // Sweep the health ring to its score.
   const showRing = healthScore != null && isFinite(healthScore);
@@ -181,7 +210,7 @@ export function HeroCard({
           <>
             <Feather name={delta === 0 ? 'minus' : up ? 'arrow-up-right' : 'arrow-down-right'} size={13} color={deltaColor} />
             <Text style={[styles.deltaText, { color: deltaColor }]} numberOfLines={1}>
-              {formatChangeMagnitude(deltaPct ?? 0)} vs {prevLabel}
+              {formatCompact(Math.abs(delta))} {up ? 'more' : 'less'} than {prevLabel}
             </Text>
           </>
         )}
@@ -202,28 +231,30 @@ export function HeroCard({
         line is a pool on Month — it is spent when the trip happens, not ₹2,000
         every month — so it is out of both halves there, and back in on Year.
 
-        The row below states both figures so the divergence from the hero number
-        is legible rather than mysterious.
+        So the bar can diverge from the hero number above it. The row below names
+        what is left or over against the budget, which is the fact the bar is
+        actually about.
       */}
       <View style={styles.track}>
-        {hasBudget && <Animated.View style={[styles.fill, { backgroundColor: paceColor, transform: [{ scaleX: barAnim }] }]} />}
+        {hasBudget && (
+          <Animated.View style={[styles.fill, { backgroundColor: showShared ? alpha(paceColor, SHARED_OPACITY) : paceColor, transform: [{ scaleX: barAnim }] }]} />
+        )}
+        {showShared && (
+          <Animated.View style={[styles.fill, styles.fillOver, { backgroundColor: paceColor, transform: [{ scaleX: personalAnim }] }]} />
+        )}
       </View>
 
       {/*
         Secondary row — always one line tall, content varies by state.
 
-        The two figures sit at the two ends of the bar they describe: spent at
+        The two figures sit at the two ends of the bar they describe: spend at
         the left where the fill starts, the budget at the right where the track
-        ends. They used to be crammed together in the right slot ("₹3.1k of ₹5k")
-        with the verdict alone on the left, which read as one long caption rather
-        than as the bar's own endpoints.
+        ends. The `1.8×` multiplier that used to trail the left figure is gone —
+        the bar already carries the proportion, so it was said twice, and a
+        multiplier is the least legible way to say it. Colour carries over/under.
 
-        The whole left group is the tap target, in every state, not only when
-        over. Insights is where the category breakdown lives, and that is worth
-        reaching whether you are 62% through the month or 1.8× past it — a row
-        that only becomes a door once you are in trouble teaches nobody where the
-        door is. (It also used to be the second-loudest thing on Home, in red, on
-        every launch, with nothing to do about it.)
+        The whole left group is the tap target in every state, not only when
+        over — Insights is worth reaching whether you are on track or not.
       */}
       <View style={styles.paceRow}>
         {hasBudget ? (
@@ -231,15 +262,13 @@ export function HeroCard({
             <PaceLeft
               onPress={onPressPace}
               color={paceColor}
-              /* `utilLabel` — the canonical "62%" / "1.8×" rendering. Written out
-                 by hand here once before and drifted to an ASCII "X". */
-              label={obfuscate ? utilLabel(util) : `${formatCompact(budgetSpent)} · ${utilLabel(util)}`}
+              /* Privacy mode hides amounts, not proportions — a percentage is not
+                 a figure, so the row stays informative instead of going blank. */
+              label={obfuscate ? `${util}% used` : formatCompact(budgetSpent)}
               a11y={obfuscate
-                ? `${utilLabel(util)} of budget, see the breakdown`
-                : `${formatCompact(budgetSpent)} of ${formatCompact(budgetAllocated)} budgeted, ${utilLabel(util)}, see the breakdown`}
+                ? `${util}% of budget used, see the breakdown`
+                : `${formatCompact(budgetSpent)} of ${formatCompact(budgetAllocated)} budgeted, see the breakdown`}
             />
-            {/* Amounts are the thing privacy mode hides; the ratio on the left is
-                a ratio, not a figure, so it stays and the row keeps working. */}
             <Text style={styles.paceSub}>{obfuscate ? '' : formatCompact(budgetAllocated)}</Text>
           </>
         ) : (
@@ -272,7 +301,7 @@ function PaceLeft({ onPress, color, label, a11y }: {
   const body = (
     <>
       <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={[styles.paceText, { color }]}>{label}</Text>
+      <Text style={[styles.paceText, { color }]} numberOfLines={1}>{label}</Text>
       {!!onPress && <Feather name="chevron-right" size={13} color={color} />}
     </>
   );
@@ -301,14 +330,17 @@ const styles = StyleSheet.create({
   numberRow: { flexDirection: 'row', alignItems: 'flex-end' },
   deltaWrap: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 6, height: 16 },
   deltaText: { ...type.label },
+  // The personal layer sits on top of the full-width one; absolute so it doesn't
+  // push the track's height around.
+  fillOver: { position: 'absolute', left: 0, top: 0 },
   track: { height: 4, backgroundColor: colors.bgElevated, borderRadius: 2, marginTop: space.md, marginBottom: space.sm, overflow: 'hidden' },
   fill: { height: 4, width: '100%', borderRadius: 2, transformOrigin: 'left' },
   // minHeight keeps the row exactly one line tall in every state → no jump.
+  paceSub: { ...type.label, color: colors.textSecondary },
   paceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 18 },
   paceLeft: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   paceText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
-  paceSub: { ...type.label, color: colors.textMuted },
   empty: { ...type.caption, color: colors.textMuted },
   obfuscated: { fontFamily: 'SpaceMono_400Regular', fontSize: 36, color: colors.textMuted, letterSpacing: 4, marginBottom: space.xs },
 });

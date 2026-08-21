@@ -406,6 +406,67 @@ it's on the exempt list below.
 
 ---
 
+## 13. The money boundary — group vs personal
+
+> **The group ledger records what happened. Your personal ledger records what it
+> cost you.** They are separate, and only you write the second one.
+
+The app is a splitting app and a personal-finance app in one, and its credibility
+depends on the second one's numbers being true. Three rules keep them true. None
+is configurable, because none is a preference:
+
+1. **Your share is your spending**, the moment it happens. Who fronted the cash is
+   irrelevant. `myShareOf` already implements this everywhere analysis happens
+   (`homeData`, `insightsData`, `reportsData`, `budget.ts`) — Monzo charges the
+   *full* bill to your budget on a 50/50 shared tab and has live complaints about it.
+2. **Money you fronted for others is a receivable, not spending.** ₹4,000 out,
+   ₹800 consumed, ₹3,200 owed back. YNAB: *"it's not new money, it's money you
+   fronted."*
+3. **Settling closes the receivable and changes nothing else** — the spending
+   already counted. Booking it again would double-count.
+
+**The test that proves it:** whether you fronted a group bill or someone else did,
+your personal position must come out identical — down only what you consumed.
+
+Consequences already in the code, each of which will look like a bug to someone
+who doesn't know the rule:
+
+- **Cash moves only on `person_id = me` payments** (`CASH_TOTALS_SQL`). Another
+  person's expense, income or share moves your cash by zero.
+- **`proposeOverspendRaid` nets receivables before liquidating a goal**, and
+  `lib/safeToSpend.ts` deliberately does **not**. Two different questions: a
+  receivable is not spendable, but it *is* a reason not to break open savings.
+  Do not "unify" them.
+- **`debtLoad` nets friend debt against what friends owe you, never against card
+  debt.** A friend's IOU does not reduce a balance accruing interest on a due date.
+- **Income is never grouped.** It always writes `[{me, total}]` and zero shares, so
+  grouping it carries no meaning.
+
+**When sync exists** (it does not today — there is no peer write path anywhere):
+*an entry takes effect immediately for whoever created it, and waits for approval
+from everyone else it touches.* You can always make yourself worse off, never
+someone else. Pending rows belong in `pending_txn`, **not** in `txn` behind a
+status flag — nothing reads `pending_txn`, so all ~40 existing read paths stay
+correct with no change. A flag would need `AND status='approved'` on every one of
+them, and missing one breaks the rule silently in that surface alone.
+
+### UPI invariants
+
+Over **70% of Indian digital-payment fraud in 2025** was QR tampering or
+collect-request manipulation. The app is built against both. Keep it that way:
+
+- ⛔ **Never a P2P collect request.** NPCI banned them outright from 1 Oct 2025
+  (circular 29 Jul 2025) — merchant collect survives, person-to-person does not.
+  Every request-money path here is **push**: `RequestQrSheet` renders a
+  `upi://pay?pa=…&am=…` QR the payer scans with their own app, and `useUpiHandoff`
+  builds the same shape as an intent.
+- ⛔ **Never present a QR-supplied name as "who am I paying".** A code's `pn` is
+  written by whoever made the code. `ScanPaySheet` leads with the **VPA** and
+  labels the name as unverified, which is the conclusion NPCI reached too — apps
+  must show only the bank-registered name, resolved from the handle.
+
+---
+
 ## Code Quality Rules
 
 - **Money is always integer paise.** `parseToPaise()` to convert. `formatRupees()` to display. Never floats.

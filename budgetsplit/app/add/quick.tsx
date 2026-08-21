@@ -1,20 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout } from '../../src/theme';
-import { formatRupees, formatCompact } from '../../src/lib/money';
+import { colors, type, space, layout } from '../../src/theme';
+import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
-import { ADD_KIND, ADD_KIND_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind } from '../../src/constants/enums';
-import { asFeather } from '../../src/constants/palette';
+import { ADD_KIND, ADD_KIND_LABEL } from '../../src/constants/enums';
 import { insertCategory } from '../../src/db/queries/categories';
-import { getTagsByFrequency, softDeleteTxn } from '../../src/db/queries/transactions';
-import { parseVoice, detectVoiceKind } from '../../src/lib/voiceParse';
-import { isGroupish, routeVoiceDraft, VoiceDestination } from '../../src/lib/voiceInbox';
+import { getTagsByFrequency } from '../../src/db/queries/transactions';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
+import { useVoiceDeepLink } from '../../src/hooks/useVoiceDeepLink';
 import { Screen } from '../../src/components/ui/Screen';
-import { ModalHeader } from '../../src/components/ui/ModalHeader';
+import { AddHeader } from '../../src/components/finance/add/AddHeader';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { TransferBody } from '../../src/components/finance/add/TransferBody';
@@ -22,13 +20,10 @@ import { AmountField } from '../../src/components/finance/add/AmountField';
 import { CategoryDatePills } from '../../src/components/finance/add/CategoryDatePills';
 import { Input } from '../../src/components/ui/Input';
 import { BudgetNudge } from '../../src/components/finance/add/BudgetNudge';
-import { ContextPill } from '../../src/components/finance/add/ContextPill';
 import { DetailChips } from '../../src/components/finance/add/DetailChips';
 import { SplitSummary } from '../../src/components/finance/add/SplitSummary';
 import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance/add/QuickAddSheets';
 import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
-import { useToast } from '../../src/components/system/Toast';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
@@ -47,93 +42,15 @@ export default function QuickAddScreen() {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
 
-  // A dictated phrase handed in by a deep link — `budgetsplit:///add/quick?q=four+fifty+groceries`.
-  // This is how ALL voice entry arrives: one Siri shortcut, no kind in the URL, everything
-  // inferred here. Applied ONCE and only once the catalogs have loaded, so the trigger lands
-  // on a filled form rather than an empty one. Nothing is saved — the user still taps Save,
-  // which is exactly what makes guessing the kind affordable.
-  //
-  // A group-ish phrase opens the destination picker straight away, because who shares a cost
-  // is the one thing that cannot be inferred. `learned` is passed so voice inherits every
-  // category correction the user has already made by hand.
-  const voiceApplied = useRef(false);
-  // Set once the draft is in and the phrase looked confident; consumed by the auto-save pass.
-  const autoSaveWanted = useRef(false);
-  const autoSaved = useRef(false);
-  const { showUndo } = useToast();
-  const { refresh } = useDataRefresh();
-  // Group and person names are what `routeVoiceDraft` checks a phrase against — naming either
-  // means the entry needs a decision, so it stays on the form instead of posting itself.
-  const groupNames = f.groups.filter(g => g.is_personal !== 1).map(g => g.name);
-  const personNames = f.allPersons.filter(p => p.id !== f.me?.id).map(p => p.name.trim().split(/\s+/)[0]).filter(Boolean);
-  useEffect(() => {
-    if (voiceApplied.current || !params.q || f.categories.length === 0) return;
-    // People must be loaded before anything else happens: they decide the *kind* ("paid Riya"
-    // is a transfer only because Riya is someone we know) and they carry the counterparty.
-    // Everything below would be wrong without them, and this effect only applies once.
-    if (f.allPersons.length === 0) return;
-
-    // One command now, so the kind is inferred rather than said. An explicit `?kind=` still
-    // wins — the route is a public entry point and a caller that states the kind means it.
-    const detected = params.kind ? f.kind : (detectVoiceKind(params.q, { people: f.allPersons }) as AddKind);
-    if (detected !== f.kind) {
-      // Switching kind swaps the category catalog *asynchronously*, so the draft cannot be
-      // applied in the same pass — it would match against the outgoing catalog. Bail without
-      // marking applied; the effect re-runs on the new kind and takes the branch below.
-      f.onSelectKind(detected);
-      return;
-    }
-
-    voiceApplied.current = true;
-    const draft = parseVoice(params.q, {
-      categories: f.categories, learned: f.learned, nowMs: Date.now(), people: f.allPersons,
-    });
-    f.applyVoiceDraft(draft);
-
-    // Is this confident enough to post without a human? `routeVoiceDraft` already answers
-    // exactly that — an amount above zero, nothing group-ish, no group or person named — so
-    // the rule is reused rather than a second one invented beside it. A transfer never
-    // qualifies: which way the money went is a decision, not a confidence problem.
-    autoSaveWanted.current = detected !== AddKind.Transfer
-      && routeVoiceDraft(draft, params.q, groupNames, personNames, detected === AddKind.Income ? 'income' : 'expense')
-        === VoiceDestination.Ledger;
-
-    // Deliberately after the draft is applied, and only for a shared-sounding phrase. Groups
-    // load asynchronously, so a phrase that arrives before them opens the sheet on the next
-    // pass rather than not at all.
-    if (isGroupish(params.q) && f.pickerGroups.length > 0) setSheet('destination');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.q, f.categories.length, f.pickerGroups.length, f.allPersons.length, f.kind]);
-
-  /**
-   * Post a confident phrase and show what it wrote.
-   *
-   * A separate pass because `applyVoiceDraft` sets state the save depends on — `canSave` is
-   * false until the amount and category have actually landed, so saving in the same tick would
-   * either no-op or save an empty form. Waiting for `canSave` is the honest signal that the
-   * form is ready.
-   *
-   * `router.replace` rather than push: going back from the transaction should return you to
-   * wherever you were, not to a spent Add screen that would re-run this.
-   */
-  useEffect(() => {
-    if (!autoSaveWanted.current || autoSaved.current || !f.canSave || f.saving) return;
-    autoSaved.current = true;
-    void f.handleSave({
-      onSaved: (txnId) => {
-        router.replace(`/txn/${txnId}`);
-        // The one guard auto-save needs. Nothing else on this path asks "are you sure", so a
-        // misheard "four fifty" as "four fifteen" has to be one tap from gone.
-        showUndo({
-          message: 'Saved from voice',
-          onUndo: async () => { await softDeleteTxn(db, txnId); refresh(); router.back(); },
-        });
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.canSave, f.saving]);
+  useVoiceDeepLink({
+    form: f,
+    phrase: params.q,
+    kindParam: params.kind,
+    onOpenDestination: () => setSheet('destination'),
+  });
 
   const { kind, flags, isEditing, isRecurEdit } = f;
+  const isTransfer = kind === 'transfer';
   const accent = kindAccent(kind);
   const nudgeColor = f.nudgePct == null ? null : f.nudgePct > 0.2 ? colors.income : f.nudgePct > 0 ? colors.healthAmber : colors.expense;
 
@@ -143,51 +60,17 @@ export default function QuickAddScreen() {
     onOpenStorageSettings: () => router.push('/settings/storage'),
   });
 
-  const title = isRecurEdit ? 'Edit recurring'
-    : isEditing ? (kind === 'income' ? 'Edit income' : kind === 'transfer' ? 'Edit settlement' : 'Edit expense')
-    : (kind === 'income' ? 'Add income' : kind === 'transfer' ? 'Settle up' : 'Add expense');
-
   // Transfer is hidden when splitting is off — a settlement needs someone to settle
   // with — but stays visible while editing one, or the pill would vanish from a row
   // that already is a transfer.
-  const tabs = flags.splitting || kind === 'transfer'
+  const tabs = flags.splitting || isTransfer
     ? KIND_TABS
     : KIND_TABS.filter(t => t.key !== 'transfer');
-
-  // Blank until the scopes load rather than "₹0": the pill now renders before
-  // `computeTransferScopes` has run, and a hard zero there would read as "nothing is owed"
-  // when the truth is "not worked out yet".
-  const scopeEntry = f.transferScope === TRANSFER_SCOPE_ALL
-    ? f.transferScopes?.all
-    : f.transferScopes?.groups.find(g => g.groupId === f.transferScope);
-  const scopeDetail = f.transferScopes == null ? undefined : formatCompact(scopeEntry?.amount ?? 0);
 
   return (
     <Screen
       header={
-        <ModalHeader
-          title={title}
-          onClose={() => router.back()}
-          right={
-            /* Save lives top-right, next to ✕ — the two ends of the same bar mean
-               "leave without saving" and "save". A footer button reads as a page
-               CTA and pushes the form up; this is a modal, not a page.
-               Note this is a deliberate exception to AGENTS §5's PrimaryButton
-               rule, which §5 now records. */
-            <TouchableOpacity
-              onPress={() => f.handleSave()}
-              disabled={!f.canSave || f.saving}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Save"
-              accessibilityState={{ disabled: !f.canSave || f.saving }}
-            >
-              <Text style={[styles.save, { color: !f.canSave || f.saving ? colors.textMuted : accent }]}>
-                Save
-              </Text>
-            </TouchableOpacity>
-          }
-        />
+        <AddHeader form={f} accent={accent} onClose={() => router.back()} onOpenSheet={open} />
       }
     >
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
@@ -205,58 +88,15 @@ export default function QuickAddScreen() {
             </View>
           )}
 
-          {/* One context pill for both kinds — an expense's destination and a
-              settlement's scope answer the same question ("what is this about?") and
-              belong in the same place. Transfer used to ask it again further down the
-              form with its own chip row. */}
-          {kind === 'expense' && (
-            <View style={styles.formBlock}>
-              <ContextPill
-                icon={asFeather(f.selectedGroup?.icon, 'layers')}
-                label={f.selectedGroup?.name ?? 'Personal'}
-                detail={
-                  f.members.length > 1
-                    ? `${f.members.length} people · ${SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase()}`
-                    : 'just you'
-                }
-                tint={f.selectedGroup?.color ?? accent}
-                onPress={() => open('destination')}
-                accessibilityLabel={`Goes to ${f.selectedGroup?.name ?? 'Personal'}. Change`}
-              />
-            </View>
-          )}
-
-          {/* Always rendered, unlike before. `computeTransferScopes` only runs once BOTH people
-              are chosen, so gating this pill on the resulting group list hid the group
-              affordance during the whole period you'd first look for it — and "All groups" is
-              already the default (`useAddTxnForm`), so there was a real value going unshown.
-              The amount fills in once the scopes arrive. */}
-          {kind === 'transfer' && (
-            <View style={styles.formBlock}>
-              <ContextPill
-                icon={f.transferScope === TRANSFER_SCOPE_ALL ? 'layers' : 'users'}
-                label={f.transferScope === TRANSFER_SCOPE_ALL
-                  ? 'All groups'
-                  : f.transferScopes?.groups.find(g => g.groupId === f.transferScope)?.name ?? 'Group'}
-                detail={scopeDetail}
-                tint={accent}
-                onPress={() => open('scope')}
-                accessibilityLabel="Choose what you're settling"
-              />
-            </View>
-          )}
-
-          {/* Dictate and adjust live as icon discs under the amount (`AmountField`), not as
-              text rows around it — see that component's docblock. Dictation is offered for
-              every kind including transfer; it is withheld only while editing, where
-              re-dictating would silently overwrite fields you came here to change. Not on the
-              tab-bar FAB long-press either: `(tabs)/_layout.tsx:135` already binds that. */}
+          {/* Dictate and adjust sit on the amount row itself (`AmountField`). Dictation is
+              offered for every kind including transfer; it is withheld only while editing,
+              where re-dictating would silently overwrite fields you came here to change. */}
           <View style={styles.formBlock}>
             <AmountField
               amountText={f.amountText}
               onChangeText={f.setAmountText}
               kind={kind}
-              autoFocus={!isEditing}
+              autoFocus={!isEditing && !isRecurEdit}
               transferScopeBal={f.transferScopeBal}
               onOpenCalculator={() => open('calc')}
               onOpenVoice={!isEditing && !isRecurEdit && flags.voiceEntry ? () => open('voice') : undefined}
@@ -304,10 +144,6 @@ export default function QuickAddScreen() {
                 onSwap={() => { f.setTransferFromId(f.transferToId); f.setTransferToId(f.transferFromId); }}
                 scopes={f.transferScopes}
                 scope={f.transferScope}
-                payMethod={f.payMethod}
-                onPayMethod={f.setPayMethod}
-                note={f.transferNote}
-                onNote={f.setTransferNote}
                 amountPaise={f.total}
                 payee={f.transferPayee}
                 handoff={f.transferHandoff}
@@ -373,47 +209,47 @@ export default function QuickAddScreen() {
                 </Text>
               )}
 
-              {/* Itemized split stays visible — it's the app's most differentiated
-                  feature — but as a chip beside the other details rather than a
-                  full-width card row competing with the form itself. */}
-              <DetailChips
-                accent={accent}
-                onSplitByItems={!isEditing && kind !== 'income' && flags.itemized
-                  ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
-                  : undefined}
-                note={flags.smartCategory ? f.note : ''}
-                onOpenNote={() => open('note')}
-                onClearNote={() => f.setNote('')}
-                tags={f.tags}
-                onOpenTags={() => open('tags')}
-                txnDate={f.txnDate}
-                onOpenTime={() => open('time')}
-                attachmentUri={f.attachmentUri}
-                onOpenAttachment={pickReceipt}
-                onClearAttachment={() => f.setAttachmentUri(null)}
-                place={f.locEnabled && !isEditing ? f.place : undefined}
-                capturingLoc={f.capturingLoc}
-                onCaptureLocation={f.locEnabled && !isEditing ? f.captureLocation : undefined}
-                onClearLocation={() => f.setPlace(null)}
-                payMethod={f.payMethod}
-                onOpenPayMethod={() => open('payMethod')}
-                isIncome={kind === 'income'}
-                recurEnabled={f.recurEnabled}
-                recurFreq={f.recurFreq}
-                recurInterval={f.recurInterval}
-                // Deliberately does NOT pre-enable recurrence. The sheet's own
-                // switch turns it on, so closing the sheet without touching it
-                // can't leave a transaction silently armed to repeat.
-                onOpenRecurring={!isEditing && flags.recurring ? () => open('recurring') : undefined}
-                onClearRecurring={() => f.setRecurEnabled(false)}
-              />
             </>
           )}
-        </ScrollView>
 
-        {/* Sticky CTA. The save action used to be a 24px ✓ glyph in the header —
-            AGENTS.md §5 requires PrimaryButton for a primary action, and a footer
-            button is also where the thumb already is. */}
+          {/* One details block for all three kinds. A kind OMITS a chip it cannot
+              honour — it never shows one that silently drops the value. */}
+          <DetailChips
+            accent={accent}
+            // A transfer's note is `transferNote` — a different field, which is what
+            // persists and what the UPI payload reads. For the other kinds the chip is
+            // omitted when smart-category is off, because then the form's top field
+            // already IS the note and two controls would edit one value.
+            note={isTransfer ? f.transferNote : flags.smartCategory ? f.note : ''}
+            onOpenNote={isTransfer || flags.smartCategory ? () => open('note') : undefined}
+            onClearNote={() => (isTransfer ? f.setTransferNote('') : f.setNote(''))}
+            tags={f.tags}
+            onOpenTags={() => open('tags')}
+            attachmentUri={f.attachmentUri}
+            onOpenAttachment={pickReceipt}
+            onClearAttachment={() => f.setAttachmentUri(null)}
+            // Where you were is a fact about a purchase; a settlement is money moving
+            // between two people and has no place of its own.
+            place={f.locEnabled && !isEditing && !isTransfer ? f.place : undefined}
+            capturingLoc={f.capturingLoc}
+            onCaptureLocation={f.locEnabled && !isEditing && !isTransfer ? f.captureLocation : undefined}
+            onClearLocation={() => f.setPlace(null)}
+            payMethod={f.payMethod}
+            onOpenPayMethod={() => open('payMethod')}
+            isIncome={kind === 'income'}
+            txnDate={f.txnDate}
+            onOpenTime={() => open('time')}
+            onSplitByItems={!isEditing && kind === 'expense' && flags.itemized
+              ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
+              : undefined}
+            recurEnabled={f.recurEnabled}
+            recurFreq={f.recurFreq}
+            recurInterval={f.recurInterval}
+            // A settlement records a payment that already happened, not a schedule,
+            // so it never repeats. Omitted, not disabled.
+            onOpenRecurring={!isEditing && flags.recurring && !isTransfer ? () => open('recurring') : undefined}
+          />
+        </ScrollView>
       </KeyboardAvoidingView>
 
       <QuickAddSheets
@@ -432,7 +268,6 @@ export default function QuickAddScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  save: { ...type.button },
   // No container `gap` — a block that renders its own top margin (e.g.
   // SplitSummary's header) would silently stack with it (AGENTS.md §3/§12).
   // Each block gets its own `formBlock` margin instead.

@@ -3,7 +3,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   startOfYear, endOfYear, getDaysInMonth, getDaysInYear,
 } from 'date-fns';
-import type { BudgetGroup } from '../db/queries/groups';
+import { getAllGroups, sharedGroupsOf, type BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getCategoryBudgets, getMyGlobalBudgetRows } from '../db/queries/categoryBudgets';
 import { OTHERS_LABEL } from './categoryFold';
@@ -233,17 +233,47 @@ export async function getCategorySpending(
   toMs: number,
   meId?: string,
 ): Promise<Record<string, number>> {
+  return (await getCategorySpendingDetail(db, groupId, fromMs, toMs, meId)).byCategory;
+}
+
+/** {@link getCategorySpendingDetail}'s shape: the same spend, on two axes. */
+export type CategorySpendDetail = {
+  byCategory: Record<string, number>;
+  /** The same paise again, category → the group the entry lives in. */
+  byCategoryGroup: Record<string, Record<string, number>>;
+};
+
+/**
+ * As {@link getCategorySpending}, but keeping the group each entry came from.
+ *
+ * The group axis is dropped by the plain version because every caller of it wants
+ * a flat per-category figure. It has to be recovered *here* rather than
+ * re-derived by the caller: anything showing "how much of this was shared"
+ * alongside a budget figure must split the **same** population the budget figure
+ * was computed over, or it repeats the numerator/denominator mismatch `HeroCard`
+ * documents at length.
+ */
+export async function getCategorySpendingDetail(
+  db: SQLite.SQLiteDatabase,
+  groupId: string | null,
+  fromMs: number,
+  toMs: number,
+  meId?: string,
+): Promise<CategorySpendDetail> {
   const txns = await getTransactionsInRange(db, groupId, fromMs, toMs);
-  const map: Record<string, number> = {};
+  const byCategory: Record<string, number> = {};
+  const byCategoryGroup: Record<string, Record<string, number>> = {};
   for (const t of txns) {
     if (t.kind !== 'expense') continue;
     const amt = meId
       ? myShareOf(t, meId)
       : t.shares.reduce((s, sh) => s + sh.amount, 0);
     if (amt === 0) continue;
-    map[t.category] = (map[t.category] ?? 0) + amt;
+    byCategory[t.category] = (byCategory[t.category] ?? 0) + amt;
+    const g = (byCategoryGroup[t.category] ??= {});
+    g[t.group_id] = (g[t.group_id] ?? 0) + amt;
   }
-  return map;
+  return { byCategory, byCategoryGroup };
 }
 
 export type CategoryBudgetStatus = {
@@ -411,6 +441,8 @@ export type GlobalBudgetSummary = {
   pooledCount: number;
   /** My share, all groups, over `target`'s window, restricted to the rate categories. */
   spent: number;
+  /** The part of `spent` that happened inside a shared group. Always ≤ `spent`. */
+  spentShared: number;
   remaining: number;
   pct: number | null;
   health: BudgetHealth;
@@ -439,7 +471,7 @@ export async function getMyGlobalBudgetSummary(
   const target = opts.target ?? 'monthly';
   const budgets = await getMyGlobalBudgetRows(db, meId);
   const empty: GlobalBudgetSummary = {
-    allocated: 0, pooled: 0, pooledCount: 0, spent: 0, remaining: 0,
+    allocated: 0, pooled: 0, pooledCount: 0, spent: 0, spentShared: 0, remaining: 0,
     pct: null, health: 'none', categoryCount: 0, rows: [],
   };
   if (budgets.length === 0) return empty;
@@ -451,9 +483,17 @@ export async function getMyGlobalBudgetSummary(
     budgets.filter(b => budgetKind(b.cadence, target) === 'rate').map(b => b.category),
   );
   const w = windowForCadence(target, now);
-  const spendByCat = await getCategorySpending(db, null, w.from, w.to, meId);
-  const spent = Object.entries(spendByCat)
+  const detail = await getCategorySpendingDetail(db, null, w.from, w.to, meId);
+  const spent = Object.entries(detail.byCategory)
     .reduce((s, [cat, amt]) => (rateCategories.has(cat) ? s + amt : s), 0);
+  // The shared slice of that same `spent` — same categories, same window, so it is
+  // always a subset of it and never a figure from a different population.
+  const sharedIds = new Set(sharedGroupsOf(await getAllGroups(db)).map(g => g.id));
+  let spentShared = 0;
+  for (const [cat, perGroup] of Object.entries(detail.byCategoryGroup)) {
+    if (!rateCategories.has(cat)) continue;
+    for (const [gid, amt] of Object.entries(perGroup)) if (sharedIds.has(gid)) spentShared += amt;
+  }
   const pct = roll.amount > 0 ? Math.round((spent / roll.amount) * 100) : null;
 
   return {
@@ -461,6 +501,7 @@ export async function getMyGlobalBudgetSummary(
     pooled: roll.pooled,
     pooledCount: roll.pooledCount,
     spent,
+    spentShared,
     remaining: roll.amount - spent,
     pct,
     health: budgetHealth(pct),

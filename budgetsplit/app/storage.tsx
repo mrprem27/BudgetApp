@@ -13,7 +13,9 @@ import { clearAllAttachmentRefs } from '../src/db/queries/transactions';
 import { loadDemoData, resetToEmpty } from '../src/db/seedDemo';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
-import { DEFAULTS, type FeatureKey } from '../src/lib/featureFlags';
+import { DEFAULTS, FEATURE_KEYS, type FeatureKey } from '../src/lib/featureFlags';
+import { applyPersona, asIntent } from '../src/lib/personaDefaults';
+import { settings } from '../src/lib/settings';
 import { haptic } from '../src/lib/haptics';
 import { IconCircle } from '../src/components/ui/IconCircle';
 
@@ -27,7 +29,7 @@ export default function StorageScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { refresh } = useDataRefresh();
-  const { setFlag } = useFeatureFlags();
+  const { setFlag, reload: reloadFlags } = useFeatureFlags();
   const [busy, setBusy] = useState(false);
 
   // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
@@ -85,9 +87,17 @@ export default function StorageScreen() {
             setBusy(true);
             try {
               await resetToEmpty(db);
+              // Loading demo data flips every flag ON for testing, and nothing put
+              // them back — so an "erase" left the tester's persona permanently
+              // overwritten. There is no snapshot and no `clearFlag`, so the stored
+              // onboarding intent is the only thing that can rebuild the setup.
+              await applyPersona(asIntent(await settings.onboardingIntent()) ?? 'both', FEATURE_KEYS);
+              // `applyPersona` writes through the module-level `setFlag`, not the
+              // provider's, so the in-memory flags need an explicit re-read.
+              await reloadFlags();
               refresh();
               haptic.warning();
-              Alert.alert('Data erased', 'The app is now empty.');
+              Alert.alert('Data erased', 'The app is now empty, and feature flags are back to your setup.');
             } catch (e) {
               haptic.error();
               Alert.alert('Couldn’t erase data', String(e instanceof Error ? e.message : e));

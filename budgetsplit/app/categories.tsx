@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
-  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -194,8 +193,11 @@ export default function CategoriesScreen() {
       {loadError ? (
         <ErrorState onRetry={() => reload()} />
       ) : (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      // Inset, not `padding`: the rename and add-category inputs auto-focus and can
+      // sit anywhere in a long list, and shrinking the container never scrolls a
+      // focused field into view — so renaming one near the bottom put the keyboard
+      // straight over it.
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
           {CATEGORY_KIND.map(k => (
@@ -393,7 +395,6 @@ export default function CategoriesScreen() {
           </View>
         )}
       </ScrollView>
-      </KeyboardAvoidingView>
       )}
     </View>
   );

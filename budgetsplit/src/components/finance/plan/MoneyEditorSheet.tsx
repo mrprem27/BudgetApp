@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';
@@ -54,8 +54,12 @@ export function MoneyEditorSheet({
   }
 
   return (
+    // No KeyboardAvoidingView here: `DraggableSheet` already wraps every sheet in
+    // one, anchored `flex-end` so the sheet rides up. A second one inside adds
+    // `paddingBottom: keyboardHeight` a second time, and in an 88%-max-height
+    // sheet with four fields that pushed Save out of reach.
     <SheetModal visible={visible} onClose={onClose} title="Your money">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <>
         <Text style={styles.label}>Cash available</Text>
         <Input value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
         <Text style={styles.hint}>Money in your bank + wallet right now. Transactions adjust this as you spend.</Text>
@@ -74,7 +78,7 @@ export function MoneyEditorSheet({
           : limitPaise > 0 ? <Text style={styles.hint}>{formatCompact(Math.max(0, limitPaise - usedPaise))} available credit.</Text> : null}
 
         <PrimaryButton label="Save" onPress={handleSave} style={{ marginTop: space.md }} />
-      </KeyboardAvoidingView>
+      </>
     </SheetModal>
   );
 }

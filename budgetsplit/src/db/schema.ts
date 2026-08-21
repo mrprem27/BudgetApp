@@ -326,6 +326,33 @@ export const COLUMN_MIGRATIONS = [
   // NULL = the group's default budget line (what every existing row is, so this is
   // additive with no data migration). Non-NULL = that person's override.
   "ALTER TABLE category_budget ADD COLUMN person_id TEXT",
+  // Whether money this person owes me should still be counted as cover.
+  //
+  // 'expected' (the default, and what every existing row is) means it offsets a
+  // shortfall before a savings goal is liquidated, and nets against what I owe in
+  // the health score. 'written_off' means I've decided it isn't coming back: the
+  // debt is still owed and still shown — this is NOT a settlement — it just stops
+  // counting as an asset.
+  //
+  // Per person, not per balance, because there IS no balance row: every balance is
+  // derived per read from txn_payment/txn_share. Staleness stays derived too (age
+  // against that person's own settle rhythm) — only the deliberate write-off is
+  // stored, because only that is a decision.
+  "ALTER TABLE person ADD COLUMN receivable_state TEXT NOT NULL DEFAULT 'expected'",
+  "ALTER TABLE person ADD COLUMN receivable_state_at INTEGER",
+  // Sync groundwork, deliberately schema-only — nothing reads these yet.
+  //
+  // AGENTS §13: when sync exists, an entry takes effect immediately for whoever
+  // created it and waits for approval from everyone else it touches. Answering
+  // "who wrote this, and who does it say paid" needs both facts on the row, and a
+  // pending row lives HERE rather than in `txn` behind a status flag — nothing
+  // reads `pending_txn`, so every existing read path stays correct untouched,
+  // whereas a flag would need `AND status='approved'` on ~40 of them and missing
+  // one breaks the rule silently in that surface alone.
+  //
+  // Added now because they cost nothing now and a migration later.
+  "ALTER TABLE pending_txn ADD COLUMN author_person_id TEXT",
+  "ALTER TABLE pending_txn ADD COLUMN payer_person_id TEXT",
 ];
 
 /**
@@ -606,6 +633,12 @@ export const INDEXES = `
     -- category-frequency / uncategorized / duplicate scans group & filter on category.
     CREATE INDEX IF NOT EXISTS idx_txn_group_category ON txn(group_id, category);
     CREATE INDEX IF NOT EXISTS idx_line_item_txn  ON line_item(txn_id);
+    -- Person-leading probes: "every transaction involving this person", for the
+    -- person detail screen. The composite PKs on these two tables are
+    -- (txn_id, person_id), so neither can serve a person_id-first lookup — without
+    -- these the screen is a full scan of both split tables.
+    CREATE INDEX IF NOT EXISTS idx_txn_share_person   ON txn_share(person_id);
+    CREATE INDEX IF NOT EXISTS idx_txn_payment_person ON txn_payment(person_id);
 `;
 
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
@@ -635,7 +668,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at';
+        + 'recur_paused_at,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at';
       await db.execAsync(`
         PRAGMA foreign_keys=OFF;
         BEGIN TRANSACTION;
@@ -656,6 +689,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           recur_override_date INTEGER,
           parent_recur_id TEXT,
           recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
+          recur_paused_at INTEGER,
           tz             TEXT,
           lat            REAL,
           lng            REAL,

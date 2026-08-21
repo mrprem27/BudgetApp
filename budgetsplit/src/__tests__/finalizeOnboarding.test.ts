@@ -7,6 +7,7 @@ import { getRecurringForGroup } from '../db/queries/recurring';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { getReminderPrefs } from '../lib/reminderPrefsStore';
 import { settings } from '../lib/settings';
+import { PayMethod } from '../constants/enums';
 
 const store = AsyncStorage as unknown as { __reset: () => void };
 beforeEach(() => store.__reset());
@@ -20,6 +21,7 @@ const data = (over: Partial<OnboardingData> = {}): OnboardingData => ({
   people: [],
   groupName: null,
   addFirst: false,
+  payMethod: PayMethod.Upi,
   money: { openingCash: 5000000, investments: 0, creditLimit: 10000000, creditUsed: 200000 },
   ...over,
 });
@@ -108,5 +110,14 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     // Preserved: name and money profile still written.
     expect((await getAllPersons(db)).find(p => p.is_me === 1)?.name).toBe('Prem');
     expect((await getMoneyProfile(db)).openingCash).toBe(5000000);
+  });
+});
+
+describe('default pay method', () => {
+  it('persists the pay method chosen on the money step', async () => {
+    const db = await openTestDb();
+    await seedGroupAndMe(db);
+    await finalizeOnboarding(db, data({ payMethod: PayMethod.Cash }));
+    expect(await settings.defaultPayMethod()).toBe('cash');
   });
 });

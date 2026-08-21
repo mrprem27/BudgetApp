@@ -12,6 +12,11 @@
  * re-export the relevant type from here, so there is a single definition.
  */
 
+// Type-only, so it is erased at compile time: `enums.ts` stays a pure constants
+// module with no runtime dependency on `@expo/vector-icons`, which the Node-based
+// unit tests importing it (savingsEngine, reviewFilter, …) rely on.
+import type { FeatherName } from './palette';
+
 // --- Transactions --------------------------------------------------------
 
 /** `txn.kind CHECK(kind IN ('income','expense','settlement'))`. "Transfer" is only
@@ -75,11 +80,16 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
   [PayMethod.Bank]: 'Bank', [PayMethod.Wallet]: 'Wallet',
   [PayMethod.Autopay]: 'Autopay', [PayMethod.Other]: 'Other',
 };
-/** Emoji glyph per pay method — the single source for the pay-method chips. */
-export const PAY_METHOD_EMOJI: Record<PayMethod, string> = {
-  [PayMethod.Upi]: '📱', [PayMethod.Card]: '💳', [PayMethod.Cash]: '💵',
-  [PayMethod.Bank]: '🏦', [PayMethod.Wallet]: '👛',
-  [PayMethod.Autopay]: '🔁', [PayMethod.Other]: '•',
+/**
+ * Feather icon per pay method — the single source for the pay-method chips.
+ *
+ * Feather has no bank or wallet glyph, so Bank takes `briefcase` and Wallet
+ * `shopping-bag`, keeping both distinct from Card's `credit-card`.
+ */
+export const PAY_METHOD_ICON: Record<PayMethod, FeatherName> = {
+  [PayMethod.Upi]: 'smartphone', [PayMethod.Card]: 'credit-card', [PayMethod.Cash]: 'dollar-sign',
+  [PayMethod.Bank]: 'briefcase', [PayMethod.Wallet]: 'shopping-bag',
+  [PayMethod.Autopay]: 'repeat', [PayMethod.Other]: 'more-horizontal',
 };
 
 /**
@@ -95,6 +105,26 @@ export const INCOME_LANDING: readonly PayMethod[] = [
   PayMethod.Bank, PayMethod.Cash, PayMethod.Wallet, PayMethod.Upi,
 ];
 export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
+
+/**
+ * `person.receivable_state` — whether money this person owes me still counts as
+ * cover. 'written_off' is NOT a settlement: the debt is still owed and still
+ * shown, it just stops offsetting a shortfall or netting against what I owe.
+ *
+ * There is no 'stale' member on purpose. Staleness is derived from the age of the
+ * balance against that person's own settle rhythm, so storing it would freeze a
+ * judgement that should move with time.
+ */
+export const RECEIVABLE_STATE = ['expected', 'written_off'] as const;
+export type ReceivableState = typeof RECEIVABLE_STATE[number];
+export function asReceivableState(v: string | null | undefined): ReceivableState {
+  return v === 'written_off' ? 'written_off' : 'expected';
+}
+
+/** Narrow a stored preference string to a PayMethod. Mirrors `asBudgetCadence`. */
+export function asPayMethod(v: string | null | undefined, fallback: PayMethod = PayMethod.Upi): PayMethod {
+  return (PAY_METHOD as readonly string[]).includes(v ?? '') ? (v as PayMethod) : fallback;
+}
 
 /**
  * A settlement's scope: which debt is being paid down. Either every shared group

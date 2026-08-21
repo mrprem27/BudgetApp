@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import type { ReceivableState } from '../../constants/enums';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
@@ -15,6 +16,8 @@ export type Person = {
   upi_vpa: string | null;
   remote_uid: string | null;
   image_uri: string | null;
+  receivable_state: ReceivableState;
+  receivable_state_at: number | null;
   /** Only populated by getGroupMembers (from group_member.joined_at). */
   joined_at?: number | null;
 };
@@ -23,8 +26,30 @@ export async function setPersonImage(db: SQLite.SQLiteDatabase, id: string, uri:
   await db.runAsync('UPDATE person SET image_uri = ? WHERE id = ?', [uri, id]);
 }
 
+/**
+ * Decide whether this person's debt still counts as cover.
+ *
+ * Writing off does not settle anything and does not touch a single txn row — the
+ * balance is unchanged and still displayed. It only stops the raid and the health
+ * score treating it as an asset.
+ */
+export async function setReceivableState(
+  db: SQLite.SQLiteDatabase,
+  id: string,
+  state: ReceivableState,
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE person SET receivable_state = ?, receivable_state_at = ? WHERE id = ?',
+    [state, Date.now(), id],
+  );
+}
+
 export async function getAllPersons(db: SQLite.SQLiteDatabase): Promise<Person[]> {
   return db.getAllAsync<Person>('SELECT * FROM person ORDER BY is_me DESC, name ASC');
+}
+
+export async function getPersonById(db: SQLite.SQLiteDatabase, id: string): Promise<Person | null> {
+  return db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [id]);
 }
 
 export async function getMe(db: SQLite.SQLiteDatabase): Promise<Person | null> {
@@ -51,7 +76,8 @@ export async function insertPerson(
     'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, 0)',
     [id, name, avatarColor],
   );
-  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null, upi_vpa: null };
+  // Mirrors the column default: a new contact is owed-to-you until you say otherwise.
+  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null, upi_vpa: null, receivable_state: 'expected', receivable_state_at: null };
 }
 
 export async function setPersonUpiVpa(

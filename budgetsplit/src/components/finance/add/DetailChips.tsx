@@ -2,6 +2,9 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { timeOfDay } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
+import { Card } from '../../ui/Card';
+import { Divider } from '../../ui/Divider';
+import { ListRow } from '../../ui/ListRow';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';
 import { freqLabel } from '../../../lib/recurrence';
@@ -21,13 +24,14 @@ type Props = {
   onOpenNote?: () => void;
   onClearNote?: () => void;
 
-  attachmentUri: string | null;
-  onOpenAttachment: () => void;
-  onClearAttachment: () => void;
+  /** Omitted where the save path can't persist an attachment. */
+  attachmentUri?: string | null;
+  onOpenAttachment?: () => void;
+  onClearAttachment?: () => void;
 
   /** Tags on this transaction. Orthogonal to category — one category, many tags. */
-  tags: string[];
-  onOpenTags: () => void;
+  tags?: string[];
+  onOpenTags?: () => void;
 
   /** The transaction's time-of-day. Always set (it defaults to now), like pay method. */
   txnDate: number;
@@ -44,11 +48,7 @@ type Props = {
   /** Income reads the same field as "landed in" rather than "paid by". */
   isIncome?: boolean;
 
-  /**
-   * Opens the itemized-split wizard. Sits with the other details rather than in a
-   * full-width card row of its own — it's the app's most differentiated feature so
-   * it must stay visible, but it isn't more important than the amount.
-   */
+  /** Opens the itemized-split wizard. */
   onSplitByItems?: () => void;
 
   /** Omitted while editing, or when the `recurring` flag is off. */
@@ -56,51 +56,47 @@ type Props = {
   recurFreq?: RecurFreq;
   recurInterval?: string;
   onOpenRecurring?: () => void;
-  onClearRecurring?: () => void;
 };
 
 /**
- * The optional details on the Add screen: one chip each, named, showing its value
- * once set.
+ * The optional details on the Add screen, in three groups: what you attach, how
+ * and when it was paid, and the two actions that change the transaction's shape.
  *
- * Replaces the "More options" accordion, which was wrong in three ways at once.
- * Its label had no information scent — NN/g's explicit progressive-disclosure
- * anti-pattern is a control that doesn't say what's behind it — and its hint read
- * "Split · Attach" when the split sheet was never inside it. Expanding it inserted
- * five or six blocks with no animation and no auto-scroll, shoving the split
- * summary off-screen. And in edit mode it rendered no header at all, so the
- * section couldn't be collapsed again.
- *
- * A chip states what it is when unset and what you chose when set, so nothing is
- * hidden behind a door you have to open to find out. Nothing moves when you use
- * it: chips change label in place.
+ * It was one flat wrap of eight chips holding three different kinds of thing —
+ * values you attach, settings that are always set, and actions. The last pair read
+ * worst as chips: `Split by items` and `Repeat` carried no tint, no value and no ✕,
+ * so they looked permanently "unset" while actually being doors to another screen.
+ * They are rows now, which is what AGENTS §4 wants for a full-width navigation.
  *
  * **Every chip carries its own glyph in both states.** The first version used
- * `icon="plus"` while unset, so Note / Receipt / Location / Repeat rendered four
- * chips with an identical `+` and the meaningful icon only appeared once the value
- * was set — backwards, since unset is exactly when you need to know what a control
- * is. State is carried by the tint, the value replacing the name, and the ✕; identity
- * is carried by the glyph, always.
+ * `icon="plus"` while unset, so four chips rendered an identical `+` and the
+ * meaningful icon only appeared once set — backwards, since unset is exactly when
+ * you need to know what a control is. State is carried by the tint, the value
+ * replacing the name, and the ✕; identity is carried by the glyph, always.
+ *
+ * A chip has exactly one trailing affordance (AGENTS §9): `⌄` while it is unset and
+ * opening a picker, `✕` once it holds a value you can clear. Never both — `Chip`
+ * silently drops the chevron if given both.
  */
 export function DetailChips({
   accent,
   note, onOpenNote, onClearNote,
   attachmentUri, onOpenAttachment, onClearAttachment,
-  tags, onOpenTags,
+  tags = [], onOpenTags,
   txnDate, onOpenTime,
   place, capturingLoc, onCaptureLocation, onClearLocation,
   payMethod, onOpenPayMethod, isIncome,
   onSplitByItems,
-  recurEnabled, recurFreq, recurInterval, onOpenRecurring, onClearRecurring,
+  recurEnabled, recurFreq, recurInterval, onOpenRecurring,
 }: Props) {
   const noteSet = !!note && note.trim().length > 0;
+  const hasActions = !!onSplitByItems || !!onOpenRecurring;
 
   return (
+    // No `gap` on this container: `SectionHeader` owns its own vertical margins and
+    // the two would silently add up (AGENTS §3/§12).
     <View>
-      {/* `first`: the ScrollView above already puts `space.md` between blocks, and
-          SectionHeader owns another `space.lg` on top — 40px between Split's last line
-          and this eyebrow, which read as a gap rather than a section break. */}
-      <SectionHeader title="Other details" first />
+      <SectionHeader title="Details" first />
       <View style={styles.row}>
         {onOpenNote && (
           <Chip
@@ -109,46 +105,42 @@ export function DetailChips({
             selected={noteSet}
             accent={accent}
             maxWidth={200}
+            chevron={!noteSet}
             onPress={onOpenNote}
             onRemove={noteSet ? onClearNote : undefined}
             accessibilityLabel={noteSet ? `Note: ${note!.trim()}` : 'Add a note'}
           />
         )}
 
+        {/* One chip whatever the count: listing each tag would let a well-tagged
+            transaction push every other detail off the row. The count is the state. */}
+        {onOpenTags && (
+          <Chip
+            label={tags.length === 0 ? 'Tags' : tags.length === 1 ? tags[0] : `${tags.length} tags`}
+            icon="hash"
+            selected={tags.length > 0}
+            accent={accent}
+            maxWidth={180}
+            chevron
+            onPress={onOpenTags}
+            accessibilityLabel={tags.length === 0 ? 'Add tags' : `Tags: ${tags.join(', ')}`}
+          />
+        )}
+
         {/* Always "Receipt" — a camera capture's filename is a UUID, so showing it
             would be noise. The tint and the ✕ carry the attached state. */}
-        <Chip
-          label="Receipt"
-          icon="paperclip"
-          selected={!!attachmentUri}
-          accent={accent}
-          onPress={onOpenAttachment}
-          onRemove={attachmentUri ? onClearAttachment : undefined}
-          accessibilityLabel={attachmentUri ? 'Receipt attached' : 'Attach a receipt'}
-        />
-
-        {/* One chip whatever the count: listing each tag here would let a well-tagged
-            transaction push every other detail off the row. The count is the state. */}
-        <Chip
-          label={tags.length === 0 ? 'Tags' : tags.length === 1 ? tags[0] : `${tags.length} tags`}
-          icon="hash"
-          selected={tags.length > 0}
-          accent={accent}
-          maxWidth={180}
-          onPress={onOpenTags}
-          accessibilityLabel={tags.length === 0 ? 'Add tags' : `Tags: ${tags.join(', ')}`}
-        />
-
-        {/* Always filled — the time is real whether or not it was chosen, so there is no
-            "unset" state to offer. Same shape as the pay-method chip. */}
-        <Chip
-          label={timeOfDay(txnDate)}
-          icon="clock"
-          selected
-          accent={accent}
-          onPress={onOpenTime}
-          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
-        />
+        {onOpenAttachment && (
+          <Chip
+            label="Receipt"
+            icon="paperclip"
+            selected={!!attachmentUri}
+            accent={accent}
+            chevron={!attachmentUri}
+            onPress={onOpenAttachment}
+            onRemove={attachmentUri ? onClearAttachment : undefined}
+            accessibilityLabel={attachmentUri ? 'Receipt attached' : 'Attach a receipt'}
+          />
+        )}
 
         {onCaptureLocation && (
           <Chip
@@ -157,12 +149,20 @@ export function DetailChips({
             selected={!!place}
             accent={accent}
             maxWidth={180}
-            onPress={place ? undefined : onCaptureLocation}
+            chevron={!place}
+            // Pressable in both states. It used to go inert once a place was
+            // captured, leaving the ✕ as the only way out — so a wrong reading
+            // had to be cleared and re-taken rather than just re-tapped.
+            onPress={onCaptureLocation}
             onRemove={place ? onClearLocation : undefined}
-            accessibilityLabel={place ? `Location: ${place.label}` : 'Capture location'}
+            accessibilityLabel={place ? `Location: ${place.label}. Re-capture` : 'Capture location'}
           />
         )}
+      </View>
 
+      {/* No `first`: this header's own 24pt top margin IS the break between groups. */}
+      <SectionHeader title="How & when" />
+      <View style={styles.row}>
         {/* Always a set chip — there is no "no pay method" state to offer. For
             income the same field means the opposite direction: where it landed. */}
         <Chip
@@ -170,36 +170,59 @@ export function DetailChips({
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
+          chevron
           onPress={onOpenPayMethod}
           accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
         />
 
-        {onSplitByItems && (
-          <Chip
-            label="Split by items"
-            icon="list"
-            accent={accent}
-            onPress={onSplitByItems}
-            accessibilityLabel="Split this bill by items"
-          />
-        )}
-
-        {onOpenRecurring && (
-          <Chip
-            label={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : 'Repeat'}
-            icon="repeat"
-            selected={!!recurEnabled}
-            accent={accent}
-            onPress={onOpenRecurring}
-            onRemove={recurEnabled ? onClearRecurring : undefined}
-            accessibilityLabel={recurEnabled ? 'Repeats' : 'Make this repeat'}
-          />
-        )}
+        {/* Always filled — the time is real whether or not it was chosen. */}
+        <Chip
+          label={timeOfDay(txnDate)}
+          icon="clock"
+          selected
+          accent={accent}
+          chevron
+          onPress={onOpenTime}
+          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
+        />
       </View>
+
+      {/* Rows, not chips: both open another surface rather than holding a value.
+          Carded because `ListRow` self-pads 16pt horizontally, which would read as
+          an accidental indent against the flush chip rows above (AGENTS §3). */}
+      {hasActions && (
+        <View style={styles.actions}>
+          <Card clip>
+            {onSplitByItems && (
+              <ListRow
+                icon="list"
+                title="Split by items"
+                onPress={onSplitByItems}
+                accessibilityLabel="Split this bill by items"
+              />
+            )}
+            {onSplitByItems && onOpenRecurring && <Divider indent="text" />}
+            {onOpenRecurring && (
+              <ListRow
+                icon="repeat"
+                title="Repeat this"
+                // No ✕ here, and that is the trade: `ListRow` has no remove
+                // affordance, so the sheet's own "Repeat this" switch is the off
+                // switch. One place to turn it on, the same place to turn it off.
+                value={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : undefined}
+                onPress={onOpenRecurring}
+                accessibilityLabel={recurEnabled ? 'Repeats. Change or turn off' : 'Make this repeat'}
+              />
+            )}
+          </Card>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  // Matches SectionHeader's own group break, since there is no header above this.
+  actions: { marginTop: space.lg },
 });

@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { haptic } from '../../lib/haptics';
-import { PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_EMOJI, type PayMethod } from '../../constants/enums';
+import { PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_ICON, type PayMethod } from '../../constants/enums';
 import { alpha } from '../../theme';
 
 type Props = {
@@ -43,7 +44,8 @@ export function PayMethodSelector({ value, onChange, accent = colors.accent, opt
             accessibilityLabel={PAY_METHOD_LABEL[m]}
             accessibilityState={{ selected: on }}
           >
-            <Text style={styles.emoji}>{PAY_METHOD_EMOJI[m]}</Text>
+            {/* Tints with the tile, which an emoji never could. */}
+            <Feather name={PAY_METHOD_ICON[m]} size={20} color={on ? accent : colors.textSecondary} />
             <Text style={[styles.label, on && { color: accent, fontFamily: 'Inter_600SemiBold' }]}>{PAY_METHOD_LABEL[m]}</Text>
           </TouchableOpacity>
         );
@@ -55,6 +57,5 @@ export function PayMethodSelector({ value, onChange, accent = colors.accent, opt
 const styles = StyleSheet.create({
   row: { gap: space.sm, paddingVertical: 2 },
   tile: { alignItems: 'center', gap: space.xs, paddingVertical: space.sm, paddingHorizontal: space.md, minWidth: 68, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  emoji: { fontSize: 20 },
   label: { ...type.label, color: colors.textSecondary },
 });

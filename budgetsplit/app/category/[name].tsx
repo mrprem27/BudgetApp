@@ -79,7 +79,7 @@ export default function CategoryDetailScreen() {
 
   const myId = data?.myId ?? '';
   const personalGroupId = data?.personalGroupId ?? null;
-  const groupNames = data?.groupNames ?? {};
+  const groupRefs = data?.groupRefs ?? {};
   const yearExpenses = data?.yearExpenses ?? [];
   const globalLines = data?.globalLines ?? [];
   const groupLimits = data?.groupLimits ?? [];
@@ -113,7 +113,17 @@ export default function CategoryDetailScreen() {
       if (amt > 0) byGroup.set(t.group_id, (byGroup.get(t.group_id) ?? 0) + amt);
     }
     const perGroup = Array.from(byGroup.entries())
-      .map(([gid, amt]) => ({ gid, name: gid === personalGroupId ? 'Personal' : (groupNames[gid] ?? 'Group'), amt }))
+      .map(([gid, amt]) => {
+        const ref = groupRefs[gid];
+        return {
+          gid, amt,
+          // A group can be deleted while its entries survive — name it rather than
+          // dropping the spend, or the slices stop adding up to the total above.
+          name: ref?.isPersonal ? 'Personal' : (ref?.name ?? 'Group'),
+          color: ref?.color ?? colors.textMuted,
+          isPersonal: ref?.isPersonal ?? false,
+        };
+      })
       .sort((a, b) => b.amt - a.amt);
 
     // Top places for this category (location-tagged entries).
@@ -142,7 +152,7 @@ export default function CategoryDetailScreen() {
       .sort((a, b) => b.limit - a.limit);
 
     return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places, limits };
-  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, personalGroupId, groupNames, groupLimits, target]);
+  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, groupRefs, groupLimits, target]);
 
   const showBudgetCard = view.budget > 0;
   // No budget set at all → prompt to set one. A budget that exists but is a pool
@@ -156,11 +166,11 @@ export default function CategoryDetailScreen() {
         txn={txn}
         myId={myId}
         onPress={() => router.push(`/txn/${txn.id}`)}
-        groupName={txn.group_id && txn.group_id !== personalGroupId ? groupNames[txn.group_id] : undefined}
+        groupName={txn.group_id && txn.group_id !== personalGroupId ? groupRefs[txn.group_id]?.name : undefined}
       />
     </TxnCell>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [myId, personalGroupId, groupNames, txnCount]);
+  ), [myId, personalGroupId, groupRefs, txnCount]);
 
   // Everything above the transaction list — rendered as the FlatList header so the
   // list itself can virtualize (a heavy category over "year" can have hundreds of rows).
@@ -254,16 +264,20 @@ export default function CategoryDetailScreen() {
             )}
 
             {/* Where it goes — my spend split across personal + groups */}
-            {view.perGroup.length > 1 && (
+            {/* Shown for one group too, as long as that group is a shared one —
+                "all of this was the flat" is worth saying. A lone Personal row is
+                not: it only restates the total above it. */}
+            {(view.perGroup.length > 1 || view.perGroup.some(g => !g.isPersonal)) && (
               <Card padded>
                 <Text style={styles.cardLabel}>Where it goes</Text>
                 {view.perGroup.map(g => {
                   const pct = view.spent > 0 ? Math.round((g.amt / view.spent) * 100) : 0;
                   return (
                     <View key={g.gid} style={styles.insRow}>
+                      <View style={[styles.groupDot, { backgroundColor: g.color }]} />
                       <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{g.name}</Text>
                       <Text style={styles.insMeta}>{pct}%</Text>
-                      <Text style={styles.insAmt}>{formatCompact(g.amt)}</Text>
+                      <Text style={styles.insAmt}>{formatRupees(g.amt)}</Text>
                     </View>
                   );
                 })}
@@ -404,6 +418,7 @@ const styles = StyleSheet.create({
 
   /** `layout.touchMin` because three of these row types are tappable (recurring,
    *  goals) — they were 27pt tall, well under AGENTS §6. */
+  groupDot: { width: 8, height: 8, borderRadius: 4, marginRight: space.sm },
   insRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: layout.touchMin },
   insName: { ...type.body, color: colors.textPrimary },
   insMeta: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },

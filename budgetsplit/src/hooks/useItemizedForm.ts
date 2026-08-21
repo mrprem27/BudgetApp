@@ -17,7 +17,7 @@ import {
   computeAdjustedTotal, computeItemSubtotal, computePerPersonShares,
   type LineItemDraft, type Adjustment,
 } from '../lib/itemized';
-import { PayMethod, type SplitMode } from '../constants/enums';
+import { PayMethod, asPayMethod, type SplitMode } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../lib/attachment';
@@ -125,6 +125,8 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   useEffect(() => {
     if (isEditing) return;
     (async () => {
+      const savedPay = await settings.defaultPayMethod();
+      if (savedPay) setPayMethod(asPayMethod(savedPay));
       const on = await settings.saveLocation();
       setLocEnabled(on);
       if (on) await captureLocation();

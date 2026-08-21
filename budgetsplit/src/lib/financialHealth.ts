@@ -62,6 +62,13 @@ export type HealthInputs = {
   creditUsed: number;
   /** What I owe people net of settlements (paise, ≥ 0). */
   netIOwe: number;
+  /**
+   * What people owe me and is still expected back (paise, ≥ 0) — `owedExpected`,
+   * not `owed`. Offsets `netIOwe` in `debtLoad`; see the note there for why it
+   * never offsets `creditUsed`. A written-off balance is still owed and still
+   * shown everywhere, it just stops counting here.
+   */
+  owedToMe: number;
 
   // ── Plan ──
   /** My share of bills still due before month-end (paise). */
@@ -131,10 +138,23 @@ function spendVsIncome(i: HealthInputs): HealthFactor | null {
   return F('Spending vs income', `Spending ${formatCompact(i.spend90 - i.income90)} more than income over 90 days.`, 15, 'bad');
 }
 
-/** Pace against the budget the user set. N/A without a budget. */
+/**
+ * How much of a month must elapse before a month-shaped ratio is scored — a
+ * fifth, so roughly the 6th.
+ *
+ * On the 2nd, `elapsed × allocated` is a rounding error, so one grocery run reads
+ * as "running significantly hot" and the score craters during a normal month.
+ * Only `budgetPace` and `goalFunding` need this; every other factor is already
+ * 90-day averaged.
+ */
+const PACE_MIN_ELAPSED = 0.2;
+
+/** Pace against the budget the user set. N/A without a budget, N/A too early in one. */
 function budgetPace(i: HealthInputs): HealthFactor | null {
   if (i.budgetAllocated <= 0) return null;
-  const paceExpected = Math.round((i.dayOfMonth / i.daysInMonth) * i.budgetAllocated);
+  const elapsed = i.daysInMonth > 0 ? i.dayOfMonth / i.daysInMonth : 0;
+  if (elapsed < PACE_MIN_ELAPSED) return F('Budget pace', 'Too early in the month to gauge pace.', 80, 'neutral');
+  const paceExpected = Math.round(elapsed * i.budgetAllocated);
   if (paceExpected === 0) return F('Budget pace', 'Too early in the month to gauge pace.', 80, 'neutral');
   const ratio = i.budgetSpent / paceExpected;
   const headroom = paceExpected - i.budgetSpent;
@@ -165,7 +185,14 @@ function goalFunding(i: HealthInputs): HealthFactor | null {
   if (i.goalCommitMonthly <= 0) return null;
   const ratio = i.goalFundedThisMonth / i.goalCommitMonthly;
   const label = 'Goal funding';
+  // Fully funded is good news whenever it lands, so it is reported immediately.
   if (ratio >= 1)   return F(label, 'This month’s goal contributions are fully set aside.', 100, 'good');
+  // Below that, the elapsed guard applies. Goal funding arrives as a lump on a
+  // schedule, not spread evenly, so "0% set aside" on the 3rd is a date that
+  // hasn't arrived — not a miss. It used to score 20/'warn' every time a month
+  // rolled over, which is the score dropping for the passage of time alone.
+  const elapsed = i.daysInMonth > 0 ? i.dayOfMonth / i.daysInMonth : 0;
+  if (elapsed < PACE_MIN_ELAPSED) return F(label, 'This month’s goal funding isn’t due yet.', 80, 'neutral');
   if (ratio >= 0.5) return F(label, `${Math.round(ratio * 100)}% of this month’s goal funding set aside.`, 70, 'good');
   if (ratio > 0)    return F(label, `Only ${Math.round(ratio * 100)}% of this month’s goal funding set aside so far.`, 40, 'warn');
   return F(label, `None of this month’s ${formatCompact(i.goalCommitMonthly)} goal funding set aside yet.`, 20, 'warn');
@@ -173,13 +200,27 @@ function goalFunding(i: HealthInputs): HealthFactor | null {
 
 // ── Borrow ───────────────────────────────────────────────────────────────────
 
-/** Debt load: card balance + what you owe people, against monthly income. */
+/**
+ * Debt load: card balance + what you owe people **net of what they owe you**,
+ * against monthly income.
+ *
+ * Only the friend half nets. A friend's IOU does not reduce a card balance
+ * accruing interest on a due date, so `creditUsed` is never offset.
+ */
 function debtLoad(i: HealthInputs): HealthFactor {
-  const debt = Math.max(0, i.creditUsed) + Math.max(0, i.netIOwe);
+  const owedToMe = Math.max(0, i.owedToMe);
+  const friendDebt = Math.max(0, Math.max(0, i.netIOwe) - owedToMe);
+  const debt = Math.max(0, i.creditUsed) + friendDebt;
   const label = 'Debt load';
   if (debt === 0) {
     // Earned, not defaulted: the gate guarantees a real ledger exists.
-    return F(label, 'No card balance and nothing owed — clear.', 100, 'good');
+    return F(
+      label,
+      owedToMe > Math.max(0, i.netIOwe)
+        ? 'No card balance, and you’re owed more than you owe — clear.'
+        : 'No card balance and nothing owed — clear.',
+      100, 'good',
+    );
   }
   const monthlyIncome = i.income90 / 3;
   if (monthlyIncome <= 0) {
@@ -298,7 +339,10 @@ function buildLever(label: string, input: HealthInputs, fromScore: number): Heal
       };
     }
     case 'Debt load': {
-      const debt = Math.max(0, input.creditUsed) + Math.max(0, input.netIOwe);
+      // Must net receivables exactly as `debtLoad` does, or the lever quotes a
+      // figure the factor above it never counted.
+      const debt = Math.max(0, input.creditUsed)
+        + Math.max(0, Math.max(0, input.netIOwe) - Math.max(0, input.owedToMe));
       if (debt <= 0) return null;
       const to = project({ creditUsed: 0, netIOwe: 0 });
       if (to <= fromScore) return null;

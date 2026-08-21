@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { simplify } from '../../lib/settle';
+import { asReceivableState, type ReceivableState } from '../../constants/enums';
 
 export type NetBalance = Record<string, number>;
 
@@ -91,14 +92,16 @@ export type FriendBalance = {
   imageUri: string | null;
   net: number;
   groupCount: number;
+  /** Whether what they owe still counts as cover. See `person.receivable_state`. */
+  receivableState: ReceivableState;
 };
 
 export async function getFriendBalances(
   db: SQLite.SQLiteDatabase,
   meId: string,
 ): Promise<FriendBalance[]> {
-  const rows = await db.getAllAsync<{ person_id: string; name: string; avatar_color: string; image_uri: string | null; group_count: number }>(
-    `SELECT p.id as person_id, p.name, p.avatar_color, p.image_uri,
+  const rows = await db.getAllAsync<{ person_id: string; name: string; avatar_color: string; image_uri: string | null; receivable_state: string | null; group_count: number }>(
+    `SELECT p.id as person_id, p.name, p.avatar_color, p.image_uri, p.receivable_state,
             COUNT(DISTINCT gm2.group_id) as group_count
      FROM group_member gm1
      JOIN group_member gm2 ON gm1.group_id = gm2.group_id AND gm2.person_id != ?
@@ -125,6 +128,7 @@ export async function getFriendBalances(
       imageUri: r.image_uri,
       net: friendNet,
       groupCount: r.group_count,
+      receivableState: asReceivableState(r.receivable_state),
     };
   });
   // (No post-filter: everyone you share a non-personal group with is shown, incl.
@@ -145,6 +149,16 @@ export type MyExposure = {
   owe: number;
   /** Total paise owed to me (positive). */
   owed: number;
+  /**
+   * The part of `owed` from people still marked `expected` — what may be treated
+   * as cover. Written-off balances stay in `owed` (they are still owed, and still
+   * shown) but drop out here.
+   *
+   * Two figures rather than a filtered `owed`, because the display and the maths
+   * want different ones: every screen shows the full balance; only the raid and
+   * the debt-load factor consume this.
+   */
+  owedExpected: number;
   /** owed - owe. */
   net: number;
   owePeople: number;
@@ -155,12 +169,15 @@ export type MyExposure = {
 
 /** Pure aggregation of a per-person balance list into my totals. Exported for testing. */
 export function summarizeExposure(perPerson: FriendBalance[]): MyExposure {
-  let owe = 0, owed = 0, owePeople = 0, owedPeople = 0;
+  let owe = 0, owed = 0, owedExpected = 0, owePeople = 0, owedPeople = 0;
   for (const f of perPerson) {
-    if (f.net > 0) { owed += f.net; owedPeople += 1; }
-    else if (f.net < 0) { owe += -f.net; owePeople += 1; }
+    if (f.net > 0) {
+      owed += f.net;
+      owedPeople += 1;
+      if (f.receivableState === 'expected') owedExpected += f.net;
+    } else if (f.net < 0) { owe += -f.net; owePeople += 1; }
   }
-  return { owe, owed, net: owed - owe, owePeople, owedPeople, perPerson };
+  return { owe, owed, owedExpected, net: owed - owe, owePeople, owedPeople, perPerson };
 }
 
 export async function getMyExposure(

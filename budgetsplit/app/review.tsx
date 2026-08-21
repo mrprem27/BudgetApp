@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, SectionList, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, space, layout, alpha } from '../src/theme';
+import { colors, space, layout } from '../src/theme';
 import { reviewStyles as styles } from '../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -49,6 +49,7 @@ import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import {
   type ReviewFilters, DEFAULT_FILTERS,
   filtersActive, deriveWorkingSet, isSimilarMerchant,
+  groupBySource, presentSourcesOf, sourceSections,
 } from '../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../src/lib/reviewViews';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -58,7 +59,7 @@ import { useToast } from '../src/components/system/Toast';
 import { haptic } from '../src/lib/haptics';
 import { saveFailureMessage } from '../src/lib/dbErrors';
 import {
-  type TxnSource, TXN_SOURCE, TXN_SOURCE_LABEL,
+  type TxnSource, TXN_SOURCE_LABEL,
 } from '../src/constants/enums';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
@@ -154,15 +155,15 @@ export default function ReviewScreen() {
 
   /** Normalize a pending row to the filter engine's shape (uses effective edits). */
   const filterRowOf = (row: PendingTxn) => ({ description: row.description, category: eff(row).category, amountPaise: parseToPaise(eff(row).amount), date: row.date });
-  const { visibleRows, baseRows, focusActive, hasFilters, narrowed, distinctCats } =
-    deriveWorkingSet(pending, focusIds, filters, filterRowOf, row => eff(row).category);
+  const { visibleRows, focusActive, hasFilters, narrowed, distinctCats } = deriveWorkingSet(pending, focusIds, filters, filterRowOf, row => eff(row).category);
 
-  const sourceOf = (r: PendingTxn): TxnSource => (r.source ?? 'manual') as TxnSource;
-  // Built from the inbox, not the enum, so there is never an empty tab; and a tab whose source
-  // has just been cleared falls back to All rather than stranding you on an empty screen.
-  const presentSources = TXN_SOURCE.filter(src => visibleRows.some(r => sourceOf(r) === src));
+  // One pass, reused by the tab strip, its counts and the sections — see `groupBySource`.
+  // A tab whose source was just cleared falls back to All rather than stranding you.
+  const bySource = useMemo(() => groupBySource(visibleRows), [visibleRows]);
+  const presentSources = useMemo(() => presentSourcesOf(bySource), [bySource]);
   const activeSource = sourceTab && presentSources.includes(sourceTab) ? sourceTab : null;
-  const tabRows = activeSource ? visibleRows.filter(r => sourceOf(r) === activeSource) : visibleRows;
+  const tabRows = useMemo(() => (activeSource ? bySource.get(activeSource) ?? [] : visibleRows), [activeSource, bySource, visibleRows]);
+  const countOf = useCallback((src: TxnSource | null) => (src ? bySource.get(src)?.length ?? 0 : visibleRows.length), [bySource, visibleRows.length]);
 
   /** Apply an edit locally (instant UI) and auto-save the matching draft columns. */
   function patch(id: string, p: Partial<RowEdit>) {
@@ -489,9 +490,7 @@ export default function ReviewScreen() {
   const emptyFiltered = pending.length > 0 && visibleRows.length === 0;
 
   // Headers only earn their place on the All tab; on a single source they repeat the tab.
-  const sections = TXN_SOURCE
-    .map(src => ({ source: src, data: tabRows.filter(r => sourceOf(r) === src) }))
-    .filter(s => s.data.length > 0);
+  const sections = useMemo(() => sourceSections(activeSource, bySource), [activeSource, bySource]);
   const multiSource = sections.length > 1;
 
   return (
@@ -526,7 +525,7 @@ export default function ReviewScreen() {
           sources={presentSources}
           active={activeSource}
           onChange={setSourceTab}
-          countOf={(src) => src ? visibleRows.filter(r => sourceOf(r) === src).length : visibleRows.length}
+          countOf={countOf}
         />
       )}
 
@@ -556,6 +555,7 @@ export default function ReviewScreen() {
         <SectionList
           sections={sections}
           keyExtractor={r => r.id}
+          automaticallyAdjustKeyboardInsets
           renderItem={({ item }) => (
             <ReviewRowCard
               row={item}
@@ -722,7 +722,7 @@ export default function ReviewScreen() {
       />
 
       {/* Save current filter + group + payer as a named view. */}
-      <SheetModal visible={saveViewSheet} onClose={() => setSaveViewSheet(false)} title="Save view" scroll={false}>
+      <SheetModal visible={saveViewSheet} onClose={() => setSaveViewSheet(false)} title="Save view">
         <SaveViewForm
           groups={data?.sharedGroups ?? []}
           membersByGroup={data?.groupMembers ?? {}}

@@ -15,6 +15,7 @@ import {
   type AffordContext, type AffordResult,
 } from '../src/lib/afford';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
+import type { FeatherName } from '../src/constants/palette';
 
 const NECESSITY_OPTS: { key: AffordNecessity; label: string; color: string }[] = [
   { key: AffordNecessity.Need,  label: 'Need it',  color: colors.income },
@@ -120,10 +121,10 @@ export default function AffordScreen() {
   ];
 
   const V = {
-    [AffordVerdict.Comfortable]: { color: colors.income, emoji: '🎉', title: 'Yes — you can afford it' },
-    [AffordVerdict.Tight]:       { color: colors.healthAmber, emoji: '🤔', title: 'Possible, but tight' },
-    [AffordVerdict.No]:          { color: colors.expense, emoji: '🛑', title: 'Not right now' },
-  }[verdict];
+    [AffordVerdict.Comfortable]: { color: colors.income, icon: 'check-circle', title: 'Yes — you can afford it' },
+    [AffordVerdict.Tight]:       { color: colors.healthAmber, icon: 'alert-triangle', title: 'Possible, but tight' },
+    [AffordVerdict.No]:          { color: colors.expense, icon: 'x-circle', title: 'Not right now' },
+  }[verdict] as { color: string; icon: FeatherName; title: string };
 
   // Turn each engine reason into a plain-English line with the real numbers.
   const reasonLine = (r: AffordReason): string | null => {
@@ -347,7 +348,7 @@ export default function AffordScreen() {
 
           {showResult && (
             <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
-              <Text style={styles.resultEmoji}>{V.emoji}</Text>
+              <Feather name={V.icon} size={30} color={V.color} style={styles.resultIcon} />
               <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
               {lines.map((l, i) => (
                 <View key={i} style={styles.reasonRow}>
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
   cashLabel: { ...type.body, color: colors.textSecondary },
   cashVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
   resultCard: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, padding: space.lg, ...shadow.sm },
-  resultEmoji: { fontSize: 34, marginBottom: 2 },
+  resultIcon: { marginBottom: space.xs },
   resultTitle: { ...type.subheading, marginBottom: space.xs },
   leftAfterRow: { borderRadius: radius.md, paddingHorizontal: space.md, marginVertical: space.xs },
   actionRow: { flexDirection: 'row', gap: space.sm },

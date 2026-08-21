@@ -2,7 +2,7 @@ import type * as SQLite from 'expo-sqlite';
 import { getTransactionsInRange, getActiveRecurringRules, type TxnWithSplits } from '../db/queries/transactions';
 import { getCategoryBudgets, getMyGlobalBudgetRows, type CategoryBudget } from '../db/queries/categoryBudgets';
 import { getMe } from '../db/queries/persons';
-import { getAllGroups, personalGroupOf, sharedGroupsOf } from '../db/queries/groups';
+import { getAllGroups, personalGroupOf, sharedGroupsOf, groupRefs, type GroupRef } from '../db/queries/groups';
 import { getGoals, type SavingsGoal } from '../db/queries/savings';
 import { budgetEquivalent, type Period } from './budget';
 
@@ -12,7 +12,7 @@ export type GroupLimit = { groupId: string; name: string; lines: CategoryBudget[
 export type CategoryDetail = {
   myId: string;
   personalGroupId: string | null;
-  groupNames: Record<string, string>;
+  groupRefs: Record<string, GroupRef>;
   yearExpenses: TxnWithSplits[];
   /** My Budget's lines for this category — the hero figure. */
   globalLines: CategoryBudget[];
@@ -49,7 +49,7 @@ export async function loadCategoryDetail(
   return {
     myId,
     personalGroupId: personalGroupOf(groups)?.id ?? null,
-    groupNames: Object.fromEntries(groups.map(g => [g.id, g.name])),
+    groupRefs: groupRefs(groups),
     yearExpenses: yearTxns.filter(t => t.kind === 'expense' && !t.is_deleted),
     globalLines: globalRows.filter(b => b.category === category),
     groupLimits: sharedGroupsOf(groups)

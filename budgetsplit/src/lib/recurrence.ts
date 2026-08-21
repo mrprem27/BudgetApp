@@ -156,6 +156,23 @@ export function recurringMonthlyEquivalent(
  * reusable (the Add screen needed the same sentence) and it was missing the
  * `yearly` case entirely — a yearly rule fell through to the bare word "Repeats".
  */
+/**
+ * Collapse "custom, every 1 day" to plain `daily`.
+ *
+ * `RECUR_FREQ` has `daily`, but `RECUR_FREQ_ADD_CHOICES` omits it — a fifth
+ * segment made the switcher too tight — so the only way to reach a daily rule is
+ * custom with interval 1, which `freqLabel` then renders as "Every day" anyway.
+ * Two stored encodings for one cadence: identical on screen, different to any
+ * code that groups or compares rules by frequency.
+ */
+export function normalizeRecurrence(
+  freq: RecurFreq,
+  interval: number,
+): { freq: RecurFreq; interval: number | undefined } {
+  if (freq === 'custom' && interval === 1) return { freq: 'daily', interval: undefined };
+  return { freq, interval: freq === 'custom' ? interval : undefined };
+}
+
 export function freqLabel(freq: string | null | undefined, interval: number | null | undefined): string {
   const n = interval && interval > 0 ? interval : 1;
   switch (freq) {

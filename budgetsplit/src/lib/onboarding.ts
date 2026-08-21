@@ -5,6 +5,7 @@ import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
 import { settings } from './settings';
+import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
 import { applyPersona, type OnboardingIntent } from './personaDefaults';
 import { GROUP_COLORS } from '../constants/palette';
@@ -22,6 +23,8 @@ export type OnboardingData = {
    *  instead of "No groups yet" for the very persona that added flatmates. */
   groupName: string | null;
   addFirst: boolean;
+  /** How this user usually pays — seeds the Add screen's chip. */
+  payMethod: PayMethod;
   /** Opening money position, already in integer paise. */
   money: {
     openingCash: number;
@@ -135,6 +138,10 @@ export async function finalizeOnboarding(
 
     // Opening money position (cash / investments / credit).
     try { await setMoneyProfile(db, data.money); } catch { /* best-effort */ }
+
+    // A capture default only: it seeds the Add screen's pay-method chip and never
+    // touches the money model.
+    try { await settings.setDefaultPayMethod(data.payMethod); } catch { /* best-effort */ }
 
     if (data.addFirst) { try { await settings.setPendingFirstAdd(true); } catch { /* best-effort */ } }
     return true;

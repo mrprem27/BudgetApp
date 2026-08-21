@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../../theme';
 
 interface Props {
@@ -19,7 +20,7 @@ export function StreakCard({ streak, daysInMonth, loggedDays }: Props) {
       <Text style={styles.label}>TRACKING STREAK</Text>
       <View style={styles.inner}>
         <View style={styles.badge}>
-          <Text style={styles.fireEmoji}>🔥</Text>
+          <Feather name="zap" size={20} color={colors.healthAmber} />
           <Text style={styles.count}>{streak}</Text>
         </View>
         <View style={styles.right}>
@@ -76,7 +77,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 2,
   },
-  fireEmoji: { fontSize: 20, lineHeight: 24 },
   count: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.streakFlame, lineHeight: 18 },
   right: { flex: 1 },
   headline: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.textPrimary, marginBottom: 2 },

@@ -296,3 +296,104 @@ describe('loadHomeData — forecast scope', () => {
     expect((await load(db, 'year')).forecast).toBeNull();
   });
 });
+
+/**
+ * "How much of my month was shared" — the figure behind the hero bar's second
+ * segment. The pair that matters is `budget.spent` / `budget.spentShared`: they
+ * must always describe the *same* population, because the bar draws one inside
+ * the other. Home has two different numerators depending on whether category
+ * budgets exist, so both branches are pinned here.
+ */
+describe('loadHomeData — personal vs group attribution', () => {
+  const HALF = 100000; // ₹1,000
+
+  /** Me + one friend, one shared group, and my own personal group. */
+  function twoGroups() {
+    const s = setup();
+    const friend = addPerson(s.db, 'Aarav', false);
+    const shared = addGroup(s.db, 'Flat');
+    addMember(s.db, shared, s.me);
+    addMember(s.db, shared, friend);
+    return { ...s, friend, shared };
+  }
+
+  it('splits my spend by the group it happened in, and the two halves sum to the whole', async () => {
+    const { db, me, friend, personal, shared } = twoGroups();
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: HALF, date: today(), category: 'Food' });
+    // A ₹2,000 bill split with Aarav — my share is ₹1,000, and it is group spend.
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: today(), category: 'Food',
+      payments: [{ personId: me, amount: HALF * 2 }],
+      shares: [{ personId: me, amount: HALF }, { personId: friend, amount: HALF }],
+    });
+
+    const r = await load(db, 'month');
+    expect(r.spending).toBe(HALF * 2);
+    expect(r.spendGroup).toBe(HALF);
+  });
+
+  it('counts someone else\'s bill I am on, and never the part I did not consume', async () => {
+    // The whole point of the split: Aarav paid ₹2,000, my cash never moved, and
+    // ₹1,000 of my month is nonetheless group spend.
+    const { db, me, friend, shared } = twoGroups();
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: today(), category: 'Food',
+      payments: [{ personId: friend, amount: HALF * 2 }],
+      shares: [{ personId: me, amount: HALF }, { personId: friend, amount: HALF }],
+    });
+
+    const r = await load(db, 'month');
+    expect(r.spending).toBe(HALF);
+    expect(r.spendGroup).toBe(HALF);
+  });
+
+  it('calls nothing shared when there are no shared groups', async () => {
+    const { db, me, personal } = setup();
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: HALF, date: today(), category: 'Food' });
+    const r = await load(db, 'month');
+    expect(r.spending).toBe(HALF);
+    expect(r.spendGroup).toBe(0);
+  });
+
+  it('measures the bar\'s shared segment against the bar\'s own numerator', async () => {
+    // With category budgets, `budget.spent` is restricted to budgeted categories.
+    // `spentShared` must be restricted the same way — an unbudgeted group expense
+    // must not appear inside a fill it was never counted in.
+    const { db, me, friend, personal, shared } = twoGroups();
+    addCategory(db, 'Food');
+    setCategoryBudget(db, { groupId: personal, category: 'Food', amount: 1000000 });
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: today(), category: 'Food',
+      payments: [{ personId: me, amount: HALF * 2 }],
+      shares: [{ personId: me, amount: HALF }, { personId: friend, amount: HALF }],
+    });
+    // Group spend in a category with no budget line — outside the bar entirely.
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: today(), category: 'Travel',
+      payments: [{ personId: me, amount: HALF * 2 }],
+      shares: [{ personId: me, amount: HALF }, { personId: friend, amount: HALF }],
+    });
+
+    const r = await load(db, 'month');
+    expect(r.spending).toBe(HALF * 2);          // both shares count as my spend
+    expect(r.budget.spent).toBe(HALF);          // only the budgeted category
+    expect(r.budget.spentShared).toBe(HALF);    // ...and its shared part
+    expect(r.budget.spentShared).toBeLessThanOrEqual(r.budget.spent);
+  });
+
+  it('falls back to the whole-period figures when no category budget exists', async () => {
+    // Against the bare onboarding target the numerator IS all spend, so the shared
+    // segment has to switch to the all-spend figure with it.
+    const { db, me, friend, personal, shared } = twoGroups();
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: HALF, date: today(), category: 'Food' });
+    addTxn(db, {
+      groupId: shared, kind: 'expense', date: today(), category: 'Travel',
+      payments: [{ personId: me, amount: HALF * 2 }],
+      shares: [{ personId: me, amount: HALF }, { personId: friend, amount: HALF }],
+    });
+
+    const r = await load(db, 'month');
+    expect(r.budget.spent).toBe(r.spending);
+    expect(r.budget.spentShared).toBe(r.spendGroup);
+  });
+});

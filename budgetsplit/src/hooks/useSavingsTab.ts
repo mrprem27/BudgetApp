@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from 'expo-router';
 import { parseToPaise } from '../lib/money';
 import { haptic } from '../lib/haptics';
+import { settings } from '../lib/settings';
 import { GOAL_ICONS, GOAL_COLORS } from '../constants/palette';
 import {
   insertGoal, fundGoal, reorderGoals,
@@ -48,6 +49,9 @@ export function useSavingsTab() {
   const [allocation, setAllocation] = useState('');
   const [frequency, setFrequency] = useState<SavingsFrequency>('none');
   const [newDate, setNewDate] = useState<number | null>(null);
+  /** The one-time "hold and drag" line. Retired by the first successful drag. */
+  const [showReorderHint, setShowReorderHint] = useState(false);
+  useEffect(() => { settings.goalReorderHintSeen().then(seen => setShowReorderHint(!seen)).catch(() => {}); }, []);
 
   // Pure reads — refetch on focus + cross-screen write. The maintenance MUTATION
   // (scheduled funding + overspend raid) is deliberately kept OUT of this loader so
@@ -164,6 +168,12 @@ export function useSavingsTab() {
   // Persist a drag reorder → new funding priority, then reload to reflect it.
   async function handleReorder(ids: string[]) {
     await reorderGoals(db, ids);
+    // The hint has done its job the moment a drag lands, so it retires here rather
+    // than on first sight — seeing it and not acting is not the same as learning it.
+    if (showReorderHint) {
+      setShowReorderHint(false);
+      settings.setGoalReorderHintSeen(true).catch(() => {});
+    }
     await reload();
   }
 
@@ -196,6 +206,6 @@ export function useSavingsTab() {
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
     allocation, setAllocation, frequency, setFrequency, newDate, setNewDate,
-    resetNew, handleCreate, handleReorder,
+    resetNew, handleCreate, handleReorder, showReorderHint,
   };
 }

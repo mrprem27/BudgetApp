@@ -78,7 +78,7 @@ export default function RecurringScreen() {
   }, []);
 
   const subs = data ?? [];
-  const { skipNext, pause, end } = useRecurringActions(reload);
+  const { skipNext, pause, edit, end } = useRecurringActions(reload);
   // Never one total across kinds (AGENTS §12): money out and money in are
   // summed and shown separately.
   const outSubs = subs.filter(s => s.kind !== 'income');
@@ -160,6 +160,7 @@ export default function RecurringScreen() {
                         {/* Real buttons, not caption-sized text links. All three were ~13px
                             tap targets — far under AGENTS §6 — and one of them is destructive. */}
                         <View style={styles.actionRow}>
+                          <SecondaryButton label="Edit" size="sm" onPress={() => edit(s.id)} style={styles.actionBtn} />
                           <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
                           <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />
                           <SecondaryButton label="Stop" size="sm" danger onPress={() => end(s.id)} style={styles.actionBtn} />

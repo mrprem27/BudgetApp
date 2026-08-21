@@ -146,7 +146,7 @@ export default function AccountScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Account" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {!configured ? (
           <Card padded>
             <Text style={styles.note}>

@@ -135,7 +135,7 @@ export default function NotificationsScreen() {
         <View style={styles.card}>
           {/* Bill / renewal reminders */}
           <View style={styles.typeRow}>
-            <Text style={styles.typeEmoji}>📅</Text>
+            <Feather name="calendar" size={20} color={colors.accent} style={styles.typeIcon} />
             <View style={styles.typeInfo}>
               <Text style={styles.typeLabel}>Bill reminders</Text>
               <Text style={styles.typeDesc}>Alert before recurring bills and memberships renew</Text>
@@ -168,7 +168,7 @@ export default function NotificationsScreen() {
 
           {/* Daily log reminder */}
           <View style={[styles.typeRow, styles.typeRowBorder]}>
-            <Text style={styles.typeEmoji}>📓</Text>
+            <Feather name="book" size={20} color={colors.accent} style={styles.typeIcon} />
             <View style={styles.typeInfo}>
               <Text style={styles.typeLabel}>Daily log reminder</Text>
               <Text style={styles.typeDesc}>Nudge to log your expenses at the end of the day</Text>
@@ -187,7 +187,7 @@ export default function NotificationsScreen() {
           {/* Backup reminder — there's no cloud sync, so this is the only nudge
               that a lost/broken phone won't silently take everything with it. */}
           <View style={[styles.typeRow, styles.typeRowBorder]}>
-            <Text style={styles.typeEmoji}>💾</Text>
+            <Feather name="save" size={20} color={colors.accent} style={styles.typeIcon} />
             <View style={styles.typeInfo}>
               <Text style={styles.typeLabel}>Back up your data</Text>
               <Text style={styles.typeDesc}>Monthly nudge to export a CSV/PDF — your data lives only on this phone</Text>
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   typeRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  typeEmoji: { fontSize: 22, width: 32, textAlign: 'center', flexShrink: 0 },
+  typeIcon: { width: 32, textAlign: 'center', flexShrink: 0 },
   typeInfo: { flex: 1 },
   typeLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
   typeDesc: { ...type.caption, color: colors.textSecondary },

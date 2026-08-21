@@ -4,7 +4,7 @@ import {
   subDays, subMonths, subYears, getDate, getDaysInMonth,
 } from 'date-fns';
 import { getAllPersons } from '../db/queries/persons';
-import { getAllGroups } from '../db/queries/groups';
+import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
 import { getSafeToSpend } from '../db/queries/spendPower';
 import { getPendingCount } from '../db/queries/pending';
@@ -92,9 +92,9 @@ export async function loadHomeData(
     if (!me) {
       return {
         meInfo: null as { name: string; color: string; image: string | null } | null,
-        spending: 0, income: 0, prevSpending: 0,
+        spending: 0, spendGroup: 0, income: 0, prevSpending: 0,
         oweTotal: 0, owedTotal: 0, reviewCount: 0,
-        budget: { allocated: 0, spent: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
+        budget: { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
         catRows: [] as CategoryRow[], catTotal: 0,
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
@@ -110,12 +110,20 @@ export async function loadHomeData(
     const txns = await getTransactionsInRange(db, null, from, to);
     let sp = 0;
     let inc = 0;
+    // How much of the same spend came from group activity. Keyed on the group the
+    // entry lives in — the axis the whole app is organised around — so it agrees
+    // with the per-group breakdown on category detail. Anything outside a shared
+    // group (including an entry whose group has since gone) counts as personal, so
+    // the two always sum to `sp` exactly.
+    const sharedIds = new Set(sharedGroupsOf(groups).map(g => g.id));
+    let spGroup = 0;
     const catMap: Record<string, number> = {};
     for (const txn of txns) {
       if (txn.is_deleted) continue;
       if (txn.kind === 'expense') {
         const myShare = myShareOf(txn, me.id);
         sp += myShare;
+        if (myShare > 0 && sharedIds.has(txn.group_id)) spGroup += myShare;
         if (myShare > 0) catMap[txn.category] = (catMap[txn.category] ?? 0) + myShare;
       } else if (txn.kind === 'income') {
         inc += myIncomeOf(txn, me.id);
@@ -210,6 +218,8 @@ export async function loadHomeData(
      * period's spend IS the matching numerator.
      */
     const budgetSpent = hasCategoryBudgets ? mine.spent : sp;
+    // The shared slice of whichever numerator was just chosen — never the other one.
+    const budgetSpentShared = hasCategoryBudgets ? mine.spentShared : spGroup;
     // Health keeps the monthly basis, whatever pill is active.
     const monthlyAllocated = monthly.allocated > 0 ? monthly.allocated : budgetTarget;
 
@@ -269,6 +279,9 @@ export async function loadHomeData(
       goalFundedThisMonth: funding.fundedThisMonth,
       creditUsed: totalMoney.creditUsed,
       netIOwe: exp.owe,
+      // `owedExpected`, not `owed`: a written-off balance must not net against
+      // what you owe. See `debtLoad`.
+      owedToMe: exp.owedExpected,
       upcomingBills: sts.upcomingBills,
       goalsCount: funding.goalsCount,
       hasBudget: monthlyAllocated > 0,
@@ -308,13 +321,15 @@ export async function loadHomeData(
 
     return {
       meInfo,
-      spending: sp, income: inc, prevSpending: prevSp,
+      spending: sp, spendGroup: spGroup, income: inc, prevSpending: prevSp,
       oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
       budget: {
         /** Rolled up at the active period; 0 when nothing is budgeted at it. */
         allocated: budgetAllocated,
         /** Spend restricted to the categories behind `allocated` — never all spend. */
         spent: budgetSpent,
+        /** The shared-group part of `spent`, for the bar's second segment. */
+        spentShared: budgetSpentShared,
         /** Lines too coarse for this period (a yearly line on Month), excluded from both halves. */
         pooledCount: hasCategoryBudgets ? mine.pooledCount : 0,
         /** Tab-independent: does ANY budget exist? Separates "no budget" from

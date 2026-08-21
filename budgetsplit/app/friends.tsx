@@ -184,7 +184,17 @@ export default function FriendsScreen() {
                   return (
                     <View key={p.id} style={[styles.row, i < people.length - 1 && styles.rowBorder]}>
                       <MemberAvatar name={p.name} color={p.avatar_color} size={46} imageUri={p.image_uri} onPress={() => changePhoto(p)} />
-                      <TouchableOpacity style={{ flex: 1 }} onPress={() => openRename(p)} accessibilityRole="button" accessibilityLabel={`Rename ${p.name}`}>
+                      {/* Tap opens what you've shared; rename moves to long-press, the
+                          app's existing secondary-action gesture. Renaming a contact is
+                          rare, and it was occupying the row's primary tap while there was
+                          nowhere at all to see why a balance is what it is. */}
+                      <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() => router.push(`/person/${p.id}`)}
+                        onLongPress={() => openRename(p)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${p.name}. Long press to rename`}
+                      >
                         <Text style={styles.name}>{p.name}</Text>
                         <View style={styles.chipRow}>
                           {(() => {

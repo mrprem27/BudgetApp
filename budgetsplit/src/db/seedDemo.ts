@@ -22,7 +22,7 @@ import { setCategoryBudgets } from './queries/categoryBudgets';
 import { insertGoal, fundGoal, withdrawFromGoal, reorderGoals } from './queries/savings';
 import { insertPending } from './queries/pending';
 import { seedGlobalCategories } from './seedCategories';
-import { setMoneyProfile } from './queries/moneyProfile';
+import { setMoneyProfile, clearMoneyProfile } from './queries/moneyProfile';
 import { RecurFreq, PayMethod } from '../constants/enums';
 
 /** Rupees → integer paise. */
@@ -59,6 +59,9 @@ export async function resetToEmpty(db: SQLite.SQLiteDatabase): Promise<void> {
   const meColor = prev?.avatar_color ?? '#4F46E5';
   const meImage = prev?.image_uri ?? null;
   await wipeAllData(db);
+  // `settings` survives the wipe on purpose (migration markers), but the money
+  // profile lives there and is per-run data.
+  await clearMoneyProfile(db);
   await createMeAndPersonal(db, meId, meName, meColor, meImage);
 }
 

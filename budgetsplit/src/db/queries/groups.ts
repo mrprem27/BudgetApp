@@ -101,6 +101,20 @@ export function sharedGroupsOf(groups: BudgetGroup[]): BudgetGroup[] {
   return groups.filter(g => g.is_personal !== 1);
 }
 
+/** What a breakdown needs to name and colour one slice of spend. */
+export type GroupRef = { name: string; color: string; isPersonal: boolean };
+
+/**
+ * Group id → its name and colour, for any surface that breaks a figure down by
+ * group. The only thing that existed before was a name-only map built inline on
+ * category detail, which is why that breakdown had no colours.
+ */
+export function groupRefs(groups: BudgetGroup[]): Record<string, GroupRef> {
+  return Object.fromEntries(
+    groups.map(g => [g.id, { name: g.name, color: g.color, isPersonal: g.is_personal === 1 }]),
+  );
+}
+
 export async function getArchivedGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
   return db.getAllAsync<BudgetGroup>(
     'SELECT * FROM budget_group WHERE is_archived = 1 ORDER BY created_at ASC',

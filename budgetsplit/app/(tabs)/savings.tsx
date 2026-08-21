@@ -1,8 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -97,7 +94,7 @@ export default function SavingsScreen() {
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
     allocation, setAllocation, frequency, setFrequency, newDate, setNewDate,
-    resetNew, handleCreate, handleReorder,
+    resetNew, handleCreate, handleReorder, showReorderHint,
   } = useSavingsTab();
 
   return (
@@ -196,15 +193,19 @@ export default function SavingsScreen() {
                 <Text style={styles.newPillText}>New</Text>
               </TouchableOpacity>
             </View>
+            {/* Said once, quietly, and only until the first drag lands. It used to be
+                appended to every section header with >1 goal — up to three shouts of
+                the same sentence — alongside a drag handle on every card. The handle
+                is gone too, so this is now the affordance. */}
+            {showReorderHint && activeGoals.length > 1 && (
+              <Text style={styles.sectionHint}>Hold and drag a goal to change its funding order</Text>
+            )}
             {PRIORITY.map(tag => {
               const tagGoals = byTag(tag);
               if (tagGoals.length === 0) return null;
               return (
                 <View key={tag} style={styles.tagSection}>
-                  <Text style={styles.tagLabel}>
-                    {PRIORITY_LABEL[tag].toUpperCase()}
-                    {tagGoals.length > 1 ? ' · HOLD & DRAG TO REORDER' : ''}
-                  </Text>
+                  <Text style={styles.tagLabel}>{PRIORITY_LABEL[tag].toUpperCase()}</Text>
                   <DraggableList
                     data={tagGoals}
                     keyExtractor={(g) => g.id}
@@ -303,8 +304,10 @@ export default function SavingsScreen() {
       </SheetModal>
 
       {/* New goal sheet */}
+      {/* No KeyboardAvoidingView: `DraggableSheet` already wraps every sheet in one.
+          A second one double-pads inside an 88%-max-height sheet. */}
       <SheetModal visible={showNew} onClose={() => setShowNew(false)} title="New goal">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <>
           <Input value={name} onChangeText={setName} placeholder="Goal name (e.g. New Phone)" autoCapitalize="words" maxLength={40} style={styles.inputGap} />
 
           <Text style={styles.fieldLabel}>Target amount</Text>
@@ -365,7 +368,7 @@ export default function SavingsScreen() {
           {newDate != null && <Text style={styles.deadlineHint}>Target: {monthLabel(newDate)}</Text>}
 
           <PrimaryButton label="Create goal" onPress={handleCreate} disabled={!name.trim() || parseToPaise(target) <= 0} style={{ marginTop: space.md }} />
-        </KeyboardAvoidingView>
+        </>
       </SheetModal>
     </View>
   );

@@ -119,6 +119,44 @@ export async function getMyActivity(db: SQLite.SQLiteDatabase, meId: string): Pr
   return withSplits.map(t => ({ ...t, groupName: meta.get(t.id)!.groupName, isPersonal: meta.get(t.id)!.isPersonal }));
 }
 
+/**
+ * Every transaction **both of us** are on, across all shared groups — the data
+ * behind the person detail screen.
+ *
+ * "Both" is the whole point: `getMyActivity` asks whether *I* am involved, which
+ * on a group screen is nearly everything. Here each person must appear as a payer
+ * or a sharer, so what comes back is the shared history between exactly two people.
+ *
+ * Personal-group rows are excluded, mirroring `CROSS_GROUP_FILTER` in `balances.ts`
+ * — a settlement recorded in a personal group is deliberately one-sided and would
+ * show up as "shared with" someone it was never shared with.
+ *
+ * Income is NOT filtered out. `BALANCE_TXN_FILTER` drops it for balance maths, but
+ * this is a ledger, and AGENTS §12 says a ledger shows all three kinds.
+ */
+export async function getSharedActivityWith(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  otherId: string,
+): Promise<MyActivityItem[]> {
+  const involves = (alias: string) => `(
+    EXISTS (SELECT 1 FROM txn_share   s WHERE s.txn_id = t.id AND s.person_id = ${alias})
+    OR EXISTS (SELECT 1 FROM txn_payment p WHERE p.txn_id = t.id AND p.person_id = ${alias})
+  )`;
+  const rows = await db.getAllAsync<Txn & { group_name: string }>(
+    `SELECT t.*, bg.name AS group_name
+       FROM txn t
+       JOIN budget_group bg ON bg.id = t.group_id
+      WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND bg.is_personal = 0
+        AND ${involves('?')} AND ${involves('?')}
+      ORDER BY t.date DESC`,
+    [meId, meId, otherId, otherId],
+  );
+  const names = new Map(rows.map(r => [r.id, r.group_name]));
+  const withSplits = await loadSplitsMany(db, rows);
+  return withSplits.map(t => ({ ...t, groupName: names.get(t.id)!, isPersonal: false }));
+}
+
 /** @internal shared with queries/recurring.ts */
 export async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<TxnWithSplits> {
   const payments = await db.getAllAsync<TxnPayment>(
@@ -316,12 +354,21 @@ export type SettlementInput = {
   payMethod?: PayMethod;
   /** Transfer reason — now a real 'transfer' category. Defaults to 'Settlement'. */
   category?: string;
+  /**
+   * A settlement carries the same optional detail as any other transaction.
+   * These were dropped on the floor: the Add screen collected tags on the *edit*
+   * path (`useAddTxnForm` → `updateTxn`) but this create path never forwarded
+   * them, so the same field persisted or vanished depending on how you got here.
+   */
+  tags?: string[];
+  attachmentUri?: string;
 };
 
 export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementInput): Promise<string> {
   return insertTxn(db, {
     groupId: s.groupId, kind: 'settlement', entryMode: 'quick', date: s.date ?? Date.now(),
     category: s.category ?? 'Settlement', note: s.note, payMethod: s.payMethod,
+    tags: s.tags, attachmentUri: s.attachmentUri,
     payments: [{ personId: s.fromId, amount: s.amount }],
     shares: [{ personId: s.toId, amount: s.amount }],
   });
@@ -607,6 +654,14 @@ export type UpdateTxnInput = {
   payMethod?: PayMethod;
   /** Full replacement set — omit to clear. Normalized by `serializeTags`. */
   tags?: string[];
+  /**
+   * Receipt. `undefined` leaves the stored value alone; `null` clears it.
+   *
+   * Deliberately not folded into the main SET list: every existing caller omits
+   * it, and writing `?? null` unconditionally would delete the receipt off any
+   * transaction that was merely edited.
+   */
+  attachmentUri?: string | null;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
@@ -618,10 +673,17 @@ export async function updateTxn(
 ): Promise<void> {
   const now = Date.now();
   await db.withTransactionAsync(async () => {
+    // `group_id` is here because the Add screen's destination pill is live in edit
+    // mode; without it, changing a transaction's group reached the audit line and
+    // nothing else. Columns absent from this SET are preserved, not lost — none of
+    // them are editable on that screen.
     await db.runAsync(
-      `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
-      [input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, input.id],
+      `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
+      [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, input.id],
     );
+    if (input.attachmentUri !== undefined) {
+      await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, input.id]);
+    }
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);
     for (const p of input.payments) {

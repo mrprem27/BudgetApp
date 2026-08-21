@@ -8,6 +8,9 @@ import { kindAccent, kindAmountColor } from '../../../lib/kindTheme';
 import type { AddKind } from '../../../constants/enums';
 import { alpha } from '../../../theme';
 
+/** Two 32pt discs plus the gap between them. */
+const TOOLS_W = layout.iconCircle * 2 + space.sm;
+
 type Props = {
   amountText: string;
   onChangeText: (raw: string) => void;
@@ -24,15 +27,15 @@ type Props = {
 /**
  * The big centered amount input. Colour + placeholder follow the kind.
  *
- * The two shortcuts under it — dictate and adjust — are **icon discs, not text links**.
- * They were a pair of centred captions ("Say it instead" above the field, "Split · tip · tax"
- * below it) that sandwiched the hero and competed with it for the eye; the upper one also
- * pushed the amount down the screen. AGENTS §1 allows one hero per screen, and on this screen
- * the amount is it.
+ * The two shortcuts — dictate and adjust — are **icon discs on the amount row itself**,
+ * pinned to its right edge. They were a pair of centred captions sandwiching the hero, then
+ * a left-aligned pair *below* it: floating under a centred number, they read as a second
+ * element rather than as tools belonging to the field. On the row, they are unmistakably
+ * about the amount and cost no vertical space. AGENTS §1 allows one hero per screen, and
+ * here it is the number.
  *
- * Left-aligned on purpose: centring them would put a second axis of symmetry directly under
- * the centred hero, which is what made the old pair read as part of the number rather than as
- * tools beside it.
+ * The input keeps symmetric padding for the tools so a long amount can never run under
+ * them while staying optically centred.
  */
 export function AmountField({
   amountText, onChangeText, kind, autoFocus, transferScopeBal = 0, onOpenCalculator, onOpenVoice,
@@ -44,43 +47,45 @@ export function AmountField({
   // nothing to split or tax, and the button would just be a second way to start typing.
   const showCalc = onOpenCalculator != null && amountText.length > 0;
   const showVoice = onOpenVoice != null;
+  const hasTools = showVoice || showCalc;
 
   return (
     <View style={styles.amountBlock}>
-      <TextInput
-        style={[styles.amountInput, { color }]}
-        value={formatAmountInput(amountText)}
-        onChangeText={(t) => onChangeText(sanitizeAmountInput(t))}
-        keyboardType="decimal-pad"
-        placeholder={kind === 'transfer' && transferScopeBal > 0 ? formatRupees(transferScopeBal) : '₹0'}
-        placeholderTextColor={kind === 'income' ? alpha(colors.income, 33) : colors.textMuted}
-        accessibilityLabel="Amount"
-        autoFocus={autoFocus}
-      />
+      <View style={styles.amountRow}>
+        <TextInput
+          style={[styles.amountInput, { color }, hasTools && { paddingHorizontal: TOOLS_W }]}
+          value={formatAmountInput(amountText)}
+          onChangeText={(t) => onChangeText(sanitizeAmountInput(t))}
+          keyboardType="decimal-pad"
+          placeholder={kind === 'transfer' && transferScopeBal > 0 ? formatRupees(transferScopeBal) : '₹0'}
+          placeholderTextColor={kind === 'income' ? alpha(colors.income, 33) : colors.textMuted}
+          accessibilityLabel="Amount"
+          autoFocus={autoFocus}
+        />
+        {hasTools && (
+          <View style={styles.tools}>
+            {showVoice && (
+              <Disc
+                icon="mic"
+                tint={cursor}
+                onPress={onOpenVoice!}
+                // The word moves into the label rather than off the screen — the glyph alone
+                // would leave a screen-reader user with "button".
+                label="Say the amount and what it was for"
+              />
+            )}
+            {showCalc && (
+              <Disc
+                icon="divide-circle"
+                tint={cursor}
+                onPress={onOpenCalculator!}
+                label="Adjust amount — split, tip or tax"
+              />
+            )}
+          </View>
+        )}
+      </View>
       <View style={[styles.amountCursor, { backgroundColor: cursor }]} />
-
-      {(showVoice || showCalc) && (
-        <View style={styles.tools}>
-          {showVoice && (
-            <Disc
-              icon="mic"
-              tint={cursor}
-              onPress={onOpenVoice!}
-              // The word moves into the label rather than off the screen — the glyph alone
-              // would leave a screen-reader user with "button".
-              label="Say the amount and what it was for"
-            />
-          )}
-          {showCalc && (
-            <Disc
-              icon="divide-circle"
-              tint={cursor}
-              onPress={onOpenCalculator!}
-              label="Adjust amount — split, tip or tax"
-            />
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -108,7 +113,9 @@ const styles = StyleSheet.create({
   // so the app's biggest number was the one number off-token.
   amountInput: { ...type.amountXL, textAlign: 'center', paddingVertical: space.xs, alignSelf: 'stretch', width: '100%' },
   amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: space.xs, alignSelf: 'center' },
-  tools: { flexDirection: 'row', gap: space.sm, marginTop: space.smd },
+  amountRow: { flexDirection: 'row', alignItems: 'center' },
+  // Absolute so the input keeps the full row and stays optically centred.
+  tools: { position: 'absolute', right: 0, flexDirection: 'row', gap: space.sm },
   disc: {
     width: layout.iconCircle,
     height: layout.iconCircle,

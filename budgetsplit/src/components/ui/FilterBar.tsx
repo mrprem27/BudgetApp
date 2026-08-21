@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
@@ -53,7 +53,14 @@ export function FilterBar({
     setSearchOpen(false);
   }
 
-  const chips = groups.flatMap(g => {
+  /*
+   * Memoised because this rebuilds every chip element, and a search field sits
+   * directly above it: without this, each keystroke re-created the whole chip row
+   * on top of the consumer's own re-filter, and `personal.tsx` froze on a large
+   * ledger. Consumers must pass a stable `groups` array for it to hold — see the
+   * note there.
+   */
+  const chips = useMemo(() => groups.flatMap(g => {
     const active = selected[g.key] ?? g.options[0]?.value;
     return g.options.map(o => {
       const isActive = active === o.value;
@@ -70,7 +77,7 @@ export function FilterBar({
         </TouchableOpacity>
       );
     });
-  });
+  }), [groups, selected, onSelect]);
 
   if (collapsible) {
     // One row: either chips + search icon, OR full-width search input.

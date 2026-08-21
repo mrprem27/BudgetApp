@@ -1,4 +1,4 @@
-import { materializeInstances, nextOccurrenceOnOrAfter, nextUnskippedOccurrence, occurrenceDatesUpTo, recurringMonthlyEquivalent } from '../lib/recurrence';
+import { materializeInstances, nextOccurrenceOnOrAfter, nextUnskippedOccurrence, occurrenceDatesUpTo, recurringMonthlyEquivalent, normalizeRecurrence, freqLabel } from '../lib/recurrence';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -214,5 +214,36 @@ describe('month-end anchoring', () => {
     const out = occurrenceDatesUpTo(ms(2024, 1, 29), 'yearly', 1, ms(2028, 5, 1), null);
     // 2025-27 clamp to the 28th, but 2028 is a leap year and must return to the 29th.
     expect(out.map(d => new Date(d).getDate())).toEqual([29, 28, 28, 28, 29]);
+  });
+});
+
+/**
+ * The Add screen's frequency switcher omits `daily` (a fifth segment made it too
+ * tight), so a daily rule could only be created as custom-every-1-day. That reads
+ * identically on screen and stores differently, which is two encodings for one
+ * cadence — invisible until something groups or compares rules by frequency.
+ */
+describe('normalizeRecurrence', () => {
+  it('collapses custom-every-1-day to daily', () => {
+    expect(normalizeRecurrence('custom', 1)).toEqual({ freq: 'daily', interval: undefined });
+  });
+
+  it('leaves a real custom interval alone', () => {
+    expect(normalizeRecurrence('custom', 3)).toEqual({ freq: 'custom', interval: 3 });
+  });
+
+  it('drops the interval for every non-custom frequency', () => {
+    // `recur_interval` only means anything alongside `custom`; storing it elsewhere
+    // is noise that the occurrence maths would have to keep ignoring.
+    for (const f of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
+      expect(normalizeRecurrence(f, 4)).toEqual({ freq: f, interval: undefined });
+    }
+  });
+
+  it('renders the same label before and after normalising', () => {
+    // The point of the collapse: the user sees no change, only the stored shape does.
+    const before = freqLabel('custom', 1);
+    const after = normalizeRecurrence('custom', 1);
+    expect(freqLabel(after.freq, after.interval ?? 1)).toBe(before);
   });
 });

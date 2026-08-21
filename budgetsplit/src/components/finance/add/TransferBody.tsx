@@ -1,9 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../tokens';
 import { MemberAvatar } from '../MemberAvatar';
-import { PayMethodSelector } from '../PayMethodSelector';
 import { formatRupees } from '../../../lib/money';
 import { handoffVerb, type UpiHandoff } from '../../../hooks/useUpiHandoff';
 import type { UpiRequest } from '../../../lib/upiIntent';
@@ -12,7 +11,6 @@ import { oweView } from '../../../lib/owe';
 import type { Person } from '../../../db/queries/persons';
 import type { TransferScopes } from '../../../lib/settleScope';
 import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../../constants/enums';
-import type { PayMethod } from '../../../constants/enums';
 import { alpha } from '../../../theme';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, ReduceMotion } from 'react-native-reanimated';
 import { PressableScale } from '../../ui/PressableScale';
@@ -28,10 +26,6 @@ type Props = {
   /** Which debt is being settled. Chosen by the ContextPill above the amount;
    *  used here only to show the resulting balance line. */
   scope: TransferScope;
-  payMethod: PayMethod;
-  onPayMethod: (m: PayMethod) => void;
-  note: string;
-  onNote: (t: string) => void;
   /** Amount being settled, in paise — drives the UPI handoff. */
   amountPaise?: number;
   /** Computed by `useAddTxnForm` (`transferPayee`/`transferHandoff`/etc.) —
@@ -53,7 +47,7 @@ type Props = {
  *  The transfer reason is a real 'transfer' category picked via the shared
  *  category pill in Quick Add (same UI as Expense/Income). */
 export function TransferBody({
-  me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope, payMethod, onPayMethod, note, onNote,
+  me, persons, fromId, toId, onPickSlot, onSwap, scopes, scope,
   amountPaise = 0, payee, handoff, canPay, canRequest, onOpenUpiUri, onOpenRequestQr, handoffHooks,
 }: Props) {
   const from = persons.find(p => p.id === fromId) ?? null;
@@ -177,9 +171,9 @@ export function TransferBody({
         <Text style={styles.errText}>From and To must be different people.</Text>
       )}
 
-      {/* How was it paid? */}
-      <Text style={styles.label}>HOW WAS IT PAID?</Text>
-      <PayMethodSelector value={payMethod} onChange={onPayMethod} accent={colors.settle} />
+      {/* Pay method and note moved to the shared `DetailChips` below. They were a
+          bespoke inline selector and a bare TextInput here — a second visual
+          vocabulary for two fields every other kind edits through a sheet. */}
 
       {canPay && (
         <>
@@ -243,16 +237,6 @@ export function TransferBody({
         </>
       )}
 
-      <Text style={styles.label}>NOTES</Text>
-      <TextInput
-        style={styles.noteInput}
-        value={note}
-        onChangeText={onNote}
-        placeholder="Add a note (optional)"
-        placeholderTextColor={colors.textMuted}
-        accessibilityLabel="Transfer notes"
-        maxLength={80}
-      />
     </View>
   );
 }
@@ -345,5 +329,4 @@ const styles = StyleSheet.create({
   destRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, minHeight: 24 },
   destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
   destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, marginTop: space.xs },
 });

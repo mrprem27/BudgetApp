@@ -1,4 +1,5 @@
 import React from 'react';
+import { AddKind } from '../../../constants/enums';
 import { SplitSheet } from './SplitSheet';
 import { PayersSheet } from './PayersSheet';
 import { TransferSlotSheet } from './TransferSlotSheet';
@@ -109,11 +110,15 @@ export function QuickAddSheets({
         kind={f.kind}
       />
 
+      {/* A transfer's note is a different field, and not a cosmetic one: it is what
+          `handleSaveTransfer` persists AND what goes into the UPI payload. Wiring
+          this sheet to `f.note` for every kind would have let the Transfer note chip
+          edit and save the expense note instead. */}
       <NoteSheet
         visible={open === 'note'}
         onClose={onClose}
-        value={f.note}
-        onChangeText={f.setNote}
+        value={f.kind === AddKind.Transfer ? f.transferNote : f.note}
+        onChangeText={f.kind === AddKind.Transfer ? f.setTransferNote : f.setNote}
       />
 
       <VoiceEntrySheet

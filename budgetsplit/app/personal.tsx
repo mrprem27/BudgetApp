@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +23,7 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { FAB } from '../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { useGroupTxnActions } from '../src/hooks/useGroupTxnActions';
-import { getMyActivity, type TxnWithSplits } from '../src/db/queries/transactions';
+import { getMyActivity, type TxnWithSplits, type MyActivityItem } from '../src/db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../src/db/queries/recurring';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
@@ -101,19 +101,59 @@ export default function PersonalScreen() {
   const recurSkips = data?.recurSkips;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
 
-  const sharedGroups = groups.filter(g => g.is_personal !== 1);
-  const personalGroup = groups.find(g => g.is_personal === 1) ?? null;
+  // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
+  // so without it every keystroke re-filtered the ledger, rebuilt the chip row and
+  // re-rendered the whole list. `TransactionsTab` already does it this way.
+  const sharedGroups = useMemo(() => groups.filter(g => g.is_personal !== 1), [groups]);
+  const personalGroup = useMemo(() => groups.find(g => g.is_personal === 1) ?? null, [groups]);
 
   // Rows span every group, so the actions read the owning group off each txn.
   const { handleDelete, handleEditTxn } = useGroupTxnActions(null, reload);
 
-  const filtered = activity.filter(a =>
+  const filtered = useMemo(() => activity.filter(a =>
     filter === 'all' ? true
     : filter === 'personal' ? a.isPersonal
     : filter === 'groups' ? !a.isPersonal
     : a.group_id === filter,
+  ), [activity, filter]);
+  const sections = useMemo(() => groupByDate(filtered), [filtered]);
+
+  // `FilterBar` memoises its chip elements on these three; passing a literal
+  // would defeat that on every render.
+  const filterGroups = useMemo(() => [{
+    key: 'scope',
+    options: [
+      { label: 'Personal', value: 'personal' },
+      { label: 'Groups', value: 'groups' },
+      { label: 'All', value: 'all' },
+      ...sharedGroups.map(g => ({ label: g.name, value: g.id })),
+    ],
+  }], [sharedGroups]);
+  const filterSelected = useMemo(() => ({ scope: filter }), [filter]);
+  const onSelectFilter = useCallback((_: string, v: string) => setFilter(v), []);
+
+  // Inline arrows here make SectionList re-render every visible row on any state
+  // change, filter typing included.
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { title: string } }) => <SectionHeader title={section.title} />,
+    [],
   );
-  const sections = groupByDate(filtered);
+  const renderItem = useCallback(
+    ({ item, index, section }: { item: MyActivityItem; index: number; section: { data: MyActivityItem[] } }) => (
+      <TxnCell first={index === 0} last={index === section.data.length - 1}>
+        <TransactionRow
+          txn={item}
+          myId={myId}
+          members={persons}
+          isPersonal={item.isPersonal}
+          groupName={item.isPersonal ? undefined : item.groupName}
+          onPress={() => handleEditTxn(item)}
+          onDelete={() => handleDelete(item.id)}
+        />
+      </TxnCell>
+    ),
+    [myId, persons, handleEditTxn, handleDelete],
+  );
 
   const net = summary.lent - summary.owe;
 
@@ -212,36 +252,16 @@ export default function PersonalScreen() {
                 activity.length > 0 ? (
                   <View style={{ marginBottom: space.xs }}>
                     <FilterBar
-                      selected={{ scope: filter }}
-                      onSelect={(_, v) => setFilter(v)}
-                      groups={[{
-                        key: 'scope',
-                        options: [
-                          { label: 'Personal', value: 'personal' },
-                          { label: 'Groups', value: 'groups' },
-                          { label: 'All', value: 'all' },
-                          ...sharedGroups.map(g => ({ label: g.name, value: g.id })),
-                        ],
-                      }]}
+                      selected={filterSelected}
+                      onSelect={onSelectFilter}
+                      groups={filterGroups}
                     />
                   </View>
                 ) : null
               }
-              renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
+              renderSectionHeader={renderSectionHeader}
               stickySectionHeadersEnabled={false}
-              renderItem={({ item, index, section }) => (
-                <TxnCell first={index === 0} last={index === section.data.length - 1}>
-                  <TransactionRow
-                    txn={item}
-                    myId={myId}
-                    members={persons}
-                    isPersonal={item.isPersonal}
-                    groupName={item.isPersonal ? undefined : item.groupName}
-                    onPress={() => handleEditTxn(item)}
-                    onDelete={() => handleDelete(item.id)}
-                  />
-                </TxnCell>
-              )}
+              renderItem={renderItem}
               ListEmptyComponent={
                 loading ? null : (
                   <EmptyState

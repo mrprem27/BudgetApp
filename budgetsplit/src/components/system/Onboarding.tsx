@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity,
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
   useWindowDimensions, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { Divider } from '../ui/Divider';
 import { IconCircle } from '../ui/IconCircle';
 import { OptionRow } from '../ui/OptionRow';
 import { SectionHeader } from '../ui/SectionHeader';
+import { PayMethodSelector } from '../finance/PayMethodSelector';
 import { StepScaffold } from './onboarding/StepScaffold';
 import { StepFooter } from './onboarding/StepFooter';
 import { StepAmountField } from './onboarding/StepAmountField';
@@ -84,6 +85,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
+    payMethod, setPayMethod,
     people, setPeople, personDraft, setPersonDraft, addPerson,
     groupName, setGroupName,
     notifPerm, locPerm, allowNotifications, allowLocation,
@@ -98,22 +100,25 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
   const trims = personaTrims(intent);
 
+  // No KeyboardAvoidingView: `StepScaffold`'s scroll view adjusts its own keyboard
+  // inset instead, so a focused field never reflows the page.
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top + space.sm }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={[styles.container, { paddingTop: insets.top + space.sm }]}>
       {/* HERO — the brand mark assembles, then the name + tagline reveal */}
       {stage === 'hero' && (
         <View style={styles.heroRoot}>
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <LogoAssembly width={width} height={height} cy={height * 0.38} />
           </View>
+          {/* Reveals over the logo, not after it: waiting for the ~3.7s assembly put
+              the first tap 4.8s away, and the "Skip intro" link that existed to
+              escape that went to the same stage as Get Started. The logo animation
+              is untouched — only this overlay's timing moved. */}
           <View style={[styles.heroBottom, { paddingBottom: bottomPad }]}>
-            <FadeIn delay={4300} offset={14}>
+            <FadeIn delay={900} offset={14}>
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
-            <FadeIn delay={4520} offset={10} style={styles.taglineWrap}>
+            <FadeIn delay={1050} offset={10} style={styles.taglineWrap}>
               {/* "No bank login" leads, ahead of "nothing in the cloud". It is the
                   concrete, checkable version of the same promise — every competitor
                   in this market either asks for a bank connection or reads your SMS,
@@ -121,28 +126,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   vaguer cloud claim follows it rather than standing alone. */}
               <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, nothing leaves your phone.</Text>
             </FadeIn>
-            <FadeIn delay={4760} style={styles.footer}>
+            <FadeIn delay={1200} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
               <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
             </FadeIn>
           </View>
         </View>
-      )}
-
-      {/* Early exit from the hero — a SIBLING of the protected block above (its
-          FadeIn delays are tuned to the logo run and stay untouched): the intro
-          is skippable ~1s in instead of gating the first tap behind ~4.8s. */}
-      {stage === 'hero' && (
-        <FadeIn delay={900} style={[styles.heroSkip, { top: insets.top + space.sm }]}>
-          <TouchableOpacity
-            onPress={() => setStage('intent')}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Skip intro"
-          >
-            <Text style={styles.heroSkipText}>Skip intro →</Text>
-          </TouchableOpacity>
-        </FadeIn>
       )}
 
       {/* INTENT — "What brings you here?" Each card says what it TRIMS, derived
@@ -170,7 +159,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 description={opt.desc}
                 selected={intent === opt.key}
                 onPress={() => { haptic.selection(); setIntent(opt.key); }}
-                leading={<Text style={styles.intentEmoji}>{opt.emoji}</Text>}
+                leading={<IconCircle icon={opt.icon} size={32} color={colors.accent} />}
               />
             ))}
           </View>
@@ -304,6 +293,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <MoneyRow icon="activity" label="Credit used" value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} tint={colors.expense} accessibilityLabel="Credit already used" />
           </Card>
           <Text style={styles.helpLine}>Leave any of these at zero if they don&apos;t apply.</Text>
+
+          {/* One extra question rather than a tenth step: it belongs with "what do
+              you have", and it is the only answer here that changes what the Add
+              screen opens on. Purely a capture default — it never moves money. */}
+          <SectionHeader title="How do you usually pay?" />
+          <PayMethodSelector value={payMethod} onChange={setPayMethod} />
         </StepScaffold>
       )}
 
@@ -521,7 +516,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </StepScaffold>
       )}
 
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -539,9 +534,6 @@ const styles = StyleSheet.create({
   footer: { gap: space.md, paddingTop: space.md },
   footNote: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
 
-  // The early hero escape — a sibling overlay, not part of the hero block.
-  heroSkip: { position: 'absolute', right: layout.screenPaddingH, zIndex: 2 },
-  heroSkipText: { ...type.label, color: colors.textSecondary, padding: space.sm },
 
   // ---- step content (chrome itself lives in onboarding/Step*) ----------------
   /** One shared help/caption line. */
@@ -564,7 +556,6 @@ const styles = StyleSheet.create({
   intentLogo: { width: 64, height: 64, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   intentRupee: { ...type.amountLG, color: colors.bg },
   intentCards: { gap: space.sm },
-  intentEmoji: { fontSize: 22 },
   intentNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', paddingHorizontal: space.md, marginTop: space.md, lineHeight: 16 },
 
   // Budget stage

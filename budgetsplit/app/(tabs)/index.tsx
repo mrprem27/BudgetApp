@@ -75,7 +75,7 @@ export default function DashboardScreen() {
   const oweTotal = data?.oweTotal ?? 0;
   const owedTotal = data?.owedTotal ?? 0;
   const reviewCount = data?.reviewCount ?? 0;
-  const budget = data?.budget ?? { allocated: 0, spent: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 };
+  const budget = data?.budget ?? { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 };
   const catRows = data?.catRows ?? [];
   const catTotal = data?.catTotal ?? 0;
   // Flag-gated here rather than at each use: nulling the result hides the ring in
@@ -293,6 +293,7 @@ export default function DashboardScreen() {
               periodLabel={PERIOD_LABEL[tab]}
               budgetAllocated={budget.allocated}
               budgetSpent={budget.spent}
+              budgetSpentShared={budget.spentShared}
               budgetExists={budget.exists}
               periodNoun={TARGET_FOR_TAB[tab]}
               prevSpending={prevSpending}

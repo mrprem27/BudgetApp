@@ -82,9 +82,20 @@ export function RecurringControls({
       <View style={styles.recurHeader}>
         <IconCircle icon="repeat" size={22} color={colors.settle} iconSize={12} />
         <Text style={styles.recurTitle}>Recurring</Text>
-        <TouchableOpacity onPress={() => setEnabled(false)} hitSlop={10} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel="Turn off recurring">
-          <Feather name="chevron-up" size={18} color={colors.settle} />
-        </TouchableOpacity>
+        {/* The same Switch as the off state, in the same place — so turning it on
+            and turning it off are one control. This was a `chevron-up` labelled
+            "Turn off recurring" for screen readers while looking like a collapse
+            arrow to everyone else, and it is now the ONLY way off: the Repeat chip's
+            ✕ went away when Repeat became a row (`ListRow` has no remove slot). */}
+        <View style={{ marginLeft: 'auto' }}>
+          <Switch
+            value={enabled}
+            onValueChange={setEnabled}
+            trackColor={{ true: colors.settle, false: colors.bgMuted }}
+            thumbColor={colors.textPrimary}
+            accessibilityLabel="Repeat on a schedule"
+          />
+        </View>
       </View>
 
       {/* Frequency */}

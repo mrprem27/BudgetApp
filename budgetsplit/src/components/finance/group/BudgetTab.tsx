@@ -85,6 +85,21 @@ export function BudgetTab({
     : c.health === 'green';
   const visible = catStatus.filter(matches);
 
+  // Grouped once here rather than re-scanning `visible` inside the SECTION_ORDER
+  // map below, which was SECTION_ORDER × categories on every render of a list
+  // that re-renders on every filter tap.
+  //
+  // Plain code, not `useMemo`: the empty-state `return` above this is a
+  // conditional exit, so a hook here would break the rules of hooks. Moving that
+  // return below the hooks is the real fix and is worth doing when this file is
+  // next opened for a feature.
+  const bySection = new Map<string, CategoryBudgetStatus[]>();
+  for (const c of visible) {
+    const s = categorySection(c.category);
+    const list = bySection.get(s);
+    if (list) list.push(c); else bySection.set(s, [c]);
+  }
+
   /** Tapping the active count clears the filter, so the row is its own escape hatch. */
   const toggle = (next: StatusFilter) => {
     haptic.selection();
@@ -165,7 +180,7 @@ export function BudgetTab({
         />
       ) : (
         SECTION_ORDER.map(section => {
-          const lines = visible.filter(c => categorySection(c.category) === section);
+          const lines = bySection.get(section) ?? [];
           if (lines.length === 0) return null;
           return (
             // No `marginBottom` here and no `gap` on the container: SectionHeader owns

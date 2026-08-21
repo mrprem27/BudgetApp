@@ -5,7 +5,7 @@ import { monthShort } from '../../../lib/dateFormat';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { asFeather } from '../../../constants/palette';
 import { formatCompact } from '../../../lib/money';
-import { goalProgress, monthlyContribution, neededPerMonth, monthsUntil } from '../../../lib/savings';
+import { goalProgress, monthlyContribution, neededPerMonth } from '../../../lib/savings';
 import { PressableScale } from '../../ui/PressableScale';
 import { BudgetBar } from '../BudgetBar';
 import type { SavingsGoal } from '../../../db/queries/savings';
@@ -37,7 +37,31 @@ export function GoalCard({
   const hasDate = g.target_date != null;
   const monthly = monthlyContribution(g.allocation, g.frequency);
   const needed = hasDate ? neededPerMonth(p.remaining, g.target_date!) : 0;
-  const monthsLeft = hasDate ? monthsUntil(g.target_date!) : 0;
+  /** Funding this goal on schedule needs more per month than it is set to put in. */
+  const behind = !completed && hasDate && needed > monthly;
+
+  /*
+   * One figure and one context line.
+   *
+   * The card used to state the same progress five ways — `₹12K / ₹50K`, the bar,
+   * `24%`, `₹38K to go`, and `₹9.5K/mo needed` on their own rows. The bar already
+   * carries proportion, so the ratio and the percent were the bar written out in
+   * words; what is left is the number you act on, plus the schedule that decides
+   * whether you are on track.
+   */
+  const headline = completed
+    ? `${formatCompact(p.saved)} saved`
+    : p.over > 0
+      ? `+${formatCompact(p.over)} over`
+      : `${formatCompact(p.remaining)} to go`;
+
+  const subLine = completed
+    ? 'Reached'
+    : hasDate
+      ? `${monthShort(g.target_date!)} · ${formatCompact(needed)}/mo needed`
+      : monthly > 0
+        ? `+${formatCompact(monthly)}/mo`
+        : 'No deadline';
 
   return (
     <PressableScale
@@ -51,46 +75,23 @@ export function GoalCard({
         </View>
         <View style={{ flex: 1 }}>
           <View style={styles.goalNameRow}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.goalName, completed && styles.goalNameDone]} numberOfLines={1}>{g.name}</Text>
-              <Text style={[styles.goalSub, completed && { color: colors.income }]} numberOfLines={1}>
-                {completed
-                  ? `Reached · ${formatCompact(p.saved)} saved`
-                  : hasDate ? `${monthShort(g.target_date!)} · ${monthsLeft <= 0 ? 'due now' : `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'}`}` : 'No deadline'}
-              </Text>
-            </View>
-            <Text style={styles.goalAmt}>{formatCompact(p.saved)} / {formatCompact(p.target)}</Text>
+            <Text style={[styles.goalName, completed && styles.goalNameDone]} numberOfLines={1}>{g.name}</Text>
+            <Text style={[styles.goalAmt, behind && { color: colors.healthAmber }]} numberOfLines={1}>{headline}</Text>
           </View>
+          <Text style={[styles.goalSub, completed && { color: colors.income }, behind && { color: colors.healthAmber }]} numberOfLines={1}>
+            {subLine}
+          </Text>
           <View style={styles.goalBarWrap}>
-            <BudgetBar pct={completed ? 100 : p.pct} health={completed ? 'green' : p.over > 0 ? 'amber' : hasDate && needed > monthly ? 'amber' : 'green'} height={4} />
+            <BudgetBar pct={completed ? 100 : p.pct} health={completed ? 'green' : p.over > 0 || behind ? 'amber' : 'green'} height={4} />
           </View>
-          {!completed && (
-            <View style={styles.goalMetaRow}>
-              {p.over > 0 ? (
-                <Text style={[styles.goalMeta, { color: colors.healthAmber }]} numberOfLines={1}>{p.rawPct}% · +{formatCompact(p.over)} over</Text>
-              ) : (
-                <Text style={styles.goalMeta} numberOfLines={1}>{p.pct}% · {formatCompact(p.remaining)} to go</Text>
-              )}
-              {hasDate ? (
-                <Text style={[styles.goalMetaRight, { color: needed > monthly ? colors.healthAmber : colors.income }]} numberOfLines={1}>{formatCompact(needed)}/mo needed</Text>
-              ) : monthly > 0 ? (
-                <Text style={[styles.goalMetaRight, { color: colors.accent }]} numberOfLines={1}>+{formatCompact(monthly)}/mo</Text>
-              ) : null}
-            </View>
-          )}
         </View>
         {completed ? (
           <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
-        ) : (
-          <View style={styles.trailing}>
-            {onAdd && (
-              <TouchableOpacity style={styles.addBtn} onPress={onAdd} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Add money to ${g.name}`}>
-                <Feather name="plus" size={16} color={colors.accent} />
-              </TouchableOpacity>
-            )}
-            <Feather name="menu" size={16} color={colors.textMuted} style={styles.dragHandle} />
-          </View>
-        )}
+        ) : onAdd ? (
+          <TouchableOpacity style={styles.addBtn} onPress={onAdd} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Add money to ${g.name}`}>
+            <Feather name="plus" size={16} color={colors.accent} />
+          </TouchableOpacity>
+        ) : null}
       </View>
     </PressableScale>
   );
@@ -105,15 +106,10 @@ const styles = StyleSheet.create({
   doneBadgeText: { ...type.caption, color: colors.income, fontFamily: 'Inter_600SemiBold' },
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   goalIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  goalNameRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: space.sm, marginBottom: 6 },
-  goalName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  goalSub: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 1 },
-  goalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary, letterSpacing: -0.3 },
-  goalBarWrap: { marginBottom: 5 },
-  goalMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
-  goalMeta: { ...type.caption, color: colors.textMuted, flexShrink: 1 },
-  goalMetaRight: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  dragHandle: { marginLeft: space.xs },
-  trailing: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  goalNameRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.sm },
+  goalName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1, minWidth: 0 },
+  goalSub: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 2 },
+  goalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary, letterSpacing: -0.3, flexShrink: 0 },
+  goalBarWrap: { marginTop: space.sm },
   addBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 });

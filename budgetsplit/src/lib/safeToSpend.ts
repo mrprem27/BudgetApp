@@ -29,6 +29,12 @@
  *                      allocated this month, floored at zero per goal.
  * - `netIOwe`        — `getMyExposure().owe` (owed-to-me is deliberately NOT
  *                      added back: it isn't liquid until it's settled).
+ *                      ⚠️ `proposeOverspendRaid` DOES net owed-to-me, and that is
+ *                      not an inconsistency to "fix". It answers a different
+ *                      question: a receivable is not spendable (so it stays out
+ *                      here), but it IS a reason not to break open a savings goal
+ *                      (so it counts there). Changing either to match the other
+ *                      breaks one of them.
  * - `everydaySpend`  — `typicalDailySpend` × days left, over **non-recurring**
  *                      expense only. Recurring-linked rows are already in
  *                      `upcomingBills`; counting them here too would double-book

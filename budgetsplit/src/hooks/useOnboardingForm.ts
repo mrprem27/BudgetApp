@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Location from 'expo-location';
 import { settings } from '../lib/settings';
+import { PayMethod } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { requestNotificationPermission } from '../lib/notifications';
 import { setReminderPrefs } from '../lib/reminders';
@@ -72,6 +73,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
   const [investText, setInvestText] = useState('');            // total investments (rupees)
   const [creditLimitText, setCreditLimitText] = useState('');  // credit card limit (rupees)
   const [creditUsedText, setCreditUsedText] = useState('');    // credit already used (rupees)
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
   const [people, setPeople] = useState<string[]>([]);          // contacts added during onboarding
   const [personDraft, setPersonDraft] = useState('');
   const [groupName, setGroupName] = useState('Friends');       // the group the contacts land in
@@ -94,7 +96,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
   async function finalize() {
     setSaving(true);
     const ok = await finalizeOnboarding(db, {
-      intent, name, incomeNum, payday, budgetNum, people,
+      intent, name, incomeNum, payday, budgetNum, people, payMethod,
       groupName: people.length > 0 ? groupName : null,
       addFirst: false, // the summary's own CTA arms this explicitly
       money: {
@@ -149,6 +151,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
+    payMethod, setPayMethod,
     people, setPeople, personDraft, setPersonDraft, addPerson,
     groupName, setGroupName,
     // permissions

@@ -56,7 +56,7 @@ export default function RecurringScreen() {
   }, [id]);
   const rules = data?.rules ?? [];
   const skips = data?.skips ?? new Map<string, Set<number>>();
-  const { skipNext, undoSkip, pause, resume, end } = useRecurringActions(reload);
+  const { skipNext, undoSkip, pause, resume, edit, end } = useRecurringActions(reload);
 
   useEffect(() => {
     if (!focus) return;
@@ -151,6 +151,11 @@ export default function RecurringScreen() {
 
                 {r.recur_state !== 'ended' && (
                   <View style={styles.actions}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => edit(r.id)} accessibilityRole="button">
+                      <Feather name="edit-2" size={14} color={colors.accent} />
+                      <Text style={[styles.actionText, { color: colors.accent }]}>Edit</Text>
+                    </TouchableOpacity>
+
                     {/* Skip: only available when there's a real future occurrence within the series end date */}
                     {r.recur_state === 'active' && hasFutureOccurrence && (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => skipNext(r.id)} accessibilityRole="button">

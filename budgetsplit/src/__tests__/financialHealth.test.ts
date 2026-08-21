@@ -1,4 +1,5 @@
 import { computeHealthScore, suggestImprovement, GATE_MIN_DAYS, GATE_MIN_TXNS, type HealthInputs } from '../lib/financialHealth';
+import { formatCompact } from '../lib/money';
 
 /** A profile that clears the minimum-data gate; override per test. */
 const inputs = (over: Partial<HealthInputs> = {}): HealthInputs => ({
@@ -13,6 +14,7 @@ const inputs = (over: Partial<HealthInputs> = {}): HealthInputs => ({
   goalFundedThisMonth: 500000,
   creditUsed: 0,
   netIOwe: 0,
+  owedToMe: 0,
   upcomingBills: 2000000,
   goalsCount: 2,
   hasBudget: true,
@@ -96,6 +98,66 @@ describe('four equal-weighted pillars', () => {
     expect(owing.score).toBeLessThan(clear.score);
     const f = owing.factors.find(x => x.label === 'Debt load')!;
     expect(f.severity).not.toBe('good');
+  });
+
+  // Being the one who always fronts the bill used to cost score twice: cash was
+  // down by the whole amount, and the friend balance counted as debt, while the
+  // money coming back counted for nothing.
+  it('nets what friends owe you against what you owe them', () => {
+    const gross = computeHealthScore(inputs({ netIOwe: 1500000 }));
+    const netted = computeHealthScore(inputs({ netIOwe: 1500000, owedToMe: 1500000 }));
+    expect(netted.score).toBeGreaterThan(gross.score);
+    expect(netted.factors.find(x => x.label === 'Debt load')!.severity).toBe('good');
+  });
+
+  it('quotes the same debt figure in the factor and in its lever', () => {
+    // The lever re-derives the netting by hand (financialHealth.ts:345). If the two
+    // ever disagree, the app tells you clearing ₹X lifts your score while the factor
+    // above it was scored on a different ₹X.
+    const i = inputs({ creditUsed: 2000000, netIOwe: 1500000, owedToMe: 500000 });
+    const r = computeHealthScore(i);
+    const imp = suggestImprovement(i, r);
+    if (imp?.factorLabel === 'Debt load') {
+      // creditUsed 20L + (15L owed − 5L owed-to-me) = 30L.
+      expect(imp.detail).toContain(formatCompact(3000000));
+    }
+    // And clearing both really does reach the projected score.
+    expect(computeHealthScore({ ...i, creditUsed: 0, netIOwe: 0 }).score).toBeGreaterThan(r.score);
+  });
+
+  it('never nets a receivable against card debt', () => {
+    // A friend's IOU does not reduce a balance accruing interest to a bank.
+    const card = computeHealthScore(inputs({ creditUsed: 2000000 }));
+    const cardWithIou = computeHealthScore(inputs({ creditUsed: 2000000, owedToMe: 5000000 }));
+    expect(cardWithIou.score).toBe(card.score);
+  });
+
+  // The score used to drop for the passage of time alone: on the 3rd, the
+  // expected-pace denominator is a rounding error and goal funding hasn't come
+  // due, so a perfectly normal month opened as a failure.
+  it('does not read the first days of a month as failure', () => {
+    const early = computeHealthScore(inputs({
+      dayOfMonth: 3, daysInMonth: 30, budgetSpent: 400000, goalFundedThisMonth: 0,
+    }));
+    const pace = early.factors.find(x => x.label === 'Budget pace')!;
+    const goals = early.factors.find(x => x.label === 'Goal funding')!;
+    expect(pace.severity).toBe('neutral');
+    expect(goals.severity).toBe('neutral');
+  });
+
+  it('still scores pace and goal funding once the month is under way', () => {
+    const mid = computeHealthScore(inputs({
+      dayOfMonth: 20, daysInMonth: 30, budgetSpent: 3400000, goalFundedThisMonth: 0,
+    }));
+    expect(mid.factors.find(x => x.label === 'Budget pace')!.severity).not.toBe('neutral');
+    expect(mid.factors.find(x => x.label === 'Goal funding')!.severity).toBe('warn');
+  });
+
+  it('reports fully-funded goals immediately, however early in the month', () => {
+    const early = computeHealthScore(inputs({ dayOfMonth: 2, daysInMonth: 30 }));
+    const goals = early.factors.find(x => x.label === 'Goal funding')!;
+    expect(goals.severity).toBe('good');
+    expect(goals.points).toBe(100);
   });
 });
 

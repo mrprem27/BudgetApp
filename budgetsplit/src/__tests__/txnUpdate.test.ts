@@ -2,6 +2,7 @@ import { openTestDb, seedGroupAndMe } from './dbHarness';
 import {
   insertTxnRows, updateTxn, getTxnById, insertItemizedTxn, updateItemizedTxn,
 } from '../db/queries/transactions';
+import { parseTags } from '../lib/tags';
 
 /**
  * `updateTxn` and `updateItemizedTxn` DELETE every payment and share row for a
@@ -46,6 +47,77 @@ const edit = (id: string, over: Partial<Parameters<typeof updateTxn>[1]> = {}) =
   payments: [{ personId: ME, amount: 100_000 }],
   shares: [{ personId: ME, amount: 50_000 }, { personId: OTHER, amount: 50_000 }],
   ...over,
+});
+
+/**
+ * The other half of "what survives": columns `updateTxn` does and does not name.
+ *
+ * The Add screen's destination pill and Receipt chip are both live in edit mode,
+ * and neither reached the database — the new group went to the audit line only,
+ * and the receipt went nowhere. Meanwhile columns the screen cannot edit must be
+ * left exactly as they are, which SQL gives for free but only while nobody
+ * "helpfully" adds them to the SET list with a `?? null`.
+ */
+describe('updateTxn column scope', () => {
+  it('moves the transaction when the group changes', async () => {
+    const db = await seed();
+    await db.runAsync(
+      `INSERT INTO budget_group (id,name,icon,color,is_personal,is_archived,created_at,created_by)
+       VALUES ('g2','Trip','map','#fff',0,0,0,?)`, [ME],
+    );
+    await db.runAsync("INSERT INTO group_member (group_id, person_id) VALUES ('g2', ?)", [ME]);
+
+    await updateTxn(db, edit('t1', { groupId: 'g2' }));
+    expect((await getTxnById(db, 't1'))?.group_id).toBe('g2');
+  });
+
+  it('round-trips a receipt, and clears it when explicitly nulled', async () => {
+    const db = await seed();
+    await updateTxn(db, edit('t1', { attachmentUri: 'file:///receipt.jpg' }));
+    expect((await getTxnById(db, 't1'))?.attachment_uri).toBe('file:///receipt.jpg');
+
+    await updateTxn(db, edit('t1', { attachmentUri: null }));
+    expect((await getTxnById(db, 't1'))?.attachment_uri).toBeNull();
+  });
+
+  it('leaves an existing receipt alone when the edit does not mention one', async () => {
+    // The reason `attachmentUri` is not in the main SET list: every caller that
+    // omits it would otherwise delete the receipt off a transaction it merely edited.
+    const db = await seed();
+    await updateTxn(db, edit('t1', { attachmentUri: 'file:///receipt.jpg' }));
+    await updateTxn(db, edit('t1', { category: 'Travel' }));
+    expect((await getTxnById(db, 't1'))?.attachment_uri).toBe('file:///receipt.jpg');
+  });
+
+  /**
+   * Pinning the asymmetry, because it is a live footgun: `tags` is a full
+   * replacement set (omit → cleared) while `attachmentUri` preserves on omit.
+   *
+   * This is what made editing a transaction delete its tags — the form hydrated
+   * `tags` only in the recurring-edit branch, so a normal edit submitted `[]` and
+   * this wrote NULL. The form now hydrates on every load; if that hydration is
+   * ever "simplified" away, this test explains what breaks.
+   */
+  it('treats tags as a full replacement set — omitting them clears them', async () => {
+    const db = await seed();
+    await updateTxn(db, edit('t1', { tags: ['goa', 'reimburse'] }));
+    expect(parseTags((await getTxnById(db, 't1'))?.tags)).toEqual(['goa', 'reimburse']);
+
+    await updateTxn(db, edit('t1', { category: 'Travel' }));
+    expect((await getTxnById(db, 't1'))?.tags).toBeNull();
+  });
+
+  it('preserves columns the edit screen cannot touch', async () => {
+    const db = await seed();
+    await db.runAsync(
+      `UPDATE txn SET currency='USD', lat=12.9, lng=77.6, place_label='Indiranagar' WHERE id='t1'`,
+    );
+    await updateTxn(db, edit('t1', { category: 'Travel' }));
+    const row = await db.getFirstAsync<{ currency: string; lat: number; lng: number; place_label: string }>(
+      `SELECT currency, lat, lng, place_label FROM txn WHERE id='t1'`,
+    );
+    expect(row).toEqual({ currency: 'USD', lat: 12.9, lng: 77.6, place_label: 'Indiranagar' });
+  });
 });
 
 describe('updateTxn replaces its own split', () => {
