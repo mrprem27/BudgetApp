@@ -1,8 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, type, space, radius } from '../../tokens';
+import { colors, type, space, radius, layout } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
+import { Card } from '../../ui/Card';
+import { Divider } from '../../ui/Divider';
+import { SectionHeader } from '../../ui/SectionHeader';
 import { formatCompact } from '../../../lib/money';
 import type { RebalancePlan } from '../../../lib/rebalance';
 import { alpha } from '../../../theme';
@@ -36,21 +39,25 @@ export function RebalanceSheet({
           : `${plan.category} is ${formatCompact(plan.overspend)} over. Cover it by trimming categories that still have room. Your total budget doesn’t change.`}
       </Text>
 
-      <Text style={styles.label}>WHAT MOVES</Text>
-      <View style={styles.card}>
+      <SectionHeader title="What moves" first />
+      <Card clip style={styles.card}>
         {plan.donors.map((d, i) => (
-          <View key={d.category} style={[styles.row, i > 0 && styles.rowDivided]}>
-            <Text style={styles.rowLabel} numberOfLines={1}>{d.category}</Text>
-            <Text style={styles.rowFrom}>{formatCompact(d.allocated)}</Text>
-            <Text style={styles.rowArrow}>→</Text>
-            <Text style={styles.rowTo}>{formatCompact(d.newAllocated)}</Text>
-          </View>
+          <React.Fragment key={d.category}>
+            {i > 0 && <Divider indent="none" />}
+            <View style={styles.row}>
+              <Text style={styles.rowLabel} numberOfLines={1}>{d.category}</Text>
+              <Text style={styles.rowFrom}>{formatCompact(d.allocated)}</Text>
+              <Text style={styles.rowArrow}>→</Text>
+              <Text style={styles.rowTo}>{formatCompact(d.newAllocated)}</Text>
+            </View>
+          </React.Fragment>
         ))}
-        <View style={[styles.row, styles.rowDivided]}>
+        <Divider indent="none" />
+        <View style={styles.row}>
           <Text style={[styles.rowLabel, styles.gainLabel]} numberOfLines={1}>{plan.category}</Text>
           <Text style={styles.rowFrom}>+{formatCompact(plan.covered)}</Text>
         </View>
-      </View>
+      </Card>
 
       <PrimaryButton label={applying ? 'Applying…' : 'Apply re-plan'} onPress={onApply} disabled={applying} />
     </SheetModal>
@@ -58,14 +65,12 @@ export function RebalanceSheet({
 }
 
 const styles = StyleSheet.create({
-  intro: { ...type.body, color: colors.textSecondary, lineHeight: 20, marginBottom: space.md },
-  label: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, marginBottom: space.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2, minHeight: 48 },
-  rowDivided: { borderTopWidth: 1, borderTopColor: colors.border },
+  intro: { ...type.body, color: colors.textSecondary, marginBottom: space.md },
+  card: { marginBottom: space.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.smd, minHeight: layout.rowMinHeight },
   rowLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
   gainLabel: { color: colors.income, fontFamily: 'Inter_600SemiBold' },
-  rowFrom: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textMuted },
+  rowFrom: { ...type.amountSM, color: colors.textMuted },
   rowArrow: { ...type.caption, color: colors.textMuted },
-  rowTo: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textPrimary, backgroundColor: alpha(colors.accent, 13), paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
+  rowTo: { ...type.amountSM, color: colors.textPrimary, backgroundColor: alpha(colors.accent, 13), paddingHorizontal: space.xs, paddingVertical: 2, borderRadius: radius.sm },
 });

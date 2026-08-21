@@ -171,6 +171,11 @@ export type BudgetEditorCopy = {
 /**
  * Copy per scope and level. `Save Budget` read the same whether you were rewriting
  * four flatmates' allowances or your own; only the blast radius makes it honest.
+ *
+ * `hint` is deliberately one short line. It sits directly under the level pills and
+ * explains what they select, so it is a label for a control — not an explainer. The
+ * editor used to stack it with two more paragraphs of muted 11px copy before you
+ * reached anything you could touch.
  */
 export function budgetEditorCopy(
   scope: BudgetScope,
@@ -181,7 +186,7 @@ export function budgetEditorCopy(
     return {
       title: 'My Budget',
       heroLabel: '≈ Monthly, yours',
-      hint: 'Your limits across everything — personal spending and your share of every group.',
+      hint: 'Across personal and every group.',
       cta: 'Save my budget',
     };
   }
@@ -190,7 +195,7 @@ export function budgetEditorCopy(
     return {
       title: `${groupName} budget`,
       heroLabel: '≈ Monthly, yours',
-      hint: `Yours only, in ${groupName}. Categories you leave blank keep following the group.`,
+      hint: 'Yours only — blank rows keep following the group.',
       cta: 'Save mine for this group',
     };
   }
@@ -198,8 +203,8 @@ export function budgetEditorCopy(
     title: `${groupName} budget`,
     heroLabel: '≈ Monthly, per person',
     hint: (opts.overrideCount ?? 0) > 0
-      ? 'The amount every member starts from. You have your own for some categories.'
-      : 'The amount every member starts from — including you, until you set your own.',
+      ? 'What every member starts from. You have your own in some.'
+      : 'What every member starts from, including you.',
     cta: 'Save for everyone',
   };
 }

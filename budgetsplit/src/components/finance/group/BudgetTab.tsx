@@ -9,9 +9,9 @@ import type { CategoryBudgetStatus } from '../../../lib/budget';
 import type { BudgetAnalytics } from '../../../lib/analytics';
 import { formatCompact } from '../../../lib/money';
 import { categorySection, SECTION_ORDER } from '../../../constants/categories';
-import { BudgetBar } from '../BudgetBar';
 import { Card } from '../../ui/Card';
 import { Chip } from '../../ui/Chip';
+import { OverviewCard } from '../../ui/OverviewCard';
 import { Divider } from '../../ui/Divider';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
@@ -96,65 +96,47 @@ export function BudgetTab({
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {analytics && (analytics.totalAllocated > 0 || analytics.pooledCount > 0) && (
-        <Card padded style={styles.ovCard}>
-          {/* Edit sits with the thing it edits. It used to be a lone unlabelled pill in a
-              `space-between` row that had lost its heading — so the tab opened with an
-              action above the number the action changes. */}
-          <View style={styles.ovHead}>
-            <Text style={styles.ovLabel}>Your spend</Text>
-            <Chip label="Edit" icon="edit-2" onPress={onEditBudget} accessibilityLabel="Edit budget" />
-          </View>
-
-          <View style={styles.ovAmountRow}>
-            <Text style={[styles.ovSpent, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>
-              {formatCompact(analytics.totalSpent)}
-            </Text>
-            <Text style={[styles.ovPct, { color: healthColor(budgetHealth(analytics.utilizationPct)) }]}>
-              {utilLabel(analytics.utilizationPct ?? 0)}
-            </Text>
-          </View>
-          {/* "per person", not "my share": the amount is one person's allowance, not
-              a pot to divide — ₹10,000 Groceries in a 4-person flat is ₹10,000 each.
-              Once you have your own amounts the figure is yours rather than the
-              group's, so it stops claiming to be what everyone gets. */}
-          <Text style={styles.ovOf}>
-            {overrideCount > 0
+      {analytics && (analytics.totalAllocated > 0 || analytics.pooledCount > 0) && (() => {
+        const health = budgetHealth(analytics.utilizationPct);
+        const tint = healthColor(health);
+        return (
+          <OverviewCard
+            eyebrow="Your spend"
+            /* Edit sits with the thing it edits. It used to be a lone unlabelled pill in a
+               `space-between` row that had lost its heading — so the tab opened with an
+               action above the number the action changes. */
+            action={<Chip label="Edit" icon="edit-2" onPress={onEditBudget} accessibilityLabel="Edit budget" />}
+            amount={analytics.totalSpent}
+            amountColor={tint}
+            trailing={utilLabel(analytics.utilizationPct ?? 0)}
+            trailingColor={tint}
+            /* "per person", not "my share": the amount is one person's allowance, not
+               a pot to divide — ₹10,000 Groceries in a 4-person flat is ₹10,000 each.
+               Once you have your own amounts the figure is yours rather than the
+               group's, so it stops claiming to be what everyone gets. */
+            supporting={overrideCount > 0
               ? `of ${formatCompact(analytics.totalAllocated)} for you this month · your own in ${overrideCount} ${overrideCount === 1 ? 'category' : 'categories'}`
               : `of ${formatCompact(analytics.totalAllocated)} per person this month`}
-          </Text>
-          {/* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
-              budget is spent when the trip happens, so it is excluded from the figures
-              above. Naming it here is what keeps the exclusion honest rather than a
-              silent omission from a total that looks complete. */}
-          {analytics.pooledCount > 0 && (
-            <Text style={styles.ovPooled}>
-              plus {formatCompact(analytics.pooledAllocated)} in {analytics.pooledCount} yearly/one-time {analytics.pooledCount === 1 ? 'budget' : 'budgets'}
-            </Text>
-          )}
-
-          <View style={styles.ovBar}>
-            <BudgetBar pct={analytics.utilizationPct} health={budgetHealth(analytics.utilizationPct)} height={10} />
-          </View>
-
-          <Divider indent="none" />
-
-          <View style={styles.statsRow}>
-            <StatFilter
-              count={analytics.overBudget.length} label="over" tint={colors.expense}
-              active={filter === 'over'} onPress={() => toggle('over')}
-            />
-            <StatFilter
-              count={analytics.nearLimit.length} label="near limit" tint={colors.healthAmber}
-              active={filter === 'near'} onPress={() => toggle('near')}
-            />
-            <StatFilter
-              count={analytics.onTrackCount} label="on track" tint={colors.income}
-              active={filter === 'ontrack'} onPress={() => toggle('ontrack')}
-            />
-          </View>
-        </Card>
-      )}
+            /* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
+               budget is spent when the trip happens, so it is excluded from the figures
+               above. Naming it here is what keeps the exclusion honest rather than a
+               silent omission from a total that looks complete. */
+            supportingSecondary={analytics.pooledCount > 0
+              ? `plus ${formatCompact(analytics.pooledAllocated)} in ${analytics.pooledCount} yearly/one-time ${analytics.pooledCount === 1 ? 'budget' : 'budgets'}`
+              : undefined}
+            bar={{
+              progress: (analytics.utilizationPct ?? 0) / 100,
+              color: tint,
+              accessibilityLabel: `${utilLabel(analytics.utilizationPct ?? 0)} of budget used`,
+            }}
+            stats={[
+              { key: 'over', value: analytics.overBudget.length, label: 'over', tint: colors.expense, onPress: () => toggle('over'), active: filter === 'over' },
+              { key: 'near', value: analytics.nearLimit.length, label: 'near limit', tint: colors.healthAmber, onPress: () => toggle('near'), active: filter === 'near' },
+              { key: 'ontrack', value: analytics.onTrackCount, label: 'on track', tint: colors.income, onPress: () => toggle('ontrack'), active: filter === 'ontrack' },
+            ]}
+          />
+        );
+      })()}
 
       {visible.length === 0 ? (
         <EmptyState
@@ -210,50 +192,11 @@ export function BudgetTab({
   );
 }
 
-/** One tappable count in the overview — the filter control for that health band. */
-function StatFilter({ count, label, tint, active, onPress }: {
-  count: number; label: string; tint: string; active: boolean; onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.stat, active && { backgroundColor: alpha(tint, 13), borderColor: tint }]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={`${count} ${label}${active ? ', filtering. Tap to clear' : '. Tap to filter'}`}
-    >
-      <Text style={[styles.statVal, { color: tint }]}>{count}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
+  // No `gap` (AGENTS §12), and the overview card carries no `marginBottom`: the
+  // `SectionHeader` under it already owns `marginTop: space.lg`, and the two used
+  // to add up to 32px above the first section.
   listContent: { padding: layout.screenPaddingH },
   replanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, alignSelf: 'flex-start', paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: alpha(colors.accent, 13) },
   replanText: { ...type.captionSemi, color: colors.accent },
-
-  ovCard: { marginBottom: space.sm },
-  ovHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
-  ovLabel: { ...type.sectionLabel, color: colors.textMuted },
-  ovAmountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  ovSpent: { ...type.amountXL },
-  ovPct: { ...type.amountSM },
-  ovPooled: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  ovOf: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  ovBar: { marginTop: space.md, marginBottom: space.md },
-
-  statsRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  stat: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-    minHeight: layout.touchMin,
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  statVal: { ...type.amountMD },
-  statLabel: { ...type.caption, color: colors.textMuted },
 });

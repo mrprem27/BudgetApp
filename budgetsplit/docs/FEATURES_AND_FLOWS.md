@@ -337,16 +337,15 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 - **Empty per tab:** Expenses gets an `EmptyState`; Budget shows the "no categories" path from the editor.
 
 ### Layout
-1. **Header** — breadcrumb back `‹ Groups › {name}`; **Insights** chart icon → the in-hub Insights view (`InsightsTab`); **⋯ options** *(sheet)*.
-2. **Group hero** — icon + name + **AvatarStack** + "N members".
-3. **Balance card** (`GroupBalanceCard`) — when your net ≠ 0: "YOU OWE / OWED TO YOU" + amount + counterpart name + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`. When net **= 0** it renders an explicit **"All settled up"** card (check-circle, `colors.settle`) rather than nothing.
-4. 🔘 **Tab pills** (see set above).
+1. **Header** — `ScreenHeader` titled "Groups" (it names where Back goes); **⋯ options** *(sheet)*.
+2. **Group header card** (`GroupHeader`) — one `Card`, two halves. Top: group icon tile + name + **AvatarStack** + "N members". Bottom (tinted): when your net ≠ 0, "YOU OWE / YOU'RE OWED" + amount + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`; when net **= 0**, an explicit **"All settled up"** row (check-circle, `colors.settle`) rather than nothing. Replaces the former `GroupHero` + `GroupBalanceCard` pair, which stacked two competing hero figures.
+3. 🔘 **Tab pills** — each carries a live count badge (Expenses = txns, Recurring = active rules, Budget = over-budget, Members = members). Counts, not alarms: the badge takes the label's colour at 0.75 opacity, so severity stays on each tab's own summary card.
 
 **Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search note or category" + 🔘 `All · Expense · Income · Settlement`) → **SectionList** of **TransactionRow** in **TxnCell**, grouped by date ("Today" / "Yesterday" / "14 Jun" via `dateSectionLabel`); each date's rows share one card. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
 
 **Tab — Budget:** "Budget" heading + **Edit** pill → `/group/{id}/budget`. Overview card (used / of total + **BudgetBar** + counts **over · near limit · on track**); recommendation pills; "Driving overspend" rows (worst-first) *or* "Every category within budget"; **"Who paid what" contributions** — a per-member fairness breakdown (ahead/behind their fair share) that the standalone budget-editor route never shows, and the reason both surfaces exist; 🔘 status filter `All · Over · Near limit · On track`; per-category **BudgetBar** cards.
 
-**Tab — Members:** Group balances (Total spent · Your balance); member rows (avatar, name, "is owed / owes / settled"); **Invite someone** → `/group/{id}/members`; 🔘 **Simplify debts** *(toggle)* ("Fewest payments" ↔ "Every direct debt", persisted to the group row); **BalanceRow** settlement rows ("N payments to settle") → **Settle amount** → `/add/quick?kind=transfer&from=&to=&amount=&groupId=`.
+**Tab — Members:** `OverviewCard` "Group spend" (fair share each · **to settle / outstanding / settled** stats — *not* "your balance", which the header card already owns) → **"N payments to settle"** `SectionHeader` carrying the 🔘 **Simplify debts** chip ("Simplified" ↔ "All debts", persisted to the group row; it sits in the header of the list it changes, and toggling it changes the count *in* that title) → **BalanceRow** settlement rows → **Settle amount** → `/add/quick?kind=transfer&from=&to=&amount=&groupId=`; when square, an **"All settled up"** `EmptyState` with an **Add an expense** CTA. Then **"Who paid what"** contributions, then **Members** (`SectionHeader` + **Invite** chip → `/group/{id}/members`) as `ListRow`s with a `BalanceChip` value. Settlements lead because they are the only thing on the tab you can act on.
 
 **Tab — Recurring:** active / paused / ended rules; row → `/group/{id}/recurring?focus={ruleId}`; add → `/add/quick?groupId={id}&kind=expense`.
 
@@ -2026,7 +2025,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 ### `finance/group/`, `finance/plan/`, `finance/add/`, `finance/review/`, `finance/backup/`
 | Component | What it is |
 |---|---|
-| `group/GroupHero` · `group/GroupBalanceCard` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views extracted from `group/[id].tsx`. `GroupBalanceCard` also renders the "All settled up" zero state. `BudgetTab` offers **Re-plan the rest of this month** on an over-budget category (`V2-07`). |
+| `group/GroupHeader` · `group/TransactionsTab` · `group/BudgetTab` · `group/MembersTab` · `group/RecurringTab` | Group-detail sub-views composed by `group/[id].tsx` (whose reads and derivations live in `hooks/useGroupDetail`). `GroupHeader` is the merged identity + balance card and renders the "All settled up" zero state. Every tab opens with `ui/OverviewCard`, except Expenses — its list is a ledger of all three kinds, and AGENTS §12 forbids one total across them. `BudgetTab` offers **Re-plan the rest of this month** on an over-budget category (`V2-07`). |
 | `group/RebalanceSheet` | The re-plan proposal: which limits move and by how much, before anything is written (`V2-07`). |
 | `group/InsightsTab` | In-hub group Insights view (member spend bars, top categories, recommendations). |
 | `plan/ForecastCard` | Plan-tab month-end forecast card (distinct from `home/ForecastCard`). |

@@ -1,6 +1,7 @@
 import {
   isRecurInstance, splitLabel,
   computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
+  computeRecurringMyShareMonthly, primarySettleTarget, settlementSummary,
 } from '../lib/groupDetail';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -71,5 +72,80 @@ describe('computeRecurringMonthlyTotal / computeRecurNextLabel', () => {
   it('returns 0 and null for no rules', () => {
     expect(computeRecurringMonthlyTotal([])).toBe(0);
     expect(computeRecurNextLabel([])).toBeNull();
+  });
+});
+
+describe('computeRecurringMyShareMonthly', () => {
+  const rule = (freq: string, total: number, mine?: number): TxnWithSplits => ({
+    id: 'r', group_id: 'g', kind: 'expense', date: 1, category: 'Rent', note: null, is_deleted: 0,
+    payments: [{ personId: 'a', amount: total }],
+    shares: mine === undefined ? [] : [{ personId: 'me', amount: mine }, { personId: 'a', amount: total - mine }],
+    recur_freq: freq, recur_interval: 1, recur_state: 'active',
+  } as any);
+
+  it('sums my share, not the whole bill', () => {
+    expect(computeRecurringMyShareMonthly([rule('monthly', 90000, 30000)], 'me')).toBe(30000);
+  });
+
+  it('converts non-monthly cadences the same way the group total does', () => {
+    const yearly = [rule('yearly', 120000, 60000)];
+    expect(computeRecurringMyShareMonthly(yearly, 'me')).toBe(computeRecurringMonthlyTotal([rule('yearly', 60000)]));
+  });
+
+  it('falls back to the whole bill when I have no share on the rule', () => {
+    expect(computeRecurringMyShareMonthly([rule('monthly', 90000)], 'me')).toBe(90000);
+  });
+
+  it('is 0 for no rules', () => {
+    expect(computeRecurringMyShareMonthly([], 'me')).toBe(0);
+  });
+});
+
+describe('primarySettleTarget', () => {
+  const me = person('me', 'Me', { is_me: 1 });
+  const a = person('a', 'Aarav');
+  const map = new Map([['me', me], ['a', a]]);
+
+  it('when I owe, returns who I pay', () => {
+    const settles = [{ from: 'me', to: 'a', amount: 500 }];
+    expect(primarySettleTarget(settles, 'me', map, -500)?.id).toBe('a');
+  });
+
+  it('when I am owed, returns who pays me', () => {
+    const settles = [{ from: 'a', to: 'me', amount: 500 }];
+    expect(primarySettleTarget(settles, 'me', map, 500)?.id).toBe('a');
+  });
+
+  it('is null when square, so no Settle button is offered', () => {
+    expect(primarySettleTarget([{ from: 'a', to: 'me', amount: 500 }], 'me', map, 0)).toBeNull();
+  });
+
+  it('is null when no plan step involves me — never an empty payee', () => {
+    expect(primarySettleTarget([{ from: 'a', to: 'b', amount: 500 }], 'me', map, -500)).toBeNull();
+  });
+
+  it('is null when the counterpart is not a known person', () => {
+    expect(primarySettleTarget([{ from: 'me', to: 'ghost', amount: 500 }], 'me', map, -500)).toBeNull();
+  });
+});
+
+describe('settlementSummary', () => {
+  it('totals what is still to move', () => {
+    const s = settlementSummary(
+      [{ from: 'me', to: 'a', amount: 500 }, { from: 'b', to: 'a', amount: 300 }],
+      { me: -500, a: 800, b: -300 },
+      ['me', 'a', 'b'],
+    );
+    expect(s.openTotal).toBe(800);
+    expect(s.settledCount).toBe(0);
+  });
+
+  it('counts a member absent from the balance map as settled, not outstanding', () => {
+    const s = settlementSummary([], { me: 0, a: 0 }, ['me', 'a', 'newcomer']);
+    expect(s.settledCount).toBe(3);
+  });
+
+  it('is zeroed for an empty group', () => {
+    expect(settlementSummary([], {}, [])).toEqual({ openTotal: 0, settledCount: 0 });
   });
 });

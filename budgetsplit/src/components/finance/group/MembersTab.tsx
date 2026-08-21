@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { monthShort } from '../../../lib/dateFormat';
-import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { colors, type, space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatCompact } from '../../../lib/money';
-import { oweView } from '../../../lib/owe';
 import { MemberAvatar } from '../MemberAvatar';
-import { AvatarStack } from '../AvatarStack';
 import { BalanceRow } from '../BalanceRow';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { Card } from '../../ui/Card';
+import { Chip } from '../../ui/Chip';
+import { Divider } from '../../ui/Divider';
+import { ListRow } from '../../ui/ListRow';
+import { BalanceChip } from '../../ui/BalanceChip';
+import { OverviewCard } from '../../ui/OverviewCard';
 import { AnimatedBar } from '../../ui/anim/AnimatedBar';
-import type { Contributions } from '../../../lib/groupDetail';
+import type { Contributions, SettlementSummary } from '../../../lib/groupDetail';
 import type { Person } from '../../../db/queries/persons';
 
 type Settle = { from: string; to: string; amount: number };
@@ -32,6 +34,8 @@ type Props = {
   onToggleSimplify: (on: boolean) => void;
   onInvite: () => void;
   onSettlePair: (from: string, to: string, amount: number) => void;
+  /** Opens the Add screen prefilled with this group — the CTA on the settled state. */
+  onAddExpense: () => void;
   groupName: string;
   /**
    * Who paid what, and each member's distance from a fair share. Moved here from the
@@ -40,73 +44,95 @@ type Props = {
    * Already computed by `computeContributions` in `lib/groupDetail`.
    */
   contributions: Contributions;
+  /** How much is still to move, and who's already square. */
+  summary: SettlementSummary;
 };
 
-/** Group Members tab: balances summary, collapsible member list, invite, simplify
- *  toggle, and the settlement (who-owes-whom) list. Owns the expand state. */
-export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, contributions, refreshing, onRefresh }: Props) {
-  const [membersExpanded, setMembersExpanded] = useState(false);
+/**
+ * Group Members tab: what the group spent, who owes whom, who paid what, and the roster.
+ *
+ * **The settlements list comes first, because it is the only thing here you can act
+ * on.** It used to be last — under a settings toggle — while the tab opened with a
+ * balance figure the pinned header was already showing. That duplicate is gone: the
+ * header owns "your balance", this tab owns the group's.
+ *
+ * The member list is no longer collapsed behind a disclosure. A tab named "Members"
+ * that hides its members was hiding its own subject, and the tab pill now states the
+ * count anyway.
+ */
+export function MembersTab({
+  members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify,
+  onInvite, onSettlePair, onAddExpense, groupName, contributions, summary, refreshing, onRefresh,
+}: Props) {
   const bottomPad = useContentInset({ fab: true });
-  const myNet = net[meId] ?? 0;
 
   return (
     <ScrollView
-        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-      {/* GROUP BALANCES summary */}
-      <View style={styles.groupBalCard}>
-        <View style={styles.groupBalItem}>
-          <Text style={styles.groupBalLabel}>Total spent</Text>
-          <Text style={styles.groupBalAmt}>{formatCompact(totalSpent)}</Text>
-        </View>
-        <View style={styles.groupBalDivider} />
-        <View style={styles.groupBalItem}>
-          <Text style={styles.groupBalLabel}>Your balance</Text>
-          <Text style={[styles.groupBalAmt, { color: myNet > 0 ? colors.income : myNet < 0 ? colors.expense : colors.textMuted }]}>
-            {myNet > 0 ? `+${formatCompact(myNet)}` : myNet < 0 ? `−${formatCompact(-myNet)}` : '—'}
-          </Text>
-        </View>
-      </View>
+      contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+      refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {/* "Group spend", not "total": AGENTS §12 — only expenses are counted here,
+          so the label has to say which kind it means. */}
+      <OverviewCard
+        eyebrow="Group spend"
+        amount={totalSpent}
+        supporting={contributions.total > 0
+          ? `Fair share ${formatCompact(contributions.fairShare)} each · ${members.length} member${members.length === 1 ? '' : 's'}`
+          : `${members.length} member${members.length === 1 ? '' : 's'}`}
+        stats={[
+          { key: 'open', value: settlements.length, label: 'to settle', tint: settlements.length > 0 ? colors.expense : colors.textPrimary },
+          { key: 'outstanding', value: formatCompact(summary.openTotal), label: 'outstanding' },
+          { key: 'settled', value: `${summary.settledCount}/${members.length}`, label: 'settled', tint: colors.income },
+        ]}
+      />
 
-      {/* Member list — collapsed by default */}
-      <TouchableOpacity
-        style={styles.membersHeader}
-        onPress={() => setMembersExpanded(e => !e)}
-        accessibilityRole="button"
-        accessibilityLabel={`${members.length} members, ${membersExpanded ? 'collapse' : 'expand'}`}
-      >
-        <AvatarStack people={members} size={24} max={5} ringColor={colors.bg} />
-        <Text style={styles.membersHeaderText}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
-        <Feather name={membersExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-      </TouchableOpacity>
-      {membersExpanded && (
-        <View style={styles.card}>
-          {members.map((m, mi) => {
-            const v = net[m.id] ?? 0;
-            const ov = oweView(v);
-            const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
-            const sub = isLargest && !m.is_me
-              ? 'Largest contributor'
-              : m.joined_at ? `Joined ${monthShort(m.joined_at)}` : '';
-            const balLabel = v > 0 ? 'is owed' : v < 0 ? (m.is_me ? 'you owe' : 'owes') : 'settled';
-            return (
-              <View key={m.id} style={[styles.memberRow, mi < members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={44} imageUri={m.image_uri} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.memberName} numberOfLines={1}>
-                    {m.name}{m.is_me ? <Text style={styles.youTag}> (you)</Text> : null}
-                  </Text>
-                  {!!sub && <Text style={styles.memberSub} numberOfLines={1}>{sub}</Text>}
-                </View>
-                <View style={styles.memberRight}>
-                  <Text style={[styles.memberBal, { color: ov.color }]}>{v === 0 ? '₹0' : `${ov.sign}${formatCompact(ov.amount)}`}</Text>
-                  <Text style={styles.memberBalLabel}>{balLabel}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+      {settlements.length > 0 ? (
+        <>
+          {/* The toggle sits in the header of the list it changes — and toggling it
+              changes `settlements.length`, which is *in* that header's title, so
+              cause and effect land in one glance. A chip with no trailing affordance
+              is a toggle (§9); it must not gain a ✕ or a ⌄. */}
+          <SectionHeader
+            title={`${settlements.length} payment${settlements.length > 1 ? 's' : ''} to settle`}
+            right={
+              <Chip
+                label={simplifyOn ? 'Simplified' : 'All debts'}
+                icon="shuffle"
+                selected={simplifyOn}
+                onPress={() => onToggleSimplify(!simplifyOn)}
+                accessibilityLabel={simplifyOn
+                  ? 'Simplify debts is on, showing the fewest possible payments. Tap to show every direct debt'
+                  : 'Simplify debts is off, showing every direct debt. Tap to simplify'}
+              />
+            }
+          />
+          <Card clip>
+            {settlements.map((s, i) => {
+              const fromPerson = personMap.get(s.from);
+              const toPerson = personMap.get(s.to);
+              if (!fromPerson || !toPerson) return null;
+              return (
+                <React.Fragment key={`${s.from}-${s.to}-${i}`}>
+                  {i > 0 && <Divider indent="none" />}
+                  <View style={styles.balanceRowWrap}>
+                    <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => onSettlePair(s.from, s.to, s.amount)} />
+                  </View>
+                </React.Fragment>
+              );
+            })}
+          </Card>
+        </>
+      ) : (
+        /* Now the first thing you see when the group is square, so §2's CTA
+           requirement actually bites — it used to be a dead end at the bottom. */
+        <EmptyState
+          icon="check-circle"
+          title="All settled up"
+          body={`No outstanding balances in ${groupName}.`}
+          tint={colors.income}
+          actionLabel="Add an expense"
+          onAction={onAddExpense}
+        />
       )}
 
       {/* WHO PAID WHAT — each member's share of the spend, and their distance from an
@@ -136,76 +162,47 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         </>
       )}
 
-      <TouchableOpacity style={styles.inviteBtn} onPress={onInvite} accessibilityRole="button">
-        <Feather name="user-plus" size={16} color={colors.accent} />
-        <Text style={styles.inviteBtnText}>Invite someone</Text>
-      </TouchableOpacity>
-
-      <View style={styles.toggleRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.toggleTitle}>Simplify debts</Text>
-          <Text style={styles.toggleSub}>{simplifyOn ? 'Fewest possible payments' : 'Show every direct debt'}</Text>
-        </View>
-        <Switch
-          value={simplifyOn}
-          onValueChange={onToggleSimplify}
-          trackColor={{ true: colors.accent, false: colors.bgMuted }}
-          thumbColor={colors.textPrimary}
-          accessibilityLabel="Simplify debts"
-        />
-      </View>
-
-      {settlements.length > 0 ? (
-        <>
-          <SectionHeader title={`${settlements.length} payment${settlements.length > 1 ? 's' : ''} to settle`} />
-          <View style={styles.card}>
-            {settlements.map((s, i) => {
-              const fromPerson = personMap.get(s.from);
-              const toPerson = personMap.get(s.to);
-              if (!fromPerson || !toPerson) return null;
-              return (
-                <View key={`${s.from}-${s.to}-${i}`} style={[styles.balanceRowWrap, i < settlements.length - 1 && styles.rowBorder]}>
-                  <BalanceRow from={fromPerson} to={toPerson} amount={s.amount} onPaid={() => onSettlePair(s.from, s.to, s.amount)} />
-                </View>
-              );
-            })}
-          </View>
-        </>
-      ) : (
-        <EmptyState icon="check-circle" title="All settled up" body={`No outstanding balances in ${groupName}.`} tint={colors.income} />
-      )}
+      <SectionHeader
+        title="Members"
+        right={<Chip label="Invite" icon="user-plus" onPress={onInvite} accessibilityLabel="Invite someone to this group" />}
+      />
+      <Card clip>
+        {members.map((m, i) => {
+          const v = net[m.id] ?? 0;
+          const isLargest = v > 0 && members.every(o => o.id === m.id || (net[o.id] ?? 0) <= v);
+          const sub = isLargest && !m.is_me
+            ? 'Largest contributor'
+            : m.joined_at ? `Joined ${monthShort(m.joined_at)}` : undefined;
+          return (
+            <React.Fragment key={m.id}>
+              {i > 0 && <Divider indent="text" />}
+              {/* `BalanceChip` renders nothing at zero, so a settled member's row is
+                  simply clean — better than the old "₹0 / settled" pair, which spent
+                  two lines saying nothing happened. */}
+              <ListRow
+                leading={<MemberAvatar name={m.name} color={m.avatar_color} size={layout.avatarSize} imageUri={m.image_uri} />}
+                title={`${m.name}${m.is_me ? ' (you)' : ''}`}
+                subtitle={sub}
+                value={<BalanceChip net={v} />}
+                onPress={onInvite}
+              />
+            </React.Fragment>
+          );
+        })}
+      </Card>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, gap: space.sm },
-  groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
-  groupBalItem: { flex: 1, alignItems: 'center', paddingVertical: space.md, gap: 3 },
-  groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
-  groupBalLabel: { ...type.caption, color: colors.textMuted },
-  groupBalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.sm + 2, paddingHorizontal: space.md, marginBottom: space.sm },
-  membersHeaderText: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm, marginBottom: space.md },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
-  memberName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  youTag: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  memberSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  memberRight: { alignItems: 'flex-end' },
-  memberBal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, letterSpacing: -0.5 },
-  memberBalLabel: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 1 },
+  // No `gap` (AGENTS §12): it used to stack with every card's own `marginBottom`,
+  // making the real gutter 24px and the space above each SectionHeader 32px.
+  listContent: { padding: layout.screenPaddingH },
   contribRowGap: { marginTop: space.md },
   contribHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xs },
   contribName: { ...type.body, color: colors.textPrimary, flex: 1 },
   contribPaid: { ...type.amountSM, color: colors.textPrimary },
   contribDelta: { ...type.captionSemi, minWidth: 52, textAlign: 'right' },
   contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.md },
-  inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.lg, paddingVertical: space.md, marginBottom: space.md },
-  inviteBtnText: { ...type.body, color: colors.accent },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
-  toggleTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  toggleSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   balanceRowWrap: { paddingHorizontal: space.md },
 });

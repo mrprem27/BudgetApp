@@ -1,6 +1,6 @@
 import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from './recurrence';
 import { shortDate } from './dateFormat';
-import { txnTotal } from './splitMath';
+import { myShareOrTotal, txnTotal } from './splitMath';
 import { SPLIT_MODE_PHRASE, type SplitMode } from '../constants/enums';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -61,6 +61,69 @@ export function computeRecurringMonthlyTotal(rules: TxnWithSplits[]): number {
     (sum, r) => sum + recurringMonthlyEquivalent(txnTotal(r), r.recur_freq, r.recur_interval),
     0,
   );
+}
+
+/**
+ * Monthly-equivalent of MY share across active recurring rules.
+ *
+ * The counterpart to `computeRecurringMonthlyTotal`: that one is the group's bill,
+ * this one is what it costs me. The Recurring tab used to show only the group
+ * figure in its summary while every row underneath carried "your share", with
+ * nothing tying the two together. Same `myShareOrTotal` fallback every other
+ * projection surface uses, so the two can't disagree.
+ */
+export function computeRecurringMyShareMonthly(rules: TxnWithSplits[], meId: string): number {
+  return rules.reduce(
+    (sum, r) => sum + recurringMonthlyEquivalent(myShareOrTotal(r, meId), r.recur_freq, r.recur_interval),
+    0,
+  );
+}
+
+export type Settle = { from: string; to: string; amount: number };
+
+/**
+ * The one counterpart to offer a Settle button for, or null when there isn't one.
+ *
+ * If I owe, that's whoever the plan says I pay; if I'm owed, whoever pays me.
+ * Null when no real counterpart exists — otherwise the transfer form opens with an
+ * empty payee, which is how this read before it moved out of the balance card.
+ */
+export function primarySettleTarget(
+  settles: Settle[],
+  meId: string,
+  personMap: Map<string, Person>,
+  myNet: number,
+): Person | null {
+  if (myNet === 0) return null;
+  const isOwe = myNet < 0;
+  const hit = isOwe ? settles.find(s => s.from === meId) : settles.find(s => s.to === meId);
+  if (!hit) return null;
+  return personMap.get(isOwe ? hit.to : hit.from) ?? null;
+}
+
+export type SettlementSummary = {
+  /** Total still to move, across every outstanding payment. */
+  openTotal: number;
+  /** How many members are square (net zero). */
+  settledCount: number;
+};
+
+/**
+ * Headline counts for the Members tab's summary: how much is open, and who's square.
+ *
+ * Counts over `memberIds`, not over `net`'s keys: a member who has never been in a
+ * transaction is absent from the balance map entirely rather than present at zero,
+ * so reading the map alone would report them as un-settled.
+ */
+export function settlementSummary(
+  settles: Settle[],
+  net: Record<string, number>,
+  memberIds: string[],
+): SettlementSummary {
+  return {
+    openTotal: settles.reduce((sum, s) => sum + s.amount, 0),
+    settledCount: memberIds.filter(id => (net[id] ?? 0) === 0).length,
+  };
 }
 
 /**

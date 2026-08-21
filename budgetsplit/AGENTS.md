@@ -68,6 +68,11 @@ What `Card` gives you (don't re-declare these):
 Spacing is still the caller's job:
 - Between cards: `marginBottom: space.md` (16px)
 - Between sections: `marginBottom: space.lg` (24px)
+- **A card immediately followed by a `SectionHeader` carries NO bottom margin.** The
+  header's own `marginTop: space.lg` is the whole gap; setting both silently makes it
+  32px. This is the non-obvious half of the rule and it was wrong in two places at
+  once — the group Budget tab's overview card and the budget editor's scroll
+  container — so the next person to "fix" it back should read this line first.
 
 Section eyebrows use **`SectionHeader`**, which owns its own vertical margins — do
 not also put a `gap` on the scroll container, or the two silently add up.

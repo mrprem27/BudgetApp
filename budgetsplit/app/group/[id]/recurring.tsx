@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { fullDate } from '../../../src/lib/dateFormat';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
+import { Card } from '../../../src/components/ui/Card';
+import { Divider } from '../../../src/components/ui/Divider';
+import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { getRecurringForGroup, getSkipsMap } from '../../../src/db/queries/recurring';
 import { useRecurringActions } from '../../../src/hooks/useRecurringActions';
-import { categoryVisual } from '../../../src/constants/categories';
-import { formatRupees } from '../../../src/lib/money';
-import { nextOccurrenceOnOrAfter, freqLabel } from '../../../src/lib/recurrence';
+import { RecurringRow } from '../../../src/components/finance/RecurringRow';
+import { nextOccurrenceOnOrAfter } from '../../../src/lib/recurrence';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 
 type Rule = TxnWithSplits;
@@ -44,11 +45,21 @@ function nextOccurrence(rule: Rule, skips?: Set<number>): Date | null {
   return null;
 }
 
+/**
+ * Manage one group's recurring rules.
+ *
+ * The rows are `RecurringRow` — the same component the group's Recurring tab uses.
+ * This screen used to hand-roll a second, entirely different card for the same
+ * object (its own icon dot, its own state pill, its own meta grid), so the two
+ * surfaces described one rule two ways. Now the tab and this screen agree, and the
+ * per-rule *actions* — which are what this screen is actually for — move into a
+ * sheet opened by the row, instead of five buttons under every card.
+ */
 export default function RecurringScreen() {
   const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
   const [highlightId, setHighlightId] = useState<string | null>(focus ?? null);
+  const [openRuleId, setOpenRuleId] = useState<string | null>(null);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const rs = await getRecurringForGroup(db, id);
@@ -67,14 +78,23 @@ export default function RecurringScreen() {
 
   if (!id) { router.back(); return null; }
 
-  function amountOf(r: Rule): number {
-    return r.payments.reduce((a, p) => a + p.amount, 0);
-  }
+  const openRule = rules.find(r => r.id === openRuleId) ?? null;
+  const openSkips = openRule ? skips.get(openRule.id) : undefined;
+  const openNext = openRule ? nextOccurrence(openRule, openSkips) : null;
+  const openHasSkips = (openSkips?.size ?? 0) > 0;
 
   const stateMeta: Record<string, { label: string; color: string }> = {
     active: { label: 'Active', color: colors.income },
     paused: { label: 'Paused', color: colors.healthAmber },
-    ended:  { label: 'Ended', color: colors.textMuted },
+    ended: { label: 'Ended', color: colors.textMuted },
+  };
+  const meta = openRule ? (stateMeta[openRule.recur_state] ?? stateMeta.active) : null;
+
+  /** Runs an action and closes the sheet — every one of them changes what it says. */
+  const act = (fn: (ruleId: string) => void) => {
+    if (!openRule) return;
+    fn(openRule.id);
+    setOpenRuleId(null);
   };
 
   return (
@@ -83,137 +103,135 @@ export default function RecurringScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {rules.length === 0 ? (loading ? null : (
-          <EmptyState
-            icon="repeat"
-            title="No recurring transactions"
-            body="Rent, salary, memberships and bills you set to repeat will appear here to manage."
-            actionLabel="Add recurring expense"
-            onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
-          />
-        )) : (
-          rules.map(r => {
-            const vis = categoryVisual(r.category);
-            const meta = stateMeta[r.recur_state] ?? stateMeta.active;
-            const seriesSkips = skips.get(r.id);
-            const next = nextOccurrence(r, seriesSkips);
-            const hasUpcomingSkips = (seriesSkips?.size ?? 0) > 0;
-            // When active but no future occurrence exists (all past endDate), only allow Stop or Undo Skip.
-            const hasFutureOccurrence = next !== null;
-
-            return (
-              <View key={r.id} style={[styles.card, highlightId === r.id && styles.cardHighlight]}>
-                <View style={styles.cardTop}>
-                  <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
-                    <Feather name={vis.icon} size={18} color={vis.color} />
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {rules.length === 0 ? (loading ? null : (
+            <EmptyState
+              icon="repeat"
+              title="No recurring transactions"
+              body="Rent, salary, memberships and bills you set to repeat will appear here to manage."
+              actionLabel="Add recurring expense"
+              onAction={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
+            />
+          )) : (
+            <Card clip>
+              {rules.map((r, i) => (
+                <React.Fragment key={r.id}>
+                  {i > 0 && <Divider indent="text" />}
+                  {/* The deep-link highlight tints the row rather than re-bordering a
+                      card, so it can't change the row's height as it fades. */}
+                  <View style={highlightId === r.id ? styles.highlight : undefined}>
+                    <RecurringRow
+                      rule={r}
+                      showNext
+                      skipDates={skips.get(r.id)}
+                      onPress={() => setOpenRuleId(r.id)}
+                    />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cat} numberOfLines={1}>{r.category}</Text>
-                    <Text style={styles.freq}>{freqLabel(r.recur_freq, r.recur_interval)}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.amount}>{formatRupees(amountOf(r))}</Text>
-                    <View style={[styles.statePill, { backgroundColor: alpha(meta.color, 13) }]}>
-                      <Text style={[styles.stateText, { color: meta.color }]}>{meta.label}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.metaRow}>
-                  <View style={styles.metaItem}>
-                    <Text style={styles.metaLabel}>Started</Text>
-                    <Text style={styles.metaVal}>{fullDate(new Date(r.date))}</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <Text style={styles.metaLabel}>
-                      {r.recur_state === 'active' ? (hasFutureOccurrence ? 'Next' : 'No more occurrences') : r.recur_state === 'paused' ? 'Paused' : 'Ended'}
-                    </Text>
-                    <Text style={styles.metaVal}>
-                      {r.recur_state === 'active'
-                        ? (next ? fullDate(next) : r.recur_end ? fullDate(new Date(r.recur_end)) : '—')
-                        : r.recur_end ? fullDate(new Date(r.recur_end)) : '—'}
-                    </Text>
-                  </View>
-                </View>
-
-                {hasUpcomingSkips && (
-                  <View style={styles.skipBanner}>
-                    <Feather name="skip-forward" size={12} color={colors.healthAmber} />
-                    <Text style={styles.skipBannerText}>
-                      {(seriesSkips?.size ?? 0) === 1 ? '1 upcoming occurrence skipped' : `${seriesSkips?.size} upcoming occurrences skipped`}
-                    </Text>
-                  </View>
-                )}
-
-                {r.recur_state !== 'ended' && (
-                  <View style={styles.actions}>
-                    {/* Skip: only available when there's a real future occurrence within the series end date */}
-                    {r.recur_state === 'active' && hasFutureOccurrence && (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => skipNext(r.id)} accessibilityRole="button">
-                        <Feather name="skip-forward" size={14} color={colors.textSecondary} />
-                        <Text style={[styles.actionText, { color: colors.textSecondary }]}>Skip</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {/* Undo Skip: only available when there are upcoming skipped occurrences */}
-                    {hasUpcomingSkips && (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => undoSkip(r.id)} accessibilityRole="button">
-                        <Feather name="rotate-ccw" size={14} color={colors.accent} />
-                        <Text style={[styles.actionText, { color: colors.accent }]}>Undo Skip</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {r.recur_state === 'active' && hasFutureOccurrence ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => pause(r.id)} accessibilityRole="button">
-                        <Feather name="pause" size={14} color={colors.healthAmber} />
-                        <Text style={[styles.actionText, { color: colors.healthAmber }]}>Pause</Text>
-                      </TouchableOpacity>
-                    ) : r.recur_state === 'paused' ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => resume(r.id)} accessibilityRole="button">
-                        <Feather name="play" size={14} color={colors.income} />
-                        <Text style={[styles.actionText, { color: colors.income }]}>Resume</Text>
-                      </TouchableOpacity>
-                    ) : null}
-
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => end(r.id)} accessibilityRole="button">
-                      <Feather name="x-circle" size={14} color={colors.expense} />
-                      <Text style={[styles.actionText, { color: colors.expense }]}>Stop</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            );
-          })
-        )}
-      </ScrollView>
+                </React.Fragment>
+              ))}
+            </Card>
+          )}
+        </ScrollView>
       )}
+
+      {/* Actions for one rule. Everything the old per-card action row offered, plus
+          the Started/Next dates it showed inline — a rule you are about to pause is
+          exactly when those dates matter. */}
+      <SheetModal
+        visible={!!openRule}
+        onClose={() => setOpenRuleId(null)}
+        title={openRule ? (openRule.note?.trim() || openRule.category) : ''}
+        scroll={false}
+      >
+        {openRule && meta && (
+          <>
+            <View style={styles.metaRow}>
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>Started</Text>
+                <Text style={styles.metaVal}>{fullDate(new Date(openRule.date))}</Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>
+                  {openRule.recur_state === 'active'
+                    ? (openNext ? 'Next' : 'No more occurrences')
+                    : openRule.recur_state === 'paused' ? 'Paused' : 'Ended'}
+                </Text>
+                <Text style={styles.metaVal}>
+                  {openRule.recur_state === 'active'
+                    ? (openNext ? fullDate(openNext) : openRule.recur_end ? fullDate(new Date(openRule.recur_end)) : '—')
+                    : openRule.recur_end ? fullDate(new Date(openRule.recur_end)) : '—'}
+                </Text>
+              </View>
+              <View style={[styles.statePill, { backgroundColor: alpha(meta.color, 13) }]}>
+                <Text style={[styles.stateText, { color: meta.color }]}>{meta.label}</Text>
+              </View>
+            </View>
+
+            {openHasSkips && (
+              <View style={styles.skipBanner}>
+                <Feather name="skip-forward" size={12} color={colors.healthAmber} />
+                <Text style={styles.skipBannerText}>
+                  {(openSkips?.size ?? 0) === 1 ? '1 upcoming occurrence skipped' : `${openSkips?.size} upcoming occurrences skipped`}
+                </Text>
+              </View>
+            )}
+
+            {openRule.recur_state !== 'ended' && (
+              <View style={styles.actions}>
+                {/* Skip: only when there's a real future occurrence inside the series end date. */}
+                {openRule.recur_state === 'active' && openNext !== null && (
+                  <ActionBtn icon="skip-forward" label="Skip" tint={colors.textSecondary} onPress={() => act(skipNext)} />
+                )}
+                {openHasSkips && (
+                  <ActionBtn icon="rotate-ccw" label="Undo Skip" tint={colors.accent} onPress={() => act(undoSkip)} />
+                )}
+                {openRule.recur_state === 'active' && openNext !== null ? (
+                  <ActionBtn icon="pause" label="Pause" tint={colors.healthAmber} onPress={() => act(pause)} />
+                ) : openRule.recur_state === 'paused' ? (
+                  <ActionBtn icon="play" label="Resume" tint={colors.income} onPress={() => act(resume)} />
+                ) : null}
+                <ActionBtn icon="x-circle" label="Stop" tint={colors.expense} onPress={() => act(end)} />
+              </View>
+            )}
+          </>
+        )}
+      </SheetModal>
     </View>
+  );
+}
+
+function ActionBtn({ icon, label, tint, onPress }: {
+  icon: keyof typeof Feather.glyphMap; label: string; tint: string; onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.actionBtn} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Feather name={icon} size={14} color={tint} />
+      <Text style={[styles.actionText, { color: tint }]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
-  cardHighlight: { borderColor: colors.accent, borderWidth: 1.5, backgroundColor: colors.accentMuted },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  iconDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  cat: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  freq: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
-  amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },
-  statePill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, marginTop: space.xs },
-  stateText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  metaRow: { flexDirection: 'row', marginTop: space.md, gap: space.lg },
+  // No `gap`: the rows are card-grouped now, and a container gap would slice the
+  // card into separate slabs (AGENTS §12).
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
+  highlight: { backgroundColor: colors.accentMuted },
+
+  metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, marginBottom: space.md },
   metaItem: { flex: 1 },
   metaLabel: { ...type.caption, color: colors.textMuted },
   metaVal: { ...type.label, color: colors.textPrimary, marginTop: 2 },
-  skipBanner: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, backgroundColor: alpha(colors.healthAmber, 9), borderRadius: radius.sm },
+  statePill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill },
+  stateText: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
+
+  skipBanner: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.md, paddingHorizontal: space.sm, paddingVertical: space.xs, backgroundColor: alpha(colors.healthAmber, 9), borderRadius: radius.sm },
   skipBannerText: { ...type.caption, color: colors.healthAmber },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgMuted },
+
+  actions: { flexDirection: 'row', gap: space.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, minHeight: layout.touchMin, borderRadius: radius.md, backgroundColor: colors.bgMuted },
   actionText: { ...type.label, fontFamily: 'Inter_600SemiBold' },
 });

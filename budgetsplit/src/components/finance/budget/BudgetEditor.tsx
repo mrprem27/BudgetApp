@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, findNodeHandle } from 'react
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../tokens';
+import { colors, type, space, layout } from '../../tokens';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { EmptyState } from '../../ui/EmptyState';
@@ -11,6 +11,8 @@ import { ErrorState } from '../../ui/ErrorState';
 import { SheetModal } from '../../ui/SheetModal';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { SectionCard } from '../../ui/SectionCard';
+import { Banner } from '../../ui/Banner';
+import { OverviewCard } from '../../ui/OverviewCard';
 import { TabPills } from '../../ui/TabPills';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
@@ -18,7 +20,7 @@ import { ListRow } from '../../ui/ListRow';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { useBudgetEditor } from '../../../hooks/useBudgetEditor';
 import { rollUpBudgets } from '../../../lib/budget';
-import { formatRupees, formatCompact, parseToPaise } from '../../../lib/money';
+import { formatCompact, parseToPaise } from '../../../lib/money';
 import { categoryVisual } from '../../../constants/categories';
 import type { FeatherName } from '../../../constants/palette';
 import type { BudgetCadence, BudgetLevel } from '../../../db/queries/categoryBudgets';
@@ -97,6 +99,28 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
   const today = new Date();
   const inherited = e.level === 'personal' ? e.inherited : {};
 
+  /**
+   * The hero's second quantity.
+   *
+   * My Budget has a real target — the monthly figure you gave at setup — so the bar
+   * measures allocation against it and the tint answers "am I over?". A group has no
+   * such target, and inventing one would be a lie, so there the honest second number
+   * is coverage: how many of your categories have a line at all. This used to be a
+   * sentence ("At setup you said about ₹40,000 a month…") that only appeared while
+   * the total was exactly zero, which is the one moment it couldn't tell you anything.
+   */
+  const hasTarget = scope === 'global' && e.budgetTarget > 0;
+  const overTarget = hasTarget && e.rollup.amount > e.budgetTarget;
+  const targetPct = hasTarget && e.budgetTarget > 0
+    ? `${Math.round((e.rollup.amount / e.budgetTarget) * 100)}%`
+    : undefined;
+  const barProgress = hasTarget
+    ? e.rollup.amount / e.budgetTarget
+    : e.cats.length > 0 ? e.budgetedCount / e.cats.length : 0;
+  const heroSupporting = hasTarget
+    ? `of ${formatCompact(e.budgetTarget)} you set at setup · ${e.budgetedCount} of ${e.cats.length} categories set`
+    : `${e.budgetedCount} of ${e.cats.length} ${e.cats.length === 1 ? 'category' : 'categories'} set`;
+
   return (
     <View style={styles.container}>
       <ScreenHeader title={e.copy.title} onBack={() => router.back()} />
@@ -115,6 +139,40 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           automaticallyAdjustKeyboardInsets
           refreshControl={<AppRefreshControl refreshing={e.refreshing} onRefresh={e.onRefresh} />}
         >
+          {/* The hero, then the control that qualifies it. The level pills used to
+              come first, so the screen opened with a switch before you knew what it
+              switched — and the figure below it is exactly what it switches. Every
+              other screen in the app goes summary-then-TabPills. */}
+          <OverviewCard
+            size="xl"
+            style={styles.hero}
+            eyebrow={e.copy.heroLabel}
+            amount={e.rollup.amount}
+            /* Not `colors.accent`: §10 reserves it for tappable/active/selected, and a
+               36px teal figure directly above a teal Save button read as two CTAs.
+               Colour now means something — amber only when you're past the target you
+               set for yourself. */
+            amountColor={overTarget ? colors.healthAmber : colors.textPrimary}
+            trailing={targetPct}
+            trailingColor={overTarget ? colors.healthAmber : colors.textSecondary}
+            supporting={heroSupporting}
+            /* Pools are excluded from the figure above on purpose (₹24k/yr is not
+               ₹2k/mo), so they are named here rather than vanishing from it. Nothing
+               is said when there are none: the old copy read " · one-time not counted"
+               on every budget that had no pools, naming an exclusion that wasn't
+               happening. */
+            supportingSecondary={e.rollup.pooledCount > 0
+              ? `plus ${formatCompact(e.rollup.pooled)} in ${e.rollup.pooledCount} yearly`
+              : undefined}
+            /* Progress toward a real target where one exists; otherwise coverage of
+               your categories. Never an invented target — a group has none. */
+            bar={{
+              progress: barProgress,
+              color: overTarget ? colors.healthAmber : colors.accent,
+              accessibilityLabel: heroSupporting,
+            }}
+          />
+
           {/* Segmented, not chips: this is "pick exactly one", and the two are
               alternatives rather than toggles. */}
           {e.levelControlVisible && (
@@ -132,30 +190,18 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           )}
           {!e.levelControlVisible && <Text style={styles.hint}>{e.copy.hint}</Text>}
 
-          <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>{e.copy.heroLabel}</Text>
-            <Text style={styles.totalAmount}>{formatRupees(e.rollup.amount)}</Text>
-            <Text style={styles.totalSub}>
-              {e.budgetedCount} {e.budgetedCount === 1 ? 'category' : 'categories'} budgeted
-              {/* Pools are excluded from the figure above on purpose (₹24k/yr is not
-                  ₹2k/mo), so they are named here rather than vanishing from it. */}
-              {e.rollup.pooledCount > 0
-                ? ` · plus ${formatCompact(e.rollup.pooled)} in ${e.rollup.pooledCount} yearly/one-time`
-                : ' · one-time not counted'}
-            </Text>
-          </View>
-
-          {scope === 'global' && e.budgetTarget > 0 && e.rollup.amount === 0 && (
-            <Text style={styles.explain}>
-              At setup you said about {formatCompact(e.budgetTarget)} a month. Set the
-              categories that add up to it.
-            </Text>
+          {/* How periods work is a product rule, not a status — shown forever it was
+              wallpaper. It appears only while nothing is budgeted yet, which is the
+              one moment it's news, and self-dismisses as soon as you set a line. */}
+          {e.budgetedCount === 0 && (
+            <Banner
+              icon="info"
+              text={scope === 'group'
+                ? 'Per person, not the group total. Each period resets.'
+                : 'Each period starts fresh — nothing carries over.'}
+              inset={false}
+            />
           )}
-
-          <Text style={styles.explain}>
-            {scope === 'group' ? 'Amounts are per person, not the group total. ' : ''}
-            Each period starts fresh — limits reset and unused amounts don't carry over.
-          </Text>
 
           {e.outside.length > 0 && (
             <SectionCard
@@ -178,9 +224,10 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
                   />
                 </View>
               ))}
-              <Text style={styles.explain}>
-                These have a budget here but are not in your category list, so they show as
-                “Others” elsewhere. Tap one to add it — the amount does not change.
+              {/* Padded: as a bare child of the card body this sat flush against the
+                  card's edge while every row above it was inset by `space.md`. */}
+              <Text style={styles.cardNote}>
+                These show as “Others” elsewhere. Tap one to add it — the amount doesn't change.
               </Text>
             </SectionCard>
           )}
@@ -203,9 +250,13 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
                 expanded={!e.collapsed.has(sec.title)}
                 onToggle={() => e.toggleSection(sec.title)}
               >
-                {sec.cats.map(c => (
+                {/* `i > 0`, not unconditional: a divider as the *first* child welded
+                    the header to the body and made the disclosure chevron look like it
+                    belonged to row 1. The "Not in your categories" card above already
+                    had this right. */}
+                {sec.cats.map((c, i) => (
                   <View key={c.name} ref={c.name === focusCategory ? focusRowRef : undefined}>
-                    <Divider indent="text" />
+                    {i > 0 && <Divider indent="text" />}
                     <BudgetAmountRow
                       category={c.name}
                       value={e.form.amounts[c.name] ?? ''}
@@ -270,17 +321,13 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { flex: 1 },
-  scroll: { padding: layout.screenPaddingH, gap: space.md },
-  levelWrap: { gap: space.sm },
+  // No `gap`: it stacked with `SectionCard`'s own `marginBottom: space.md`, putting
+  // 32px between every section (AGENTS §3). Blocks that need space say so themselves.
+  scroll: { padding: layout.screenPaddingH },
+  hero: { marginBottom: space.md },
+  levelWrap: { gap: space.sm, marginBottom: space.md },
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
-  totalCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1,
-    borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md,
-  },
-  totalLabel: { ...type.label, color: colors.textSecondary },
-  totalAmount: { ...type.amountXL, color: colors.accent },
-  totalSub: { ...type.caption, color: colors.textMuted },
-  explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
+  cardNote: { ...type.caption, color: colors.textMuted, lineHeight: 16, paddingHorizontal: space.md, paddingBottom: space.md },
   footer: {
     paddingHorizontal: layout.screenPaddingH, paddingTop: space.md,
     borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg,

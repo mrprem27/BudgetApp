@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
+import { colors, type, space, layout } from '../../../src/theme';
 import { AVATAR_COLORS } from '../../../src/constants/categories';
 import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../src/db/queries/persons';
 import { pickAndSaveAvatar } from '../../../src/lib/avatar';
@@ -17,7 +17,6 @@ import { getGroupNet } from '../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
-import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../src/lib/money';
@@ -25,7 +24,9 @@ import { oweView } from '../../../src/lib/owe';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../src/lib/haptics';
 import type { Person } from '../../../src/db/queries/persons';
-import { IconCircle } from '../../../src/components/ui/IconCircle';
+import { Card } from '../../../src/components/ui/Card';
+import { Divider } from '../../../src/components/ui/Divider';
+import { ListRow } from '../../../src/components/ui/ListRow';
 import { PersonNameSheet } from '../../../src/components/finance/PersonNameSheet';
 import { getMe } from '../../../src/db/queries/persons';
 import { getGroupContext, getGroupMembersWithRoles, setMemberRole } from '../../../src/db/queries/groups';
@@ -174,7 +175,7 @@ export default function MembersScreen() {
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {members.length > 0 && (
-          <View style={styles.membersCard}>
+          <Card clip style={styles.membersCard}>
             {members.map((item, index) => {
               const renderRightActions = () => (
                 <TouchableOpacity
@@ -187,79 +188,85 @@ export default function MembersScreen() {
                   <Text style={styles.swipeActionText}>Remove</Text>
                 </TouchableOpacity>
               );
+              const role = roleOf.get(item.id);
+              // Creator outranks admin as a label: "Admin" is a role that can be taken
+              // away, "Creator" never can, and that difference is the whole point of the
+              // protection. It rides in the subtitle rather than a badge beside the name
+              // because `ListRow`'s title is a single string — and one line of
+              // "Creator · Owes ₹2,100" reads better than a badge plus a second line.
+              const balance = net[item.id] ?? 0;
+              const ov = balance !== 0 ? oweView(balance) : null;
+              const roleWord = role?.is_creator ? 'Creator' : role?.role === 'admin' ? 'Admin' : null;
+              const subtitle = [roleWord, ov ? `${ov.thirdPerson} ${formatRupees(ov.amount)}` : null]
+                .filter(Boolean).join(' · ') || undefined;
               return (
-                <Swipeable
-                  key={item.id}
-                  ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
-                  renderRightActions={item.is_me ? undefined : renderRightActions}
-                  overshootRight={false}
-                  friction={2}
-                >
-                  <View style={[styles.row, index < members.length - 1 && styles.rowBorder]}>
-                    <MemberAvatar
-                      name={item.name}
-                      color={item.avatar_color}
-                      size={36}
-                      imageUri={item.image_uri}
-                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); refresh(); } }}
-                    />
-                    <TouchableOpacity
-                      style={{ flex: 1 }}
-                      onPress={() => openRename(item)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Rename ${item.name}`}
-                    >
-                      <View style={styles.nameRow}>
-                        <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-                        {/* Creator outranks admin as a label: "Admin" is a role that can
-                            be taken away, "Creator" never can, and the difference is the
-                            whole point of the protection. */}
-                        {roleOf.get(item.id)?.is_creator ? (
-                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Creator</Text></View>
-                        ) : roleOf.get(item.id)?.role === 'admin' ? (
-                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Admin</Text></View>
-                        ) : null}
+                <React.Fragment key={item.id}>
+                  {/* Outside the Swipeable: a divider inside it slides away with the
+                      row and leaves a gap in the card while the action is open. */}
+                  {index > 0 && <Divider indent="text" />}
+                  <Swipeable
+                    ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
+                    renderRightActions={item.is_me ? undefined : renderRightActions}
+                    overshootRight={false}
+                    friction={2}
+                  >
+                  {/* The row must be opaque: it translates over the red Remove action,
+                      which would otherwise show through it. `Card`'s background is
+                      behind the Swipeable, not behind the sliding row. */}
+                  <View style={styles.rowSurface}>
+                  <ListRow
+                    leading={
+                      <MemberAvatar
+                        name={item.name}
+                        color={item.avatar_color}
+                        size={layout.avatarSize}
+                        imageUri={item.image_uri}
+                        onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); refresh(); } }}
+                      />
+                    }
+                    title={`${item.name}${item.is_me ? ' (me)' : ''}`}
+                    subtitle={subtitle}
+                    /* The row itself renames; the shield is a separate, smaller target
+                       for a different action, so the row gets no chevron competing
+                       with it. */
+                    chevron={false}
+                    onPress={() => openRename(item)}
+                    accessibilityLabel={`Rename ${item.name}`}
+                    value={
+                      <View style={styles.rowActions}>
+                        {mayManage && canChangeRole(ctx!, item.id) && (
+                          <TouchableOpacity
+                            onPress={() => toggleAdmin(item)}
+                            hitSlop={10}
+                            accessibilityRole="button"
+                            accessibilityLabel={role?.role === 'admin' ? `Remove admin from ${item.name}` : `Make ${item.name} an admin`}
+                          >
+                            <Feather
+                              name={role?.role === 'admin' ? 'shield-off' : 'shield'}
+                              size={16}
+                              color={role?.role === 'admin' ? colors.accent : colors.textMuted}
+                            />
+                          </TouchableOpacity>
+                        )}
+                        <Feather name="edit-2" size={16} color={colors.textMuted} />
                       </View>
-                      {net[item.id] !== undefined && net[item.id] !== 0 && (() => {
-                        const ov = oweView(net[item.id]);
-                        return (
-                          <Text style={[styles.netText, { color: ov.color }]}>
-                            {ov.thirdPerson} {formatRupees(ov.amount)}
-                          </Text>
-                        );
-                      })()}
-                    </TouchableOpacity>
-                    {mayManage && canChangeRole(ctx!, item.id) && (
-                      <TouchableOpacity
-                        onPress={() => toggleAdmin(item)}
-                        hitSlop={10}
-                        accessibilityRole="button"
-                        accessibilityLabel={roleOf.get(item.id)?.role === 'admin' ? `Remove admin from ${item.name}` : `Make ${item.name} an admin`}
-                      >
-                        <Feather
-                          name={roleOf.get(item.id)?.role === 'admin' ? 'shield-off' : 'shield'}
-                          size={15}
-                          color={roleOf.get(item.id)?.role === 'admin' ? colors.accent : colors.textMuted}
-                        />
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
-                      <Feather name="edit-2" size={15} color={colors.textMuted} />
-                    </TouchableOpacity>
+                    }
+                  />
                   </View>
-                </Swipeable>
+                  </Swipeable>
+                </React.Fragment>
               );
             })}
-          </View>
+          </Card>
         )}
 
-        <View style={styles.addButtons}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
-            <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-            <Text style={styles.addBtnText}>Add or create person</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        </View>
+        <Card clip>
+          <ListRow
+            icon="user-plus"
+            title="Add or create person"
+            onPress={() => { setPendingIds([]); setShowAdd(true); }}
+          />
+        </Card>
       </ScrollView>
       )}
 
@@ -302,37 +309,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
 
-  membersCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadow.sm,
-    marginBottom: space.md,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52, backgroundColor: colors.bgCard },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
-  roleBadge: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
-  roleBadgeText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  netText: { ...type.caption, marginTop: 2 },
+  membersCard: { marginBottom: space.md },
+  rowSurface: { backgroundColor: colors.bgCard },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },
   swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
 
   addCommit: { marginTop: space.sm },
-  addButtons: { gap: space.sm },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.sm,
-  },
-  addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 });

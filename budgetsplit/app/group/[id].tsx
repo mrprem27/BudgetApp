@@ -1,26 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, type, space, radius, layout } from '../../src/theme';
-import { getGroupById, setSimplifyDebt, archiveGroupSafe, getGroupContext } from '../../src/db/queries/groups';
-import { getTransactionsForGroup } from '../../src/db/queries/transactions';
-import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
-import { useScreenData } from '../../src/hooks/useScreenData';
+import { colors, space, layout } from '../../src/theme';
+import { setSimplifyDebt, archiveGroupSafe } from '../../src/db/queries/groups';
+import { useGroupDetail } from '../../src/hooks/useGroupDetail';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
-import { getGroupNet } from '../../src/db/queries/balances';
-import { getCategoryBudgetStatus } from '../../src/lib/budget';
-import type { CategoryBudgetStatus } from '../../src/lib/budget';
-import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { canEditGroupBudget } from '../../src/lib/permissions';
-import type { BudgetAnalytics } from '../../src/lib/analytics';
-import { simplify, rawDebts } from '../../src/lib/settle';
-import {
-  computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
-} from '../../src/lib/groupDetail';
 import { haptic } from '../../src/lib/haptics';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -29,14 +16,15 @@ import { TabPills } from '../../src/components/ui/TabPills';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { FAB } from '../../src/components/ui/FAB';
-import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
-import { GroupHero } from '../../src/components/finance/group/GroupHero';
-import { GroupBalanceCard } from '../../src/components/finance/group/GroupBalanceCard';
+import { Card } from '../../src/components/ui/Card';
+import { Divider } from '../../src/components/ui/Divider';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { GroupHeader } from '../../src/components/finance/group/GroupHeader';
 import { TransactionsTab } from '../../src/components/finance/group/TransactionsTab';
 import { BudgetTab } from '../../src/components/finance/group/BudgetTab';
 import { RebalanceSheet } from '../../src/components/finance/group/RebalanceSheet';
 import { planRebalance, applyRebalance, type RebalancePlan } from '../../src/lib/rebalance';
-import { setCategoryBudgets, getCategoryBudgetRows } from '../../src/db/queries/categoryBudgets';
+import { setCategoryBudgets } from '../../src/db/queries/categoryBudgets';
 import { MembersTab } from '../../src/components/finance/group/MembersTab';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
@@ -49,8 +37,11 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
+  // The Expenses tab's filters live here, not in the tab: all four tabs unmount on
+  // switch, so a tab-local search box emptied itself on every glance at another tab.
+  const [search, setSearch] = useState('');
+  const [filterKind, setFilterKind] = useState('all');
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   // A budget write moves Home's pace and Insights, so it needs the global signal.
@@ -59,58 +50,22 @@ export default function GroupDetailScreen() {
   const [rebalance, setRebalance] = useState<RebalancePlan | null>(null);
   const [applyingRebalance, setApplyingRebalance] = useState(false);
 
-  // Pure read: group + its txns/members/balances/budget/recurring. Refetches on
-  // focus and on cross-screen writes; retry = reload().
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [grp, txnList, memberList, meRow] = await Promise.all([
-      getGroupById(db, id),
-      getTransactionsForGroup(db, id),
-      getGroupMembers(db, id),
-      getMe(db),
-    ]);
-    const netMap = await getGroupNet(db, id);
-
-    let ctx: Awaited<ReturnType<typeof getGroupContext>> | null = null;
-    let overrideCount = 0;
-    let catStatus: CategoryBudgetStatus[] = [];
-    let analytics: BudgetAnalytics | null = null;
-    let recurringRules: TxnWithSplits[] = [];
-    let recurSkips = new Map<string, Set<number>>();
-    if (grp) {
-      const meId = meRow?.id ?? '';
-      const [cs, an, gctx, budgetRows] = await Promise.all([
-        getCategoryBudgetStatus(db, grp, { meId }),
-        getBudgetAnalytics(db, grp, { meId }),
-        getGroupContext(db, id, meId),
-        getCategoryBudgetRows(db, id),
-      ]);
-      ctx = gctx;
-      overrideCount = budgetRows.filter(r => r.person_id === meId && r.amount > 0).length;
-      catStatus = cs;
-      analytics = an;
-      const rules = await getRecurringForGroup(db, id);
-      recurringRules = rules.filter(r => r.recur_state === 'active');
-      recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
-    }
-    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };
-  }, [id]);
-
-  const group = data?.group ?? null;
-  const txns = data?.txns ?? [];
-  const members = data?.members ?? [];
-  const me = data?.me ?? null;
-  const net = data?.net ?? {};
-  const catStatus = data?.catStatus ?? [];
-  const analytics = data?.analytics ?? null;
-  const recurringRules = data?.recurringRules ?? [];
-  const recurSkips = data?.recurSkips;
-  const meId = me?.id ?? '';
-  const isPersonal = group?.is_personal === 1;
+  // Reads and derivations live in the hook; this screen composes (AGENTS "screen
+  // thinness"). `simplifyOn` is passed in because it selects between two settlement
+  // plans, and stays here because the screen is what writes it back.
+  const g = useGroupDetail(id, simplifyOn);
+  const {
+    group, txns, members, net, meId, catStatus, analytics, recurringRules, recurSkips,
+    isPersonal, settlements, personMap, contributions,
+    recurringMonthlyTotal, recurringMyShare, recurNextLabel,
+    totalSpent, myNet, settleWith, settleSummary,
+    loading, error, refreshing, onRefresh, reload,
+  } = g;
 
   const { handleDelete, handleEditTxn } = useGroupTxnActions(id, reload);
 
   // Seed the simplify toggle from the group's saved preference on each fresh row.
-  useEffect(() => { if (data?.group) setSimplifyOn(data.group.simplify_debt === 1); }, [data?.group]);
+  useEffect(() => { if (group) setSimplifyOn(group.simplify_debt === 1); }, [group]);
 
   /**
    * `/personal` is the canonical personal screen (AUDIT S-14 / DEBT-03). This route
@@ -140,24 +95,25 @@ export default function GroupDetailScreen() {
     await setSimplifyDebt(db, id, on);
   }
 
-  // simplify(net) feeds both the balance card and the settlements list — memoize once.
-  const simplifiedSettles = useMemo(() => simplify(net), [net]);
-  const settlements = useMemo(() => (simplifyOn ? simplifiedSettles : rawDebts(txns)), [simplifyOn, simplifiedSettles, txns]);
-  const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
-  const contributions = useMemo(() => computeContributions(txns, members, net), [txns, members, net]);
-  const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
-  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
-  const totalSpent = useMemo(
-    () => txns.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
-    [txns],
+  const handleSettleWith = useCallback(
+    (personId: string) => router.push(`/add/quick?kind=transfer&to=${personId}`),
+    [router],
   );
 
-  const TABS: { key: TabKey; label: string }[] = [
-    { key: 'transactions', label: 'Expenses' },
-    { key: 'recurring', label: 'Recurring' },
-    { key: 'budget', label: 'Budget' },
-    { key: 'members', label: 'Members' },
-  ];
+  /**
+   * The badges are counts, not alarms — `TabPills` renders them at 0.75 opacity of
+   * the label colour, so severity stays on the tab's own summary card. `|| undefined`
+   * throughout because a `0` badge is noise, and Budget's over-count is 0 most days.
+   *
+   * Memoized because the search box below now lives on this screen: without it the
+   * pills would get a fresh array on every keystroke.
+   */
+  const TABS = useMemo(() => [
+    { key: 'transactions', label: 'Expenses', badge: txns.length || undefined },
+    { key: 'recurring', label: 'Recurring', badge: recurringRules.length || undefined },
+    { key: 'budget', label: 'Budget', badge: analytics?.overBudget.length || undefined },
+    { key: 'members', label: 'Members', badge: members.length || undefined },
+  ], [txns.length, recurringRules.length, analytics?.overBudget.length, members.length]);
 
   // Recoverable states — never a blank dead-end.
   if (error) {
@@ -186,8 +142,8 @@ export default function GroupDetailScreen() {
           `+ space.sm`, so the header jumped 4px on each push. It also rendered
           `ScreenHeader` in its error/not-found branches and a breadcrumb here, so
           the header changed shape depending on load state.
-          The title names where Back goes — `GroupHero` right below already carries
-          the group's name at 26px, so repeating it here would just be redundant. */}
+          The title names where Back goes — `GroupHeader` right below already carries
+          the group's name, so repeating it here would just be redundant. */}
       <ScreenHeader
         title="Groups"
         onBack={() => router.back()}
@@ -198,25 +154,28 @@ export default function GroupDetailScreen() {
         }
       />
 
-      <GroupHero group={group} members={members} />
-
-      <GroupBalanceCard
-        net={net}
-        meId={meId}
-        simplifiedSettles={simplifiedSettles}
-        personMap={personMap}
-        onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
+      {/* One card, one hero. `myNet` and `settleWith` are passed already resolved so
+          `GroupHeader`'s memo holds — `net` and `simplifiedSettles` are fresh objects
+          on every load and every keystroke in the lifted search box. */}
+      <GroupHeader
+        group={group}
+        members={members}
+        myNet={myNet}
+        settleWith={settleWith}
+        onSettle={handleSettleWith}
       />
 
       {/* `TabPills`, not a local copy of it. This strip was a byte-for-byte
           duplicate of that component's intent at different values (borderRadius 10
           vs radius.pill, 32pt tall vs 36, fontSize 12) — and `personal.tsx` held an
           identical copy of the duplicate. */}
+      {/* No haptic on change: AGENTS §7 lists tab switching under "NEVER", and the
+          sliding indicator is already the feedback. */}
       <View style={styles.tabs}>
         <TabPills
           tabs={TABS}
           active={activeTab}
-          onChange={(k) => { setActiveTab(k as TabKey); haptic.selection(); }}
+          onChange={(k) => setActiveTab(k as TabKey)}
         />
       </View>
 
@@ -230,6 +189,10 @@ export default function GroupDetailScreen() {
           onEditTxn={handleEditTxn}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          search={search}
+          onSearch={setSearch}
+          filterKind={filterKind}
+          onFilterKind={setFilterKind}
         />
       )}
 
@@ -242,8 +205,8 @@ export default function GroupDetailScreen() {
           onEditBudget={() => router.push(`/group/${id}/budget`)}
           onCreateBudget={() => router.push(`/group/${id}/budget`)}
           onRebalance={(category) => setRebalance(planRebalance(catStatus, category))}
-          canEditGroupDefault={data?.ctx ? canEditGroupBudget(data.ctx) : false}
-          overrideCount={data?.overrideCount ?? 0}
+          canEditGroupDefault={g.ctx ? canEditGroupBudget(g.ctx) : false}
+          overrideCount={g.overrideCount}
         />
       )}
 
@@ -261,8 +224,10 @@ export default function GroupDetailScreen() {
           onToggleSimplify={handleToggleSimplify}
           onInvite={() => router.push(`/group/${id}/members`)}
           onSettlePair={(from, to, amount) => router.push(`/add/quick?kind=transfer&from=${from}&to=${to}&amount=${amount}&groupId=${id}`)}
+          onAddExpense={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           groupName={group.name}
           contributions={contributions}
+          summary={settleSummary}
         />
       )}
 
@@ -275,6 +240,7 @@ export default function GroupDetailScreen() {
           meId={meId}
           defaultSplit={group.default_split}
           monthlyTotal={recurringMonthlyTotal}
+          myShare={recurringMyShare}
           nextLabel={recurNextLabel}
           onAdd={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           onOpenRule={(ruleId) => router.push(`/group/${id}/recurring?focus=${ruleId}`)}
@@ -285,28 +251,31 @@ export default function GroupDetailScreen() {
       <FAB onPress={() => router.push(`/add/quick?groupId=${id}&kind=expense`)} aboveTabBar={false} />
 
       {/* Group options menu */}
+      {/* One `Card` of `ListRow`s, archive included — it used to be a hand-rolled
+          `bgInput` card plus a separate hand-rolled destructive button below it,
+          so the sheet had two chromes for one menu. `ListRow` carries `danger`. */}
       <SheetModal visible={showMenu} onClose={() => setShowMenu(false)} title={group.name} scroll={false}>
-        <View style={styles.menuCard}>
-          <SettingsRow icon="clock" label="Audit log" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="edit-2" label="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
-        </View>
-        <TouchableOpacity
-          style={styles.archiveBtn}
-          onPress={() => {
-            setShowMenu(false);
-            Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroupSafe(db, id); if (ok) { haptic.warning(); router.back(); } } },
-            ]);
-          }}
-          accessibilityRole="button"
-        >
-          <Feather name="archive" size={16} color={colors.expense} />
-          <Text style={styles.archiveText}>Archive group</Text>
-        </TouchableOpacity>
+        <Card clip>
+          <ListRow icon="clock" title="Audit log" onPress={() => { setShowMenu(false); router.push(`/history?groupId=${id}`); }} />
+          <Divider indent="text" />
+          <ListRow icon="download" title="Export as CSV" onPress={handleExport} />
+          <Divider indent="text" />
+          <ListRow icon="edit-2" title="Edit group" onPress={() => { setShowMenu(false); router.push(`/group/${id}/edit`); }} />
+          <Divider indent="text" />
+          <ListRow
+            danger
+            icon="archive"
+            title="Archive group"
+            subtitle="Hides it from Groups. Its data is kept."
+            onPress={() => {
+              setShowMenu(false);
+              Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroupSafe(db, id); if (ok) { haptic.warning(); router.back(); } } },
+              ]);
+            }}
+          />
+        </Card>
       </SheetModal>
       <RebalanceSheet
         plan={rebalance}
@@ -333,7 +302,4 @@ export default function GroupDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
-  menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
-  archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 });
