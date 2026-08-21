@@ -10,7 +10,15 @@ import { OTHERS_LABEL } from './categoryFold';
 import { myShareOf } from './splitMath';
 import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudgets';
 
-export type Period = 'daily' | 'monthly' | 'yearly';
+/**
+ * The period a rollup is expressed over.
+ *
+ * Structurally identical to `BudgetCadence` now that `once` is gone, and kept as
+ * its own name because the two play different roles in `budgetKind(cadence,
+ * target)`: one is a property of a *line*, the other is what the *screen* is
+ * asking for. They share one rank table below, so they cannot drift.
+ */
+export type Period = BudgetCadence;
 
 export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
 
@@ -77,12 +85,8 @@ export function resolveBudgetLines<T extends { category: string; cadence: Budget
  */
 export type BudgetKind = 'rate' | 'pool';
 
-/**
- * Cadences ordered fine → coarse. `once` is coarser than everything: it has no
- * period at all, so it can never roll up into one.
- */
-const CADENCE_RANK: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
-const PERIOD_RANK: Record<Period, number> = { daily: 0, monthly: 1, yearly: 2 };
+/** Cadences ordered fine → coarse. Serves both sides of `budgetKind`. */
+const CADENCE_RANK: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2 };
 
 /**
  * Is this line a rate or a pool **relative to the headline being shown**?
@@ -93,7 +97,7 @@ const PERIOD_RANK: Record<Period, number> = { daily: 0, monthly: 1, yearly: 2 };
  * rolls up; anything coarser is a pool, because rolling *down* is the error.
  */
 export function budgetKind(cadence: BudgetCadence, target: Period): BudgetKind {
-  return CADENCE_RANK[cadence] <= PERIOD_RANK[target] ? 'rate' : 'pool';
+  return CADENCE_RANK[cadence] <= CADENCE_RANK[target] ? 'rate' : 'pool';
 }
 
 /**
@@ -261,18 +265,12 @@ export type CategoryBudgetStatus = {
  * weeks before the money moved. Future-dated commitments are a separate idea and
  * already have a home — `upcomingBills` in `getAffordSnapshot`.
  *
- * Also serves an *aggregate* at a target `Period`, since `Period` is a subset of
- * `BudgetCadence` and the rule is the same one. `analytics.ts` had this written out
- * twice more (`currentWindow`, `targetWindow`) before they were folded in here.
+ * Also serves an *aggregate* at a target `Period`, which is the same vocabulary
+ * and the same rule. `analytics.ts` had this written out twice more
+ * (`currentWindow`, `targetWindow`) before they were folded in here.
  */
 export function windowForCadence(cadence: BudgetCadence, now: Date): { from: number; to: number } {
-  const to = now.getTime();
-  switch (cadence) {
-    case 'daily':   return { from: getPeriodRange('daily', now).from, to };
-    case 'monthly': return { from: getPeriodRange('monthly', now).from, to };
-    case 'yearly':  return { from: getPeriodRange('yearly', now).from, to };
-    case 'once':    return { from: 0, to }; // cumulative, all-time
-  }
+  return { from: getPeriodRange(cadence, now).from, to: now.getTime() };
 }
 
 /**
@@ -360,8 +358,7 @@ export function foldBudgetStatuses(
 
 /** Shared ordering: coarser cadence later, most-used first inside a cadence. */
 function sortStatusRows(rows: CategoryBudgetStatus[]): CategoryBudgetStatus[] {
-  const order: Record<BudgetCadence, number> = { daily: 0, monthly: 1, yearly: 2, once: 3 };
-  return rows.sort((a, b) => order[a.cadence] - order[b.cadence] || (b.pct ?? 0) - (a.pct ?? 0));
+  return rows.sort((a, b) => CADENCE_RANK[a.cadence] - CADENCE_RANK[b.cadence] || (b.pct ?? 0) - (a.pct ?? 0));
 }
 
 function statusRows(budgets: CategoryBudget[], spendByCadence: Record<string, Record<string, number>>): CategoryBudgetStatus[] {

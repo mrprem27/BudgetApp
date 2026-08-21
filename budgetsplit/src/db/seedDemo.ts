@@ -285,7 +285,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { category: 'Electricity', cadence: 'monthly', amount: R(2500) },
     { category: 'Chai & Snacks', cadence: 'daily', amount: R(50) },     // daily cadence
     { category: 'Insurance', cadence: 'yearly', amount: R(12000) },     // yearly cadence
-    { category: 'Education', cadence: 'once', amount: R(6000) },        // one-time cadence (kept small so it doesn't dwarf the monthly pace)
+    { category: 'Education', cadence: 'yearly', amount: R(6000) },      // second yearly line — pooled on Month, counted on Year
   ], { level: 'group', actorId: meId });
   await setCategoryBudgets(db, roommates.id, [
     { category: 'Groceries', cadence: 'monthly', amount: R(6000) },

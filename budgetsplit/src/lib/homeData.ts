@@ -16,7 +16,7 @@ import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
 import { settings } from './settings';
 import { myShareOf, myIncomeOf } from './splitMath';
-import { getMyGlobalBudgetSummary } from './budget';
+import { getMyGlobalBudgetSummary, budgetEquivalent, type Period } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { forecastMonthEnd, type Forecast } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
@@ -35,6 +35,19 @@ import type { BudgetGroup } from '../db/queries/groups';
  */
 
 export type TabKey = 'today' | 'month' | 'year';
+
+/**
+ * The period each pill rolls budgets up into — and, because `Period` and
+ * `BudgetCadence` share a vocabulary, also the noun the empty state says when
+ * nothing is budgeted at that period ("No daily budget set").
+ *
+ * The rule this encodes lives in `budgetKind`: a line counts toward a headline
+ * only when its cadence is at or finer than the headline's period. Today sees
+ * daily lines, Month sees daily + monthly, Year sees all three.
+ */
+export const TARGET_FOR_TAB: Record<TabKey, Period> = {
+  today: 'daily', month: 'monthly', year: 'yearly',
+};
 
 export function getRange(tab: TabKey): { from: number; to: number } {
   const now = new Date();
@@ -81,7 +94,7 @@ export async function loadHomeData(
         meInfo: null as { name: string; color: string; image: string | null } | null,
         spending: 0, income: 0, prevSpending: 0,
         oweTotal: 0, owedTotal: 0, reviewCount: 0,
-        budget: { allocated: 0, spent: 0 },
+        budget: { allocated: 0, spent: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
         catRows: [] as CategoryRow[], catTotal: 0,
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
@@ -151,13 +164,54 @@ export async function loadHomeData(
      * against my budget. Both halves now share my-share, all-groups basis, and the
      * health score is rebased onto them.
      */
-    const mine = await getMyGlobalBudgetSummary(db, me.id);
+    /*
+     * TWO summaries, because Home asks two different questions.
+     *
+     * `monthly` is the health engine's basis and never moves. Its inputs are
+     * month-shaped (`dayOfMonth`, `daysInMonth`), so a score that re-based itself
+     * on whichever pill was tapped would swing between three different numbers
+     * for the same finances.
+     *
+     * `mine` is the pace bar's, rolled up at the period the pills select. The
+     * screen used to take the monthly figure and divide it by days-in-month for
+     * Today and multiply it by 12 for Year. Both are wrong in the same way: the
+     * first rolls a monthly line *down* into a day — the error `budgetKind`
+     * exists to name, and the one a single rent payment turns into a 15× red bar
+     * — and the second silently dropped every yearly line from the Year view,
+     * the one place a yearly line belongs.
+     */
+    const target = TARGET_FOR_TAB[tab];
+    const monthly = await getMyGlobalBudgetSummary(db, me.id, { target: 'monthly' });
+    const mine = tab === 'month' ? monthly : await getMyGlobalBudgetSummary(db, me.id, { target });
+
     // D2: the whole-month figure onboarding stores (`budget_target`) is a real
     // input until category budgets exist — it drives the Home pace bar and the
     // health engine's budget terms instead of being one sentence two screens
     // deep in the budget editor. Category budgets win the moment they're set.
     const budgetTarget = (await settings.budgetTarget()) ?? 0;
-    const effAllocated = mine.allocated > 0 ? mine.allocated : budgetTarget;
+    // Read off the line count, not off `allocated`: at the daily target a user
+    // with eight monthly lines rolls up to zero, and testing the *amount* would
+    // fall back to a stale onboarding figure precisely when they have real ones.
+    const hasCategoryBudgets = monthly.categoryCount > 0;
+    // That onboarding figure is one whole-MONTH cap over ALL categories, so it
+    // obeys the same rate/pool rule as any monthly line: it is the Month headline,
+    // ×12 the Year one, and a pool on Today. Deriving ₹X/30 from it would be the
+    // same roll-down error, wearing the "but they have no daily budget" hat.
+    const budgetAllocated = hasCategoryBudgets
+      ? mine.allocated
+      : budgetEquivalent('monthly', budgetTarget, target, new Date()) ?? 0;
+    /*
+     * The bar's numerator must share its denominator's scope or it measures
+     * nothing. `mine.spent` is my spend restricted to the categories that
+     * contributed to `mine.allocated`; the hero number above it is all spend, and
+     * the two are *deliberately* different quantities — see `HeroCard`.
+     *
+     * Against the bare onboarding target — one cap over everything — the whole
+     * period's spend IS the matching numerator.
+     */
+    const budgetSpent = hasCategoryBudgets ? mine.spent : sp;
+    // Health keeps the monthly basis, whatever pill is active.
+    const monthlyAllocated = monthly.allocated > 0 ? monthly.allocated : budgetTarget;
 
     // Category breakdown for "Where it went" (largest first). Names not in the
     // global catalog fold into one "Others" row (catMap itself is left intact so
@@ -204,10 +258,10 @@ export async function loadHomeData(
     }
     const healthInputsNow: HealthInputs = {
       income90, spend90,
-      budgetAllocated: effAllocated,
+      budgetAllocated: monthlyAllocated,
       // Against a bare whole-month target the spend side is the whole month's
       // my-share spend; category budgets keep their own scoped figure.
-      budgetSpent: mine.allocated > 0 ? mine.spent : monthSp,
+      budgetSpent: monthly.allocated > 0 ? monthly.spent : monthSp,
       dayOfMonth: getDate(now2),
       daysInMonth: getDaysInMonth(now2),
       liquid: sts.available,
@@ -217,7 +271,7 @@ export async function loadHomeData(
       netIOwe: exp.owe,
       upcomingBills: sts.upcomingBills,
       goalsCount: funding.goalsCount,
-      hasBudget: effAllocated > 0,
+      hasBudget: monthlyAllocated > 0,
       dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
       hasIncome: ledger.hasIncome,
       txnCount: ledger.txnCount,
@@ -256,7 +310,19 @@ export async function loadHomeData(
       meInfo,
       spending: sp, income: inc, prevSpending: prevSp,
       oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
-      budget: { allocated: effAllocated, spent: mine.spent },
+      budget: {
+        /** Rolled up at the active period; 0 when nothing is budgeted at it. */
+        allocated: budgetAllocated,
+        /** Spend restricted to the categories behind `allocated` — never all spend. */
+        spent: budgetSpent,
+        /** Lines too coarse for this period (a yearly line on Month), excluded from both halves. */
+        pooledCount: hasCategoryBudgets ? mine.pooledCount : 0,
+        /** Tab-independent: does ANY budget exist? Separates "no budget" from
+         *  "no budget at THIS period", which need different copy and different tiles. */
+        exists: hasCategoryBudgets || budgetTarget > 0,
+        /** The whole-month figure, for the Month-only forecast card. */
+        monthlyAllocated,
+      },
       // For Home's GET STARTED tiles: don't re-ask what onboarding answered.
       peopleCount: persons.filter(p => p.id !== me.id).length,
       catRows, catTotal, health, healthInputs,

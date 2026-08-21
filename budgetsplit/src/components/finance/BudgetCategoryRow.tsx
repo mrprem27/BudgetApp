@@ -11,7 +11,7 @@ import type { BudgetHealth } from '../../lib/budget';
 
 type Props = {
   category: string;
-  /** `'once'` renders as "one-time". */
+  /** Rendered as-is, capitalized by the style — "daily" / "monthly" / "yearly". */
   cadence: string;
   spent: number;
   allocated: number;
@@ -40,7 +40,7 @@ export function BudgetCategoryRow({ category, cadence, spent, allocated, pct, he
         <IconCircle icon={asFeather(visual?.icon, 'tag')} size={28} color={visual?.color ?? colors.accent} iconSize={14} />
         <View style={styles.mid}>
           <Text style={styles.name} numberOfLines={1}>{category}</Text>
-          <Text style={styles.cadence}>{cadence === 'once' ? 'one-time' : cadence}</Text>
+          <Text style={styles.cadence}>{cadence}</Text>
         </View>
         <Text style={styles.amount}>
           <Text style={{ color: healthColor(health) }}>{formatCompact(spent)}</Text> / {formatCompact(allocated)}

@@ -42,6 +42,9 @@ function makeDb(): DatabaseSync {
     CREATE TABLE category_budget (
       id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL,
       period TEXT NOT NULL DEFAULT 'monthly', amount INTEGER NOT NULL,
+      -- Added by COLUMN_MIGRATIONS in the real schema; included here because the
+      -- 'once' cadence fix rewrites it.
+      cadence TEXT NOT NULL DEFAULT 'monthly',
       UNIQUE(group_id, category, period)
     );
     CREATE TABLE savings_txn (
@@ -111,6 +114,35 @@ describe('one-time data fixes', () => {
     // No placeholder identifier is written: nothing reads person.email, so the
     // fix that stamped a hardcoded address was removed rather than kept guarded.
     expect((db.prepare("SELECT email FROM person WHERE id='p1'").get() as any).email).toBeNull();
+  });
+
+  // The 'once' cadence was removed: it was a pool at every target, so it could
+  // never reach a headline, and its window ran from the epoch, so it never reset.
+  // Converted rather than deleted — the amount the user typed is real, and
+  // 'yearly' is the coarsest cadence that still resets and still rolls up.
+  it('converts `once` budget lines to yearly, leaving the amount and the others alone', async () => {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO category_budget (id, group_id, category, period, cadence, amount)
+        VALUES ('b1','g1','Education','monthly','once',600000),
+               ('b2','g1','Chai','monthly','daily',5000),
+               ('b3','g1','Rent','monthly','monthly',2200000);
+    `);
+
+    await launch(db);
+
+    const rows = db.prepare('SELECT id, cadence, amount FROM category_budget ORDER BY id').all() as any[];
+    expect(rows).toEqual([
+      { id: 'b1', cadence: 'yearly', amount: 600000 },
+      { id: 'b2', cadence: 'daily', amount: 5000 },
+      { id: 'b3', cadence: 'monthly', amount: 2200000 },
+    ]);
+
+    // A line the user later re-saves as something else must survive relaunch —
+    // the fix is recorded, not re-applied.
+    db.exec("UPDATE category_budget SET cadence='monthly' WHERE id='b1'");
+    await launch(db);
+    expect((db.prepare("SELECT cadence FROM category_budget WHERE id='b1'").get() as any).cadence).toBe('monthly');
   });
 
   // The regression this guard exists for.

@@ -9,7 +9,7 @@ import type { BudgetCadence } from '../../../db/queries/categoryBudgets';
 import type { InheritedLine } from '../../../lib/budgetEditor';
 
 export const CADENCE_LABEL: Record<BudgetCadence, string> = {
-  once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly',
+  daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly',
 };
 
 /**

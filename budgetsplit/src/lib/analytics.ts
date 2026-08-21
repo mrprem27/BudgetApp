@@ -73,12 +73,11 @@ export type BudgetAnalytics = {
   recommendations: Recommendation[];
 };
 
-function previousWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } | null {
+function previousWindow(cadence: BudgetCadence, now: Date): { from: number; to: number } {
   switch (cadence) {
     case 'daily':   { const d = subDays(now, 1);   return { from: startOfDay(d).getTime(), to: endOfDay(d).getTime() }; }
     case 'monthly': { const d = subMonths(now, 1); return { from: startOfMonth(d).getTime(), to: endOfMonth(d).getTime() }; }
     case 'yearly':  { const d = subYears(now, 1);  return { from: startOfYear(d).getTime(), to: endOfYear(d).getTime() }; }
-    case 'once':    return null;
   }
 }
 
@@ -133,7 +132,7 @@ export async function getBudgetAnalytics(
     const cw = windowForCadence(cad, now);
     curByCad[cad] = await getCategorySpending(db, group.id, cw.from, cw.to, meId);
     const pw = previousWindow(cad, now);
-    prevByCad[cad] = pw ? await getCategorySpending(db, group.id, pw.from, pw.to, meId) : {};
+    prevByCad[cad] = await getCategorySpending(db, group.id, pw.from, pw.to, meId);
   }));
 
   const dayOfMonth = getDate(now);

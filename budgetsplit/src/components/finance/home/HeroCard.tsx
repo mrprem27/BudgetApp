@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { AmountText } from '../../ui/AmountText';
 import { formatCompact, formatChangeMagnitude } from '../../../lib/money';
+import { utilLabel } from '../../../lib/budget';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -15,12 +16,21 @@ const RING_R = (RING - RING_STROKE) / 2;
 const RING_CIRC = 2 * Math.PI * RING_R;
 
 type Props = {
-  /** My spend (paise) for the active period. */
+  /** My spend (paise) for the active period — ALL categories. The hero number. */
   spent: number;
   /** UPPERCASE label e.g. "SPENT THIS MONTH". */
   periodLabel: string;
-  /** Budget for the active period, already scaled (day/month/year); 0 when none is set. */
+  /** Budget rolled up at the active period; 0 when nothing is budgeted at it. */
   budgetAllocated: number;
+  /**
+   * The bar's numerator: my spend restricted to the categories behind
+   * `budgetAllocated`. Deliberately NOT `spent` — see the note on the bar below.
+   */
+  budgetSpent: number;
+  /** Is there a budget at all, at any cadence? Picks which empty copy is true. */
+  budgetExists?: boolean;
+  /** 'daily' | 'monthly' | 'yearly' — names the period in the empty copy. */
+  periodNoun?: string;
   /** Prior-period spend + its label, for the delta row when no budget exists. */
   prevSpending: number;
   prevLabel: string;
@@ -35,8 +45,8 @@ type Props = {
   healthColor?: string;
   /** Tap handler for the ring — opens the health breakdown sheet. */
   onPressHealth?: () => void;
-  /** Tap handler for the over-budget pace row — routes to the overspend breakdown. */
-  onPressOver?: () => void;
+  /** Tap handler for the pace row — routes to Insights, in every state, not just over. */
+  onPressPace?: () => void;
   /** While a period switch is loading, hide the delta so it doesn't flash a stale value. */
   settling?: boolean;
 };
@@ -52,29 +62,29 @@ type Props = {
  * the three sitting *below* the card. The bar is the card's loudest element and
  * it was explaining a number that wasn't the headline.
  *
- * So: one quantity, one time base, everything answering to the same pills. The
- * horizon-scoped figure moved out to `StsStrip`, above this card, where being
- * unaffected by the pills is legible instead of contradictory.
+ * So: one time base, everything answering to the same pills. The horizon-scoped
+ * figure moved out to `StsStrip`, above this card, where being unaffected by the
+ * pills is legible instead of contradictory.
+ *
+ * The bar is the one deliberate second quantity — budgeted spend over budget,
+ * on that same time base. It is a *subset* of the hero number, not a fraction of
+ * it, and the row beneath prints both figures for exactly that reason.
  *
  * Every line is a fixed height so the card never jumps between states.
  */
 export function HeroCard({
-  spent, periodLabel, budgetAllocated, prevSpending, prevLabel,
+  spent, periodLabel, budgetAllocated, budgetSpent, budgetExists = false, periodNoun = 'monthly',
+  prevSpending, prevLabel,
   obfuscate = false, healthScore = null, healthLocked = false, healthColor = colors.accent,
-  onPressHealth, onPressOver, settling = false,
+  onPressHealth, onPressPace, settling = false,
 }: Props) {
   const hasBudget = budgetAllocated > 0;
-  const util = hasBudget ? Math.round((spent / budgetAllocated) * 100) : 0;
+  const util = hasBudget ? Math.round((budgetSpent / budgetAllocated) * 100) : 0;
   const over = util >= 100;
   // healthRed (not colors.expense) — "over budget" and "you owe money" are
   // different meanings and shouldn't share a color.
   const paceColor = over ? colors.healthRed : util >= 80 ? colors.healthAmber : colors.income;
   const barPct = Math.min(100, Math.max(0, util));
-  // Over budget reads better as a multiple ("1.2× budget") than as ">100%" — but
-  // the multiple is the *secondary* framing now. The rupees over is what a user
-  // can act on, so it leads and the multiple sits in the sub-slot.
-  const overMultiple = hasBudget ? (spent / budgetAllocated).toFixed(1).replace(/\.0$/, '') : '0';
-  const overAmount = hasBudget ? Math.max(0, spent - budgetAllocated) : 0;
 
   const delta = spent - prevSpending;
   const deltaPct = prevSpending > 0 ? Math.round((delta / prevSpending) * 100) : null;
@@ -177,54 +187,106 @@ export function HeroCard({
         )}
       </View>
 
-      {/* Track — always present (muted when no budget) so height is constant. */}
+      {/*
+        Track — always present (muted when no budget) so height is constant.
+
+        The bar does NOT measure the number above it, and that is the design.
+        It fills `budgetSpent / budgetAllocated`: spend in the categories that
+        are actually budgeted *at this period*, over what they are budgeted. It
+        used to divide the whole period's spend by the budgeted categories'
+        total, so budgeting one category out of twelve pinned it red on launch —
+        a numerator and a denominator from two different populations.
+
+        Which lines are in scope moves with the pills, by `budgetKind`'s rule:
+        Today counts daily lines, Month daily + monthly, Year all three. A yearly
+        line is a pool on Month — it is spent when the trip happens, not ₹2,000
+        every month — so it is out of both halves there, and back in on Year.
+
+        The row below states both figures so the divergence from the hero number
+        is legible rather than mysterious.
+      */}
       <View style={styles.track}>
         {hasBudget && <Animated.View style={[styles.fill, { backgroundColor: paceColor, transform: [{ scaleX: barAnim }] }]} />}
       </View>
 
-      {/* Secondary row — always one line tall, content varies by state.
-          When over, the row becomes a way out. It used to read "1.2× budget"
-          and stop there: the second-loudest thing on Home, in red, on every
-          launch, with nothing to do about it. A multiple is also the least
-          actionable form of the fact — "₹4,200 over" is a number you can go
-          find. Rebalancing was the obvious target and is the wrong one: it
-          trades headroom *between categories* and cannot raise the month's
-          total, which is what has already gone. Insights is where the
-          driving-overspend breakdown and "what to cut" actually live. */}
+      {/*
+        Secondary row — always one line tall, content varies by state.
+
+        The two figures sit at the two ends of the bar they describe: spent at
+        the left where the fill starts, the budget at the right where the track
+        ends. They used to be crammed together in the right slot ("₹3.1k of ₹5k")
+        with the verdict alone on the left, which read as one long caption rather
+        than as the bar's own endpoints.
+
+        The whole left group is the tap target, in every state, not only when
+        over. Insights is where the category breakdown lives, and that is worth
+        reaching whether you are 62% through the month or 1.8× past it — a row
+        that only becomes a door once you are in trouble teaches nobody where the
+        door is. (It also used to be the second-loudest thing on Home, in red, on
+        every launch, with nothing to do about it.)
+      */}
       <View style={styles.paceRow}>
         {hasBudget ? (
           <>
-            {over && onPressOver ? (
-              <TouchableOpacity
-                onPress={onPressOver}
-                style={styles.paceLeft}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`${formatCompact(overAmount)} over budget, see what drove it`}
-              >
-                <View style={[styles.dot, { backgroundColor: paceColor }]} />
-                <Text style={[styles.paceText, { color: paceColor }]}>
-                  {formatCompact(overAmount)} over
-                </Text>
-                <Feather name="chevron-right" size={13} color={paceColor} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.paceLeft}>
-                <View style={[styles.dot, { backgroundColor: paceColor }]} />
-                <Text style={[styles.paceText, { color: paceColor }]}>
-                  {over ? `${formatCompact(overAmount)} over` : `On pace · ${util}%`}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.paceSub}>
-              {over ? `${overMultiple}× budget` : `Budget ${formatCompact(budgetAllocated)}`}
-            </Text>
+            <PaceLeft
+              onPress={onPressPace}
+              color={paceColor}
+              /* `utilLabel` — the canonical "62%" / "1.8×" rendering. Written out
+                 by hand here once before and drifted to an ASCII "X". */
+              label={obfuscate ? utilLabel(util) : `${formatCompact(budgetSpent)} · ${utilLabel(util)}`}
+              a11y={obfuscate
+                ? `${utilLabel(util)} of budget, see the breakdown`
+                : `${formatCompact(budgetSpent)} of ${formatCompact(budgetAllocated)} budgeted, ${utilLabel(util)}, see the breakdown`}
+            />
+            {/* Amounts are the thing privacy mode hides; the ratio on the left is
+                a ratio, not a figure, so it stays and the row keeps working. */}
+            <Text style={styles.paceSub}>{obfuscate ? '' : formatCompact(budgetAllocated)}</Text>
           </>
         ) : (
-          <Text style={styles.empty}>Set a budget to track your pace</Text>
+          /* Two different facts, and telling the wrong one is why a user who set
+             a monthly budget in onboarding read "Set a budget" on the Today tab. */
+          <Text style={styles.empty}>
+            {budgetExists ? `No ${periodNoun} budget set` : 'Set a budget to track your pace'}
+          </Text>
         )}
       </View>
     </View>
+  );
+}
+
+/**
+ * The bar's left endpoint: a tinted dot, the spent figure with its ratio, and
+ * the way through to Insights. Extracted only so the tappable and untappable
+ * forms can't drift — they were two hand-copied JSX blocks differing in a
+ * chevron, and the untappable one had already lost a style.
+ *
+ * No handler means no chevron: an arrow that promises a destination and does
+ * nothing is worse than no arrow.
+ */
+function PaceLeft({ onPress, color, label, a11y }: {
+  onPress?: () => void;
+  color: string;
+  label: string;
+  a11y: string;
+}) {
+  const body = (
+    <>
+      <View style={[styles.dot, { backgroundColor: color }]} />
+      <Text style={[styles.paceText, { color }]}>{label}</Text>
+      {!!onPress && <Feather name="chevron-right" size={13} color={color} />}
+    </>
+  );
+  if (!onPress) return <View style={styles.paceLeft}>{body}</View>;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.paceLeft}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+    >
+      {body}
+    </TouchableOpacity>
   );
 }
 

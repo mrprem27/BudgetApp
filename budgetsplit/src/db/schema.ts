@@ -372,6 +372,17 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
       "DELETE FROM category WHERE name='Subscriptions'",
     ],
   },
+  // The 'once' budget cadence is gone (see BUDGET_CADENCE in constants/enums).
+  // It was a pool at every target, so it never reached a headline, and its spend
+  // window ran from the epoch, so it never reset — a crossed line stayed red
+  // forever. Converted rather than deleted: the amount the user typed is real,
+  // and 'yearly' is the coarsest cadence that still resets and still rolls up
+  // (into the Year view). The settings row holding it as a *default* is narrowed
+  // in code by `asBudgetCadence`, since it lives in the key/value settings table.
+  {
+    key: 'fix_drop_once_cadence_v1',
+    sql: ["UPDATE category_budget SET cadence='yearly' WHERE cadence='once'"],
+  },
   // Legacy repair: the seeded Personal group (oldest) is the single-user space.
   // New databases don't need it — seedIfNeeded/createMeAndPersonal already insert
   // the Personal group with is_personal=1.

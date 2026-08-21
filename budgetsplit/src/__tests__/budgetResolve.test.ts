@@ -3,7 +3,7 @@ import { openTestDb, seedGroupAndMe } from './dbHarness';
 import { setCategoryBudgets } from '../db/queries/categoryBudgets';
 import { insertGroup } from '../db/queries/groups';
 
-type Line = { category: string; cadence: 'daily' | 'monthly' | 'yearly' | 'once'; amount: number; person_id: string | null };
+type Line = { category: string; cadence: 'daily' | 'monthly' | 'yearly'; amount: number; person_id: string | null };
 const line = (category: string, amount: number, person_id: string | null, cadence: Line['cadence'] = 'monthly'): Line =>
   ({ category, cadence, amount, person_id });
 

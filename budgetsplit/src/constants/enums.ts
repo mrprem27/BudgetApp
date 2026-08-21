@@ -225,9 +225,25 @@ export const TXN_KIND_FOR_CATEGORY: Record<CategoryKind, TxnKind> = {
   expense: 'expense', income: 'income', transfer: 'settlement',
 };
 
-/** Category-budget cadence. */
-export const BUDGET_CADENCE = ['once', 'daily', 'monthly', 'yearly'] as const;
+/**
+ * Category-budget cadence.
+ *
+ * Every cadence here is a **repeating** cap, and that is the whole set on
+ * purpose. A `once` cadence existed and was removed: `budgetKind` classified it
+ * as a pool at every target, so it could never reach a headline on any screen,
+ * and its spend window ran from the epoch — so it never reset, and a line the
+ * user crossed stayed red forever with no way back but editing it. A
+ * never-resetting one-off target is a savings goal, which is a first-class
+ * feature already. Existing rows were converted to `yearly` by
+ * `fix_drop_once_cadence_v1` (`db/schema.ts`).
+ */
+export const BUDGET_CADENCE = ['daily', 'monthly', 'yearly'] as const;
 export type BudgetCadence = typeof BUDGET_CADENCE[number];
+
+/** Narrow a stored string to a cadence, falling back for legacy/unknown values. */
+export function asBudgetCadence(v: string | null | undefined, fallback: BudgetCadence = 'monthly'): BudgetCadence {
+  return (BUDGET_CADENCE as readonly string[]).includes(v ?? '') ? (v as BudgetCadence) : fallback;
+}
 
 /** `category_budget.period CHECK(period IN ('monthly','yearly'))`. */
 export const BUDGET_PERIOD = ['monthly', 'yearly'] as const;

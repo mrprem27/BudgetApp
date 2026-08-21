@@ -35,12 +35,13 @@ import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/stora
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
+import { asBudgetCadence } from '../../src/constants/enums';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useServerSession } from '../../src/hooks/useServerSession';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 
-const CADENCE_LABELS: Record<BudgetCadence, string> = { once: 'One-time', daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
-const CADENCE_KEYS: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
+const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
+const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -139,8 +140,10 @@ export default function SettingsScreen() {
       // writes the anchor, so this row used to read "Backed up just now" to someone
       // who had never backed up at all.
       setBackupAt(await settings.lastBackupAt());
+      // Narrowed, not cast: a database written before `once` was removed still
+      // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
-      if (dc) setDefaultCadence(dc as BudgetCadence);
+      if (dc) setDefaultCadence(asBudgetCadence(dc));
     })();
   }, []));
 

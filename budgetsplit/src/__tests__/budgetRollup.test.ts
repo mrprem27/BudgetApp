@@ -16,7 +16,7 @@ import type { BudgetCadence } from '../db/queries/categoryBudgets';
 const FEB_2024 = new Date(2024, 1, 15); // leap year: 29 days, 366-day year
 const JAN_2026 = new Date(2026, 0, 15); // 31 days, 365-day year
 
-const ALL: BudgetCadence[] = ['daily', 'monthly', 'yearly', 'once'];
+const ALL: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 const TARGETS: Period[] = ['daily', 'monthly', 'yearly'];
 
 describe('budgetKind is relative to the headline, not a property of the cadence', () => {
@@ -26,8 +26,10 @@ describe('budgetKind is relative to the headline, not a property of the cadence'
     expect(budgetKind('monthly', 'yearly')).toBe('rate');
   });
 
-  it('`once` is a pool at every target — it has no period to roll into', () => {
-    for (const t of TARGETS) expect(budgetKind('once', t)).toBe('pool');
+  it('every cadence is a rate at the coarsest target — nothing is stranded', () => {
+    // The `once` cadence used to fail this: it was a pool at every target, so it
+    // could never appear in any headline. It was removed for exactly that.
+    for (const c of ALL) expect(budgetKind(c, 'yearly')).toBe('rate');
   });
 
   it('a cadence is always a rate in its own period', () => {
@@ -42,7 +44,6 @@ describe('budgetEquivalent — the full target × cadence matrix', () => {
     expect(budgetEquivalent('daily', 50000, 'daily', JAN_2026)).toBe(50000);
     expect(budgetEquivalent('monthly', 50000, 'daily', JAN_2026)).toBeNull();
     expect(budgetEquivalent('yearly', 50000, 'daily', JAN_2026)).toBeNull();
-    expect(budgetEquivalent('once', 50000, 'daily', JAN_2026)).toBeNull();
   });
 
   it('monthly target rolls daily up by the REAL length of that month', () => {
@@ -104,14 +105,13 @@ describe('rollUpBudgets keeps pools visible instead of dropping them', () => {
     { cadence: 'monthly' as const, amount: 500000 },   // ₹5,000/mo groceries
     { cadence: 'daily' as const, amount: 10000 },      // ₹100/day chai
     { cadence: 'yearly' as const, amount: 2_400_000 }, // ₹24,000/yr trips
-    { cadence: 'once' as const, amount: 900000 },      // ₹9,000 one-off
   ];
 
-  it('a monthly headline excludes the yearly and one-time lines', () => {
+  it('a monthly headline excludes the yearly line', () => {
     const r = rollUpBudgets(lines, 'monthly', JAN_2026);
     expect(r.amount).toBe(500000 + 10000 * 31);
-    expect(r.pooled).toBe(2_400_000 + 900000);
-    expect(r.pooledCount).toBe(2);
+    expect(r.pooled).toBe(2_400_000);
+    expect(r.pooledCount).toBe(1);
   });
 
   it('reports the pools so a headline can name what it left out', () => {
@@ -122,17 +122,17 @@ describe('rollUpBudgets keeps pools visible instead of dropping them', () => {
     expect(r.amount + r.pooled).toBeGreaterThan(r.amount);
   });
 
-  it('a yearly headline absorbs the monthly and daily lines, leaving only `once`', () => {
+  it('a yearly headline absorbs every line — nothing is left pooled', () => {
     const r = rollUpBudgets(lines, 'yearly', JAN_2026);
     expect(r.amount).toBe(500000 * 12 + 10000 * 365 + 2_400_000);
-    expect(r.pooled).toBe(900000);
-    expect(r.pooledCount).toBe(1);
+    expect(r.pooled).toBe(0);
+    expect(r.pooledCount).toBe(0);
   });
 
   it('a daily headline takes only the daily line', () => {
     const r = rollUpBudgets(lines, 'daily', JAN_2026);
     expect(r.amount).toBe(10000);
-    expect(r.pooledCount).toBe(3);
+    expect(r.pooledCount).toBe(2);
   });
 
   it('is 0/0/0 for no lines at all', () => {

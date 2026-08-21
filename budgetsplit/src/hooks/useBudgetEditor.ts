@@ -12,6 +12,7 @@ import {
 import { getGroupContext, getPersonalGroup } from '../db/queries/groups';
 import { getGroupMembers, getMe } from '../db/queries/persons';
 import { canEditGroupBudget } from '../lib/permissions';
+import { asBudgetCadence } from '../constants/enums';
 import { categoryVisual } from '../constants/categories';
 import { haptic } from '../lib/haptics';
 import { parseToPaise, paiseToInput } from '../lib/money';
@@ -75,7 +76,9 @@ export function useBudgetEditor(opts: { scope: BudgetScope; groupId?: string; fo
     }
     return {
       groupId, groupName: group?.name ?? '', cats, rows, meId, ctx,
-      defaultCadence: dc ? (dc as BudgetCadence) : 'monthly',
+      // Narrowed, not cast: a database written before `once` was removed still
+      // holds it here, and it would flow straight into a saved budget line.
+      defaultCadence: asBudgetCadence(dc),
       memberCount: members.length,
       budgetTarget: target ?? 0,
     };

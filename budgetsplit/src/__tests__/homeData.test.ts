@@ -168,19 +168,58 @@ describe('loadHomeData — category ranking', () => {
   });
 });
 
-describe('loadHomeData — budget rollup', () => {
-  it('returns the MONTHLY allocation unchanged for every tab', async () => {
-    // The assembler always reports the monthly figure; scaling it to the active
-    // period (÷ days for Today, × 12 for Year) is the screen's job, in
-    // app/(tabs)/index.tsx. Pinned here so the two don't both start scaling.
+/*
+ * The pace bar rolls budgets up AT the active period, and both of its halves are
+ * scoped to the lines that roll up.
+ *
+ * The assembler used to report the monthly figure on every tab and let the screen
+ * scale it — ÷ days-in-month for Today, × 12 for Year. That rolled a monthly line
+ * *down* into a day (the error `budgetKind` exists to name) and dropped every
+ * yearly line from the Year view. The numerator was worse: the screen paired this
+ * budgeted-categories-only allocation with the whole period's spend, so budgeting
+ * one category out of twelve pinned the bar red on launch.
+ */
+describe('loadHomeData — budget rollup follows the active period', () => {
+  it('a monthly line is the Month figure, ×12 on Year, and absent on Today', async () => {
     const { db, personal } = setup();
     addCategory(db, 'Total');
     setCategoryBudget(db, { groupId: personal, category: 'Total', amount: 3000000 });
 
     const [day, month, year] = await Promise.all([load(db, 'today'), load(db, 'month'), load(db, 'year')]);
     expect(month.budget.allocated).toBe(3000000);
-    expect(day.budget.allocated).toBe(month.budget.allocated);
-    expect(year.budget.allocated).toBe(month.budget.allocated);
+    expect(year.budget.allocated).toBe(3000000 * 12);
+    // A month's cap is a pool inside a day — one rent payment would blow a
+    // ₹30,000/31 "daily budget" that the user never set.
+    expect(day.budget.allocated).toBe(0);
+    // ...but it is not "no budget": the empty copy has to say which is true.
+    expect(day.budget.exists).toBe(true);
+    expect(day.budget.pooledCount).toBe(1);
+  });
+
+  it('a daily line rolls up by the real length of the month and the year', async () => {
+    const { db, personal } = setup();
+    addCategory(db, 'Chai');
+    setCategoryBudget(db, { groupId: personal, category: 'Chai', amount: 5000, cadence: 'daily' });
+
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysInYear = (now.getFullYear() % 4 === 0 && now.getFullYear() % 100 !== 0) || now.getFullYear() % 400 === 0 ? 366 : 365;
+
+    const [day, month, year] = await Promise.all([load(db, 'today'), load(db, 'month'), load(db, 'year')]);
+    expect(day.budget.allocated).toBe(5000);
+    expect(month.budget.allocated).toBe(5000 * daysInMonth);
+    expect(year.budget.allocated).toBe(5000 * daysInYear);
+  });
+
+  it('a yearly line is counted on Year and pooled on Month — never ÷12', async () => {
+    const { db, personal } = setup();
+    addCategory(db, 'Trips');
+    setCategoryBudget(db, { groupId: personal, category: 'Trips', amount: 2_400_000, cadence: 'yearly' });
+
+    const [month, year] = await Promise.all([load(db, 'month'), load(db, 'year')]);
+    expect(year.budget.allocated).toBe(2_400_000);
+    expect(month.budget.allocated).toBe(0);
+    expect(month.budget.pooledCount).toBe(1);
   });
 
   it('counts spend against the budget', async () => {
@@ -192,6 +231,47 @@ describe('loadHomeData — budget rollup', () => {
     const d = await load(db, 'month');
     expect(d.budget.allocated).toBe(100000);
     expect(d.budget.spent).toBe(40000);
+  });
+
+  it('the bar ignores spend in categories that are not budgeted', async () => {
+    // The regression that mattered: the hero number counts everything, the bar
+    // counts only what it has a denominator for. Pairing the two populations
+    // made one budgeted category out of many read as 5× over on launch.
+    const { db, me, personal } = setup();
+    addCategory(db, 'Food');
+    addCategory(db, 'Shopping');
+    setCategoryBudget(db, { groupId: personal, category: 'Food', amount: 100000 });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 40000, date: today(), category: 'Food' });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 500000, date: today(), category: 'Shopping' });
+
+    const d = await load(db, 'month');
+    expect(d.spending).toBe(540000);   // the hero number: everything
+    expect(d.budget.spent).toBe(40000); // the bar: Food only
+    expect(d.budget.allocated).toBe(100000);
+  });
+
+  it('excludes a pooled line from BOTH halves, not just the allocation', async () => {
+    // Dropping the allocation but keeping its spend would inflate utilisation
+    // rather than fix it — the bar would report a yearly trip as a blown month.
+    const { db, me, personal } = setup();
+    addCategory(db, 'Food');
+    addCategory(db, 'Trips');
+    setCategoryBudget(db, { groupId: personal, category: 'Food', amount: 100000 });
+    setCategoryBudget(db, { groupId: personal, category: 'Trips', amount: 2_400_000, cadence: 'yearly' });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 40000, date: today(), category: 'Food' });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 900000, date: today(), category: 'Trips' });
+
+    const d = await load(db, 'month');
+    expect(d.budget.allocated).toBe(100000);
+    expect(d.budget.spent).toBe(40000);
+    expect(d.budget.pooledCount).toBe(1);
+  });
+
+  it('reports no budget at all when there is none', async () => {
+    const { db } = setup();
+    const d = await load(db, 'month');
+    expect(d.budget.allocated).toBe(0);
+    expect(d.budget.exists).toBe(false);
   });
 });
 

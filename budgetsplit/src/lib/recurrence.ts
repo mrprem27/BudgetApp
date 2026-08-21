@@ -129,9 +129,10 @@ export function nthOccurrenceMs(
  * is how `occurrenceAt` walks it), so its equivalent is ×30/interval.
  *
  * No cadence — null/undefined — is 0: nothing recurs, so it contributes
- * nothing to a monthly total. The `freq` param is typed so a non-recur
- * vocabulary ('once' from budget cadences) can't silently pass through and
- * count a one-off as a monthly commitment. Amounts are integer paise.
+ * nothing to a monthly total. The `freq` param is typed so a foreign vocabulary
+ * (budget cadences, `afford`'s purchase frequencies — which still have a 'once')
+ * can't silently pass through and count a one-off as a monthly commitment.
+ * Amounts are integer paise.
  */
 export function recurringMonthlyEquivalent(
   amount: number,

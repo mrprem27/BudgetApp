@@ -34,7 +34,7 @@ import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
-import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, type TabKey } from '../../src/lib/homeData';
+import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -75,7 +75,7 @@ export default function DashboardScreen() {
   const oweTotal = data?.oweTotal ?? 0;
   const owedTotal = data?.owedTotal ?? 0;
   const reviewCount = data?.reviewCount ?? 0;
-  const budget = data?.budget ?? { allocated: 0, spent: 0 };
+  const budget = data?.budget ?? { allocated: 0, spent: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 };
   const catRows = data?.catRows ?? [];
   const catTotal = data?.catTotal ?? 0;
   // Flag-gated here rather than at each use: nulling the result hides the ring in
@@ -128,18 +128,15 @@ export default function DashboardScreen() {
     }
   }
 
-  // Budgets are stored monthly; scale to the active period so the pace line
-  // shows on every tab when a budget exists (Today = per-day, Year = ×12).
   // A first-run tile is offered only when the thing it creates is still absent.
+  // `budget.exists` and not `budget.allocated`: the allocation is rolled up at the
+  // active period and is legitimately 0 on Today for someone whose budgets are all
+  // monthly — offering them "Set a monthly budget" would be re-asking a question
+  // they already answered.
   const peopleCount = data?.peopleCount ?? 0;
-  const showBudgetTile = budget.allocated <= 0;
+  const showBudgetTile = !budget.exists;
   const showGroupTile = flags.splitting && groups.filter(g => g.is_personal !== 1).length === 0;
   const showPeopleTile = flags.splitting && peopleCount === 0;
-
-  const paceAllocated = budget.allocated <= 0 ? 0
-    : tab === 'today' ? Math.round(budget.allocated / getDaysInMonth(new Date()))
-    : tab === 'year' ? budget.allocated * 12
-    : budget.allocated;
 
   return (
     <View style={styles.container}>
@@ -231,7 +228,7 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            {(spending === 0 && income === 0 && budget.allocated <= 0 && !everHadCats) ? (
+            {(spending === 0 && income === 0 && !budget.exists && !everHadCats) ? (
               <>
                 {/* Dedicated first-run empty home (design Screen 6) */}
                 <View style={styles.emptyHero}>
@@ -294,7 +291,10 @@ export default function DashboardScreen() {
             <HeroCard
               spent={spending}
               periodLabel={PERIOD_LABEL[tab]}
-              budgetAllocated={paceAllocated}
+              budgetAllocated={budget.allocated}
+              budgetSpent={budget.spent}
+              budgetExists={budget.exists}
+              periodNoun={TARGET_FOR_TAB[tab]}
               prevSpending={prevSpending}
               prevLabel={PREV_LABEL[tab]}
               obfuscate={hideAmounts}
@@ -302,7 +302,7 @@ export default function DashboardScreen() {
               healthLocked={!!health && !health.gate.ok}
               healthColor={health ? healthBandColor(health.band) : colors.accent}
               onPressHealth={() => setShowHealth(true)}
-              onPressOver={() => router.push('/insights')}
+              onPressPace={() => router.push('/insights')}
             />
 
             <View style={styles.tabRow}>
@@ -329,7 +329,7 @@ export default function DashboardScreen() {
             {tab === 'month' && forecast?.ready && (
               <ForecastCard
                 projected={forecast.projected}
-                budget={budget.allocated}
+                budget={budget.monthlyAllocated}
                 spentSoFar={spending}
                 dayOfMonth={getDate(new Date())}
                 daysInMonth={getDaysInMonth(new Date())}

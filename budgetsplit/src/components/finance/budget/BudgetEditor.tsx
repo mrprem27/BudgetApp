@@ -26,7 +26,7 @@ import type { BudgetScope } from '../../../lib/budgetEditor';
 import { BudgetAmountRow, CADENCE_LABEL } from './BudgetAmountRow';
 import { OwnBudgetSheet } from './OwnBudgetSheet';
 
-const CADENCES: BudgetCadence[] = ['once', 'daily', 'monthly', 'yearly'];
+const CADENCES: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
 const SECTION_ICON: Record<string, FeatherName> = {
   'Home & Living': 'home',
