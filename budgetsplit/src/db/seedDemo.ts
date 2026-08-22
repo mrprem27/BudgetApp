@@ -33,7 +33,7 @@ const R = (rupees: number) => Math.round(rupees * 100);
 // leave every transaction "uncategorized" (folded into Others). `category_budget`
 // IS wiped (budgets are per-run demo data) and re-created below.
 const ALL_TABLES = [
-  'txn_payment', 'txn_share', 'txn_approval', 'sync_outbox', 'line_item', 'recur_skip', 'txn',
+  'txn_payment', 'txn_share', 'txn_approval', 'txn_dispute', 'sync_outbox', 'line_item', 'recur_skip', 'txn',
   'category_budget', 'group_member', 'budget_group',
   'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
 ];
@@ -367,6 +367,103 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     payments: [{ personId: aarav.id, amount: R(1200) }],
     shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }],
   });
+
+  /*
+   * --- Peer entries: trust, approval and dispute ---------------------------
+   *
+   * None of the sync surfaces could be judged on a device without this. An
+   * entry someone else wrote, one waiting on you, a transfer that must be
+   * confirmed whatever you think of the sender, and an objection to something
+   * YOU wrote — four states that between them exercise the approvals queue, the
+   * two banners on transaction detail, and the promise that a waiting entry
+   * moves none of your figures.
+   *
+   * `remote_uid` is what makes trust evaluable at all: without an account
+   * matched to a person, `requiresMyApproval` has nobody to ask about, and every
+   * one of these would be inert. Aarav is trusted, Priya is on review — so the
+   * same kind of entry lands differently depending only on who wrote it, which
+   * is the whole point of trust being per person.
+   */
+  await db.runAsync("UPDATE person SET remote_uid = 'demo-acct-aarav', trust_state = 'trusted', trust_state_at = ? WHERE id = ?", [Date.now(), aarav.id]);
+  await db.runAsync("UPDATE person SET remote_uid = 'demo-acct-priya', trust_state = 'review' WHERE id = ?", [priya.id]);
+
+  /** An entry another person wrote, recorded the way sync records one. */
+  async function peerTxn(opts: {
+    groupId: string; author: string; date: number; category: string; note?: string;
+    kind?: 'expense' | 'settlement'; payMethod?: PayMethod;
+    payments: Array<{ personId: string; amount: number }>;
+    shares: Array<{ personId: string; amount: number }>;
+    pending: boolean;
+  }): Promise<string> {
+    const id = await insertTxn(db, {
+      groupId: opts.groupId, kind: opts.kind ?? 'expense', entryMode: 'quick',
+      date: opts.date, category: opts.category, note: opts.note,
+      payMethod: opts.payMethod,
+      payments: opts.payments, shares: opts.shares,
+    });
+    // `source` and `author_person_id` are what make it read as theirs rather
+    // than mine — the ledger is judged on "who put this number here".
+    await db.runAsync("UPDATE txn SET source = 'peer', author_person_id = ?, sync_version = 1 WHERE id = ?", [opts.author, id]);
+    if (opts.pending) {
+      await db.runAsync(
+        "INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at) VALUES (?, 'pending', ?, NULL)",
+        [id, opts.date],
+      );
+    }
+    return id;
+  }
+
+  // Priya is on review, so her expense waits: visible in the Roommates ledger,
+  // counted nowhere. This is the one to check the "moves none of your numbers"
+  // promise against — note the Home badge and the amber banner on the entry.
+  await peerTxn({
+    groupId: roommates.id, author: priya.id, date: thisMonth(21),
+    category: 'Groceries', note: 'Weekly big shop',
+    payments: [{ personId: priya.id, amount: R(3600) }],
+    shares: [{ personId: meId, amount: R(1200) }, { personId: priya.id, amount: R(1200) }, { personId: aarav.id, amount: R(1200) }],
+    pending: true,
+  });
+
+  // Aarav is trusted, so the same shape of entry applied on arrival with no
+  // question. Side by side with Priya's, this is what "trust is per person"
+  // looks like on screen.
+  await peerTxn({
+    groupId: roommates.id, author: aarav.id, date: thisMonth(22),
+    category: 'Bills', note: 'Electricity — Aarav paid',
+    payments: [{ personId: aarav.id, amount: R(2400) }],
+    shares: [{ personId: meId, amount: R(800) }, { personId: aarav.id, amount: R(800) }, { personId: priya.id, amount: R(800) }],
+    pending: false,
+  });
+
+  // A transfer waits EVEN THOUGH Aarav is trusted. Money arriving is not the
+  // same question as an expense being recorded: only the recipient knows where
+  // it actually landed, so approving it asks. Trust is the wrong test here, and
+  // this row is what proves the app agrees.
+  await peerTxn({
+    groupId: roommates.id, author: aarav.id, date: thisMonth(23),
+    kind: 'settlement', category: 'Settle up', note: 'Aarav says he sent this by UPI',
+    payMethod: PayMethod.Upi,
+    payments: [{ personId: aarav.id, amount: R(1500) }],
+    shares: [{ personId: meId, amount: R(1500) }],
+    pending: true,
+  });
+
+  // ...and an objection to something I wrote. Rohan says the Goa cab split is
+  // wrong, so it counts for him as though it never happened while our balances
+  // disagree. Open the entry to see the red banner — deliberately unlike the
+  // amber "waiting for you" one, because it means the opposite thing.
+  const disputed = await insertTxn(db, {
+    groupId: goa.id, kind: 'expense', entryMode: 'quick', date: thisMonth(12),
+    category: 'Cab & Auto', note: 'Airport cab',
+    payments: [{ personId: meId, amount: R(2800) }],
+    shares: [{ personId: meId, amount: R(1400) }, { personId: rohan.id, amount: R(1400) }],
+  });
+  await db.runAsync('UPDATE txn SET sync_version = 1 WHERE id = ?', [disputed]);
+  await db.runAsync("UPDATE person SET remote_uid = 'demo-acct-rohan' WHERE id = ?", [rohan.id]);
+  await db.runAsync(
+    'INSERT OR REPLACE INTO txn_dispute (txn_id, by_uid, version, created_at, cleared) VALUES (?, ?, 1, ?, 0)',
+    [disputed, 'demo-acct-rohan', thisMonth(13)],
+  );
 
   // --- Import inbox: pending transactions to exercise the GPay import → Review
   // wizard (dashboard badge, Step 1 classify, Step 2 group split). Mix of
