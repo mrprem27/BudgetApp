@@ -1433,6 +1433,38 @@ completed. Both rows open **Sync activity** below. Disabled entirely without
 
 ---
 
+### 13.8 Getting a phone back — the restore offer
+
+The last step of "keep a copy of everything", and the one without which the
+feature is worthless: snapshots upload on their own, but until this existed,
+getting one back meant knowing to open Settings → Backup → *Restore from your
+account*. Somebody setting up a replacement phone has no reason to look there.
+
+On launch, `pendingRestoreOffer` (`src/lib/restoreOffer.ts`) asks four questions
+and offers only if all four pass: a server is configured, someone is signed in,
+the offer has not already been declined, and **this phone has no transactions on
+it**.
+
+That last one is the safety rule, and it is why the prompt can appear unasked. A
+restore is wipe-and-replace, so a prompt that can show up beside real data is one
+somebody eventually taps by accident. "No transactions" deliberately counts
+soft-deleted and pending rows too — deleting your only entry does not make the
+phone new, and offering to wipe it at that moment would be grotesque. Anyone with
+data can still restore deliberately, from the screen built for it, with its own
+confirmation.
+
+Declining is **sticky** (`settings.restoreOfferDismissed`): saying no means this
+phone *is* the fresh start, and asking again every launch would nag someone out of
+a decision they have already made. A completed restore sets the same flag, since
+the question is then moot.
+
+Accepting routes to `/settings/backup?open=account`, which opens the list of
+copies and stops there. The passphrase, the cipher-version check, the sync
+refusal (F9) and the confirm are the same ones every other restore goes
+through — this adds a door, not a second path.
+
+---
+
 ### 13.7 Sync activity — `app/settings/sync-log.tsx` (optional, server-backed)
 
 The screen that explains a sync doing nothing.

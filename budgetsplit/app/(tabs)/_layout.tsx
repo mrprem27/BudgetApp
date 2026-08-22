@@ -10,9 +10,11 @@ import { setPendingPayment } from '../../src/lib/pendingPayment';
 import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
+import { dateTime } from '../../src/lib/dateFormat';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { runSync } from '../../src/lib/syncEngine';
 import { maybeSnapshot } from '../../src/lib/syncSnapshot';
+import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
@@ -112,6 +114,47 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
     runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
     maybeSnapshot(db).catch(() => {});
   }, [db, refresh]);
+
+  /*
+   * "Your data is on your account — want it back?"
+   *
+   * The last step of "keep a copy of everything". Snapshots upload on their own,
+   * and until this existed getting one back meant knowing to go to Settings →
+   * Backup → Restore from your account. Somebody setting up a replacement phone
+   * has no reason to look there.
+   *
+   * Only ever on a phone with no transactions on it — a restore is
+   * wipe-and-replace, and a prompt that can appear next to real data is one
+   * somebody eventually taps by accident. `pendingRestoreOffer` enforces that;
+   * it is stated here because it is the reason this is safe to show unasked.
+   */
+  useEffect(() => {
+    let alive = true;
+    pendingRestoreOffer(db).then(offer => {
+      if (!alive || !offer) return;
+      Alert.alert(
+        'Welcome back',
+        `Your account has ${offer.count === 1 ? 'a saved copy' : `${offer.count} saved copies`} of your `
+        + `BudgetSplit data, the most recent from ${dateTime(new Date(offer.newestAt))}.\n\n`
+        + 'Bringing it back needs the passphrase you set when you turned this on. '
+        + 'Nothing here is overwritten — this phone has nothing on it yet.',
+        [
+          {
+            text: 'Start fresh',
+            style: 'cancel',
+            // Sticky: saying no means this phone IS the fresh start, and asking
+            // again every launch would nag them out of a decision already made.
+            onPress: () => { settings.setRestoreOfferDismissed(true).catch(() => {}); },
+          },
+          {
+            text: 'Restore',
+            onPress: () => router.push('/settings/backup?open=account'),
+          },
+        ],
+      );
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [db, router]);
 
   // Shown only to a just-onboarded user (armed in `finalizeOnboarding`), and only
   // until they touch the FAB either way. It is onboarding guidance, not a permanent

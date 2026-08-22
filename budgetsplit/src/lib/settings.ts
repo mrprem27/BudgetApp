@@ -32,6 +32,7 @@ const K = {
   syncLog: 'sync_log',
   syncEverything: 'sync_everything',
   lastSnapshotAt: 'sync_last_snapshot_at',
+  restoreOfferDismissed: 'restore_offer_dismissed',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -144,6 +145,16 @@ export const settings = {
 
   lastSnapshotAt: () => getNumber(K.lastSnapshotAt),
   setLastSnapshotAt: (v: number) => setNumber(K.lastSnapshotAt, v),
+
+  /**
+   * They were offered their data back and said no.
+   *
+   * Sticky, because saying no means "this phone is a fresh start" and asking
+   * again every launch would nag somebody out of a decision they have already
+   * made. Cleared by a restore, which makes the question moot anyway.
+   */
+  restoreOfferDismissed: () => getBool(K.restoreOfferDismissed, false),
+  setRestoreOfferDismissed: (v: boolean) => setBool(K.restoreOfferDismissed, v),
 
   /**
    * What the server last said about my groups: `[id, state]` pairs.

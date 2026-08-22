@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
@@ -47,6 +47,16 @@ export default function BackupScreen() {
   const { refresh } = useDataRefresh();
 
   const { session: serverSession, configured: serverConfigured } = useServerSession();
+  /**
+   * `?open=account` lands straight on the list of copies.
+   *
+   * The launch prompt sends people here, and making them find the right row
+   * afterwards would waste the one moment they are certain what they want. It
+   * goes no further than opening the list: the passphrase, the version check and
+   * the confirm are the same ones every other restore goes through.
+   */
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const autoOpened = useRef(false);
 
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -75,6 +85,12 @@ export default function BackupScreen() {
   const [pickedEnvelope, setPickedEnvelope] = useState<BackupEnvelope | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (openParam !== 'account' || autoOpened.current || !serverSession) return;
+    autoOpened.current = true;   // once per visit, never on a re-render
+    openServerList();
+  }, [openParam, serverSession]);
 
   // The *backup* timestamp, not the reminder anchor — enabling the reminder
   // stamps the anchor, which is how this row came to claim a backup that never
@@ -399,6 +415,8 @@ export default function BackupScreen() {
       await settings.setBackupAnchorAt(payload.createdAt);
       await settings.setLastBackupAt(payload.createdAt);
       setLastBackupAt(payload.createdAt);
+      // The "want your data back?" prompt has been answered by doing it.
+      await settings.setRestoreOfferDismissed(true).catch(() => {});
       haptic.success();
       refresh();
       Alert.alert('Restored', 'Your data has been restored from the backup.', [
