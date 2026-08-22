@@ -268,6 +268,7 @@ const NOTE: Record<string, string | undefined> = {
   disabled: 'Sync is switched off, so nothing is being exchanged.',
   'not-configured': 'This build has no server configured.',
   'no-device-key': 'This device cannot store its own key, so it cannot sync.',
+  'signed-out': 'You are signed out, so there is no account to sync with.',
 };
 
 function Fact({ title, body }: { title: string; body: string }) {

@@ -7,8 +7,9 @@ import {
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
 import { sealEntry, openEntry, unwrapGroupKey, wrapGroupKey, newGroupKey } from './groupCrypto';
-import { deviceIdentity, deviceSecret } from './deviceKey';
+import { deviceIdentity, deviceSecret, bindDeviceToAccount } from './deviceKey';
 import {
+  getStoredSession,
   listSyncGroups, pullSyncEntries, pushSyncEntry, registerDevice, listDeviceKeys,
   publishSyncGroup, inviteSyncMember, joinSyncGroup,
   pushSyncDispute, pullSyncDisputes,
@@ -41,7 +42,7 @@ export type SyncOutcome = {
   /** True when anything reached the database, so the caller knows to refresh. */
   changed: boolean;
   /** Why nothing happened, when nothing did. Not an error — a reason. */
-  skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'offline';
+  skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'signed-out' | 'offline';
 };
 
 const NOTHING: SyncOutcome = { pushed: 0, pulled: 0, conflicts: [], vanished: [], changed: false };
@@ -70,6 +71,18 @@ export async function runSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
 async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
   if (!serverConfigured()) return { ...NOTHING, skipped: 'not-configured' };
   if (!(await settings.syncEnabled().catch(() => false))) return { ...NOTHING, skipped: 'disabled' };
+
+  const session = await getStoredSession();
+  if (!session) return { ...NOTHING, skipped: 'signed-out' };
+
+  /*
+   * Before anything else: is this identity even ours?
+   *
+   * A phone that changes hands keeps its device id, and the server rightly
+   * refuses to let one account overwrite another's key — so without this, the
+   * second person's sync is refused on every launch and never recovers.
+   */
+  await bindDeviceToAccount(session.user.id).catch(() => {});
 
   const identity = await deviceIdentity().catch(() => null);
   // No keychain means nowhere to keep the secret that opens this device's wraps.

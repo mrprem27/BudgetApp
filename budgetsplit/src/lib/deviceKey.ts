@@ -47,6 +47,8 @@ function keychain(): SecureStoreModule | null {
 /** Versioned, like the session key, so a format change never reads stale bytes. */
 const SECRET_KEY = 'budgetsplit.device.secret.v1';
 const DEVICE_ID_KEY = 'budgetsplit.device.id.v1';
+/** Which account this device identity belongs to. See `bindDeviceToAccount`. */
+const OWNER_KEY = 'budgetsplit.device.owner.v1';
 
 export type DeviceIdentity = {
   /** Opaque, stable for the life of this install. Named in every wrap. */
@@ -110,6 +112,37 @@ export async function deviceIdentity(): Promise<DeviceIdentity | null> {
 }
 
 /**
+ * Make sure this device's identity belongs to the account now signed in.
+ *
+ * Device ids are stored per install, not per account, and the server refuses to
+ * let one account overwrite another's device key — correctly. Put together, those
+ * two facts had a hole in them: sign out, hand the phone to someone else, and
+ * their `POST /sync/devices` names an id registered to the previous owner. The
+ * server refuses it, forever, and sync silently never works for them again.
+ *
+ * Keeping the identity across a sign-out and back in for the SAME account is the
+ * behaviour worth protecting — otherwise every sign-out costs every group key and
+ * needs a re-wrap from another member. So the account is recorded alongside, and
+ * only a genuine change of owner mints a new identity.
+ *
+ * Returns whether it reset, so a caller can say why the groups went quiet.
+ */
+export async function bindDeviceToAccount(userId: string): Promise<boolean> {
+  const ks = keychain();
+  if (!ks) return false;
+
+  const owner = await ks.getItemAsync(OWNER_KEY).catch(() => null);
+  if (owner === userId) return false;
+
+  // A different account, or an identity minted before this key existed. Both are
+  // safer to reset than to hand over: the wraps are useless to the new owner
+  // anyway, since they cannot open them.
+  if (owner !== null) await forgetDevice();
+  await ks.setItemAsync(OWNER_KEY, userId);
+  return owner !== null;
+}
+
+/**
  * Forget this device's identity — on sign-out, or when a user wants a clean break.
  *
  * Destructive and permanent: every group key wrapped to this device becomes
@@ -122,6 +155,7 @@ export async function forgetDevice(): Promise<void> {
   if (!ks) return;
   await ks.deleteItemAsync(SECRET_KEY).catch(() => {});
   await ks.deleteItemAsync(DEVICE_ID_KEY).catch(() => {});
+  await ks.deleteItemAsync(OWNER_KEY).catch(() => {});
 }
 
 /** Sync has nowhere to keep a secret, so it stays off entirely. */

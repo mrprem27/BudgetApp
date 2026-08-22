@@ -1,4 +1,6 @@
-import { deviceSecret, deviceIdentity, forgetDevice, deviceKeyAvailable } from '../lib/deviceKey';
+import {
+  deviceSecret, deviceIdentity, forgetDevice, deviceKeyAvailable, bindDeviceToAccount,
+} from '../lib/deviceKey';
 
 /**
  * A device's secret is the root of everything sync can decrypt. If it is not
@@ -66,5 +68,50 @@ describe('device identity', () => {
     const after = await deviceIdentity();
     expect(after).not.toBeNull();
     expect(after!.deviceId).toBeTruthy();
+  });
+});
+
+/**
+ * A phone that changes hands.
+ *
+ * Device ids live per install, and the server refuses to let one account
+ * overwrite another's device key — correctly. Those two facts together had a
+ * hole: sign out, hand the phone over, and the next person's registration names
+ * an id belonging to the previous owner. The server refuses it, and their sync
+ * never works again, silently, forever.
+ */
+describe('binding a device to an account', () => {
+  beforeEach(async () => { await forgetDevice(); });
+
+  it('keeps the same identity when the same account signs back in', async () => {
+    // The behaviour worth protecting: otherwise every sign-out costs every group
+    // key and needs a re-wrap from another member.
+    await bindDeviceToAccount('user-a');
+    const first = await deviceIdentity();
+
+    const reset = await bindDeviceToAccount('user-a');
+    expect(reset).toBe(false);
+    expect((await deviceIdentity())?.deviceId).toBe(first?.deviceId);
+  });
+
+  it('mints a fresh identity when a different account signs in', async () => {
+    await bindDeviceToAccount('user-a');
+    const first = await deviceIdentity();
+
+    expect(await bindDeviceToAccount('user-b')).toBe(true);
+    const second = await deviceIdentity();
+    expect(second?.deviceId).not.toBe(first?.deviceId);
+    // And a genuinely different key, not just a different label — the new owner
+    // must not inherit anything that could open the old owner's groups.
+    expect(second?.publicKey).not.toBe(first?.publicKey);
+  });
+
+  it('claims an identity that predates the owner record without resetting it', async () => {
+    // An install that synced before this key existed has a working identity and
+    // working wraps. Throwing those away on upgrade would break every group for
+    // no reason.
+    const before = await deviceIdentity();
+    expect(await bindDeviceToAccount('user-a')).toBe(false);
+    expect((await deviceIdentity())?.deviceId).toBe(before?.deviceId);
   });
 });
