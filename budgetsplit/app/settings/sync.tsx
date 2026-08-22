@@ -216,14 +216,20 @@ export default function SyncScreen() {
           <>
             <Text style={styles.heading}>Right now</Text>
             <Card>
+              {/*
+                “They will go the next time you open the app” was false whenever
+                the group had not been shared: there is no recipient, so those
+                entries never move however many times you open it. The count was
+                honest and the sentence was not. Details carries the real answer.
+              */}
               <ListRow
                 icon={waiting > 0 ? 'upload-cloud' : 'check'}
                 title={waiting > 0
                   ? `${waiting} change${waiting === 1 ? '' : 's'} waiting to go up`
                   : 'Everything here has been sent'}
-                subtitle={waiting > 0 ? 'They will go on the next time you open the app.' : undefined}
+                subtitle={waiting > 0 ? 'Tap to see which can be sent, and which have nowhere to go yet.' : undefined}
                 variant="stacked"
-                chevron={false}
+                onPress={() => router.push('/settings/sync-log')}
               />
               <Divider indent="text" />
               {/*
@@ -239,9 +245,9 @@ export default function SyncScreen() {
                 icon={NOTE[note ?? 'ok'] ? 'alert-circle' : 'clock'}
                 iconColor={NOTE[note ?? 'ok'] ? colors.healthAmber : colors.textSecondary}
                 title={lastAt ? `Last synced ${dateTime(new Date(lastAt))}` : 'Not synced yet'}
-                subtitle={NOTE[note ?? 'ok'] ?? undefined}
+                subtitle={NOTE[note ?? 'ok'] ?? 'See what went up, what came down, and sync now.'}
                 variant="stacked"
-                chevron={false}
+                onPress={() => router.push('/settings/sync-log')}
               />
             </Card>
           </>

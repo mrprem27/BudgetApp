@@ -1427,8 +1427,41 @@ lives and where the count is named ("2 shared groups"). Turning it **off** is a
 **pause**: nothing already uploaded is deleted, and nothing is removed from anyone
 else's phone. The copy says so, because "off" is widely read as "and take it back".
 
-Shows what is queued when sync is on, from `sync_outbox`. Disabled entirely
-without `EXPO_PUBLIC_API_URL` or a signed-in account.
+Shows what is queued when sync is on, from `sync_outbox`, and when it last
+completed. Both rows open **Sync activity** below. Disabled entirely without
+`EXPO_PUBLIC_API_URL` or a signed-in account.
+
+---
+
+### 13.7 Sync activity — `app/settings/sync-log.tsx` (optional, server-backed)
+
+The screen that explains a sync doing nothing.
+
+`runSync` swallows every failure on purpose: a background sync must never
+interrupt someone who did not ask for one. The price is that a feature silently
+doing nothing looks exactly like a feature that works. This is where that is paid
+back — and the question it was built for came straight from first use: *"it says
+26 changes waiting to go up, and they never go."*
+
+They never went because the group had **never been shared**, so there was no
+recipient. The count was honest; the sentence under it ("they will go the next
+time you open the app") was not. The queue is now split:
+
+- **Ready to send** — in a group that is published and joined.
+- **Nowhere to go yet** — named group by group, with the fix (share it from
+  Members) and the reassurance that nothing is lost meanwhile.
+
+Which of the two an entry is in depends on the group's server state, so
+`settings.syncGroups` caches it after every run — a screen that must be online to
+explain why nothing is happening is useless in exactly the moment it is wanted.
+
+Below that, the last `SYNC_LOG_MAX` runs: what went up, what came down, groups
+that ended, and conflicts (someone changed it first — the pull brought their
+version in). A skipped run says *why*, because "nothing to do" and "could not
+reach the server" look identical from outside and mean opposite things.
+
+**Sync now** runs it while you watch. The app syncs on open, which is right for a
+ledger and useless for diagnosing one.
 
 ---
 

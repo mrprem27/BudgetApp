@@ -65,6 +65,14 @@ export async function runSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
   // and this is the only place that difference is written down.
   await settings.setLastSyncNote(outcome.skipped ?? 'ok').catch(() => {});
   if (!outcome.skipped) await settings.setLastSyncAt(Date.now()).catch(() => {});
+  await settings.appendSyncLog({
+    at: Date.now(),
+    pushed: outcome.pushed,
+    pulled: outcome.pulled,
+    conflicts: outcome.conflicts.length,
+    vanished: outcome.vanished.length,
+    ...(outcome.skipped ? { skipped: outcome.skipped } : {}),
+  }).catch(() => {});
   return outcome;
 }
 
@@ -93,6 +101,9 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
   try {
     await registerDevice(identity.deviceId, identity.publicKey);
     const groups = await listSyncGroups(identity.deviceId);
+    // Cached so the Sync screen can explain a stuck queue while offline — which
+    // is exactly when someone goes looking for the explanation.
+    await settings.setSyncGroups(groups.map(g => [g.id, g.state] as [string, string])).catch(() => {});
 
     const secret = await deviceSecret();
     if (!secret) return { ...NOTHING, skipped: 'no-device-key' };

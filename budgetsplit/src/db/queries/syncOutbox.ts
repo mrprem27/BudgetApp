@@ -104,6 +104,25 @@ export async function markDelivered(db: SQLite.SQLiteDatabase, entryId: string):
   await db.runAsync('DELETE FROM sync_outbox WHERE entry_id = ?', [entryId]);
 }
 
+/**
+ * What is queued, per group — so the screen can say which of it can actually go.
+ *
+ * A count alone was misleading in the one case that matters most at the start:
+ * queue up entries in a group you have never shared, and the number climbs while
+ * nothing can ever be sent, because there is nobody to send it to. "26 changes
+ * waiting to go up · they will go next time you open the app" was true about the
+ * queue and false about the world.
+ */
+export async function pendingUploadsByGroup(
+  db: SQLite.SQLiteDatabase,
+): Promise<Array<{ groupId: string; name: string; n: number }>> {
+  return db.getAllAsync<{ groupId: string; name: string; n: number }>(
+    `SELECT o.group_id AS groupId, g.name AS name, COUNT(*) AS n
+       FROM sync_outbox o LEFT JOIN budget_group g ON g.id = o.group_id
+      GROUP BY o.group_id ORDER BY n DESC`,
+  );
+}
+
 /** Drives the "not yet synced" indicator. Cheap enough for a screen load. */
 export async function pendingUploadCount(db: SQLite.SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM sync_outbox');

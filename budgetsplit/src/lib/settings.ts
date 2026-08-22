@@ -28,6 +28,8 @@ const K = {
   syncEnabled: 'sync_enabled',
   lastSyncAt: 'sync_last_at',
   lastSyncNote: 'sync_last_note',
+  syncGroups: 'sync_known_groups',
+  syncLog: 'sync_log',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -56,6 +58,21 @@ async function getBool(key: string, fallback: boolean): Promise<boolean> {
   return v === null ? fallback : v === 'true';
 }
 const setBool = (key: string, v: boolean) => AsyncStorage.setItem(key, v ? 'true' : 'false');
+
+/** One sync attempt, as the details screen shows it. */
+export type SyncLogEntry = {
+  at: number;
+  pushed: number;
+  pulled: number;
+  conflicts: number;
+  /** Groups that ended — deleted for everyone, or that I left. */
+  vanished: number;
+  /** Absent when it completed. Otherwise why it did nothing. */
+  skipped?: string;
+};
+
+/** Enough to see a pattern, few enough to stay a diagnostic rather than history. */
+export const SYNC_LOG_MAX = 20;
 
 const getString = (key: string): Promise<string | null> => AsyncStorage.getItem(key);
 const setString = (key: string, v: string) => AsyncStorage.setItem(key, v);
@@ -108,6 +125,37 @@ export const settings = {
   setLastSyncAt: (v: number) => setNumber(K.lastSyncAt, v),
   lastSyncNote: () => getString(K.lastSyncNote),
   setLastSyncNote: (v: string) => setString(K.lastSyncNote, v),
+
+  /**
+   * What the server last said about my groups: `[id, state]` pairs.
+   *
+   * Cached so the Sync screen can answer "will this queue ever move?" without a
+   * request. Whether an entry can be sent depends on the group being published
+   * and joined, which is knowledge only the server has — and a screen that has to
+   * be online to explain why nothing is happening is useless in exactly the
+   * moment it is needed.
+   */
+  syncGroups: async (): Promise<Array<[string, string]>> => {
+    try { return JSON.parse((await getString(K.syncGroups)) ?? '[]'); } catch { return []; }
+  },
+  setSyncGroups: (v: Array<[string, string]>) => setString(K.syncGroups, JSON.stringify(v)),
+
+  /**
+   * The last few sync runs, newest first. A ring buffer, not a log file.
+   *
+   * `runSync` swallows every failure on purpose — it must never interrupt someone
+   * who did not ask for it — so without this there is no way to tell a sync that
+   * did nothing from one that never ran. Bounded at SYNC_LOG_MAX because this is
+   * a diagnostic, not history: the interesting question is always "what happened
+   * the last few times", never "what happened last March".
+   */
+  syncLog: async (): Promise<SyncLogEntry[]> => {
+    try { return JSON.parse((await getString(K.syncLog)) ?? '[]'); } catch { return []; }
+  },
+  appendSyncLog: async (entry: SyncLogEntry): Promise<void> => {
+    const prev = await settings.syncLog().catch(() => [] as SyncLogEntry[]);
+    await setString(K.syncLog, JSON.stringify([entry, ...prev].slice(0, SYNC_LOG_MAX)));
+  },
 
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),
