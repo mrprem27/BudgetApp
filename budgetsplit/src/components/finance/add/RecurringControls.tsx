@@ -2,11 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Switch, Keyboard } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { fullDate } from '../../../lib/dateFormat';
-import { Chip } from '../../ui/Chip';
 import { TabPills } from '../../ui/TabPills';
 import { IconCircle } from '../../ui/IconCircle';
 import { colors, type, space, radius, layout } from '../../tokens';
-import { nthOccurrenceMs } from '../../../lib/recurrence';
+import { nthOccurrenceMs, freqLabel } from '../../../lib/recurrence';
 import {
   RECUR_FREQ_ADD_CHOICES, RECUR_FREQ_LABEL, RECUR_END_MODE, RECUR_END_MODE_LABEL,
   RecurEndMode, type RecurFreq,
@@ -68,6 +67,9 @@ export function RecurringControls({
   }
 
   const intervalN = freq === 'custom' ? (parseInt(interval, 10) || 1) : 1;
+  // What is set, said once, at the top — so the card leads with the answer rather
+  // than with its own name.
+  const freqSummary = freqLabel(freq, intervalN);
 
   /** Pick the end mode. `never` also clears any date already chosen, so a stale
    *  end date can't survive switching away from "On date" and back. */
@@ -79,14 +81,13 @@ export function RecurringControls({
 
   return (
     <View style={styles.recurCard}>
+      {/* The switch is the only way off — the Repeat chip carries a chevron, not an
+          ✕, because §9 allows a chip exactly one trailing affordance. It no longer
+          repeats the word: the sheet's own title says "Repeat this", and saying it
+          again here was the third statement of one idea. */}
       <View style={styles.recurHeader}>
         <IconCircle icon="repeat" size={22} color={colors.settle} iconSize={12} />
-        <Text style={styles.recurTitle}>Recurring</Text>
-        {/* The same Switch as the off state, in the same place — so turning it on
-            and turning it off are one control. This was a `chevron-up` labelled
-            "Turn off recurring" for screen readers while looking like a collapse
-            arrow to everyone else, and it is now the ONLY way off: the Repeat chip's
-            ✕ went away when Repeat became a row (`ListRow` has no remove slot). */}
+        <Text style={styles.recurTitle}>{freqSummary}</Text>
         <View style={{ marginLeft: 'auto' }}>
           <Switch
             value={enabled}
@@ -127,7 +128,12 @@ export function RecurringControls({
       {/* Next charge — the occurrence after the start date */}
       <View style={styles.recurRow}>
         <Text style={styles.recurRowLabel}>Next charge</Text>
-        <Chip label={fullDate(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)))} />
+        {/* Plain text, not a Chip. It is a derived fact you cannot act on, and a
+            pill among real pills reads as another thing to tap — which is exactly
+            the "what is selectable here" confusion §9 is about. */}
+        <Text style={styles.recurRowValue}>
+          {fullDate(new Date(nthOccurrenceMs(txnDate, freq, intervalN, 2)))}
+        </Text>
       </View>
 
       {/* Ends — Never / On date / After N */}
@@ -173,6 +179,7 @@ const styles = StyleSheet.create({
   recurTitle: { ...type.bodySemi, color: colors.settle },
   recurRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.smd, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurRowLabel: { ...type.body, color: colors.textSecondary },
+  recurRowValue: { ...type.bodySemi, color: colors.textPrimary },
   recurSection: { paddingHorizontal: space.md, paddingVertical: space.smd },
   recurSectionBordered: { paddingHorizontal: space.md, paddingVertical: space.smd, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurSectionLabel: { ...type.sectionLabel, color: colors.settle, marginBottom: space.sm },

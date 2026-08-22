@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
@@ -29,6 +29,21 @@ type Props = {
  * control with a door in front of it.
  */
 export function RecurringSheet({ visible, onClose, ...controls }: Props) {
+  const { enabled, setEnabled } = controls;
+
+  /*
+   * Opening this IS the intent to repeat, so turn it on.
+   *
+   * It used to open on an off switch with nothing below it: you tapped a chip
+   * labelled "Repeat", landed on a sheet titled "Repeat this", and then had to
+   * find a third control saying the same thing before any options appeared. Three
+   * statements of one intention, and two taps before the screen showed you
+   * anything. The switch stays as the way back off.
+   */
+  useEffect(() => {
+    if (visible && !enabled) setEnabled(true);
+  }, [visible, enabled, setEnabled]);
+
   return (
     <SheetModal visible={visible} onClose={onClose} title="Repeat this">
       <RecurringControls {...controls} />
