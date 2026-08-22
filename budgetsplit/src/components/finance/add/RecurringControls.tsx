@@ -24,7 +24,7 @@ const END_TABS = RECUR_END_MODE.map(m => ({ key: m, label: RECUR_END_MODE_LABEL[
  * choices, and a segmented control says "pick exactly one of these" where a row of
  * chips says "toggle any of these". They used to be three hand-rolled pill styles
  * (`recurPill`, `recurChip`, `recurDateChip`) that differed only in padding and
- * radius, all on the §9-banned `space.sm + 2` — the same drift `ui/Chip` was built
+ * radius, all on the §9-banned `space.smd` — the same drift `ui/Chip` was built
  * to end, one layer below the form.
  *
  * The section eyebrows deliberately don't use `ui/SectionHeader`: that component owns

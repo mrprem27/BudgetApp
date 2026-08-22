@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   intro: { ...type.body, color: colors.textSecondary, marginBottom: space.md, lineHeight: 20 },
   sourceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
   sourceRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
-  sourceChip: { flex: 1, alignItems: 'center', paddingVertical: space.sm + 2, borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
+  sourceChip: { flex: 1, alignItems: 'center', paddingVertical: space.smd, borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
   sourceChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
   sourceChipText: { ...type.label, color: colors.textSecondary },
   sourceChipTextOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },

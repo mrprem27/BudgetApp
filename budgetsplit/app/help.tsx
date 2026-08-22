@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.subheading, color: colors.textPrimary, flex: 1 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd },
   iconDot: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { ...type.body, color: colors.textPrimary, flex: 1 },
   body: { ...type.body, color: colors.textSecondary, lineHeight: 22, paddingBottom: space.md, paddingLeft: 30 + space.sm },

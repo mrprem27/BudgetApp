@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
 
   chip: {
-    paddingHorizontal: space.sm + 2,
+    paddingHorizontal: space.smd,
     height: 30,
     justifyContent: 'center',
     borderRadius: radius.pill,

@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   adjustBtn: { flex: 1, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   adjustText: { ...type.button, color: colors.accent },
   secondaryRow: { flexDirection: 'row', gap: space.sm },
-  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.smd, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
   secondaryText: { ...type.label, color: colors.textSecondary },
   deadlineHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
 

@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   intro: { ...type.body, color: colors.textSecondary, lineHeight: 20, marginBottom: space.md },
   label: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, marginBottom: space.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2, minHeight: 48 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, minHeight: 48 },
   rowDivided: { borderTopWidth: 1, borderTopColor: colors.border },
   rowLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
   gainLabel: { color: colors.income, fontFamily: 'Inter_600SemiBold' },

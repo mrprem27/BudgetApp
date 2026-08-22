@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   intro: { ...type.caption, color: colors.textSecondary, lineHeight: 18, marginBottom: space.md },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,
-    paddingVertical: space.sm + 2, paddingHorizontal: space.sm,
+    paddingVertical: space.smd, paddingHorizontal: space.sm,
     borderRadius: radius.md, marginBottom: space.xs,
   },
   rowOn: { backgroundColor: colors.bgMuted },

@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
   // No `maxWidth`. The row already wraps (`fChipRow` is `flexWrap: 'wrap'`), so a
   // long label needs a new line, not an ellipsis: the 160pt cap produced the
   // "Househol…" pattern on exactly the chips whose whole job is to name which
-  // filter is active. `space.smd` is the scale's 12 — `space.sm + 2` was not on it.
+  // filter is active. `space.smd` is the scale's 12 — `space.smd` was not on it.
   fChip: { paddingHorizontal: space.smd, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
   fChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
   fChipText: { ...type.label, color: colors.textSecondary },

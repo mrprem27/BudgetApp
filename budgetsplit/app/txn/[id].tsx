@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   splitPaidName: { ...type.body, color: colors.textSecondary, flex: 1 },
   splitPaidNameBold: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   splitPaidAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
-  splitOweRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2, paddingLeft: space.sm },
+  splitOweRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, paddingLeft: space.sm },
   splitConnector: { width: 10, height: 1.5, backgroundColor: colors.border, marginRight: space.xs },
   splitOweName: { ...type.body, color: colors.textSecondary, flex: 1 },
   splitOweAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.expense },

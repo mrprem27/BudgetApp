@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
   groupBalLabel: { ...type.caption, color: colors.textMuted },
   groupBalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.sm + 2, paddingHorizontal: space.md, marginBottom: space.sm },
+  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.smd, paddingHorizontal: space.md, marginBottom: space.sm },
   membersHeaderText: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm, marginBottom: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

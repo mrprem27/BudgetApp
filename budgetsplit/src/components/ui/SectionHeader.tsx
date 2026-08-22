@@ -34,7 +34,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: space.lg,
+    /*
+     * `md`, not `lg`. React Native does not collapse margins the way CSS does, so
+     * this stacks with whatever sits above it: a card carries `marginBottom:
+     * space.md` (§3), and 16 + 24 put a **40pt** hole before every section label.
+     * Across a screen of cards and headers that is what reads as scattered — the
+     * blocks stop looking related to each other.
+     *
+     * 16 above and 8 below still separates the groups clearly, and the label's own
+     * weight does the rest. If a screen genuinely needs more air, give that screen
+     * the margin — do not put it back here, where it multiplies.
+     */
+    marginTop: space.md,
     marginBottom: space.sm,
   },
   first: { marginTop: 0 },

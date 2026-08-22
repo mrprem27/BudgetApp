@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: space.xl + space.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, minHeight: 56 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd, minHeight: 56 },
   rowOff: { opacity: 0.7 },
   iconDot: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary },

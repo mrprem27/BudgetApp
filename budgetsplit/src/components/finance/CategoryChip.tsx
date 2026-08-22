@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     gap: space.xs,
     backgroundColor: colors.bgMuted,
     borderRadius: radius.pill,
-    paddingHorizontal: space.sm + 2,
+    paddingHorizontal: space.smd,
     height: 32,
   },
   selected: {

@@ -363,6 +363,14 @@ export default function GroupsScreen() {
   );
 }
 
+/**
+ * The group's colour down the card's left edge. Named because the card's left
+ * padding is derived from it — this is NOT the off-scale spacing drift §9 bans,
+ * it is content clearing a known element, the same reasoning as
+ * `layout.dividerIndent` clearing the icon disc.
+ */
+const STRIPE_W = 4;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
@@ -370,16 +378,16 @@ const styles = StyleSheet.create({
   balancesWrap: { marginBottom: space.sm },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
   balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
-  balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
+  balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd },
   balRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   balName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   balSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   swipeAction: { backgroundColor: colors.expense, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', width: 80, marginLeft: space.sm, gap: space.xs },
   swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
-  groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + 4, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  groupCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingLeft: space.md + STRIPE_W, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   // RN types borderStyle as a union that excludes 'dashed' on some platforms.
   groupCardArchived: { opacity: 0.65, borderStyle: 'dashed' as any },
-  cardStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
+  cardStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: STRIPE_W, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   trailingCol: { alignItems: 'flex-end', gap: space.xs },
   groupInfo: { flex: 1, gap: space.xs },
@@ -389,6 +397,6 @@ const styles = StyleSheet.create({
   budgetPct: { ...type.caption, color: colors.textMuted, minWidth: 30, textAlign: 'right' },
   overBadge: { ...type.caption, color: colors.healthRed, fontFamily: 'Inter_600SemiBold', marginLeft: space.xs },
   stackRow: { marginTop: space.xs },
-  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 5, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
+  settleChip: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.smd, paddingVertical: 5, borderWidth: 1, borderColor: alpha(colors.accent, 27) },
   settleChipText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });
