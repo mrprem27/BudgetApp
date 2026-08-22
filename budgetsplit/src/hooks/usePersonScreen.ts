@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
 import { useStore } from '../store';
 import { useScreenData } from './useScreenData';
-import { getPersonById, setReceivableState } from '../db/queries/persons';
+import { getPersonById, setReceivableState, setTrustState } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { getSharedActivityWith } from '../db/queries/transactions';
 import { computeTransferScopes } from '../lib/settleScope';
 import { groupByDate } from '../lib/txnGrouping';
 import { settleRhythmDays, settleRhythmLabel, isReceivableStale } from '../lib/settleHistory';
+import { appliesImmediately } from '../lib/trust';
 import { confirmAsync } from '../lib/confirm';
-import { asReceivableState } from '../constants/enums';
+import { asReceivableState, asTrustState } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { useSQLiteContext } from 'expo-sqlite';
 
@@ -68,6 +69,33 @@ export function usePersonScreen(personId: string) {
     && net > 0
     && isReceivableStale(settlementDates.length ? Math.max(...settlementDates) : null, Date.now(), rhythmDays);
 
+  const trustState = asTrustState(data?.person?.trust_state);
+  /**
+   * Whether the toggle can do anything yet. Without an account there is no write
+   * path, so trusting them is a preference about a thing that cannot happen — the
+   * row still shows, but it says so rather than implying a protection is active.
+   */
+  const trustIsLive = data?.person
+    ? data.person.remote_uid != null
+    : false;
+  const trustApplies = data?.person ? appliesImmediately(data.person) : false;
+
+  async function toggleTrusted() {
+    const next = trustState === 'trusted' ? 'review' : 'trusted';
+    const name = data?.person?.name ?? 'this person';
+    const ok = await confirmAsync(
+      next === 'trusted' ? `Trust ${name}?` : `Review ${name}'s entries?`,
+      next === 'trusted'
+        ? `Anything ${name} adds in a group you share will count straight away, without waiting for you.`
+        : `Anything ${name} adds will wait for your approval before it touches your numbers. Entries you have already accepted stay accepted.`,
+      next === 'trusted' ? 'Trust' : 'Review each one',
+    );
+    if (!ok) return;
+    await setTrustState(db, personId, next);
+    haptic.success();
+    await reload();
+  }
+
   async function toggleWrittenOff() {
     const next = receivableState === 'expected' ? 'written_off' : 'expected';
     const name = data?.person?.name ?? 'this person';
@@ -94,6 +122,7 @@ export function usePersonScreen(personId: string) {
     scopes: data?.scopes ?? null,
     rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff,
+    trustState, trustIsLive, trustApplies, toggleTrusted,
     loading, error, refreshing, onRefresh, reload,
   };
 }

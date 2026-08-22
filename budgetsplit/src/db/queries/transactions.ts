@@ -33,6 +33,8 @@ export type Txn = {
   place_label: string | null;
   pay_method: PayMethod | null;
   source: TxnSource | null;
+  /** Who wrote it. NULL = me, on this device — which is every row today. */
+  author_person_id: string | null;
   currency: string | null;
   is_deleted: number;
   created_at: number;

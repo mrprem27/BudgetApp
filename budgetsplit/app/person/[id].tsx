@@ -34,6 +34,7 @@ export default function PersonScreen() {
   const {
     me, person, activity, sections, net, scopes, rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff,
+    trustState, trustIsLive, trustApplies, toggleTrusted,
     loading, error, refreshing, onRefresh, reload,
   } = usePersonScreen(id ?? '');
 
@@ -118,6 +119,26 @@ export default function PersonScreen() {
                 />
               )}
 
+              {/*
+                Trust is about what they can do to your numbers, not about the
+                balance — so it shows whatever the balance is. The hint is honest
+                about whether it can do anything yet: with no account there is no
+                write path, and saying "protected" would be theatre.
+              */}
+              <SecondaryButton
+                label={trustState === 'trusted' ? `Review ${name}'s entries` : `Trust ${name}`}
+                size="sm"
+                onPress={toggleTrusted}
+                style={styles.trustBtn}
+              />
+              <Text style={styles.trustHint}>
+                {!trustIsLive
+                  ? `${name} has no linked account, so nothing can be added on their behalf yet.`
+                  : trustApplies
+                    ? 'Their entries count straight away, in every group you share.'
+                    : 'Their entries wait for your approval before touching your numbers.'}
+              </Text>
+
               {net !== 0 && (
                 <PrimaryButton
                   label="Settle up"
@@ -154,5 +175,7 @@ const styles = StyleSheet.create({
   writtenOff: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
   stale: { ...type.caption, color: colors.healthAmber, marginTop: space.xs, textAlign: 'center' },
   writeOffBtn: { marginTop: space.sm },
+  trustBtn: { marginTop: space.md },
+  trustHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
   settle: { alignSelf: 'stretch', marginTop: space.md },
 });

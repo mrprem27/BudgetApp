@@ -157,6 +157,18 @@ export const TransactionRow = React.memo(function TransactionRow({
             <Text style={styles.groupText} numberOfLines={1}>{groupName}</Text>
           </View>
         ) : null}
+
+        {/*
+          A row that is shown but counted by nothing has to say so, or the amount
+          beside it reads as spent money. Read-only, so no trailing affordance —
+          the decision is made on the approvals screen (AGENTS §9).
+        */}
+        {txn.pendingApproval ? (
+          <View style={styles.pendingChip}>
+            <Feather name="user-check" size={10} color={colors.healthAmber} />
+            <Text style={styles.pendingText} numberOfLines={1}>Waiting for you</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.right}>
@@ -236,6 +248,8 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontFamily: 'Inter_600SemiBold',
   },
+  pendingChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 2 },
+  pendingText: { ...type.caption, color: colors.healthAmber },
   groupChip: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -219,6 +219,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 |---|---|---|---|
 | S-18 | **Import** | `app/import.tsx` | Pick a PDF / xlsx / CSV / text file *or* paste text; format auto-detected; rows land in `pending_txn`. See §10.1. |
 | S-19 | **Review** | `app/review.tsx` (**largest screen in the repo**) | The staging inbox — every pending row editable in place, draft auto-save, bulk actions, focus workspace, filters, saved views. See §10.2. |
+| S-40 | **Waiting for you** | `app/approvals.tsx` | Entries **other people** wrote that are waiting on your approval. Grouped by author, with approve / not-mine per entry and "Trust <name>" per person. Unreachable today — nothing can author a peer entry until sync exists. See §10.3. |
 
 ### 3.7 Analytics
 
@@ -1188,6 +1189,45 @@ group (income is always personal), and marks its payer active so commits attribu
 that person — the "someone else always pays for this group" case.
 
 ---
+
+### 10.3 Waiting for you — `app/approvals.tsx`
+
+**Not reachable today.** Nothing in the app can author an entry on your behalf —
+there is no peer write path — so this queue is always empty until sync ships. It
+is built now because the rule it enforces is much cheaper to establish before the
+thing it defends against exists than after.
+
+**What it is.** When someone else adds an expense in a group you share, that entry
+is real: it appears in the **group ledger** immediately, because the group has to
+agree on what happened. But it moves **none of your numbers** — not spend, not
+budget, not cash, not owe/owed, not Safe-to-Spend, not the health score, and it
+cannot trigger a savings raid — until you accept it here. See AGENTS §13.
+
+**Why it is not part of Review.** Review holds `pending_txn` rows: imports *you*
+created, where every field is editable because you are still shaping them. These
+are assertions someone else made. You accept or refuse them; you never silently
+rewrite them. One "Confirm" button meaning both would teach the wrong reflex on
+the screen where it matters most.
+
+**States:** empty (the normal one) · a card per author · error + retry ·
+pull-to-refresh.
+
+**Layout & actions**
+1. **Grouped by author**, oldest unanswered person first — "who is asking" is the
+   decision being made, so a burst from someone new cannot bury an older one.
+2. Each entry reads as a **conditional sentence**: *"Aarav added ₹4,000 for food
+   in Flat. Your share would be ₹1,000, and it says you paid ₹0."* The "it says
+   you paid" clause is never implicit — someone else claiming you paid is the only
+   shape that can move your cash.
+3. **Approve** — applies at once. Not gated behind a dialog; accepting is ordinary.
+4. **Not mine** — confirms first, removes it from your ledger, and says plainly
+   that it stays on theirs.
+5. **Trust <name>** — confirms, then applies to everything of theirs already
+   waiting. After the third entry from the same person, the honest answer is trust,
+   not repetition.
+
+**Ordering** is by *arrival*, never by the entry's own date: the author chose that
+date, and a back-dated entry must not bury itself at the bottom of the queue.
 
 ## 11. Transaction & category detail
 

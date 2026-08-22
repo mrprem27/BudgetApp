@@ -75,6 +75,7 @@ export default function DashboardScreen() {
   const oweTotal = data?.oweTotal ?? 0;
   const owedTotal = data?.owedTotal ?? 0;
   const reviewCount = data?.reviewCount ?? 0;
+  const approvalCount = data?.approvalCount ?? 0;
   const budget = data?.budget ?? { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 };
   const catRows = data?.catRows ?? [];
   const catTotal = data?.catTotal ?? 0;
@@ -150,6 +151,16 @@ export default function DashboardScreen() {
             <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
           </View>
           <View style={styles.headerRight}>
+            {/* Distinct icon and an amber tint: this is someone else asking for a
+                decision, not a queue of your own imports. */}
+            {approvalCount > 0 && (
+              <TouchableOpacity onPress={() => router.push('/approvals')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`${approvalCount} entries waiting for your approval`}>
+                <Feather name="user-check" size={18} color={colors.healthAmber} />
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{approvalCount > 9 ? '9+' : approvalCount}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
             {reviewCount > 0 && (
               <TouchableOpacity onPress={() => router.push('/review')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
                 <Feather name="inbox" size={18} color={colors.textSecondary} />

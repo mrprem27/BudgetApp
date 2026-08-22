@@ -8,6 +8,7 @@ import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
 import { getSafeToSpend } from '../db/queries/spendPower';
 import { getPendingCount } from '../db/queries/pending';
+import { getPendingApprovalCount } from '../db/queries/approval';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange, getLedgerStats } from '../db/queries/transactions';
 import { getGoalFundingStatus } from '../db/queries/spendPower';
@@ -93,7 +94,7 @@ export async function loadHomeData(
       return {
         meInfo: null as { name: string; color: string; image: string | null } | null,
         spending: 0, spendGroup: 0, income: 0, prevSpending: 0,
-        oweTotal: 0, owedTotal: 0, reviewCount: 0,
+        oweTotal: 0, owedTotal: 0, reviewCount: 0, approvalCount: 0,
         budget: { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
         catRows: [] as CategoryRow[], catTotal: 0,
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
@@ -161,6 +162,9 @@ export async function loadHomeData(
     // so owe AND owed can both show (matches Insights / Personal / Groups).
     const exp = await getMyExposure(db, me.id);
     const reviewCount = await getPendingCount(db);
+    // Entries other people wrote that are waiting on me. Always 0 today — nothing
+    // can author one until sync exists.
+    const approvalCount = await getPendingApprovalCount(db);
 
     /*
      * Everything budget-shaped on Home is **My Budget** — one summary, no per-group
@@ -322,7 +326,7 @@ export async function loadHomeData(
     return {
       meInfo,
       spending: sp, spendGroup: spGroup, income: inc, prevSpending: prevSp,
-      oweTotal: exp.owe, owedTotal: exp.owed, reviewCount,
+      oweTotal: exp.owe, owedTotal: exp.owed, reviewCount, approvalCount,
       budget: {
         /** Rolled up at the active period; 0 when nothing is budgeted at it. */
         allocated: budgetAllocated,
