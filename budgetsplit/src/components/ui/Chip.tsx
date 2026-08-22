@@ -51,7 +51,7 @@ export function Chip({
     <View
       style={[
         styles.chip,
-        selected && { backgroundColor: alpha(accent, 13), borderColor: accent },
+        selected && { backgroundColor: alpha(accent, 20), borderColor: accent },
         maxWidth != null && { maxWidth },
       ]}
     >
@@ -100,7 +100,11 @@ const styles = StyleSheet.create({
     minHeight: layout.touchMin - 8,
     paddingHorizontal: space.smd,
     borderRadius: radius.pill,
-    backgroundColor: colors.bgCard,
+    // `bgMuted`, not `bgCard`. Unset chips were card-coloured against the screen
+    // background — a 1-step difference on a dark theme — so a row of controls read
+    // as flat text and "which of these is on" was unanswerable at a glance.
+    // `bgMuted` is the token for exactly this (§10: tab pills, segmented controls).
+    backgroundColor: colors.bgMuted,
     borderWidth: 1,
     borderColor: colors.border,
   },

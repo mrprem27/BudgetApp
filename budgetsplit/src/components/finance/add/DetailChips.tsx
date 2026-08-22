@@ -96,7 +96,55 @@ export function DetailChips({
     // No `gap` on this container: `SectionHeader` owns its own vertical margins and
     // the two would silently add up (AGENTS §3/§12).
     <View>
-      <SectionHeader title="Details" first />
+      {/* How & when leads: pay method, time and repeat are the things people
+          actually change, and Details (note, tags, receipt, place) are the ones
+          they add occasionally. The frequent group should not sit under the rare
+          one. `first` because this is now the top block. */}
+      <SectionHeader title="How & when" first />
+      <View style={styles.row}>
+        {/* Always a set chip — there is no "no pay method" state to offer. For
+            income the same field means the opposite direction: where it landed. */}
+        <Chip
+          label={PAY_METHOD_LABEL[payMethod]}
+          icon={isIncome ? 'download' : 'credit-card'}
+          selected
+          accent={accent}
+          chevron
+          onPress={onOpenPayMethod}
+          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
+        />
+
+        {/* A chip, not a row in the card below. Repeat HOLDS a value and has a
+            real on/off, so it belongs in the same visual language as the other
+            settable things — as a card row its only state signal was a line of
+            grey text, and "is this repeating?" could not be answered at a glance. */}
+        {onOpenRecurring && (
+          <Chip
+            label={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : 'Repeat'}
+            icon="repeat"
+            selected={recurEnabled}
+            accent={accent}
+            maxWidth={200}
+            chevron
+            onPress={onOpenRecurring}
+            accessibilityLabel={recurEnabled ? 'Repeats. Change or turn off' : 'Make this repeat'}
+          />
+        )}
+
+        {/* Always filled — the time is real whether or not it was chosen. */}
+        <Chip
+          label={timeOfDay(txnDate)}
+          icon="clock"
+          selected
+          accent={accent}
+          chevron
+          onPress={onOpenTime}
+          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
+        />
+      </View>
+
+      {/* No `first`: this header's own 24pt top margin IS the break between groups. */}
+      <SectionHeader title="Details" />
       <View style={styles.row}>
         {onOpenNote && (
           <Chip
@@ -160,34 +208,7 @@ export function DetailChips({
         )}
       </View>
 
-      {/* No `first`: this header's own 24pt top margin IS the break between groups. */}
-      <SectionHeader title="How & when" />
-      <View style={styles.row}>
-        {/* Always a set chip — there is no "no pay method" state to offer. For
-            income the same field means the opposite direction: where it landed. */}
-        <Chip
-          label={PAY_METHOD_LABEL[payMethod]}
-          icon={isIncome ? 'download' : 'credit-card'}
-          selected
-          accent={accent}
-          chevron
-          onPress={onOpenPayMethod}
-          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
-        />
-
-        {/* Always filled — the time is real whether or not it was chosen. */}
-        <Chip
-          label={timeOfDay(txnDate)}
-          icon="clock"
-          selected
-          accent={accent}
-          chevron
-          onPress={onOpenTime}
-          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
-        />
-      </View>
-
-      {/* Rows, not chips: both open another surface rather than holding a value.
+      {/* A row, not a chip: this one holds no value, it opens another screen.
           Carded because `ListRow` self-pads 16pt horizontally, which would read as
           an accidental indent against the flush chip rows above (AGENTS §3). */}
       {hasActions && (
@@ -199,19 +220,6 @@ export function DetailChips({
                 title="Split by items"
                 onPress={onSplitByItems}
                 accessibilityLabel="Split this bill by items"
-              />
-            )}
-            {onSplitByItems && onOpenRecurring && <Divider indent="text" />}
-            {onOpenRecurring && (
-              <ListRow
-                icon="repeat"
-                title="Repeat this"
-                // No ✕ here, and that is the trade: `ListRow` has no remove
-                // affordance, so the sheet's own "Repeat this" switch is the off
-                // switch. One place to turn it on, the same place to turn it off.
-                value={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : undefined}
-                onPress={onOpenRecurring}
-                accessibilityLabel={recurEnabled ? 'Repeats. Change or turn off' : 'Make this repeat'}
               />
             )}
           </Card>

@@ -99,10 +99,19 @@ export function formatCompact(smallestUnit: number, currency: CurrencyCode = DEF
   return formatCompactMajor(smallestUnit / divisor, currency);
 }
 
-/** Hard cap on a single amount: up to 12 integer digits of rupees. Prevents
- *  absurd/overflow values from entering the DB and blowing out compact
- *  formatting; stays well inside Number.MAX_SAFE_INTEGER even in paise. */
-export const MAX_INT_DIGITS = 12;
+/**
+ * Hard cap on a single amount: 9 integer digits, so up to ₹99,99,99,999 —
+ * just under ₹100 crore.
+ *
+ * Was 12 digits (₹1 trillion). Nothing overflowed, but it is not a real
+ * transaction: it let a stray keypress produce a number that dwarfs every other
+ * figure in the app, wrecks a budget bar and a category share, and renders as a
+ * 16-character string in a 36pt centred hero. A cap people cannot legitimately
+ * reach is not a constraint on them; it is a constraint on typos.
+ *
+ * Still far inside `Number.MAX_SAFE_INTEGER` in paise (~₹90,071 crore).
+ */
+export const MAX_INT_DIGITS = 9;
 export const MAX_PAISE = (10 ** MAX_INT_DIGITS - 1) * 100;
 
 /** Keep only digits + a single decimal point (max 2 places), and cap the

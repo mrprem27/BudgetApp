@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { PressableScale } from '../../ui/PressableScale';
 import { IconCircle } from '../../ui/IconCircle';
 import { colors, type, space, radius } from '../../tokens';
+import { alpha } from '../../../theme';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;
@@ -26,6 +27,12 @@ type Props = {
  * screen, which is the wrong hierarchy. Destination is context, and context should
  * be quiet — so it's centred and small, a caption over the number below it.
  *
+ * Quiet is not the same as invisible, though, and it had gone too far: card
+ * background on screen background is barely a step apart on this theme, so the one
+ * control that decides which group an expense lands in disappeared. It now carries
+ * the group's OWN colour as a wash, which makes it findable and tells you which
+ * group you are in before you read the word.
+ *
  * Shared by expense and transfer so the two don't drift into two different
  * group-pickers on one screen, which is exactly what happened before: expense had
  * a wrapping pill row, transfer had its own scope chips further down the form.
@@ -38,7 +45,7 @@ export function ContextPill({ icon, label, detail, tint = colors.accent, onPress
         hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
         accessibilityLabel={accessibilityLabel}
       >
-        <View style={styles.pill}>
+        <View style={[styles.pill, { backgroundColor: alpha(tint, 13), borderColor: alpha(tint, 33) }]}>
           <IconCircle icon={icon} size={22} color={tint} iconSize={12} />
           <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{label}</Text>
           {!!detail && <Text style={styles.detail} numberOfLines={1}>· {detail}</Text>}
@@ -59,9 +66,7 @@ const styles = StyleSheet.create({
     paddingRight: space.smd,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
-    backgroundColor: colors.bgCard,
     borderWidth: 1,
-    borderColor: colors.border,
     maxWidth: '100%',
   },
   label: { ...type.labelSemi, flexShrink: 1 },

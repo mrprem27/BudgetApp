@@ -83,7 +83,10 @@ export default function QuickAddScreen() {
                 active={kind}
                 onChange={(k) => f.onSelectKind(k as typeof kind)}
                 activeColor={accent}
-                size="lg"
+                // `sm` (36pt), not `lg`. At 48pt the three kinds were the loudest
+                // thing on the screen, competing with the amount below them — and
+                // it is a choice most people make once and leave.
+                size="sm"
               />
             </View>
           )}

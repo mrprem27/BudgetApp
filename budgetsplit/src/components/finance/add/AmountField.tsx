@@ -8,8 +8,9 @@ import { kindAccent, kindAmountColor } from '../../../lib/kindTheme';
 import type { AddKind } from '../../../constants/enums';
 import { alpha } from '../../../theme';
 
-/** Two 32pt discs plus the gap between them. */
-const TOOLS_W = layout.iconCircle * 2 + space.sm;
+/** One 32pt disc plus breathing room, reserved on BOTH sides so the number
+ *  stays optically centred rather than shifting when the tool appears. */
+const TOOLS_W = layout.iconCircle + space.sm;
 
 type Props = {
   amountText: string;
@@ -20,15 +21,23 @@ type Props = {
   transferScopeBal?: number;
   /** Opens the arithmetic sheet. Omitted where adjusting makes no sense. */
   onOpenCalculator?: () => void;
-  /** Opens the dictation sheet. Omitted while editing, where re-dictating would overwrite. */
+  /**
+   * Opens the dictation sheet.
+   *
+   * **Parked, not deleted.** The mic is off for now: it sat beside the calculator
+   * on the amount row, which put two competing shortcuts on the app's one hero
+   * number for a capture path most entries never use. The sheet, the deep link and
+   * the Siri shortcut all still work — only this entry point is withdrawn, so
+   * turning it back on is passing the prop again.
+   */
   onOpenVoice?: () => void;
 };
 
 /**
  * The big centered amount input. Colour + placeholder follow the kind.
  *
- * The two shortcuts — dictate and adjust — are **icon discs on the amount row itself**,
- * pinned to its right edge. They were a pair of centred captions sandwiching the hero, then
+ * The adjust shortcut is an **icon disc on the amount row itself**, pinned to its
+ * bottom-right corner. They were a pair of centred captions sandwiching the hero, then
  * a left-aligned pair *below* it: floating under a centred number, they read as a second
  * element rather than as tools belonging to the field. On the row, they are unmistakably
  * about the amount and cost no vertical space. AGENTS §1 allows one hero per screen, and
@@ -43,17 +52,34 @@ export function AmountField({
   const color = kindAmountColor(kind);
   const cursor = kindAccent(kind);
 
+  /*
+   * Shrink a long amount instead of letting it overflow.
+   *
+   * `adjustsFontSizeToFit` is a `Text` prop — `TextInput` does not have it on
+   * either platform — so the size is derived from the string that is actually
+   * rendered, grouping separators and all. At the 9-digit cap that string is 16
+   * characters ("₹99,99,99,999"), which does not fit any phone width at 36pt.
+   *
+   * Steps rather than a continuous ratio: a size that moves on every keystroke
+   * makes the number visibly wobble while you type.
+   */
+  const shown = formatAmountInput(amountText);
+  const fontSize = shown.length <= 9 ? type.amountXL.fontSize
+    : shown.length <= 12 ? type.amountXL.fontSize * 0.78
+    : type.amountXL.fontSize * 0.62;
+
   // The calculator only appears once there is something to adjust — an empty field has
   // nothing to split or tax, and the button would just be a second way to start typing.
   const showCalc = onOpenCalculator != null && amountText.length > 0;
-  const showVoice = onOpenVoice != null;
-  const hasTools = showVoice || showCalc;
+  // The mic is parked — see `onOpenVoice`. Deliberately ignored rather than the
+  // prop removed, so callers keep compiling and it is one line to restore.
+  const hasTools = showCalc;
 
   return (
     <View style={styles.amountBlock}>
       <View style={styles.amountRow}>
         <TextInput
-          style={[styles.amountInput, { color }, hasTools && { paddingHorizontal: TOOLS_W }]}
+          style={[styles.amountInput, { color, fontSize }, hasTools && { paddingHorizontal: TOOLS_W }]}
           value={formatAmountInput(amountText)}
           onChangeText={(t) => onChangeText(sanitizeAmountInput(t))}
           keyboardType="decimal-pad"
@@ -62,26 +88,14 @@ export function AmountField({
           accessibilityLabel="Amount"
           autoFocus={autoFocus}
         />
-        {hasTools && (
+        {showCalc && (
           <View style={styles.tools}>
-            {showVoice && (
-              <Disc
-                icon="mic"
-                tint={cursor}
-                onPress={onOpenVoice!}
-                // The word moves into the label rather than off the screen — the glyph alone
-                // would leave a screen-reader user with "button".
-                label="Say the amount and what it was for"
-              />
-            )}
-            {showCalc && (
-              <Disc
-                icon="divide-circle"
-                tint={cursor}
-                onPress={onOpenCalculator!}
-                label="Adjust amount — split, tip or tax"
-              />
-            )}
+            <Disc
+              icon="divide-circle"
+              tint={cursor}
+              onPress={onOpenCalculator!}
+              label="Adjust amount — split, tip or tax"
+            />
           </View>
         )}
       </View>
@@ -107,7 +121,15 @@ function Disc({ icon, tint, onPress, label }: {
 }
 
 const styles = StyleSheet.create({
-  amountBlock: { paddingBottom: space.md, borderBottomWidth: 1, borderColor: alpha(colors.border, 33) },
+  // Room above and below: the amount is the hero, and it was sitting tight
+  // against the kind switcher above and the category row below, which made all
+  // three read as one dense block instead of a headline with its controls.
+  amountBlock: {
+    paddingTop: space.md,
+    paddingBottom: space.lg,
+    borderBottomWidth: 1,
+    borderColor: alpha(colors.border, 33),
+  },
   // `type.amountXL` is the hero-number token (SpaceMono 36). This used to
   // re-declare the size with its own letterSpacing (-1.5 vs the token's -0.5),
   // so the app's biggest number was the one number off-token.
@@ -115,7 +137,12 @@ const styles = StyleSheet.create({
   amountCursor: { width: 48, height: 2, borderRadius: 1, marginTop: space.xs, alignSelf: 'center' },
   amountRow: { flexDirection: 'row', alignItems: 'center' },
   // Absolute so the input keeps the full row and stays optically centred.
-  tools: { position: 'absolute', right: 0, flexDirection: 'row', gap: space.sm },
+  //
+  // Pinned to the BOTTOM of the row, not centred on it: level with a 36pt number,
+  // the disc read as floating inside the field rather than sitting beside it, and
+  // on a short amount it landed almost against the digits. On the baseline it
+  // reads as a tool attached to the amount block.
+  tools: { position: 'absolute', right: 0, bottom: 0, flexDirection: 'row', gap: space.sm },
   disc: {
     width: layout.iconCircle,
     height: layout.iconCircle,
