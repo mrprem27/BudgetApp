@@ -22,13 +22,25 @@ export type TrustSubject = {
  * 3. **Otherwise, whatever I decided.** Default `review`, because the safe answer
  *    to "may someone I have not vouched for move my numbers" is no.
  *
- * Deliberately reads the person, not the group. A group is only a set of humans,
- * and a group-level switch would silently extend trust to whoever is added next.
+ * Still keyed on the PERSON, never on the group. A group is only a set of humans,
+ * so a group-level switch would silently extend trust to whoever is added to it
+ * next month. `override` does not break that: it is my answer about one human in
+ * one place, so nobody inherits anything by being added.
+ *
+ * What it allows is the thing people actually think — "Aarav is reliable about
+ * the flat bills and vague on holiday" — which without it could only be expressed
+ * by distrusting him everywhere.
+ *
+ * @param override this person's trust in the group the entry belongs to, when one
+ *   has been set. `null`/absent means fall back to the global answer, which is the
+ *   common case and deliberately the default.
  */
-export function appliesImmediately(p: TrustSubject): boolean {
+export function appliesImmediately(p: TrustSubject, override?: string | null): boolean {
   if (p.is_me === 1) return true;
+  // Checked BEFORE the override, not after: without an account there is no write
+  // path at all, so no per-group answer can make an unreachable person reachable.
   if (p.remote_uid == null) return false;
-  return asTrustState(p.trust_state) === 'trusted';
+  return asTrustState(override ?? p.trust_state) === 'trusted';
 }
 
 /** The parts of an incoming entry that decide whether it can touch me unasked. */
@@ -61,8 +73,16 @@ export type IncomingEntry = {
  * debts across the whole group — an expense between two other people can still
  * move who I owe.
  */
-export function requiresMyApproval(author: TrustSubject, entry: IncomingEntry): boolean {
+export function requiresMyApproval(
+  author: TrustSubject,
+  entry: IncomingEntry,
+  /** Their trust in THIS group, when I have set one. See `appliesImmediately`. */
+  override?: string | null,
+): boolean {
   if (author.is_me === 1) return false;
+  // Ahead of trust, and ahead of any override: a transfer is confirmed however
+  // much I trust the sender, in every group. No per-group answer can waive it,
+  // because the reason has nothing to do with the person's honesty.
   if (entry.kind === 'settlement' && entry.touchesMe) return true;
-  return !appliesImmediately(author);
+  return !appliesImmediately(author, override);
 }

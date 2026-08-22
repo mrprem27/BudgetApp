@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList, Linking, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, SectionList, Linking, Share, Alert, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -38,6 +38,7 @@ export default function PersonScreen() {
     me, person, activity, sections, net, scopes, rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff,
     trustState, trustIsLive, trustApplies, toggleTrusted,
+    sharedGroups, groupTrust, setGroupTrustFor,
     loading, error, refreshing, onRefresh, reload,
   } = usePersonScreen(id ?? '');
 
@@ -165,6 +166,45 @@ export default function PersonScreen() {
                     : 'Their entries wait for your approval before touching your numbers.'}
               </Text>
 
+              {/*
+                Per-group exceptions.
+
+                Only shown once trust can actually do something, and only when
+                there is more than one group — with one group an override and the
+                global answer are the same statement said twice.
+
+                Each row cycles trusted → waits → follows the answer above.
+                Clearing has to be reachable, or "trusted everywhere except the
+                trip" becomes a one-way door.
+              */}
+              {trustIsLive && sharedGroups.length > 1 && (
+                <View style={styles.groupTrust}>
+                  <Text style={styles.groupTrustLabel}>OR DECIDE PER GROUP</Text>
+                  {sharedGroups.map(g => {
+                    const set = groupTrust.get(g.id) ?? null;
+                    return (
+                      <TouchableOpacity
+                        key={g.id}
+                        style={styles.groupTrustRow}
+                        onPress={() => {
+                          haptic.selection();
+                          setGroupTrustFor(g.id, set === null ? 'trusted' : set === 'trusted' ? 'review' : null);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Trust for ${g.name}`}
+                      >
+                        <Text style={styles.groupTrustName} numberOfLines={1}>{g.name}</Text>
+                        <Text style={[styles.groupTrustValue, set === null && styles.groupTrustInherit]}>
+                          {set === 'trusted' ? 'Counts straight away'
+                            : set === 'review' ? 'Waits for you'
+                              : 'Same as above'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
               {/* Only when they owe YOU and we have a number. `canRemind` owns
                   both halves of that — nudging someone about money you owe them
                   is an apology, not a reminder. */}
@@ -215,5 +255,14 @@ const styles = StyleSheet.create({
   writeOffBtn: { marginTop: space.sm },
   trustBtn: { marginTop: space.md },
   trustHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
+  groupTrust: { marginTop: space.md, alignSelf: 'stretch' },
+  groupTrustLabel: { ...type.sectionLabel, color: colors.textSecondary, marginBottom: space.sm },
+  groupTrustRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: space.sm, minHeight: layout.touchMin, paddingVertical: space.xs,
+  },
+  groupTrustName: { ...type.body, color: colors.textPrimary, flexShrink: 1 },
+  groupTrustValue: { ...type.labelSemi, color: colors.accent },
+  groupTrustInherit: { color: colors.textMuted },
   settle: { alignSelf: 'stretch', marginTop: space.md },
 });

@@ -442,15 +442,25 @@ who doesn't know the rule:
 - **Income is never grouped.** It always writes `[{me, total}]` and zero shares, so
   grouping it carries no meaning.
 
-**When sync exists** (it does not today — there is no peer write path anywhere):
-*an entry takes effect immediately for whoever created it, and waits for approval
-from everyone else it touches.* You can always make yourself worse off, never
-someone else.
+**Sync exists now**, and the rule it was written for holds: *an entry takes effect
+immediately for whoever created it, and waits for approval from everyone else it
+touches.* You can always make yourself worse off, never someone else. The peer
+write path is `ingestPeerTxn`, reached from `lib/syncEngine`.
 
-**Trust is per person, not per group.** Mark someone trusted and their entries
+**Trust is per person, never per group.** Mark someone trusted and their entries
 apply immediately in every group you share; leave them on review and every entry
-waits. A group is only a set of humans, so a group-level switch would silently
-extend trust to whoever is added next.
+waits. A group is only a set of humans, so a group-*level* switch would silently
+extend trust to whoever is added next — that remains forbidden.
+
+A **per-person, per-group override** (`person_group_trust`) is the exception that
+does not break the rule: every row is still keyed on a human, so nobody inherits
+anything by being added to a group. It exists because "Aarav is reliable about the
+flat bills and vague on holiday" is a real thought, and without it the only way to
+say so was to distrust him everywhere. Absent = the global answer, and that must
+stay clearable, or "trusted except here" is a one-way door. Two things it can
+never do: make someone with no `remote_uid` reachable (that check runs first), or
+waive the transfer rule. The override is read at the loader (`ingestPeerTxn`) and
+passed in, so `lib/trust.ts` stays pure and db-free.
 
 **A person with no `remote_uid` has no account and therefore no write path, so
 their trust value is inert** (`lib/trust.ts`). `remote_uid` is written by one

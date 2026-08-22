@@ -236,3 +236,59 @@ export async function removeMemberFromGroup(
     });
   });
 }
+
+// --- Per-group trust overrides ---------------------------------------------
+
+/**
+ * How much I trust this person IN THIS GROUP, when I have said.
+ *
+ * `null` means I have not, and the global answer stands — which is the common
+ * case and deliberately so: an override is an exception, and a row per person per
+ * group would make "I never thought about it" indistinguishable from a decision.
+ */
+export async function getGroupTrust(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  groupId: string,
+): Promise<string | null> {
+  const row = await db.getFirstAsync<{ trust_state: string }>(
+    'SELECT trust_state FROM person_group_trust WHERE person_id = ? AND group_id = ?',
+    [personId, groupId],
+  );
+  return row?.trust_state ?? null;
+}
+
+/** Every override I have set for one person, so the person screen can show them. */
+export async function getGroupTrustFor(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+): Promise<Array<{ group_id: string; trust_state: string }>> {
+  return db.getAllAsync<{ group_id: string; trust_state: string }>(
+    'SELECT group_id, trust_state FROM person_group_trust WHERE person_id = ?',
+    [personId],
+  );
+}
+
+/**
+ * Set or clear one override. `null` clears it, returning that group to the global
+ * answer — which has to be reachable, or "trust everywhere except here" becomes a
+ * one-way door.
+ */
+export async function setGroupTrust(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  groupId: string,
+  state: string | null,
+): Promise<void> {
+  if (state === null) {
+    await db.runAsync(
+      'DELETE FROM person_group_trust WHERE person_id = ? AND group_id = ?', [personId, groupId],
+    );
+    return;
+  }
+  await db.runAsync(
+    `INSERT OR REPLACE INTO person_group_trust (person_id, group_id, trust_state, updated_at)
+     VALUES (?, ?, ?, ?)`,
+    [personId, groupId, state, Date.now()],
+  );
+}

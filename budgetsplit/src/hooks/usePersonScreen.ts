@@ -8,6 +8,8 @@ import { computeTransferScopes } from '../lib/settleScope';
 import { groupByDate } from '../lib/txnGrouping';
 import { settleRhythmDays, settleRhythmLabel, isReceivableStale } from '../lib/settleHistory';
 import { appliesImmediately } from '../lib/trust';
+import { getGroupTrustFor, setGroupTrust } from '../db/queries/persons';
+import { getSharedGroupsWith } from '../db/queries/groups';
 import { confirmAsync } from '../lib/confirm';
 import { asReceivableState, asTrustState } from '../constants/enums';
 import { haptic } from '../lib/haptics';
@@ -27,11 +29,13 @@ export function usePersonScreen(personId: string) {
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
     async (db) => {
       if (!me) throw new Error('No current user');
-      const [person, activity, balances, scopes] = await Promise.all([
+      const [person, activity, balances, scopes, shared, overrides] = await Promise.all([
         getPersonById(db, personId),
         getSharedActivityWith(db, me.id, personId),
         getFriendBalances(db, me.id),
         computeTransferScopes(db, me.id, personId),
+        getSharedGroupsWith(db, me.id, personId),
+        getGroupTrustFor(db, personId),
       ]);
       return {
         person,
@@ -40,6 +44,8 @@ export function usePersonScreen(personId: string) {
         // so a missing row means we share no group rather than "balance zero".
         net: balances.find(b => b.personId === personId)?.net ?? 0,
         scopes,
+        shared,
+        overrides: new Map(overrides.map(o => [o.group_id, o.trust_state])),
       };
     },
     [personId, me?.id],
@@ -112,6 +118,18 @@ export function usePersonScreen(personId: string) {
     await reload();
   }
 
+  /**
+   * Set or clear this person's trust in ONE group.
+   *
+   * Cycles trusted → review → cleared rather than offering three controls: the
+   * third state is "I have not decided here", which is a *removal* of an opinion,
+   * and a switch cannot express that.
+   */
+  async function setGroupTrustFor(groupId: string, next: string | null) {
+    await setGroupTrust(db, personId, groupId, next);
+    reload();
+  }
+
   return {
     me,
     person: data?.person ?? null,
@@ -123,6 +141,10 @@ export function usePersonScreen(personId: string) {
     rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff,
     trustState, trustIsLive, trustApplies, toggleTrusted,
+    /** Groups we both belong to, and any per-group answer I have set. */
+    sharedGroups: data?.shared ?? [],
+    groupTrust: data?.overrides ?? new Map<string, string>(),
+    setGroupTrustFor,
     loading, error, refreshing, onRefresh, reload,
   };
 }

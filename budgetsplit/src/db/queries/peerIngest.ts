@@ -5,6 +5,7 @@ import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 import { validateShares } from '../../lib/splitMath';
 import { requiresMyApproval } from '../../lib/trust';
+import { getGroupTrust } from './persons';
 import type { Person } from './persons';
 import { localTz } from './transactions';
 
@@ -170,7 +171,11 @@ export async function ingestPeerTxn(
   const wasRejected = !!existing && !!(await db.getFirstAsync<{ state: string }>(
     "SELECT state FROM txn_approval WHERE txn_id = ? AND state = 'rejected'", [id],
   ));
-  const applied = !wasRejected && !requiresMyApproval(author, { kind: env.kind, touchesMe });
+  // My answer about this person IN THIS GROUP, when I have set one. Read here
+  // rather than inside `requiresMyApproval` so that function stays pure and
+  // db-free, which is what makes the whole trust model testable without a schema.
+  const groupTrust = await getGroupTrust(db, author.id, env.groupId);
+  const applied = !wasRejected && !requiresMyApproval(author, { kind: env.kind, touchesMe }, groupTrust);
   const now = Date.now();
   const deleted = env.isDeleted ? 1 : 0;
 

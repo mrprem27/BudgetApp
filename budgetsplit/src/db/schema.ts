@@ -287,6 +287,29 @@ CREATE TABLE IF NOT EXISTS txn_approval (
   dispute_state TEXT
 );
 
+-- Trust for one person in ONE group, overriding my global answer for them.
+--
+-- Trust is per PERSON, never per group: a group is only a set of humans, so a
+-- group-level switch would silently extend trust to whoever is added to it next
+-- month. That rule is unchanged and this table does not break it -- every row is
+-- still keyed on a human, so nobody inherits anything by being added.
+--
+-- What it adds is that the same human can be judged differently in two places.
+-- "Aarav is reliable about the flat bills and vague on holiday" is a real thing
+-- people think, and without this the only way to express it was to distrust him
+-- everywhere.
+--
+-- Absent = use the global person.trust_state. Deliberately sparse: an override
+-- is an exception, and materialising a row per person per group would make the
+-- common answer indistinguishable from a deliberate one.
+CREATE TABLE IF NOT EXISTS person_group_trust (
+  person_id   TEXT NOT NULL REFERENCES person(id),
+  group_id    TEXT NOT NULL REFERENCES budget_group(id),
+  trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted','review')),
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (person_id, group_id)
+);
+
 -- What other people have said about MY entries.
 --
 -- The mirror of txn_approval: that table is my opinion of their entries, this is

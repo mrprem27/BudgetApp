@@ -372,3 +372,25 @@ export async function setMemberRole(
   );
 }
 
+
+/**
+ * Groups the two of us are both in.
+ *
+ * Only shared ones: a personal group has one member by definition, so it can
+ * never contain anyone else, and offering to set trust there would be offering a
+ * control over an impossibility.
+ */
+export async function getSharedGroupsWith(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  personId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  return db.getAllAsync<{ id: string; name: string }>(
+    `SELECT g.id, g.name FROM budget_group g
+       JOIN group_member a ON a.group_id = g.id AND a.person_id = ?
+       JOIN group_member b ON b.group_id = g.id AND b.person_id = ?
+      WHERE g.is_personal = 0 AND g.is_archived = 0
+      ORDER BY g.created_at ASC`,
+    [meId, personId],
+  );
+}
