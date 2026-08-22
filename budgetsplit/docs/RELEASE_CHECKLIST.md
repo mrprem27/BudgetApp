@@ -463,10 +463,11 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 ## 3 · Decisions still open
 
-- [ ] **Investments as a Transfer destination.** Decided in principle
-      ("move money to investments" becomes a Transfer destination, crypto stays
-      out) and **not implemented**. The card-repayment half of the same decision
-      landed 2026-08-18.
+- [x] ~~**Investments as a Transfer destination.**~~ **Shipped as `moveToInvestments`** —
+      a personal-group settlement with `shares: []`, mirroring `payCardBill`, rather
+      than an Add-screen destination (`TransferBody` hard-types both endpoints as a
+      Person). Buying an SIP was logged as an *expense*, so net worth fell by the
+      amount when it should have stayed flat.
 - [ ] **Monetisation shape.** Deliberately parked until there are users — a tier
       boundary drawn before anyone uses the app is a guess. No paywall,
       entitlement check or purchase SDK exists anywhere, and that absence is
@@ -744,6 +745,15 @@ an auto-sweep must refuse rather than guess when the source is ambiguous.
 
 ### Money-model gap: accounts as entities
 
+> **Half closed.** Cash is now three buckets — bank / cash / wallet — with real
+> per-bucket balances (`assetOf`, `BUCKET_FLOWS_SQL`, `openingTotal`), and
+> `INCOME_LANDING`'s answer is finally read. `savings_txn.source_asset` means a
+> goal remembers which bucket funded it and a withdrawal is capped by that bucket.
+>
+> What is still open is **named** accounts ("HDFC", "Paytm") with their own
+> balances, which is what bank sync would eventually need. The paragraph below
+> describes the world before the buckets landed.
+
 `INCOME_LANDING` asks "Landed in ___" and **nothing reads the answer** —
 `src/lib/cash.ts` branches on `PayMethod.Card` alone. Cash is one pooled figure,
 so choosing Bank vs Cash only labels the transaction. Real balances would reopen
@@ -767,9 +777,9 @@ without this; the rest waits for the per-method baselines pass, which touches
 | **App Intents** | True hands-free, no app launch, Siri reading results back. Native Swift target + entitlements + App Group | Gate 0 clears. Note Apple's own forums report inline parameters falling back to a prompt |
 | **In-app mic capture** | On-device recognition, live partial transcript, insert on silence. **No first-party Expo speech-to-text exists** (`expo-speech` is TTS); needs a native module on the `modules/expo-ocr` precedent | You want the Shortcuts round trip gone |
 | **Widget** | Scope genuinely undecided — balance? today's spend? quick-add? | You answer that **and** Gate 0 clears |
-| **WhatsApp reminder composer** | Framing decided, phone field already shipped; only the compose step is left | **Any time — it's small** |
+| ~~**WhatsApp reminder composer**~~ | **Shipped.** Pure builder in `lib/whatsappReminder.ts`, button on the person screen, share-sheet fallback when the number has no country code. Push only — never a collect request | — |
 | **Repayment likelihood → expected recovery** | Per-person "how likely is this to come back", turning owed-to-me from a face value into an expected one, and ordering who to chase first. Three constraints decided up front: it stays **out of Safe-to-Spend** (every term there is certain money, and a probabilistic one makes the headline a guess); the maths is **Σ(amount × probability)**, not an average or median of probabilities — a median discards the amounts, so a 20%-likely ₹40,000 would rank below a 90%-likely ₹200; and the rating **never syncs**, because at S3 it could reach the person being rated | The WhatsApp composer ships — this is what gives it an order |
-| **Goals surplus sweep** | Nothing pushes an underspent month into goals; the only automatic inflow is the fixed per-goal allocation. Must be explicit opt-in. **And it is blocked on accounts-as-entities, not on the sweep logic** — see below | **After the per-method baselines pass** |
+| ~~**Goals surplus sweep**~~ | **Shipped.** `planSurplusSweep` (pure, refuses rather than guesses) + `runSurplusSweep`, opt-in via `settings.autoSweep`, off by default. Records the bucket it drew from, so a withdrawal returns there | — |
 | **Scheduled reminder nudge** | Needs an overdue scan, a per-person cooldown store, notification routing, and a cadence that cannot be guessed from an empty pilot. Get it wrong and users disable notifications, losing the channel permanently | The manual composer ships first — it is a strict prerequisite |
 | **Insights three-tier restructure** | One always-present headline (today it renders *only* when overspending, `insights.tsx:99`), then Fact, then Forecast. Rows 6/7/8/10 are four hand-written variants of one row | Post-pilot polish |
 | **Import restructure (remainder)** | pdf.js vendoring is done; `app/import.tsx` and `paytmParse.ts` are still one long screen and one long parser | Opportunistic |
