@@ -19,6 +19,9 @@ const K = {
   privacyScreen: 'privacy_screen',
   hideAmounts: 'hide_amounts',
   saveLocation: 'save_location',
+  // Opt-in, and default OFF. A sweep moves real money into goals without being
+  // asked, so it has to be a decision someone made rather than one they inherited.
+  autoSweep: 'auto_sweep_enabled',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -71,6 +74,8 @@ export const settings = {
   // Capture preferences
   saveLocation: () => getBool(K.saveLocation, false),
   setSaveLocation: (v: boolean) => setBool(K.saveLocation, v),
+  autoSweep: () => getBool(K.autoSweep, false),
+  setAutoSweep: (v: boolean) => setBool(K.autoSweep, v),
 
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),

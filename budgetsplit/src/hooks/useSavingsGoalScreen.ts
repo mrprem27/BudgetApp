@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
-import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
+import { parseToPaise, formatRupees, formatCompact, paiseToInput } from '../lib/money';
+import type { AssetBucket } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { confirmAsync } from '../lib/confirm';
 import { PRIORITY_LABEL } from '../constants/enums';
 import { settings } from '../lib/settings';
 import {
   getGoalById, getGoalSavedMap, getTotalMoney, getGoalHistory, getGoalHistoryCount,
-  fundGoal, withdrawFromGoal, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
+  fundGoal, withdrawFromGoal, fundedByAsset, setGoalLocked, deleteGoal, restoreGoal, updateGoal,
   type SavingsTxn, type SavingsFrequency, type Priority,
 } from '../db/queries/savings';
 import { useToast } from '../components/system/Toast';
@@ -39,6 +40,15 @@ export function useSavingsGoalScreen(id: string) {
   const [adjustPriority, setAdjustPriority] = useState<Priority>('need');
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [amt, setAmt] = useState('');
+  /**
+   * Which bucket a withdrawal returns to, and which one funding comes out of.
+   * Null means unattributed — the honest answer for a goal funded before buckets
+   * existed, and the only case where the goal's own total is the right cap.
+   */
+  const [withdrawTo, setWithdrawTo] = useState<AssetBucket | null>(null);
+  const [fundFrom, setFundFrom] = useState<AssetBucket>('bank');
+  /** What this goal holds, per bucket — what bounds a withdrawal. */
+  const [heldByAsset, setHeldByAsset] = useState<Record<string, number>>({});
   const [showLockExplainer, setShowLockExplainer] = useState(false);
 
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (loadDb) => {
@@ -70,7 +80,7 @@ export function useSavingsGoalScreen(id: string) {
     try {
       // Fund the goal directly from Cash available.
       const justCompleted = goal !== null && saved < goal.target && saved + a >= goal.target;
-      await fundGoal(db, id, a);
+      await fundGoal(db, id, a, 'manual', undefined, fundFrom);
       haptic.success();
       setAmt(''); setShowAdd(false);
       await reload();
@@ -81,11 +91,47 @@ export function useSavingsGoalScreen(id: string) {
     }
   }
 
+  // Refreshed as the sheet opens rather than held in the loader: it is only needed
+  // here, and it must reflect a fund that happened moments ago.
+  useEffect(() => {
+    if (!showWithdraw) return;
+    let alive = true;
+    fundedByAsset(db, id).then((h: Record<string, number>) => {
+      if (!alive) return;
+      setHeldByAsset(h);
+      // Default to the bucket holding the most — the one a withdrawal is most
+      // likely meant for, and never a bucket that holds nothing.
+      const best = Object.entries(h).sort((a, b) => b[1] - a[1])[0]?.[0];
+      setWithdrawTo(best && best !== 'unknown' ? (best as AssetBucket) : null);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [showWithdraw, db, id]);
+
   async function handleWithdraw() {
     const a = parseToPaise(amt);
     if (a <= 0) return;
     try {
-      await withdrawFromGoal(db, id, Math.min(a, saved));
+      /*
+       * Bounded by the bucket, not by the goal's total.
+       *
+       * A goal funded ₹3,000 from bank and ₹2,000 from wallet holds ₹5,000, but
+       * the bank may only take back ₹3,000 — taking more would hand the user money
+       * the bank never gave, and every balance downstream would be wrong.
+       * `fundedByAsset` is the only thing that knows this; the goal's own saved
+       * total does not.
+       */
+      const held = await fundedByAsset(db, id);
+      const cap = withdrawTo ? (held[withdrawTo] ?? 0) : saved;
+      if (withdrawTo && a > cap) {
+        haptic.error();
+        Alert.alert(
+          'More than that bucket holds',
+          `This goal only holds ${formatCompact(cap)} that came from ${withdrawTo}. `
+          + 'Withdraw that much, or pick where the rest should go.',
+        );
+        return;
+      }
+      await withdrawFromGoal(db, id, Math.min(a, cap), undefined, withdrawTo);
       haptic.warning();
       setAmt(''); setShowWithdraw(false);
       await reload();
@@ -209,6 +255,7 @@ export function useSavingsGoalScreen(id: string) {
     loading, error, refreshing, onRefresh, reload,
     // add / withdraw sheets
     showAdd, setShowAdd, showWithdraw, setShowWithdraw, amt, setAmt,
+    withdrawTo, setWithdrawTo, fundFrom, setFundFrom, heldByAsset,
     handleAdd, handleWithdraw,
     // adjust sheet
     showAdjust, setShowAdjust, adjustName, setAdjustName,

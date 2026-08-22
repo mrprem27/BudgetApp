@@ -36,6 +36,7 @@ export default function FeaturesScreen() {
   const db = useSQLiteContext();
   const { flags, setFlag } = useFeatureFlags();
   const [saveLocation, setSaveLocation] = useState(false);
+  const [autoSweep, setAutoSweep] = useState(false);
   const [intent, setIntent] = useState<OnboardingIntent | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Receipt-scan provider, as a boolean: on = 'gemini' (cloud), off = 'device'.
@@ -45,6 +46,7 @@ export default function FeaturesScreen() {
   useEffect(() => {
     (async () => {
       setSaveLocation(await settings.saveLocation());
+      setAutoSweep(await settings.autoSweep());
       setCloudOcr((await settings.ocrProvider()) !== 'device');
       setIntent(asIntent(await settings.onboardingIntent()));
     })();
@@ -102,6 +104,18 @@ export default function FeaturesScreen() {
     }
     setSaveLocation(v);
     await settings.setSaveLocation(v);
+  }
+
+  /**
+   * A `settings` pref, not a `FeatureKey`, for the same reason as the two above:
+   * it does not show or hide a surface, it changes what the app does with money
+   * unattended. Off by default, and it stays off until someone asks — a sweep
+   * moves real cash into goals without being prompted.
+   */
+  async function toggleAutoSweep(v: boolean) {
+    haptic.selection();
+    setAutoSweep(v);
+    await settings.setAutoSweep(v);
   }
 
   /**
@@ -207,6 +221,7 @@ export default function FeaturesScreen() {
         { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
         { icon: 'repeat', label: 'Recurring Suggestions', caption: 'Flag imported transactions that look like a recurring bill', value: flags.recurringSuggest, onChange: v => setFlag('recurringSuggest', v) },
         { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
+        { icon: 'trending-up', label: 'Sweep Surplus Into Goals', caption: 'When a month ends under budget, move what is left into the goals that are short — and remember which account it came from, so taking it back returns it there', value: autoSweep, onChange: toggleAutoSweep },
         { icon: 'camera', label: 'Receipt Scanning', caption: 'Read line items straight off a photographed receipt', value: flags.receiptScan, onChange: v => setFlag('receiptScan', v) },
         { icon: 'upload', label: 'Import & Review', caption: 'Bring in statements, then confirm each row before it counts', value: flags.importReview, onChange: v => setFlag('importReview', v) },
         // Availability is `receiptScan` above; this row only picks the provider.

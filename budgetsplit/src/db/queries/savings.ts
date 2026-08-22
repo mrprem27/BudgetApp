@@ -1,7 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { planAutoAllocations, planOverspendRaid } from '../../lib/savingsEngine';
+import { planAutoAllocations, planOverspendRaid, planSurplusSweep } from '../../lib/savingsEngine';
+import { settings } from '../../lib/settings';
 import { generateInsights, type Insight, type CategorySpend } from '../../lib/savingsInsights';
 import { cashPositionFromTotals, computeTotalMoney, openingTotal, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
 import { computeSafeToSpend, type SafeToSpend } from '../../lib/safeToSpend';
@@ -452,6 +453,47 @@ export async function applyOverspendRaid(
   return { withdrawals: chosen, total: chosen.reduce((s, r) => s + r.amount, 0) };
 }
 
+/**
+ * Push what is left of an underspent month into the goals that are short.
+ *
+ * Applies rather than proposes, unlike the raid — and the asymmetry is the same
+ * one `runSavingsMaintenance` already draws. This moves money *into* goals, which
+ * is what the user opted in for; the raid takes money *out*, which needs a yes
+ * every time.
+ *
+ * `planSurplusSweep` refuses rather than guesses (no real surplus, no single
+ * bucket that covers it, nothing short), so a no-op here is the normal case and
+ * not a failure.
+ */
+export async function runSurplusSweep(db: SQLite.SQLiteDatabase): Promise<void> {
+  const [goals, saved, cash] = await Promise.all([
+    getGoals(db), getGoalSavedMap(db), getCashPosition(db),
+  ]);
+  // Only what is genuinely spare, and only from buckets we can name. The
+  // unattributed remainder is excluded on purpose: sweeping money whose origin we
+  // never recorded would create exactly the un-returnable balance this feature
+  // exists to prevent.
+  const surplus = Math.max(0, cash.available);
+  // `anchor` is the scheduled-funding clock and means nothing to a sweep, but
+  // `GoalLike` carries it — mapped rather than loosened, so the scheduled planner
+  // keeps requiring it.
+  const plan = planSurplusSweep(
+    goals.map(g => ({ ...g, anchor: g.last_auto_at ?? g.created_at })),
+    saved, surplus, cash.byBucket ?? {},
+  );
+  if (plan.length === 0) return;
+
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    for (const a of plan) {
+      await insertSavingsTxn(db, {
+        goal_id: a.goalId, amount: a.amount, kind: 'allocate', source: 'auto',
+        date: now, note: 'Swept from surplus', source_asset: a.sourceAsset,
+      });
+    }
+  });
+}
+
 /** Undo an overspend raid by re-funding the goals it pulled from. */
 export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: { goalId: string; amount: number }[]): Promise<void> {
   const now = Date.now();
@@ -473,6 +515,11 @@ export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: 
  */
 export async function runSavingsMaintenance(db: SQLite.SQLiteDatabase): Promise<OverspendRaid> {
   await runAutoFunding(db).catch(() => {});
+  // Opt-in and off by default — see `settings.autoSweep`. It moves real money into
+  // goals, so it runs only for someone who asked for it.
+  if (await settings.autoSweep().catch(() => false)) {
+    await runSurplusSweep(db).catch(() => {});
+  }
   // Proposes only. Scheduled funding still runs unattended — the user set that up on
   // purpose and it moves money *into* goals. Taking money *out* now needs a yes.
   return proposeOverspendRaid(db).catch(() => ({ withdrawals: [], total: 0 }));

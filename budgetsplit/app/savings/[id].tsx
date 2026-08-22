@@ -15,6 +15,7 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { TabPills } from '../../src/components/ui/TabPills';
+import { ASSET_BUCKET, type AssetBucket } from '../../src/constants/enums';
 import { LockExplainerSheet } from '../../src/components/finance/plan/LockExplainerSheet';
 import { formatRupees, formatCompact, parseToPaise, paiseToInput } from '../../src/lib/money';
 import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../src/lib/savings';
@@ -50,6 +51,9 @@ const KIND_META: Record<SavingsTxn['kind'], { icon: keyof typeof Feather.glyphMa
   deposit:  { icon: 'plus-circle', label: 'Deposited', color: colors.accent },
 };
 
+/** From the enum, so adding a bucket cannot silently miss this picker. */
+const BUCKET_TABS = ASSET_BUCKET.map(b => ({ key: b, label: b[0].toUpperCase() + b.slice(1) }));
+
 export default function GoalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -59,6 +63,7 @@ export default function GoalDetailScreen() {
     goal, saved, cashAvailable, history, historyTotal,
     loading, error, refreshing, onRefresh, reload,
     showAdd, setShowAdd, showWithdraw, setShowWithdraw, amt, setAmt,
+    withdrawTo, setWithdrawTo, fundFrom, setFundFrom, heldByAsset,
     handleAdd, handleWithdraw,
     showAdjust, setShowAdjust, adjustName, setAdjustName,
     adjustTarget, setAdjustTarget, adjustAlloc, setAdjustAlloc,
@@ -266,13 +271,45 @@ export default function GoalDetailScreen() {
 
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add funds">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatCompact(cashAvailable)} cash available · comes out of your Cash available.</Text>
+        {/* Which bucket it comes out of — recorded so a later withdrawal can put
+            it back there rather than landing wherever. */}
+        <Text style={styles.bucketLabel}>Out of</Text>
+        <TabPills
+          tabs={BUCKET_TABS}
+          active={fundFrom}
+          onChange={(b) => setFundFrom(b as AssetBucket)}
+          size="sm"
+        />
+        <Text style={styles.hint}>{formatCompact(cashAvailable)} cash available.</Text>
         <PrimaryButton label="Add to goal" onPress={handleAdd} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
 
-      <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw to cash">
+      {/* "Withdraw to cash" was the old title, and it was wrong the moment money
+          could come from a bank or a wallet. It goes back where it came from. */}
+      <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw">
         <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
-        <Text style={styles.hint}>{formatCompact(saved)} saved · returns to your Cash available.</Text>
+        {withdrawTo ? (
+          <>
+            <Text style={styles.bucketLabel}>Back to</Text>
+            {/* Only buckets this goal was actually funded from, each showing what it
+                can give back. Offering one that holds nothing would be offering
+                money the goal never took from there. */}
+            <TabPills
+              tabs={Object.entries(heldByAsset)
+                .filter(([k, v]) => k !== 'unknown' && (v as number) > 0)
+                .map(([k, v]) => ({ key: k, label: `${k} · ${formatCompact(v as number)}` }))}
+              active={withdrawTo}
+              onChange={(b) => setWithdrawTo(b as AssetBucket)}
+              size="sm"
+            />
+          </>
+        ) : (
+          <Text style={styles.hint}>
+            This goal was funded before we tracked where money came from, so it returns
+            to your cash total without naming a bucket.
+          </Text>
+        )}
+        <Text style={styles.hint}>{formatCompact(saved)} saved in this goal.</Text>
         <PrimaryButton label="Withdraw" onPress={handleWithdraw} disabled={parseToPaise(amt) <= 0} />
       </SheetModal>
 
@@ -432,6 +469,7 @@ const styles = StyleSheet.create({
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
+  bucketLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.sm },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
 
   surplusBanner: {
