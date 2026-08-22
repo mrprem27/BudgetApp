@@ -6,11 +6,13 @@ import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { Banner } from '../src/components/ui/Banner';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { getAttachmentStorage, clearAllAttachmentFiles } from '../src/lib/attachment';
 import { clearAllAttachmentRefs } from '../src/db/queries/transactions';
 import { loadDemoData, resetToEmpty } from '../src/db/seedDemo';
+import { DEV_TOOLS_ENABLED } from '../src/constants/devTools';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
 import { DEFAULTS, FEATURE_KEYS, type FeatureKey } from '../src/lib/featureFlags';
@@ -33,11 +35,11 @@ export default function StorageScreen() {
   const [busy, setBusy] = useState(false);
 
   // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
-  // is already __DEV__-gated, but this screen can replace or erase a user's entire
+  // carries the same gate, but this screen can replace or erase a user's entire
   // dataset (loadDemoData/resetToEmpty below), so a stray deep link or old muscle
-  // memory must not reach it in a release/TestFlight build either.
+  // memory must not reach it once the gate closes either.
   useFocusEffect(useCallback(() => {
-    if (!__DEV__) router.back();
+    if (!DEV_TOOLS_ENABLED) router.back();
   }, [router]));
 
   // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
@@ -134,8 +136,20 @@ export default function StorageScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Storage" onBack={() => router.back()} />
+      <ScreenHeader title="Developer tools" onBack={() => router.back()} />
       <View style={styles.content}>
+        {/*
+          Named, not hidden. This screen is deliberately reachable in pilot builds,
+          and a tester who finds it by accident must see immediately that it is not
+          a normal feature — the two actions below destroy everything they have
+          entered. It is also the reminder that this ships behind a temporary gate.
+        */}
+        <Banner
+          icon="alert-triangle"
+          tone={colors.expense}
+          text="Developer tools. These actions erase all your data and cannot be undone."
+          inset={false}
+        />
         {/* Only the storage *stats* come from the loader. If that read fails we
             surface it here rather than blanking the screen — the reset/erase
             actions below are exactly what a user needs when storage misbehaves. */}

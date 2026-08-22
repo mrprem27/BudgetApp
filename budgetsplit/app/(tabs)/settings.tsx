@@ -33,6 +33,7 @@ import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { freeBytes } from '../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/storage';
+import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Person } from '../../src/db/queries/persons';
 import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
@@ -444,15 +445,15 @@ export default function SettingsScreen() {
         <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
       </View>
 
-      {/* About — tap version 7× to open developer storage screen. __DEV__-gated:
-          this screen can replace or erase a user's entire dataset
-          (loadDemoData/resetToEmpty), so the unlock gesture and its on-screen
-          hint must not exist in a release/TestFlight build. */}
+      {/* About — tap version 7× to open the developer storage screen. Gated on
+          DEV_TOOLS_ENABLED, not __DEV__: that screen can replace or erase the
+          user's entire dataset, and it is deliberately reachable in pilot builds
+          for now. One constant closes every entry point — see constants/devTools. */}
       <Text style={styles.sectionTitle}>About</Text>
       <View style={styles.card}>
         <TouchableOpacity
           onPress={() => {
-            if (!__DEV__) return;
+            if (!DEV_TOOLS_ENABLED) return;
             const next = devTaps + 1;
             setDevTaps(next);
             if (next >= 7) {
@@ -461,13 +462,13 @@ export default function SettingsScreen() {
               router.push('/storage');
             }
           }}
-          activeOpacity={__DEV__ ? 0.7 : 1}
+          activeOpacity={DEV_TOOLS_ENABLED ? 0.7 : 1}
           accessibilityLabel="App version"
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
           <Text style={styles.aboutSub}>No bank login · No accounts · No tracking</Text>
           <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
-          {__DEV__ && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
+          {DEV_TOOLS_ENABLED && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
         </TouchableOpacity>
       </View>
 

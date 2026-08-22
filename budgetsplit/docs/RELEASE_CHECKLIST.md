@@ -32,6 +32,15 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ## 1 · Hard blockers — nothing ships until every box is ticked
 
+- [ ] **Set `DEV_TOOLS_ENABLED` to `false`** (`src/constants/devTools.ts`) before
+      the App Store upload. It is deliberately `true` for the pilot so a tester
+      build can be erased and re-seeded, which means the shipped app currently
+      contains a screen that **deletes every transaction, group, person, budget
+      and goal** with no backup and no undo, reachable by tapping the version 7×
+      in Settings → About. One edit closes every entry point.
+      `devToolsGate.test.ts` fails the suite if this line and the constant ever
+      disagree, so neither can drift — but the *decision* is still yours to make.
+
 - [ ] **Buy the Apple Developer Program** ($99/yr). Gate 0: TestFlight external
       testing, push, App Intents and the widget all sit behind it. This is why
       `plugins/withoutPushEntitlement.js` exists.
