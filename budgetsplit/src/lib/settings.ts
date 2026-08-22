@@ -26,6 +26,8 @@ const K = {
   // the app is local-first, and turning this on is the moment data leaves the
   // phone. It is a pause, not a delete -- see `settings.setSyncEnabled`.
   syncEnabled: 'sync_enabled',
+  lastSyncAt: 'sync_last_at',
+  lastSyncNote: 'sync_last_note',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -91,6 +93,21 @@ export const settings = {
    * assumption is how someone turns it off expecting a retraction they never get.
    */
   setSyncEnabled: (v: boolean) => setBool(K.syncEnabled, v),
+
+  /**
+   * When sync last completed, and what happened if it did not.
+   *
+   * Recorded because `runSync` deliberately never throws — a failed sync must not
+   * put a dialog in front of somebody who did not ask for one. The cost of that
+   * is a feature which, when it silently does nothing, looks exactly like a
+   * feature that is working. This is the one surface that tells the two apart,
+   * and it is what makes a problem on a real phone diagnosable instead of a
+   * shrug.
+   */
+  lastSyncAt: () => getNumber(K.lastSyncAt),
+  setLastSyncAt: (v: number) => setNumber(K.lastSyncAt, v),
+  lastSyncNote: () => getString(K.lastSyncNote),
+  setLastSyncNote: (v: string) => setString(K.lastSyncNote, v),
 
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),

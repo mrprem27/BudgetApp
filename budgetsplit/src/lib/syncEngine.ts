@@ -2,7 +2,7 @@ import type * as SQLite from 'expo-sqlite';
 import { pendingUploads, markDelivered } from '../db/queries/syncOutbox';
 import {
   readEntryDoc, markSynced, pullCursor, setPullCursor, toPeerEnvelope, personResolver,
-  pendingDisputes, markDisputeSent, recordDispute,
+  pendingDisputes, markDisputeSent, recordDispute, archiveVanishedGroup,
   type EntryDoc,
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
@@ -36,13 +36,15 @@ export type SyncOutcome = {
   pulled: number;
   /** Entries the server refused as stale. Someone else changed them first. */
   conflicts: string[];
+  /** Groups that were deleted for everyone, or that I am no longer in. */
+  vanished: string[];
   /** True when anything reached the database, so the caller knows to refresh. */
   changed: boolean;
   /** Why nothing happened, when nothing did. Not an error — a reason. */
   skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'offline';
 };
 
-const NOTHING: SyncOutcome = { pushed: 0, pulled: 0, conflicts: [], changed: false };
+const NOTHING: SyncOutcome = { pushed: 0, pulled: 0, conflicts: [], vanished: [], changed: false };
 
 /**
  * One full cycle: send what is queued, then fetch what is new.
@@ -56,6 +58,16 @@ const NOTHING: SyncOutcome = { pushed: 0, pulled: 0, conflicts: [], changed: fal
  * not ask for one.
  */
 export async function runSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
+  const outcome = await attemptSync(db);
+  // Recorded whatever happened, including the reasons — see `settings.lastSyncNote`.
+  // A sync that quietly does nothing is indistinguishable from one that works,
+  // and this is the only place that difference is written down.
+  await settings.setLastSyncNote(outcome.skipped ?? 'ok').catch(() => {});
+  if (!outcome.skipped) await settings.setLastSyncAt(Date.now()).catch(() => {});
+  return outcome;
+}
+
+async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
   if (!serverConfigured()) return { ...NOTHING, skipped: 'not-configured' };
   if (!(await settings.syncEnabled().catch(() => false))) return { ...NOTHING, skipped: 'disabled' };
 
@@ -72,6 +84,7 @@ export async function runSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
     const secret = await deviceSecret();
     if (!secret) return { ...NOTHING, skipped: 'no-device-key' };
 
+    const vanished = await reconcileVanished(db, groups);
     const push = await drain(db, groups, secret);
     await drainDisputes(db, groups);
     const pull = await pullAll(db, groups, secret);
@@ -80,7 +93,8 @@ export async function runSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
       pushed: push.pushed,
       pulled: pull.pulled,
       conflicts: push.conflicts,
-      changed: push.pushed > 0 || pull.pulled > 0,
+      vanished,
+      changed: push.pushed > 0 || pull.pulled > 0 || vanished.length > 0,
     };
   } catch {
     // Offline, the Worker down, or a dead session — all three mean the same
@@ -173,6 +187,22 @@ async function drain(
     }
   }
   return { pushed, conflicts };
+}
+
+/**
+ * Groups that stopped existing while this device was away.
+ *
+ * Runs FIRST, before push and pull, so nothing is sent to a group that is gone
+ * and no cursor is advanced against one. The server refuses those writes anyway;
+ * this is what stops the device retrying them on every launch forever.
+ */
+async function reconcileVanished(db: SQLite.SQLiteDatabase, groups: SyncGroup[]): Promise<string[]> {
+  const gone: string[] = [];
+  for (const g of groups) {
+    if (g.state !== 'deleted' && g.state !== 'removed') continue;
+    if (await archiveVanishedGroup(db, g.id)) gone.push(g.id);
+  }
+  return gone;
 }
 
 /**

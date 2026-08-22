@@ -2,7 +2,7 @@ import { insertTxn, insertItemizedTxn, updateTxn, softDeleteTxn } from '../db/qu
 import { pendingUploads, pendingUploadCount, markDelivered } from '../db/queries/syncOutbox';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
 import { deleteGroup } from '../db/queries/groups';
-import { pullCursor, setPullCursor } from '../db/queries/syncDoc';
+import { pullCursor, setPullCursor, archiveVanishedGroup } from '../db/queries/syncDoc';
 import { createTestDb, addPerson, addGroup, addMember, asDb, type TestDb } from './helpers/testDb';
 
 /**
@@ -144,4 +144,52 @@ describe('sync outbox', () => {
     // skips the group's entire history.
     expect(await pullCursor(asDb(db), shared)).toBe(0);
   });
+
+  /**
+   * A shared group that stopped existing on the server.
+   *
+   * The owner deleted it for everyone, or I was removed. Either way this device
+   * has to stop syncing it — and must NOT delete anything, because my share of
+   * every entry in it already counted as my spending in months that are closed.
+   * Erasing them would rewrite my own budget history for a decision that was not
+   * mine, with no undo.
+   */
+  describe('a group that vanished', () => {
+    it('archives it, stops syncing it, and deletes nothing', async () => {
+      const { db, me, shared } = await setup();
+      const id = await insertTxn(asDb(db), expense(shared, me));
+      await setPullCursor(asDb(db), shared, 9999);
+      expect(await pendingUploadCount(asDb(db))).toBe(1);
+
+      expect(await archiveVanishedGroup(asDb(db), shared)).toBe(true);
+
+      // Out of the active list, and nothing left trying to reach a group that is gone.
+      const g = await db.getFirstAsync<{ is_archived: number }>(
+        'SELECT is_archived FROM budget_group WHERE id = ?', [shared],
+      );
+      expect(g?.is_archived).toBe(1);
+      expect(await pendingUploadCount(asDb(db))).toBe(0);
+      expect(await pullCursor(asDb(db), shared)).toBe(0);
+
+      // The money is untouched. This is the assertion that matters.
+      const txn = await db.getFirstAsync<{ id: string; is_deleted: number }>(
+        'SELECT id, is_deleted FROM txn WHERE id = ?', [id],
+      );
+      expect(txn).toMatchObject({ id, is_deleted: 0 });
+      const shares = await db.getAllAsync('SELECT * FROM txn_share WHERE txn_id = ?', [id]);
+      expect(shares.length).toBeGreaterThan(0);
+    });
+
+    it('says nothing the second time, so it is announced once', async () => {
+      const { db, shared } = await setup();
+      expect(await archiveVanishedGroup(asDb(db), shared)).toBe(true);
+      expect(await archiveVanishedGroup(asDb(db), shared)).toBe(false);
+    });
+
+    it('says nothing about a group this device does not have', async () => {
+      const { db } = await setup();
+      expect(await archiveVanishedGroup(asDb(db), 'never-heard-of-it')).toBe(false);
+    });
+  });
+
 });

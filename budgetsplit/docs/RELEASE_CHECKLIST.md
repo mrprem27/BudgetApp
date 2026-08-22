@@ -580,16 +580,21 @@ net worth are never sent.
   of the 64 KiB per-request cap.
 - ✅ Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
   which is the only moment a re-wrap costs nothing.
-- ⚠️ F11, partly. `deleteGroup` is already **creator-only** (`canDeleteGroup =
-  isCreator`), so "deleting a group you did not create becomes leave" is enforced
-  by refusal. What is still open is the creator deleting a *published* group: their
-  history goes, other members keep theirs, and nothing propagates the deletion — a
-  silent divergence needing a group tombstone on the server. The queue and cursor
-  are at least cleaned up now, so no dangling rows are left behind.
+- ✅ F11 closed. `deleteGroup` is creator-only, leaving is its own route, and a
+  deletion now propagates: the server reports `deleted`/`removed` instead of
+  dropping the group from the list, and the client archives it, stops syncing it,
+  and says so once. **Nothing is deleted locally** — my share of every entry
+  already counted as spending in closed months, and erasing it for a decision that
+  was not mine has no undo.
 - ✅ F10 closed: a rejection reaches the author as an objection on the entry, and
   withdrawing it travels too.
 - ✅ Sharing has a UI: group → Members → Share with a member, and invitations are
-  answered at the top of Settings → Sync.
+  answered at the top of Settings → Sync. Settings → Sync also shows when sync
+  last ran and why it did nothing, which is the first thing to look at when it
+  appears dead on a phone.
+- ⚠️ **Still the big one: sync has never run on a phone.** Everything is verified
+  against the deployed Worker or by tests, which is not the same thing. Two
+  installs, two accounts, linked, sharing a group — that test is the gate.
 
 **Migrations remain forward-only, applied by hand, with no rollback and no
 staging.** `0004_sync.sql` is strictly additive and readable by the currently

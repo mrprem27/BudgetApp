@@ -1049,21 +1049,39 @@ async function listSyncGroups(request: Request, env: Env, url: URL): Promise<Res
   const deviceId = (url.searchParams.get('deviceId') ?? '').trim();
   if (!deviceId) return badRequest('deviceId is required');
 
+  /*
+   * Deleted and removed groups are REPORTED, not filtered out.
+   *
+   * They used to be dropped from this list, which made "the owner deleted this
+   * group" indistinguishable from "you were never in it" and from "the request
+   * failed" — so the other members' devices kept a group that had ceased to
+   * exist, quietly syncing nothing, forever. A tombstone is only useful if
+   * somebody is told about it.
+   *
+   * The membership row is still what decides access: `approvedMember` is
+   * unchanged and refuses reads and writes for both states. This route is the one
+   * place that says *why*.
+   */
   const rows = await env.DB.prepare(
-    `SELECT g.id, g.owner_user, m.state, w.wrapped_key
+    `SELECT g.id, g.owner_user, m.state, m.removed_at, g.deleted_at, w.wrapped_key
        FROM sync_member m
        JOIN sync_group g ON g.id = m.group_id
        LEFT JOIN sync_wrap w ON w.group_id = g.id AND w.device_id = ?
-      WHERE m.user_id = ? AND m.removed_at IS NULL AND g.deleted_at IS NULL
+      WHERE m.user_id = ?
       ORDER BY g.created_at ASC`,
   ).bind(deviceId, auth.user.id)
-    .all<{ id: string; owner_user: string; state: string; wrapped_key: string | null }>();
+    .all<{
+      id: string; owner_user: string; state: string;
+      removed_at: number | null; deleted_at: number | null; wrapped_key: string | null;
+    }>();
 
   return json({
     groups: (rows.results ?? []).map(r => ({
       id: r.id,
       owner: r.owner_user,
-      state: r.state,
+      // Deletion outranks removal: if the group is gone for everyone, that is the
+      // more useful thing to say to someone who also happens to have left it.
+      state: r.deleted_at !== null ? 'deleted' : r.removed_at !== null ? 'removed' : r.state,
       // Null means this device has no wrap yet — it is invited, or it re-installed
       // and its old wraps died with its old key. Either way the client cannot read
       // the group and must be told so plainly rather than shown an empty ledger.

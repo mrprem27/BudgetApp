@@ -17,7 +17,7 @@ import type { Env } from './types';
 export type StoredBlob = { body: ReadableStream | ArrayBuffer; contentType: string };
 
 export type Storage = {
-  kind: 'r2' | 'kv';
+  kind: 'r2' | 'kv' | 'r2+kv';
   /** Largest single object this backend accepts. */
   maxBytes: number;
   put(key: string, bytes: ArrayBuffer | Uint8Array, contentType: string): Promise<void>;
@@ -30,11 +30,66 @@ const R2_MAX_BYTES = 50 * 1024 * 1024;
 /** KV's hard limit per value — 25 MiB. Exceeding it is a write that simply fails. */
 const KV_MAX_BYTES = 25 * 1024 * 1024;
 
-/** `null` when neither backend is bound — the routes answer 503. */
+/**
+ * `null` when neither backend is bound — the routes answer 503.
+ *
+ * When BOTH are bound, R2 is the store and KV is a **read fallback**. That is the
+ * whole migration story, and it exists because the obvious version loses data:
+ * switching `FILES` on makes every route look in R2, and every backup already
+ * written to KV becomes unreachable in the same deploy. Silently — a user opens
+ * the restore list, sees their ten snapshots (the rows are in D1), taps one, and
+ * gets "that backup is no longer stored".
+ *
+ * So a miss in R2 falls through to KV, and anything found there is **copied into
+ * R2 as it is read**, so the estate drains itself as people use it. Deletes go to
+ * both, because a blob only half-deleted is one that comes back.
+ */
 export function storage(env: Env): Storage | null {
+  if (env.FILES && env.BLOBS) return migratingStorage(env.FILES, env.BLOBS);
   if (env.FILES) return r2Storage(env.FILES);
   if (env.BLOBS) return kvStorage(env.BLOBS);
   return null;
+}
+
+/**
+ * R2 in front, KV behind, promoting on read.
+ *
+ * Reported as `r2+kv` on `/health` rather than `r2`, so "is the old store still
+ * carrying anything" is answerable with a curl instead of a guess — that is the
+ * signal for when the KV binding can finally be removed.
+ */
+function migratingStorage(bucket: R2Bucket, kv: KVNamespace): Storage {
+  const r2 = r2Storage(bucket);
+  const legacy = kvStorage(kv);
+  return {
+    kind: 'r2+kv',
+    maxBytes: R2_MAX_BYTES,
+    put: r2.put,
+    async get(key) {
+      const hit = await r2.get(key);
+      if (hit) return hit;
+
+      const old = await legacy.get(key);
+      if (!old) return null;
+
+      // Promote, then serve. A failed copy must NOT fail the read — the user
+      // gets their backup either way, and it simply migrates on the next attempt.
+      try {
+        const bytes = old.body instanceof ArrayBuffer ? old.body : await new Response(old.body).arrayBuffer();
+        await r2.put(key, bytes, old.contentType);
+        return { body: bytes, contentType: old.contentType };
+      } catch {
+        return old;
+      }
+    },
+    async delete(keys) {
+      // Both, always. Deleting only from R2 would leave the KV copy to be
+      // promoted straight back the next time it is read — a deleted backup
+      // resurrecting itself is worse than one that lingers.
+      await r2.delete(keys);
+      await legacy.delete(keys).catch(() => {});
+    },
+  };
 }
 
 function r2Storage(bucket: R2Bucket): Storage {

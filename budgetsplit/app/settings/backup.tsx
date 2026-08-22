@@ -32,6 +32,15 @@ import {
   type ServerBackup,
 } from '../../src/lib/serverApi';
 
+/**
+ * The smaller of the two server ceilings — KV's hard 25 MiB per value.
+ *
+ * Deliberately conservative: `storage.ts` raises this to 50 MB once R2 is bound,
+ * but a client that assumed the larger number would let someone spend a full
+ * encrypt before a 413 on the deployment that is actually live.
+ */
+const MAX_SERVER_BACKUP_BYTES = 25 * 1024 * 1024;
+
 export default function BackupScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -86,9 +95,31 @@ export default function BackupScreen() {
       const envelope = await encryptPayload(payload, passphrase, onKdf);
 
       if (createTarget === 'server') {
+        /*
+         * Checked here, before the upload, because the alternative is cruel:
+         * the whole payload is held as base64, copied by JSON.stringify, copied
+         * again by the cipher, and only then rejected with a 413 — after the user
+         * has already waited through the key derivation.
+         *
+         * The ceiling is the server's, not a guess: KV stops at 25 MiB where R2
+         * keeps going, and `createBackup` reads it from whichever backend is
+         * actually bound. This number matches the smaller one, so the message is
+         * right on either.
+         */
+        const body = JSON.stringify(envelope);
+        if (body.length > MAX_SERVER_BACKUP_BYTES) {
+          haptic.warning();
+          Alert.alert(
+            'Too large for your account',
+            `This backup is ${formatBytes(body.length)}, and the limit is `
+            + `${formatBytes(MAX_SERVER_BACKUP_BYTES)}. Receipt photos are almost always the reason — `
+            + 'make one without them, or save it as a file instead.',
+          );
+          return;
+        }
         // Uploaded already-encrypted: the server stores the same bytes this
         // device would have written to a file, and can't read either.
-        const saved = await uploadBackup(JSON.stringify(envelope));
+        const saved = await uploadBackup(body);
         Alert.alert(
           'Backed up to your account',
           `${formatBytes(saved.sizeBytes)}, encrypted on this phone. You'll need this passphrase to restore it — it was never sent.`,
@@ -434,7 +465,16 @@ export default function BackupScreen() {
               <SettingsRow
                 icon="rotate-ccw"
                 label="Restore from your account"
-                value={busy ? undefined : 'Pick a backup'}
+                /*
+                 * Names the signed-in account, like the row above it (F8).
+                 *
+                 * Email is the only identity here and there is no merge: a typo at
+                 * sign-in is a second account with none of your backups. Someone
+                 * staring at an empty restore list needs to see WHICH account they
+                 * are looking at, because "my backups are gone" and "I am signed
+                 * into the wrong address" look identical otherwise.
+                 */
+                value={busy ? undefined : serverSession.user.email}
                 onPress={busy ? undefined : openServerList}
               />
             </>

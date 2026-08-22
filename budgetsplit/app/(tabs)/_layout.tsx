@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, AppState } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, AppState, Alert } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -17,6 +17,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+
+/**
+ * A shared group that stopped existing has to be said out loud.
+ *
+ * Its entries are kept and the group is archived, not deleted — my share of every
+ * one of them already counted as my spending in months that are closed, and
+ * erasing them because somebody else pressed a button would rewrite my own budget
+ * history for a decision that was not mine.
+ *
+ * But it does leave the group list, and a group quietly disappearing is exactly
+ * the kind of thing that reads as data loss. So it is announced once, and the
+ * message says plainly that nothing was lost.
+ */
+function announceVanished(r: { vanished: string[] }) {
+  if (r.vanished.length === 0) return;
+  const n = r.vanished.length;
+  Alert.alert(
+    n === 1 ? 'A shared group has ended' : `${n} shared groups have ended`,
+    'The group was deleted by whoever created it, or you are no longer a member. '
+    + 'Nothing has been deleted here — everything you spent is still in your history, '
+    + 'and the group has moved to Archived.',
+  );
+}
 
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   index: 'home',
@@ -73,7 +96,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       //
       // `runSync` gates itself on the setting and never throws, so there is no
       // check to duplicate here and no failure that can reach a screen.
-      runSync(db).then(r => { if (r.changed) refresh(); }).catch(() => {});
+      runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
     });
     return () => sub.remove();
   }, [db, refresh]);
@@ -81,7 +104,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // The cold-start half. `AppState` only fires on a transition, so without this a
   // launch straight into the app syncs nothing until you leave and come back.
   useEffect(() => {
-    runSync(db).then(r => { if (r.changed) refresh(); }).catch(() => {});
+    runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
   }, [db, refresh]);
 
   // Shown only to a just-onboarded user (armed in `finalizeOnboarding`), and only

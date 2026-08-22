@@ -418,7 +418,13 @@ export const extractInviteToken = extractAuthToken;
 export type SyncGroup = {
   id: string;
   owner: string;
-  state: 'pending' | 'approved';
+  /**
+   * `removed` — I left, or was removed. `deleted` — the owner deleted it for
+   * everyone. Both are reported rather than the group simply vanishing from the
+   * list, because a group that disappears is indistinguishable from a failed
+   * request, and the device would keep it forever, syncing nothing.
+   */
+  state: 'pending' | 'approved' | 'removed' | 'deleted';
   /** Null when this device has no wrap yet — invited, or reinstalled. */
   wrappedKey: string | null;
 };

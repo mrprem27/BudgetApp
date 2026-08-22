@@ -360,3 +360,41 @@ export async function disputesFor(
     [txnId],
   );
 }
+
+// --- A group that stopped existing on the server ---------------------------
+
+/**
+ * The owner deleted this group, or I am no longer in it.
+ *
+ * **Archived, never deleted.** The entries stay exactly where they are, and that
+ * is not caution for its own sake: my share of every one of them has already
+ * counted as my spending, in months that are already closed. Deleting them
+ * because somebody else pressed a button would silently rewrite my own budget
+ * history for a decision that was not mine — and there is no undo for that.
+ *
+ * So what actually happens is narrow: it leaves the active group list, it stops
+ * syncing, and the queue and cursor go so nothing keeps trying. What the user
+ * spent is untouched.
+ *
+ * Returns whether anything changed, so a sync that finds nothing new does not
+ * announce it.
+ */
+export async function archiveVanishedGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<boolean> {
+  const row = await db.getFirstAsync<{ is_archived: number }>(
+    'SELECT is_archived FROM budget_group WHERE id = ?', [groupId],
+  );
+  // Not a group this device has, or already dealt with. Either way, nothing to say.
+  if (!row || row.is_archived === 1) return false;
+
+  await db.runAsync('UPDATE budget_group SET is_archived = 1 WHERE id = ?', [groupId]);
+  // Nothing left to deliver, and nowhere to deliver it. Left behind, these are the
+  // same dangling rows a restore and a group delete both used to leave.
+  await db.runAsync('DELETE FROM sync_outbox WHERE group_id = ?', [groupId]);
+  await db.runAsync('DELETE FROM settings WHERE key = ? OR key = ?', [
+    cursorKey(groupId), cursorKey(`${groupId}#disputes`),
+  ]);
+  return true;
+}

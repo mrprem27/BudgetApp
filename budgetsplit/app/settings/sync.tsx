@@ -9,6 +9,7 @@ import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { Banner } from '../../src/components/ui/Banner';
 import { settings } from '../../src/lib/settings';
+import { dateTime } from '../../src/lib/dateFormat';
 import { haptic } from '../../src/lib/haptics';
 import { serverConfigured } from '../../src/lib/serverApi';
 import { useServerSession } from '../../src/hooks/useServerSession';
@@ -36,18 +37,23 @@ export default function SyncScreen() {
   const [sharedCount, setSharedCount] = useState(0);
   const [invites, setInvites] = useState<SyncGroup[]>([]);
   const [joining, setJoining] = useState<string | null>(null);
+  const [lastAt, setLastAt] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(() => {
     let alive = true;
     (async () => {
-      const [on, n, groups, pending] = await Promise.all([
+      const [on, n, groups, pending, at, why] = await Promise.all([
         settings.syncEnabled(), pendingUploadCount(db), getAllGroups(db), pendingGroupInvites(),
+        settings.lastSyncAt(), settings.lastSyncNote(),
       ]);
       if (!alive) return;
       setEnabled(on);
       setWaiting(n);
       setSharedCount(sharedGroupsOf(groups).length);
       setInvites(pending);
+      setLastAt(at);
+      setNote(why);
     })().catch(() => {});
     return () => { alive = false; };
   }, [db]);
@@ -219,6 +225,24 @@ export default function SyncScreen() {
                 variant="stacked"
                 chevron={false}
               />
+              <Divider indent="text" />
+              {/*
+                The honest status line.
+
+                `runSync` never throws, deliberately — a failed sync must not put a
+                dialog in front of someone who did not ask for one. The cost is
+                that silently doing nothing looks exactly like working. This is
+                where the two are told apart, and it is the first thing to look at
+                when sync appears dead on a real phone.
+              */}
+              <ListRow
+                icon={NOTE[note ?? 'ok'] ? 'alert-circle' : 'clock'}
+                iconColor={NOTE[note ?? 'ok'] ? colors.healthAmber : colors.textSecondary}
+                title={lastAt ? `Last synced ${dateTime(new Date(lastAt))}` : 'Not synced yet'}
+                subtitle={NOTE[note ?? 'ok'] ?? undefined}
+                variant="stacked"
+                chevron={false}
+              />
             </Card>
           </>
         )}
@@ -231,6 +255,20 @@ export default function SyncScreen() {
     </View>
   );
 }
+
+/**
+ * Why a sync did nothing, in words rather than a code.
+ *
+ * Only the states worth explaining are here — 'ok' maps to nothing, because a
+ * working sync needs no commentary and a subtitle saying "fine" is noise.
+ */
+const NOTE: Record<string, string | undefined> = {
+  ok: undefined,
+  offline: 'Could not reach the server last time. It will try again when you next open the app.',
+  disabled: 'Sync is switched off, so nothing is being exchanged.',
+  'not-configured': 'This build has no server configured.',
+  'no-device-key': 'This device cannot store its own key, so it cannot sync.',
+};
 
 function Fact({ title, body }: { title: string; body: string }) {
   return (
