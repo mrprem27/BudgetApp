@@ -3,6 +3,7 @@ import {
   addDays, addWeeks, addMonths, addYears,
 } from 'date-fns';
 import type { Priority, SavingsFrequency } from '../db/queries/savings';
+import type { AssetBucket } from '../constants/enums';
 
 /** Whole periods elapsed between the schedule anchor and now. */
 export function periodsElapsed(freq: SavingsFrequency, anchorMs: number, nowMs: number): number {
@@ -148,6 +149,69 @@ export function planOverspendRaid(goals: RaidGoal[], saved: Record<string, numbe
     if (left <= 0) break;
     const amount = Math.min(saved[g.id] ?? 0, left);
     if (amount > 0) { out.push({ goalId: g.id, amount }); left -= amount; }
+  }
+  return out;
+}
+
+
+// --- Surplus sweep -------------------------------------------------------
+
+export type SweepAllocation = { goalId: string; amount: number; sourceAsset: AssetBucket };
+
+/**
+ * Push an underspent month's leftover into goals — proposed, never applied.
+ *
+ * The only automatic inflow before this was the fixed per-goal allocation, so a
+ * month where you spent ₹8,000 under budget left that money sitting in the
+ * current account doing nothing. This offers it to the goals that are short.
+ *
+ * **It sweeps FROM a named bucket, and that is the whole point.** A withdrawal
+ * has to return money where it came from, and the ledger can only say so if the
+ * sweep recorded it. Sweeping "cash" generically and returning it to the bank is
+ * not a round trip — it rewrites where the user's money is, silently.
+ *
+ * Refuses rather than guesses, in three cases, each of which would otherwise
+ * produce a confident wrong answer:
+ *  - a surplus that is not real (nothing, or a negative "surplus")
+ *  - no single bucket that can cover it — splitting a sweep across buckets is a
+ *    policy nobody has chosen, and picking one silently drains it
+ *  - nothing short enough to want the money
+ *
+ * Same ordering as `planAutoAllocations` — Emergency, then Need, then Want, drag
+ * rank within each — because a sweep and a scheduled allocation are the same act
+ * with different triggers, and two different orders would be indefensible.
+ */
+export function planSurplusSweep(
+  /** `locked` is required: a locked goal is one the user has said to leave alone. */
+  goals: (GoalLike & { locked: number })[],
+  saved: Record<string, number>,
+  surplus: number,
+  /** What each bucket actually holds. A sweep may only draw from one of these. */
+  buckets: Partial<Record<AssetBucket, number>>,
+): SweepAllocation[] {
+  if (surplus <= 0) return [];
+
+  // One bucket must cover the whole sweep. Spreading it would need a policy for
+  // which bucket gives up what, and inventing one here would be the same class of
+  // guess this feature exists to avoid.
+  const from = (Object.keys(buckets) as AssetBucket[])
+    .filter(b => (buckets[b] ?? 0) >= surplus)
+    .sort((a, b) => (buckets[b] ?? 0) - (buckets[a] ?? 0))[0];
+  if (!from) return [];
+
+  const short = goals
+    .filter(g => g.locked !== 1 && g.target > (saved[g.id] ?? 0))
+    .sort((a, b) => fundTagRank(a.priority) - fundTagRank(b.priority) || rankKey(a) - rankKey(b));
+
+  let left = surplus;
+  const out: SweepAllocation[] = [];
+  for (const g of short) {
+    if (left <= 0) break;
+    // Never overshoot a target — the same cap `planAutoAllocations` applies.
+    const amount = Math.min(g.target - (saved[g.id] ?? 0), left);
+    if (amount <= 0) continue;
+    left -= amount;
+    out.push({ goalId: g.id, amount, sourceAsset: from });
   }
   return out;
 }

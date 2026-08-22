@@ -56,6 +56,14 @@ export type SavingsTxn = {
   source: 'manual' | 'auto';
   date: number;
   note: string | null;
+  /**
+   * Which bucket this money moved to or from — bank, cash or wallet.
+   *
+   * Null means unknown, not a default: every row written before this column
+   * existed has none, and a withdrawal against an unattributed balance asks rather
+   * than guessing. See the migration comment in `schema.ts`.
+   */
+  source_asset: AssetBucket | null;
   created_at: number;
 };
 
@@ -174,8 +182,11 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
     );
     for (const t of ledger) {
       await db.runAsync(
-        `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [t.id, t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.created_at],
+        // Stays a raw INSERT because it restores the ORIGINAL id and created_at,
+        // which `insertSavingsTxn` deliberately mints fresh. It must still carry
+        // every column, or an undo silently strips the provenance it is restoring.
+        `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, source_asset, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [t.id, t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.source_asset ?? null, t.created_at],
       );
     }
   });
@@ -183,24 +194,88 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
 
 // --- Ledger (goal funding) -----------------------------------------------
 
+/**
+ * The ONE place a savings ledger row is written.
+ *
+ * Three other sites used to hand-roll this INSERT — `restoreGoal`,
+ * `runAutoFunding` and `applyOverspendRaid` — which is how `source_asset` would
+ * have landed in one of them and been forgotten in the rest. A ledger with holes
+ * in its provenance is worse than one with none, because the gaps are invisible.
+ */
 async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {
   await db.runAsync(
-    `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuid(), t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, Date.now()],
+    `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, source_asset, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [uuid(), t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.source_asset ?? null, Date.now()],
   );
 }
 
-/** Fund a goal directly from Cash available — earmarks money to the goal. */
-export async function fundGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, source: 'manual' | 'auto' = 'manual', note?: string): Promise<void> {
+/**
+ * Fund a goal — earmarks money to it, out of one bucket.
+ *
+ * `sourceAsset` is what a later withdrawal returns to. Optional because a caller
+ * genuinely may not know (an old flow, a fixture); null records that honestly
+ * rather than picking a bucket that would then be silently drained on the way back.
+ */
+export async function fundGoal(
+  db: SQLite.SQLiteDatabase,
+  goalId: string,
+  amount: number,
+  source: 'manual' | 'auto' = 'manual',
+  note?: string,
+  sourceAsset: AssetBucket | null = null,
+): Promise<void> {
   if (amount <= 0) return;
-  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'allocate', source, date: Date.now(), note: note ?? null, source_asset: sourceAsset });
 }
 
-/** Pull money back out of a goal, returning it to Cash available. */
-export async function withdrawFromGoal(db: SQLite.SQLiteDatabase, goalId: string, amount: number, note?: string): Promise<void> {
+/**
+ * Pull money back out of a goal, into a named bucket.
+ *
+ * `toAsset` is the destination, and it must be one this goal was actually funded
+ * from — `fundedByAsset` below is what bounds it. Sweeping ₹5,000 out of the bank
+ * and handing it back as cash is not a round trip; it rewrites where the user's
+ * money is, quietly, and every figure built on that is then wrong.
+ *
+ * Null is allowed and means "we do not know where this came from" — the only
+ * honest answer for a goal funded before the column existed.
+ */
+export async function withdrawFromGoal(
+  db: SQLite.SQLiteDatabase,
+  goalId: string,
+  amount: number,
+  note?: string,
+  toAsset: AssetBucket | null = null,
+): Promise<void> {
   if (amount <= 0) return;
-  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null });
+  await insertSavingsTxn(db, { goal_id: goalId, amount, kind: 'withdraw', source: 'manual', date: Date.now(), note: note ?? null, source_asset: toAsset });
+}
+
+/**
+ * What a goal holds, split by the bucket it came from — allocations minus
+ * withdrawals, per asset.
+ *
+ * This is what makes a withdrawal bounded rather than a guess. A goal funded
+ * ₹3,000 from bank and ₹2,000 from wallet cannot return ₹4,000 to the bank, and
+ * `source_asset` on a single row does not say that — only the per-bucket balance
+ * does. FIFO or pro-rata would be inventing a fact about money.
+ *
+ * The `null` key is the pre-column balance: real, and deliberately not attributed.
+ */
+export async function fundedByAsset(
+  db: SQLite.SQLiteDatabase,
+  goalId: string,
+): Promise<Record<string, number>> {
+  const rows = await db.getAllAsync<{ source_asset: string | null; net: number }>(
+    `SELECT source_asset,
+            COALESCE(SUM(CASE WHEN kind = 'allocate' THEN amount
+                              WHEN kind = 'withdraw' THEN -amount ELSE 0 END), 0) AS net
+       FROM savings_txn WHERE goal_id = ? GROUP BY source_asset`,
+    [goalId],
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) if (r.net !== 0) out[r.source_asset ?? 'unknown'] = r.net;
+  return out;
 }
 
 /** Saved (earmarked) amount per goal: allocations minus withdrawals. */
@@ -280,11 +355,15 @@ export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean
   await db.withTransactionAsync(async () => {
     for (const a of plan) {
       if (a.amount > 0) {
-        await db.runAsync(
-          `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
-           VALUES (?, ?, ?, 'allocate', 'auto', ?, NULL, ?)`,
-          [uuid(), a.goalId, a.amount, now, now],
-        );
+        await insertSavingsTxn(db, {
+          goal_id: a.goalId, amount: a.amount, kind: 'allocate', source: 'auto',
+          date: now, note: null,
+          // Where scheduled funding draws from. Bank, because that is where a
+          // standing transfer comes from for almost everyone — and because it is
+          // the bucket `INCOME_LANDING_DEFAULT` puts salary into, so the money
+          // being swept is the money that arrived.
+          source_asset: 'bank',
+        });
       }
       await db.runAsync('UPDATE savings_goal SET last_auto_at = ? WHERE id = ?', [a.newAnchor, a.goalId]);
     }
@@ -360,11 +439,14 @@ export async function applyOverspendRaid(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     for (const r of chosen) {
-      await db.runAsync(
-        `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, created_at)
-         VALUES (?, ?, ?, 'withdraw', 'auto', ?, 'Covered overspend', ?)`,
-        [uuid(), r.goalId, r.amount, now, now],
-      );
+      await insertSavingsTxn(db, {
+        goal_id: r.goalId, amount: r.amount, kind: 'withdraw', source: 'auto',
+        date: now, note: 'Covered overspend',
+        // Null on purpose: a raid covers a shortfall in the pooled figure, not in
+        // one named bucket, so there is no honest asset to name here yet. Naming
+        // one would make the undo put money back somewhere it never came from.
+        source_asset: null,
+      });
     }
   });
   return { withdrawals: chosen, total: chosen.reduce((s, r) => s + r.amount, 0) };
@@ -376,7 +458,9 @@ export async function undoOverspendRaid(db: SQLite.SQLiteDatabase, withdrawals: 
   await db.withTransactionAsync(async () => {
     for (const w of withdrawals) {
       if (w.amount <= 0) continue;
-      await insertSavingsTxn(db, { goal_id: w.goalId, amount: w.amount, kind: 'allocate', source: 'auto', date: now, note: 'Undo overspend cover' });
+      // No asset: an undo puts back what the raid took, and the raid recorded
+      // where that went. Attributing it here would be guessing twice.
+      await insertSavingsTxn(db, { goal_id: w.goalId, amount: w.amount, kind: 'allocate', source: 'auto', date: now, note: 'Undo overspend cover', source_asset: null });
     }
   });
 }

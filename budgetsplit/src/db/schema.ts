@@ -402,6 +402,17 @@ export const COLUMN_MIGRATIONS = [
   // RECUR_MODE in constants/enums.ts for why income and transfers default the
   // other way at creation.
   "ALTER TABLE txn ADD COLUMN recur_mode TEXT NOT NULL DEFAULT 'auto'",
+  // Which bucket this money came out of — bank, cash or wallet.
+  //
+  // A goal funded from the bank has to be withdrawable BACK to the bank. Returning
+  // it as generic "cash" is not a round trip: it silently rewrites where the user's
+  // money is, and every figure built on that is then wrong.
+  //
+  // Nullable, and null means "we do not know" rather than a default. Every row
+  // written before this column exists has no source, and guessing one would be the
+  // same silent-drain mistake the pay-method buckets refuse to make. A withdrawal
+  // against an unattributed balance asks instead of assuming.
+  "ALTER TABLE savings_txn ADD COLUMN source_asset TEXT",
   // Sync prerequisites, schema-only — nothing reads these yet.
   //
   // When shared groups sync, the unit that travels is the ENTRY (a `txn` plus its
