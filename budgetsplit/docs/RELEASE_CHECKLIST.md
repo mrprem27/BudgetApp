@@ -723,6 +723,25 @@ actually carries.
       device that never ran it. This is F7 arriving early, through backup rather
       than sync. The fix is the same: an explicit key allowlist.
 
+### Sweep has to know *where from*, and give it back to the same place
+
+A surplus sweep moves money **out of a specific asset** — bank, cash, wallet — and
+a later withdrawal has to return it **to that same one**. Sweeping ₹5,000 out of a
+bank account and handing it back as "cash" is not a round trip; it silently
+rewrites where the user's money is, and every figure built on that is then wrong.
+The same applies to a manual withdrawal from a goal: it is not a generic credit,
+it goes back where it came from.
+
+That means the sweep cannot be built on today's model, where **cash is one pooled
+figure** and the "landed in" answer is stored and never read (below). The sweep
+logic itself is small; the prerequisite is not. So it is parked *behind* the
+per-method baselines pass, not beside it — building it first would bake the pooled
+assumption into the savings ledger, which is the hardest place to unpick it.
+
+Concretely, when it is built: `savings_txn` needs the source asset on the row, a
+withdrawal must default to that asset and be unable to silently pick another, and
+an auto-sweep must refuse rather than guess when the source is ambiguous.
+
 ### Money-model gap: accounts as entities
 
 `INCOME_LANDING` asks "Landed in ___" and **nothing reads the answer** —
@@ -750,7 +769,7 @@ without this; the rest waits for the per-method baselines pass, which touches
 | **Widget** | Scope genuinely undecided — balance? today's spend? quick-add? | You answer that **and** Gate 0 clears |
 | **WhatsApp reminder composer** | Framing decided, phone field already shipped; only the compose step is left | **Any time — it's small** |
 | **Repayment likelihood → expected recovery** | Per-person "how likely is this to come back", turning owed-to-me from a face value into an expected one, and ordering who to chase first. Three constraints decided up front: it stays **out of Safe-to-Spend** (every term there is certain money, and a probabilistic one makes the headline a guess); the maths is **Σ(amount × probability)**, not an average or median of probabilities — a median discards the amounts, so a 20%-likely ₹40,000 would rank below a 90%-likely ₹200; and the rating **never syncs**, because at S3 it could reach the person being rated | The WhatsApp composer ships — this is what gives it an order |
-| **Goals surplus sweep** | Nothing pushes an underspent month into goals; the only automatic inflow is the fixed per-goal allocation. Must be explicit opt-in | **Any time** |
+| **Goals surplus sweep** | Nothing pushes an underspent month into goals; the only automatic inflow is the fixed per-goal allocation. Must be explicit opt-in. **And it is blocked on accounts-as-entities, not on the sweep logic** — see below | **After the per-method baselines pass** |
 | **Scheduled reminder nudge** | Needs an overdue scan, a per-person cooldown store, notification routing, and a cadence that cannot be guessed from an empty pilot. Get it wrong and users disable notifications, losing the channel permanently | The manual composer ships first — it is a strict prerequisite |
 | **Insights three-tier restructure** | One always-present headline (today it renders *only* when overspending, `insights.tsx:99`), then Fact, then Forecast. Rows 6/7/8/10 are four hand-written variants of one row | Post-pilot polish |
 | **Import restructure (remainder)** | pdf.js vendoring is done; `app/import.tsx` and `paytmParse.ts` are still one long screen and one long parser | Opportunistic |
