@@ -1,8 +1,8 @@
 # budgetsplit-api
 
-Cloudflare Worker holding the app's **accounts** and its **encrypted backup blobs** —
-phase S1 of the server ladder in `budgetsplit/docs/V2_LAUNCH_CHECKLIST.md` §6b
-(S1 = login + backup/restore, S2 = multi-device sync, S3 = shared groups).
+Cloudflare Worker holding the app's **accounts**, its **encrypted backup blobs**,
+and the **sealed mailbox** shared groups sync through — phases S1 and S2/S3 of the
+server ladder in `budgetsplit/docs/V2_LAUNCH_CHECKLIST.md` §6b.
 
 Sibling of `../receipt-ocr-proxy` (a separate, stateless Worker) — they share the
 repo and the Cloudflare account, nothing else.
@@ -16,6 +16,8 @@ true. This server holds:
 - **Identity** — email, display name, avatar. D1.
 - **Encrypted snapshots** — the exact `{v, createdAt, ciphertext}` envelope
   `budgetsplit/src/lib/backup.ts` already produces, stored byte-for-byte. R2.
+- **Sealed shared-group entries** — one row per entry, sealed on the device with a
+  per-group key this server never receives. D1. See § Sync below.
 
 The passphrase that decrypts a snapshot is never sent here and never stored
 anywhere but the user's head. So a leaked bucket is unreadable, and a leaked D1
@@ -23,8 +25,13 @@ gives up email addresses and nothing about anyone's money. There is no
 server-side reset for a forgotten passphrase — same tradeoff the local
 share-sheet backup already documents, unchanged by this server existing.
 
-Not here, on purpose: live sync of financial data (S2) and group sharing (S3).
-Backup/restore is a manual snapshot, not two-way sync.
+What this still does not hold: anyone's **personal** finances. Sync carries shared
+groups only — personal spending, income, savings goals, budgets and net worth
+never leave the device at all. And what it does carry, it cannot read: the server
+stores sealed blobs and the per-device wraps of a key it has no copy of.
+
+Backup/restore remains a manual snapshot and is unrelated to sync — different
+data, different key, different lifecycle.
 
 ## Auth model
 
@@ -82,6 +89,40 @@ widen who can call this from a browser.
 | `GET /backups` | bearer | `{backups: [{id, sizeBytes, createdAt}]}`, newest first. |
 | `GET /backups/:id` | bearer | The blob, `application/octet-stream`. |
 | `DELETE /backups/:id` | bearer | Removes the R2 object and the row. |
+| `POST /sync/devices` | bearer | `{deviceId, publicKey, label?}` → registers this device's public key. Upsert, scoped so another account cannot overwrite your key. |
+| `GET /sync/devices?userId=` | bearer | `{devices: [{deviceId, publicKey, label}]}` — yours, or those of someone you are **already linked with**. Not a directory. |
+| `POST /sync/groups` | bearer | `{groupId, wraps}` — publishes a group under its **existing client uuid**, with the key wrapped to your own devices. Idempotent; 403 if that id is another account's. |
+| `GET /sync/groups?deviceId=` | bearer | `{groups: [{id, owner, state, wrappedKey}]}`. `wrappedKey` is null when this device has no wrap yet. |
+| `POST /sync/groups/:id/members` | bearer | `{userId, wraps: [{deviceId, wrappedKey}]}` — invite someone you are **already linked with**, handing over the group key wrapped to each of their devices. They land `pending`. |
+| `POST /sync/groups/:id/join` | bearer | Accept your own invitation. `pending` → `approved`. |
+| `PUT /sync/entries` | bearer | `{groupId, entryId, version, ciphertext, isDeleted?}` → `{version, updatedAt}`, or **409 with the current row** when the version is stale. |
+| `GET /sync/entries?groupId=&since=` | bearer | `{entries, cursor, more}` — up to 200, ordered by `updated_at`. |
+
+### Sync (Stage C)
+
+The server is a **blind, ordered mailbox**. Entries are sealed with a per-group
+key it never receives (`budgetsplit/src/lib/groupCrypto.ts`), and that key is
+stored only as per-device wraps it cannot open. It knows who may read which
+mailbox, and which version of an entry is current — nothing else.
+
+`PUT /sync/entries` is **compare-and-set on `version`**, which is why `version`
+is in the clear. Last-write-wins on a ledger is the lost-update problem with
+money in it: two people edit the same bill, both writes succeed, and the second
+silently erases the first with nobody told. A stale push gets 409 and the current
+row attached, for a human to resolve — never an automatic merge.
+
+Isolation changes shape here. Every earlier route answers "is this row yours"
+with `WHERE user_id = ?`; a shared group is the first thing that belongs to
+several people, so it goes through one `approvedMember` helper — 'pending' grants
+nothing, and `removed_at`/`deleted_at` are checked in the same place.
+
+**Rate limited.** `PUT /sync/entries` is capped at **500 entries per account per
+hour** (`SYNC_WRITES_PER_WINDOW`), on top of the 64 KiB per-request cap. It counts
+entries *touched* in the window rather than requests made, so rewriting one entry
+repeatedly costs one — that burns requests, not storage, and Cloudflare's own
+request cap already covers it. What this bounds is D1 filling an entry at a time.
+Migration `0005` adds the `(author_user, updated_at)` index that makes the check
+affordable; without it the guard would scan the table on every push.
 
 Every backup route resolves its row through one `WHERE id = ? AND user_id = ?`
 helper — that predicate is the only thing separating one account's backups from

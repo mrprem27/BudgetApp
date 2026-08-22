@@ -173,6 +173,26 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: 'Account, backup and sync',
+    illustration: { icons: [
+      { name: 'user', bg: alpha(colors.accent, 13), color: colors.accent },
+      { name: 'download', bg: alpha(colors.income, 13), color: colors.income },
+      { name: 'refresh-cw', bg: alpha(colors.settle, 13), color: colors.settle },
+    ] },
+    items: [
+      { icon: 'help-circle', color: colors.accent, title: 'Three different things, and they are easy to mix up', body: 'An ACCOUNT is just who you are \u2014 it lets another person\u2019s phone know that a name in their app is you. A BACKUP is a snapshot you take by hand, so you can get your data back if this phone is lost. SYNC keeps a shared group up to date between the people in it. You can have an account and never back up. You can back up without ever syncing. Sync is the only one of the three that involves anyone else.' },
+      { icon: 'mail', color: colors.accent, title: 'Signing in \u2014 no password', body: 'Settings \u2192 Account, enter your email, and we send you a link. Tapping it signs you in; the email also prints the code in case you opened the mail on a computer. There is no password to forget and none to steal. Signing out ends the session on the server, not just on this phone.' },
+      { icon: 'search', color: colors.textSecondary, title: 'Nobody can look you up', body: 'There is no directory and no username search anywhere in BudgetSplit. The only way to reach another account is a link its owner generated, and then the owner approves the specific person who used it \u2014 so a link forwarded round a group chat cannot connect you to a stranger.' },
+      { icon: 'download', color: colors.income, title: 'Backups \u2014 a snapshot you take', body: 'Settings \u2192 Backup makes one encrypted file of everything and hands it to you, or stores it on your account if you are signed in. It is encrypted on this phone with a passphrase that is never sent anywhere \u2014 which also means a forgotten passphrase cannot be reset by anyone, including us. Restoring replaces everything on this phone with the snapshot, so it asks first.' },
+      { icon: 'refresh-cw', color: colors.settle, title: 'Sync \u2014 shared groups only', body: 'Settings \u2192 Sync. Turning it on sends the groups you split with, so the people in them see the same entries. Only those groups travel: your personal spending, income, goals, budgets and net worth stay here. Changes are exchanged when you open the app, not the second someone types them \u2014 a ledger does not need to be a chat.' },
+      { icon: 'lock', color: colors.accent, title: 'The server cannot read your groups', body: 'Everything is encrypted on this phone before it is sent, with a key made here and shared only with the people in the group. What the server holds is sealed data it has no key for \u2014 not amounts, not who paid, not what it was for. It knows who is in which group and when something changed, and nothing else.' },
+      { icon: 'user-plus', color: colors.accent, title: 'Sharing a group with someone', body: 'Open the group \u2192 Members \u2192 Share with a member. You can share with someone who is both a member of that group and linked to your account, so link them first under Settings \u2192 Linked people. They get an invitation and nothing is shared until they accept it \u2014 being added to a group should not be something that happens to you.' },
+      { icon: 'check-circle', color: colors.income, title: 'Accepting an invitation', body: 'An invitation waiting for you appears at the top of Settings \u2192 Sync. Accept it and that group starts arriving on the next sync. Until you accept, nothing about it reaches your phone.' },
+      { icon: 'shield', color: colors.healthAmber, title: 'Nothing lands without your say-so', body: 'An entry someone else adds shows up in the group straight away \u2014 the group agrees on what happened \u2014 but it moves none of your own numbers until you accept it. If you mark someone trusted, their entries count immediately in every group you share with them. Money arriving as a transfer always waits for you to confirm it, however much you trust the sender.' },
+      { icon: 'alert-triangle', color: colors.expense, title: 'What sync does not do', body: 'It is not live, so it will not show someone typing. It does not carry receipt photos, only the entries. Turning it off pauses it \u2014 what is already on the server stays there and nothing is removed from anyone else\u2019s phone. And you cannot restore a backup while sync is on, because that would replace what everyone else sees with a snapshot they were never part of; turn sync off first.' },
+    ],
+  },
+  {
     title: 'Privacy & Security',
     illustration: { icons: [
       { name: 'lock', bg: alpha(colors.accent, 13), color: colors.accent },
@@ -180,7 +200,7 @@ const SECTIONS: Section[] = [
       { name: 'shield', bg: alpha(colors.income, 13), color: colors.income },
     ] },
     items: [
-      { icon: 'wifi-off', color: colors.income, title: 'Offline by default', body: 'Your data lives on this device. No account needed, no cloud sync, no tracking, no analytics — nothing is uploaded as you use the app. Two things can leave, both only when you ask: receipt scanning sends that photo (and nothing else) to a cloud OCR service to read the line items, and if you sign in under Settings → Account you can store a backup off this phone — encrypted here first, with a passphrase that never leaves your phone.' },
+      { icon: 'wifi-off', color: colors.income, title: 'Local by default', body: 'Your money lives on this device. No account is needed to use the app, and there is no tracking and no analytics \u2014 nothing is uploaded as you use it. Your personal spending, income, savings goals, budgets and net worth never leave this phone at all, whatever else you switch on. Three things can leave, each only when you ask: receipt scanning sends that one photo to a cloud text-reader, signing in lets you keep an encrypted backup off the phone, and turning on sync sends your shared groups \u2014 sealed here first, to a server with no key for them. See \u201cAccount, backup and sync\u201d above for what each one actually does.' },
       { icon: 'lock', color: colors.accent, title: 'Face ID / Touch ID', body: 'Enable biometric lock in Settings \u2192 Privacy. The app requires Face ID every time you open it, preventing others from seeing your finances.' },
       { icon: 'eye-off', color: colors.settle, title: 'Privacy screen', body: 'When you switch apps, your financial data is hidden with a blur overlay. On by default \u2014 toggle in Settings \u2192 Privacy & Security.' },
       { icon: 'map-pin', color: colors.healthAmber, title: 'Location tagging', body: 'Optionally tag transactions with where you made them. OFF by default, explicitly enable in Settings. Location data never leaves your device.' },

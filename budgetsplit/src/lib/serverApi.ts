@@ -91,11 +91,22 @@ export class ServerAuthError extends Error {
 export class ServerRequestError extends Error {
   status: number;
   code?: string;
-  constructor(status: number, message: string, code?: string) {
+  /**
+   * The whole parsed error body, when there was one.
+   *
+   * Kept because a 409 from `PUT /sync/entries` carries the *current* version of
+   * the entry alongside the message, and that payload is the only thing that lets
+   * a conflict be shown as "yours vs theirs" instead of a dead end. Discarding it
+   * would leave the client knowing only that it lost, which is not enough to do
+   * anything useful about it.
+   */
+  detail?: Record<string, unknown>;
+  constructor(status: number, message: string, code?: string, detail?: Record<string, unknown>) {
     super(message);
     this.name = 'ServerRequestError';
     this.status = status;
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -198,11 +209,13 @@ async function send(path: string, options: SendOptions = {}): Promise<Response> 
     throw new ServerAuthError();
   }
 
-  const detail = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+  const detail = await response.json().catch(() => null) as
+    (Record<string, unknown> & { error?: string; code?: string }) | null;
   throw new ServerRequestError(
     response.status,
     detail?.error ?? `The server returned an error (${response.status}).`,
     detail?.code,
+    detail ?? undefined,
   );
 }
 
@@ -399,3 +412,136 @@ export async function removeLink(id: string): Promise<void> {
 
 /** Same shape as `extractAuthToken`, for `budgetsplit:///link?token=…`. */
 export const extractInviteToken = extractAuthToken;
+
+// --- Sync (Stage C) --------------------------------------------------------
+
+export type SyncGroup = {
+  id: string;
+  owner: string;
+  state: 'pending' | 'approved';
+  /** Null when this device has no wrap yet — invited, or reinstalled. */
+  wrappedKey: string | null;
+};
+
+export type SyncEntry = {
+  entryId: string;
+  version: number;
+  ciphertext: string;
+  author: string;
+  isDeleted: boolean;
+  updatedAt: number;
+};
+
+export type SyncDevice = { deviceId: string; publicKey: string; label: string | null };
+
+export async function registerDevice(
+  deviceId: string, publicKey: string, label?: string,
+): Promise<void> {
+  await sendAuthed('/sync/devices', { method: 'POST', json: { deviceId, publicKey, label } });
+}
+
+/**
+ * The devices of someone you are linked with — what a group key gets wrapped to.
+ *
+ * Only reachable for a person who has already approved a link with you. There is
+ * no directory here and this route must not become one.
+ */
+export async function listDeviceKeys(userId?: string): Promise<SyncDevice[]> {
+  const q = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+  const res = await sendAuthed(`/sync/devices${q}`);
+  return ((await res.json()) as { devices: SyncDevice[] }).devices;
+}
+
+export async function listSyncGroups(deviceId: string): Promise<SyncGroup[]> {
+  const res = await sendAuthed(`/sync/groups?deviceId=${encodeURIComponent(deviceId)}`);
+  return ((await res.json()) as { groups: SyncGroup[] }).groups;
+}
+
+/**
+ * Publish a group, with the key wrapped to my own devices.
+ *
+ * The wraps travel WITH the publish rather than after it: without them the owner
+ * has published a group they cannot read, because the key exists only in the
+ * memory of the device that just generated it.
+ */
+export async function publishSyncGroup(
+  groupId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
+): Promise<void> {
+  await sendAuthed('/sync/groups', { method: 'POST', json: { groupId, wraps } });
+}
+
+export async function inviteSyncMember(
+  groupId: string, userId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
+): Promise<void> {
+  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'POST', json: { userId, wraps },
+  });
+}
+
+export async function joinSyncGroup(groupId: string): Promise<void> {
+  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/join`, { method: 'POST' });
+}
+
+/**
+ * The push. Throws `ServerRequestError` with `status === 409` when the version is
+ * stale, and `error.detail.current` then holds what the server actually has.
+ *
+ * Deliberately not swallowed into a boolean: a conflict is not a failed request,
+ * it is news — someone else changed this entry — and the caller has to be able to
+ * tell the two apart.
+ */
+export async function pushSyncEntry(entry: {
+  groupId: string; entryId: string; version: number; ciphertext: string; isDeleted: boolean;
+}): Promise<{ version: number; updatedAt: number }> {
+  const res = await sendAuthed('/sync/entries', { method: 'PUT', json: entry });
+  return (await res.json()) as { version: number; updatedAt: number };
+}
+
+export async function pullSyncEntries(
+  groupId: string, since: number,
+): Promise<{ entries: SyncEntry[]; cursor: number; more: boolean }> {
+  const res = await sendAuthed(
+    `/sync/entries?groupId=${encodeURIComponent(groupId)}&since=${since}`,
+  );
+  return (await res.json()) as { entries: SyncEntry[]; cursor: number; more: boolean };
+}
+
+export type SyncDispute = {
+  entryId: string;
+  byUser: string;
+  version: number;
+  createdAt: number;
+  cleared: boolean;
+};
+
+/**
+ * Tell the group I object to an entry — or withdraw that objection.
+ *
+ * Never a new version of their entry: a dispute is my opinion of what someone
+ * else wrote, and expressing it as a version would let one person overwrite
+ * another's record of what happened.
+ */
+export async function pushSyncDispute(
+  groupId: string, entryId: string, version: number, cleared = false,
+): Promise<void> {
+  await sendAuthed('/sync/disputes', { method: 'PUT', json: { groupId, entryId, version, cleared } });
+}
+
+export async function pullSyncDisputes(
+  groupId: string, since: number,
+): Promise<{ disputes: SyncDispute[]; cursor: number; more: boolean }> {
+  const res = await sendAuthed(
+    `/sync/disputes?groupId=${encodeURIComponent(groupId)}&since=${since}`,
+  );
+  return (await res.json()) as { disputes: SyncDispute[]; cursor: number; more: boolean };
+}
+
+/** Leave a group someone else created. Their entries stay; my access ends. */
+export async function leaveSyncGroup(groupId: string): Promise<void> {
+  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/leave`, { method: 'POST' });
+}
+
+/** Delete a group for everyone. Owner only — the server enforces it too. */
+export async function deleteSyncGroup(groupId: string): Promise<void> {
+  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+}

@@ -35,6 +35,40 @@ export async function setPersonImage(db: SQLite.SQLiteDatabase, id: string, uri:
  * balance is unchanged and still displayed. It only stops the raid and the health
  * score treating it as an asset.
  */
+/**
+ * Bind a local person to the account they have linked with.
+ *
+ * **The one thing that makes trust real.** `remote_uid` is how `ingestPeerTxn`
+ * answers "who wrote this" — until a person carries one, `appliesImmediately`
+ * returns false for everyone and every incoming envelope is refused as
+ * `unknown-author`. The whole peer model is inert without this write.
+ *
+ * Deliberately a separate, explicit act rather than something linking does for
+ * you. The app's own rule is that a friend is a LOCAL record and a linked
+ * account's details are offered *into* it, never written over it — you may
+ * legitimately know someone by a different name than the one they signed up with,
+ * and you may link with someone you have not added as a friend at all.
+ *
+ * Unbinding is `null`, and it must stay possible: linking the wrong local person
+ * would otherwise be permanent, and it would silently grant that account the
+ * ability to write entries as them.
+ */
+export async function setRemoteUid(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+  remoteUid: string | null,
+): Promise<void> {
+  await db.runAsync('UPDATE person SET remote_uid = ? WHERE id = ?', [remoteUid, personId]);
+}
+
+/** The local person bound to this account, if any. */
+export async function personByRemoteUid(
+  db: SQLite.SQLiteDatabase,
+  remoteUid: string,
+): Promise<Person | null> {
+  return db.getFirstAsync<Person>('SELECT * FROM person WHERE remote_uid = ?', [remoteUid]);
+}
+
 export async function setReceivableState(
   db: SQLite.SQLiteDatabase,
   id: string,

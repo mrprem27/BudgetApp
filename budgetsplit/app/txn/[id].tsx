@@ -42,7 +42,7 @@ export default function TxnDetailScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
 
   const {
-    txn, members, me, groupName, isPersonal, history, items, parentRule,
+    txn, members, me, groupName, isPersonal, history, items, parentRule, disputes,
     loading, error, reload,
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,
@@ -135,6 +135,24 @@ export default function TxnDetailScreen() {
             text="Waiting for you. None of the figures below have been counted yet."
             actionLabel="Decide"
             onAction={() => router.push('/approvals')}
+          />
+        )}
+        {/*
+          Somebody in the group says this entry is wrong (F10).
+          
+          Shown to the AUTHOR, which is the whole point: rejecting used to be
+          invisible to the person who wrote it, so their balance and the
+          objector's silently disagreed and neither was told. It is deliberately
+          not an error — they may be wrong — but it is not dismissable either,
+          because an unanswered objection is exactly the state that diverges.
+        */}
+        {disputes.length > 0 && (
+          <Banner
+            tone={colors.expense}
+            icon="alert-triangle"
+            text={disputes.length === 1
+              ? `${disputes[0].name ?? 'Someone in this group'} says this isn’t right, so it counts for them as though it never happened. Edit it or delete it if they’re correct.`
+              : `${disputes.length} people say this isn’t right, so it counts for none of them. Edit it or delete it if they’re correct.`}
           />
         )}
         {/* Hero */}

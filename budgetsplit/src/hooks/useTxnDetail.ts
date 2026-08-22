@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Platform, ActionSheetIOS } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getApproval } from '../db/queries/approval';
+import { disputesFor } from '../db/queries/syncDoc';
 import { useRouter } from 'expo-router';
 import { freeBytes } from '../lib/deviceStorage';
 import { storageVerdict, storageAdvice, allowsAttachments } from '../lib/storage';
@@ -33,14 +34,15 @@ export function useTxnDetail(id: string) {
   const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
     const t = await getTxnById(database, id);
     if (!t) {
-      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null };
+      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null, disputes: [] };
     }
-    const [grp, mems, meRow, hist, li] = await Promise.all([
+    const [grp, mems, meRow, hist, li, disputes] = await Promise.all([
       getGroupById(database, t.group_id),
       getGroupMembers(database, t.group_id),
       getMe(database),
       getAuditLog(database, { entityId: id }),
       t.entry_mode === 'itemized' ? getLineItems(database, id) : Promise.resolve([]),
+      disputesFor(database, id),
     ]);
     const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
     return {
@@ -52,6 +54,7 @@ export function useTxnDetail(id: string) {
       history: hist,
       items: li,
       parentRule,
+      disputes,
     };
   }, [id]);
 
@@ -156,6 +159,7 @@ export function useTxnDetail(id: string) {
 
   return {
     txn, members, me, groupName, isPersonal, history, items, parentRule,
+    disputes: data?.disputes ?? [],
     loading, error, reload,
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,

@@ -1,3 +1,4 @@
+import type { TxnDispute } from '../db/queries/syncDoc';
 import type { TxnWithSplits, LineItem } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
 import type { AuditLog } from '../db/queries/audit';
@@ -12,4 +13,6 @@ export type TxnDetailData = {
   history: AuditLog[];
   items: LineItem[];
   parentRule: TxnWithSplits | null;
+  /** Live objections from other members against MY entry — see F10. */
+  disputes: TxnDispute[];
 };

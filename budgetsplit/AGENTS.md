@@ -450,9 +450,14 @@ someone else.
 **Trust is per person, not per group.** Mark someone trusted and their entries
 apply immediately in every group you share; leave them on review and every entry
 waits. A group is only a set of humans, so a group-level switch would silently
-extend trust to whoever is added next. A person with no `remote_uid` has no
-account and therefore no write path, so their trust value is inert — which is why
-all of this is a no-op on every database that exists today (`lib/trust.ts`).
+extend trust to whoever is added next.
+
+**A person with no `remote_uid` has no account and therefore no write path, so
+their trust value is inert** (`lib/trust.ts`). `remote_uid` is written by one
+thing — matching a linked account to a local person on Linked people
+(`setRemoteUid`). Until you do that, nothing anyone adds can reach you, whatever
+their trust says. Two decisions kept apart on purpose: matching says *who they
+are*, trusting says *and their entries may count*.
 
 **A peer entry lives in `txn`. Its approval state lives in `txn_approval`, keyed
 on `txn_id`. It is shown in the group ledger while it waits, and moves none of

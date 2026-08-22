@@ -28,8 +28,9 @@ import type { Person } from '../../../src/db/queries/persons';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { PersonNameSheet } from '../../../src/components/finance/PersonNameSheet';
 import { getMe } from '../../../src/db/queries/persons';
-import { getGroupContext, getGroupMembersWithRoles, setMemberRole } from '../../../src/db/queries/groups';
+import { getGroupContext, getGroupMembersWithRoles, setMemberRole, getGroupById } from '../../../src/db/queries/groups';
 import { isAdmin, canRemoveMember, canChangeRole } from '../../../src/lib/permissions';
+import { ShareGroupRow } from '../../../src/components/finance/group/ShareGroupRow';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -46,14 +47,15 @@ export default function MembersScreen() {
   const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const me = await getMe(db);
     const meId = me?.id ?? '';
-    const [members, allPersons, net, roles, ctx] = await Promise.all([
+    const [members, allPersons, net, roles, ctx, group] = await Promise.all([
       getGroupMembers(db, groupId),
       getAllPersons(db),
       getGroupNet(db, groupId),
       getGroupMembersWithRoles(db, groupId),
       getGroupContext(db, groupId, meId),
+      getGroupById(db, groupId),
     ]);
-    return { members, allPersons, net, roles, ctx, meId };
+    return { members, allPersons, net, roles, ctx, meId, group };
   }, [groupId]);
   const members = data?.members ?? [];
   const allPersons = data?.allPersons ?? [];
@@ -61,6 +63,7 @@ export default function MembersScreen() {
   const meId = data?.meId ?? '';
   const ctx = data?.ctx ?? null;
   const roleOf = new Map((data?.roles ?? []).map(r => [r.person_id, r]));
+  const isPersonal = data?.group?.is_personal === 1;
   const mayManage = ctx ? isAdmin(ctx) : false;
 
   useEffect(() => { if (!groupId) router.back(); }, [groupId]);
@@ -260,6 +263,18 @@ export default function MembersScreen() {
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
+
+        {/*
+          Sharing lives on Members because that is what it is: giving a specific
+          person the group, not flipping a property of the group. It renders
+          nothing at all on a build with no server configured.
+
+          A personal group is never offered — it is the half of the app that must
+          never leave the device.
+        */}
+        {!isPersonal && (
+          <ShareGroupRow groupId={groupId} members={members} onShared={reload} />
+        )}
       </ScrollView>
       )}
 

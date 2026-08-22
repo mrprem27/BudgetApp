@@ -22,6 +22,10 @@ const K = {
   // Opt-in, and default OFF. A sweep moves real money into goals without being
   // asked, so it has to be a decision someone made rather than one they inherited.
   autoSweep: 'auto_sweep_enabled',
+  // Whether shared-group entries travel between devices at all. Off by default:
+  // the app is local-first, and turning this on is the moment data leaves the
+  // phone. It is a pause, not a delete -- see `settings.setSyncEnabled`.
+  syncEnabled: 'sync_enabled',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -76,6 +80,17 @@ export const settings = {
   setSaveLocation: (v: boolean) => setBool(K.saveLocation, v),
   autoSweep: () => getBool(K.autoSweep, false),
   setAutoSweep: (v: boolean) => setBool(K.autoSweep, v),
+  syncEnabled: () => getBool(K.syncEnabled, false),
+  /**
+   * Turning sync OFF is a pause, never a delete.
+   *
+   * Nothing already uploaded is removed, and nothing local is lost — the queue
+   * simply stops draining and no pulls happen. Turning it back on resumes from
+   * where it left off. The copy has to say that, because "off" reading as
+   * "deleted from the server" is the assumption people make, and acting on that
+   * assumption is how someone turns it off expecting a retraction they never get.
+   */
+  setSyncEnabled: (v: boolean) => setBool(K.syncEnabled, v),
 
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),

@@ -18,7 +18,7 @@ export type TrustSubject = {
  *    row and a server account. Without one there is no write path, so nothing can
  *    arrive claiming to be them and the stored trust value is unreachable. This is
  *    the clause that makes the whole feature a strict no-op today: nothing writes
- *    `remote_uid` yet, so every person on every device takes this branch.
+ *    `remote_uid`, so this branch is taken until you match them on Linked people.
  * 3. **Otherwise, whatever I decided.** Default `review`, because the safe answer
  *    to "may someone I have not vouched for move my numbers" is no.
  *

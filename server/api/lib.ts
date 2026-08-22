@@ -41,6 +41,35 @@ export const MAX_NAME_LEN = 80;
 /** Long enough for any real avatar URL, short enough to not be an upload. */
 export const MAX_AVATAR_URL_LEN = 2048;
 
+/**
+ * A sealed transaction — amount, payer, shares, line items — is well under a
+ * kilobyte. 64 KiB is a sanity ceiling that rejects a wrong-endpoint upload
+ * before it becomes a D1 row, not a real budget.
+ */
+export const MAX_ENTRY_BYTES = 64 * 1024;
+/**
+ * Entries returned by one pull. The client's own drain sends 50 at a time
+ * (`MAX_PER_DRAIN`), and a bounded page is what keeps a first sync on a large
+ * group from being one request that either times out or blows the memory limit.
+ */
+export const SYNC_PAGE_SIZE = 200;
+
+/**
+ * Ceiling on entries one account may write per hour, across all its groups.
+ *
+ * `PUT /sync/entries` is the first write route here with a real abuse profile: an
+ * authenticated member of one group can fill D1 an entry at a time, and the
+ * per-request size cap does nothing about volume.
+ *
+ * 500/hour is far above any genuine use — a busy household logs perhaps thirty
+ * expenses a day — while bounding a runaway client or a malicious one to
+ * something the free tier absorbs. It counts entries TOUCHED in the window, so
+ * repeatedly rewriting one entry costs one, which is correct: that burns
+ * requests, not storage, and Cloudflare's own request cap covers it.
+ */
+export const SYNC_WRITES_PER_WINDOW = 500;
+export const SYNC_WRITE_WINDOW_MS = 60 * 60 * 1000;
+
 // --- Responses ------------------------------------------------------------
 
 export function json(body: unknown, status = 200): Response {
@@ -58,6 +87,14 @@ export const methodNotAllowed = (allow: string) =>
     status: 405,
     headers: { 'content-type': 'application/json', allow },
   });
+export const forbidden = (error = 'Not yours') => json({ error }, 403);
+/**
+ * A write that lost a race. 409 is not an error to swallow: it means someone
+ * else's version of this entry is now current, so the client must pull and let a
+ * human decide. Merging two versions of a money row automatically is how a figure
+ * nobody typed ends up in a ledger.
+ */
+export const conflict = (body: Record<string, unknown>) => json(body, 409);
 export const payloadTooLarge = (error: string) => json({ error }, 413);
 export const tooManyRequests = (error: string) => json({ error }, 429);
 

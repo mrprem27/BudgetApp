@@ -1407,6 +1407,31 @@ server keeps the newest **10** snapshots per account and prunes older ones on up
 
 ---
 
+### 13.6 Sync — `app/settings/sync.tsx` (optional, server-backed)
+
+One switch and four facts. It exists because the honest answers about sync are
+*surprising*, and a user who assumes the opposite of any of them makes a decision
+they would not otherwise have made:
+
+1. **Only shared groups travel.** Personal spending, income, goals, budgets and net
+   worth never leave the device.
+2. **The server cannot read it.** Entries are sealed on the phone; the server holds
+   blobs it has no key for.
+3. **Nothing lands without your say-so** — an entry appears in the group but moves
+   none of your numbers until you accept it, unless that person is trusted.
+4. **It is not live.** Changes are exchanged when you open the app. There is no
+   background task runner and push is behind Gate 0.
+
+Turning it **on** is the consequential direction, so that is where the confirm
+lives and where the count is named ("2 shared groups"). Turning it **off** is a
+**pause**: nothing already uploaded is deleted, and nothing is removed from anyone
+else's phone. The copy says so, because "off" is widely read as "and take it back".
+
+Shows what is queued when sync is on, from `sync_outbox`. Disabled entirely
+without `EXPO_PUBLIC_API_URL` or a signed-in account.
+
+---
+
 ### 13.5 Linked people — `app/settings/linked.tsx` (optional, server-backed)
 
 Linking two accounts so they can see details each has chosen to share. Today that is a name,

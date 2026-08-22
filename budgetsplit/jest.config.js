@@ -8,7 +8,9 @@ module.exports = {
   transform: {
     '^.+\\.[jt]sx?$': ['babel-jest', { presets: ['babel-preset-expo'] }],
   },
-  transformIgnorePatterns: ['node_modules/(?!(date-fns|uuid)/)'],
+  // @noble ships ESM only, and it is real crypto the tests must actually run —
+  // stubbing it would make the group-key wrap untestable rather than tested.
+  transformIgnorePatterns: ['node_modules/(?!(date-fns|uuid|@noble)/)'],
   // Stub native-only modules that pure-logic code imports transitively but
   // never calls in these tests (they ship ESM that we don't transform).
   moduleNameMapper: {

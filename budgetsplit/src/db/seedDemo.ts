@@ -33,7 +33,7 @@ const R = (rupees: number) => Math.round(rupees * 100);
 // leave every transaction "uncategorized" (folded into Others). `category_budget`
 // IS wiped (budgets are per-run demo data) and re-created below.
 const ALL_TABLES = [
-  'txn_payment', 'txn_share', 'txn_approval', 'line_item', 'recur_skip', 'txn',
+  'txn_payment', 'txn_share', 'txn_approval', 'sync_outbox', 'line_item', 'recur_skip', 'txn',
   'category_budget', 'group_member', 'budget_group',
   'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
 ];

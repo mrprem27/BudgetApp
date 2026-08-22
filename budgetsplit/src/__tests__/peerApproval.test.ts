@@ -1,8 +1,9 @@
 import { ingestPeerTxn } from '../db/queries/peerIngest';
-import { approveTxn, rejectTxn, getPendingApprovalCount, getPendingApprovals, getApproval } from '../db/queries/approval';
+import { approveTxn, rejectTxn, reopenApproval, getPendingApprovalCount, getPendingApprovals, getApproval } from '../db/queries/approval';
+import { pendingDisputes, markDisputeSent, recordDispute, disputesFor, markSynced } from '../db/queries/syncDoc';
 import { getMyExposure } from '../db/queries/balances';
 import { getCashPosition, proposeOverspendRaid } from '../db/queries/savings';
-import { getTransactionsForGroup, getLedgerStats, updateTxn, getActiveRecurringRules } from '../db/queries/transactions';
+import { getTransactionsForGroup, getLedgerStats, updateTxn, getActiveRecurringRules, insertTxn } from '../db/queries/transactions';
 import { materializeDueOccurrences } from '../db/queries/recurring';
 import { PayMethod } from '../constants/enums';
 import { getMyGlobalBudgetSummary } from '../lib/budget';
@@ -49,6 +50,7 @@ function envelope(flat: string, me: string, aarav: string) {
   return {
     authorUid: 'acct-aarav',
     groupId: flat,
+    version: 1,
     kind: 'expense' as const,
     date: Date.now(),
     category: 'Food',
@@ -141,7 +143,7 @@ describe('a peer entry waiting on me', () => {
 
     // The same envelope arriving again must not re-ask a decided question.
     const again = await ingestPeerTxn(asDb(db), { ...envelope(flat, me, aarav), entryId: 'entry-1' });
-    expect(again).toEqual({ ok: false, reason: 'duplicate' });
+    expect(again).toEqual({ ok: false, reason: 'stale' });
     expect(await snapshot(db, me)).toEqual(before);
   });
 
@@ -257,7 +259,7 @@ describe('a transfer is confirmed, not trusted', () => {
     const before = await snapshot(db, me);
 
     const res = await ingestPeerTxn(asDb(db), {
-      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      authorUid: 'acct-aarav', groupId: flat, version: 1, kind: 'settlement',
       date: Date.now(), category: 'Settlement',
       payments: [{ personId: aarav, amount: BILL }],
       shares: [{ personId: me, amount: BILL }],
@@ -270,7 +272,7 @@ describe('a transfer is confirmed, not trusted', () => {
   it('records where it actually landed, not where they said they sent it', async () => {
     const { db, me, aarav, flat } = await setup({ trusted: true });
     const res = await ingestPeerTxn(asDb(db), {
-      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      authorUid: 'acct-aarav', groupId: flat, version: 1, kind: 'settlement',
       date: Date.now(), category: 'Settlement',
       payMethod: 'upi',            // how they sent it
       payments: [{ personId: aarav, amount: BILL }],
@@ -295,7 +297,7 @@ describe('a transfer is confirmed, not trusted', () => {
     const { db, me, aarav, flat } = await setup();
     await ingestPeerTxn(asDb(db), envelope(flat, me, aarav));           // an expense
     await ingestPeerTxn(asDb(db), {                                     // and an arrival
-      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      authorUid: 'acct-aarav', groupId: flat, version: 1, kind: 'settlement',
       date: Date.now(), category: 'Settlement',
       payments: [{ personId: aarav, amount: BILL }],
       shares: [{ personId: me, amount: BILL }],
@@ -400,5 +402,183 @@ describe('recur_mode', () => {
     await db.runAsync("INSERT INTO txn_payment (txn_id, person_id, amount) VALUES ('legacy', ?, 100000)", [me]);
     await db.runAsync("INSERT INTO txn_share (txn_id, person_id, amount) VALUES ('legacy', ?, 100000)", [me]);
     expect(await materializeDueOccurrences(asDb(db))).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Versions, and the four things they stop.
+ *
+ * An entry that can only ever be created is not a synced ledger — it is a ledger
+ * that lands once and then freezes, which reads as working right up until someone
+ * corrects an amount. So edits must arrive. And the moment they can, three ways to
+ * move money without anyone agreeing to it open up, all of them closed here.
+ */
+describe('an edit from a peer', () => {
+  const edited = (flat: string, me: string, aarav: string, version: number, bill: number) => ({
+    ...envelope(flat, me, aarav),
+    entryId: 'entry-1',
+    version,
+    payments: [{ personId: aarav, amount: bill }],
+    shares: [{ personId: me, amount: bill / 2 }, { personId: aarav, amount: bill / 2 }],
+  });
+
+  it('replaces the entry in place rather than making a second copy', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    const r = await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 2, 6_000_00));
+    expect(r).toMatchObject({ ok: true, txnId: 'entry-1' });
+
+    const rows = await getTransactionsForGroup(asDb(db), flat);
+    expect(rows).toHaveLength(1);
+    // The new figure, not the old one, and not both.
+    expect((await snapshot(db, me)).owe).toBe(3_000_00);
+  });
+
+  it('refuses a stale copy that arrives after a newer one', async () => {
+    // At-least-once delivery means a re-send can overtake. Applying it would roll
+    // a corrected figure back to the value the group already fixed.
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 2, 6_000_00));
+
+    expect(await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL)))
+      .toEqual({ ok: false, reason: 'stale' });
+    expect((await snapshot(db, me)).owe).toBe(3_000_00);
+  });
+
+  it('re-opens an approval I had already given, when the numbers change', async () => {
+    /*
+     * The one that matters most. I accept ₹4,000. They edit it to ₹40,000. If the
+     * edit inherited my decision, the new figure would land in my ledger on the
+     * strength of a decision I made about a different number.
+     */
+    const { db, me, aarav, flat } = await setup();
+    const first = await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    if (!first.ok) throw new Error(first.reason);
+    await approveTxn(asDb(db), first.txnId);
+    const afterApproval = await snapshot(db, me);
+    expect(afterApproval.owe).toBe(MY_SHARE);
+
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 2, 40_000_00));
+
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+    // And it moves nothing until I say so — not the old figure, not the new one.
+    expect((await snapshot(db, me)).owe).toBe(0);
+  });
+
+  it('cannot overrule a rejection, however much I trust the author', async () => {
+    /*
+     * I said this did not happen. A trusted author editing it must not apply the
+     * new version silently — that would erase my decision with no way for me to
+     * see it. Trust means "their entries may count", never "their edits overrule
+     * me". It comes back as a question instead of being discarded, because they
+     * may genuinely have corrected it.
+     */
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    const first = await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    if (!first.ok) throw new Error(first.reason);
+    await rejectTxn(asDb(db), first.txnId);
+    expect((await snapshot(db, me)).owe).toBe(0);
+
+    const second = await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 2, 6_000_00));
+    expect(second).toMatchObject({ ok: true, applied: false });
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+    expect((await snapshot(db, me)).owe).toBe(0);
+  });
+
+  it('carries a deletion the author made, and it moves my numbers back', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    expect((await snapshot(db, me)).owe).toBe(MY_SHARE);
+
+    await ingestPeerTxn(asDb(db), { ...edited(flat, me, aarav, 2, BILL), isDeleted: true });
+
+    expect((await snapshot(db, me)).owe).toBe(0);
+    expect(await getTransactionsForGroup(asDb(db), flat)).toHaveLength(0);
+  });
+});
+
+/**
+ * F10 — a rejection has to reach the person who wrote the entry.
+ *
+ * Rejecting soft-deletes it here and does nothing to their copy, so their balance
+ * and mine silently disagree and neither of us is told. Two confident numbers,
+ * one of them wrong, and nothing in either app admits it. The objection is queued
+ * on this device and delivered by the drain.
+ */
+describe('objecting to a peer entry', () => {
+  it('queues an objection when I reject, and takes it back when I reopen', async () => {
+    const { db, me, aarav, flat } = await setup();
+    const res = await ingestPeerTxn(asDb(db), { ...envelope(flat, me, aarav), entryId: 'e-obj' });
+    if (!res.ok) throw new Error(res.reason);
+
+    await rejectTxn(asDb(db), res.txnId);
+    let queued = await pendingDisputes(asDb(db));
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({ txn_id: 'e-obj', group_id: flat, dispute_state: 'raise' });
+
+    // Undoing the rejection must travel too — otherwise an objection I have
+    // withdrawn sits on their screen forever with no way for them to know.
+    await reopenApproval(asDb(db), res.txnId);
+    queued = await pendingDisputes(asDb(db));
+    expect(queued[0].dispute_state).toBe('clear');
+
+    await markDisputeSent(asDb(db), res.txnId);
+    expect(await pendingDisputes(asDb(db))).toHaveLength(0);
+  });
+
+  it('never objects to my own entry — there is nobody to tell', async () => {
+    const { db, me, flat } = await setup();
+    const mine = await insertTxn(asDb(db), {
+      groupId: flat, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+      payments: [{ personId: me, amount: BILL }],
+      shares: [{ personId: me, amount: BILL }],
+    });
+    await rejectTxn(asDb(db), mine);
+    expect(await pendingDisputes(asDb(db))).toHaveLength(0);
+  });
+
+  it('shows the author an objection, and hides it once they edit in response', async () => {
+    const { db, me, aarav, flat } = await setup();
+    const mine = await insertTxn(asDb(db), {
+      groupId: flat, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+      payments: [{ personId: me, amount: BILL }],
+      shares: [{ personId: me, amount: MY_SHARE }, { personId: aarav, amount: MY_SHARE }],
+    });
+    await markSynced(asDb(db), mine, 1);
+    await recordDispute(asDb(db), mine, 'acct-aarav', 1, Date.now(), false);
+
+    const live = await disputesFor(asDb(db), mine);
+    expect(live).toHaveLength(1);
+    // Resolved to a local name where this device knows the account.
+    expect(live[0].name).toBe('Aarav');
+
+    // I edit in response and push v2. The objection was about v1, which no longer
+    // exists — leaving it up would be an unanswerable complaint about a figure
+    // that has already changed.
+    await markSynced(asDb(db), mine, 2);
+    expect(await disputesFor(asDb(db), mine)).toHaveLength(0);
+  });
+
+  it('drops an objection about an entry this device does not have', async () => {
+    // Someone rejected an entry I deleted outright. Storing it against nothing
+    // would leave a row no screen can ever explain.
+    const { db } = await setup();
+    await recordDispute(asDb(db), 'no-such-entry', 'acct-aarav', 1, Date.now(), false);
+    expect(await disputesFor(asDb(db), 'no-such-entry')).toHaveLength(0);
+  });
+
+  it('a withdrawn objection stops being shown', async () => {
+    const { db, me, flat } = await setup();
+    const mine = await insertTxn(asDb(db), {
+      groupId: flat, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+      payments: [{ personId: me, amount: BILL }], shares: [{ personId: me, amount: BILL }],
+    });
+    await markSynced(asDb(db), mine, 1);
+    await recordDispute(asDb(db), mine, 'acct-aarav', 1, Date.now(), false);
+    expect(await disputesFor(asDb(db), mine)).toHaveLength(1);
+
+    await recordDispute(asDb(db), mine, 'acct-aarav', 1, Date.now(), true);
+    expect(await disputesFor(asDb(db), mine)).toHaveLength(0);
   });
 });

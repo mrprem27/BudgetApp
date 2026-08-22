@@ -6,8 +6,15 @@ build** of the app. This works on a **free Apple ID** (no $99 needed); the only
 catch is a free-account app **expires after ~7 days**, so you re-run one command
 to reinstall.
 
-> Everything here is on-device. No push server, no account, nothing leaves your
-> phone — consistent with the app's offline promise.
+> **Notifications** here are entirely on-device: local notifications, no push
+> server, nothing sent anywhere. That is unchanged.
+>
+> The flat claim that once sat here — "nothing leaves your phone" — is no longer
+> true of the app as a whole, and has been corrected everywhere else rather than
+> left standing in one dev-facing file. Three things can leave, each only when
+> asked: a receipt photo goes to a cloud text-reader, signing in stores an
+> encrypted backup, and sync exchanges sealed shared-group entries. Personal
+> spending, income, goals, budgets and net worth still never leave the device.
 
 ## One-time setup (~25–35 min, mostly waiting)
 

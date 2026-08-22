@@ -261,6 +261,17 @@ export async function deleteGroup(
       `DELETE FROM line_item WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
     await db.runAsync(
       `DELETE FROM recur_skip WHERE series_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+    /*
+     * The delivery queue and the pull cursor, before the entries they name.
+     *
+     * `sync_outbox.entry_id REFERENCES txn(id)`, so leaving these behind points
+     * every queued row at an id that is about to stop existing — the same defect
+     * a restore had, arriving by a second route. The cursor has to go too: keeping
+     * it would mean that re-joining this group later starts from a timestamp that
+     * skips its entire history.
+     */
+    await db.runAsync('DELETE FROM sync_outbox WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM settings WHERE key=?', [`sync.cursor.${groupId}`]);
     await db.runAsync('DELETE FROM txn WHERE group_id=?', [groupId]);
     await db.runAsync('DELETE FROM group_member WHERE group_id=?', [groupId]);
     // Unreviewed imports that were drafted into this group. Left pointing at a

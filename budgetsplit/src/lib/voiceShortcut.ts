@@ -87,7 +87,8 @@ export const VOICE_ENCODED_OUTPUT = 'URL Encoded Text';
 
 
 /**
- * Worth saying out loud, given the app's "nothing leaves your device" promise.
+ * Worth saying out loud: the app is local-first, and this is one of the few
+ * things that isn't.
  *
  * The last clause is qualified on purpose: there are now two ways data can leave,
  * both opt-in and both user-initiated — cloud receipt scanning (a photo to the

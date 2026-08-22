@@ -34,6 +34,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     why: 'Collecting receipt files before deleting a group — a rule row can own an attachment too, and the file must still be unlinked.',
   },
   {
+    file: 'categories.ts',
+    contains: 'INSERT OR REPLACE INTO sync_outbox',
+    why: 'Queues shared entries for sync after a category rename. Recurring RULES are included deliberately: a rule carries a category too, and a peer left holding the old name would post a bill under a category that no longer exists on their device. This counts rows to deliver, not money.',
+  },
+  {
     file: 'transactions.ts',
     contains: 'SELECT tags FROM txn',
     why: 'Building the tag vocabulary (getTagsByFrequency). A tag applied to a recurring RULE is a tag genuinely in use, so it belongs in the picker — excluding templates would hide a tag the user typed and then never offer it back. This counts tag names, not money or dates, so the usual reason to exclude rules (double-counting a template as a transaction) does not apply.',

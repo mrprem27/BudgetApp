@@ -23,6 +23,21 @@ export type PeerEnvelope = {
   groupId: string;
   /** The entry's id, minted by the author's device so both sides agree on it. */
   entryId?: string;
+  /**
+   * Which version of this entry this is. 1 is a create; anything higher replaces
+   * exactly its predecessor.
+   *
+   * Without it every edit a peer makes would arrive as a `duplicate` and be
+   * dropped — the entry would land once and then be frozen forever, which reads
+   * as "sync works" right up until someone corrects an amount.
+   */
+  version: number;
+  /**
+   * The author deleted it. A tombstone rather than a removal: the entry has to
+   * keep existing so the deletion itself can carry a version and cannot be
+   * undone by a stale copy arriving afterwards.
+   */
+  isDeleted?: boolean;
   kind: 'expense' | 'settlement';
   date: number;
   /**
@@ -57,7 +72,7 @@ export type IngestRefusal =
   | 'not-a-member'        // author or I am not in that group
   | 'personal-group'      // only shared-group data ever syncs
   | 'unbalanced'          // shares do not sum to payments
-  | 'duplicate';          // already have this entry
+  | 'stale';              // I already hold this version, or a newer one
 
 /**
  * Accept an entry another person wrote.
@@ -121,30 +136,84 @@ export async function ingestPeerTxn(
   }
 
   const id = env.entryId ?? uuid();
-  const existing = await db.getFirstAsync<{ id: string }>('SELECT id FROM txn WHERE id = ?', [id]);
-  // Re-delivery is normal for an at-least-once transport. It must not create a
-  // second copy, and it must not resurrect a decision I already made.
-  if (existing) return { ok: false, reason: 'duplicate' };
+  const existing = await db.getFirstAsync<{ id: string; sync_version: number }>(
+    'SELECT id, sync_version FROM txn WHERE id = ?', [id],
+  );
+
+  /*
+   * Re-delivery is normal for an at-least-once transport, and so is an EDIT —
+   * which is why this compares versions rather than refusing anything it has
+   * seen before.
+   *
+   * `<=` and not `<`: an equal version is the re-delivery case, and re-applying
+   * it would reset an approval I have already decided. A LOWER version is a stale
+   * copy overtaking a newer one on the wire, and applying that would roll a
+   * corrected figure back to the value the group already fixed.
+   */
+  if (existing && env.version <= existing.sync_version) return { ok: false, reason: 'stale' };
 
   // Does this need my say-so? A transfer always does, however much I trust them —
   // see `requiresMyApproval` for why trust is the wrong test for money arriving.
   const touchesMe = [...env.payments, ...env.shares].some(r => r.personId === me.id);
-  const applied = !requiresMyApproval(author, { kind: env.kind, touchesMe });
+
+  /*
+   * A decision I have already made cannot be edited away.
+   *
+   * Without this, rejecting an entry ("this did not happen") and then receiving a
+   * v2 of it from a TRUSTED author would apply it silently — my rejection erased
+   * by someone else's edit, and no way for me to know. Trust means "their entries
+   * may count", never "their edits may overrule me".
+   *
+   * The entry is not discarded either: they may genuinely have corrected it. It
+   * comes back as pending, which is the one outcome that respects both sides.
+   */
+  const wasRejected = !!existing && !!(await db.getFirstAsync<{ state: string }>(
+    "SELECT state FROM txn_approval WHERE txn_id = ? AND state = 'rejected'", [id],
+  ));
+  const applied = !wasRejected && !requiresMyApproval(author, { kind: env.kind, touchesMe });
   const now = Date.now();
+  const deleted = env.isDeleted ? 1 : 0;
 
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `INSERT INTO txn
-         (id,group_id,kind,entry_mode,date,category,note,tags,tz,pay_method,source,
-          recur_freq,recur_interval,recur_end,author_person_id,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,'quick',?,?,?,'',?,?,'peer',?,?,?,?,0,?,?)`,
-      [
-        id, env.groupId, env.kind, env.date, env.category, env.note ?? null,
-        localTz(), env.payMethod ?? null,
-        env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
-        author.id, now, now,
-      ],
-    );
+    if (existing) {
+      /*
+       * An edit. The row is UPDATEd rather than deleted and re-inserted so that
+       * everything hanging off this id — the audit trail, an attachment, the
+       * recurring children — stays attached to it.
+       *
+       * `author_person_id` is rewritten too: whoever made this version is its
+       * author, and the ledger is read as "who put this number here".
+       */
+      await db.runAsync(
+        `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?,
+                        recur_freq=?, recur_interval=?, recur_end=?,
+                        author_person_id=?, sync_version=?, is_deleted=?, updated_at=?
+          WHERE id = ?`,
+        [
+          env.kind, env.date, env.category, env.note ?? null, env.payMethod ?? null,
+          env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
+          author.id, env.version, deleted, now, id,
+        ],
+      );
+      // Wholesale replace, matching how the app's own edit path writes these.
+      // Safe precisely because approval does NOT live on these tables — it is in
+      // `txn_approval`, keyed on txn_id, for this reason.
+      await db.runAsync('DELETE FROM txn_payment WHERE txn_id = ?', [id]);
+      await db.runAsync('DELETE FROM txn_share WHERE txn_id = ?', [id]);
+    } else {
+      await db.runAsync(
+        `INSERT INTO txn
+           (id,group_id,kind,entry_mode,date,category,note,tags,tz,pay_method,source,
+            recur_freq,recur_interval,recur_end,author_person_id,sync_version,is_deleted,created_at,updated_at)
+         VALUES (?,?,?,'quick',?,?,?,'',?,?,'peer',?,?,?,?,?,?,?,?)`,
+        [
+          id, env.groupId, env.kind, env.date, env.category, env.note ?? null,
+          localTz(), env.payMethod ?? null,
+          env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
+          author.id, env.version, deleted, now, now,
+        ],
+      );
+    }
     for (const p of env.payments) {
       await db.runAsync(
         'INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)',
@@ -157,24 +226,41 @@ export async function ingestPeerTxn(
         [id, s.personId, s.amount],
       );
     }
+    /*
+     * The approval is re-decided for THIS version, and an edit can only ever
+     * re-open it.
+     *
+     * `INSERT OR REPLACE` rather than an insert-if-absent: an entry I accepted at
+     * v1 and that arrives changed at v2 must wait again. Otherwise someone edits
+     * ₹200 into ₹20,000 after I have accepted the ₹200, and the new figure lands
+     * in my ledger on the strength of a decision I made about a different number.
+     *
+     * The reverse — clearing a pending approval when the new version no longer
+     * needs one — is deliberate too: nothing is waiting on me any more, so
+     * leaving it pending would strand the entry with no way to resolve it.
+     */
     if (!applied) {
       await db.runAsync(
-        `INSERT INTO txn_approval (txn_id, state, created_at, decided_at)
+        `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at)
          VALUES (?, 'pending', ?, NULL)`,
         [id, now],
       );
+    } else if (existing) {
+      await db.runAsync('DELETE FROM txn_approval WHERE txn_id = ?', [id]);
     }
     // Named, not anonymous. Reusing `insertTxnRows` would log "Added expense ₹X"
     // as though I had added it, in the one log a dispute would be settled from.
+    // An edit and a deletion are not "created". The log is the one place a
+    // dispute gets settled from, so it has to say which of the three happened.
+    const verb = env.isDeleted ? 'deleted' : existing ? 'changed' : 'added';
     await logAudit(db, {
       entityType: env.kind === 'settlement' ? 'settlement' : 'txn',
       entityId: id,
       groupId: env.groupId,
-      action: 'created',
+      action: env.isDeleted ? 'deleted' : existing ? 'updated' : 'created',
       amount: total,
-      summary: applied
-        ? `${author.name} added ${formatRupees(total)} · ${env.category}`
-        : `${author.name} added ${formatRupees(total)} · ${env.category} — waiting for you`,
+      summary: `${author.name} ${verb} ${formatRupees(total)} · ${env.category}`
+        + (applied ? '' : ' — waiting for you'),
     });
   });
 

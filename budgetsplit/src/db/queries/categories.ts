@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { NOT_AWAITING_APPROVAL } from './approvalSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { TXN_KIND_FOR_CATEGORY, type CategoryKind } from '../../constants/enums';
@@ -169,8 +170,28 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
     // name its own catalog does not contain: they fell out of every category
     // match, folded into Others, and the budget for that name read ₹0 spent
     // forever — with nothing on screen connecting the two.
+    /*
+     * `updated_at` is bumped, and that is a fix, not decoration.
+     *
+     * This rewrites `txn.category` across every group — including shared ones —
+     * and it used to leave `updated_at` alone. Under a scheme that versions an
+     * entry by `updated_at`, that edit would be invisible: the peer keeps the old
+     * category forever and nothing indicates a disagreement. A rename is a real
+     * content change to a shared entry and has to travel like one.
+     */
+    const now = Date.now();
     await db.runAsync(
-      'UPDATE txn SET category = ? WHERE category = ? AND kind = ?', [n, cat.name, txnKind],
+      'UPDATE txn SET category = ?, updated_at = ? WHERE category = ? AND kind = ?',
+      [n, now, cat.name, txnKind],
+    );
+    // ...and every affected shared entry goes into the outbox for the same reason.
+    await db.runAsync(
+      `INSERT OR REPLACE INTO sync_outbox (entry_id, group_id, queued_at)
+       SELECT t.id, t.group_id, ?
+         FROM txn t JOIN budget_group g ON g.id = t.group_id
+        WHERE t.category = ? AND t.kind = ? AND g.is_personal = 0
+          AND ${NOT_AWAITING_APPROVAL}`,
+      [now, n, txnKind],
     );
     // Budgets are an expense-side concept — `getCategorySpending` only ever sums
     // expenses — so a transfer or income rename must leave them alone.

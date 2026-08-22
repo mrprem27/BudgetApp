@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { queueEntry } from './syncOutbox';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
@@ -274,6 +275,10 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
             occ, t.id, now, now,
           ],
         );
+        // A fourth INSERT INTO txn, distinct from the three in transactions.ts.
+        // Occurrences are real entries a peer must see, and this loop makes N of
+        // them per run — so it queues per occurrence, not per call.
+        await queueEntry(db, newId, t.group_id);
         for (const p of rw.payments) {
           await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
         }

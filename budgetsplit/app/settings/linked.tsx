@@ -12,6 +12,8 @@ import { Divider } from '../../src/components/ui/Divider';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
+import { useSQLiteContext } from 'expo-sqlite';
+import { getAllPersons, setRemoteUid, type Person } from '../../src/db/queries/persons';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { haptic } from '../../src/lib/haptics';
@@ -39,24 +41,58 @@ export default function LinkedPeopleScreen() {
   const [claims, setClaims] = useState<PendingClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const db = useSQLiteContext();
   const [busy, setBusy] = useState<string | null>(null);
   const [invite, setInvite] = useState<{ url: string; expiresAt: number } | null>(null);
   const [creating, setCreating] = useState(false);
+  /** Local people, so a link can be matched to one. */
+  const [people, setPeople] = useState<Person[]>([]);
+  /** The link currently being matched, if any. */
+  const [matching, setMatching] = useState<ServerLink | null>(null);
+
+  /** Who this account is already bound to locally, by name. */
+  const boundName = (link: ServerLink) =>
+    people.find(p => p.remote_uid === link.person.id)?.name ?? null;
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [nextLinks, nextClaims] = await Promise.all([listLinks(), listPendingClaims()]);
+      const [nextLinks, nextClaims, nextPeople] = await Promise.all([
+        listLinks(), listPendingClaims(), getAllPersons(db),
+      ]);
       setLinks(nextLinks);
       setClaims(nextClaims);
+      setPeople(nextPeople.filter(p => p.is_me !== 1));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load your linked people.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [db]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  /**
+   * Bind (or unbind) the account being matched. Unbinding must stay possible —
+   * a wrong match would otherwise permanently let that account write entries as
+   * someone they are not.
+   */
+  async function handleMatch(person: Person | null) {
+    if (!matching) return;
+    const uid = matching.person.id;
+    try {
+      // Clear any previous holder first: one account, one person.
+      const prev = people.find(p => p.remote_uid === uid);
+      if (prev && prev.id !== person?.id) await setRemoteUid(db, prev.id, null);
+      if (person) await setRemoteUid(db, person.id, uid);
+      haptic.success();
+      setMatching(null);
+      await load();
+    } catch (e) {
+      haptic.error();
+      setError(e instanceof Error ? e.message : 'Could not match this account.');
+    }
+  }
 
   async function handleInvite() {
     setCreating(true);
@@ -197,6 +233,32 @@ export default function LinkedPeopleScreen() {
                       variant="stacked"
                       chevron={false}
                     />
+                    {/*
+                      Which local person this account IS. Nothing else in the app
+                      can answer "who wrote this" without it, so an unbound link is
+                      a link that can never send you anything.
+
+                      Offered, never guessed — matching on name would be a guess
+                      about money, and a friend is a local record whose details are
+                      yours to set.
+                    */}
+                    <View style={styles.shareRow}>
+                      <View style={styles.shareText}>
+                        <Text style={styles.shareLabel}>Who this is, in your people</Text>
+                        <Text style={styles.shareHint}>
+                          {boundName(link)
+                            ? `${boundName(link)} — entries they add can reach you, subject to whether you trust them.`
+                            : 'Not matched yet. Until you say who this is, nothing they add can reach you at all.'}
+                        </Text>
+                      </View>
+                      <SecondaryButton
+                        label={boundName(link) ? 'Change' : 'Match'}
+                        size="sm"
+                        onPress={() => setMatching(link)}
+                        disabled={busy === link.id}
+                      />
+                    </View>
+
                     <View style={styles.shareRow}>
                       <View style={styles.shareText}>
                         <Text style={styles.shareLabel}>Show them my number</Text>
@@ -265,6 +327,58 @@ export default function LinkedPeopleScreen() {
           </>
         )}
       </SheetModal>
+
+      {/*
+        Match a linked account to a local person.
+        
+        Two guards worth stating: an account can only be bound to ONE person (the
+        partial unique index enforces it — two answers to "who wrote this" is
+        failure F5 in a different place), and matching says *who they are*, never
+        *that you trust them*. Trust stays a separate switch on their own screen.
+      */}
+      <SheetModal
+        visible={!!matching}
+        onClose={() => setMatching(null)}
+        title={`Who is ${matching?.person.name ?? matching?.person.email ?? 'this'}?`}
+      >
+        <Text style={styles.hint}>
+          Pick the person in your app this account belongs to. Until you do, nothing
+          they add can reach you — the app has no way to know who wrote it.
+        </Text>
+        <Card>
+          {people.map((person, i) => (
+            <View key={person.id}>
+              {i > 0 && <Divider indent="text" />}
+              <ListRow
+                icon="user"
+                title={person.name}
+                subtitle={
+                  person.remote_uid === matching?.person.id ? 'Matched to this account'
+                    : person.remote_uid ? 'Already matched to another account'
+                    : undefined
+                }
+                // A person bound to a DIFFERENT account is not selectable — the
+                // unique index would reject it anyway, and `ListRow` has no
+                // disabled state, so withholding `onPress` IS the guard.
+                onPress={
+                  person.remote_uid && person.remote_uid !== matching?.person.id
+                    ? undefined
+                    : () => handleMatch(person)
+                }
+              />
+            </View>
+          ))}
+        </Card>
+        {boundName(matching ?? ({} as ServerLink)) && (
+          <SecondaryButton
+            label="Unmatch"
+            danger
+            onPress={() => handleMatch(null)}
+            style={styles.unmatch}
+          />
+        )}
+      </SheetModal>
+
     </View>
   );
 }
@@ -284,5 +398,7 @@ const styles = StyleSheet.create({
   inviteCta: { marginTop: space.lg },
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center', marginTop: space.sm },
   qrWrap: { alignItems: 'center', paddingVertical: space.md },
+  unmatch: { marginTop: space.md },
+  hint2: { marginBottom: space.sm },
   sheetHint: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginBottom: space.md, textAlign: 'center' },
 });

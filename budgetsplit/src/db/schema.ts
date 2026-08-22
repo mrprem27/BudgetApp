@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS txn (
   lng            REAL,
   place_label    TEXT,
   pay_method     TEXT,
+  sync_version   INTEGER NOT NULL DEFAULT 0,
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -241,6 +242,29 @@ CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 -- Device-local: this is my opinion of someone else's assertion and must never
 -- travel to them. It IS included in backup, though — restoring my own device
 -- must not silently approve a queue I had left waiting.
+-- Entries whose current state has not reached the server yet.
+--
+-- A TABLE, not a file queue, and that is the whole point: the row has to be
+-- appended in the SAME transaction as the write it describes. Neither
+-- AsyncStorage nor the filesystem can join a SQLite transaction, so voiceDrain's
+-- shape (the app's only other queue) is structurally unavailable here. A write
+-- that commits without its outbox row is a divergence nobody is ever told about.
+--
+-- One row per entry, keyed on entry_id: five edits to one expense collapse to one
+-- row, because the drain re-reads the entry's CURRENT state rather than replaying
+-- a snapshot. That is deliberately the opposite of pendingSettlement, which stores
+-- a resolved plan precisely so it cannot change underneath the user -- there, a
+-- stale plan would settle the wrong group; here, a stale snapshot would send an
+-- amount the user has since corrected.
+--
+-- Device-local delivery state, so it is NOT in BACKUP_TABLES. Restoring an outbox
+-- onto a new phone would re-broadcast history that has already been delivered.
+CREATE TABLE IF NOT EXISTS sync_outbox (
+  entry_id  TEXT PRIMARY KEY REFERENCES txn(id),
+  group_id  TEXT NOT NULL,
+  queued_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS txn_approval (
   txn_id     TEXT PRIMARY KEY REFERENCES txn(id),
   state      TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
@@ -253,7 +277,32 @@ CREATE TABLE IF NOT EXISTS txn_approval (
   -- When it ARRIVED, not when it happened. The queue sorts on this so a peer
   -- cannot bury an entry by back-dating it.
   created_at INTEGER NOT NULL,
-  decided_at INTEGER
+  decided_at INTEGER,
+  -- The dispute outbox, one column wide.
+  --
+  -- Rejecting a peer's entry has to reach the person who wrote it, or their
+  -- balance and mine disagree and neither of us is told (F10). NULL means nothing
+  -- to send; 'raise' means tell them I object; 'clear' means I have taken it back.
+  -- The drain clears it once the server has accepted.
+  dispute_state TEXT
+);
+
+-- What other people have said about MY entries.
+--
+-- The mirror of txn_approval: that table is my opinion of their entries, this is
+-- their opinion of mine. Kept apart on purpose — an objection is not an approval,
+-- it moves none of my numbers, and it must never be mistaken for one.
+CREATE TABLE IF NOT EXISTS txn_dispute (
+  txn_id     TEXT NOT NULL REFERENCES txn(id),
+  -- Their account id, not a local person id: whoever objected may not be anyone
+  -- this device can name yet.
+  by_uid     TEXT NOT NULL,
+  -- Which version they were looking at, so an author who edits in response is not
+  -- left staring at an objection to the figure they already changed.
+  version    INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  cleared    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (txn_id, by_uid)
 );
 `;
 
@@ -433,6 +482,18 @@ export const COLUMN_MIGRATIONS = [
   // Added after txn_approval shipped, so the CREATE above only covers fresh
   // databases — this covers one that already ran the earlier build.
   "ALTER TABLE txn_approval ADD COLUMN landed_pay_method TEXT",
+  // Which version of this entry the server has accepted. 0 = never sent.
+  //
+  // This is what makes compare-and-set possible: a push claims `sync_version + 1`
+  // and the server refuses it unless that is genuinely the next version. Without
+  // a number the entry carries, two people editing the same bill would both
+  // succeed and the later write would silently erase the earlier one — the
+  // lost-update problem, with money in it.
+  //
+  // Default 0 for every existing row, which is correct: nothing has ever synced.
+  "ALTER TABLE txn ADD COLUMN sync_version INTEGER NOT NULL DEFAULT 0",
+  // The dispute outbox — see the column comment in the CREATE above (F10).
+  "ALTER TABLE txn_approval ADD COLUMN dispute_state TEXT",
 ];
 
 /**
@@ -706,7 +767,8 @@ export const INDEXES = `
       ON txn_approval(txn_id) WHERE state = 'pending';
     -- One local person per remote account. Partial so NULLs stay distinct — the
     -- same construction as idx_catbudget_default above. Safe to add now because
-    -- nothing writes remote_uid yet, so every value is NULL.
+    -- written only by setRemoteUid, and only for people you have matched to a
+    -- linked account, so almost every value stays NULL.
     CREATE UNIQUE INDEX IF NOT EXISTS idx_person_remote_uid
       ON person(remote_uid) WHERE remote_uid IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
@@ -759,7 +821,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
         + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
-        + 'is_deleted,created_at,updated_at';
+        + 'sync_version,is_deleted,created_at,updated_at';
       await db.execAsync(`
         PRAGMA foreign_keys=OFF;
         BEGIN TRANSACTION;
@@ -790,6 +852,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           currency       TEXT,
           source         TEXT,
           author_person_id TEXT,
+          sync_version   INTEGER NOT NULL DEFAULT 0,
           is_deleted     INTEGER NOT NULL DEFAULT 0,
           created_at     INTEGER NOT NULL,
           updated_at     INTEGER NOT NULL

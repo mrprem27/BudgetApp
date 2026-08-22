@@ -11,6 +11,7 @@ import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/conf
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
+import { runSync } from '../../src/lib/syncEngine';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
@@ -65,8 +66,22 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       // balance wrong for two people.
       askAboutPendingSettlement(db).then(filed => { if (filed) refresh(); }).catch(() => {});
       drainVoiceInbox(db).then(r => { if (r.saved + r.queued > 0) refresh(); }).catch(() => {});
+      // Shared groups exchange changes here, and only here. A ledger does not need
+      // to be a chat: pushing on every keystroke would mean a live connection, a
+      // battery cost and a stream of half-typed entries reaching other people. This
+      // is what the Sync screen means by "when you open the app".
+      //
+      // `runSync` gates itself on the setting and never throws, so there is no
+      // check to duplicate here and no failure that can reach a screen.
+      runSync(db).then(r => { if (r.changed) refresh(); }).catch(() => {});
     });
     return () => sub.remove();
+  }, [db, refresh]);
+
+  // The cold-start half. `AppState` only fires on a transition, so without this a
+  // launch straight into the app syncs nothing until you leave and come back.
+  useEffect(() => {
+    runSync(db).then(r => { if (r.changed) refresh(); }).catch(() => {});
   }, [db, refresh]);
 
   // Shown only to a just-onboarded user (armed in `finalizeOnboarding`), and only

@@ -32,6 +32,13 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ## 1 · Hard blockers — nothing ships until every box is ticked
 
+- [x] **`KDF_ITERATIONS`, and getting the cost off the drawing thread.** ✅ Both
+      halves done. 50,000 rounds, and `lib/pbkdf2.ts` unrolls the loop so it yields
+      to the event loop rather than holding the thread for the whole derivation —
+      backup and restore now show a moving percentage instead of freezing. Output
+      is byte-identical to `CryptoJS.PBKDF2`, asserted against CryptoJS itself
+      rather than a fixture, because a one-byte difference would make every backup
+      already written permanently unopenable.
 - [ ] **Set `DEV_TOOLS_ENABLED` to `false`** (`src/constants/devTools.ts`) before
       the App Store upload. It is deliberately `true` for the pilot so a tester
       build can be erased and re-seeded, which means the shipped app currently
@@ -76,7 +83,17 @@ claim cites `file:line` or it gets deleted rather than debated.
       branch. Verified with `git log --branches --not --remotes`.
 - [ ] **Privacy policy + App Store listing.** Required even for external
       TestFlight, and newly sharp: a server now holds email addresses.
-- [ ] **Update the store-listing copy.** In-app copy was corrected on 2026-08-17
+- [x] **Update the store-listing copy.** ✅ Draft rewritten in `STORE_LISTING.md`
+      now that sync ships: it distinguishes personal data (which genuinely never
+      leaves the device) from shared groups (which do, sealed, with no key on the
+      server), which is both the honest version and the selling point. The last
+      flat "nothing leaves your phone" in the tree — `SETUP_DEVBUILD.md` — is
+      corrected too. **Still yours to do: paste it into App Store Connect and
+      confirm the privacy answers.** Original note: Draft ready to paste at
+      [`STORE_LISTING.md`](./STORE_LISTING.md), including the privacy-questionnaire
+      answers — receipt photos count as collected because they leave the device,
+      and they are ON by default. An undeclared data type is a rejection.
+      Original note: In-app copy was corrected on 2026-08-17
       (`VOICE_SHORTCUT_PRIVACY`, `help.tsx`, `Onboarding.tsx`, the backup
       explainer, `FEATURES_AND_FLOWS` §19). The listing is not in this repo and
       still says "nothing leaves your device", which stopped being true when
@@ -508,16 +525,76 @@ constraints to design against.
 |---|---|---|
 | F1 | Invite links are made to be forwarded — first stranger to tap gets linked, and gets your number | **Sender approves the claim.** Tapping creates a pending request; nothing binds until approval |
 | F2 | "Stop sharing my number" cannot take it back — it's already on their device | Word it as a **disclosure** ("Shared with Rohan on 12 Aug"), never a revocable permission |
-| F3 | Document-level last-write-wins silently discards a co-editor's edit, and the shares-sum-to-payments invariant still passes | Compare-and-set on `updated_at`; the server rejects stale writes. **Never silent LWW on money** |
+| F3 ✅ | Document-level last-write-wins silently discards a co-editor's edit, and the shares-sum-to-payments invariant still passes | **Built.** Compare-and-set on `txn.sync_version`; `PUT /sync/entries` refuses a stale push with 409 and the current row attached. Never silent LWW on money — and never an auto-merge either |
 | F4 | `attachment_uri` is a `file://` path from another device — "receipt attached" over nothing | Rows sync, photos never do; the receiving device nulls the URI |
 | F5 | ⚠️ **`seed.ts` writes `is_me = 1` with a fresh `uuid()` per install** — one account can get two "me" rows, and every my-share figure silently reads one of them | Bind the local `is_me` row to `person.remote_uid` at sign-in |
 | F6 | `category` has `UNIQUE(name, kind)`, so adding `is_deleted` makes delete-then-re-add "Groceries" fail | No `is_deleted` on `category`; sync through the existing `category_tombstone` |
 | F7 | `settings` holds one-time migration flags (`schema.ts:771-786`) — syncing it wholesale makes a device **skip a migration and record it as done** | Explicit key allowlist. Migration flags are device state and are never synced |
-| F8 | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
-| F9 | Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true | Refuse restore while sync is on |
+| F8 ⚠️ | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
+| F9 | ~~Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true~~ | **Closed.** `confirmRestore` refuses outright while `settings.syncEnabled()` is on, and offers the Sync screen. A refusal rather than a warning because the damage lands on other people's phones — where the person causing it cannot see it and the people suffering it cannot undo it |
 | F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
-| F11 | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
-| F12 | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | The key must be recoverable from any member who still holds it; never derive it from one device's secret |
+| F11 ⚠️ | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
+| F12 ✅ | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | **Built.** The key is wrapped once per DEVICE and stored server-side, so any member who still holds it can reissue a wrap. It is never derived from one device's secret — which is also why reinstalling mints a new device key rather than resurrecting the old one |
+
+---
+
+## 3.1 · Sync — built, and what is not proven
+
+Shared-group sync is complete end to end: device identity, per-group keys, the
+outbox, the server, the transport, and sharing a group. What follows is a plain
+account of which parts are proven and which are not, because the honest answer
+differs by layer and a single "done" would misrepresent both halves.
+
+**The shape.** A device mints a secret into the keychain. A shared group gets a
+256-bit key, wrapped once per member DEVICE — per device, because a key wrapped to
+a *person* cannot be opened by their second phone, and because losing one phone
+should drop one wrap rather than rotate every group. Entries are sealed on the
+device with that key and pushed to a server that stores wraps and blobs and holds
+no key at all. `{group_id, entry_id, version}` is bound into the GCM AAD, so a
+sealed entry cannot be replayed under another id or rolled back to an older
+version. Only shared groups travel; personal spending, income, goals, budgets and
+net worth are never sent.
+
+**Proven, with tests that run:**
+
+- device key mint, reuse, and total forget
+- group key wrap → unwrap, and a wrap for one device failing on another
+- AAD binding refusing an entry replayed under another id, version, or group
+- the full round trip minus the HTTP — read → seal → open → resolve → ingest,
+  across two databases with different person ids for the same humans
+- version compare: an edit replaces in place, a stale copy is refused, an edit
+  re-opens an approval already given, and a trusted author cannot edit over a
+  rejection
+- the outbox never queueing personal data or anything awaiting my approval
+
+**Not proven, and it needs a deployed Worker and two phones:**
+
+- every route in `server/api` under `/sync` — none has run against a live D1
+- the push, the pull, and the 409 in practice
+- publishing and adopting a group, and accepting an invitation
+- migration `0004_sync.sql` applying cleanly
+
+**Still open, and named rather than implied to be handled:**
+
+- ✅ `PUT /sync/entries` is rate limited: 500 entries per account per hour, on top
+  of the 64 KiB per-request cap.
+- ✅ Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
+  which is the only moment a re-wrap costs nothing.
+- ⚠️ F11, partly. `deleteGroup` is already **creator-only** (`canDeleteGroup =
+  isCreator`), so "deleting a group you did not create becomes leave" is enforced
+  by refusal. What is still open is the creator deleting a *published* group: their
+  history goes, other members keep theirs, and nothing propagates the deletion — a
+  silent divergence needing a group tombstone on the server. The queue and cursor
+  are at least cleaned up now, so no dangling rows are left behind.
+- ✅ F10 closed: a rejection reaches the author as an objection on the entry, and
+  withdrawing it travels too.
+- ✅ Sharing has a UI: group → Members → Share with a member, and invitations are
+  answered at the top of Settings → Sync.
+
+**Migrations remain forward-only, applied by hand, with no rollback and no
+staging.** `0004_sync.sql` is strictly additive and readable by the currently
+deployed Worker, because `deploy` and `migrate` are separate manual commands and
+nothing orders them.
 
 ---
 
@@ -710,19 +787,35 @@ synced as a table.
 Neither is caused by the sync work; both were found by tracing what `BACKUP_TABLES`
 actually carries.
 
-- [ ] **Restore resurrects every category the user deleted.**
-      `category_tombstone` is **not** in `BACKUP_TABLES` (`src/lib/backup.ts`), and
-      `restoreAllTables` re-runs `seedGlobalCategories` afterwards — so the default
-      catalog comes back with no record of the deletions. Adding the table is now
-      *safe* to do, because `OPTIONAL_BACKUP_TABLES` lets a table absent from older
-      files restore empty instead of rejecting the whole backup. Left out of
-      `feat/peer-trust-and-approval` deliberately: it changes restore behaviour and
-      deserves its own pass.
-- [ ] **Restore carries one-time migration flags between devices.** The `settings`
-      table holds `ONE_TIME_FIXES` markers and `category_global_v1` **and** is in
-      `BACKUP_TABLES` — so restoring a snapshot can mark a migration done on a
-      device that never ran it. This is F7 arriving early, through backup rather
-      than sync. The fix is the same: an explicit key allowlist.
+- [x] **Restore resurrects every category the user deleted.** ✅ `category_tombstone`
+      is in `BACKUP_TABLES` (index 4, right after `category`; the table has no FKs
+      so the position is safe) and in `OPTIONAL_BACKUP_TABLES`, so an older file
+      restores it empty instead of being rejected. `seedGlobalCategories` still runs
+      after the transaction commits, which is what makes the fix work — the
+      tombstones are readable by the time the seeder checks them. Covered by
+      `backupQueries.test.ts`.
+- [x] **Restore carries one-time migration flags between devices.** ✅ Closed in both
+      directions: the delete side skips `fix_%`, the insert side skips them too, and
+      `category_global_v1` is named alongside. Implemented as a **prefix rule**
+      rather than the allowlist this item prescribed — strictly safer, because a new
+      `fix_*` cannot be forgotten.
+- [x] **Restore refused every backup this build wrote.** ✅ The pick-time version
+      guard in `settings/backup.tsx` hardcoded "v1 only" and was not updated when
+      `encryptPayload` moved to v2, so both the file and server paths answered "made
+      by a newer version" to files the app had just made. The passphrase sheet never
+      opened. Now one exported `canReadCipher` used by the decryptor and both
+      guards, with a test asserting the app can always read what it writes.
+- [x] **A restore left the sync outbox pointing at deleted rows.** ✅ `sync_outbox`
+      is excluded from backups (a delivery queue is device state) but was never
+      cleared either, so every queued row survived pointing at a `txn` that had just
+      been deleted. Cleared with the rest now.
+- [x] **Restoring stamped `lastBackupAt = now`.** ✅ Restoring is not backing up.
+      Settings read "Backed up just now" when the newest backup might be six months
+      old. Stamped with the backup's own date, so the nudge fires straight away
+      after restoring something old — which is the right moment for it.
+- [x] **F9 — restore while sync is on.** ✅ Refused, with the Sync screen one tap
+      away. A restore is wipe-and-replace, so under sync it would push a snapshot
+      other people were never part of over their copies.
 
 ### Sweep has to know *where from*, and give it back to the same place
 

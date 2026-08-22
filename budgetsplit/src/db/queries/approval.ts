@@ -86,9 +86,11 @@ export async function approveTxn(
  * ledger on **my** device — I have said this did not happen, so it should stop
  * being shown as though it did.
  *
- * It does NOT reach their copy. Under sync their device still holds the entry and
- * their balance will disagree with mine until one of us changes it — a real hole,
- * recorded as F10 rather than half-solved here.
+ * It does NOT edit their copy, and must not: I can refuse an entry, not rewrite
+ * what someone else recorded. What it does now is TELL them — `dispute_state` is
+ * a one-column outbox the sync drain turns into an objection on their screen
+ * (F10). Before that, their balance and mine simply disagreed and neither of us
+ * was told, which is the worst thing this app can do with money.
  */
 export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
   // Two writes, NOT wrapped in a transaction: `softDeleteTxn` opens its own, and
@@ -101,9 +103,23 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
   // and 'rejected' is not filtered, so it would briefly count as my money. If the
   // second write then failed, it would stay that way.
   await softDeleteTxn(db, txnId);
+  /*
+   * INSERT OR REPLACE, not UPDATE.
+   *
+   * An entry from a TRUSTED author is applied on arrival and never gets an
+   * approval row — so an UPDATE here matched nothing, and rejecting it left no
+   * record of the decision anywhere but the soft delete. That was survivable
+   * while nothing could edit an entry after the fact. It is not survivable now:
+   * a v2 of a rejected entry would find no rejection, see a trusted author, and
+   * apply itself — erasing my decision with nothing to show it ever existed.
+   *
+   * The decision is the thing worth persisting. It belongs here whether or not
+   * the entry ever had to wait.
+   */
   await db.runAsync(
-    "UPDATE txn_approval SET state = 'rejected', decided_at = ? WHERE txn_id = ?",
-    [Date.now(), txnId],
+    `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at, dispute_state)
+     VALUES (?, 'rejected', COALESCE((SELECT created_at FROM txn_approval WHERE txn_id = ?), ?), ?, 'raise')`,
+    [txnId, txnId, Date.now(), Date.now()],
   );
 }
 
@@ -112,8 +128,13 @@ export async function reopenApproval(db: SQLite.SQLiteDatabase, txnId: string): 
   // Same reasoning as `rejectTxn`, mirrored: mark it pending first, so it is
   // filtered out again BEFORE it becomes visible. Restoring first would show a
   // still-'rejected' entry that every figure counts.
+  /*
+   * 'clear' rather than NULL: if the rejection already reached the author, taking
+   * it back has to reach them too. Leaving it NULL would strand an objection on
+   * their screen that I have since withdrawn, and they would have no way to know.
+   */
   await db.runAsync(
-    "UPDATE txn_approval SET state = 'pending', decided_at = NULL WHERE txn_id = ?",
+    "UPDATE txn_approval SET state = 'pending', decided_at = NULL, dispute_state = 'clear' WHERE txn_id = ?",
     [txnId],
   );
   // Only a reject soft-deleted it; restoring an already-live row is a no-op.
