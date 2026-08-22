@@ -34,6 +34,28 @@ export async function readAllTables(db: SQLite.SQLiteDatabase): Promise<BackupTa
  * newer app version than it was made on could in theory make a completed
  * migration look undone — a known, accepted edge case, not fixed here.
  */
+/**
+ * `settings` keys that are DEVICE state, not user data, and must never travel in
+ * a backup.
+ *
+ * The table mixes two unrelated things. `money.*` is real user data — opening
+ * cash, investments, the credit-card baseline — and losing it on restore would
+ * silently reset someone's net worth. The one-time-fix markers are the opposite:
+ * they record what has already been done to *this* database.
+ *
+ * Restoring them either way is a bug, and the dangerous direction is the one the
+ * checklist does not mention. Restore is DELETE-then-INSERT, so a marker present
+ * on the device but absent from an older snapshot gets **removed** — and the fix
+ * re-runs on the next launch. `fix_income_category_kind_v1` re-running trips
+ * `UNIQUE(name, kind)`, and `applyOneTimeFixes` throwing takes the whole app to
+ * the "Couldn't start BudgetSplit" screen, permanently.
+ *
+ * Prefix-matched rather than an exact list so a new `fix_*` cannot be forgotten.
+ */
+function isDeviceOnlySetting(key: string): boolean {
+  return key.startsWith('fix_') || key === 'category_global_v1';
+}
+
 export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: BackupTables): Promise<void> {
   assertSafeColumnNames(tables);
 
@@ -43,10 +65,21 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
   try {
     await db.withTransactionAsync(async () => {
       for (const name of [...BACKUP_TABLES].reverse()) {
+        if (name === 'settings') {
+          // Everything EXCEPT this device's own migration markers. Wiping those
+          // makes a completed fix look undone and re-runs it. See above.
+          await db.runAsync(
+            `DELETE FROM settings WHERE key NOT LIKE 'fix\\_%' ESCAPE '\\' AND key <> 'category_global_v1'`,
+          );
+          continue;
+        }
         await db.runAsync(`DELETE FROM ${name}`);
       }
       for (const name of BACKUP_TABLES) {
         for (const row of tables[name]) {
+          // ...and never take a marker FROM a backup either: it would mark a fix
+          // done on a device that never ran it.
+          if (name === 'settings' && isDeviceOnlySetting(String(row.key))) continue;
           const keys = Object.keys(row);
           if (keys.length === 0) continue;
           const placeholders = keys.map(() => '?').join(',');

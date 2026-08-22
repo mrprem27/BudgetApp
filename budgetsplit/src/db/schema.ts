@@ -881,18 +881,29 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   // silently undid the user's own later edits. Must stay AHEAD of the
   // category-global migration below: the income reclassification has to happen
   // before the (name, kind) dedupe.
-  await applyOneTimeFixes(
-    async () => {
-      const keys = ONE_TIME_FIXES.map(f => f.key);
-      const rows = await db.getAllAsync<{ key: string }>(
-        `SELECT key FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`,
-        keys,
-      );
-      return new Set(rows.map(r => r.key));
-    },
-    (sql) => db.execAsync(sql),
-    (key) => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", [key]).then(() => undefined),
-  );
+  //
+  // Wrapped, like the category-global migration below it. These fixes are the one
+  // startup step that can throw on real data — `fix_income_category_kind_v1` is an
+  // UPDATE that can trip `UNIQUE(name, kind)` if it ever runs twice — and an
+  // unguarded throw here reaches `_layout.tsx` as `setDbError(true)`, i.e. the
+  // "Couldn't start BudgetSplit" screen, on every launch, with no way out. A
+  // legacy repair failing must not cost the user their app.
+  try {
+    await applyOneTimeFixes(
+      async () => {
+        const keys = ONE_TIME_FIXES.map(f => f.key);
+        const rows = await db.getAllAsync<{ key: string }>(
+          `SELECT key FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`,
+          keys,
+        );
+        return new Set(rows.map(r => r.key));
+      },
+      (sql) => db.execAsync(sql),
+      (key) => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", [key]).then(() => undefined),
+    );
+  } catch {
+    // Leave the data as-is if a legacy repair fails. The app still opens.
+  }
 
   // Phase GC: collapse the per-group category rows into a single GLOBAL catalog.
   // One-time, flagged — see CATEGORY_GLOBAL_V1_SQL for what it does and why it's safe.

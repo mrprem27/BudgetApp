@@ -210,6 +210,12 @@ export function txnInputFromPlan(row: PendingTxn, plan: Extract<CommitPlan, { ok
     payMethod: plan.payMethod,
     payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
     shares: plan.shares,
+    // Where it came from, carried through the commit. Dropping it recorded every
+    // reviewed row as hand-typed, when it came from a bank statement, a GPay
+    // export or a UPI scan — and `txn.source` is the only record of that once the
+    // pending row is deleted. Nothing reads it yet, which is exactly why it had to
+    // be fixed before something does: the rows written meanwhile are unrecoverable.
+    source: row.source,
     lat: row.lat ?? undefined,
     lng: row.lng ?? undefined,
     placeLabel: row.place_label ?? undefined,

@@ -1,7 +1,7 @@
 import { toRecurRows } from '../lib/recurringSuggest';
 import {
   effectiveRow, effectiveSplit, snapshotRow, payerFor, planCommit,
-  DEFAULT_CATEGORY, type ReviewContext, type RowEdit, type SplitState,
+  DEFAULT_CATEGORY, txnInputFromPlan, type ReviewContext, type RowEdit, type SplitState,
 } from '../lib/reviewCommit';
 import type { PendingTxn } from '../db/queries/pending';
 import type { Person } from '../db/queries/persons';
@@ -346,5 +346,43 @@ describe('toRecurRows — what qualifies as recurring evidence', () => {
 
   it('carries the committed txn id through, not the pending id', () => {
     expect(toRecurRows([snap()])[0].id).toBe('t1');
+  });
+});
+
+/**
+ * The mapper that turns a plan into what `insertTxn` writes. It had no test at
+ * all, and it was silently dropping `source` — so every row committed through
+ * Review was recorded as hand-typed, whatever it actually came from. Once the
+ * pending row is deleted, `txn.source` is the only record left, so the loss is
+ * permanent and invisible.
+ */
+describe('txnInputFromPlan', () => {
+  const committed = (over: Partial<PendingTxn> = {}) => {
+    const r = row(over);
+    const p = plan(ctx(), r, { amount: '500' });
+    if (!p.ok) throw new Error('expected a valid plan');
+    return txnInputFromPlan(r, p);
+  };
+
+  it('carries where the row came from', () => {
+    expect(committed({ source: 'gpay' }).source).toBe('gpay');
+    expect(committed({ source: 'bank_csv' }).source).toBe('bank_csv');
+  });
+
+  it('carries the location the import captured', () => {
+    // Only Scan & Pay has one — it is the single ingest route running while the
+    // user is actually at the merchant, so losing it here loses the real thing.
+    const out = committed({ lat: 28.45, lng: 77.09, place_label: 'Cyber Hub' });
+    expect(out.lat).toBe(28.45);
+    expect(out.lng).toBe(77.09);
+    expect(out.placeLabel).toBe('Cyber Hub');
+  });
+
+  it('leaves location undefined when the import had none', () => {
+    // Statement and email imports arrive days later; a location captured then
+    // would be the user's sofa, recorded as though it were the shop.
+    const out = committed();
+    expect(out.lat).toBeUndefined();
+    expect(out.placeLabel).toBeUndefined();
   });
 });

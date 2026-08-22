@@ -23,7 +23,7 @@ export const BACKUP_VERSION = 1;
 /** Forward (insert) order — parents before children, traced from every
  *  `REFERENCES` in `db/schema.ts`. Reverse this order for deletes. */
 export const BACKUP_TABLES = [
-  'person', 'budget_group', 'group_member', 'category', 'category_budget',
+  'person', 'budget_group', 'group_member', 'category', 'category_tombstone', 'category_budget',
   'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
 ] as const;
@@ -40,8 +40,11 @@ export const BACKUP_TABLES = [
  *
  * `txn_approval` is safe to default empty for a second reason — a backup written
  * before it existed cannot contain a peer entry, so there is no decision to lose.
+ *
+ * `category_tombstone` restores empty for older files too, which is the same
+ * behaviour those files already had — no worse, and correct from here on.
  */
-const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>(['txn_approval']);
+const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>(['txn_approval', 'category_tombstone']);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];
 export type BackupTables = Record<BackupTableName, Record<string, unknown>[]>;

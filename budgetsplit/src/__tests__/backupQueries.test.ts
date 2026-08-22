@@ -75,3 +75,73 @@ describe('readAllTables / restoreAllTables', () => {
     expect(pragma?.foreign_keys).toBe(1);
   });
 });
+
+/**
+ * Restore is the one feature whose whole purpose is a NEW device — and both of
+ * these bugs looked fine on the old one, which is why neither was noticed.
+ */
+describe('restore preserves decisions, not just rows', () => {
+  it('keeps a deleted category deleted', async () => {
+    // `restoreAllTables` re-seeds the default catalog afterwards, and the seeder
+    // skips a default only when a tombstone says the user deleted it. With
+    // `category_tombstone` outside BACKUP_TABLES the tombstones never travelled,
+    // so on a fresh phone every deleted default came back — and came back WITHOUT
+    // its budget, because `category_budget` rows really were deleted.
+    const source = createTestDb();
+    addCategory(source, 'Groceries');
+    await source.runAsync("DELETE FROM category WHERE name = 'Groceries'");
+    await source.runAsync(
+      "INSERT INTO category_tombstone (name, kind, created_at) VALUES ('Groceries', 'expense', 1)",
+    );
+    const snapshot = await readAllTables(asDb(source));
+
+    const fresh = createTestDb();
+    await restoreAllTables(asDb(fresh), snapshot);
+
+    const back = await fresh.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM category WHERE name = 'Groceries'",
+    );
+    expect(back?.n).toBe(0);
+  });
+
+  it('does not carry this device\'s migration markers into the backup', async () => {
+    // The direction the checklist names: a marker arriving on a device that never
+    // ran the fix would mark it done and skip it forever.
+    const source = createTestDb();
+    await source.runAsync("INSERT INTO settings (key, value) VALUES ('fix_income_category_kind_v1', '1')");
+    await source.runAsync("INSERT INTO settings (key, value) VALUES ('money.opening_cash', '250000')");
+    const snapshot = await readAllTables(asDb(source));
+
+    const fresh = createTestDb();
+    await restoreAllTables(asDb(fresh), snapshot);
+
+    const marker = await fresh.getFirstAsync<{ value: string }>(
+      "SELECT value FROM settings WHERE key = 'fix_income_category_kind_v1'",
+    );
+    expect(marker).toBeNull();
+    // ...while real user data in the same table survives. `money.*` is opening
+    // cash and the card baseline — dropping it would silently reset net worth.
+    const cash = await fresh.getFirstAsync<{ value: string }>(
+      "SELECT value FROM settings WHERE key = 'money.opening_cash'",
+    );
+    expect(cash?.value).toBe('250000');
+  });
+
+  it('does not un-mark a fix this device has already run', async () => {
+    // The worse, undocumented direction. Restore is DELETE-then-INSERT, so a
+    // marker present here but absent from an older snapshot was being wiped — and
+    // then `fix_income_category_kind_v1` re-runs, trips UNIQUE(name, kind), and
+    // takes the app to "Couldn't start BudgetSplit" on every launch.
+    const source = createTestDb();
+    const snapshot = await readAllTables(asDb(source));   // older backup, no marker
+
+    const device = createTestDb();
+    await device.runAsync("INSERT INTO settings (key, value) VALUES ('fix_income_category_kind_v1', '1')");
+    await restoreAllTables(asDb(device), snapshot);
+
+    const marker = await device.getFirstAsync<{ value: string }>(
+      "SELECT value FROM settings WHERE key = 'fix_income_category_kind_v1'",
+    );
+    expect(marker?.value).toBe('1');
+  });
+});

@@ -38,6 +38,13 @@ export type PendingTxn = {
   lng: number | null;
   /** Reverse-geocoded place name, e.g. "Cyber Hub, Gurgaon". Null if geocoding failed. */
   place_label: string | null;
+  /**
+   * Sync groundwork — who wrote this and who it says paid. Nothing produces them
+   * yet (there is no peer write path), but they are real columns, so Undo has to
+   * carry them or a future peer row would come back stripped of its provenance.
+   */
+  author_person_id: string | null;
+  payer_person_id: string | null;
 };
 
 // Ingest never knows about app people or groups — those are Review-only drafts.
@@ -45,7 +52,7 @@ export type PendingTxn = {
 // forcing every one of them to write `lat: null` would be noise around the single
 // route that does.
 export type NewPending =
-  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label'>
+  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label' | 'author_person_id' | 'payer_person_id'>
   // `counterparty_id` is settable at ingest, not only in Review: a voice settlement already
   // knows who was named, and re-asking for it would be asking twice.
   & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label' | 'counterparty_id'>>;
@@ -100,13 +107,24 @@ export async function updatePendingDraft(
  *  a commit in Review. */
 export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn): Promise<void> {
   await db.runAsync(
+    // EVERY column, deliberately. This is the inverse of every destructive action
+    // in Review, so a column missing here is data the user loses by pressing Undo
+    // — silently, and permanently once they re-confirm. `lat`/`lng`/`place_label`
+    // were missing, which threw away the location Scan & Pay had captured, and
+    // `author_person_id`/`payer_person_id` went the same way.
+    // `pendingRoundTrip.test.ts` reads `schema.ts` and fails if this list ever
+    // falls behind the table again.
     `INSERT OR REPLACE INTO pending_txn
-       (id, date, amount, description, kind, category, direction, raw, created_at, dest_group_id, split_draft, source, pay_method, counterparty_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, date, amount, description, kind, category, direction, raw, created_at,
+        dest_group_id, split_draft, source, pay_method, counterparty_id,
+        lat, lng, place_label, author_person_id, payer_person_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
       row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
       row.source ?? 'manual', row.pay_method ?? null, row.counterparty_id ?? null,
+      row.lat ?? null, row.lng ?? null, row.place_label ?? null,
+      row.author_person_id ?? null, row.payer_person_id ?? null,
     ],
   );
 }
