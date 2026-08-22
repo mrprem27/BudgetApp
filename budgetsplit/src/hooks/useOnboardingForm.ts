@@ -100,7 +100,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
       groupName: people.length > 0 ? groupName : null,
       addFirst: false, // the summary's own CTA arms this explicitly
       money: {
-        openingCash: toPaise(cashText),
+        openingBank: toPaise(cashText),
         investments: toPaise(investText),
         creditLimit: toPaise(creditLimitText),
         creditUsed: toPaise(creditUsedText),

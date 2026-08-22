@@ -27,7 +27,13 @@ export type OnboardingData = {
   payMethod: PayMethod;
   /** Opening money position, already in integer paise. */
   money: {
-    openingCash: number;
+    /**
+     * The single figure the money step asks for. It lands in **bank**, not
+     * cash-in-hand: the question is "what do you have right now", which for almost
+     * everyone is an account balance — and `INCOME_LANDING_DEFAULT` is Bank for the
+     * same reason. Cash and wallet start at zero and are set in Plan → Your money.
+     */
+    openingBank: number;
     investments: number;
     creditLimit: number;
     creditUsed: number;

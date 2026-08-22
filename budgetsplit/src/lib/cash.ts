@@ -108,8 +108,18 @@ export function computeCash(
 // spending-power context but is never spent from automatically.
 
 export type MoneyProfile = {
-  /** Starting cash balance entered at setup (paise). */
+  /**
+   * Starting balances per bucket (paise).
+   *
+   * There used to be one `openingCash` meaning "all my money" — the editor's own
+   * hint said "bank + wallet". Splitting it lets a savings withdrawal return to
+   * where the money came from instead of landing in an undifferentiated pool.
+   * `getMoneyProfile` reads the old single figure as **bank** when no bucket key
+   * exists, so old data and old backups keep their total exactly.
+   */
   openingCash: number;
+  openingBank: number;
+  openingWallet: number;
   /** Total investments balance entered by the user (paise). Informational. */
   investments: number;
   /** Credit card limit (paise). */
@@ -117,6 +127,19 @@ export type MoneyProfile = {
   /** Credit already used (paise). */
   creditUsed: number;
 };
+
+/**
+ * What the user has, across every bucket.
+ *
+ * The invariant this whole split rests on: **this must equal the single
+ * `openingCash` figure that existed before buckets.** Every analytical consumer —
+ * Safe-to-Spend, the overspend raid, afford, the health score — reads a total and
+ * is provably unaffected as long as that holds. A total that moves is not a
+ * migration, it is a bug, and the existing cash tests are what say so.
+ */
+export function openingTotal(p: Pick<MoneyProfile, 'openingCash' | 'openingBank' | 'openingWallet'>): number {
+  return p.openingBank + p.openingCash + p.openingWallet;
+}
 
 export type TotalMoney = {
   total: number;           // yourMoney + creditAvailable

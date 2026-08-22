@@ -1,6 +1,7 @@
 import { openTestDb } from './dbHarness';
 import { resetToEmpty, loadDemoData } from '../db/seedDemo';
 import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
+import { openingTotal } from '../lib/cash';
 
 /**
  * "Erase all data" has to actually leave an empty app.
@@ -15,7 +16,9 @@ describe('resetToEmpty clears the money profile', () => {
   it('leaves nothing behind after a demo load', async () => {
     const db = await openTestDb();
     await loadDemoData(db);
-    expect((await getMoneyProfile(db)).openingCash).toBeGreaterThan(0);
+    // The demo now spreads its opening across buckets, so assert the TOTAL —
+    // which is the invariant that matters and the one that survives the split.
+    expect(openingTotal(await getMoneyProfile(db))).toBeGreaterThan(0);
 
     await resetToEmpty(db);
     const profile = await getMoneyProfile(db);

@@ -62,7 +62,7 @@ export function useSavingsTab() {
   const goals = data?.goals ?? [];
   const saved = data?.saved ?? {};
   const money = data?.money ?? null;
-  const profile = data?.profile ?? { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
+  const profile = data?.profile ?? { openingCash: 0, openingBank: 0, openingWallet: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
   const forecastMonthEnd = data?.forecastMonthEnd ?? null;
   const forecastBudget = data?.forecastBudget ?? 0;
   const upcoming = data?.upcoming ?? [];

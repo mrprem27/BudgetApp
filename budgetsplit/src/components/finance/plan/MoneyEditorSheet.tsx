@@ -26,7 +26,9 @@ export function MoneyEditorSheet({
   initial: MoneyProfile;
   onSave: (p: MoneyProfile) => void;
 }) {
+  const [bank, setBank] = useState('');
   const [cash, setCash] = useState('');
+  const [wallet, setWallet] = useState('');
   const [investments, setInvestments] = useState('');
   const [limit, setLimit] = useState('');
   const [used, setUsed] = useState('');
@@ -34,7 +36,9 @@ export function MoneyEditorSheet({
   // Re-seed the fields whenever the sheet (re)opens with the latest profile.
   useEffect(() => {
     if (!visible) return;
+    setBank(toInput(initial.openingBank));
     setCash(toInput(initial.openingCash));
+    setWallet(toInput(initial.openingWallet));
     setInvestments(toInput(initial.investments));
     setLimit(toInput(initial.creditLimit));
     setUsed(toInput(initial.creditUsed));
@@ -46,7 +50,9 @@ export function MoneyEditorSheet({
 
   function handleSave() {
     onSave({
+      openingBank: parseToPaise(bank),
       openingCash: parseToPaise(cash),
+      openingWallet: parseToPaise(wallet),
       investments: parseToPaise(investments),
       creditLimit: limitPaise,
       creditUsed: usedPaise,
@@ -60,9 +66,34 @@ export function MoneyEditorSheet({
     // sheet with four fields that pushed Save out of reach.
     <SheetModal visible={visible} onClose={onClose} title="Your money">
       <>
-        <Text style={styles.label}>Cash available</Text>
-        <Input value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
-        <Text style={styles.hint}>Money in your bank + wallet right now. Transactions adjust this as you spend.</Text>
+        {/*
+          Three fields where there was one, and the sheet has already failed this
+          way once — see the note above about Save going out of reach. So they sit
+          as one labelled group with a single shared hint, not three full-weight
+          fields each with their own label and explanation.
+
+          Bank leads because it is where most money is, and because
+          `INCOME_LANDING_DEFAULT` is Bank for the same reason.
+        */}
+        <Text style={styles.label}>Where your money is</Text>
+        <View style={styles.bucketRow}>
+          <View style={styles.bucket}>
+            <Text style={styles.bucketLabel}>Bank</Text>
+            <Input value={bank} onChangeText={setBank} keyboardType="decimal-pad" placeholder="₹0" />
+          </View>
+          <View style={styles.bucket}>
+            <Text style={styles.bucketLabel}>Cash</Text>
+            <Input value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="₹0" />
+          </View>
+          <View style={styles.bucket}>
+            <Text style={styles.bucketLabel}>Wallet</Text>
+            <Input value={wallet} onChangeText={setWallet} keyboardType="decimal-pad" placeholder="₹0" />
+          </View>
+        </View>
+        <Text style={styles.hint}>
+          What you have right now, in each place. Transactions adjust these as you spend,
+          using the pay method on each one.
+        </Text>
 
         <Text style={styles.label}>Investments</Text>
         <Input value={investments} onChangeText={setInvestments} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
@@ -85,6 +116,9 @@ export function MoneyEditorSheet({
 
 const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
+  bucketRow: { flexDirection: 'row', gap: space.sm },
+  bucket: { flex: 1 },
+  bucketLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
   gap: { marginBottom: space.xs },
   hint: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
 });

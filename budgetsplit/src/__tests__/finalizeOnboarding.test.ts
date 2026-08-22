@@ -22,7 +22,7 @@ const data = (over: Partial<OnboardingData> = {}): OnboardingData => ({
   groupName: null,
   addFirst: false,
   payMethod: PayMethod.Upi,
-  money: { openingCash: 5000000, investments: 0, creditLimit: 10000000, creditUsed: 200000 },
+  money: { openingBank: 5000000, investments: 0, creditLimit: 10000000, creditUsed: 200000 },
   ...over,
 });
 
@@ -52,7 +52,9 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
 
     expect(await settings.budgetTarget()).toBe(30000 * 100);
     const money = await getMoneyProfile(db);
-    expect(money.openingCash).toBe(5000000);
+    // Lands in BANK, not cash-in-hand: "what do you have right now" is an account
+    // balance for almost everyone, and INCOME_LANDING_DEFAULT is Bank for the same reason.
+    expect(money.openingBank).toBe(5000000);
     expect(money.creditUsed).toBe(200000);
   });
 
@@ -109,7 +111,7 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     expect(await settings.budgetTarget()).toBeNull();
     // Preserved: name and money profile still written.
     expect((await getAllPersons(db)).find(p => p.is_me === 1)?.name).toBe('Prem');
-    expect((await getMoneyProfile(db)).openingCash).toBe(5000000);
+    expect((await getMoneyProfile(db)).openingBank).toBe(5000000);
   });
 });
 

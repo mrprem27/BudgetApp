@@ -302,7 +302,11 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Money profile (Total Money breakdown): cash + investments + credit
   await setMoneyProfile(db, {
-    openingCash: R(300000),
+    // Split across buckets so the demo exercises the model it ships with — a
+    // single figure would leave two of the three permanently at zero.
+    openingBank: R(210000),
+    openingCash: R(45000),
+    openingWallet: R(45000),
     investments: R(150000),
     creditLimit: R(60000),
     creditUsed: R(10000),

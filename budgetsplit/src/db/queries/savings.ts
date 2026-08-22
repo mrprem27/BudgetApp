@@ -3,7 +3,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { planAutoAllocations, planOverspendRaid } from '../../lib/savingsEngine';
 import { generateInsights, type Insight, type CategorySpend } from '../../lib/savingsInsights';
-import { cashPositionFromTotals, computeTotalMoney, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
+import { cashPositionFromTotals, computeTotalMoney, openingTotal, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
 import { computeSafeToSpend, type SafeToSpend } from '../../lib/safeToSpend';
 import { getSafeToSpend } from './spendPower';
 import { CASH_TOTALS_SQL } from './cashQuery';
@@ -427,7 +427,9 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
     getTotalSaved(db),
   ]);
   const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };
-  return cashPositionFromTotals(totals, savedTotal, profile.openingCash);
+  // The SUM, not one bucket — see `openingTotal`. This is the line that keeps
+  // every downstream figure identical across the bucket split.
+  return cashPositionFromTotals(totals, savedTotal, openingTotal(profile));
 }
 
 /** The single "Total Money" figure + breakdown for the Plan screen. */

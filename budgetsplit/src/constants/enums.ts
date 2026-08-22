@@ -107,6 +107,47 @@ export const INCOME_LANDING: readonly PayMethod[] = [
 export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
 
 /**
+ * Where money actually sits — the three buckets a balance can live in.
+ *
+ * Deliberately buckets, not named institutions. "HDFC" and "Paytm" would be an
+ * account-management feature; this is the smallest model that makes "landed in ___"
+ * mean something and gives a savings withdrawal somewhere honest to return to.
+ *
+ * Card is NOT here: it is a liability, not a place money sits, and `cash.ts`
+ * already keeps it separate on purpose.
+ */
+export const ASSET_BUCKET = ['bank', 'cash', 'wallet'] as const;
+export type AssetBucket = typeof ASSET_BUCKET[number];
+
+/**
+ * Where a payment method draws from, or `null` when it genuinely is not known.
+ *
+ * **This mapping is a policy, not a fact, and it lives here so it is decided once.**
+ * `upi` and `autopay` are read as bank because that is where they draw from for
+ * almost everyone — but a UPI payment CAN come out of a wallet, so this is a
+ * defensible default and not a truth.
+ *
+ * `null` for an unrecorded method is the important case, not an oversight.
+ * `txn.pay_method` is nullable and real rows have NULL, where it has always meant
+ * "not card" and nothing more. Forcing those into bank would silently drain one
+ * bucket for every legacy row while the total stayed correct — the worst kind of
+ * wrong, because nothing looks broken. They stay **unattributed**: counted in the
+ * total, attributed to no bucket. Same refuse-rather-than-guess rule the savings
+ * sweep follows.
+ */
+export function assetOf(pm: PayMethod | string | null | undefined): AssetBucket | 'credit' | null {
+  switch (pm) {
+    case PayMethod.Card:    return 'credit';
+    case PayMethod.Cash:    return 'cash';
+    case PayMethod.Wallet:  return 'wallet';
+    case PayMethod.Bank:
+    case PayMethod.Upi:
+    case PayMethod.Autopay: return 'bank';
+    default:                return null;   // 'other', and every legacy NULL
+  }
+}
+
+/**
  * `person.receivable_state` — whether money this person owes me still counts as
  * cover. 'written_off' is NOT a settlement: the debt is still owed and still
  * shown, it just stops offsetting a shortfall or netting against what I owe.
