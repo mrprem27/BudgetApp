@@ -80,14 +80,16 @@ describe('screen size ceilings', () => {
     // happened *because* this ceiling refused to budge — a perf fix turned into a
     // decomposition. The rule working, twice.
     //
-    // ⚠️ The file now sits EXACTLY at this number, i.e. zero headroom — set by
-    // measuring straight after an extraction, which was too tight. Adding
-    // `automaticallyAdjustKeyboardInsets` (one line, a real keyboard bug) already
-    // had to be paid for by deleting a dead `baseRows` destructure and an unused
-    // `alpha` import. That was legitimate; the next one won't be. **The next
-    // change to this file extracts `<SectionList>` into
-    // `components/finance/review/ReviewList.tsx`** — don't golf lines for it.
-    'app/review.tsx': 744,
+    // Lowered to 620 after BOTH extractions the note above demanded:
+    // `<SectionList>` → `components/finance/review/ReviewList.tsx`, and every
+    // write path — commit, batch commit, discard, and the undo for each — →
+    // `hooks/useReviewCommit.ts`. 743 → 598, so there is real headroom for the
+    // first time. The second extraction was not tidiness: the atomicity fix and
+    // the missing undo error handling both landed in it, and neither would have
+    // fit under the old ceiling. The rule working, a third time.
+    //
+    // Lower it again when you extract more; never raise it.
+    'app/review.tsx': 620,
   };
 
   for (const [rel, ceiling] of Object.entries(CEILINGS)) {

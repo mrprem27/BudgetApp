@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { saveFailureMessage } from '../src/lib/dbErrors';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -172,6 +173,15 @@ export default function ImportScreen() {
       haptic.success();
       refresh();
       router.replace('/review');
+    } catch (e) {
+      // Was a bare try/finally, so a failed insert became an unhandled rejection:
+      // the spinner stopped, nothing was imported, nothing was said, and the
+      // button looked broken. This is the exact bug already fixed in review.tsx —
+      // and `saveFailureMessage` exists because "could not save, try again" is a
+      // lie twice over on a full disk, which is the realistic cause here.
+      haptic.error();
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.body);
     } finally {
       setSaving(false);
     }
