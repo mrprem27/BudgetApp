@@ -501,6 +501,9 @@ constraints to design against.
 | F7 | `settings` holds one-time migration flags (`schema.ts:771-786`) — syncing it wholesale makes a device **skip a migration and record it as done** | Explicit key allowlist. Migration flags are device state and are never synced |
 | F8 | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
 | F9 | Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true | Refuse restore while sync is on |
+| F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
+| F11 | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
+| F12 | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | The key must be recoverable from any member who still holds it; never derive it from one device's secret |
 
 ---
 
@@ -652,6 +655,22 @@ Each line is real, evidenced, and not blocking the pilot.
 
 ### Schema gap: sync prerequisites
 
+> **Narrowed 2026-08-22.** The paragraph below assumed **row-level** sync. The
+> decided design is **document-level**: the unit that travels is an *entry* — a
+> `txn` plus its payments, shares and line items — versioned by `txn.updated_at`.
+> That holds because those child tables are never mutated apart from their parent
+> (every mutation is an insert beside a new `txn`, a rewrite of the whole set
+> inside `updateTxn`, or a group cascade). It is also the only correct unit for
+> money, since shares-summing-to-payments is a property of the whole document —
+> row-level sync could transmit a half-valid state that passes every check.
+>
+> With that, and with sync scoped to **shared-group data only**, the gap is **two
+> tables and four columns**, not nine tables: `budget_group` and `group_member`
+> each need `updated_at` + `deleted_at`, because both are hard-deleted today and a
+> hard delete cannot propagate. **Both landed on `feat/peer-trust-and-approval`.**
+> `person` rows never travel at all — a friend is a local record, and only the
+> account id (`remote_uid`) bridges devices.
+
 **Only `txn` carries what sync needs.** `updated_at` + `is_deleted` exist at
 `src/db/schema.ts:73-75` and nowhere else. `budget_group`, `recur_skip`,
 `savings_goal` and `savings_txn` have `created_at` alone; `person`,
@@ -662,6 +681,25 @@ pushes it back. This is a gap in the app as it stands today, not only a cost of
 S2. Two carve-outs already decided: `category` uses `category_tombstone`
 (its `UNIQUE(name, kind)` would block re-adding a name), and `settings` is never
 synced as a table.
+
+### Two live restore defects, found while designing sync
+
+Neither is caused by the sync work; both were found by tracing what `BACKUP_TABLES`
+actually carries.
+
+- [ ] **Restore resurrects every category the user deleted.**
+      `category_tombstone` is **not** in `BACKUP_TABLES` (`src/lib/backup.ts`), and
+      `restoreAllTables` re-runs `seedGlobalCategories` afterwards — so the default
+      catalog comes back with no record of the deletions. Adding the table is now
+      *safe* to do, because `OPTIONAL_BACKUP_TABLES` lets a table absent from older
+      files restore empty instead of rejecting the whole backup. Left out of
+      `feat/peer-trust-and-approval` deliberately: it changes restore behaviour and
+      deserves its own pass.
+- [ ] **Restore carries one-time migration flags between devices.** The `settings`
+      table holds `ONE_TIME_FIXES` markers and `category_global_v1` **and** is in
+      `BACKUP_TABLES` — so restoring a snapshot can mark a migration done on a
+      device that never ran it. This is F7 arriving early, through backup rather
+      than sync. The fix is the same: an explicit key allowlist.
 
 ### Money-model gap: accounts as entities
 

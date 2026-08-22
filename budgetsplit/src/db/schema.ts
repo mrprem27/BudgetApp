@@ -387,6 +387,23 @@ export const COLUMN_MIGRATIONS = [
   // which today is everyone.
   "ALTER TABLE person ADD COLUMN trust_state TEXT NOT NULL DEFAULT 'review'",
   "ALTER TABLE person ADD COLUMN trust_state_at INTEGER",
+  // Sync prerequisites, schema-only — nothing reads these yet.
+  //
+  // When shared groups sync, the unit that travels is the ENTRY (a `txn` plus its
+  // payments, shares and line items, as one document versioned by
+  // `txn.updated_at`), because those child rows are never mutated apart from their
+  // parent. That leaves exactly two other things that have to travel: the group
+  // itself and its membership. Both are currently HARD deleted
+  // (`groups.ts` deleteGroup, `persons.ts` removeMemberFromGroup), and a hard
+  // delete cannot propagate — the other device keeps the row and pushes it back.
+  //
+  // Added now because they cost nothing now and a migration across every write
+  // path later. `budget_group` and `group_member` are not hand-rebuilt tables, so
+  // unlike `txn` there is no rebuild column list to keep in step.
+  "ALTER TABLE budget_group ADD COLUMN updated_at INTEGER",
+  "ALTER TABLE budget_group ADD COLUMN deleted_at INTEGER",
+  "ALTER TABLE group_member ADD COLUMN updated_at INTEGER",
+  "ALTER TABLE group_member ADD COLUMN deleted_at INTEGER",
 ];
 
 /**

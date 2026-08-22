@@ -31,8 +31,13 @@ into understanding). Everything else (forecast, health score, subscriptions, rem
 afford check, savings goals) ships as optional feature-flagged modules.
 
 **Hard invariants:**
-- **No accounts, no network, no cloud, no tracking.** All data lives in a local SQLite
-  file (`budgetsplit.db`). Notifications are local-only (no push server).
+- **Local-first, and no tracking.** All data lives in a local SQLite file
+  (`budgetsplit.db`); every screen reads it directly and works with no network.
+  Notifications are local-only (no push server). *Accounts now exist* — optional
+  sign-in and client-encrypted backup, only in a build with `EXPO_PUBLIC_API_URL`,
+  and the server never sees a transaction. **Sync does not exist**: there is no
+  peer write path anywhere. See FEATURES_AND_FLOWS §19 for every egress path, and
+  AGENTS §13 for what will gate a peer entry when there is one.
 - **Money is always integer paise.** Parse with `parseToPaise`, display with
   `formatRupees`/`formatCompact`. Never floats.
 - **Timestamps are epoch ms** (`Date.now()`), not `new Date()` in DB paths.
@@ -55,7 +60,7 @@ afford check, savings goals) ships as optional feature-flagged modules.
 | Fonts | **SpaceMono** (money), **Inter** (everything else) |
 | Crypto | **crypto-js** — passphrase-encrypted backups only (`src/lib/backup.ts`) |
 | Server | **One Cloudflare Worker**, `server/receipt-ocr-proxy/` — stateless, ~113 L, exists only to hold `GEMINI_API_KEY` for receipt OCR. Not required for anything else; the app is otherwise fully local. Deployed with **wrangler** |
-| Network | Two outbound calls total: pdf.js from a CDN (library only) and the receipt-OCR proxy (**sends the receipt photo**). No accounts, no sync, no analytics |
+| Network | Three paths, all opt-in but one: the receipt-OCR proxy (**sends the receipt photo**, on by default), and — only in a build with `EXPO_PUBLIC_API_URL` — sign-in and encrypted backup via `server/api`, which never sees a transaction. pdf.js is bundled, not fetched. **Accounts exist; sync does not.** No analytics. See FEATURES_AND_FLOWS §19 |
 
 ---
 
