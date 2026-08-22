@@ -16,6 +16,8 @@ import { useServerSession } from '../../src/hooks/useServerSession';
 import { pendingUploadCount } from '../../src/db/queries/syncOutbox';
 import { getAllGroups, sharedGroupsOf } from '../../src/db/queries/groups';
 import { pendingGroupInvites, acceptGroupInvite } from '../../src/lib/syncEngine';
+import { rememberSyncPassphrase, forgetSyncPassphrase, maybeSnapshot } from '../../src/lib/syncSnapshot';
+import { PassphraseSheet } from '../../src/components/finance/backup/PassphraseSheet';
 import type { SyncGroup } from '../../src/lib/serverApi';
 
 /**
@@ -39,6 +41,9 @@ export default function SyncScreen() {
   const [joining, setJoining] = useState<string | null>(null);
   const [lastAt, setLastAt] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [everything, setEverything] = useState(false);
+  const [askPass, setAskPass] = useState(false);
+  const [savingPass, setSavingPass] = useState(false);
 
   const load = useCallback(() => {
     let alive = true;
@@ -47,6 +52,8 @@ export default function SyncScreen() {
         settings.syncEnabled(), pendingUploadCount(db), getAllGroups(db), pendingGroupInvites(),
         settings.lastSyncAt(), settings.lastSyncNote(),
       ]);
+      const everythingOn = await settings.syncEverything().catch(() => false);
+      if (alive) setEverything(everythingOn);
       if (!alive) return;
       setEnabled(on);
       setWaiting(n);
@@ -86,6 +93,55 @@ export default function SyncScreen() {
     );
   }
 
+  /**
+   * The second switch: a whole-app encrypted copy, not entry sync.
+   *
+   * Turning it ON asks for a passphrase, because that is the only thing that can
+   * open it on a phone this one has never met. It is held in this device's
+   * keychain so snapshots can run unattended, and never leaves — which is also
+   * why forgetting it is unrecoverable, said here rather than discovered later.
+   */
+  async function toggleEverything(next: boolean) {
+    haptic.selection();
+    if (next) { setAskPass(true); return; }
+
+    setEverything(false);
+    await settings.setSyncEverything(false);
+    await forgetSyncPassphrase();
+    Alert.alert(
+      'Stopped',
+      'No new copies will be made. The ones already on your account stay there until you '
+      + 'delete them under Backup & restore — turning this off is not a deletion.',
+    );
+  }
+
+  async function confirmPassphrase(passphrase: string) {
+    setSavingPass(true);
+    const held = await rememberSyncPassphrase(passphrase);
+    if (!held) {
+      setSavingPass(false);
+      setAskPass(false);
+      haptic.error();
+      Alert.alert('Cannot store the passphrase', 'This device has no secure storage, so an automatic copy could not be opened again.');
+      return;
+    }
+    await settings.setSyncEverything(true);
+    setEverything(true);
+    setAskPass(false);
+    setSavingPass(false);
+    haptic.success();
+    // Take the first one now rather than in six hours: turning it on and having
+    // nothing happen is indistinguishable from it not working.
+    const r = await maybeSnapshot(db);
+    Alert.alert(
+      r.ok ? 'First copy saved' : 'Turned on',
+      r.ok
+        ? 'Everything on this phone is now on your account, encrypted. It refreshes in the background from here on.\n\nKeep that passphrase — without it nobody, including us, can open this.'
+        : 'The first copy will be made shortly.\n\nKeep that passphrase — without it nobody, including us, can open this.',
+    );
+    load();
+  }
+
   async function toggle(next: boolean) {
     haptic.selection();
     if (!next) {
@@ -104,7 +160,8 @@ export default function SyncScreen() {
     Alert.alert(
       'Turn on sync?',
       `Entries in your ${sharedCount} shared group${sharedCount === 1 ? '' : 's'} will be encrypted on this phone and sent to your account, so the people in them stay up to date.\n\n`
-      + 'Your personal group, income, goals, budgets and net worth never leave this device.',
+      + 'This switch carries nothing else — your personal group, income, goals, budgets and net worth '
+      + 'stay on this device unless you also turn on “Keep a copy of everything”.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -185,6 +242,43 @@ export default function SyncScreen() {
         </Card>
 
         {/*
+          The second switch, and deliberately a separate card.
+
+          It is not "more of the same": groups sync entry by entry, this is a
+          whole-app snapshot. Presenting them as one control with a degree setting
+          would hide that they fail differently — and that only this one can bring
+          a phone back from nothing.
+        */}
+        <Card>
+          <ListRow
+            icon="hard-drive"
+            title="Keep a copy of everything"
+            subtitle={everything
+              ? 'On. A fresh phone can become this one again — sign in, enter your passphrase.'
+              : 'Off. Only the groups above would travel.'}
+            variant="stacked"
+            chevron={false}
+            value={(
+              <Switch
+                value={everything}
+                onValueChange={toggleEverything}
+                disabled={!configured || !session}
+                trackColor={{ false: colors.bgMuted, true: colors.accent }}
+                thumbColor={colors.onAccent}
+              />
+            )}
+          />
+        </Card>
+        {everything && (
+          <Text style={styles.footnote}>
+            Sealed on this phone with your passphrase, which is never sent — so the server holds a
+            copy it cannot open, and losing the passphrase means losing the copy. It refreshes in
+            the background, and the newest copy wins: two phones used heavily at the same time will
+            not merge, so this is for getting a phone back, not for working on two at once.
+          </Text>
+        )}
+
+        {/*
           The four things people get wrong, answered before they have to ask. Each
           is a real surprise, not reassurance: a user who assumes the opposite of
           any of these will make a decision they would not have made.
@@ -192,8 +286,10 @@ export default function SyncScreen() {
         <Text style={styles.heading}>What this does</Text>
         <Card padded>
           <Fact
-            title="Only shared groups travel"
-            body="Your personal spending, income, savings goals, budgets and net worth never leave this phone. Sync carries the groups you split with, and nothing else."
+            title={everything ? 'Groups sync; everything else is copied' : 'Only shared groups travel'}
+            body={everything
+              ? 'The switch above syncs the groups you split with, entry by entry. “Keep a copy of everything” also sends an encrypted copy of the rest — your own spending, goals, budgets and net worth — so a new phone can become this one. Both are sealed here first.'
+              : 'Your personal spending, income, savings goals, budgets and net worth never leave this phone. Sync carries the groups you split with, and nothing else. Turn on “Keep a copy of everything” to change that.'}
           />
           <Divider indent="none" />
           <Fact
@@ -258,6 +354,14 @@ export default function SyncScreen() {
           and it does not remove anything from anyone else&apos;s phone.
         </Text>
       </ScrollView>
+
+      <PassphraseSheet
+        visible={askPass}
+        onClose={() => setAskPass(false)}
+        mode="create"
+        onSubmit={confirmPassphrase}
+        submitting={savingPass}
+      />
     </View>
   );
 }

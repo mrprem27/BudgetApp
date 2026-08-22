@@ -200,8 +200,9 @@ export default function SyncLogScreen() {
         )}
 
         <Text style={styles.footnote}>
-          Only shared groups are ever sent. Your personal spending, income, goals, budgets and
-          net worth never leave this phone.
+          This page is about group sync, which carries only the groups you share. If you have also
+          turned on “Keep a copy of everything”, that is a separate encrypted copy of the whole app
+          and refreshes on its own schedule.
         </Text>
       </ScrollView>
       {running && <ActivityIndicator style={styles.floating} color={colors.accent} />}

@@ -30,7 +30,7 @@ Split bills. Budget for real.
 ## 2 · Promotional text (170 chars, changeable without review)
 
 ```
-Split with friends without losing track of your own money. Everything lives on your phone — no bank login, no ads, no tracking.
+Split with friends without losing track of your own money. No bank login, no ads, no tracking — and nothing leaves your phone unless you switch it on.
 ```
 
 ---
@@ -62,15 +62,19 @@ Everything else
 
 Your data
 Your money lives on this phone. There is no ad network, no analytics, and no
-tracking of any kind. Your personal spending, income, savings goals, budgets and
-net worth never leave the device at all.
+tracking of any kind. By default your personal spending, income, savings goals,
+budgets and net worth never leave the device.
 
-Three things can leave, and only when you switch them on. Receipt scanning sends
-that one photo to a cloud text-reader. Signing in lets you keep an encrypted
-backup off the phone. And if you turn on sync, the groups you split with are
-encrypted here before they are sent, so the people in them stay up to date — we
-store sealed data we have no key for, and cannot read amounts, who paid, or what
-it was for. All three are explained in the app, and all three can be turned off.
+Nothing leaves unless you switch it on. Receipt scanning sends that one photo to
+a cloud text-reader. Signing in lets you keep an encrypted backup off the phone.
+Sync keeps the groups you split with up to date for everyone in them. And "keep a
+copy of everything" saves an encrypted copy of your whole app, so a new phone can
+become your old one.
+
+Everything that leaves is sealed on this phone first, with a key we never
+receive — we store data we cannot read, and cannot see amounts, who paid, or what
+anything was for. All of it is explained in the app, and all of it can be turned
+off.
 
 Made for India. Rupees, UPI, and the way people here actually settle up.
 ```
@@ -112,7 +116,7 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
 | **Name** | Yes, optional | Yes | No | Shown to people you link with | `PATCH /me` |
 | **Phone number** | Yes, optional | Yes | No | Only shown to people you link with, and only if you switch it on | `links.share_phone_*` |
 | **Photos** (receipts) | **Yes, on by default** | No | No | Read the line items off a receipt | `receipt-ocr-proxy` → Gemini |
-| **Financial info** | **No** | — | — | Never leaves the device except inside an encrypted backup the server cannot read | `backup.ts` |
+| **Financial info** | **No** | — | — | Leaves only inside an encrypted envelope the server cannot read — a backup, a sealed group entry, or the whole-app copy. Never in the clear | `backup.ts`, `groupCrypto.ts`, `syncSnapshot.ts` |
 | **Identifiers / usage / diagnostics** | No | — | — | No analytics SDK, no crash reporter, no ad network | — |
 
 ### The three answers people get wrong
@@ -127,11 +131,17 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
 3. **Nothing is "tracking"** in Apple's sense — no data goes to a data broker and
    nothing is joined with third-party data for advertising. So no ATT prompt.
 
-### Sync — shipped, and what it does not change
+### Sync and "keep a copy of everything" — shipped, and what they do not change
 
 Nothing is added to the table above. Shared-group entries are end-to-end encrypted
-with a per-group key the server never receives, exactly the argument backups
-already make. The declarations that follow from it:
+with a per-group key the server never receives, and the whole-app copy is the
+**same envelope backups already use**, sealed with a passphrase that is never
+sent. Both rest on the identical argument, which is why neither changes the
+declaration.
+
+⚠️ Do not describe the personal copy as "not stored". It IS stored — encrypted,
+and unreadable to us. Say encrypted-and-unreadable, the same wording as backups,
+because the distinction is the whole defence. The declarations that follow from it:
 
 - **Financial info stays "not collected".** Defensible for the same reason as
   backups — sealed before upload, no key on the server. Say
@@ -140,11 +150,11 @@ already make. The declarations that follow from it:
   accounts already declared, not separately collected.
 - **Still no tracking**, so still no ATT prompt.
 
-The description above has been rewritten accordingly: it no longer implies
-transactions never leave the phone, and it distinguishes personal data (which
-genuinely never does) from shared groups (which do, sealed). Keep that
-distinction in any future edit — it is the honest version and it is also the
-selling point.
+The description above is written to match: nothing leaves **by default**, four
+things can leave **when switched on**, and everything that does is sealed here
+first. Keep that shape in any future edit. "Nothing leaves your device" was true
+once and each feature since has made it less so — the honest version is a default
+plus a list, not an absolute.
 
 ---
 

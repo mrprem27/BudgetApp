@@ -30,6 +30,8 @@ const K = {
   lastSyncNote: 'sync_last_note',
   syncGroups: 'sync_known_groups',
   syncLog: 'sync_log',
+  syncEverything: 'sync_everything',
+  lastSnapshotAt: 'sync_last_snapshot_at',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
   defaultPayMethod: 'default_pay_method',
@@ -125,6 +127,23 @@ export const settings = {
   setLastSyncAt: (v: number) => setNumber(K.lastSyncAt, v),
   lastSyncNote: () => getString(K.lastSyncNote),
   setLastSyncNote: (v: string) => setString(K.lastSyncNote, v),
+
+  /**
+   * Keep an encrypted copy of EVERYTHING on the account, not just shared groups.
+   *
+   * The second switch, and a genuinely different promise from the first. Groups
+   * sync entry by entry because two people race the same bill. This is a whole-app
+   * snapshot, sealed with a passphrase the server never sees, so a fresh phone can
+   * become this one again — which the group sync cannot do, because personal data
+   * has no other member to re-wrap a key.
+   *
+   * Off by default, like everything else that sends data anywhere.
+   */
+  syncEverything: () => getBool(K.syncEverything, false),
+  setSyncEverything: (v: boolean) => setBool(K.syncEverything, v),
+
+  lastSnapshotAt: () => getNumber(K.lastSnapshotAt),
+  setLastSnapshotAt: (v: number) => setNumber(K.lastSnapshotAt, v),
 
   /**
    * What the server last said about my groups: `[id, state]` pairs.

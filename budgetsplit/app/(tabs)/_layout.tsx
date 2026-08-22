@@ -12,6 +12,7 @@ import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { runSync } from '../../src/lib/syncEngine';
+import { maybeSnapshot } from '../../src/lib/syncSnapshot';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
@@ -97,6 +98,10 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       // `runSync` gates itself on the setting and never throws, so there is no
       // check to duplicate here and no failure that can reach a screen.
       runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
+      // "Keep a copy of everything", if it is on and one is due. Its own throttle
+      // (six hours) lives inside — a full read, seal and upload on every
+      // foreground would be absurd.
+      maybeSnapshot(db).catch(() => {});
     });
     return () => sub.remove();
   }, [db, refresh]);
@@ -105,6 +110,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // launch straight into the app syncs nothing until you leave and come back.
   useEffect(() => {
     runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
+    maybeSnapshot(db).catch(() => {});
   }, [db, refresh]);
 
   // Shown only to a just-onboarded user (armed in `finalizeOnboarding`), and only
