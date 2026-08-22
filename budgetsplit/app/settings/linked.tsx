@@ -235,6 +235,11 @@ export default function LinkedPeopleScreen() {
               style={styles.inviteCta}
             />
             <Text style={styles.hint}>
+              A link connects you to someone so you can share a name and, if you choose, a
+              number. No money crosses a link — your groups, balances and transactions stay
+              exactly where they are.
+            </Text>
+            <Text style={styles.hint}>
               There's no search here on purpose: nobody can look you up by name, email or
               number. A link you send is the only way in.
             </Text>

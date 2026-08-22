@@ -268,10 +268,14 @@ export default function AccountScreen() {
           <>
             <Card padded style={styles.heroCard}>
               <IconCircle icon="cloud" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
-              <Text style={styles.heroTitle}>Back up beyond this phone</Text>
+              <Text style={styles.heroTitle}>Sign in to keep your place</Text>
               <Text style={styles.note}>
-                Sign in with your email — no password — and you can store encrypted backups off
-                this device, so losing the phone doesn’t lose your data. Nothing else is uploaded.
+                Signing in is how this phone knows it’s you. It stores your email and who you’re
+                linked with — never your transactions. Everything works without it.
+              </Text>
+              <Text style={styles.noteWarn}>
+                It does not back anything up on its own. Make a backup under Backup &amp; restore,
+                or losing this phone still loses your data.
               </Text>
             </Card>
 
@@ -330,6 +334,9 @@ const styles = StyleSheet.create({
   heroCard: { alignItems: 'center', gap: space.sm },
   heroTitle: { ...type.subheading, color: colors.textPrimary, textAlign: 'center' },
   note: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  // Amber, not grey. This line is the correction to what people assume an account
+  // does, so it must not read as more of the same explanatory text above it.
+  noteWarn: { ...type.caption, color: colors.healthAmber, textAlign: 'center', lineHeight: 18, marginTop: space.sm },
   profileCard: { alignItems: 'center', gap: space.xs },
   profileName: { ...type.subheading, color: colors.textPrimary, marginTop: space.sm },
   profileEmail: { ...type.body, color: colors.textSecondary },

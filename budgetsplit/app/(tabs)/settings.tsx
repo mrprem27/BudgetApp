@@ -295,7 +295,7 @@ export default function SettingsScreen() {
           <Text style={styles.profileSub}>
             {serverSession
               ? serverSession.user.email
-              : serverSessionConfigured ? 'Offline-first · sign in to back up' : 'Offline-first · no accounts'}
+              : serverSessionConfigured ? 'On this phone · sign in to link with people' : 'On this phone · no account needed'}
           </Text>
         </View>
         <Feather name="edit-2" size={16} color={colors.textMuted} />

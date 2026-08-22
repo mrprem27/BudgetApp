@@ -256,8 +256,8 @@ export default function BackupScreen() {
           <IconCircle icon="shield" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
           <Text style={styles.note}>
             {serverSession
-              ? 'Your transactions live on this device — signing in didn’t change that. What an account adds is somewhere to keep an encrypted backup, so losing this phone doesn’t lose your data. Every backup is encrypted here first; the passphrase never leaves this phone.'
-              : 'Your data lives only on this device — nothing is uploaded. Create an encrypted backup file and save it to Files, iCloud Drive, or Google Drive so you can recover everything if you lose this phone.'}
+              ? 'Your transactions live on this device — signing in didn’t change that. What an account adds is somewhere to keep a backup. Nothing happens automatically: a backup is a snapshot you make, encrypted here first with a passphrase that never leaves this phone. Forget the passphrase and that backup cannot be opened by anyone, including us.'
+              : 'Your data lives only on this device — nothing is uploaded. Make an encrypted backup and save it to Files, iCloud Drive or Google Drive. Nothing happens automatically, and the passphrase never leaves this phone — forget it and that backup cannot be opened by anyone.'}
           </Text>
           {lastBackupAt != null && (
             <Text style={styles.lastBackup}>Last backup: {dateTime(new Date(lastBackupAt))}</Text>
