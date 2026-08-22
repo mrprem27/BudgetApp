@@ -173,7 +173,7 @@ export type TransferScope = typeof TRANSFER_SCOPE_ALL | string;
  *  **Order is the Review section order** (`app/review.tsx` maps this tuple directly), so
  *  `voice` sits first: a phrase you said out loud minutes ago deserves to be the thing you
  *  see before a statement you imported. */
-export const TXN_SOURCE = ['voice', 'email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'upi_qr', 'manual'] as const;
+export const TXN_SOURCE = ['voice', 'email', 'gpay', 'paytm', 'bank_csv', 'sms', 'notification', 'upi_qr', 'peer', 'manual'] as const;
 export type TxnSource = typeof TXN_SOURCE[number];
 export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
   // Captured by the Siri shortcut while the app was closed, or dictated inside it.
@@ -182,6 +182,9 @@ export const TXN_SOURCE_LABEL: Record<TxnSource, string> = {
   sms: 'SMS', notification: 'Notifications',
   // Paid through the app: scanned a QR, handed off to a UPI app, confirmed on return.
   upi_qr: 'Scanned & paid',
+  // Written by another person on their own device. Never appears in Review — a
+  // peer entry is judged on the approvals screen, not edited into shape.
+  peer: 'Added by someone else',
   manual: 'Imported',
 };
 /**
@@ -195,6 +198,7 @@ export const TXN_SOURCE_LABEL_SHORT: Record<TxnSource, string> = {
   email: 'Email', gpay: 'GPay', paytm: 'Paytm', bank_csv: 'Bank',
   sms: 'SMS', notification: 'Notifs',
   upi_qr: 'Scanned',
+  peer: 'Shared',
   manual: 'Imported',
 };
 
@@ -202,7 +206,8 @@ export const TXN_SOURCE_LABEL_SHORT: Record<TxnSource, string> = {
 export const TXN_SOURCE_ICON: Record<TxnSource, string> = {
   voice: 'mic',
   email: 'mail', gpay: 'smartphone', paytm: 'credit-card', bank_csv: 'file-text',
-  sms: 'message-square', notification: 'bell', upi_qr: 'maximize', manual: 'inbox',
+  sms: 'message-square', notification: 'bell', upi_qr: 'maximize',
+  peer: 'user-check', manual: 'inbox',
 };
 
 /** `txn.recur_freq CHECK(... IN ('daily','weekly','monthly','yearly','custom'))`. */

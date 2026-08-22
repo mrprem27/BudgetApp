@@ -9,6 +9,7 @@ import { PAY_METHOD_LABEL } from '../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../src/lib/splitMath';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { Banner } from '../../src/components/ui/Banner';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
@@ -97,7 +98,14 @@ export default function TxnDetailScreen() {
   const isItemized = txn.entry_mode === 'itemized';
   // Materialized recurring occurrences are read-only — manage the series from
   // the Recurring screen instead.
-  const canEdit = !txn.parent_recur_id;
+  /*
+   * An entry someone else wrote and I have not accepted is not mine to edit or
+   * delete. Editing it would rewrite their assertion under their name; deleting it
+   * would be a reject that leaves no decision behind. Both live on the approvals
+   * screen instead, where the choice is Approve or Not mine.
+   */
+  const isPendingPeer = txn.pendingApproval;
+  const canEdit = !txn.parent_recur_id && !isPendingPeer;
   const editHref = isItemized
     ? `/add/itemized?editId=${id}`
     : isSettlement
@@ -120,6 +128,15 @@ export default function TxnDetailScreen() {
         ) : undefined}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
+        {isPendingPeer && (
+          <Banner
+            tone={colors.healthAmber}
+            icon="user-check"
+            text="Waiting for you. None of the figures below have been counted yet."
+            actionLabel="Decide"
+            onAction={() => router.push('/approvals')}
+          />
+        )}
         {/* Hero */}
         <View style={styles.hero}>
           <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
@@ -373,10 +390,12 @@ export default function TxnDetailScreen() {
           })}
         </View>
 
+        {!isPendingPeer && (
         <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
           <Feather name="trash-2" size={16} color={colors.expense} />
           <Text style={styles.deleteText}>Delete {isSettlement ? 'settlement' : 'transaction'}</Text>
         </TouchableOpacity>
+        )}
       </ScrollView>
 
       {!!txn.attachment_uri && (
