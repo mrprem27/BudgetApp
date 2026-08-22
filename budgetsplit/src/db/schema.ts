@@ -244,6 +244,12 @@ CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 CREATE TABLE IF NOT EXISTS txn_approval (
   txn_id     TEXT PRIMARY KEY REFERENCES txn(id),
   state      TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
+  -- Where the money actually landed for ME, on an incoming transfer.
+  -- The sender says how they sent it; only the recipient knows where it arrived,
+  -- and the two are routinely different (sent by UPI, landed in a bank account).
+  -- Recorded here rather than overwriting their claim, because this is my side of
+  -- their assertion — which is exactly what this table is.
+  landed_pay_method TEXT,
   -- When it ARRIVED, not when it happened. The queue sorts on this so a peer
   -- cannot bury an entry by back-dating it.
   created_at INTEGER NOT NULL,
@@ -404,6 +410,9 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE budget_group ADD COLUMN deleted_at INTEGER",
   "ALTER TABLE group_member ADD COLUMN updated_at INTEGER",
   "ALTER TABLE group_member ADD COLUMN deleted_at INTEGER",
+  // Added after txn_approval shipped, so the CREATE above only covers fresh
+  // databases — this covers one that already ran the earlier build.
+  "ALTER TABLE txn_approval ADD COLUMN landed_pay_method TEXT",
 ];
 
 /**

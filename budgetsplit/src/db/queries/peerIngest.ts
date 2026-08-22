@@ -4,7 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
 import { formatRupees } from '../../lib/money';
 import { validateShares } from '../../lib/splitMath';
-import { appliesImmediately } from '../../lib/trust';
+import { requiresMyApproval } from '../../lib/trust';
 import type { Person } from './persons';
 import { localTz } from './transactions';
 
@@ -25,6 +25,14 @@ export type PeerEnvelope = {
   entryId?: string;
   kind: 'expense' | 'settlement';
   date: number;
+  /**
+   * Set to make this a recurring RULE rather than a one-off. Approving the rule
+   * approves its occurrences too — see `materializeDueOccurrences`, which refuses
+   * to spawn anything from a rule still waiting on me.
+   */
+  recurFreq?: string | null;
+  recurInterval?: number | null;
+  recurEnd?: number | null;
   category: string;
   note?: string | null;
   payMethod?: string | null;
@@ -48,7 +56,6 @@ export type IngestRefusal =
   | 'ambiguous-me'        // two is_me rows — see F5; trust cannot be evaluated
   | 'not-a-member'        // author or I am not in that group
   | 'personal-group'      // only shared-group data ever syncs
-  | 'recurring'           // a peer entry is never a recurring RULE
   | 'unbalanced'          // shares do not sum to payments
   | 'duplicate';          // already have this entry
 
@@ -103,13 +110,6 @@ export async function ingestPeerTxn(
   // Both ends: they must be entitled to write here, and it must concern me.
   if (!ids.has(author.id) || !ids.has(me.id)) return { ok: false, reason: 'not-a-member' };
 
-  // A recurring RULE is a `txn` row that spawns more rows. Accepting one from a
-  // peer would let them schedule indefinite future spending against me. Refusing
-  // at the seam is also what keeps `upcoming.ts` and the six recurring queries out
-  // of the enforcement list entirely — they can never see a pending entry.
-  if (env.kind !== 'expense' && env.kind !== 'settlement') {
-    return { ok: false, reason: 'recurring' };
-  }
 
   const total = env.payments.reduce((a, p) => a + p.amount, 0);
   const check = validateShares(total, env.shares);
@@ -126,18 +126,23 @@ export async function ingestPeerTxn(
   // second copy, and it must not resurrect a decision I already made.
   if (existing) return { ok: false, reason: 'duplicate' };
 
-  const applied = appliesImmediately(author);
+  // Does this need my say-so? A transfer always does, however much I trust them —
+  // see `requiresMyApproval` for why trust is the wrong test for money arriving.
+  const touchesMe = [...env.payments, ...env.shares].some(r => r.personId === me.id);
+  const applied = !requiresMyApproval(author, { kind: env.kind, touchesMe });
   const now = Date.now();
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,tags,tz,pay_method,source,
-          author_person_id,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,'quick',?,?,?,'',?,?,'peer',?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,author_person_id,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,'quick',?,?,?,'',?,?,'peer',?,?,?,?,0,?,?)`,
       [
         id, env.groupId, env.kind, env.date, env.category, env.note ?? null,
-        localTz(), env.payMethod ?? null, author.id, now, now,
+        localTz(), env.payMethod ?? null,
+        env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
+        author.id, now, now,
       ],
     );
     for (const p of env.payments) {

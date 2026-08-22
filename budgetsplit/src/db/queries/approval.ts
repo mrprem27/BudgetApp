@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { softDeleteTxn, restoreTxn } from './transactions';
-import type { ApprovalState } from '../../constants/enums';
+import type { ApprovalState, PayMethod } from '../../constants/enums';
 
 export { NOT_AWAITING_APPROVAL } from './approvalSql';
 
@@ -9,6 +9,8 @@ export type TxnApproval = {
   state: ApprovalState;
   created_at: number;
   decided_at: number | null;
+  /** Where an incoming transfer actually landed for me. Null for everything else. */
+  landed_pay_method: string | null;
 };
 
 /** Every entry still waiting on me, oldest arrival first. */
@@ -49,11 +51,31 @@ export async function getApproval(
  * ("Approved 12 Aug"), and keeping it means a re-delivered envelope is recognised
  * as already-decided rather than asked again.
  */
-export async function approveTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
-  await db.runAsync(
-    "UPDATE txn_approval SET state = 'approved', decided_at = ? WHERE txn_id = ? AND state = 'pending'",
-    [Date.now(), txnId],
-  );
+export async function approveTxn(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  /**
+   * For an incoming transfer: where the money actually arrived. The sender says
+   * how they sent it, but only the recipient knows where it landed, and the two
+   * routinely differ — sent by UPI, landed in a bank account.
+   */
+  landedPayMethod?: PayMethod | null,
+): Promise<void> {
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE txn_approval SET state = 'approved', decided_at = ?, landed_pay_method = ?
+        WHERE txn_id = ? AND state = 'pending'`,
+      [now, landedPayMethod ?? null, txnId],
+    );
+    // Also written onto the entry itself, because on MY device `pay_method` should
+    // describe what happened to MY money — that is what `CASH_TOTALS_SQL` reads to
+    // tell a card repayment from cash moving. The approval row keeps the record of
+    // the decision; this makes the ledger act on it without a second read path.
+    if (landedPayMethod) {
+      await db.runAsync('UPDATE txn SET pay_method = ?, updated_at = ? WHERE id = ?', [landedPayMethod, now, txnId]);
+    }
+  });
 }
 
 /**

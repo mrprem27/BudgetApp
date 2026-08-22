@@ -30,3 +30,39 @@ export function appliesImmediately(p: TrustSubject): boolean {
   if (p.remote_uid == null) return false;
   return asTrustState(p.trust_state) === 'trusted';
 }
+
+/** The parts of an incoming entry that decide whether it can touch me unasked. */
+export type IncomingEntry = {
+  kind: 'expense' | 'income' | 'settlement';
+  /** Does this entry name me as a payer or a sharer? */
+  touchesMe: boolean;
+};
+
+/**
+ * Does this entry need my say-so before it counts?
+ *
+ * `appliesImmediately` asks "do I trust this person". This asks the prior
+ * question — "is trust even the right test here" — and for one kind it is not.
+ *
+ * **A transfer is always confirmed, however much I trust the sender.** Trust is
+ * about honesty, and an incoming transfer fails for reasons neither person
+ * controls: a declined UPI, a wrong VPA, a bank hold. The cost of being wrong is
+ * also asymmetric in a way an expense's is not — "I paid you ₹5,000" credits cash
+ * I may never have received *and* erases a real debt in the same write, so an
+ * honest mistake quietly writes off money I am owed. An expense from someone I
+ * trust only adds a cost I would have agreed to anyway.
+ *
+ * The same reasoning applies whichever way the transfer points. If they claim I
+ * paid them, my cash goes down on their say-so; if they claim they paid me, my
+ * receivable goes down. Either way a figure of mine moves because someone else
+ * said so, which is the thing this whole model exists to stop.
+ *
+ * Entries that do not name me at all still queue, because `simplify()` re-pairs
+ * debts across the whole group — an expense between two other people can still
+ * move who I owe.
+ */
+export function requiresMyApproval(author: TrustSubject, entry: IncomingEntry): boolean {
+  if (author.is_me === 1) return false;
+  if (entry.kind === 'settlement' && entry.touchesMe) return true;
+  return !appliesImmediately(author);
+}

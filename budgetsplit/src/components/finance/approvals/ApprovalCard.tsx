@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { format } from 'date-fns';
 import { colors, type, space } from '../../tokens';
@@ -8,7 +8,9 @@ import { ListRow } from '../../ui/ListRow';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
 import { SectionHeader } from '../../ui/SectionHeader';
-import { describeImpact, type PendingEntry } from '../../../lib/approvalData';
+import { describeImpact, isIncomingTransfer, type PendingEntry } from '../../../lib/approvalData';
+import { PayMethodSelector } from '../PayMethodSelector';
+import { INCOME_LANDING, INCOME_LANDING_DEFAULT, type PayMethod } from '../../../constants/enums';
 import { formatRupees } from '../../../lib/money';
 
 type Props = {
@@ -17,7 +19,7 @@ type Props = {
   /** What accepting all of theirs would cost me. */
   total: number;
   busyId: string | null;
-  onApprove: (txnId: string) => void;
+  onApprove: (txnId: string, landedPayMethod?: PayMethod) => void;
   onReject: (entry: PendingEntry) => void;
   onTrust: () => void;
 };
@@ -40,32 +42,14 @@ export function ApprovalCard({
       <SectionHeader title={authorName} />
       <Card>
         {entries.map((e, i) => (
-          <View key={e.txnId}>
-            {i > 0 && <Divider indent="text" />}
-            <ListRow
-              icon={e.kind === 'settlement' ? 'repeat' : 'shopping-bag'}
-              title={describeImpact(e)}
-              subtitle={format(new Date(e.date), 'd MMM')}
-              variant="stacked"
-              chevron={false}
-            />
-            <View style={styles.decideRow}>
-              <SecondaryButton
-                label="Not mine"
-                size="md"
-                danger
-                onPress={() => onReject(e)}
-                disabled={busyId === e.txnId}
-                style={styles.decideBtn}
-              />
-              <PrimaryButton
-                label="Approve"
-                onPress={() => onApprove(e.txnId)}
-                loading={busyId === e.txnId}
-                style={styles.decideBtn}
-              />
-            </View>
-          </View>
+          <EntryRow
+            key={e.txnId}
+            entry={e}
+            divided={i > 0}
+            busy={busyId === e.txnId}
+            onApprove={onApprove}
+            onReject={onReject}
+          />
         ))}
       </Card>
 
@@ -92,7 +76,68 @@ export function ApprovalCard({
   );
 }
 
+/**
+ * One entry. Split out because money arriving needs its own local state — the
+ * landing method — and a `useState` per row cannot live inside a `.map()`.
+ */
+function EntryRow({ entry: e, divided, busy, onApprove, onReject }: {
+  entry: PendingEntry;
+  divided: boolean;
+  busy: boolean;
+  onApprove: (txnId: string, landedPayMethod?: PayMethod) => void;
+  onReject: (entry: PendingEntry) => void;
+}) {
+  const incoming = isIncomingTransfer(e);
+  // Defaulted, not blank: a required question with no default is friction, and
+  // Bank is where a settlement most often lands. Still changeable in one tap.
+  const [landed, setLanded] = useState<PayMethod>(INCOME_LANDING_DEFAULT);
+
+  return (
+    <View>
+      {divided && <Divider indent="text" />}
+      <ListRow
+        icon={e.kind === 'settlement' ? 'repeat' : e.recurFreq ? 'refresh-cw' : 'shopping-bag'}
+        title={describeImpact(e)}
+        subtitle={format(new Date(e.date), 'd MMM')}
+        variant="stacked"
+        chevron={false}
+      />
+
+      {/*
+        Only for money arriving. The sender says how they sent it; only you know
+        where it actually turned up, and the two are routinely different. Asking
+        here is also the moment you would notice it never arrived at all.
+      */}
+      {incoming && (
+        <View style={styles.landing}>
+          <Text style={styles.landingLabel}>Where did it land?</Text>
+          <PayMethodSelector value={landed} onChange={setLanded} options={INCOME_LANDING} />
+        </View>
+      )}
+
+      <View style={styles.decideRow}>
+        <SecondaryButton
+          label={incoming ? 'Never arrived' : 'Not mine'}
+          size="md"
+          danger
+          onPress={() => onReject(e)}
+          disabled={busy}
+          style={styles.decideBtn}
+        />
+        <PrimaryButton
+          label={incoming ? 'Got it' : 'Approve'}
+          onPress={() => onApprove(e.txnId, incoming ? landed : undefined)}
+          loading={busy}
+          style={styles.decideBtn}
+        />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  landing: { paddingHorizontal: space.md, paddingBottom: space.sm },
+  landingLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
   decideRow: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md },
   decideBtn: { flex: 1 },
   trustBtn: { marginTop: space.md },

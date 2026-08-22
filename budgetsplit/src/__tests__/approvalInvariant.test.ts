@@ -69,6 +69,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     why: 'reapDeletedAttachments — file hygiene must see every row, including one whose approval is still pending, or the receipt leaks.',
   },
   {
+    file: 'recurring.ts',
+    contains: 'ORDER BY t.recur_state ASC',
+    why: 'getRecurringForGroup — the group\'s recurring LIST, a ledger view. It shows a peer\'s rule while I am deciding on it, marked pending, exactly as the group ledger shows their one-off. Nothing spends from it; materializeDueOccurrences is the query that spawns money, and that one filters.',
+  },
+  {
     file: 'groups.ts',
     contains: 'attachment_uri IS NOT NULL',
     why: 'Collecting receipt files before deleting a group. Same hygiene reasoning.',
@@ -98,11 +103,14 @@ function classify(file: string, sql: string): Verdict {
   if (/WHERE\s+(?:\w+\.)?id\s*=\s*\?/i.test(flat)) return { ok: true };
   // Cascading deletes must remove pending rows along with everything else.
   if (/DELETE\s+FROM/i.test(flat)) return { ok: true };
-  // Reads recurring RULES, or walks occurrences back to the rule that spawned
-  // them. A peer entry is never a rule and never has a parent — `ingestPeerTxn`
-  // refuses `recur_freq` — so neither shape can see a pending entry.
-  if (/recur_freq\s+IS\s+NOT\s+NULL/i.test(flat)) return { ok: true };
+  // Walks materialized occurrences back to the rule that spawned them. An
+  // occurrence only exists because its rule was already approved.
   if (/parent_recur_id/i.test(flat)) return { ok: true };
+  // NOTE: `recur_freq IS NOT NULL` is deliberately NOT a free pass. It was, while
+  // a peer entry could never be a rule — that stopped being true when peers gained
+  // the ability to send one, and a blanket exemption here would have let a rule I
+  // never accepted spawn real spend every month. Each recurring query now either
+  // carries the filter or earns an allowlist entry.
   // Dynamic WHERE built in code; the fragment is checked separately below.
   if (/\$\{where\}/.test(flat)) return { ok: true };
 

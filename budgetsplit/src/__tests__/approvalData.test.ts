@@ -1,9 +1,9 @@
-import { describeImpact, groupByAuthor, type PendingEntry } from '../lib/approvalData';
+import { describeImpact, groupByAuthor, isIncomingTransfer, type PendingEntry } from '../lib/approvalData';
 
 const base: PendingEntry = {
   txnId: 't1', authorId: 'a', authorName: 'Aarav', groupName: 'Flat',
   category: 'Food', note: null, date: 0, arrivedAt: 100,
-  kind: 'expense', total: 400000, myShare: 100000, myPaid: 0,
+  kind: 'expense', total: 400000, myShare: 100000, myPaid: 0, recurFreq: null,
 };
 
 describe('describeImpact', () => {
@@ -28,7 +28,35 @@ describe('describeImpact', () => {
   });
 
   it('names a transfer as a transfer, not as a category', () => {
-    expect(describeImpact({ ...base, kind: 'settlement' })).toContain('for a transfer in Flat');
+    // Outgoing: they say I paid THEM, so nothing is arriving and it reads like
+    // any other entry.
+    const outgoing = { ...base, kind: 'settlement' as const, myShare: 0, myPaid: 400000 };
+    expect(describeImpact(outgoing)).toContain('for a transfer in Flat');
+  });
+
+  /**
+   * The claim that needs its own sentence. "Aarav added ₹4,000 for a transfer"
+   * reads like a cost; what is actually being asked is whether money reached you
+   * — and approving it erases a real debt.
+   */
+  it('describes money arriving as a claim, and names what approving it costs', () => {
+    const incoming = { ...base, kind: 'settlement' as const, myShare: 400000, total: 400000 };
+    expect(isIncomingTransfer(incoming)).toBe(true);
+    const s = describeImpact(incoming);
+    expect(s).toContain('says they sent you ₹4,000.00');
+    expect(s).toContain('clears ₹4,000.00 of what they owe you');
+  });
+
+  it('is not an arrival when they claim I paid them', () => {
+    // My cash still moves on their say-so, so it still queues — but the question
+    // is "did this happen", not "where did it land".
+    expect(isIncomingTransfer({ ...base, kind: 'settlement', myShare: 0, myPaid: 400000 })).toBe(false);
+  });
+
+  it('says a rule is standing, before it is accepted rather than after', () => {
+    const s = describeImpact({ ...base, recurFreq: 'monthly' });
+    expect(s).toContain('every month');
+    expect(s).toContain('accepts every one of these until you stop it');
   });
 });
 

@@ -10,6 +10,7 @@ import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { ApprovalCard } from '../src/components/finance/approvals/ApprovalCard';
 import { useApprovals } from '../src/hooks/useApprovals';
 import type { PendingEntry } from '../src/lib/approvalData';
+import type { PayMethod } from '../src/constants/enums';
 
 /**
  * Entries other people wrote that are waiting on you.
@@ -58,7 +59,7 @@ export default function ApprovalsScreen() {
                 entries={group.entries}
                 total={group.total}
                 busyId={busyId}
-                onApprove={(txnId: string) => run(txnId, () => approve(txnId))}
+                onApprove={(txnId: string, landed?: PayMethod) => run(txnId, () => approve(txnId, landed))}
                 onReject={(entry: PendingEntry) => run(entry.txnId, () => reject(entry))}
                 onTrust={() => run(group.authorId, () => trustAuthor(group.authorId, group.authorName, group.entries))}
               />

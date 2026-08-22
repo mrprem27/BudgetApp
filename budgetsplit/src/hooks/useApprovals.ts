@@ -8,8 +8,9 @@ import { loadSplitsMany, type Txn } from '../db/queries/transactions';
 import { setTrustState } from '../db/queries/persons';
 import { getAllPersons } from '../db/queries/persons';
 import { getAllGroups } from '../db/queries/groups';
-import { groupByAuthor, type PendingEntry } from '../lib/approvalData';
+import { groupByAuthor, isIncomingTransfer, type PendingEntry } from '../lib/approvalData';
 import { confirmAsync } from '../lib/confirm';
+import type { PayMethod } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 
 /**
@@ -59,6 +60,7 @@ export function useApprovals() {
         total: t.payments.reduce((s, p) => s + p.amount, 0),
         myShare: t.shares.find(s => s.personId === me.id)?.amount ?? 0,
         myPaid: t.payments.find(p => p.personId === me.id)?.amount ?? 0,
+        recurFreq: t.recur_freq,
       }));
       // Keep arrival order; grouping preserves it per author.
       entries.sort((a, b) => a.arrivedAt - b.arrivedAt);
@@ -70,9 +72,12 @@ export function useApprovals() {
   const entries = data?.entries ?? [];
   const byAuthor = useMemo(() => groupByAuthor(entries), [entries]);
 
-  /** Accepting is the ordinary act, so it is not gated behind a dialog. */
-  async function approve(txnId: string) {
-    await approveTxn(db, txnId);
+  /**
+   * Accepting is the ordinary act, so it is not gated behind a dialog — except for
+   * money arriving, where the screen asks where it landed first and passes it here.
+   */
+  async function approve(txnId: string, landedPayMethod?: PayMethod) {
+    await approveTxn(db, txnId, landedPayMethod);
     haptic.success();
     refresh();
   }
@@ -103,12 +108,17 @@ export function useApprovals() {
     const ok = await confirmAsync(
       `Trust ${name}?`,
       `Anything ${name} adds in a shared group will count straight away, without waiting for you. `
-      + `The ${pending.length} entr${pending.length === 1 ? 'y' : 'ies'} waiting now will be accepted too.`,
+      + `Money they say they have sent you still has to be confirmed each time.`,
       'Trust',
     );
     if (!ok) return;
     await setTrustState(db, authorId, 'trusted');
-    for (const e of pending) await approveTxn(db, e.txnId);
+    // Trust does not clear money ARRIVING. "Did it reach me, and where" is not a
+    // question about honesty, and those entries stay in the queue to be confirmed
+    // one at a time. See `requiresMyApproval`.
+    for (const e of pending) {
+      if (!isIncomingTransfer(e)) await approveTxn(db, e.txnId);
+    }
     haptic.success();
     refresh();
   }

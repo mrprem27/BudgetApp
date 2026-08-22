@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
@@ -23,9 +24,11 @@ export async function getRecurringForGroup(
   groupId: string,
 ): Promise<TxnWithSplits[]> {
   const rows = await db.getAllAsync<Txn>(
-    `SELECT * FROM txn
-     WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NOT NULL
-     ORDER BY recur_state ASC, date DESC`,
+    // The group's recurring list is a LEDGER view — it shows a peer's rule while I
+    // am deciding, marked, the same way the group ledger shows their one-off.
+    `SELECT t.*, ${AWAITING_APPROVAL_COL} FROM txn t
+     WHERE t.group_id = ? AND t.is_deleted = 0 AND t.recur_freq IS NOT NULL
+     ORDER BY t.recur_state ASC, t.date DESC`,
     [groupId],
   );
   return loadSplitsMany(db, rows);
@@ -208,7 +211,13 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
   const now = Date.now();
   const horizonStart = now - MATERIALIZE_HORIZON_MS;
   const templates = await db.getAllAsync<Txn>(
-    `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
+    // A rule still waiting on me spawns NOTHING. Approving a peer's rule is
+    // approving indefinite future spending, so until I have, it must not quietly
+    // start posting occurrences — which would be the loudest possible version of
+    // the thing this model exists to stop.
+    `SELECT t.* FROM txn t
+      WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
+        AND ${NOT_AWAITING_APPROVAL}`,
   );
   if (templates.length === 0) return 0;
 

@@ -1,8 +1,10 @@
 import { ingestPeerTxn } from '../db/queries/peerIngest';
-import { approveTxn, rejectTxn, getPendingApprovalCount } from '../db/queries/approval';
+import { approveTxn, rejectTxn, getPendingApprovalCount, getPendingApprovals, getApproval } from '../db/queries/approval';
 import { getMyExposure } from '../db/queries/balances';
 import { getCashPosition, proposeOverspendRaid } from '../db/queries/savings';
-import { getTransactionsForGroup, getLedgerStats, updateTxn } from '../db/queries/transactions';
+import { getTransactionsForGroup, getLedgerStats, updateTxn, getActiveRecurringRules } from '../db/queries/transactions';
+import { materializeDueOccurrences } from '../db/queries/recurring';
+import { PayMethod } from '../constants/enums';
 import { getMyGlobalBudgetSummary } from '../lib/budget';
 import { createTestDb, addPerson, addGroup, addMember, addCategory, setCategoryBudget, asDb, type TestDb } from './helpers/testDb';
 
@@ -240,5 +242,117 @@ describe('what ingestion refuses', () => {
     addPerson(db, 'Me again', true);
     const r = await ingestPeerTxn(asDb(db), envelope(flat, me, aarav));
     expect(r).toEqual({ ok: false, reason: 'ambiguous-me' });
+  });
+});
+
+describe('a transfer is confirmed, not trusted', () => {
+  /**
+   * The sharpest claim in the app. "I paid you ₹4,000" credits cash you may never
+   * have received AND erases a real debt, in one write. Trust answers "is this
+   * person honest"; it cannot answer "did the transfer actually land", which fails
+   * for reasons neither person controls.
+   */
+  it('still waits even when the sender is trusted', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    const before = await snapshot(db, me);
+
+    const res = await ingestPeerTxn(asDb(db), {
+      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      date: Date.now(), category: 'Settlement',
+      payments: [{ personId: aarav, amount: BILL }],
+      shares: [{ personId: me, amount: BILL }],
+    });
+    expect(res).toMatchObject({ ok: true, applied: false });
+    expect(await snapshot(db, me)).toEqual(before);
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+  });
+
+  it('records where it actually landed, not where they said they sent it', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    const res = await ingestPeerTxn(asDb(db), {
+      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      date: Date.now(), category: 'Settlement',
+      payMethod: 'upi',            // how they sent it
+      payments: [{ personId: aarav, amount: BILL }],
+      shares: [{ personId: me, amount: BILL }],
+    });
+    if (!res.ok) throw new Error(res.reason);
+
+    await approveTxn(asDb(db), res.txnId, PayMethod.Bank);   // where it arrived
+
+    const approval = await getApproval(asDb(db), res.txnId);
+    expect(approval?.landed_pay_method).toBe('bank');
+    // Applied to the entry too, so the ledger acts on my side's truth.
+    const row = await db.getFirstAsync<{ pay_method: string }>(
+      'SELECT pay_method FROM txn WHERE id = ?', [res.txnId],
+    );
+    expect(row?.pay_method).toBe('bank');
+  });
+
+  it('is not swept up by trusting the author', async () => {
+    // Trusting someone clears their expenses. It must not clear their claim that
+    // they have paid you — that is the one thing trust cannot answer.
+    const { db, me, aarav, flat } = await setup();
+    await ingestPeerTxn(asDb(db), envelope(flat, me, aarav));           // an expense
+    await ingestPeerTxn(asDb(db), {                                     // and an arrival
+      authorUid: 'acct-aarav', groupId: flat, kind: 'settlement',
+      date: Date.now(), category: 'Settlement',
+      payments: [{ personId: aarav, amount: BILL }],
+      shares: [{ personId: me, amount: BILL }],
+    });
+    expect(await getPendingApprovalCount(asDb(db))).toBe(2);
+
+    // What `trustAuthor` does: flip the state, then approve everything except
+    // money arriving.
+    await db.runAsync("UPDATE person SET trust_state = 'trusted' WHERE id = ?", [aarav]);
+    const pending = await getPendingApprovals(asDb(db));
+    for (const a of pending) {
+      const t = await db.getFirstAsync<{ kind: string }>('SELECT kind FROM txn WHERE id = ?', [a.txn_id]);
+      if (t?.kind !== 'settlement') await approveTxn(asDb(db), a.txn_id);
+    }
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+  });
+});
+
+describe('a peer recurring rule', () => {
+  const rule = (flat: string, me: string, aarav: string) => ({
+    ...envelope(flat, me, aarav),
+    recurFreq: 'monthly',
+    date: Date.now() - 90 * 86400000,   // started three months ago
+  });
+
+  /**
+   * The loudest possible version of the thing this model exists to stop: a rule
+   * nobody accepted, quietly posting an occurrence every month.
+   */
+  it('spawns nothing at all while it waits', async () => {
+    const { db, me, aarav, flat } = await setup();
+    const before = await snapshot(db, me);
+    const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    expect(res).toMatchObject({ ok: true, applied: false });
+
+    const made = await materializeDueOccurrences(asDb(db));
+    expect(made).toBe(0);
+    expect(await snapshot(db, me)).toEqual(before);
+  });
+
+  it('starts posting once the rule itself is approved', async () => {
+    const { db, me, aarav, flat } = await setup();
+    const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    if (!res.ok) throw new Error(res.reason);
+    await approveTxn(asDb(db), res.txnId);
+
+    expect(await materializeDueOccurrences(asDb(db))).toBeGreaterThan(0);
+    // Occurrences of an approved rule need no further approval — that is the
+    // whole point of approving the rule rather than each month.
+    expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+  });
+
+  it('is not announced as a committed bill while it waits', async () => {
+    // "Coming up", reminders and the forecast all read getActiveRecurringRules.
+    // A rule I have not accepted is a proposal, not a bill.
+    const { db, me, aarav, flat } = await setup();
+    await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    expect(await getActiveRecurringRules(asDb(db))).toHaveLength(0);
   });
 });

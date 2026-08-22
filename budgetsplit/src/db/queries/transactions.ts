@@ -646,10 +646,19 @@ export async function setTxnAttachment(
   await db.runAsync('UPDATE txn SET attachment_uri=?, updated_at=? WHERE id=?', [uri, Date.now(), txnId]);
 }
 
-/** Active recurring rules across all groups, with their splits — for reminders. */
+/**
+ * Active recurring rules across all groups, with their splits — for reminders,
+ * "Coming up" and the month-end forecast.
+ *
+ * Filtered: a rule I have not accepted must not be announced as a committed bill,
+ * counted against Safe-to-Spend, or turned into a reminder. Approving a peer's
+ * rule is approving indefinite future spending, and until I have, it is a proposal.
+ */
 export async function getActiveRecurringRules(db: SQLite.SQLiteDatabase): Promise<TxnWithSplits[]> {
   const rows = await db.getAllAsync<Txn>(
-    `SELECT * FROM txn WHERE recur_freq IS NOT NULL AND is_deleted = 0 AND recur_state = 'active'`,
+    `SELECT t.* FROM txn t
+      WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
+        AND ${NOT_AWAITING_APPROVAL}`,
   );
   return loadSplitsMany(db, rows);
 }

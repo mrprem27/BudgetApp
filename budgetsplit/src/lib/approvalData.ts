@@ -17,7 +17,21 @@ export type PendingEntry = {
   myShare: number;
   /** What it claims I paid — the number that could drain my cash. */
   myPaid: number;
+  /** A recurring RULE, not a one-off. Approving it approves everything it spawns. */
+  recurFreq: string | null;
 };
+
+/**
+ * Money arriving on someone else's say-so.
+ *
+ * This is the claim that needs a different question from every other kind: not
+ * "do I accept this cost" but "did this actually reach me, and where". It credits
+ * cash and erases a real debt in one write, so approving it blind is how a
+ * receivable quietly disappears.
+ */
+export function isIncomingTransfer(e: PendingEntry): boolean {
+  return e.kind === 'settlement' && e.myShare > 0;
+}
 
 /**
  * What this entry would do to me, in one sentence.
@@ -29,8 +43,16 @@ export type PendingEntry = {
  * Pure and testable: no React, no db, no formatting decisions in the screen.
  */
 export function describeImpact(e: PendingEntry): string {
+  // Money coming to me is described as a claim, not as an event, because that is
+  // exactly what is in question.
+  if (isIncomingTransfer(e)) {
+    return `${e.authorName} says they sent you ${formatRupees(e.myShare)} in ${e.groupName}. `
+      + `Approving it clears ${formatRupees(e.myShare)} of what they owe you.`;
+  }
+
   const what = e.kind === 'settlement' ? 'a transfer' : e.category.toLowerCase();
-  const parts: string[] = [`${e.authorName} added ${formatRupees(e.total)} for ${what} in ${e.groupName}`];
+  const every = e.recurFreq ? `, every ${e.recurFreq.replace(/ly$/, '')}` : '';
+  const parts: string[] = [`${e.authorName} added ${formatRupees(e.total)} for ${what} in ${e.groupName}${every}`];
 
   if (e.myShare > 0) parts.push(`Your share would be ${formatRupees(e.myShare)}`);
   else parts.push('None of it is yours');
@@ -38,6 +60,10 @@ export function describeImpact(e: PendingEntry): string {
   // The claim worth reading twice. Someone else saying you paid is the only shape
   // that can take money out of your cash position, so it is never left implicit.
   if (e.myPaid > 0) parts.push(`and it says you paid ${formatRupees(e.myPaid)}`);
+
+  // A rule is not one cost, it is a standing one. Say so before it is accepted,
+  // not after the third month.
+  if (e.recurFreq) parts.push('Approving it accepts every one of these until you stop it');
 
   return `${parts.join('. ')}.`;
 }
