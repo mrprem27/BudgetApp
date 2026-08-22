@@ -28,6 +28,17 @@ export type CashPosition = {
   /** Card spend since the money profile was last confirmed — debt, not cash out.
    *  Optional so an older/partial CashPosition still type-checks. */
   cardSpend?: number;
+  /**
+   * Where the money sits. Optional because only the SQL path fills it — the JS
+   * reducer is a parity oracle for `available` and has no bucket dimension.
+   *
+   * These do NOT sum to `available`: savings are held back from the total and are
+   * not yet attributable to a bucket (that arrives with the sweep), and
+   * `unattributed` sits outside them by design.
+   */
+  byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
+  /** Movement on entries whose pay method was never recorded. Real, unassigned. */
+  unattributed?: number;
 };
 
 /** The four running sums computeCash accumulates — also what the aggregated SQL

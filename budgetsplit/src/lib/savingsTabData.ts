@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { getGoals, getGoalSavedMap, getTotalMoney } from '../db/queries/savings';
+import { getGoals, getGoalSavedMap, getTotalMoney, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
@@ -27,9 +27,12 @@ export async function loadSavingsTabData(
   /** Injected for determinism, same contract as the other loaders. */
   now: Date = new Date(),
 ) {
-  const [goals, saved, money, profile, grps, me] = await Promise.all([
+  const [goals, saved, money, profile, grps, me, cashPos] = await Promise.all([
     getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db),
     getAllGroups(db), getMe(db),
+    // Same underlying figures as `getTotalMoney`, but carrying the per-bucket
+    // detail. Only this screen needs it, which is why it is not on `TotalMoney`.
+    getCashPosition(db),
   ]);
   const meId = me?.id ?? '';
 
@@ -67,5 +70,5 @@ export async function loadSavingsTabData(
   // `monthSpend` is returned as well as consumed: it is the basis half of the
   // forecast-vs-budget comparison, and a forecast is null before day 3, so this is
   // the only way to assert that both halves are my share.
-  return { goals, saved, money, profile, monthSpend: totalMonthSpend, forecastMonthEnd, forecastBudget, upcoming };
+  return { goals, saved, money, profile, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, monthSpend: totalMonthSpend, forecastMonthEnd, forecastBudget, upcoming };
 }

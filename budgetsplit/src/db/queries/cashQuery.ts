@@ -60,3 +60,52 @@ export const CASH_TOTALS_SQL = `
   WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ?
     AND ${NOT_AWAITING_APPROVAL}
 `;
+
+/**
+ * Net movement per bucket — bank, cash, wallet — since the opening balances.
+ *
+ * A **separate** statement rather than more columns on `CASH_TOTALS_SQL`, on
+ * purpose. That one is pinned byte-for-byte against the JS reducer by
+ * `cashSql.test.ts` and read by Safe-to-Spend, the raid, afford and the health
+ * score; reshaping it to carry three more dimensions would put all of that at risk
+ * for a figure only two screens need. This adds detail beside it and changes
+ * nothing about it.
+ *
+ * The bucket mapping mirrors `assetOf` in `constants/enums.ts` — that file owns
+ * the policy (why `upi` and `autopay` read as bank), this is the same rule in SQL
+ * because this module stays import-free so it can be tested against a real engine.
+ * If one changes, change both; `bucketFlows.test.ts` fails when they disagree.
+ *
+ * **`NULL` groups to `NULL` and is deliberately not a bucket.** `txn.pay_method`
+ * is nullable and real rows have it, where it has only ever meant "not card".
+ * Forcing those into bank would silently drain that bucket for every legacy row
+ * while the total stayed correct — wrong in the way nothing looks broken. They
+ * come back as an unattributed row, counted in the total and attributed nowhere.
+ *
+ * Card is absent for the same reason it is absent from `available`: putting a
+ * purchase on a card moves no money out of any bucket, it creates debt.
+ */
+export const BUCKET_FLOWS_SQL = `
+  SELECT
+    CASE
+      WHEN t.pay_method = 'cash'   THEN 'cash'
+      WHEN t.pay_method = 'wallet' THEN 'wallet'
+      WHEN t.pay_method IN ('bank', 'upi', 'autopay') THEN 'bank'
+      ELSE NULL
+    END AS bucket,
+    COALESCE(SUM(
+      CASE
+        WHEN t.kind = 'income'     THEN  COALESCE(mp.amt, 0)
+        WHEN t.kind = 'expense'    THEN -COALESCE(mp.amt, 0)
+        WHEN t.kind = 'settlement' THEN  COALESCE(ms.amt, 0) - COALESCE(mp.amt, 0)
+        ELSE 0
+      END
+    ), 0) AS delta
+  FROM txn t
+  LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
+  LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_share   WHERE person_id = ? GROUP BY txn_id) ms ON ms.txn_id = t.id
+  WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ?
+    AND (t.pay_method IS NULL OR t.pay_method <> 'card')
+    AND ${NOT_AWAITING_APPROVAL}
+  GROUP BY bucket
+`;

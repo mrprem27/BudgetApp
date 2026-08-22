@@ -28,7 +28,16 @@ const MONTH = 30 * 24 * 60 * 60 * 1000;
  * figures with no bank feed, so a staleness badge is the difference between an
  * honest snapshot and a confident-looking number nobody's touched in months.
  */
-export function TotalMoneyCard({ money, updatedAt, onEdit, onPayCardBill }: { money: TotalMoney; updatedAt?: number | null; onEdit: () => void; onPayCardBill?: () => void }) {
+export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill }: {
+  money: TotalMoney;
+  /** Per-bucket balances from `getCashPosition`. Absent until it has loaded. */
+  byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
+  /** Movement on entries with no recorded pay method — shown, never folded in. */
+  unattributed?: number;
+  updatedAt?: number | null;
+  onEdit: () => void;
+  onPayCardBill?: () => void;
+}) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
   // <7d: no badge (don't clutter a freshly-edited card). 7-30d: neutral. >30d
@@ -56,6 +65,26 @@ export function TotalMoneyCard({ money, updatedAt, onEdit, onPayCardBill }: { mo
       {/* Net worth — what you own minus what you owe. */}
       <Row label="Net worth" value={formatCompact(money.netWorth)} strong />
       <SubRow label="Cash" value={formatCompact(money.cashAvailable)} valueColor={negativeCash ? colors.expense : colors.textSecondary} />
+      {/*
+        Where that cash sits, when we know. Nested under Cash rather than replacing
+        it: the hero stays one number (§1), and these are a breakdown of the row
+        above, not four competing figures.
+
+        `unattributed` is shown, not hidden. It is movement on entries whose pay
+        method was never recorded — real money we decline to assign rather than
+        guessing and quietly draining a bucket. Hiding it would make the three
+        buckets look like they should add up to Cash when they do not.
+      */}
+      {byBucket && (
+        <>
+          <SubRow label="  in bank" value={formatCompact(byBucket.bank)} />
+          <SubRow label="  in cash" value={formatCompact(byBucket.cash)} />
+          <SubRow label="  in wallet" value={formatCompact(byBucket.wallet)} />
+          {!!unattributed && (
+            <SubRow label="  not recorded where" value={formatCompact(unattributed)} />
+          )}
+        </>
+      )}
       <SubRow label="Investments" value={formatCompact(money.investments)} />
       {money.creditUsed > 0 && <SubRow label="Credit used" value={`−${formatCompact(money.creditUsed)}`} valueColor={colors.expense} />}
 

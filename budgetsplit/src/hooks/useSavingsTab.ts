@@ -62,6 +62,8 @@ export function useSavingsTab() {
   const goals = data?.goals ?? [];
   const saved = data?.saved ?? {};
   const money = data?.money ?? null;
+  const byBucket = data?.byBucket;
+  const unattributed = data?.unattributed ?? 0;
   const profile = data?.profile ?? { openingCash: 0, openingBank: 0, openingWallet: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
   const forecastMonthEnd = data?.forecastMonthEnd ?? null;
   const forecastBudget = data?.forecastBudget ?? 0;
@@ -192,6 +194,7 @@ export function useSavingsTab() {
   }
 
   return {
+    byBucket, unattributed,
     // data
     goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,

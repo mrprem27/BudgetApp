@@ -6,7 +6,8 @@ import { generateInsights, type Insight, type CategorySpend } from '../../lib/sa
 import { cashPositionFromTotals, computeTotalMoney, openingTotal, type CashPosition, type CashTotals, type TotalMoney } from '../../lib/cash';
 import { computeSafeToSpend, type SafeToSpend } from '../../lib/safeToSpend';
 import { getSafeToSpend } from './spendPower';
-import { CASH_TOTALS_SQL } from './cashQuery';
+import { CASH_TOTALS_SQL, BUCKET_FLOWS_SQL } from './cashQuery';
+import type { AssetBucket } from '../../constants/enums';
 import { getMoneyProfile } from './moneyProfile';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getMe } from './persons';
@@ -429,7 +430,27 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
   const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };
   // The SUM, not one bucket — see `openingTotal`. This is the line that keeps
   // every downstream figure identical across the bucket split.
-  return cashPositionFromTotals(totals, savedTotal, openingTotal(profile));
+  const pos = cashPositionFromTotals(totals, savedTotal, openingTotal(profile));
+
+  /*
+   * Where that money actually sits. Additive detail: `available` above is
+   * untouched, and every analytical consumer keeps reading it.
+   *
+   * `unattributed` is the honest remainder — movement on entries whose pay method
+   * was never recorded. It is real money, counted in the total, that we decline to
+   * assign to a bucket rather than guessing and quietly draining one.
+   */
+  const flows = await db.getAllAsync<{ bucket: string | null; delta: number }>(
+    BUCKET_FLOWS_SQL, [me.id, me.id, Date.now()],
+  );
+  const flowOf = (b: AssetBucket) => flows.find(f => f.bucket === b)?.delta ?? 0;
+  pos.byBucket = {
+    bank:   profile.openingBank   + flowOf('bank'),
+    cash:   profile.openingCash   + flowOf('cash'),
+    wallet: profile.openingWallet + flowOf('wallet'),
+  };
+  pos.unattributed = flows.find(f => f.bucket === null)?.delta ?? 0;
+  return pos;
 }
 
 /** The single "Total Money" figure + breakdown for the Plan screen. */
