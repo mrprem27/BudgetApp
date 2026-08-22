@@ -22,8 +22,6 @@ import type { BudgetAnalytics } from '../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../src/lib/budget';
 import { formatCompact } from '../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../src/lib/reportExport';
-import { settings } from '../src/lib/settings';
-import { rescheduleReminders } from '../src/lib/reminders';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { AmountText } from '../src/components/ui/AmountText';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
@@ -85,14 +83,15 @@ export default function ReportsScreen() {
   const isCurrentMonth = format(month, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
   const canGoNext = !isCurrentMonth;
 
-  // A real export resets the monthly "back up your data" nudge's clock — no
-  // point nagging someone right after they just backed up.
-  function markBackedUp() {
-    settings.setBackupAnchorAt(Date.now())
-      .then(() => rescheduleReminders(db))
-      .catch(() => {});
-  }
-
+  /*
+   * A CSV or PDF export deliberately does NOT touch the backup nudge's clock.
+   *
+   * It used to. That silenced "back up your data" for a month on the strength of
+   * an export that cannot be restored — so the one nudge standing between a user
+   * and losing everything was switched off by an action that saved nothing
+   * recoverable. A report is for reading; a backup is for restoring. Only
+   * Settings → Backup resets the anchor.
+   */
   async function exportCSV() {
     setExporting(true);
     try {
@@ -101,7 +100,6 @@ export default function ReportsScreen() {
       const file = new File(Paths.cache, fileName);
       file.create({ overwrite: true });
       file.write(csv);
-      markBackedUp();
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The CSV was saved to:\n${file.uri}`);
         return;
@@ -120,7 +118,6 @@ export default function ReportsScreen() {
     try {
       const html = await buildReportHtml(db, summaries, month);
       const { uri } = await Print.printToFileAsync({ html });
-      markBackedUp();
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The PDF was saved to:\n${uri}`);
         return;

@@ -13,6 +13,14 @@ type Props = {
   mode: 'create' | 'restore';
   onSubmit: (passphrase: string) => void;
   submitting?: boolean;
+  /**
+   * 0-100 while the key is being derived, or null when there is nothing to say.
+   *
+   * Unlocking a backup is 50,000 PBKDF2 rounds — most of a second on a phone, and
+   * the only part of a restore with a visible wait. A bare spinner cannot tell
+   * someone whether to wait or force-quit; a number that moves can.
+   */
+  progress?: number | null;
   /** Set after a failed restore attempt (e.g. wrong passphrase) — shown inline
    *  so a retry doesn't stack an Alert on top of this sheet. */
   error?: string | null;
@@ -25,7 +33,7 @@ type Props = {
  * that it's never stored and can't be recovered if forgotten.
  * `mode: 'restore'` — enter the passphrase for a picked backup file.
  */
-export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, error, extra }: Props) {
+export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, progress, error, extra }: Props) {
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
 
@@ -88,10 +96,10 @@ export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, 
         </>
       )}
       <PrimaryButton
-        label={mode === 'create' ? 'Continue' : 'Unlock'}
+        label={submitting && progress != null ? `Unlocking… ${progress}%` : mode === 'create' ? 'Continue' : 'Unlock'}
         onPress={() => onSubmit(pass)}
         disabled={!canSubmit || submitting}
-        loading={submitting}
+        loading={submitting && progress == null}
         style={styles.button}
       />
     </SheetModal>

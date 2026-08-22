@@ -2,7 +2,8 @@ jest.mock('expo-file-system', () => require('./__mocks__/expoFileSystem'));
 
 import type * as SQLite from 'expo-sqlite';
 import { createTestDb, addPerson, addGroup, addMember, addSimpleExpense, addCategory, type TestDb } from './helpers/testDb';
-import { readAllTables, restoreAllTables } from '../db/queries/backup';
+import { File, Directory, Paths } from 'expo-file-system';
+import { readAllTables, restoreAllTables, reapUnreferencedPhotos } from '../db/queries/backup';
 import { BACKUP_TABLES, type BackupTables } from '../lib/backup';
 
 const asDb = (db: TestDb) => db as unknown as SQLite.SQLiteDatabase;
@@ -65,6 +66,36 @@ describe('readAllTables / restoreAllTables', () => {
     const groups = await db.getAllAsync('SELECT * FROM budget_group');
     expect(persons).toHaveLength(0);
     expect(groups).toHaveLength(0);
+  });
+
+  /**
+   * The outbox is deliberately NOT backed up — it is a delivery queue, not user
+   * data — but it must still be cleared, and that half was missing.
+   *
+   * `sync_outbox.entry_id REFERENCES txn(id)`, and a restore deletes every txn.
+   * Left behind, every row points at an id that no longer exists: the Sync screen
+   * counts changes "waiting to go up" that cannot be read, and the drain walks
+   * rows whose entries are gone. It is also the one table `restoreAllTables` never
+   * touched, so nothing else would have caught it.
+   */
+  it('clears the sync outbox, so no queued row survives pointing at a deleted txn', async () => {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const group = addGroup(db, 'Roommates');
+    addMember(db, group, me);
+    addCategory(db, 'Groceries');
+    const txnId = addSimpleExpense(db, {
+      groupId: group, personId: me, amount: 50000, date: Date.now(), category: 'Groceries',
+    });
+    await db.runAsync(
+      'INSERT INTO sync_outbox (entry_id, group_id, queued_at) VALUES (?, ?, ?)',
+      [txnId, group, Date.now()],
+    );
+
+    await restoreAllTables(asDb(db), emptyTables());
+
+    const left = await db.getAllAsync('SELECT * FROM sync_outbox');
+    expect(left).toHaveLength(0);
   });
 
   it('leaves foreign_keys back ON after restoring, even though it was toggled off mid-operation', async () => {
@@ -143,5 +174,75 @@ describe('restore preserves decisions, not just rows', () => {
       "SELECT value FROM settings WHERE key = 'fix_income_category_kind_v1'",
     );
     expect(marker?.value).toBe('1');
+  });
+});
+
+/**
+ * Files on disk that nothing points at any more.
+ *
+ * The ordinary reaper is ROW-driven: it finds soft-deleted transactions and
+ * unlinks their receipts. A restore hard-deletes every old row, so the previous
+ * install's photos end up with no row at all — invisible to that reaper forever,
+ * and still counted on the storage screen. This one goes the other way: list what
+ * is on disk, subtract what the database names, delete the rest.
+ */
+describe('reapUnreferencedPhotos', () => {
+  it('keeps a file a row still points at, and removes one nothing does', async () => {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const group = addGroup(db, 'Flat');
+    addMember(db, group, me);
+    addCategory(db, 'Food');
+    const kept = addSimpleExpense(db, {
+      groupId: group, personId: me, amount: 100, date: Date.now(), category: 'Food',
+    });
+    await db.runAsync('UPDATE txn SET attachment_uri = ? WHERE id = ?',
+      ['file:///doc/attachments/keep.jpg', kept]);
+
+    const dir = new Directory(Paths.document, 'attachments');
+    dir.create({ intermediates: true, idempotent: true });
+    for (const name of ['keep.jpg', 'orphan.jpg']) {
+      const f = new File(dir, name);
+      f.create({ overwrite: true });
+      f.write('x');
+    }
+
+    const removed = await reapUnreferencedPhotos(asDb(db));
+    expect(removed).toBe(1);
+    expect(new File(dir, 'keep.jpg').exists).toBe(true);
+    expect(new File(dir, 'orphan.jpg').exists).toBe(false);
+  });
+
+  /**
+   * A receipt on a PENDING entry must survive. Its row exists and the entry is one
+   * approval away from counting — deleting the photo because the entry is not
+   * mine yet would destroy it exactly when it is about to be needed. This is why
+   * the query is on the approval invariant's allowlist rather than carrying the
+   * usual filter.
+   */
+  it('keeps the receipt of an entry that is still awaiting approval', async () => {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const group = addGroup(db, 'Flat');
+    addMember(db, group, me);
+    addCategory(db, 'Food');
+    const pending = addSimpleExpense(db, {
+      groupId: group, personId: me, amount: 100, date: Date.now(), category: 'Food',
+    });
+    await db.runAsync('UPDATE txn SET attachment_uri = ? WHERE id = ?',
+      ['file:///doc/attachments/pending.jpg', pending]);
+    await db.runAsync(
+      `INSERT INTO txn_approval (txn_id, state, created_at) VALUES (?, 'pending', ?)`,
+      [pending, Date.now()],
+    );
+
+    const dir = new Directory(Paths.document, 'attachments');
+    dir.create({ intermediates: true, idempotent: true });
+    const f = new File(dir, 'pending.jpg');
+    f.create({ overwrite: true });
+    f.write('x');
+
+    await reapUnreferencedPhotos(asDb(db));
+    expect(f.exists).toBe(true);
   });
 });

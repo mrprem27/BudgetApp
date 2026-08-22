@@ -84,7 +84,11 @@ export async function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<vo
     const fireAt = atTimeOfDay(nextMonthlyAnchor(anchor, now), DEFAULT_BACKUP_TIME);
     await scheduleReminderAt(
       'backup_nudge', new Date(fireAt), 'Back up your data',
-      'There’s no cloud sync — export a CSV/PDF from Reports so nothing is lost if you lose this phone.',
+      // Points at the backup that can actually be RESTORED. This used to send
+      // people to Reports for a CSV, which is an export and not a backup: it
+      // cannot be restored, so someone who followed the advice and then lost the
+      // phone had a spreadsheet and no ledger.
+      'Settings → Backup makes an encrypted copy you can restore if you lose this phone.',
     );
   }
 }

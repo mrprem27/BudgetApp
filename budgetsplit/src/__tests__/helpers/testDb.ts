@@ -23,6 +23,7 @@ export type TestDb = {
   runAsync(sql: string, params?: unknown[]): Promise<void>;
   execAsync(sql: string): Promise<void>;
   withTransactionAsync(fn: () => Promise<void>): Promise<void>;
+  withExclusiveTransactionAsync(fn: () => Promise<void>): Promise<void>;
   /** Escape hatch for fixture setup. */
   raw: DatabaseSync;
 };
@@ -65,6 +66,21 @@ export function createTestDb(): TestDb {
     },
     async withTransactionAsync(fn: () => Promise<void>) {
       db.exec('BEGIN');
+      try {
+        await fn();
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    },
+    /**
+     * Restore takes the connection exclusively rather than sharing it. Modelled
+     * with a real `BEGIN EXCLUSIVE` so the harness fails the same way the device
+     * would if something ever tried to nest one.
+     */
+    async withExclusiveTransactionAsync(fn: () => Promise<void>) {
+      db.exec('BEGIN EXCLUSIVE');
       try {
         await fn();
         db.exec('COMMIT');

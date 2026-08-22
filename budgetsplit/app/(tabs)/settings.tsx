@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
+import { reconciledBackupAt } from '../../src/lib/backupStatus';
 import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
 import { formatAgoCompact } from '../../src/lib/time';
@@ -144,7 +145,7 @@ export default function SettingsScreen() {
       // `lastBackupAt`, not the reminder anchor: turning the backup *reminder* on
       // writes the anchor, so this row used to read "Backed up just now" to someone
       // who had never backed up at all.
-      setBackupAt(await settings.lastBackupAt());
+      setBackupAt(await reconciledBackupAt());
       // Narrowed, not cast: a database written before `once` was removed still
       // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
@@ -423,6 +424,13 @@ export default function SettingsScreen() {
         />
         <View style={settingsRowDivider} />
         <SettingsRow
+          icon="refresh-cw"
+          label="Sync"
+          value={serverSessionConfigured ? undefined : 'Not available'}
+          onPress={() => { router.push('/settings/sync'); }}
+        />
+        <View style={settingsRowDivider} />
+        <SettingsRow
           icon="hard-drive"
           label="Storage"
           value={storageLabel}
@@ -467,7 +475,7 @@ export default function SettingsScreen() {
           accessibilityLabel="App version"
         >
           <Text style={styles.aboutText}>BudgetSplit v2.0</Text>
-          <Text style={styles.aboutSub}>No bank login · No accounts · No tracking</Text>
+          <Text style={styles.aboutSub}>No bank login · No tracking · Sign-in optional</Text>
           <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
           {DEV_TOOLS_ENABLED && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
         </TouchableOpacity>

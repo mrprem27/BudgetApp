@@ -31,6 +31,7 @@ import { StoreHydrator } from '../src/components/system/StoreHydrator';
 import { ToastProvider } from '../src/components/system/Toast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { isRestoring } from '../src/lib/restoreGuard';
 
 // Soft-deleted transactions older than this have long outlived the ~5s Undo
 // toast — their receipt photo is never coming back, so the reaper unlinks it.
@@ -89,7 +90,19 @@ export default function RootLayout() {
     // Also catch up when the app returns to the foreground (e.g. left open
     // overnight, then reopened the next day).
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && dbRef) {
+      /*
+       * Skipped entirely while a restore is running.
+       *
+       * These four run on a DIFFERENT connection from the one the restore holds
+       * exclusively, so its transaction does not protect them — and a restore is
+       * started from a document picker or share sheet, both of which background
+       * the app, so coming back from one fires this handler at exactly the wrong
+       * moment. Writing into a half-wiped database, or taking the WAL write lock
+       * and failing the restore, are both live outcomes.
+       *
+       * Nothing is lost by skipping: the next foreground picks it all up.
+       */
+      if (state === 'active' && dbRef && !isRestoring()) {
         materializeDueOccurrences(dbRef).catch(() => {});
         runSavingsMaintenance(dbRef)
           .then((raid) => { if (raid.total > 0) return setPendingOverspendNotice(raid); })

@@ -63,7 +63,35 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
   // outside one — matches the existing precedent in seedDemo.ts's wipeAllData.
   await db.execAsync('PRAGMA foreign_keys=OFF;');
   try {
-    await db.withTransactionAsync(async () => {
+    /*
+     * EXCLUSIVE, not the default deferred transaction.
+     *
+     * `withTransactionAsync` lets other async queries on the same connection
+     * interleave — which for a wipe-and-replace means a screen's loader can read
+     * a half-empty database and render it as fact, or a write can land between the
+     * DELETE and the INSERT and be destroyed by neither.
+     *
+     * This is the one operation in the app where that matters enough to take the
+     * whole connection: everything else is additive.
+     */
+    await db.withExclusiveTransactionAsync(async () => {
+      /*
+       * The outbox is not in BACKUP_TABLES — it is this device's delivery queue,
+       * not user data — but it still has to be CLEARED here, and that half was
+       * missing.
+       *
+       * `sync_outbox.entry_id REFERENCES txn(id)`, and every txn is about to be
+       * deleted. Leaving the queue behind points every row at an id that no longer
+       * exists: the Sync screen counts changes "waiting to go up" that cannot be
+       * read, and the first drain walks rows whose entries are gone.
+       *
+       * Dropped rather than re-queued deliberately. A restore is refused while
+       * sync is on (F9), so nothing is in flight; re-queueing would instead mean
+       * pushing a restored snapshot at the group. Reconciliation is the sync
+       * engine's job when sync is next turned on, from what is actually here.
+       */
+      await db.runAsync('DELETE FROM sync_outbox');
+
       for (const name of [...BACKUP_TABLES].reverse()) {
         if (name === 'settings') {
           // Everything EXCEPT this device's own migration markers. Wiping those
@@ -169,4 +197,48 @@ export async function restorePhotoFiles(
     }
   }
   return rewritePhotoUris(tables, uri => written.get(uri) ?? null);
+}
+
+/**
+ * Delete photo files that nothing in the database points at any more.
+ *
+ * The existing reaper is **row-driven**: it looks for soft-deleted transactions
+ * and unlinks their receipts. That cannot see the case a restore creates, because
+ * a restore HARD-deletes every old row — so the previous install's receipts and
+ * avatars are left on disk with nothing referencing them, invisible to the reaper
+ * forever and still counted on the storage screen.
+ *
+ * This one is file-driven: list what is on disk, subtract what the database
+ * names, delete the rest. That is the only direction that can find a file whose
+ * row is already gone.
+ *
+ * Deliberately run AFTER the restore transaction commits. Running it before would
+ * mean deciding what is unreferenced from a database that is about to be
+ * replaced — which would delete exactly the files the restore is about to need.
+ */
+export async function reapUnreferencedPhotos(db: SQLite.SQLiteDatabase): Promise<number> {
+  const rows = await db.getAllAsync<{ uri: string }>(
+    `SELECT attachment_uri AS uri FROM txn WHERE attachment_uri IS NOT NULL
+     UNION SELECT image_uri FROM person WHERE image_uri IS NOT NULL`,
+  );
+  // Matched on basename, the same key the backup uses, because the directory
+  // prefix changes on every install and the filename is what is actually stable.
+  const referenced = new Set(rows.map(r => photoKey(r.uri)));
+
+  let removed = 0;
+  for (const dir of [RECEIPT_DIR, AVATAR_DIR]) {
+    if (!dir.exists) continue;
+    for (const entry of dir.list()) {
+      if (!(entry instanceof File)) continue;
+      if (referenced.has(photoKey(entry.uri))) continue;
+      try {
+        entry.delete();
+        removed++;
+      } catch {
+        // A file we cannot remove is a leak, not a failure. Never let tidying up
+        // disk space turn a completed restore into a reported error.
+      }
+    }
+  }
+  return removed;
 }

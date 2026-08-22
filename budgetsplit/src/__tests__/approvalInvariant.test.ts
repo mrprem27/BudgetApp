@@ -44,6 +44,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     why: 'getSharedActivityWith — the one-person ledger behind the person screen. Same reasoning as getMyActivity: this is where you judge what someone has been adding, so hiding it defeats the screen. Its derived figures come from getFriendBalances, which is filtered.',
   },
   {
+    file: 'backup.ts',
+    contains: 'SELECT attachment_uri AS uri FROM txn',
+    why: 'reapUnreferencedPhotos — decides which FILES on disk still have a row pointing at them. It must see every row without exception, including pending ones: excluding a pending entry would make its receipt look unreferenced and delete a photo that is about to be needed the moment the entry is approved. No money is read, only paths.',
+  },
+  {
     file: 'categories.ts',
     contains: 'FROM txn t',
     why: 'Counts how often a category is USED, to rank the category picker. No money and no window — the same reasoning as the getTagsByFrequency exemption in txnInvariant.test.ts.',
