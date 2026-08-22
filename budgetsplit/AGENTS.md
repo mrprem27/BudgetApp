@@ -445,10 +445,55 @@ who doesn't know the rule:
 **When sync exists** (it does not today — there is no peer write path anywhere):
 *an entry takes effect immediately for whoever created it, and waits for approval
 from everyone else it touches.* You can always make yourself worse off, never
-someone else. Pending rows belong in `pending_txn`, **not** in `txn` behind a
-status flag — nothing reads `pending_txn`, so all ~40 existing read paths stay
-correct with no change. A flag would need `AND status='approved'` on every one of
-them, and missing one breaks the rule silently in that surface alone.
+someone else.
+
+**Trust is per person, not per group.** Mark someone trusted and their entries
+apply immediately in every group you share; leave them on review and every entry
+waits. A group is only a set of humans, so a group-level switch would silently
+extend trust to whoever is added next. A person with no `remote_uid` has no
+account and therefore no write path, so their trust value is inert — which is why
+all of this is a no-op on every database that exists today (`lib/trust.ts`).
+
+**A peer entry lives in `txn`. Its approval state lives in `txn_approval`, keyed
+on `txn_id`. It is shown in the group ledger while it waits, and moves none of
+your numbers until you accept it.**
+
+*This reverses the earlier rule that pending rows belong in `pending_txn`.* Both
+halves of that rule turned out to be wrong. `pending_txn` **cannot carry a peer
+entry**: it has no share or payment rows and no source group, only a
+`split_draft` JSON and a `dest_group_id` (`schema.ts:208-226`), so a split expense
+routed through it loses its split. It is the *import* queue, written by four
+things, all of them you. And the "~40 read paths" do not exist — money reaches a
+screen through **eight** statements, five of them already shared constants
+extracted precisely because they had been duplicated once:
+
+| Statement | Feeds | Pending rows |
+|---|---|---|
+| `getTransactionsInRange` (`transactions.ts`) | every analysis surface (~14 callers) | excluded |
+| `netSql()` (`balances.ts`) | all four balance aggregates → every owe/owed figure | excluded |
+| `CASH_TOTALS_SQL` (`cashQuery.ts`) | cash, credit used, net worth, the unattended auto-fund | excluded |
+| `DAILY_SPEND_SQL` (`spendRateQuery.ts`) | Safe-to-Spend's everyday rate | excluded |
+| `getLedgerStats` (`transactions.ts`) | the health score's minimum-data gate | excluded |
+| `findRecentDuplicate` (`transactions.ts`) | the duplicate warning | excluded |
+| `getTransactionsForGroup` | the group ledger | **shown**, marked |
+| `getMyActivity` / `getSharedActivityWith` | the Personal and person ledgers | **shown**, marked |
+
+The exclusion is one exported constant, `NOT_AWAITING_APPROVAL`
+(`db/queries/approvalSql.ts`), and `approvalInvariant.test.ts` reads the real SQL
+and fails when a new statement over `txn` neither carries it nor says why — the
+same mechanism `txnInvariant.test.ts` uses for `recur_freq IS NULL`.
+
+Two things that look like details and are not:
+
+- **Approval must never live on `txn_share` / `txn_payment`.** Both are `DELETE`d
+  and re-`INSERT`ed wholesale on every edit (`transactions.ts:473`, `:694`), so an
+  ordinary edit would silently erase the decision.
+- **Enforce at the loader, not at `myShareOf`.** That function has no row id, and
+  threading a pending-id set through its thirteen callers would recreate exactly
+  the ~40-paths problem this rule is about.
+
+A figure that moves while the others do not is worse than all of them moving: the
+app then contradicts itself and nothing tells the user which number to believe.
 
 ### UPI invariants
 

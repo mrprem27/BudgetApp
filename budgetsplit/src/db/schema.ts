@@ -225,6 +225,30 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   place_label TEXT                           -- reverse-geocoded name, e.g. "Cyber Hub, Gurgaon"
 );
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
+
+-- MY decision about an entry someone else wrote.
+--
+-- Keyed on txn_id and deliberately NOT a column on txn_share/txn_payment: both
+-- of those are DELETEd and re-INSERTed wholesale on every edit
+-- (transactions.ts:466-468, :687-688), so approval state stored there would be
+-- silently erased by an ordinary edit — an entry that quietly starts counting,
+-- or quietly stops.
+--
+-- Absent means approved. Every row that exists today, and everything I write
+-- myself, has no row here — which is what makes the whole feature a no-op until
+-- a peer write path exists.
+--
+-- Device-local: this is my opinion of someone else's assertion and must never
+-- travel to them. It IS included in backup, though — restoring my own device
+-- must not silently approve a queue I had left waiting.
+CREATE TABLE IF NOT EXISTS txn_approval (
+  txn_id     TEXT PRIMARY KEY REFERENCES txn(id),
+  state      TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
+  -- When it ARRIVED, not when it happened. The queue sorts on this so a peer
+  -- cannot bury an entry by back-dating it.
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER
+);
 `;
 
 /**
@@ -353,6 +377,16 @@ export const COLUMN_MIGRATIONS = [
   // Added now because they cost nothing now and a migration later.
   "ALTER TABLE pending_txn ADD COLUMN author_person_id TEXT",
   "ALTER TABLE pending_txn ADD COLUMN payer_person_id TEXT",
+  // Who wrote this entry. NULL = me, on this device, which is every existing row
+  // — so this is additive with no data migration. Authorship is permanent and
+  // belongs on the entry itself; my *opinion* of it lives in `txn_approval`.
+  "ALTER TABLE txn ADD COLUMN author_person_id TEXT",
+  // Whether this person's entries reach my ledger without my approval.
+  // See TRUST_STATE in constants/enums.ts for why it is per person and why the
+  // default is 'review'. Inert for anyone with no account (`remote_uid IS NULL`),
+  // which today is everyone.
+  "ALTER TABLE person ADD COLUMN trust_state TEXT NOT NULL DEFAULT 'review'",
+  "ALTER TABLE person ADD COLUMN trust_state_at INTEGER",
 ];
 
 /**
@@ -619,6 +653,16 @@ export const INDEXES = `
       ON category_budget(group_id, category, period) WHERE person_id IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_catbudget_override
       ON category_budget(group_id, category, period, person_id) WHERE person_id IS NOT NULL;
+    -- Partial: the exclusion predicate only ever asks about 'pending', and on a
+    -- single-user device this table is empty, so the NOT EXISTS stays one index
+    -- probe even on the paths that scan all history (CASH_TOTALS_SQL).
+    CREATE INDEX IF NOT EXISTS idx_txn_approval_pending
+      ON txn_approval(txn_id) WHERE state = 'pending';
+    -- One local person per remote account. Partial so NULLs stay distinct — the
+    -- same construction as idx_catbudget_default above. Safe to add now because
+    -- nothing writes remote_uid yet, so every value is NULL.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_person_remote_uid
+      ON person(remote_uid) WHERE remote_uid IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
     CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
     CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;
@@ -668,7 +712,8 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at';
+        + 'recur_paused_at,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
+        + 'is_deleted,created_at,updated_at';
       await db.execAsync(`
         PRAGMA foreign_keys=OFF;
         BEGIN TRANSACTION;
@@ -697,6 +742,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           pay_method     TEXT,
           currency       TEXT,
           source         TEXT,
+          author_person_id TEXT,
           is_deleted     INTEGER NOT NULL DEFAULT 0,
           created_at     INTEGER NOT NULL,
           updated_at     INTEGER NOT NULL

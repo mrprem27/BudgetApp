@@ -121,6 +121,34 @@ export function asReceivableState(v: string | null | undefined): ReceivableState
   return v === 'written_off' ? 'written_off' : 'expected';
 }
 
+/**
+ * `person.trust_state` — whether this person's entries reach my ledger without
+ * my say-so. 'review' means anything they add in a shared group waits for me;
+ * 'trusted' means it lands immediately, in every group we share.
+ *
+ * Per person, not per group: a group is only a set of people, and trusting the
+ * group would silently extend that trust to whoever gets added to it next.
+ *
+ * 'review' is the default because the safe answer to "may a stranger move my
+ * numbers" is no. It is also inert for anyone without an account — see
+ * `lib/trust.ts`, which is what makes all of this a no-op today.
+ */
+export const TRUST_STATE = ['review', 'trusted'] as const;
+export type TrustState = typeof TRUST_STATE[number];
+export function asTrustState(v: string | null | undefined): TrustState {
+  return v === 'trusted' ? 'trusted' : 'review';
+}
+
+/**
+ * `txn_approval.state` — my decision about an entry someone else wrote.
+ *
+ * 'rejected' rows are kept rather than deleted: a rejection is a decision, it
+ * stops the same entry being re-delivered and asked again, and it is the record
+ * if the two of you disagree about what happened.
+ */
+export const APPROVAL_STATE = ['pending', 'approved', 'rejected'] as const;
+export type ApprovalState = typeof APPROVAL_STATE[number];
+
 /** Narrow a stored preference string to a PayMethod. Mirrors `asBudgetCadence`. */
 export function asPayMethod(v: string | null | undefined, fallback: PayMethod = PayMethod.Upi): PayMethod {
   return (PAY_METHOD as readonly string[]).includes(v ?? '') ? (v as PayMethod) : fallback;

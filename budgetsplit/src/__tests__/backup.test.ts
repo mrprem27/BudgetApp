@@ -82,6 +82,31 @@ describe('validateBackupPayload', () => {
     const { person, ...rest } = tables;
     expect(() => validateBackupPayload({ ...payload, tables: rest })).toThrow(BackupCorruptError);
   });
+
+  /**
+   * Adding a name to BACKUP_TABLES would otherwise reject **every backup ever
+   * written**, because validation demands all of them and a version bump is
+   * rejected before the table check even runs. A post-v1 table restores empty
+   * instead — which is right, since the data could not have existed in that file.
+   *
+   * Without this, the first user to restore a pre-feature backup loses everything.
+   */
+  it('accepts a file written before a later table existed', () => {
+    const payload = buildBackupPayload(emptyTables());
+    const tables = payload.tables as unknown as Record<string, unknown>;
+    const { txn_approval, ...older } = tables;
+    expect(txn_approval).toBeDefined(); // the fixture really does carry it now
+
+    const restored = validateBackupPayload({ ...payload, tables: older });
+    expect(restored.tables.txn_approval).toEqual([]);
+  });
+
+  it('still rejects a table present but not an array', () => {
+    const payload = buildBackupPayload(emptyTables());
+    const tables = payload.tables as unknown as Record<string, unknown>;
+    expect(() => validateBackupPayload({ ...payload, tables: { ...tables, txn_approval: 'nope' } }))
+      .toThrow(BackupCorruptError);
+  });
 });
 
 describe('assertSafeColumnNames', () => {

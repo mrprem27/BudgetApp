@@ -24,9 +24,24 @@ export const BACKUP_VERSION = 1;
  *  `REFERENCES` in `db/schema.ts`. Reverse this order for deletes. */
 export const BACKUP_TABLES = [
   'person', 'budget_group', 'group_member', 'category', 'category_budget',
-  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment',
+  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
 ] as const;
+
+/**
+ * Tables that did not exist in the first backups, and so may legitimately be
+ * absent from a file on disk.
+ *
+ * Validation below demands every `BACKUP_TABLES` name be present, which means
+ * adding a table would otherwise reject **every backup ever written** — and
+ * bumping `BACKUP_VERSION` is not an escape, because a version mismatch is
+ * rejected first. A missing name here restores as an empty table instead, which
+ * is exactly right: the data could not have existed when the file was made.
+ *
+ * `txn_approval` is safe to default empty for a second reason — a backup written
+ * before it existed cannot contain a peer entry, so there is no decision to lose.
+ */
+const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>(['txn_approval']);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];
 export type BackupTables = Record<BackupTableName, Record<string, unknown>[]>;
@@ -103,7 +118,14 @@ export function validateBackupPayload(json: unknown): BackupPayload {
   if (!obj.tables || typeof obj.tables !== 'object') throw new BackupCorruptError('Not a valid BudgetSplit backup file.');
   const tables = obj.tables as Record<string, unknown>;
   for (const name of BACKUP_TABLES) {
-    if (!Array.isArray(tables[name])) throw new BackupCorruptError(`Backup is missing the "${name}" table.`);
+    if (Array.isArray(tables[name])) continue;
+    // A table added after this file was written restores empty rather than
+    // failing the whole file. See OPTIONAL_BACKUP_TABLES.
+    if (OPTIONAL_BACKUP_TABLES.has(name) && tables[name] === undefined) {
+      tables[name] = [];
+      continue;
+    }
+    throw new BackupCorruptError(`Backup is missing the "${name}" table.`);
   }
   // `photos` is optional by design — a rows-only backup is valid, and so is one
   // written before photos existed at all.

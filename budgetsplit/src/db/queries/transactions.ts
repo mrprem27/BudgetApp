@@ -3,6 +3,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
+import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
 import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource } from '../../constants/enums';
@@ -53,6 +54,12 @@ export type LineItem = {
 };
 
 export type TxnWithSplits = Txn & {
+  /**
+   * True only on the LEDGER loaders, and only for an entry someone else wrote
+   * that I have not accepted. Always false everywhere else — the analysis
+   * loaders never return such a row at all.
+   */
+  pendingApproval: boolean;
   payments: Array<{ personId: string; amount: number }>;
   shares:   Array<{ personId: string; amount: number }>;
 };
@@ -65,7 +72,11 @@ export async function getTransactionsForGroup(
   // Future occurrences are never pre-calculated — they appear only after midnight
   // when materializeDueOccurrences() runs on app open.
   const rows = await db.getAllAsync<Txn>(
-    `SELECT * FROM txn WHERE group_id = ? AND is_deleted = 0 AND recur_freq IS NULL ORDER BY date DESC, created_at DESC`,
+    // No approval filter, deliberately: this is the group's record of what
+    // happened, and it must show a peer entry while I am still deciding on it.
+    `SELECT t.*, ${AWAITING_APPROVAL_COL} FROM txn t
+      WHERE t.group_id = ? AND t.is_deleted = 0 AND t.recur_freq IS NULL
+      ORDER BY t.date DESC, t.created_at DESC`,
     [groupId],
   );
   return loadSplitsMany(db, rows);
@@ -79,7 +90,8 @@ export async function getTransactionsInRange(
 ): Promise<TxnWithSplits[]> {
   // Only real rows in range — one-time entries + materialized recurring occurrences.
   const args: (string | number)[] = [fromMs, toMs];
-  let where = 'WHERE t.date >= ? AND t.date <= ? AND t.is_deleted = 0 AND t.recur_freq IS NULL';
+  let where = 'WHERE t.date >= ? AND t.date <= ? AND t.is_deleted = 0 AND t.recur_freq IS NULL'
+    + ` AND ${NOT_AWAITING_APPROVAL}`;
   if (groupId) {
     where += ' AND t.group_id = ?';
     args.push(groupId);
@@ -102,7 +114,7 @@ export type MyActivityItem = TxnWithSplits & { groupName: string; isPersonal: bo
  */
 export async function getMyActivity(db: SQLite.SQLiteDatabase, meId: string): Promise<MyActivityItem[]> {
   const rows = await db.getAllAsync<Txn & { group_name: string; grp_personal: number }>(
-    `SELECT t.*, bg.name AS group_name, bg.is_personal AS grp_personal
+    `SELECT t.*, ${AWAITING_APPROVAL_COL}, bg.name AS group_name, bg.is_personal AS grp_personal
        FROM txn t
        JOIN budget_group bg ON bg.id = t.group_id
       WHERE t.is_deleted = 0 AND t.recur_freq IS NULL
@@ -144,7 +156,7 @@ export async function getSharedActivityWith(
     OR EXISTS (SELECT 1 FROM txn_payment p WHERE p.txn_id = t.id AND p.person_id = ${alias})
   )`;
   const rows = await db.getAllAsync<Txn & { group_name: string }>(
-    `SELECT t.*, bg.name AS group_name
+    `SELECT t.*, ${AWAITING_APPROVAL_COL}, bg.name AS group_name
        FROM txn t
        JOIN budget_group bg ON bg.id = t.group_id
       WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND bg.is_personal = 0
@@ -167,6 +179,10 @@ export async function loadSplits(db: SQLite.SQLiteDatabase, txn: Txn): Promise<T
   );
   return {
     ...txn,
+    // Single-row loader: callers fetch a txn they already named, and the screens
+    // that use it (txn/[id].tsx) read the approval row directly to decide what to
+    // show. See `getApproval`.
+    pendingApproval: (txn as Txn & { pending_approval?: number }).pending_approval === 1,
     payments: payments.map(p => ({ personId: p.person_id, amount: p.amount })),
     shares:   shares.map(s => ({ personId: s.person_id, amount: s.amount })),
   };
@@ -208,6 +224,9 @@ export async function loadSplitsMany(db: SQLite.SQLiteDatabase, txns: Txn[]): Pr
 
   return txns.map(t => ({
     ...t,
+    // Only the ledger SELECTs ask for this column; elsewhere it is absent and
+    // therefore false, which is correct — those loaders filter pending rows out.
+    pendingApproval: (t as Txn & { pending_approval?: number }).pending_approval === 1,
     payments: payByTxn.get(t.id) ?? [],
     shares:   shareByTxn.get(t.id) ?? [],
   }));
@@ -236,7 +255,8 @@ export type InsertTxnInput = {
   shares:   Array<{ personId: string; amount: number }>;
 };
 
-function localTz(): string {
+/** @internal shared with queries/peerIngest.ts */
+export function localTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; }
 }
 
@@ -579,6 +599,7 @@ export async function findRecentDuplicate(
        FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
       WHERE t.group_id=? AND t.category=? AND t.is_deleted=0 AND t.recur_freq IS NULL
         AND t.date BETWEEN ? AND ?
+        AND ${NOT_AWAITING_APPROVAL}
       GROUP BY t.id`,
     [groupId, category, dateMs - window, dateMs + window],
   );
@@ -719,11 +740,13 @@ export type LedgerStats = {
 /** Ledger footprint for the health score's minimum-data gate. */
 export async function getLedgerStats(db: SQLite.SQLiteDatabase): Promise<LedgerStats> {
   const row = await db.getFirstAsync<{ first: number | null; n: number; incomes: number }>(
-    `SELECT MIN(CASE WHEN recur_freq IS NULL THEN date END) AS first,
-            SUM(CASE WHEN recur_freq IS NULL THEN 1 ELSE 0 END) AS n,
-            SUM(CASE WHEN kind = 'income' THEN 1 ELSE 0 END) AS incomes
-       FROM txn
-      WHERE is_deleted = 0`,
+    // Aliased `t` so the approval filter applies: an entry I have not accepted
+    // must not unlock my health score or move the "logging since" date.
+    `SELECT MIN(CASE WHEN t.recur_freq IS NULL THEN t.date END) AS first,
+            SUM(CASE WHEN t.recur_freq IS NULL THEN 1 ELSE 0 END) AS n,
+            SUM(CASE WHEN t.kind = 'income' THEN 1 ELSE 0 END) AS incomes
+       FROM txn t
+      WHERE t.is_deleted = 0 AND ${NOT_AWAITING_APPROVAL}`,
   );
   return {
     firstTxnMs: row?.first ?? null,

@@ -48,7 +48,10 @@ export function usePersonScreen(personId: string) {
   const sections = useMemo(() => groupByDate(activity), [activity]);
 
   const settlementDates = useMemo(
-    () => activity.filter(t => t.kind === 'settlement').map(t => t.date),
+    // Approved settlements only. A pending "I paid you back" is exactly the claim
+    // that must not reset the clock — it would make a stale balance look freshly
+    // settled and silence the write-off suggestion, on someone else's say-so.
+    () => activity.filter(t => t.kind === 'settlement' && !t.pendingApproval).map(t => t.date),
     [activity],
   );
   const rhythmDays = useMemo(() => settleRhythmDays(settlementDates), [settlementDates]);

@@ -33,6 +33,7 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
     );
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE txn_share (txn_id TEXT, person_id TEXT, amount INTEGER);
+    CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at INTEGER NOT NULL, decided_at INTEGER);
     INSERT INTO budget_group VALUES ('personal', 1), ('flat', 0), ('trip', 0);
   `);
   for (const f of fixtures) {

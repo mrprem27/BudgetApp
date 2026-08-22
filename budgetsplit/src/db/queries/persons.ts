@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { ReceivableState } from '../../constants/enums';
+import type { ReceivableState, TrustState } from '../../constants/enums';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
@@ -18,6 +18,8 @@ export type Person = {
   image_uri: string | null;
   receivable_state: ReceivableState;
   receivable_state_at: number | null;
+  trust_state: TrustState;
+  trust_state_at: number | null;
   /** Only populated by getGroupMembers (from group_member.joined_at). */
   joined_at?: number | null;
 };
@@ -40,6 +42,25 @@ export async function setReceivableState(
 ): Promise<void> {
   await db.runAsync(
     'UPDATE person SET receivable_state = ?, receivable_state_at = ? WHERE id = ?',
+    [state, Date.now(), id],
+  );
+}
+
+/**
+ * Decide whether this person's entries reach my ledger without my approval.
+ *
+ * Like {@link setReceivableState}, this writes only the decision — nothing is
+ * derived, nothing else moves. It is also inert until this person has an account
+ * (`remote_uid`), because until then nothing can arrive claiming to be them. See
+ * `lib/trust.ts`.
+ */
+export async function setTrustState(
+  db: SQLite.SQLiteDatabase,
+  id: string,
+  state: TrustState,
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE person SET trust_state = ?, trust_state_at = ? WHERE id = ?',
     [state, Date.now(), id],
   );
 }
@@ -76,8 +97,16 @@ export async function insertPerson(
     'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, 0)',
     [id, name, avatarColor],
   );
-  // Mirrors the column default: a new contact is owed-to-you until you say otherwise.
-  return { id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null, remote_uid: null, image_uri: null, upi_vpa: null, receivable_state: 'expected', receivable_state_at: null };
+  // Mirrors the column defaults: a new contact is owed-to-you until you say
+  // otherwise, and their entries wait for you until you say otherwise. Both are
+  // moot for a hand-added contact — `remote_uid` is null, so there is no account
+  // and no write path — but the row must match the columns either way.
+  return {
+    id, name, avatar_color: avatarColor, is_me: 0, email: null, mobile: null,
+    remote_uid: null, image_uri: null, upi_vpa: null,
+    receivable_state: 'expected', receivable_state_at: null,
+    trust_state: 'review', trust_state_at: null,
+  };
 }
 
 export async function setPersonUpiVpa(

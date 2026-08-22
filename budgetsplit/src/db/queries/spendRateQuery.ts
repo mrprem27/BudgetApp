@@ -1,3 +1,5 @@
+import { NOT_AWAITING_APPROVAL } from './approvalSql';
+
 // SQL for the everyday-spend rate's per-day buckets, aggregated in the DB rather
 // than loading 90 days of txns + all their split rows into JS and reducing there.
 //
@@ -51,6 +53,7 @@ export const DAILY_SPEND_SQL = `
     AND t.date >= ?
     AND t.date <= ?
     AND ms.amt > 0
+    AND ${NOT_AWAITING_APPROVAL}
   GROUP BY day
   ORDER BY day
 `;

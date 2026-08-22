@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { NOT_AWAITING_APPROVAL } from './approvalSql';
 import { simplify } from '../../lib/settle';
 import { asReceivableState, type ReceivableState } from '../../constants/enums';
 
@@ -45,7 +46,7 @@ function netSql(table: 'txn_payment' | 'txn_share', scope: 'group' | 'global'): 
      FROM ${table} s
      JOIN txn t ON t.id = s.txn_id
      JOIN budget_group bg ON bg.id = t.group_id
-    WHERE ${BALANCE_TXN_FILTER} AND ${where}
+    WHERE ${BALANCE_TXN_FILTER} AND ${NOT_AWAITING_APPROVAL} AND ${where}
     GROUP BY s.person_id`;
 }
 

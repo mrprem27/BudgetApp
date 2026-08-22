@@ -142,14 +142,23 @@ export default function GroupDetailScreen() {
 
   // simplify(net) feeds both the balance card and the settlements list — memoize once.
   const simplifiedSettles = useMemo(() => simplify(net), [net]);
-  const settlements = useMemo(() => (simplifyOn ? simplifiedSettles : rawDebts(txns)), [simplifyOn, simplifiedSettles, txns]);
+  /*
+   * `txns` is the group LEDGER and deliberately includes entries still waiting on
+   * my approval — the group agrees on what happened even before I accept my part.
+   * But every figure derived here must exclude them, because `net` beside them
+   * comes from `getGroupNet`, which does. Mixing the two would put two different
+   * populations on one card, and `computeContributions` below takes BOTH in the
+   * same call.
+   */
+  const settled = useMemo(() => txns.filter(t => !t.pendingApproval), [txns]);
+  const settlements = useMemo(() => (simplifyOn ? simplifiedSettles : rawDebts(settled)), [simplifyOn, simplifiedSettles, settled]);
   const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
-  const contributions = useMemo(() => computeContributions(txns, members, net), [txns, members, net]);
+  const contributions = useMemo(() => computeContributions(settled, members, net), [settled, members, net]);
   const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
   const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
   const totalSpent = useMemo(
-    () => txns.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
-    [txns],
+    () => settled.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
+    [settled],
   );
 
   const TABS: { key: TabKey; label: string }[] = [

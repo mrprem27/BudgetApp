@@ -1,3 +1,5 @@
+import { NOT_AWAITING_APPROVAL } from './approvalSql';
+
 // SQL for the derived cash position, aggregated in the DB instead of loading every
 // txn + all its split rows into JS and reducing there (getCashPosition scans all of
 // history). Kept import-free so it can be unit-tested against a real SQLite engine
@@ -56,4 +58,5 @@ export const CASH_TOTALS_SQL = `
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_share   WHERE person_id = ? GROUP BY txn_id) ms ON ms.txn_id = t.id
   WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ?
+    AND ${NOT_AWAITING_APPROVAL}
 `;

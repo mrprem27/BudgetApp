@@ -31,6 +31,7 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
     );
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
+    CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at INTEGER NOT NULL, decided_at INTEGER);
   `);
   const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method) VALUES (?,?,?,?,?,?,?)');
   const insPay = db.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?,?,?)');
