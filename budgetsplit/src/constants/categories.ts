@@ -109,8 +109,18 @@ export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
  * is now a real category (kind = 'transfer'), managed in the Categories screen and
  * picked with the same UI as expense/income. Seeded per group.
  */
+/**
+ * Moving money into investments is a TRANSFER, not spending.
+ *
+ * Named here so `moveToInvestments` and the picker agree on one string — it is the
+ * marker that tells an investment settlement apart from a card-bill repayment, and
+ * a typo would silently make one look like the other.
+ */
+export const INVESTMENT_CATEGORY = 'Investment';
+
 export const TRANSFER_CATEGORIES: CategoryDef[] = [
   { name: 'Repayment',   icon: 'corner-up-left',  color: '#8B7CF8' },
+  { name: INVESTMENT_CATEGORY, icon: 'trending-up', color: '#6EE7B7' },
   { name: 'Rent',        icon: 'home',            color: '#A78BFA' },
   { name: 'Shared Bill', icon: 'file-text',       color: '#7C6AF7' },
   { name: 'Lent',        icon: 'arrow-up-right',  color: '#22D3EE' },

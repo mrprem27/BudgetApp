@@ -37,6 +37,7 @@ export default function FriendsScreen() {
   const [renamePhone, setRenamePhone] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
+  const [addPhone, setAddPhone] = useState('');
   const [query, setQuery] = useState('');
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
@@ -73,9 +74,13 @@ export default function FriendsScreen() {
     if (!trimmed) return;
     try {
       const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-      await insertPerson(db, trimmed, color);
+      const created = await insertPerson(db, trimmed, color);
+      // Captured at creation, not only via a long-press rename nobody discovers.
+      // Without it the WhatsApp reminder silently never appears for this person.
+      const phone = addPhone.trim();
+      if (created && phone) await setPersonContact(db, created.id, { mobile: phone });
       haptic.success();
-      setAddName(''); setShowAdd(false);
+      setAddName(''); setAddPhone(''); setShowAdd(false);
       refresh();
     } catch {
       haptic.error();
@@ -256,6 +261,8 @@ export default function FriendsScreen() {
         onSubmit={handleAddFriend}
         placeholder="Friend's name"
         submitLabel="Add friend"
+        phone={addPhone}
+        onChangePhone={setAddPhone}
       />
     </View>
   );

@@ -28,7 +28,7 @@ const MONTH = 30 * 24 * 60 * 60 * 1000;
  * figures with no bank feed, so a staleness badge is the difference between an
  * honest snapshot and a confident-looking number nobody's touched in months.
  */
-export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill }: {
+export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill, onMoveToInvestments }: {
   money: TotalMoney;
   /** Per-bucket balances from `getCashPosition`. Absent until it has loaded. */
   byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
@@ -37,6 +37,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
   updatedAt?: number | null;
   onEdit: () => void;
   onPayCardBill?: () => void;
+  onMoveToInvestments?: () => void;
 }) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
@@ -91,6 +92,16 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
       {/* Headroom, deliberately outside both figures. */}
       <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
       <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
+
+      {/* Investments have a real way UP now — not just re-typing the figure.
+          Buying an SIP was logged as an expense, which dropped net worth by the
+          amount when it should have stayed flat. */}
+      {onMoveToInvestments && (
+        <PressableScale style={styles.payBillBtn} onPress={onMoveToInvestments} accessibilityLabel="Move money to investments">
+          <Feather name="trending-up" size={14} color={colors.accent} />
+          <Text style={styles.payBillText}>Bought an investment? Move it across</Text>
+        </PressableScale>
+      )}
 
       {/* Card debt has a real way down now — not just re-typing the balance. */}
       {money.creditUsed > 0 && onPayCardBill && (

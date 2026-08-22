@@ -1,4 +1,6 @@
 import * as SQLite from 'expo-sqlite';
+import { INVESTMENT_CATEGORY } from '../../constants/categories';
+import { getMoneyProfile, setMoneyProfile } from './moneyProfile';
 import { startOfMonth } from 'date-fns';
 import {
   computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,
@@ -130,6 +132,60 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
  * way down between Plan edits. The full accounts model stays future work; this
  * row is designed to survive it (it is just a settlement with a pay method).
  */
+/**
+ * Move money into investments — a transfer, not an expense.
+ *
+ * Today buying an SIP is logged as an **expense** (`smartCategory` maps "sip",
+ * "mutual fund", "zerodha" and friends to the `Investments / SIP` expense
+ * category). That is wrong three ways at once: it is not consumption, so it
+ * violates the money boundary; it eats a budget and skews the Reports donut; and
+ * net worth *falls* by the amount when it should be flat, because cash drops and
+ * `money.investments` never moves.
+ *
+ * Deliberately built as a sibling of `payCardBill` rather than as an Add-screen
+ * destination. `TransferBody` hard-types both endpoints as a `Person`, and
+ * `buildTransferPlans` refuses when the two share no group — investments share
+ * none. This produces the correct row with no changes to the Add screen, and it is
+ * exactly the row the eventual accounts model wants: a settlement with a marker.
+ *
+ * `shares: []` and a personal-group settlement means the ledger shows it, spend
+ * analysis excludes it (AGENTS §12), and `settledOut` takes it out of the bucket
+ * it came from — one row, both sides, the same trick the card bill uses.
+ */
+export async function moveToInvestments(
+  db: SQLite.SQLiteDatabase,
+  amountPaise: number,
+  /** Which bucket the money leaves. Recorded so cash lands in the right place. */
+  fromAsset: PayMethod = PayMethod.Bank,
+  note?: string,
+): Promise<string> {
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('An investment needs a positive amount');
+  const me = await getMe(db);
+  if (!me) throw new Error('No current user');
+  const personal = personalGroupOf(await getAllGroups(db));
+  if (!personal) throw new Error('No personal group');
+
+  const id = await insertTxn(db, {
+    groupId: personal.id,
+    kind: 'settlement',
+    entryMode: 'quick',
+    date: Date.now(),
+    category: INVESTMENT_CATEGORY,
+    note: note ?? 'Moved to investments',
+    payMethod: fromAsset,
+    payments: [{ personId: me.id, amount: amountPaise }],
+    shares: [],
+  });
+
+  // The other half. Stated rather than derived, unlike the card baseline: there is
+  // no "investment spend since" window to measure against, and a user's holdings
+  // move on their own with the market anyway — so this is a running figure they
+  // can still correct by hand.
+  const profile = await getMoneyProfile(db);
+  await setMoneyProfile(db, { investments: profile.investments + amountPaise });
+  return id;
+}
+
 export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number, note?: string): Promise<string> {
   if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('Card payment needs a positive amount');
   const me = await getMe(db);

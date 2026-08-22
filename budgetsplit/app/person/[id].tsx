@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList } from 'react-native';
+import { View, Text, StyleSheet, SectionList, Linking, Share, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -7,6 +7,9 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { canRemind, reminderText, whatsappUrl } from '../../src/lib/whatsappReminder';
+import { buildUpiRequestUri } from '../../src/lib/upiIntent';
+import { haptic } from '../../src/lib/haptics';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -66,6 +69,29 @@ export default function PersonScreen() {
 
   const ov = oweView(net);
   const name = person?.name ?? 'Person';
+
+  /**
+   * Opens WhatsApp with the message pre-written. Falls back to the share sheet
+   * when the stored number has no country code — losing the reminder entirely
+   * over that would be worse than letting the user pick the app.
+   */
+  async function sendReminder() {
+    if (!person?.mobile) return;
+    const text = reminderText({
+      name: person.name,
+      amountPaise: net,
+      groups: scopes?.groups?.map(g => ({ name: g.name, amount: g.amount })),
+      payLink: me?.upi_vpa ? buildUpiRequestUri(me.upi_vpa, me.name, net) : null,
+    });
+    const url = whatsappUrl(person.mobile, text);
+    try {
+      if (url && await Linking.canOpenURL(url)) await Linking.openURL(url);
+      else await Share.share({ message: text });
+    } catch {
+      haptic.error();
+      Alert.alert('Could not open WhatsApp', 'You can copy the message and send it yourself.');
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -138,6 +164,18 @@ export default function PersonScreen() {
                     ? 'Their entries count straight away, in every group you share.'
                     : 'Their entries wait for your approval before touching your numbers.'}
               </Text>
+
+              {/* Only when they owe YOU and we have a number. `canRemind` owns
+                  both halves of that — nudging someone about money you owe them
+                  is an apology, not a reminder. */}
+              {canRemind(net, person?.mobile) && (
+                <SecondaryButton
+                  label="Remind on WhatsApp"
+                  icon="message-circle"
+                  onPress={sendReminder}
+                  style={styles.settle}
+                />
+              )}
 
               {net !== 0 && (
                 <PrimaryButton
