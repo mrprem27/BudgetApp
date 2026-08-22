@@ -98,8 +98,14 @@ export default function DashboardScreen() {
   // On-focus maintenance, kept OUT of the data loader: read the hide-amounts
   // setting and run the recurring catch-up check (a maintenance WRITE, not a read).
   useFocusEffect(useCallback(() => {
-    settings.hideAmounts().then(setHideAmounts);
-    checkCatchUp();
+    // Both were floating promises, and `checkCatchUp` WRITES (it stamps the last
+    // open time) plus queries every group — so a rejection here was an unhandled
+    // one on every focus of the app's first screen. Neither failing is worth
+    // interrupting the user for; both are worth not crashing over.
+    let alive = true;
+    settings.hideAmounts().then(v => { if (alive) setHideAmounts(v); }).catch(() => {});
+    checkCatchUp().catch(() => {});
+    return () => { alive = false; };
   }, []));
 
   // Onboarding's "add my first expense" hand-off: open Add once, then clear the

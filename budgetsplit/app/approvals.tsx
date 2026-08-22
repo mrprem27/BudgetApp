@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { saveFailureMessage } from '../src/lib/dbErrors';
+import { haptic } from '../src/lib/haptics';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space, layout } from '../src/theme';
@@ -32,7 +34,18 @@ export default function ApprovalsScreen() {
 
   async function run(id: string, fn: () => Promise<void>) {
     setBusyId(id);
-    try { await fn(); } finally { setBusyId(null); }
+    try {
+      await fn();
+    } catch (e) {
+      // Bare try/finally swallowed it: the spinner stopped, the entry stayed in
+      // the queue, and nothing said why. Approving is a decision about money —
+      // the one place a silent no-op is least acceptable.
+      haptic.error();
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.body);
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (

@@ -18,11 +18,24 @@ export function useLocationCapture(isEditing: boolean) {
 
   useEffect(() => {
     if (isEditing) return;
+    // GPS takes seconds, and backing straight out of Add is normal — so the
+    // awaits here routinely resolve after this hook is gone. Same `alive` guard
+    // `ScanPaySheet` and `FeatureFlagsProvider` already use.
+    let alive = true;
     (async () => {
       const on = await settings.saveLocation();
+      if (!alive) return;
       setLocEnabled(on);
-      if (on) await capture();
+      if (!on) return;
+      setCapturing(true);
+      try {
+        const p = await getCurrentPlace();
+        if (alive) setPlace(p);
+      } finally {
+        if (alive) setCapturing(false);
+      }
     })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
 

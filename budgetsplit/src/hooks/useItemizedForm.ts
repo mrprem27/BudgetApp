@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { saveFailureMessage } from '../lib/dbErrors';
 import { Alert } from 'react-native';
 import { File } from 'expo-file-system';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -406,8 +407,13 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
       haptic.success();
       refresh();
       router.back();
-    } catch {
-      Alert.alert('Error', 'Could not save. Try again.');
+    } catch (e) {
+      // Every other save routes through `saveFailureMessage`; this one was missed.
+      // Its docblock exists because on a full disk "could not save, try again" is
+      // a lie twice over — it did not save, and trying again will not help.
+      haptic.error();
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.body);
     } finally {
       setSaving(false);
     }

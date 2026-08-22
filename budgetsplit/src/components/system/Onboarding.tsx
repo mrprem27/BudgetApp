@@ -124,7 +124,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   in this market either asks for a bank connection or reads your SMS,
                   and this is the one line that separates the app from both. The
                   vaguer cloud claim follows it rather than standing alone. */}
-              <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, nothing leaves your phone.</Text>
+              <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
             </FadeIn>
             <FadeIn delay={1200} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
