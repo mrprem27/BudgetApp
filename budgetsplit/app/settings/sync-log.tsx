@@ -74,8 +74,22 @@ export default function SyncLogScreen() {
     load();
   }
 
-  const stuck = queued.filter(q => known.get(q.groupId) !== 'approved');
-  const movable = queued.filter(q => known.get(q.groupId) === 'approved');
+  /*
+   * Three states, not two.
+   *
+   * `known` is only written after a sync COMPLETES, so before the first one it is
+   * empty — and treating empty as "nowhere to go" turns "I have not asked the
+   * server yet" into a confident claim about the world. Someone signed out, or
+   * offline, or with sync switched off would be told their entries are stranded
+   * when nothing of the sort has been established.
+   *
+   * `lastSyncAt` is what separates the two: never completed means unknown, and
+   * unknown says so.
+   */
+  const asked = lastAt !== null;
+  const total = queued.reduce((n, q) => n + q.n, 0);
+  const movable = asked ? queued.filter(q => known.get(q.groupId) === 'approved') : [];
+  const stuck = asked ? queued.filter(q => known.get(q.groupId) !== 'approved') : [];
   const stuckTotal = stuck.reduce((n, q) => n + q.n, 0);
   const movableTotal = movable.reduce((n, q) => n + q.n, 0);
 
@@ -97,6 +111,25 @@ export default function SyncLogScreen() {
               <IconCircle icon="check" color={colors.income} bg={colors.bgMuted} size={36} />
               <Text style={styles.clearText}>Everything on this phone has been sent.</Text>
             </View>
+          </Card>
+        ) : !asked ? (
+          /*
+           * Queued, and genuinely not yet knowable. Saying which of these can move
+           * requires asking the server which groups are shared, and that has never
+           * happened on this device.
+           */
+          <Card>
+            <ListRow
+              icon="help-circle"
+              iconColor={colors.textSecondary}
+              title={`${total} change${total === 1 ? '' : 's'} queued`}
+              subtitle={
+                'Sync has not completed on this phone yet, so there is no way to say which of these '
+                + 'can be sent. They are saved and nothing is lost. Run a sync below to find out.'
+              }
+              variant="stacked"
+              chevron={false}
+            />
           </Card>
         ) : (
           <Card>
