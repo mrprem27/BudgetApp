@@ -211,12 +211,18 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
   const now = Date.now();
   const horizonStart = now - MATERIALIZE_HORIZON_MS;
   const templates = await db.getAllAsync<Txn>(
+    // `recur_mode = 'auto'` — a 'remind' rule posts nothing by itself. It surfaces
+    // as due and waits to be logged, which is the only honest treatment for money
+    // that may not have arrived: a salary silently posted on the 1st corrupts
+    // every figure downstream and does it quietly.
+    //
     // A rule still waiting on me spawns NOTHING. Approving a peer's rule is
     // approving indefinite future spending, so until I have, it must not quietly
     // start posting occurrences — which would be the loudest possible version of
     // the thing this model exists to stop.
     `SELECT t.* FROM txn t
       WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
+        AND t.recur_mode = 'auto'
         AND ${NOT_AWAITING_APPROVAL}`,
   );
   if (templates.length === 0) return 0;

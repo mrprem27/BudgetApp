@@ -9,8 +9,22 @@ import { nthOccurrenceMs, freqLabel } from '../../../lib/recurrence';
 import {
   RECUR_FREQ_ADD_CHOICES, RECUR_FREQ_LABEL, RECUR_END_MODE, RECUR_END_MODE_LABEL,
   RecurEndMode, type RecurFreq,
+  type RecurMode,
 } from '../../../constants/enums';
 import { alpha } from '../../../theme';
+
+/**
+ * Post it, or ask about it.
+ *
+ * Money you have committed to can be posted for you. Money that has to ARRIVE
+ * cannot: a salary that never landed, silently recorded on the 1st, moves every
+ * figure in the app and does it without telling anyone. So income and transfers
+ * default to the second, and this is where you override either way.
+ */
+const MODE_TABS = [
+  { key: 'auto', label: 'Add it for me' },
+  { key: 'remind', label: 'Just remind me' },
+];
 
 const FREQ_TABS = RECUR_FREQ_ADD_CHOICES.map(f => ({ key: f, label: RECUR_FREQ_LABEL[f] }));
 const END_TABS = RECUR_END_MODE.map(m => ({ key: m, label: RECUR_END_MODE_LABEL[m] }));
@@ -37,7 +51,7 @@ export function RecurringControls({
   freq, setFreq,
   interval, setInterval,
   endMode, setEndMode,
-  endMs, setEndMs,
+  mode, setMode, endMs, setEndMs,
   count, setCount,
   txnDate,
   onPickEndDate,
@@ -46,6 +60,7 @@ export function RecurringControls({
   freq: RecurFreq; setFreq: (f: RecurFreq) => void;
   interval: string; setInterval: (s: string) => void;
   endMode: RecurEndMode; setEndMode: (m: RecurEndMode) => void;
+  mode: RecurMode; setMode: (m: RecurMode) => void;
   endMs: number | null; setEndMs: (n: number | null) => void;
   count: string; setCount: (s: string) => void;
   txnDate: number;
@@ -125,6 +140,23 @@ export function RecurringControls({
         )}
       </View>
 
+      {/* When it's due */}
+      <View style={styles.recurSectionBordered}>
+        <Text style={styles.recurSectionLabel}>WHEN IT'S DUE</Text>
+        {/* TabPills, not a chip row: this is exactly one choice of two (§9). */}
+        <TabPills
+          tabs={MODE_TABS}
+          active={mode}
+          onChange={(m) => setMode(m as RecurMode)}
+          activeColor={colors.settle}
+        />
+        <Text style={styles.recurHint}>
+          {mode === 'auto'
+            ? 'Adds it for you on the day.'
+            : 'Reminds you, and you add it — so nothing is recorded until it actually happened.'}
+        </Text>
+      </View>
+
       {/* Next charge — the occurrence after the start date */}
       <View style={styles.recurRow}>
         <Text style={styles.recurRowLabel}>Next charge</Text>
@@ -183,6 +215,7 @@ const styles = StyleSheet.create({
   recurSection: { paddingHorizontal: space.md, paddingVertical: space.smd },
   recurSectionBordered: { paddingHorizontal: space.md, paddingVertical: space.smd, borderTopWidth: 1, borderTopColor: alpha(colors.settle, 20) },
   recurSectionLabel: { ...type.sectionLabel, color: colors.settle, marginBottom: space.sm },
+  recurHint: { ...type.caption, color: colors.textSecondary, marginTop: space.sm },
   recurEndDate: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
   recurEndDateText: { ...type.labelSemi, color: colors.settle },
   recurIntervalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },

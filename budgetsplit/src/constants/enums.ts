@@ -149,6 +149,29 @@ export function asTrustState(v: string | null | undefined): TrustState {
 export const APPROVAL_STATE = ['pending', 'approved', 'rejected'] as const;
 export type ApprovalState = typeof APPROVAL_STATE[number];
 
+/**
+ * `txn.recur_mode` — what a due recurring rule actually does.
+ *
+ * 'auto' posts the occurrence by itself, which is what every rule did before this
+ * existed and remains right for a fixed bill you have already agreed to.
+ * 'remind' posts nothing: the rule surfaces as due, and you log it — which is the
+ * only honest option for money you cannot be sure arrived.
+ *
+ * Income and settlements default to 'remind' for that reason. A salary that never
+ * landed, silently posted, corrupts every figure downstream and does it quietly —
+ * the same reasoning that makes an incoming transfer always confirm.
+ */
+export const RECUR_MODE = ['auto', 'remind'] as const;
+export type RecurMode = typeof RECUR_MODE[number];
+export function asRecurMode(v: string | null | undefined): RecurMode {
+  return v === 'remind' ? 'remind' : 'auto';
+}
+
+/** The kinds that default to waiting for you rather than posting themselves. */
+export function defaultRecurMode(kind: string): RecurMode {
+  return kind === 'expense' ? 'auto' : 'remind';
+}
+
 /** Narrow a stored preference string to a PayMethod. Mirrors `asBudgetCadence`. */
 export function asPayMethod(v: string | null | undefined, fallback: PayMethod = PayMethod.Upi): PayMethod {
   return (PAY_METHOD as readonly string[]).includes(v ?? '') ? (v as PayMethod) : fallback;

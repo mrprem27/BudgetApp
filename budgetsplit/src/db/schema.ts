@@ -393,6 +393,12 @@ export const COLUMN_MIGRATIONS = [
   // which today is everyone.
   "ALTER TABLE person ADD COLUMN trust_state TEXT NOT NULL DEFAULT 'review'",
   "ALTER TABLE person ADD COLUMN trust_state_at INTEGER",
+  // What a due recurring rule does: post itself, or wait to be logged.
+  // Default 'auto' so every rule that already exists behaves exactly as it did —
+  // this column can only change behaviour for rules created after it. See
+  // RECUR_MODE in constants/enums.ts for why income and transfers default the
+  // other way at creation.
+  "ALTER TABLE txn ADD COLUMN recur_mode TEXT NOT NULL DEFAULT 'auto'",
   // Sync prerequisites, schema-only — nothing reads these yet.
   //
   // When shared groups sync, the unit that travels is the ENTRY (a `txn` plus its
@@ -738,7 +744,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
+        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
         + 'is_deleted,created_at,updated_at';
       await db.execAsync(`
         PRAGMA foreign_keys=OFF;
@@ -761,6 +767,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           parent_recur_id TEXT,
           recur_state    TEXT NOT NULL DEFAULT 'active' CHECK(recur_state IN ('active','paused','ended')),
           recur_paused_at INTEGER,
+          recur_mode     TEXT NOT NULL DEFAULT 'auto',
           tz             TEXT,
           lat            REAL,
           lng            REAL,

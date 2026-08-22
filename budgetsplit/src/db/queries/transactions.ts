@@ -6,7 +6,7 @@ import { logAudit } from './audit';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
-import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource } from '../../constants/enums';
+import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode } from '../../constants/enums';
 
 export type Txn = {
   id: string;
@@ -27,6 +27,8 @@ export type Txn = {
   recur_state: RecurState;
   /** When the rule was paused — lets resume skip the dormant gap instead of back-posting it. */
   recur_paused_at: number | null;
+  /** 'auto' posts when due; 'remind' waits to be logged. See RECUR_MODE. */
+  recur_mode: string;
   tz: string | null;
   lat: number | null;
   lng: number | null;
@@ -246,6 +248,8 @@ export type InsertTxnInput = {
   recurFreq?: RecurFreq;
   recurInterval?: number;
   recurEnd?: number;
+  /** 'auto' posts when due; 'remind' waits to be logged. Defaults to 'auto'. */
+  recurMode?: RecurMode;
   lat?: number;
   lng?: number;
   placeLabel?: string;
@@ -308,13 +312,14 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.recurFreq ?? null, input.recurInterval ?? null, input.recurEnd ?? null,
+        input.recurMode ?? 'auto',
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
         input.currency ?? null,

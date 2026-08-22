@@ -153,6 +153,7 @@ export function QuickAddSheets({
         visible={open === 'recurring'}
         onClose={onClose}
         enabled={f.recurEnabled} setEnabled={f.setRecurEnabled}
+        mode={f.recurMode} setMode={f.setRecurMode}
         freq={f.recurFreq} setFreq={f.setRecurFreq}
         interval={f.recurInterval} setInterval={f.setRecurInterval}
         endMode={f.recurEndMode} setEndMode={f.setRecurEndMode}

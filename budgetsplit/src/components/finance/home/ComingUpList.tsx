@@ -63,11 +63,23 @@ export function ComingUpList({ items, title = 'Coming up', showIcon = false, hea
                 )}
                 <View style={styles.mid}>
                   <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
-                  <Text style={styles.sub}>Recurring · {whenLabel(it.daysUntil)}</Text>
+                  {/* "Reminder" vs "Recurring" is the difference between something
+                      that will happen to you and something you have to do — and
+                      only one of them is actionable. */}
+                  <Text style={styles.sub}>
+                    {it.mode === 'remind' ? 'Reminder' : 'Recurring'} · {whenLabel(it.daysUntil)}
+                  </Text>
                 </View>
-                {/* `colors.settle` is the recurring/settlement colour (AGENTS §10), and it
-                    is what made this figure scannable at a glance. */}
-                <Text style={styles.amount}>{formatCompact(it.amount)}</Text>
+                {/*
+                  Money in is never shown looking like money out. The list carries all
+                  three kinds now, and there is deliberately NO total across them —
+                  §12: income, spend and transfers in one figure measure nothing.
+                  `colors.settle` stays the default because it is the recurring colour
+                  and it is what made this figure scannable.
+                */}
+                <Text style={[styles.amount, it.kind === 'income' && { color: colors.income }]}>
+                  {it.kind === 'income' ? '+' : ''}{formatCompact(it.amount)}
+                </Text>
               </View>
             </View>
           );

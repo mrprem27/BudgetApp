@@ -4,7 +4,7 @@ import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { RecurringControls } from './RecurringControls';
 import { space } from '../../tokens';
-import type { RecurFreq, RecurEndMode } from '../../../constants/enums';
+import type { RecurFreq, RecurEndMode, RecurMode } from '../../../constants/enums';
 
 type Props = {
   visible: boolean;
@@ -13,6 +13,7 @@ type Props = {
   freq: RecurFreq; setFreq: (f: RecurFreq) => void;
   interval: string; setInterval: (s: string) => void;
   endMode: RecurEndMode; setEndMode: (m: RecurEndMode) => void;
+  mode: RecurMode; setMode: (m: RecurMode) => void;
   endMs: number | null; setEndMs: (n: number | null) => void;
   count: string; setCount: (s: string) => void;
   txnDate: number;

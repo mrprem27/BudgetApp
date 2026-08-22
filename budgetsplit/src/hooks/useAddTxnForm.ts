@@ -35,7 +35,7 @@ import { buildUpiUri, buildUpiRequestUri } from '../lib/upiIntent';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
-import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope } from '../constants/enums';
+import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 
 export type AddTxnParams = {
@@ -122,6 +122,15 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [tags, setTags] = useState<string[]>([]);
   const [recurEnabled, setRecurEnabled] = useState(false);
   const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
+  /**
+   * Whether a due occurrence posts itself or waits to be logged.
+   *
+   * Defaults by kind: an expense you have already committed to can post itself,
+   * but income and transfers default to waiting, because a salary that never
+   * landed — silently posted on the 1st — corrupts every figure downstream and
+   * does it quietly. Same reasoning as confirming an incoming transfer.
+   */
+  const [recurMode, setRecurMode] = useState<RecurMode>('auto');
   const [recurInterval, setRecurInterval] = useState('1');
   const [recurEndMs, setRecurEndMs] = useState<number | null>(null);
   const [recurEndMode, setRecurEndMode] = useState<RecurEndMode>(RecurEndMode.Never);
@@ -393,6 +402,10 @@ export function useAddTxnForm(params: AddTxnParams) {
   function onSelectKind(k: AddKind) {
     haptic.selection();
     setKind(k);
+    // Follow the kind's default. Switching kind changes what the answer should be,
+    // and the user has not touched this control yet on a fresh form — the sheet
+    // still lets them override it either way.
+    setRecurMode(defaultRecurMode(k === 'transfer' ? 'settlement' : k));
     if (k === 'expense') {
       // Same group, so the category survives the catalog reload. (Income and
       // transfer genuinely switch to a different category catalog below, where
@@ -651,6 +664,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           tags,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurNorm.freq,
+          recurMode,
           recurInterval: recurNorm.interval,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
           payments: finalPayments, shares: finalShares,
@@ -701,6 +715,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurNorm.freq : undefined,
           recurInterval: recurEnabled ? recurNorm.interval : undefined,
+          recurMode: recurEnabled ? recurMode : undefined,
           recurEnd,
           lat: place?.lat, lng: place?.lng, placeLabel: place?.label ?? undefined,
           currency: currency !== DEFAULT_CURRENCY ? currency : undefined,
@@ -771,7 +786,8 @@ export function useAddTxnForm(params: AddTxnParams) {
     transferHandoffHooks,
     payMethod, setPayMethod,
     // recurring
-    recurEnabled, setRecurEnabled, recurFreq, setRecurFreq, recurInterval, setRecurInterval,
+    recurEnabled, setRecurEnabled,
+    recurMode, setRecurMode, recurFreq, setRecurFreq, recurInterval, setRecurInterval,
     recurEndMs, setRecurEndMs, recurEndMode, setRecurEndMode, recurCount, setRecurCount,
     // attachment / location
     attachmentUri, setAttachmentUri, tags, setTags, setTxnTime, applyVoiceDraft, place, setPlace, locEnabled, capturingLoc, captureLocation,

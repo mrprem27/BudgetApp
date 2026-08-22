@@ -356,3 +356,49 @@ describe('a peer recurring rule', () => {
     expect(await getActiveRecurringRules(asDb(db))).toHaveLength(0);
   });
 });
+
+/**
+ * A rule can post itself, or wait to be logged. The difference matters most for
+ * money that has to ARRIVE: a salary silently recorded on the 1st, that never
+ * actually landed, moves every figure in the app without telling anyone.
+ */
+describe('recur_mode', () => {
+  async function ruleFor(kind: 'expense' | 'income', mode: 'auto' | 'remind') {
+    const { db, me, flat } = await setup();
+    const id = `rule-${kind}-${mode}`;
+    await db.runAsync(
+      `INSERT INTO txn (id, group_id, kind, entry_mode, date, category, recur_freq,
+         recur_interval, recur_state, recur_mode, is_deleted, created_at, updated_at)
+       VALUES (?, ?, ?, 'quick', ?, 'Rent', 'monthly', 1, 'active', ?, 0, ?, ?)`,
+      [id, flat, kind, Date.now() - 90 * 86400000, mode, Date.now(), Date.now()],
+    );
+    await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, me, 100000]);
+    await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [id, me, 100000]);
+    return { db, me, id };
+  }
+
+  it('an auto rule still posts by itself', async () => {
+    const { db } = await ruleFor('expense', 'auto');
+    expect(await materializeDueOccurrences(asDb(db))).toBeGreaterThan(0);
+  });
+
+  it('a remind rule posts nothing at all', async () => {
+    const { db } = await ruleFor('income', 'remind');
+    expect(await materializeDueOccurrences(asDb(db))).toBe(0);
+  });
+
+  it('every rule that existed before this column keeps posting', async () => {
+    // The migration defaults to 'auto', so nothing anyone already set up changes
+    // behaviour. That is the whole reason for the default.
+    const { db, me, flat } = await setup();
+    await db.runAsync(
+      `INSERT INTO txn (id, group_id, kind, entry_mode, date, category, recur_freq,
+         recur_interval, recur_state, is_deleted, created_at, updated_at)
+       VALUES ('legacy', ?, 'expense', 'quick', ?, 'Rent', 'monthly', 1, 'active', 0, ?, ?)`,
+      [flat, Date.now() - 90 * 86400000, Date.now(), Date.now()],
+    );
+    await db.runAsync("INSERT INTO txn_payment (txn_id, person_id, amount) VALUES ('legacy', ?, 100000)", [me]);
+    await db.runAsync("INSERT INTO txn_share (txn_id, person_id, amount) VALUES ('legacy', ?, 100000)", [me]);
+    expect(await materializeDueOccurrences(asDb(db))).toBeGreaterThan(0);
+  });
+});

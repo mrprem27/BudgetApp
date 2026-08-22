@@ -1,4 +1,4 @@
-import { buildUpcoming } from '../lib/upcoming';
+import { buildUpcoming, expandUpcoming } from '../lib/upcoming';
 
 const base = {
   id: 'r1', group_id: 'g', kind: 'expense', entry_mode: 'quick',
@@ -26,14 +26,46 @@ describe('buildUpcoming', () => {
     expect(out[0].amount).toBe(1000);
   });
 
-  it('omits paused, deleted, ended, income and non-recurring series', () => {
+  it('omits paused, deleted, ended and non-recurring series', () => {
     const paused: any = { ...base, id: 'p', recur_freq: 'monthly', date: ms(2024, 0, 1), recur_state: 'paused' };
     const deleted: any = { ...base, id: 'd', recur_freq: 'monthly', date: ms(2024, 0, 1), is_deleted: 1 };
-    const income: any = { ...base, id: 'i', recur_freq: 'monthly', date: ms(2024, 0, 1), kind: 'income' };
     const oneOff: any = { ...base, id: 'o', recur_freq: null, date: ms(2024, 0, 1) };
     const ended: any = { ...base, id: 'e', recur_freq: 'monthly', date: ms(2024, 0, 1), recur_end: ms(2024, 0, 15) };
-    const out = buildUpcoming([paused, deleted, income, oneOff, ended], 'me', ms(2024, 1, 20));
+    const out = buildUpcoming([paused, deleted, oneOff, ended], 'me', ms(2024, 1, 20));
     expect(out).toHaveLength(0);
+  });
+
+  /**
+   * Income used to be dropped here too. It is a LIST of what is coming, and a
+   * recurring salary is exactly the sort of thing you want on it — the reason to
+   * exclude it was never about this function.
+   */
+  it('includes income and transfers, tagged by kind', () => {
+    const income: any = { ...base, id: 'i', recur_freq: 'monthly', date: ms(2024, 0, 1), kind: 'income' };
+    const transfer: any = { ...base, id: 't', recur_freq: 'monthly', date: ms(2024, 0, 2), kind: 'settlement' };
+    const out = buildUpcoming([income, transfer], 'me', ms(2024, 1, 20));
+    expect(out.map(i => i.kind)).toEqual(['income', 'settlement']);
+  });
+
+  /**
+   * ...but Safe-to-Spend's "committed bills" must stay outgoings only. Income is
+   * not a bill and a settlement is not consumption (AGENTS §12), and summing them
+   * into one figure is the bug two other screens already shipped.
+   */
+  it('keeps expandUpcoming — which feeds Safe-to-Spend — to expenses alone', () => {
+    const income: any = { ...base, id: 'i', recur_freq: 'monthly', date: ms(2024, 0, 1), kind: 'income' };
+    const transfer: any = { ...base, id: 't', recur_freq: 'monthly', date: ms(2024, 0, 2), kind: 'settlement' };
+    const bill: any = { ...base, id: 'b', recur_freq: 'monthly', date: ms(2024, 0, 3) };
+    const out = expandUpcoming([income, transfer, bill], 'me', ms(2024, 1, 1), ms(2024, 2, 1));
+    expect(out.every(o => o.seriesId === 'b')).toBe(true);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('reports whether a rule posts itself or waits to be logged', () => {
+    const auto: any = { ...base, id: 'a', recur_freq: 'monthly', date: ms(2024, 0, 1), recur_mode: 'auto' };
+    const remind: any = { ...base, id: 'r', recur_freq: 'monthly', date: ms(2024, 0, 2), recur_mode: 'remind' };
+    const out = buildUpcoming([auto, remind], 'me', ms(2024, 1, 20));
+    expect(out.map(i => i.mode)).toEqual(['auto', 'remind']);
   });
 
   it('sorts soonest first and respects the limit', () => {

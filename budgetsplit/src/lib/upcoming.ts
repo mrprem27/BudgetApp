@@ -1,4 +1,6 @@
 import { nextUnskippedOccurrence, materializeInstances } from './recurrence';
+import { asRecurMode, type RecurMode } from '../constants/enums';
+import type { TxnKind } from '../constants/enums';
 import { myShareOrTotal } from './splitMath';
 import type { TxnWithSplits } from '../db/queries/transactions';
 
@@ -31,6 +33,10 @@ export function expandUpcoming(
   const out: ExpandedOccurrence[] = [];
   for (const txn of recurring) {
     if (txn.is_deleted) continue;
+    // Expenses ONLY, and deliberately — this feeds Safe-to-Spend's `upcomingBills`,
+    // which is "committed outgoings before payday". Income is not a bill, and a
+    // settlement is not consumption (AGENTS §12). `buildUpcoming` below is the
+    // list, and that one shows all three, labelled per kind.
     if (txn.kind !== 'expense') continue;
     if (!txn.recur_freq) continue;
     if (txn.recur_state && txn.recur_state !== 'active') continue;
@@ -62,6 +68,13 @@ export type UpcomingItem = {
   dateMs: number;
   /** Whole days from now until the occurrence (0 = today). */
   daysUntil: number;
+  /** Which side of the ledger this is. Never sum across values of this. */
+  kind: TxnKind;
+  /**
+   * 'auto' posts itself when due; 'remind' waits to be logged. A reminder is the
+   * only one the user can act on, so the list needs to tell them apart.
+   */
+  mode: RecurMode;
 };
 
 /**
@@ -87,7 +100,10 @@ export function buildUpcoming(
   const items: UpcomingItem[] = [];
   for (const txn of recurring) {
     if (txn.is_deleted) continue;
-    if (txn.kind !== 'expense') continue;
+    // All three kinds. This is a LIST of what is coming, not a total — a recurring
+    // salary and a standing transfer are both things you want to see. Consumers
+    // must label and sum per kind rather than adding them together; §12 forbids
+    // one figure across kinds, and two screens have already shipped that bug.
     if (!txn.recur_freq) continue;
     if (txn.recur_state && txn.recur_state !== 'active') continue;
 
@@ -101,6 +117,8 @@ export function buildUpcoming(
       amount: myShareOrTotal(txn, meId),
       dateMs: next,
       daysUntil: Math.max(0, Math.round((next - nowMs) / DAY_MS)),
+      kind: txn.kind,
+      mode: asRecurMode(txn.recur_mode),
     });
   }
   items.sort((a, b) => a.dateMs - b.dateMs);
