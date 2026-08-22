@@ -7,6 +7,9 @@ import { haptic } from '../lib/haptics';
 import { requestNotificationPermission } from '../lib/notifications';
 import { setReminderPrefs } from '../lib/reminders';
 import { finalizeOnboarding } from '../lib/onboarding';
+// Re-exported so callers keep one import site; the logic is pure and lives in lib.
+export { NUMBERED_STEPS, numberedSteps, stepPosition, type OnboardingStage } from '../lib/onboardingSteps';
+import type { OnboardingStage } from '../lib/onboardingSteps';
 import type { OnboardingIntent } from '../lib/personaDefaults';
 
 /**
@@ -16,34 +19,6 @@ import type { OnboardingIntent } from '../lib/personaDefaults';
  * beat and the fake 1.7s "committing" checklist are gone — the write is a fast
  * local SQLite transaction and pretending otherwise was theatre.
  */
-export type OnboardingStage =
-  | 'hero' | 'intent' | 'name' | 'income' | 'money' | 'budget'
-  | 'people' | 'permissions' | 'summary';
-
-/** The numbered flow, intent onward. `summary` is a result, not a question. */
-export const NUMBERED_STEPS: OnboardingStage[] = ['intent', 'name', 'income', 'money', 'budget', 'people', 'permissions'];
-
-/**
- * Someone who told us they only track their own spending is never asked who they
- * split with — the step can only produce contacts they'd never use, and the dots
- * shouldn't count a screen they'll never see.
- */
-export function numberedSteps(intent: OnboardingIntent): OnboardingStage[] {
-  return intent === 'personal' ? NUMBERED_STEPS.filter(s => s !== 'people') : NUMBERED_STEPS;
-}
-
-/**
- * Where a step sits in the flow, 1-based. Known from the FIRST question — the
- * old flow showed no count until three screens had gone by, and the total
- * changed under the user when the persona shifted mid-flow.
- */
-export function stepPosition(stage: OnboardingStage, intent: OnboardingIntent): { step: number; total: number } | null {
-  const steps = numberedSteps(intent);
-  const idx = steps.indexOf(stage);
-  if (idx < 0) return null;
-  return { step: idx + 1, total: steps.length };
-}
-
 /** rupees text → integer paise (0 when blank or unparseable). */
 function toPaise(t: string): number {
   return Math.max(0, Math.round((Number(t.replace(/[^0-9.]/g, '')) || 0) * 100));

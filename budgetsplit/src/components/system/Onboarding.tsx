@@ -15,6 +15,8 @@ import { FadeIn } from '../ui/FadeIn';
 import { Card } from '../ui/Card';
 import { Chip } from '../ui/Chip';
 import { Divider } from '../ui/Divider';
+import { ListRow } from '../ui/ListRow';
+import { PayMethod, PAY_METHOD_LABEL, PAY_METHOD_ICON } from '../../constants/enums';
 import { IconCircle } from '../ui/IconCircle';
 import { OptionRow } from '../ui/OptionRow';
 import { SectionHeader } from '../ui/SectionHeader';
@@ -110,15 +112,25 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <LogoAssembly width={width} height={height} cy={height * 0.38} />
           </View>
-          {/* Reveals over the logo, not after it: waiting for the ~3.7s assembly put
-              the first tap 4.8s away, and the "Skip intro" link that existed to
-              escape that went to the same stage as Get Started. The logo animation
-              is untouched — only this overlay's timing moved. */}
+          {/* Reveals once the mark has visibly FORMED — not over it, and not after
+              the whole physics run.
+
+              Three positions have been tried here. Waiting for the full ~3.7s
+              assembly put the first tap 4.8s away, which is why it was moved to
+              900ms. But at 900ms the words arrive on top of a logo still visibly
+              assembling, and it reads as a mistake rather than as a sequence.
+
+              2.4s is where the mark is legible and the animation is only settling.
+              The name lands on a finished logo, and the first tap is ~2.8s — most
+              of the speed, none of the overlap.
+
+              ⛔ LogoAssembly itself is untouched, as it always must be. Only these
+              three delays moved. */}
           <View style={[styles.heroBottom, { paddingBottom: bottomPad }]}>
-            <FadeIn delay={900} offset={14}>
+            <FadeIn delay={2400} offset={14}>
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
-            <FadeIn delay={1050} offset={10} style={styles.taglineWrap}>
+            <FadeIn delay={2550} offset={10} style={styles.taglineWrap}>
               {/* "No bank login" leads, ahead of "nothing in the cloud". It is the
                   concrete, checkable version of the same promise — every competitor
                   in this market either asks for a bank connection or reads your SMS,
@@ -126,7 +138,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   vaguer cloud claim follows it rather than standing alone. */}
               <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
             </FadeIn>
-            <FadeIn delay={1200} style={styles.footer}>
+            <FadeIn delay={2700} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
               <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
             </FadeIn>
@@ -270,9 +282,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           footer={
             <StepFooter
               primaryLabel="Continue"
-              onPrimary={() => setStage('budget')}
+              onPrimary={() => setStage('pay')}
               skipLabel="Skip"
-              onSkip={() => setStage('budget')}
+              onSkip={() => setStage('pay')}
             />
           }
         >
@@ -303,10 +315,59 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       )}
 
       {/* BUDGET STEP — presets derive from the income just entered. */}
+      {/*
+        How you usually pay.
+        
+        This was already being SAVED — defaulted to UPI, never asked — so every
+        transaction carried a payment method the user had not chosen and would
+        have no reason to suspect. Asking makes the default theirs, and it is the
+        one question here whose answer shows up on literally every entry.
+
+        Skippable, and skipping keeps UPI: it is the right guess for this market,
+        and a required question about a preference is a worse trade than a good
+        default. The Settings row stays the way to change it later.
+      */}
+      {stage === 'pay' && (
+        <StepScaffold
+          stageKey="pay"
+          onBack={() => setStage('money')}
+          {...(stepPosition('pay', intent) ?? {})}
+          title="How do you usually pay?"
+          subtitle="Filled in for you on every new expense, so the common case takes no taps. You can change it on any single one."
+          footer={
+            <StepFooter
+              primaryLabel="Continue"
+              onPrimary={() => setStage('budget')}
+              skipLabel="Skip"
+              onSkip={() => setStage('budget')}
+            />
+          }
+        >
+          <Card clip>
+            {PAY_CHOICES.map((m, i) => (
+              <React.Fragment key={m}>
+                {i > 0 && <Divider indent="text" />}
+                <ListRow
+                  icon={PAY_METHOD_ICON[m]}
+                  iconColor={payMethod === m ? colors.accent : colors.textSecondary}
+                  title={PAY_METHOD_LABEL[m]}
+                  chevron={false}
+                  value={payMethod === m
+                    ? <Feather name="check" size={18} color={colors.accent} />
+                    : undefined}
+                  onPress={() => { haptic.selection(); setPayMethod(m); }}
+                />
+              </React.Fragment>
+            ))}
+          </Card>
+          <Text style={styles.helpLine}>Autopay and other methods are still available on each transaction.</Text>
+        </StepScaffold>
+      )}
+
       {stage === 'budget' && (
         <StepScaffold
           stageKey="budget"
-          onBack={() => setStage('money')}
+          onBack={() => setStage('pay')}
           {...(stepPosition('budget', intent) ?? {})}
           title="Set your monthly budget"
           subtitle={incomeNum > 0
@@ -520,12 +581,23 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   );
 }
 
+/**
+ * Offered as a default, in the order they are likely in this market.
+ *
+ * Deliberately not every `PayMethod`. Autopay is set by a mandate rather than
+ * chosen at the till, and "Other" is a fallback, not a habit — defaulting every
+ * future expense to either would be worse than a wrong guess between the four
+ * real ones. Both stay selectable on an individual transaction.
+ */
+const PAY_CHOICES: PayMethod[] = [PayMethod.Upi, PayMethod.Card, PayMethod.Cash, PayMethod.Bank, PayMethod.Wallet];
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
-  // ⛔ HERO ONLY — do not touch. The FadeIn delays in the hero block are tuned to
-  // LogoAssembly's ~3.7s physics run; `footer` and `bottomPad` are shared with it,
-  // which is why the step components fork their own rather than reusing these.
+  // ⛔ HERO ONLY — do not touch these styles. The FadeIn delays in the hero block
+  // are tuned to LogoAssembly's ~3.7s physics run (they reveal at 2.4s, once the
+  // mark has formed); `footer` and `bottomPad` are shared with it, which is why
+  // the step components fork their own rather than reusing these.
   heroRoot: { flex: 1 },
   heroBottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: layout.screenPaddingH, gap: space.md },
   brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center' },
