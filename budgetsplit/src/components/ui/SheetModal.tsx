@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DraggableSheet, SHEET_EXIT_MS } from './DraggableSheet';
+import { joinStage, claimStage } from '../../lib/sheetStage';
 
 type Props = {
   visible: boolean;
@@ -33,15 +34,38 @@ type Props = {
  *
  * The Modal keeps `animationType="none"` on purpose — `DraggableSheet` owns all the motion,
  * and letting the Modal fade as well double-animates the backdrop.
+ *
+ * ### Why the exit lag is given up on a swap
+ *
+ * That same lag froze the app when one sheet **replaced** another. `QuickAddSheets`
+ * swaps in a single state change, so for ~240ms the outgoing sheet and the incoming
+ * one both rendered `<Modal visible>` — and two RN modals presented at once on iOS
+ * leaves an invisible view that eats every touch. Tapping "On date" inside Repeat
+ * did exactly that.
+ *
+ * So a sheet becoming visible **claims the stage** (`lib/sheetStage`) and every other
+ * one unmounts immediately, animation forfeited. Nobody watches a sheet leave while
+ * another arrives; a stuck screen is not a trade-off.
  */
 export function SheetModal({ visible, onClose, title, children, scroll = true, headerRight }: Props) {
   // Lags `visible` on the way down only; leads it on the way up.
   const [rendered, setRendered] = useState(visible);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Stable identity for the lifetime of the instance: the stage holds this
+  // reference, so a new closure per render would leak registrations.
+  const yieldNow = useRef<(() => void) | null>(null);
+  if (!yieldNow.current) {
+    yieldNow.current = () => {
+      if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+      setRendered(false);
+    };
+  }
+  useEffect(() => joinStage(yieldNow.current!), []);
+
   useEffect(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    if (visible) { setRendered(true); return; }
+    if (visible) { claimStage(yieldNow.current!); setRendered(true); return; }
     // A slightly longer wait than the animation, so the final frame has landed before the
     // native view goes away.
     timer.current = setTimeout(() => setRendered(false), SHEET_EXIT_MS + 40);
