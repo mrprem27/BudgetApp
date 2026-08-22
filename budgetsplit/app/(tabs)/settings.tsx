@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
+  ScrollView, Alert, Platform, ActivityIndicator,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -244,7 +245,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
     {/* Persistent status-bar cover — outside the ScrollView so scrolled content
         never paints under the clock/notch once the large title scrolls away. */}
     <View style={[styles.statusBarCover, { height: insets.top, backgroundColor: colors.bg }]} pointerEvents="none" />

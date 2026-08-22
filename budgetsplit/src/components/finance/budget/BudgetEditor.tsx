@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, findNodeHandle } from 'react-native';
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -55,7 +56,9 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
 
   const [footerH, setFooterH] = React.useState(0);
   const listPad = useContentInset({ footer: footerH });
-  const scrollRef = useRef<ScrollView>(null);
+  // Typed from the library, not RN: KeyboardAwareScrollView's ref adds
+  // `assureFocusedInputVisible` and is not a plain ScrollView.
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const focusRowRef = useRef<View>(null);
   const scrolledToFocus = useRef(false);
 
@@ -107,12 +110,12 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
         {/* No KeyboardAvoidingView: it padded the whole stack, so the footer rode the
             keyboard up on every one of 40-odd field focuses. The ScrollView insets
             itself instead, keeping the focused row visible and the CTA in place. */}
-        <ScrollView
+        <KeyboardAwareScrollView
           ref={scrollRef}
           style={styles.list}
           contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets
+         
           refreshControl={<AppRefreshControl refreshing={e.refreshing} onRefresh={e.onRefresh} />}
         >
           {/* Segmented, not chips: this is "pick exactly one", and the two are
@@ -223,7 +226,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           }) : (
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View
           style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}

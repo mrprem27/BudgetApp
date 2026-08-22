@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { FadeIn } from '../../ui/FadeIn';
 import { StepBack } from './StepBack';
 import { StepProgress } from './StepProgress';
@@ -70,18 +71,18 @@ export function StepScaffold({
         subtitle all jumped. An inset lets the focused field scroll into view
         while the layout stays exactly where it was.
       */}
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.fill}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
+       
         showsVerticalScrollIndicator={false}
       >
         {!!art && <View style={styles.art}>{art}</View>}
         {titlePosition === 'top' && heading}
         {children}
         {titlePosition === 'bottom' && heading}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {footer}
     </FadeIn>

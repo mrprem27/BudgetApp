@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { View, AppState } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
@@ -138,6 +139,19 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      {/*
+        Android had NO keyboard handling at all — not one screen moved. Three
+        causes stacked: every `KeyboardAvoidingView` passed
+        `behavior={Platform.OS === 'ios' ? 'padding' : undefined}`, which makes a
+        KAV a plain `View` on Android; the fix used elsewhere,
+        `automaticallyAdjustKeyboardInsets`, is iOS-only; and Expo 54+ makes
+        edge-to-edge mandatory, under which `adjustResize` no longer resizes the
+        window, so the platform fallback is a no-op too.
+
+        `KeyboardProvider` gives one code path that genuinely works on both. It
+        must sit above every screen, hence here.
+      */}
+      <KeyboardProvider>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
         <SQLiteProvider databaseName="budgetsplit.db">
           <FeatureFlagsProvider>
@@ -169,6 +183,7 @@ export default function RootLayout() {
         </SQLiteProvider>
         <PrivacyScreen />
       </GestureHandlerRootView>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

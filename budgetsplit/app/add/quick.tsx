@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Keyboard, Platform } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -73,7 +74,11 @@ export default function QuickAddScreen() {
         <AddHeader form={f} accent={accent} onClose={() => router.back()} onOpenSheet={open} />
       }
     >
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      {/* One behavior, both platforms. Was `'height'` on Android with a magic
+          24pt offset — the jankiest RN mode, chosen because `'padding'` did
+          nothing there. The library's implementation makes `'padding'` work, so
+          the special case and the magic number both go. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           {!isEditing && !isRecurEdit && (

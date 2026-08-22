@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { fullDate } from '../../src/lib/dateFormat';
 import { colors, type, space, layout } from '../../src/theme';
@@ -146,7 +147,7 @@ export default function AccountScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Account" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!configured ? (
           <Card padded>
             <Text style={styles.note}>
@@ -298,7 +299,7 @@ export default function AccountScreen() {
             {error && <Text style={styles.error}>{error}</Text>}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <SheetModal visible={showPhone} onClose={() => setShowPhone(false)} title="Your phone number">
         <Input

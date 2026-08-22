@@ -16,6 +16,7 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { Banner } from '../src/components/ui/Banner';
 import { ReviewSourceTabs, ReviewSourceHeader } from '../src/components/finance/review/ReviewSourceTabs';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ReviewList } from '../src/components/finance/review/ReviewList';
 import { useReviewCommit } from '../src/hooks/useReviewCommit';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
@@ -426,6 +427,7 @@ export default function ReviewScreen() {
           onAction={() => { setSourceTab(null); exitFocus(); }}
         />
       ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ReviewList
           sections={sections}
           multiSource={multiSource}
@@ -456,6 +458,7 @@ export default function ReviewScreen() {
           onConfirm={confirmRow}
           onDiscard={deleteRow}
         />
+        </KeyboardAvoidingView>
       )}
 
       {/* Sticky footer — one CTA normally, Actions + Save while selecting. */}

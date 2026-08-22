@@ -81,6 +81,9 @@ export function ReviewList({
     <SectionList
       sections={sections}
       keyExtractor={r => r.id}
+      // iOS-only, and kept: there is no keyboard-aware SectionList, so the screen
+      // wraps this in the library's KeyboardAvoidingView for Android. Both are
+      // needed — the inset prop gives iOS the smoother behaviour it already had.
       automaticallyAdjustKeyboardInsets
       renderItem={({ item }) => (
         <ReviewRowCard

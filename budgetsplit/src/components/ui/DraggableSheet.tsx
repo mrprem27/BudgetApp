@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View, Text, StyleSheet, Pressable, Dimensions,
-  KeyboardAvoidingView, Platform, Keyboard, type NativeSyntheticEvent, type NativeScrollEvent,
+import {  View, Text, StyleSheet, Pressable, Dimensions, Platform, Keyboard, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate,
@@ -140,8 +139,15 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
       <Animated.View style={[styles.backdrop, backdropStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} accessibilityRole="button" accessibilityLabel="Close" />
       </Animated.View>
+      {/*
+        The highest-leverage one in the app. This is the single KAV behind
+        `SheetModal`, which has ~58 usages — and about ten of those `autoFocus` a
+        field, so on Android those sheets opened with their own input focused and
+        invisible behind the keyboard. `ScanPaySheet` is one of them, and it is
+        reachable from every tab.
+      */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.wrap}
         pointerEvents="box-none"
       >
