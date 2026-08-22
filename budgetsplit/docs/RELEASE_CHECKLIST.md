@@ -69,7 +69,11 @@ claim cites `file:line` or it gets deleted rather than debated.
       CSV export's hardcoded demo-row signatures drift apart by design.
 - [ ] **Rotate the Brevo API key.** It was pasted into a chat transcript and is a
       live credential for the deployed Worker.
-- [ ] **Push all 25 commits.** Two branches, neither pushed.
+- [x] ~~**Push all 25 commits.** Two branches, neither pushed.~~
+      **Closed — the claim was false.** `HEAD` is level with `origin`, and both
+      named branches are ancestors of it, so their commits are on the remote too.
+      The only unpushed commits are three merge commits on an unrelated `Test`
+      branch. Verified with `git log --branches --not --remotes`.
 - [ ] **Privacy policy + App Store listing.** Required even for external
       TestFlight, and newly sharp: a server now holds email addresses.
 - [ ] **Update the store-listing copy.** In-app copy was corrected on 2026-08-17
@@ -680,6 +684,15 @@ Each line is real, evidenced, and not blocking the pilot.
 > `person` rows never travel at all — a friend is a local record, and only the
 > account id (`remote_uid`) bridges devices.
 
+> **Superseded — read the note, not the paragraph below.** This section described
+> nine tables needing sync columns, which assumed ROW-level sync. The entry is the
+> unit: `txn_share` / `txn_payment` / `line_item` are never mutated apart from their
+> parent (every mutation is an insert with a new `txn` id, a rewrite of the whole set
+> inside `updateTxn`, or a group cascade), so they sync as part of the parent
+> document and need no columns of their own. That left **two** tables — `budget_group`
+> and `group_member` — and both have since gained `updated_at` + `deleted_at`.
+> The paragraph below is kept because it explains *why* the columns are needed.
+
 **Only `txn` carries what sync needs.** `updated_at` + `is_deleted` exist at
 `src/db/schema.ts:73-75` and nowhere else. `budget_group`, `recur_skip`,
 `savings_goal` and `savings_txn` have `created_at` alone; `person`,
@@ -727,7 +740,7 @@ without this; the rest waits for the per-method baselines pass, which touches
 
 | Item | Why it's parked | Un-parks when |
 |---|---|---|
-| **Multi-device sync (S2)** | Nine tables lack the columns sync needs, so it opens with a migration across every write path | You want it enough to spend weeks |
+| **Multi-device sync (S2)** | The schema prep has landed (see §5's superseded note — two tables, four columns, not nine). What is left is the engine: transport, outbox, conflict handling, and an E2E crypto swap off `crypto-js` | You want it enough to spend weeks |
 | **Shared groups (S3)** | Hardest rung: identity merging + multi-writer money | S2 is running and boring |
 | **Per-method money baselines** | Money-correctness risk; deserves its own reviewed pass | The next money-model pass — accounts-as-entities and investments-as-transfer are waiting with it |
 | **Monetisation / premium tier** | A tier boundary drawn before anyone uses the app is a guess | After the pilot. Needs a new entitlement concept; nothing existing can be repurposed |

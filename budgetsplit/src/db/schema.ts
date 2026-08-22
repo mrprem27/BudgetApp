@@ -374,11 +374,14 @@ export const COLUMN_MIGRATIONS = [
   //
   // AGENTS §13: when sync exists, an entry takes effect immediately for whoever
   // created it and waits for approval from everyone else it touches. Answering
-  // "who wrote this, and who does it say paid" needs both facts on the row, and a
-  // pending row lives HERE rather than in `txn` behind a status flag — nothing
-  // reads `pending_txn`, so every existing read path stays correct untouched,
-  // whereas a flag would need `AND status='approved'` on ~40 of them and missing
-  // one breaks the rule silently in that surface alone.
+  // "who wrote this, and who does it say paid" needs both facts on the row.
+  //
+  // NOTE: the second half of this comment used to argue that a pending peer row
+  // belongs HERE rather than in `txn`. That was reversed — `pending_txn` has no
+  // share or payment rows, so a split expense routed through it loses its split,
+  // and the "~40 read paths" turned out to be eight. A peer entry is a real `txn`
+  // with its state in `txn_approval`; see AGENTS §13. These two columns are still
+  // right for `pending_txn`'s own rows (a peer-authored IMPORT), so they stay.
   //
   // Added now because they cost nothing now and a migration later.
   "ALTER TABLE pending_txn ADD COLUMN author_person_id TEXT",

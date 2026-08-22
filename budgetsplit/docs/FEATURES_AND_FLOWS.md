@@ -1780,14 +1780,17 @@ documented, **not implemented**.
 
 ### The account/backup Worker
 [server/api/](../../server/api/) is the second Worker: D1 for identity (`users`, `magic_links`,
-`sessions`) and backup metadata, R2 for the blobs. It never sees a transaction, and never sees a
+`sessions`) and backup metadata, and a blob store for the encrypted snapshots —
+**KV today**, because the `[[r2_buckets]]` block in `wrangler.toml` is commented
+out. That matters: KV caps a value at 25 MiB and the free plan allows ~1k writes a
+day, where R2's ceiling is far higher. It never sees a transaction, and never sees a
 backup passphrase — `lib/backup.ts` encrypts on the phone first, so the stored bytes are opaque
 to it. Phase **S1** only: no sync (S2), no shared groups (S3).
 
 **Config**: `wrangler d1 create` → `d1 migrations apply` → `r2 bucket create` → an email
 provider (see below) → `wrangler deploy` → set `EXPO_PUBLIC_API_URL`.
 
-**It runs free.** Workers (100k req/day), D1 (5 GB) and R2 (10 GB) are all on Cloudflare's
+**It runs free.** Workers (100k req/day), D1 (5 GB) and R2 (10 GB, once wired) are all on Cloudflare's
 free plan. The one exception is Cloudflare's *own* Email Sending, which is Workers Paid
 ($5/mo) and needs a domain you own — so `server/api/mailer.ts` defaults to an HTTP provider
 with a free tier and single-sender verification, and falls back to the Cloudflare binding

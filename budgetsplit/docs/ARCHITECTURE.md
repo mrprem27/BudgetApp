@@ -24,7 +24,14 @@
 
 ## 1. What the app is
 
-A **100% offline, private** personal-finance + bill-splitting app for urban Indian users.
+A **local-first** personal-finance + bill-splitting app for urban Indian users.
+
+> Not "100% offline", which this line used to claim three rows above the table that
+> contradicts it. Receipt scanning defaults to a **cloud** OCR provider and sends the
+> photo; signing in sends an email address. Both are listed in §2 and in
+> `FEATURES_AND_FLOWS.md` §19, and both are avoidable — but the app is not offline
+> by default, and a doc that says otherwise is how a false claim reached the
+> onboarding screen.
 Three always-on pillars: **Personal Finance** (budget + spending), **Group Splitting**
 (shared expenses, itemized splits, settle-up), and **Insights** (turning the first two
 into understanding). Everything else (forecast, health score, subscriptions, reminders,
@@ -59,7 +66,7 @@ afford check, savings goals) ships as optional feature-flagged modules.
 | Gestures/animation | **react-native-gesture-handler**, **react-native-reanimated**, RN `Animated` |
 | Fonts | **SpaceMono** (money), **Inter** (everything else) |
 | Crypto | **crypto-js** — passphrase-encrypted backups only (`src/lib/backup.ts`) |
-| Server | **One Cloudflare Worker**, `server/receipt-ocr-proxy/` — stateless, ~113 L, exists only to hold `GEMINI_API_KEY` for receipt OCR. Not required for anything else; the app is otherwise fully local. Deployed with **wrangler** |
+| Server | **Two Cloudflare Workers.** `server/receipt-ocr-proxy/` is stateless, ~113 L, and exists only to hold `GEMINI_API_KEY` for receipt OCR. `server/api/` is accounts + encrypted backup (D1 + KV, magic-link auth) and is **deployed** — it never sees a transaction. Both via **wrangler** |
 | Network | Three paths, all opt-in but one: the receipt-OCR proxy (**sends the receipt photo**, on by default), and — only in a build with `EXPO_PUBLIC_API_URL` — sign-in and encrypted backup via `server/api`, which never sees a transaction. pdf.js is bundled, not fetched. **Accounts exist; sync does not.** No analytics. See FEATURES_AND_FLOWS §19 |
 
 ---
@@ -212,7 +219,7 @@ Both PK `(txn_id, person_id)` · `amount` (paise). Payment = who paid; share = w
 
 ### `category`
 `id` PK · `group_id` · `name` · `icon` · `color` · `kind` CHECK(expense/income) ·
-`section`. **Per-group** — duplicated into every group at creation.
+`section`. **Global** — one catalog per kind, `group_id` nullable and `UNIQUE(name, kind)`. It was per-group, duplicated into every group at creation; the `category_global_v1` migration collapsed that, and `category_tombstone` is how a deleted default stays deleted against the re-seed.
 
 ### `category_budget`
 `id` PK · `group_id` · `category` (name string) · `period` (**vestigial — always
@@ -236,8 +243,22 @@ funding order now driven by `sort_order` drag rank) · `category` · `icon` · `
 `id` · `goal_id` (NULL = pool-level) · `amount` · `kind` CHECK(deposit/allocate/withdraw) ·
 `source` CHECK(manual/auto) · `date` · `note` · `created_at`. Indexed on `goal_id`.
 
-### `settings` — **DEAD TABLE**
-Created in DDL, **zero reads/writes**. All key/value settings live in AsyncStorage (§7).
+### `settings` — **live, and load-bearing**
+Was documented here as a dead table with zero reads/writes. It is neither, and the
+error is not cosmetic: believing it dead is exactly what would make someone dismiss
+the restore defect that lives in it.
+
+It holds two unrelated things. **`money.*`** — opening cash, investments, the credit
+baseline (`db/queries/moneyProfile.ts`) — is real user data. **One-time-fix markers**
+(`ONE_TIME_FIXES`, `category_global_v1`, `schema.ts`) are *device* state recording
+what has already been done to this database.
+
+`restoreAllTables` therefore treats them differently: `money.*` restores, the markers
+never do — in **either** direction. Carrying one in marks a fix done on a device that
+never ran it; wiping one out re-runs a fix that has already happened, and
+`fix_income_category_kind_v1` re-running trips `UNIQUE(name, kind)`.
+
+Most other key/value prefs do live in AsyncStorage (§7). Both stores are real.
 
 ### Indexing reality
 Indexed: audit ×2, `savings_txn`, `pending_txn`, and the hot transaction paths —
@@ -260,7 +281,7 @@ an AsyncStorage marker with DB writes — it's idempotent, and tracked in
 | `transactions.ts` (762 L) | All txn CRUD, itemized, recurring rules, materialization, skips, duplicates, streak |
 | `groups.ts` | Group CRUD, members, archive/restore/delete (cascades) |
 | `persons.ts` | People CRUD, `getMe`, group membership, avatars |
-| `categories.ts` | Per-group categories CRUD (with usage counts) |
+| `categories.ts` | Global category catalog CRUD (with usage counts) |
 | `categoryBudgets.ts` | Per-category budget limits (delete-all-then-reinsert) |
 | `balances.ts` | **Canonical net-balance SQL** (`getGroupNet`, `getGlobalNet`), spending/income, `getFriendBalances`, **`getMyExposure`** (single source for global owe/owed; pure `summarizeExposure`) |
 | `audit.ts` | `logAudit` (call inside caller's txn), `getAuditLog` |
@@ -303,8 +324,14 @@ Read these instead — each is generated from the code, not from another doc:
 | §9 Business-logic engines | [AUDIT.md](./AUDIT.md) §7 (BL-01 … BL-33) |
 | §10 Feature flags | [AUDIT.md](./AUDIT.md) §4.3, and `src/lib/featureFlags.ts` itself |
 
-**Sections 1–6 above were re-verified against the code and are accurate.** They are the reason
-this file still exists.
+**Verify against the tree before acting on anything here.** This file used to close
+by asserting §1–6 were "re-verified and accurate"; an audit then found the settings
+table, the category model, the server count and the offline claim all wrong, plus
+four stale counts. A sign-off that outlives its own accuracy is worse than none,
+because it stops the next reader checking.
+
+The counts in §3 in particular drift with every change and are indicative, not
+current.
 
 > Note on §10 specifically: the dead flags it documented are gone. `FeatureKey` now holds 16
 > keys, every one of which gates a real surface and appears in the Feature Management screen —
