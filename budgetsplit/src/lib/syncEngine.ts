@@ -3,7 +3,8 @@ import { pendingUploads, markDelivered } from '../db/queries/syncOutbox';
 import {
   readEntryDoc, markSynced, pullCursor, setPullCursor, toPeerEnvelope, personResolver,
   pendingDisputes, markDisputeSent, recordDispute, archiveVanishedGroup,
-  type EntryDoc,
+  readRosterDoc, adoptGroup, ROSTER_ENTRY_ID,
+  type EntryDoc, type RosterDoc, type NameCollision,
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
 import { sealEntry, openEntry, unwrapGroupKey, wrapGroupKey, newGroupKey } from './groupCrypto';
@@ -39,13 +40,22 @@ export type SyncOutcome = {
   conflicts: string[];
   /** Groups that were deleted for everyone, or that I am no longer in. */
   vanished: string[];
+  /**
+   * People a shared group introduced who look like people already here.
+   *
+   * Never merged automatically. Guessing wrong splits a balance across two rows
+   * that never reconcile, and guessing right is not worth the times it does not.
+   */
+  collisions: NameCollision[];
   /** True when anything reached the database, so the caller knows to refresh. */
   changed: boolean;
   /** Why nothing happened, when nothing did. Not an error — a reason. */
   skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'signed-out' | 'offline';
 };
 
-const NOTHING: SyncOutcome = { pushed: 0, pulled: 0, conflicts: [], vanished: [], changed: false };
+const NOTHING: SyncOutcome = {
+  pushed: 0, pulled: 0, conflicts: [], vanished: [], collisions: [], changed: false,
+};
 
 /**
  * One full cycle: send what is queued, then fetch what is new.
@@ -118,6 +128,7 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
       pulled: pull.pulled,
       conflicts: push.conflicts,
       vanished,
+      collisions: pull.collisions,
       changed: push.pushed > 0 || pull.pulled > 0 || vanished.length > 0,
     };
   } catch {
@@ -257,12 +268,10 @@ async function pullAll(
   db: SQLite.SQLiteDatabase,
   groups: SyncGroup[],
   secret: Uint8Array,
-): Promise<{ pulled: number }> {
+): Promise<{ pulled: number; collisions: NameCollision[] }> {
   const keys = await keyring(groups, secret);
-  // Built once, not per entry: the roster does not change mid-pull, and a page
-  // holds up to 200 entries.
-  const resolve = await personResolver(db);
   let pulled = 0;
+  const collisions: NameCollision[] = [];
 
   for (const [groupId, key] of keys) {
     let cursor = await pullCursor(db, groupId);
@@ -271,7 +280,25 @@ async function pullAll(
     // is left comes on the next open.
     for (let page = 0; page < MAX_PULL_PAGES; page++) {
       const res = await pullSyncEntries(groupId, cursor);
+
+      /*
+       * Roster FIRST, always — before any entry in the page.
+       *
+       * An entry names people by id, and `toPeerEnvelope` refuses one naming
+       * somebody this device cannot resolve. Applying entries before the roster
+       * that introduces those people would drop the entire first page, and the
+       * cursor would move past it.
+       */
+      for (const e of res.entries.filter(x => x.entryId === ROSTER_ENTRY_ID)) {
+        const doc = await openEntry<RosterDoc>(e.ciphertext, key, groupId, e.entryId, e.version);
+        if (!doc) continue;
+        const clashes = await adoptGroup(db, groupId, doc);
+        if (clashes.length > 0) collisions.push(...clashes);
+        pulled++;
+      }
+
       for (const e of res.entries) {
+        if (e.entryId === ROSTER_ENTRY_ID) continue;
         const doc = await openEntry<EntryDoc>(
           e.ciphertext, key, groupId, e.entryId, e.version,
         );
@@ -283,6 +310,10 @@ async function pullAll(
          */
         if (!doc) continue;
 
+        // Rebuilt per entry now, deliberately: a roster earlier in this very page
+        // may have just created the people this entry names, and a resolver built
+        // once at the top would not know about them.
+        const resolve = await personResolver(db);
         const envelope = toPeerEnvelope(resolve, groupId, e.entryId, e.version, e.isDeleted, doc);
         if (!envelope) continue;
 
@@ -314,7 +345,7 @@ async function pullAll(
       // Never let the smaller one take down the larger.
     }
   }
-  return { pulled };
+  return { pulled, collisions };
 }
 
 /**
@@ -347,7 +378,11 @@ export type ShareResult =
  * They land as invited, not joined. Being added to a group that starts moving
  * numbers should not be something that happens TO someone.
  */
-export async function shareGroup(groupId: string, theirUserId: string): Promise<ShareResult> {
+export async function shareGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  theirUserId: string,
+): Promise<ShareResult> {
   if (!serverConfigured()) return { ok: false, reason: 'not-signed-in' };
   const identity = await deviceIdentity().catch(() => null);
   if (!identity) return { ok: false, reason: 'no-device-key' };
@@ -372,12 +407,52 @@ export async function shareGroup(groupId: string, theirUserId: string): Promise<
 
     await publishSyncGroup(groupId, await wrapsFor(mine));
     await inviteSyncMember(groupId, theirUserId, await wrapsFor(theirs));
+
+    /*
+     * The roster, sealed like any other entry.
+     *
+     * Without it the invitee accepts, syncs, and every entry is refused as
+     * `not-a-member` — because their phone has no such group and no person rows
+     * for anyone the entries name. Sent as a reserved entry id so it inherits the
+     * versioning, the AAD binding and the encryption, and the server needs no
+     * change and learns no names.
+     */
+    const roster = await readRosterDoc(db, groupId);
+    if (roster) await pushRoster(db, groupId, key, roster);
+
     return { ok: true, devices: theirs.length };
   } catch (e) {
     // 403 is the one worth naming: it means the link they think they have does
     // not exist on the server, and "not linked" is something they can act on.
     if (e instanceof ServerRequestError && e.status === 403) return { ok: false, reason: 'not-linked' };
     return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
+ * Send the roster as a sealed entry at version 1.
+ *
+ * Best-effort on the version: a re-share of a group already published would
+ * collide at v1, and the roster it already carries is not wrong enough to be
+ * worth failing the share over. Members are re-published whenever the group is
+ * shared again, which is when the roster can actually have changed.
+ */
+async function pushRoster(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  key: Uint8Array,
+  roster: RosterDoc,
+): Promise<void> {
+  for (let version = 1; version <= 3; version++) {
+    try {
+      const ciphertext = await sealEntry(roster, key, groupId, ROSTER_ENTRY_ID, version);
+      await pushSyncEntry({ groupId, entryId: ROSTER_ENTRY_ID, version, ciphertext, isDeleted: false });
+      return;
+    } catch (e) {
+      // 409 means a roster is already there at this version — try the next one.
+      // Anything else, and a stale roster is better than a failed share.
+      if (!(e instanceof ServerRequestError && e.status === 409)) return;
+    }
   }
 }
 

@@ -15,6 +15,7 @@ import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { runSync } from '../../src/lib/syncEngine';
 import { maybeSnapshot } from '../../src/lib/syncSnapshot';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
+import { mergePerson } from '../../src/db/queries/persons';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
@@ -41,6 +42,42 @@ function announceVanished(r: { vanished: string[] }) {
     'The group was deleted by whoever created it, or you are no longer a member. '
     + 'Nothing has been deleted here — everything you spent is still in your history, '
     + 'and the group has moved to Archived.',
+  );
+}
+
+/**
+ * A shared group brought in somebody who looks like somebody already here.
+ *
+ * Asked, never guessed. Merging the wrong two people splits a balance across two
+ * rows that never reconcile — the same defect as F5 — and the app cannot tell
+ * "Priya my flatmate" from "Priya from work" by name alone. Keeping them apart is
+ * always recoverable; merging is not.
+ *
+ * One at a time, and only ever after a real answer.
+ */
+function askAboutMerges(
+  db: Parameters<typeof runSync>[0],
+  r: { collisions: Array<{ incomingId: string; existingId: string; name: string }> },
+  refresh: () => void,
+) {
+  const [first] = r.collisions;
+  if (!first) return;
+  Alert.alert(
+    `Two people called ${first.name}`,
+    `A shared group just introduced a ${first.name}, and you already have one. `
+    + 'Same person?\n\nIf you are not sure, keep them separate — you can merge later, '
+    + 'but a merge cannot be undone.',
+    [
+      { text: 'Keep separate', style: 'cancel' },
+      {
+        text: 'Same person',
+        onPress: () => {
+          mergePerson(db, first.incomingId, first.existingId)
+            .then(refresh)
+            .catch(() => {});
+        },
+      },
+    ],
   );
 }
 
@@ -99,7 +136,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       //
       // `runSync` gates itself on the setting and never throws, so there is no
       // check to duplicate here and no failure that can reach a screen.
-      runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
+      runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); askAboutMerges(db, r, refresh); }).catch(() => {});
       // "Keep a copy of everything", if it is on and one is due. Its own throttle
       // (six hours) lives inside — a full read, seal and upload on every
       // foreground would be absurd.
@@ -111,7 +148,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // The cold-start half. `AppState` only fires on a transition, so without this a
   // launch straight into the app syncs nothing until you leave and come back.
   useEffect(() => {
-    runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); }).catch(() => {});
+    runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); askAboutMerges(db, r, refresh); }).catch(() => {});
     maybeSnapshot(db).catch(() => {});
   }, [db, refresh]);
 

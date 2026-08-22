@@ -292,3 +292,57 @@ export async function setGroupTrust(
     [personId, groupId, state, Date.now()],
   );
 }
+
+/**
+ * Two rows are one person: fold the newcomer into the one already here.
+ *
+ * Every reference moves — payments, shares, group memberships, authorship,
+ * per-group trust, disputes — and only then does the duplicate go. Doing it in
+ * that order means a failure leaves two rows that both work, rather than
+ * references pointing at a person who no longer exists.
+ *
+ * `INSERT OR IGNORE` before `DELETE` on the two composite-key tables: both people
+ * may already be in the same group, or on the same transaction, and a bare UPDATE
+ * would collide with the row that is already there.
+ */
+export async function mergePerson(
+  db: SQLite.SQLiteDatabase,
+  fromId: string,
+  intoId: string,
+): Promise<void> {
+  if (fromId === intoId) return;
+  await db.withTransactionAsync(async () => {
+    for (const t of ['txn_payment', 'txn_share'] as const) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO ${t} (txn_id, person_id, amount)
+         SELECT txn_id, ?, amount FROM ${t} WHERE person_id = ?`, [intoId, fromId],
+      );
+      await db.runAsync(`DELETE FROM ${t} WHERE person_id = ?`, [fromId]);
+    }
+    await db.runAsync(
+      `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
+       SELECT group_id, ?, joined_at, role FROM group_member WHERE person_id = ?`, [intoId, fromId],
+    );
+    await db.runAsync('DELETE FROM group_member WHERE person_id = ?', [fromId]);
+    await db.runAsync(
+      `INSERT OR IGNORE INTO person_group_trust (person_id, group_id, trust_state, updated_at)
+       SELECT ?, group_id, trust_state, updated_at FROM person_group_trust WHERE person_id = ?`,
+      [intoId, fromId],
+    );
+    await db.runAsync('DELETE FROM person_group_trust WHERE person_id = ?', [fromId]);
+    await db.runAsync('UPDATE txn SET author_person_id = ? WHERE author_person_id = ?', [intoId, fromId]);
+
+    // The survivor keeps its own name, but inherits anything it was missing —
+    // the incoming row is the one that carries the account id.
+    await db.runAsync(
+      `UPDATE person SET
+         remote_uid = COALESCE(remote_uid, (SELECT remote_uid FROM person WHERE id = ?)),
+         email      = COALESCE(email,      (SELECT email      FROM person WHERE id = ?)),
+         mobile     = COALESCE(mobile,     (SELECT mobile     FROM person WHERE id = ?)),
+         upi_vpa    = COALESCE(upi_vpa,    (SELECT upi_vpa    FROM person WHERE id = ?))
+       WHERE id = ?`,
+      [fromId, fromId, fromId, fromId, intoId],
+    );
+    await db.runAsync('DELETE FROM person WHERE id = ?', [fromId]);
+  });
+}

@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { colors, type, space, layout } from '../../tokens';
 import { Card } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
@@ -37,6 +38,7 @@ type Props = {
 };
 
 export function ShareGroupRow({ groupId, members, onShared }: Props) {
+  const db = useSQLiteContext();
   const router = useRouter();
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -75,7 +77,7 @@ export function ShareGroupRow({ groupId, members, onShared }: Props) {
 
   async function share(link: ServerLink) {
     setBusyId(link.person.id);
-    const res = await shareGroup(groupId, link.person.id);
+    const res = await shareGroup(db, groupId, link.person.id);
     setBusyId(null);
     if (res.ok) {
       haptic.success();

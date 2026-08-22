@@ -398,3 +398,146 @@ export async function archiveVanishedGroup(
   ]);
   return true;
 }
+
+// --- The roster: how a group arrives on a phone that has never seen it -------
+
+/**
+ * Reserved entry id carrying a group's identity and its members.
+ *
+ * Sent as an ordinary sealed entry, which is the whole trick: it inherits the
+ * versioning, the compare-and-set, the AAD binding and the encryption for free,
+ * and **the server needs no change and learns no names**. It already stores
+ * opaque blobs per `(group_id, entry_id)`; this is one more of them.
+ *
+ * Double-underscored because `entry_id` is otherwise a uuid — nothing the app
+ * generates can collide with it.
+ */
+export const ROSTER_ENTRY_ID = '__roster__';
+
+export type RosterMember = {
+  /** The publisher's local person id. What entries name when there is no account. */
+  pid: string;
+  /** Their account id, when they have one. Global, so it matches across devices. */
+  uid: string | null;
+  name: string;
+  color: string;
+};
+
+export type RosterDoc = {
+  name: string;
+  icon: string;
+  color: string;
+  members: RosterMember[];
+};
+
+/**
+ * The group as its publisher sees it.
+ *
+ * Names travel because the alternative is a group full of "Unknown" — the entries
+ * reference people by id, and an id is not something anyone can recognise. They
+ * are sealed with the group key like everything else, so this adds nothing the
+ * server can read.
+ */
+export async function readRosterDoc(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<RosterDoc | null> {
+  const g = await db.getFirstAsync<{ name: string; icon: string; color: string }>(
+    'SELECT name, icon, color FROM budget_group WHERE id = ?', [groupId],
+  );
+  if (!g) return null;
+
+  const members = await db.getAllAsync<RosterMember>(
+    `SELECT p.id AS pid, p.remote_uid AS uid, p.name AS name, p.avatar_color AS color
+       FROM group_member m JOIN person p ON p.id = m.person_id
+      WHERE m.group_id = ?`,
+    [groupId],
+  );
+  return { name: g.name, icon: g.icon, color: g.color, members };
+}
+
+/** Someone on the roster who looks like someone this device already has. */
+export type NameCollision = {
+  /** The row just created from the roster. */
+  incomingId: string;
+  /** The person already here with the same name. */
+  existingId: string;
+  name: string;
+};
+
+/**
+ * Make a group real on this device, from a roster somebody else published.
+ *
+ * Without this the whole receiving half of sharing does nothing: `ingestPeerTxn`
+ * looks the group up locally, does not find it, and refuses every entry as
+ * `not-a-member` — silently, on every sync, forever.
+ *
+ * Three rules, in this order, for each person on the roster:
+ *
+ * 1. **Known account wins.** A local person carrying that `remote_uid` IS them;
+ *    nothing is created. This is what makes "me" resolve to my own row rather
+ *    than a copy of myself.
+ * 2. **Adopt their id.** Otherwise a person row is created *using the publisher's
+ *    pid as its primary key*, because that is the id their entries name. Minting
+ *    a fresh uuid here would mean every entry referenced somebody who does not
+ *    exist.
+ * 3. **Never merge silently.** A new row whose name matches somebody already here
+ *    is REPORTED, not merged. Guessing wrong splits a balance across two rows
+ *    that never reconcile — the same defect as F5 — and guessing right is not
+ *    worth the times it does not.
+ *
+ * Returns the collisions, for the caller to ask about.
+ */
+export async function adoptGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  doc: RosterDoc,
+): Promise<NameCollision[]> {
+  const collisions: NameCollision[] = [];
+
+  const existing = await db.getAllAsync<{ id: string; name: string; remote_uid: string | null; is_me: number }>(
+    'SELECT id, name, remote_uid, is_me FROM person',
+  );
+  const byUid = new Map(existing.filter(p => p.remote_uid).map(p => [p.remote_uid!, p.id]));
+  const haveId = new Set(existing.map(p => p.id));
+
+  await db.withTransactionAsync(async () => {
+    // The group itself, under the SHARED id — that is what adoption means, and it
+    // is why no id mapping exists anywhere in the sync path.
+    await db.runAsync(
+      `INSERT OR IGNORE INTO budget_group
+         (id, name, icon, color, carry_over, is_shared, is_archived, is_personal,
+          simplify_debt, default_split, created_at)
+       VALUES (?, ?, ?, ?, 0, 1, 0, 0, 1, 'equal', ?)`,
+      [groupId, doc.name, doc.icon, doc.color, Date.now()],
+    );
+
+    for (const m of doc.members) {
+      const mine = m.uid ? byUid.get(m.uid) : undefined;
+      const localId = mine ?? m.pid;
+
+      if (!mine && !haveId.has(m.pid)) {
+        await db.runAsync(
+          'INSERT INTO person (id, name, avatar_color, is_me, remote_uid) VALUES (?, ?, ?, 0, ?)',
+          [m.pid, m.name, m.color, m.uid],
+        );
+        haveId.add(m.pid);
+        // Same name, different row. Reported rather than resolved — see rule 3.
+        const clash = existing.find(p => p.id !== m.pid && sameName(p.name, m.name));
+        if (clash) collisions.push({ incomingId: m.pid, existingId: clash.id, name: m.name });
+      }
+
+      await db.runAsync(
+        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
+        [groupId, localId, Date.now(), 'member'],
+      );
+    }
+  });
+
+  return collisions;
+}
+
+/** Case- and space-insensitive: "priya " and "Priya" are the same suspicion. */
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
