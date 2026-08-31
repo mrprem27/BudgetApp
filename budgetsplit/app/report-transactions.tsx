@@ -20,7 +20,7 @@ import { getAllGroups } from '../src/db/queries/groups';
 import { getCategories } from '../src/db/queries/categories';
 import { getMe } from '../src/db/queries/persons';
 import { getTransactionsInRange, type TxnWithSplits } from '../src/db/queries/transactions';
-import { OTHERS_LABEL } from '../src/lib/categoryFold';
+import { matchesCategory } from '../src/lib/categoryFold';
 import { txnTotal } from '../src/lib/splitMath';
 import { haptic } from '../src/lib/haptics';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
@@ -120,11 +120,8 @@ export default function ReportTransactionsScreen() {
   const txns = data?.txns ?? [];
 
   // A folded-name filter ("Others") matches any category not in the catalog.
-  const matchesCat = (t: TxnWithSplits, c: string): boolean => {
-    if (c === 'all') return true;
-    if (c === OTHERS_LABEL && !known.has(OTHERS_LABEL)) return !known.has(t.category);
-    return t.category === c;
-  };
+  const matchesCat = (t: TxnWithSplits, c: string): boolean =>
+    c === 'all' || matchesCategory(t.category, c, known);
 
   const { rows, byKind } = useMemo(() => {
     const filtered = txns.filter(t => {

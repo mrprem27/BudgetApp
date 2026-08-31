@@ -75,24 +75,52 @@ export function effectiveRow(row: PendingTxn, edits: Partial<RowEdit> | undefine
   };
 }
 
-/** Effective split state = local edits over the persisted `split_draft`. */
+/**
+ * Effective split state = local edits over the persisted `split_draft`.
+ *
+ * The draft is a JSON blob of person ids that can sit in `pending_txn` for weeks,
+ * and it names people rather than referencing them — so nothing about removing
+ * somebody from a group, or deleting them outright, touches it. Committing it
+ * verbatim wrote `txn_share` rows for a non-member: the group ledger showed a
+ * share belonging to somebody who is not in the group, balances reported a debt
+ * against them, and `computeContributions` (which counts only current members)
+ * stopped adding up to the total printed above it.
+ *
+ * The same filter covers a case that looks unrelated and is the same bug: the
+ * user changing the row's destination group after drafting the split. `members`
+ * is always the CURRENT destination's roster, so ids that do not belong there
+ * fall away either way.
+ *
+ * Dropping everyone leaves an equal split across the real members, which is the
+ * default this function already falls back to — never an empty split, which
+ * `validateShares` would refuse with nothing on screen explaining why.
+ */
 export function effectiveSplit(
   row: PendingTxn,
   local: SplitState | undefined,
   members: Person[],
 ): SplitState {
+  const all = members.map(m => m.id);
+  const isMember = new Set(all);
+  const fallback = (): SplitState => ({ included: all, mode: 'equal', values: {} });
+
   if (local) return local;
   if (row.split_draft) {
     try {
       const d = JSON.parse(row.split_draft) as Partial<SplitState>;
-      return {
-        included: d.included ?? members.map(m => m.id),
-        mode: d.mode ?? 'equal',
-        values: d.values ?? {},
-      };
+      const included = (d.included ?? all).filter(id => isMember.has(id));
+      if (included.length === 0) return fallback();
+      // Prune the per-person amounts too. An `exact`/`percent`/`shares` value
+      // keyed on a departed member is money assigned to nobody, so the split
+      // silently stops summing to the total.
+      const values: Record<string, string> = {};
+      for (const [id, v] of Object.entries(d.values ?? {})) {
+        if (isMember.has(id)) values[id] = v;
+      }
+      return { included, mode: d.mode ?? 'equal', values };
     } catch { /* fall through to defaults */ }
   }
-  return { included: members.map(m => m.id), mode: 'equal', values: {} };
+  return fallback();
 }
 
 /** Snapshot a row's CURRENT effective state so Undo restores exactly that. */

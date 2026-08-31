@@ -105,6 +105,42 @@ describe('effectiveSplit', () => {
     expect(out).toEqual({ included: ['me', 'you'], mode: 'shares', values: {} });
   });
 
+  /**
+   * A draft is a JSON blob of person ids that can sit in `pending_txn` for weeks,
+   * and nothing about removing somebody from a group touches it. Committing it
+   * verbatim wrote a `txn_share` for a non-member: the ledger showed a share
+   * belonging to somebody not in the group, balances reported a debt against
+   * them, and "who paid what" stopped adding up to its own total.
+   */
+  it('drops people who are no longer in the group', () => {
+    const draft = JSON.stringify({ included: ['me', 'you', 'gone'], mode: 'equal', values: {} });
+    const out = effectiveSplit(row({ split_draft: draft }), undefined, members);
+    expect(out.included).toEqual(['me', 'you']);
+  });
+
+  it('drops their per-person amount too, so the split still sums to the total', () => {
+    const draft = JSON.stringify({
+      included: ['me', 'gone'], mode: 'exact', values: { me: '250', gone: '250' },
+    });
+    const out = effectiveSplit(row({ split_draft: draft }), undefined, members);
+    expect(out).toEqual({ included: ['me'], mode: 'exact', values: { me: '250' } });
+  });
+
+  it('falls back to an equal split rather than an empty one when everyone has left', () => {
+    const draft = JSON.stringify({ included: ['gone', 'alsogone'], mode: 'percent', values: { gone: '50' } });
+    const out = effectiveSplit(row({ split_draft: draft }), undefined, members);
+    // Never empty: `validateShares` would refuse that, with nothing on screen saying why.
+    expect(out).toEqual({ included: ['me', 'you'], mode: 'equal', values: {} });
+  });
+
+  // The same filter, reached a different way: the user picked another destination
+  // group after drafting the split, so the draft names the old group's members.
+  it('drops ids that belong to a different group after the destination changes', () => {
+    const draft = JSON.stringify({ included: ['me', 'flatmate'], mode: 'equal', values: {} });
+    const out = effectiveSplit(row({ split_draft: draft }), undefined, [person('me'), person('aarav')]);
+    expect(out.included).toEqual(['me']);
+  });
+
   it('yields an empty included list when the group has no members', () => {
     expect(effectiveSplit(row(), undefined, []).included).toEqual([]);
   });

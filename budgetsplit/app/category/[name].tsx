@@ -18,6 +18,7 @@ import { type TxnWithSplits } from '../../src/db/queries/transactions';
 import { type Period as BudgetPeriod } from '../../src/lib/budget';
 import { loadCategoryDetail, categoryPeriodBudget } from '../../src/lib/categoryDetailData';
 import { categoryVisual } from '../../src/constants/categories';
+import { matchesCategory } from '../../src/lib/categoryFold';
 import { recurringMonthlyEquivalent } from '../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../src/lib/money';
 import { myShareOf, myShareOrTotal } from '../../src/lib/splitMath';
@@ -47,6 +48,9 @@ function paramToPeriod(p?: string): Period {
 // My share of each expense (personal entries: full; group entries: my split).
 const sumMyShare = (arr: TxnWithSplits[], myId: string) =>
   arr.reduce((s, t) => s + myShareOf(t, myId), 0);
+
+// Stable identity so the `view` memo doesn't recompute on every render while loading.
+const EMPTY_KNOWN: Set<string> = new Set();
 
 export default function CategoryDetailScreen() {
   const { name, period: periodParam } = useLocalSearchParams<{ name?: string; period?: string }>();
@@ -85,6 +89,7 @@ export default function CategoryDetailScreen() {
   const groupLimits = data?.groupLimits ?? [];
   const recurRules = data?.recurRules ?? [];
   const goals = data?.goals ?? [];
+  const known = data?.known ?? EMPTY_KNOWN;
 
   const target: BudgetPeriod = period === 'day' ? 'daily' : period === 'month' ? 'monthly' : 'yearly';
   // The hero is MY budget for this category, against my spend on it everywhere —
@@ -101,7 +106,10 @@ export default function CategoryDetailScreen() {
     const now = new Date();
     const [ps, pe] = ranges[period];
     const inPeriod = yearExpenses.filter(t => t.date >= ps && t.date <= pe);
-    const cat = inPeriod.filter(t => t.category === categoryName).sort((a, b) => b.date - a.date);
+    // Others is a BUCKET, not a category — matching the literal string showed a
+    // slice worth thousands and then an empty list here (`matchesCategory`).
+    const cat = inPeriod.filter(t => matchesCategory(t.category, categoryName, known))
+      .sort((a, b) => b.date - a.date);
     const spent = sumMyShare(cat, myId);
     const totalAll = sumMyShare(inPeriod, myId);
     const budget = periodBudget.amount;
@@ -152,7 +160,7 @@ export default function CategoryDetailScreen() {
       .sort((a, b) => b.limit - a.limit);
 
     return { txns: cat, spent, totalAll, count: cat.length, budget, perGroup, places, limits };
-  }, [ranges, period, yearExpenses, categoryName, periodBudget, myId, groupRefs, groupLimits, target]);
+  }, [ranges, period, yearExpenses, categoryName, known, periodBudget, myId, groupRefs, groupLimits, target]);
 
   const showBudgetCard = view.budget > 0;
   // No budget set at all → prompt to set one. A budget that exists but is a pool
