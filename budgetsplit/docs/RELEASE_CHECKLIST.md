@@ -30,6 +30,45 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ---
 
+## 0 · Is the app actually workable? — the sync ledger
+
+Checked against the code, not remembered. This is the answer to "does everything
+a user does actually travel".
+
+### Travels today
+
+- [x] **Expenses and transfers in a shared group** — entry by entry, versioned,
+      compare-and-set, sealed per group.
+- [x] **Edits and deletions** — an edit is a new version; a deletion is a tombstone.
+- [x] **Recurring rules** — `recurFreq`/`interval`/`end` ride on the entry.
+- [x] **Who is in the group** — the roster document, republished on every change.
+- [x] **Rejections** — as an objection the author sees (F10).
+- [x] **Leaving and deleting a group** — tombstoned, and the other phones archive
+      without losing their own history (F11).
+- [x] **Everything personal** — as an encrypted snapshot on your account, restored
+      by passphrase on a new phone. Newest-wins, and it says so.
+
+### Does NOT travel, and each is a deliberate line
+
+- [ ] **Receipt photos.** Rows sync, photos never do (F4). A restore nulls a URI it
+      cannot honour. Deliberate: size, and the 25 MiB per-copy ceiling.
+- [ ] **Itemized line items.** An itemized bill arrives with its totals and shares
+      intact — **the money is right** — but the per-item breakdown is not carried,
+      so the receiving phone shows it as a single expense. Cosmetic, not financial.
+      Listed because it will look like a bug to whoever hits it first.
+- [ ] **Budgets, savings goals, money profile.** Personal by definition; they travel
+      in the snapshot, never in group sync. Correct as designed.
+- [ ] **Categories.** Global catalog, seeded locally. A peer entry naming a category
+      you do not have folds into Others until adopted — the existing
+      adopt-or-ignore path.
+
+### The one bound worth knowing
+
+- [ ] ⚠️ Roster recovery self-heals only while the roster and the entry needing it
+      fall inside one page (200). In practice they always do, because
+      `drainRosters` runs before the entry drain in the same sync. Recorded because
+      it is the only shape that could stall.
+
 ## 1 · Hard blockers — nothing ships until every box is ticked
 
 - [x] **`KDF_ITERATIONS`, and getting the cost off the drawing thread.** ✅ Both

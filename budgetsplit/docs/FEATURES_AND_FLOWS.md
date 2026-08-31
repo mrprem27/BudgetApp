@@ -1433,6 +1433,48 @@ completed. Both rows open **Sync activity** below. Disabled entirely without
 
 ---
 
+### 13.9 The roster, and why the cursor sometimes waits
+
+Two coupled mechanisms, both of which exist because their absence lost money
+silently.
+
+**The roster is a living document.** It travels as an ordinary sealed entry under
+the reserved id `__roster__`, so it inherits versioning, compare-and-set, the AAD
+binding and the encryption — and the server needs no change and learns no names.
+It is republished whenever membership changes, a member is renamed, or the group
+is renamed (`markRosterDirty` → `dirtyRosters` → `drainRosters`). Personal groups
+are excluded in the SQL, not at the call site.
+
+Publishing it once, at share time, was the original bug. An entry naming a member
+the other device has never heard of cannot be resolved, so it is refused — which
+meant **adding somebody to a shared group silently broke every entry that
+mentioned them.**
+
+**The pull cursor only advances over what it could actually handle.** Failures are
+split by whether this device could ever succeed:
+
+| Kind | Examples | Cursor |
+|---|---|---|
+| Permanent — a fact about the entry | bad seal, unbalanced, stale version, my own | advances |
+| Recoverable — a fact about what this phone knows | unresolvable person, `not-a-member` | **holds** |
+
+Advancing over a recoverable failure is what lost entries: fetched once, skipped,
+then behind the cursor forever.
+
+The two fixes make each other work. On a stall the group stops and the cursor is
+left before the offending entry; the next sync re-fetches from there, a
+republished roster carries a newer timestamp so it lands in the same page, rosters
+are applied before entries within a page, and the entry succeeds on the retry. It
+heals without anyone noticing it broke.
+
+⚠️ **The bound:** this self-heals only while the roster and the entry that needs
+it fall within one page (`SYNC_PAGE_SIZE`, 200). In practice they always do —
+`drainRosters` runs before the entry drain in the same sync, so a roster is
+published with an *earlier* timestamp than the entries that depend on it. It is
+recorded because it is the one shape that could stall.
+
+---
+
 ### 13.8 Getting a phone back — the restore offer
 
 The last step of "keep a copy of everything", and the one without which the
