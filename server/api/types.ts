@@ -139,6 +139,9 @@ export type LinkRow = {
   created_at: number;
   share_phone_a: number;
   share_phone_b: number;
+  /** Set when either side unlinked. A tombstone — see `0007_link_end.sql`. */
+  ended_at: number | null;
+  ended_by: string | null;
 };
 
 /**

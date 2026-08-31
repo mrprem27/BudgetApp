@@ -55,7 +55,12 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
     file: 'transactions.ts',
     contains: 'attachment_uri IS NOT NULL AND updated_at',
-    why: 'reapDeletedAttachments — a recurring RULE\'s own template row can hold an attachment too, and a deleted one must still be reaped. Same reasoning as the groups.ts entry above.',
+    why: 'reapDeletedAttachments — a recurring RULE\'s own template row can hold an attachment too, and a deleted one must still be reaped.',
+  },
+  {
+    file: 'persons.ts',
+    contains: '(SELECT COUNT(*) FROM txn WHERE author_person_id = ?)',
+    why: "deletePerson's reference count. It asks whether removing this row would orphan anything, so it must see EVERY row that names them — a rule template is still a reference, and this is a hard delete. It reads no amount and derives no figure; it only counts.",
   },
 ];
 

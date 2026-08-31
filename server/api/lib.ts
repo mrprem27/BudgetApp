@@ -21,6 +21,16 @@ export const SESSION_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
  * request the sender must approve.
  */
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long an ended link is still reported, so the other device can explain the
+ * disappearance once.
+ *
+ * Long enough to survive somebody not opening the app for a while, short enough
+ * that it stays an explanation rather than becoming a permanent list of people
+ * you are no longer connected to.
+ */
+export const ENDED_LINK_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /** Magic-link requests allowed per email per window. Stops an email-bomb. */
 export const MAGIC_LINK_MAX_PER_WINDOW = 5;
 export const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;

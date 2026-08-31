@@ -193,7 +193,14 @@ export default function PersonScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`Trust for ${g.name}`}
                       >
-                        <Text style={styles.groupTrustName} numberOfLines={1}>{g.name}</Text>
+                        {/* Archived groups are listed so an override set in one
+                            stays clearable — otherwise the row survives with no
+                            control to reach it, and silently governs again if the
+                            group is ever restored. Labelled, so it is obvious why
+                            a hidden group is in this list. */}
+                        <Text style={styles.groupTrustName} numberOfLines={1}>
+                          {g.is_archived === 1 ? `${g.name} · Archived` : g.name}
+                        </Text>
                         <Text style={[styles.groupTrustValue, set === null && styles.groupTrustInherit]}>
                           {set === 'trusted' ? 'Counts straight away'
                             : set === 'review' ? 'Waits for you'

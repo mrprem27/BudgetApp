@@ -63,6 +63,68 @@ export async function setRemoteUid(
   await db.runAsync('UPDATE person SET remote_uid = ? WHERE id = ?', [remoteUid, personId]);
 }
 
+export type DeletePersonResult =
+  | { ok: true }
+  | { ok: false; reason: 'is-me' | 'not-found' | 'in-use' };
+
+/**
+ * Remove a person this device made and never used.
+ *
+ * There was no way to delete a person at all. Type "Priyaa" instead of "Priya",
+ * tap Add, and that row is in the People list forever, in every member picker
+ * forever, and in the Linked-people match sheet forever. `mergePerson` was the
+ * only way to get rid of one and it is reachable from exactly one place — a sync
+ * name-collision alert — so a plain typo had no answer.
+ *
+ * **Only when nothing references them.** This is a hard delete, so the bar is that
+ * removing the row can change no number and orphan nothing: no payment, no share,
+ * no membership past or present, no authored entry, no import draft, no budget
+ * override, and they cannot be linked to an account. Anyone who fails that test
+ * is a real person with real history, and the answer for them is removal from a
+ * group (soft, and reversible) or a merge — never this.
+ *
+ * `is_me` is refused outright: it is the row every balance in the app is measured
+ * against.
+ */
+export async function deletePerson(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+): Promise<DeletePersonResult> {
+  const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
+  if (!p) return { ok: false, reason: 'not-found' };
+  if (p.is_me === 1) return { ok: false, reason: 'is-me' };
+  // A linked account means somebody real, whose entries can arrive at any time.
+  if (p.remote_uid) return { ok: false, reason: 'in-use' };
+
+  // Every column anywhere that names a person, checked in one place — the same
+  // list `mergePerson` moves. A reference this misses is a dangling id, and
+  // foreign keys are off, so nothing else would catch it.
+  const referenced = await db.getFirstAsync<{ n: number }>(
+    `SELECT (
+       (SELECT COUNT(*) FROM txn_payment       WHERE person_id = ?) +
+       (SELECT COUNT(*) FROM txn_share         WHERE person_id = ?) +
+       (SELECT COUNT(*) FROM group_member      WHERE person_id = ?) +
+       (SELECT COUNT(*) FROM person_group_trust WHERE person_id = ?) +
+       (SELECT COUNT(*) FROM category_budget   WHERE person_id = ?) +
+       (SELECT COUNT(*) FROM txn               WHERE author_person_id = ?) +
+       (SELECT COUNT(*) FROM budget_group      WHERE created_by = ?) +
+       (SELECT COUNT(*) FROM pending_txn
+         WHERE counterparty_id = ? OR author_person_id = ? OR payer_person_id = ?)
+     ) AS n`,
+    Array(10).fill(personId),
+  );
+  if ((referenced?.n ?? 0) > 0) return { ok: false, reason: 'in-use' };
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM person WHERE id = ?', [personId]);
+    await logAudit(db, {
+      entityType: 'member', entityId: personId, groupId: null,
+      action: 'deleted', summary: `Deleted person · ${p.name}`,
+    });
+  });
+  return { ok: true };
+}
+
 /** What `claimMyAccount` did, so a caller can say why the groups went quiet. */
 export type ClaimResult =
   | { ok: true; changed: boolean }

@@ -154,11 +154,29 @@ export default function LinkedPeopleScreen() {
     }
   }
 
+  /**
+   * Unlinking is about DISCLOSURE, not membership.
+   *
+   * The copy has to say that, because the opposite is what people assume — and
+   * the assumption is the dangerous one. It stops them being addable to something
+   * new and stops the details you share; it does not end the groups you are both
+   * already in, and `approvedMember` on the server never consulted `links` at all.
+   * Somebody who unlinks expecting to have left a shared ledger has not left it.
+   *
+   * `person.remote_uid` is deliberately NOT cleared here. That binding is what
+   * makes every entry they ever authored resolvable; clearing it would turn all
+   * of them into `unknown-author` and orphan every `PersonRef` still in my
+   * outbox. Ending a relationship must not rewrite the record of it — the same
+   * rule as everywhere else in this area.
+   */
   function handleUnlink(link: ServerLink) {
     const who = link.person.name ?? link.person.email;
     Alert.alert(
       `Unlink ${who}?`,
-      'You both stop seeing each other’s shared details. Anything you’ve already recorded about them on this device stays exactly as it is.',
+      'You both stop seeing each other’s shared details, and neither of you can add '
+      + 'the other to something new.\n\n'
+      + 'Groups you are already both in carry on — leave those separately. Everything '
+      + 'you have recorded stays exactly as it is.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

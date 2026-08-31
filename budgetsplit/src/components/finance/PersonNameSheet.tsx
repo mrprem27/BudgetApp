@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, type, space } from '../tokens';
+import { colors, type, space, layout } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { Input } from '../ui/Input';
 import { PrimaryButton } from '../ui/PrimaryButton';
@@ -32,6 +32,7 @@ export function PersonNameSheet({
   onChangeVpa,
   phone,
   onChangePhone,
+  onDelete,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -51,6 +52,15 @@ export function PersonNameSheet({
    */
   phone?: string;
   onChangePhone?: (v: string) => void;
+  /**
+   * Remove this person entirely. Omit to hide.
+   *
+   * Only ever offered for somebody with no history — the query refuses anyone
+   * else — which is why it can be a plain destructive action rather than a
+   * warning about what it will take with it. It takes nothing with it; that is
+   * the condition of it being allowed at all.
+   */
+  onDelete?: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const disabled = !value.trim();
@@ -112,6 +122,16 @@ export function PersonNameSheet({
         </>
       )}
       <PrimaryButton label={submitLabel} onPress={onSubmit} disabled={disabled} />
+      {onDelete && (
+        <TouchableOpacity
+          style={styles.removeBtn}
+          onPress={onDelete}
+          accessibilityRole="button"
+        >
+          <Feather name="trash-2" size={14} color={colors.expense} />
+          <Text style={styles.removeText}>Remove this person</Text>
+        </TouchableOpacity>
+      )}
 
       <UpiQrScanner
         visible={scanning}
@@ -134,4 +154,11 @@ const styles = StyleSheet.create({
   hintBad: { color: colors.expense },
   scanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', marginTop: -space.sm, marginBottom: space.sm, paddingVertical: space.xs },
   scanText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  // `layout.touchMin` tall so the one destructive control in this sheet is not
+  // the hardest thing in it to hit (§6).
+  removeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs,
+    minHeight: layout.touchMin, marginTop: space.smd,
+  },
+  removeText: { ...type.caption, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 });

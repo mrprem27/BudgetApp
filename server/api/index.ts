@@ -20,6 +20,7 @@
 
 import {
   INVITE_TTL_MS,
+  ENDED_LINK_WINDOW_MS,
   MAGIC_LINK_TTL_MS,
   MAGIC_LINK_MAX_PER_WINDOW,
   MAGIC_LINK_WINDOW_MS,
@@ -684,8 +685,9 @@ async function listLinks(request: Request, env: Env, url: URL): Promise<Response
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
   const rows = await env.DB.prepare(
-    `SELECT id, user_a, user_b, created_at, share_phone_a, share_phone_b
-       FROM links WHERE user_a = ? OR user_b = ? ORDER BY created_at DESC`,
+    `SELECT id, user_a, user_b, created_at, share_phone_a, share_phone_b, ended_at, ended_by
+       FROM links WHERE (user_a = ? OR user_b = ?) AND ended_at IS NULL
+      ORDER BY created_at DESC`,
   ).bind(auth.user.id, auth.user.id).all<LinkRow>();
 
   const links: LinkDto[] = [];
@@ -693,7 +695,30 @@ async function listLinks(request: Request, env: Env, url: URL): Promise<Response
     const dto = await toLinkDto(env, row, auth.user.id, url.origin);
     if (dto) links.push(dto);
   }
-  return json({ links });
+
+  /*
+   * What ended recently, separately — so the other device can say it ONCE.
+   *
+   * Windowed rather than forever: this exists to explain a disappearance while
+   * the disappearance is still surprising. After that it is just history, and a
+   * permanently growing list of people who are no longer connected to you is not
+   * something anybody asked for.
+   */
+  const endedRows = await env.DB.prepare(
+    `SELECT id, user_a, user_b, created_at, share_phone_a, share_phone_b, ended_at, ended_by
+       FROM links WHERE (user_a = ? OR user_b = ?) AND ended_at > ?
+      ORDER BY ended_at DESC`,
+  ).bind(auth.user.id, auth.user.id, Date.now() - ENDED_LINK_WINDOW_MS).all<LinkRow>();
+
+  const ended: Array<LinkDto & { endedAt: number; endedByMe: boolean }> = [];
+  for (const row of endedRows.results ?? []) {
+    const dto = await toLinkDto(env, row, auth.user.id, url.origin);
+    // "You unlinked" and "they unlinked" are different sentences; guessing wrong
+    // is worse than saying nothing, so which it was travels with it.
+    if (dto) ended.push({ ...dto, endedAt: row.ended_at!, endedByMe: row.ended_by === auth.user.id });
+  }
+
+  return json({ links, ended });
 }
 
 /** `{ sharePhone: boolean }` — flips only the caller's own side of the link. */
@@ -717,13 +742,25 @@ async function patchLink(request: Request, env: Env, id: string): Promise<Respon
   return json({ ok: true, sharingMyPhone: body.sharePhone });
 }
 
-/** Either side can unlink, and it removes the pair for both. */
+/**
+ * Either side can unlink, and it ends the pair for both.
+ *
+ * A tombstone rather than a DELETE. Removing the row told the other person
+ * nothing: their app just stopped listing you one day, with no reason and no
+ * date, which reads as data loss rather than as a decision somebody made. Keeping
+ * it lets their device say it once and then stop, and `ended_by` is recorded
+ * because "you unlinked" and "they unlinked" are different sentences.
+ *
+ * Guarded on `ended_at IS NULL` so unlinking twice answers 404 rather than
+ * silently re-stamping a newer date on something already over.
+ */
 async function deleteLink(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
   const result = await env.DB.prepare(
-    'DELETE FROM links WHERE id = ? AND (user_a = ? OR user_b = ?)',
-  ).bind(id, auth.user.id, auth.user.id).run();
+    `UPDATE links SET ended_at = ?, ended_by = ?
+      WHERE id = ? AND (user_a = ? OR user_b = ?) AND ended_at IS NULL`,
+  ).bind(Date.now(), auth.user.id, id, auth.user.id, auth.user.id).run();
   if ((result.meta?.changes ?? 0) === 0) return notFound('No such link');
   return json({ ok: true });
 }

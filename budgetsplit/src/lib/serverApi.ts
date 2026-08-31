@@ -401,6 +401,24 @@ export async function listLinks(): Promise<ServerLink[]> {
   return data.links ?? [];
 }
 
+/** A connection that ended, and which side ended it. */
+export type EndedLink = ServerLink & { endedAt: number; endedByMe: boolean };
+
+/**
+ * Links that ended in the last 30 days, so the app can explain a disappearance
+ * once instead of leaving it as a mystery.
+ *
+ * Unlinking used to DELETE the row, so the other person's app simply stopped
+ * listing you one day with nothing to say why or when — which reads as data loss
+ * rather than as a decision somebody made. `endedByMe` travels because "you
+ * unlinked" and "they unlinked" are different sentences.
+ */
+export async function listEndedLinks(): Promise<EndedLink[]> {
+  const response = await sendAuthed('/links');
+  const data = await response.json() as { ended?: EndedLink[] };
+  return data.ended ?? [];
+}
+
 /** Flips only my own side. I can never change what they disclose to me. */
 export async function setLinkPhoneSharing(id: string, sharePhone: boolean): Promise<void> {
   await sendAuthed(`/links/${encodeURIComponent(id)}`, { method: 'PATCH', json: { sharePhone } });

@@ -35,6 +35,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   },
   {
     file: 'persons.ts',
+    contains: '(SELECT COUNT(*) FROM group_member WHERE person_id = ?)',
+    why: 'deletePerson\'s reference count. It is asking "does removing this row orphan anything", so it must see EVERY reference including memberships of groups the person has already left — a departed membership is still a row pointing at them, and this is a hard delete.',
+  },
+  {
+    file: 'persons.ts',
     contains: 'SELECT group_id, ?, joined_at, role FROM group_member WHERE person_id = ?',
     why: 'mergePerson — folds one person row into another and must move EVERY membership, including memberships of groups they had already left. Leaving those behind would orphan them on a person row that is about to be deleted.',
   },

@@ -538,13 +538,27 @@ export async function getSharedGroupsWith(
   db: SQLite.SQLiteDatabase,
   meId: string,
   personId: string,
-): Promise<Array<{ id: string; name: string }>> {
-  return db.getAllAsync<{ id: string; name: string }>(
-    `SELECT g.id, g.name FROM budget_group g
+): Promise<Array<{ id: string; name: string; is_archived: number }>> {
+  /*
+   * ARCHIVED groups are included, and that is the point.
+   *
+   * This list is what the person screen offers per-group trust overrides on, and
+   * filtering archived groups out made an override set there permanently
+   * unclearable: the row survived, the control to reach it did not, and if the
+   * group was ever restored the forgotten answer silently governed their entries
+   * again. AGENTS.md is explicit that an override "must stay clearable, or
+   * 'trusted except here' is a one-way door" — and trust is the one setting where
+   * stale-and-more-permissive is exactly the wrong failure.
+   *
+   * `deleted_at` groups are still excluded: those are over for everybody, so there
+   * is nothing left for an override to govern.
+   */
+  return db.getAllAsync<{ id: string; name: string; is_archived: number }>(
+    `SELECT g.id, g.name, g.is_archived FROM budget_group g
        JOIN group_member a ON a.group_id = g.id AND a.person_id = ? AND ${memberActive('a')}
        JOIN group_member b ON b.group_id = g.id AND b.person_id = ? AND ${memberActive('b')}
-      WHERE g.is_personal = 0 AND g.is_archived = 0
-      ORDER BY g.created_at ASC`,
+      WHERE g.is_personal = 0 AND g.deleted_at IS NULL
+      ORDER BY g.is_archived ASC, g.created_at ASC`,
     [meId, personId],
   );
 }

@@ -12,7 +12,7 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { Input } from '../src/components/ui/Input';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
-import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa, setPersonContact } from '../src/db/queries/persons';
+import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa, setPersonContact, deletePerson } from '../src/db/queries/persons';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
 import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
@@ -93,6 +93,44 @@ export default function FriendsScreen() {
     setRenameText(p.name);
     setRenameVpa(p.upi_vpa ?? '');
     setRenamePhone(p.mobile ?? '');
+  }
+
+  /**
+   * Remove somebody added by mistake.
+   *
+   * Refused for anyone with history, and the refusal explains itself rather than
+   * saying no: a person with shared expenses is not a typo, and the honest answers
+   * for them are removing them from a group (soft, reversible) or merging two rows
+   * that turned out to be one human.
+   */
+  function confirmDeletePerson() {
+    const person = renamePerson;
+    if (!person) return;
+    Alert.alert(
+      `Remove ${person.name}?`,
+      'They will be gone from your people list.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: async () => {
+          const res = await deletePerson(db, person.id);
+          if (!res.ok) {
+            haptic.error();
+            Alert.alert(
+              `Can't remove ${person.name}`,
+              res.reason === 'is-me'
+                ? 'This is you.'
+                : "You've shared expenses with them, so removing them would change your numbers. "
+                  + 'Take them out of a group instead — their history stays either way.',
+            );
+            return;
+          }
+          haptic.warning();
+          setRenamePerson(null);
+          await reload();
+          refresh();
+        } },
+      ],
+    );
   }
 
   async function handleRename() {
@@ -250,6 +288,7 @@ export default function FriendsScreen() {
         onChangeVpa={setRenameVpa}
         phone={renamePhone}
         onChangePhone={setRenamePhone}
+        onDelete={confirmDeletePerson}
       />
 
       <PersonNameSheet
