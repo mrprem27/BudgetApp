@@ -64,9 +64,19 @@ describe('share accessors', () => {
     expect(myShareOf(txn, 'z')).toBe(0);
   });
 
-  it('myShareOrTotal: my share, full amount when not in the split (projection basis)', () => {
+  /**
+   * The projection basis falls back only for an UNSPLIT bill. A split that simply
+   * does not name me is not unsplit — it is a bill I am explicitly not on.
+   *
+   * The old fallback returned the whole share total whenever I was absent, so a
+   * flatmate's ₹18,000 car EMI split between the two of them was charged to me in
+   * full: off Safe-to-Spend, under the forecast, and listed against my name.
+   */
+  it('myShareOrTotal: my share, and 0 for a split I am not on', () => {
     expect(myShareOrTotal(txn, 'b')).toBe(6000);
-    expect(myShareOrTotal(txn, 'z')).toBe(9000);
+    expect(myShareOrTotal(txn, 'z')).toBe(0);
+    // Which is the same answer the analysis basis gives about the same row.
+    expect(myShareOrTotal(txn, 'z')).toBe(myShareOf(txn, 'z'));
   });
 
   it('myShareOrTotal: an explicit 0 share stays 0 (not coerced to the total)', () => {

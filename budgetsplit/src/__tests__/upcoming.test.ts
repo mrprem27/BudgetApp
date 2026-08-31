@@ -20,10 +20,29 @@ describe('buildUpcoming', () => {
     expect(out[0].daysUntil).toBeGreaterThan(0);
   });
 
-  it('falls back to full amount when I am not in the split', () => {
+  it('falls back to the full amount only when the bill is unsplit', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1), shares: [], payments: [{ personId: 'a', amount: 1000 }] };
+    expect(buildUpcoming([t], 'me', ms(2024, 1, 20))[0].amount).toBe(1000);
+  });
+
+  /**
+   * A bill split between two other people is coming for THEM. Presuming it mine
+   * put a flatmate's ₹18,000 car EMI on my list, under my forecast and against my
+   * Safe-to-Spend, every month.
+   */
+  it('omits a split I am not on rather than charging me the whole thing', () => {
     const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1), shares: [{ personId: 'a', amount: 1000 }] };
-    const out = buildUpcoming([t], 'me', ms(2024, 1, 20));
-    expect(out[0].amount).toBe(1000);
+    expect(buildUpcoming([t], 'me', ms(2024, 1, 20))).toHaveLength(0);
+  });
+
+  /**
+   * A rule I have not accepted is a proposal, not a bill — and this list feeds
+   * the reminder scheduler, so including it would announce somebody else's
+   * intention as my commitment.
+   */
+  it('omits a rule still waiting on my approval', () => {
+    const t: any = { ...base, recur_freq: 'monthly', date: ms(2024, 0, 1), pendingApproval: true };
+    expect(buildUpcoming([t], 'me', ms(2024, 1, 20))).toHaveLength(0);
   });
 
   it('omits paused, deleted, ended and non-recurring series', () => {
@@ -58,6 +77,26 @@ describe('buildUpcoming', () => {
     const bill: any = { ...base, id: 'b', recur_freq: 'monthly', date: ms(2024, 0, 3) };
     const out = expandUpcoming([income, transfer, bill], 'me', ms(2024, 1, 1), ms(2024, 2, 1));
     expect(out.every(o => o.seriesId === 'b')).toBe(true);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The money half of the same rule. `getRecurringForGroup` is a LEDGER view and
+   * includes a peer's pending rule on purpose, marked — but everything downstream
+   * of `expandUpcoming` is a figure: Safe-to-Spend's committed bills, the
+   * month-end forecast floor, Afford, and the health score's bills-covered.
+   *
+   * Aarav proposing "Gym ₹12,000/mo" used to take my ₹4,000 share off
+   * Safe-to-Spend the moment it arrived, while `getMyExposure` and every ledger
+   * total correctly ignored it. One figure moving while the rest do not is the
+   * failure AGENTS §13 calls worse than all of them moving.
+   */
+  it('keeps a rule I have not accepted out of Safe-to-Spend', () => {
+    const mine: any = { ...base, id: 'mine', recur_freq: 'monthly', date: ms(2024, 0, 1) };
+    const theirs: any = { ...base, id: 'theirs', recur_freq: 'monthly', date: ms(2024, 0, 1), pendingApproval: true };
+
+    const out = expandUpcoming([mine, theirs], 'me', ms(2024, 1, 1), ms(2024, 2, 1));
+    expect(out.every(o => o.seriesId === 'mine')).toBe(true);
     expect(out.length).toBeGreaterThan(0);
   });
 

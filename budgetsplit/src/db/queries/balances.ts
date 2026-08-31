@@ -40,20 +40,24 @@ export const CROSS_GROUP_FILTER = 'bg.is_personal = 0';
  * so they are built from one template — the drift this fixes came from four hand-written
  * copies. Exported so `balancesSql.test.ts` can run the real SQL rather than a paraphrase.
  */
-function netSql(table: 'txn_payment' | 'txn_share', scope: 'group' | 'global'): string {
+function netSql(table: 'txn_payment' | 'txn_share', scope: 'group' | 'global' | 'per-group'): string {
   const where = scope === 'group' ? 't.group_id = ?' : CROSS_GROUP_FILTER;
-  return `SELECT s.person_id, SUM(s.amount) as total
+  const select = scope === 'per-group' ? 't.group_id, s.person_id' : 's.person_id';
+  const by = scope === 'per-group' ? 't.group_id, s.person_id' : 's.person_id';
+  return `SELECT ${select}, SUM(s.amount) as total
      FROM ${table} s
      JOIN txn t ON t.id = s.txn_id
      JOIN budget_group bg ON bg.id = t.group_id
     WHERE ${BALANCE_TXN_FILTER} AND ${NOT_AWAITING_APPROVAL} AND ${where}
-    GROUP BY s.person_id`;
+    GROUP BY ${by}`;
 }
 
 export const GROUP_PAYMENTS_SQL = netSql('txn_payment', 'group');
 export const GROUP_SHARES_SQL = netSql('txn_share', 'group');
 export const GLOBAL_PAYMENTS_SQL = netSql('txn_payment', 'global');
 export const GLOBAL_SHARES_SQL = netSql('txn_share', 'global');
+export const PER_GROUP_PAYMENTS_SQL = netSql('txn_payment', 'per-group');
+export const PER_GROUP_SHARES_SQL = netSql('txn_share', 'per-group');
 
 export async function getGroupNet(
   db: SQLite.SQLiteDatabase,
@@ -86,6 +90,71 @@ export async function getGlobalNet(
   return net;
 }
 
+/**
+ * Every shared group's net, in one pass, keyed by group.
+ *
+ * Two queries total rather than two per group, so this stays cheaper than the
+ * global pair it replaces even with a dozen groups.
+ */
+export async function getNetByGroup(
+  db: SQLite.SQLiteDatabase,
+): Promise<Map<string, NetBalance>> {
+  const [payments, shares] = await Promise.all([
+    db.getAllAsync<{ group_id: string; person_id: string; total: number }>(PER_GROUP_PAYMENTS_SQL),
+    db.getAllAsync<{ group_id: string; person_id: string; total: number }>(PER_GROUP_SHARES_SQL),
+  ]);
+  const byGroup = new Map<string, NetBalance>();
+  const bump = (groupId: string, personId: string, delta: number) => {
+    let net = byGroup.get(groupId);
+    if (!net) { net = {}; byGroup.set(groupId, net); }
+    net[personId] = (net[personId] ?? 0) + delta;
+  };
+  for (const p of payments) bump(p.group_id, p.person_id, p.total);
+  for (const s of shares) bump(s.group_id, s.person_id, -s.total);
+  return byGroup;
+}
+
+/**
+ * What each person nets out to with me, across every shared group.
+ *
+ * **Simplified per GROUP, then summed — never simplified globally.** That
+ * distinction is the whole function, and getting it wrong lost real debt.
+ *
+ * `simplify` is a greedy match over whatever net it is handed: it will pair the
+ * largest debtor against the largest creditor whether or not those two people
+ * have ever met. Run over the *global* net it therefore invented settlements
+ * between strangers — and the caller then kept only the legs naming me and
+ * silently dropped the rest. Concretely: I owe Aarav ₹500 in the flat, Priya owes
+ * me ₹500 from the trip, and Aarav and Priya share nothing. The global match
+ * emitted the single leg "Priya pays Aarav ₹500", which names neither me nor a
+ * pair that can transact — so both of my balances read zero and Home, Personal,
+ * Insights, Groups and Reminders all announced **"Settled up"** while the flat's
+ * own screen still said I owed ₹500.
+ *
+ * Per group, the same greedy match can only ever pair people who share that
+ * group, which is exactly the set of people who can settle with each other. Debts
+ * across groups then cancel by summation, which is what the docs always claimed
+ * this did.
+ */
+async function netPerPerson(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+): Promise<Map<string, number>> {
+  const byGroup = await getNetByGroup(db);
+  const out = new Map<string, number>();
+  const bump = (personId: string, delta: number) =>
+    out.set(personId, (out.get(personId) ?? 0) + delta);
+
+  for (const net of byGroup.values()) {
+    for (const s of simplify(net)) {
+      // Sign convention, unchanged: positive means they owe me.
+      if (s.from === meId) bump(s.to, -s.amount);
+      else if (s.to === meId) bump(s.from, s.amount);
+    }
+  }
+  return out;
+}
+
 export type FriendBalance = {
   personId: string;
   name: string;
@@ -113,21 +182,15 @@ export async function getFriendBalances(
     [meId, meId],
   );
 
-  const net = await getGlobalNet(db);
-  const settlements = simplify(net);
+  const perPerson = await netPerPerson(db, meId);
 
   return rows.map(r => {
-    let friendNet = 0;
-    for (const s of settlements) {
-      if (s.from === meId && s.to === r.person_id) friendNet -= s.amount;
-      if (s.to === meId && s.from === r.person_id) friendNet += s.amount;
-    }
     return {
       personId: r.person_id,
       name: r.name,
       avatarColor: r.avatar_color,
       imageUri: r.image_uri,
-      net: friendNet,
+      net: perPerson.get(r.person_id) ?? 0,
       groupCount: r.group_count,
       receivableState: asReceivableState(r.receivable_state),
     };
@@ -140,10 +203,11 @@ export async function getFriendBalances(
 /**
  * My total Owe/Owed exposure across all groups — the single source of truth for
  * every *global* owe/owed headline (Insights, Personal, Groups tab, Reminders).
- * Built on {@link getFriendBalances}, which nets each person via
- * `simplify(getGlobalNet)` — i.e. "after all settlements", per the spec. A person
- * counts toward `owe` OR `owed` once, by their single net figure (never both), so
- * a debt in one group and a credit in another for the same person cancel out.
+ * Built on {@link getFriendBalances}, which simplifies each shared group and then
+ * sums the legs naming me — never a global simplification, which could route a
+ * debt through somebody I share no group with and then drop it. A person counts
+ * toward `owe` OR `owed` once, by their single net figure (never both), so a debt
+ * in one group and a credit in another for the same person cancel out.
  */
 export type MyExposure = {
   /** Total paise I owe (positive). */

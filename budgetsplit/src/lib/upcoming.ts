@@ -33,6 +33,17 @@ export function expandUpcoming(
   const out: ExpandedOccurrence[] = [];
   for (const txn of recurring) {
     if (txn.is_deleted) continue;
+    // A rule I have not accepted is a PROPOSAL, not a bill.
+    //
+    // Callers pass rows from `getRecurringForGroup`, which is a ledger view and
+    // therefore includes a peer's pending rule on purpose, marked. Every figure
+    // downstream of here is money: `computeSafeToSpend`'s `upcomingBills`, the
+    // month-end forecast floor, Afford, and the health score's bills-covered.
+    // Aarav proposing "Gym ₹12,000/mo" took ₹4,000 off my Safe-to-Spend the
+    // moment it arrived, while `getMyExposure` and every ledger total correctly
+    // ignored it — one figure moving while the rest do not, which AGENTS §13
+    // names as worse than all of them moving.
+    if (txn.pendingApproval) continue;
     // Expenses ONLY, and deliberately — this feeds Safe-to-Spend's `upcomingBills`,
     // which is "committed outgoings before payday". Income is not a bill, and a
     // settlement is not consumption (AGENTS §12). `buildUpcoming` below is the
@@ -100,6 +111,12 @@ export function buildUpcoming(
   const items: UpcomingItem[] = [];
   for (const txn of recurring) {
     if (txn.is_deleted) continue;
+    // Same rule as `expandUpcoming`. This list is what "Coming up" and the
+    // reminder scheduler read, so a pending rule here becomes a notification
+    // announcing a bill I never agreed to — and Afford sums it as committed.
+    // The place to decide about a peer's rule is the approvals queue, which is
+    // where it already appears.
+    if (txn.pendingApproval) continue;
     // All three kinds. This is a LIST of what is coming, not a total — a recurring
     // salary and a standing transfer are both things you want to see. Consumers
     // must label and sum per kind rather than adding them together; §12 forbids
@@ -110,11 +127,17 @@ export function buildUpcoming(
     const next = nextUnskippedOccurrence(txn, nowMs, skipsBySeries?.get(txn.id));
     if (next === null) continue;
 
+    // Costs me nothing, so it is not MY upcoming. A group rule split between two
+    // other flatmates is coming for them; putting it on my list at ₹0 is a row
+    // that explains nothing and a reminder about somebody else's bill.
+    const amount = myShareOrTotal(txn, meId);
+    if (amount === 0) continue;
+
     items.push({
       id: txn.id,
       name: (txn.note && txn.note.trim()) || txn.category,
       category: txn.category,
-      amount: myShareOrTotal(txn, meId),
+      amount,
       dateMs: next,
       daysUntil: Math.max(0, Math.round((next - nowMs) / DAY_MS)),
       kind: txn.kind,

@@ -19,21 +19,28 @@ export function myShareOf(txn: { shares: readonly Share[] }, meId: string): numb
 }
 
 /**
- * My paise share, falling back to the occurrence's full amount when I'm not in
- * the split. The PROJECTION basis: an unsplit upcoming bill is presumed mine
+ * My paise share, falling back to the occurrence's full amount only when the bill
+ * is UNSPLIT. The PROJECTION basis: an unsplit upcoming bill is presumed mine
  * (someone has to pay it and it's on my list), whereas in analysis the same
  * absence means "not my spend". Every projection surface (upcoming, recurring
  * rows, afford's committed bills) must use this one, so the two fallbacks can
  * never disagree per-screen again.
+ *
+ * "Unsplit" means **no shares at all**. A split that simply does not include me
+ * is not unsplit — it is a bill I am explicitly not on, and my share of it is
+ * zero, which is exactly what `myShareOf` says about the same row.
+ *
+ * The old fallback returned the whole share total whenever I was absent, so a
+ * flatmate's monthly ₹18,000 car EMI, split between the two of them, was charged
+ * to me in full: ₹18,000 off Safe-to-Spend, an ₹18,000 floor under the month-end
+ * forecast, and "Coming up · ₹18,000" against my name for a car I do not own.
  */
 export function myShareOrTotal(
   txn: { shares: readonly Share[]; payments: readonly Share[] },
   meId: string,
 ): number {
-  const mine = txn.shares.find(s => s.personId === meId)?.amount;
-  if (mine !== undefined) return mine;
-  const shareTotal = txn.shares.reduce((sum, s) => sum + s.amount, 0);
-  return shareTotal || txn.payments.reduce((s, p) => s + p.amount, 0);
+  if (txn.shares.length > 0) return myShareOf(txn, meId);
+  return txn.payments.reduce((s, p) => s + p.amount, 0);
 }
 
 /**
