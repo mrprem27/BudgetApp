@@ -201,8 +201,12 @@ export function BudgetTab({
                       health={c.health}
                     >
                       {/* V2-07: a red bar used to be the whole response to an overrun.
-                          Only offered when a re-plan is actually possible. */}
-                      {c.remaining < 0 && onRebalance && planRebalance(catStatus, c.category) && (
+                          Only offered when a re-plan is actually possible — and only
+                          to an admin, because it writes the group's DEFAULT, which
+                          `setCategoryBudgets` refuses from anyone else. Ungated, a
+                          member's tap produced an unhandled rejection and silence. */}
+                      {c.remaining < 0 && canEditGroupDefault && onRebalance
+                        && planRebalance(catStatus, c.category) && (
                         <TouchableOpacity
                           style={styles.replanBtn}
                           onPress={() => onRebalance(c.category)}

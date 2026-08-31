@@ -80,9 +80,25 @@ export function requiresMyApproval(
   override?: string | null,
 ): boolean {
   if (author.is_me === 1) return false;
-  // Ahead of trust, and ahead of any override: a transfer is confirmed however
-  // much I trust the sender, in every group. No per-group answer can waive it,
-  // because the reason has nothing to do with the person's honesty.
+  /*
+   * Ahead of trust, and ahead of any override: a transfer that NAMES ME is
+   * confirmed however much I trust the sender, in every group. No per-group answer
+   * can waive it, because the reason has nothing to do with the person's honesty.
+   *
+   * `touchesMe` is the precise boundary, and it is deliberate rather than an
+   * oversight — the invariant is sometimes stated as "a transfer always needs
+   * approval", which is broader than its own reasoning supports. Everything that
+   * makes a transfer different is about MY money: it credits cash I may never have
+   * received, and erases a real debt in the same write. A settlement between two
+   * OTHER people does neither. My net with the group is unchanged by it; only
+   * which of them `simplify()` tells me to pay can shift, and that re-derives on
+   * every read. So it follows the ordinary trust rule: from someone on review it
+   * waits, like all their entries, and from someone I have trusted it applies.
+   *
+   * Asking me to "approve" a payment between two people I did not watch make it
+   * would be asking me to vouch for something I cannot check, every month, in
+   * exchange for no protection at all.
+   */
   if (entry.kind === 'settlement' && entry.touchesMe) return true;
   return !appliesImmediately(author, override);
 }

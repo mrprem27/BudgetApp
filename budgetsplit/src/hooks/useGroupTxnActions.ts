@@ -22,7 +22,19 @@ export function useGroupTxnActions(groupId: string | null, reload: () => Promise
   const { showUndo } = useToast();
 
   async function deleteTxn(targetId: string, cascade: boolean, message: string) {
-    await softDeleteTxn(db, targetId, cascade);
+    try {
+      await softDeleteTxn(db, targetId, cascade);
+    } catch (e) {
+      // An entry somebody else wrote is refused here — the honest action on one
+      // is to say it is wrong, which records the decision and tells them. Said
+      // out loud rather than swallowed into "something went wrong".
+      haptic.error();
+      Alert.alert(
+        "Can't delete this",
+        e instanceof Error ? e.message : 'Please try again.',
+      );
+      return;
+    }
     haptic.warning();
     await reload();
     showUndo({

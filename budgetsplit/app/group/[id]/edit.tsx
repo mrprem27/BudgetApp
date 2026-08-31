@@ -6,10 +6,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { getGroupContext } from '../../../src/db/queries/groups';
-import { canDeleteGroup } from '../../../src/lib/permissions';
+import { canDeleteGroup, canEditGroup, isAdmin } from '../../../src/lib/permissions';
 import { colors, type, space, radius, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
+import { Banner } from '../../../src/components/ui/Banner';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { GroupForm } from '../../../src/components/finance/GroupForm';
 import { getGroupById, updateGroup, archiveGroupSafe, deleteGroup, type SplitMode } from '../../../src/db/queries/groups';
@@ -51,6 +52,11 @@ export default function EditGroupScreen() {
   const meId = data?.meId ?? '';
   // Deleting takes every member's history with it, so it is the creator's call alone.
   const mayDelete = data?.ctx ? canDeleteGroup(data.ctx) : false;
+  // Admins only, matching `canAddMember` / `canRemoveMember` / `canEditGroup`. The
+  // query layer refuses either way now; these stop offering a plain member controls
+  // whose Save can only fail.
+  const mayManageMembers = data?.ctx ? isAdmin(data.ctx) : false;
+  const mayEdit = data?.ctx ? canEditGroup(data.ctx) : false;
 
   // Seed the editable form fields once the read-only data arrives.
   useEffect(() => {
@@ -72,12 +78,15 @@ export default function EditGroupScreen() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await updateGroup(db, id, name.trim(), icon, color, defaultSplit);
+      await updateGroup(db, id, name.trim(), icon, color, defaultSplit, meId);
       if (!isPersonal) {
         const added = members.filter(m => !initialMembers.includes(m));
         const removed = initialMembers.filter(m => !members.includes(m));
-        for (const pid of added) await addMemberToGroup(db, id, pid);
-        for (const pid of removed) await removeMemberFromGroup(db, id, pid);
+        // `meId` is not optional here. Passing nothing used to skip the check
+        // entirely, which let any member add or remove anyone from this screen —
+        // including the creator, who is un-removable by design.
+        for (const pid of added) await addMemberToGroup(db, id, pid, meId);
+        for (const pid of removed) await removeMemberFromGroup(db, id, pid, meId);
       }
       haptic.success();
       refresh();
@@ -136,11 +145,24 @@ export default function EditGroupScreen() {
             if (patch.defaultSplit !== undefined) setDefaultSplit(patch.defaultSplit);
           }}
           allPersons={allPersons}
-          showMembers={!isPersonal}
+          showMembers={!isPersonal && mayManageMembers}
         />
 
         <View style={{ height: space.lg }} />
-        <PrimaryButton label="Save changes" onPress={handleSave} disabled={!name.trim()} loading={saving} />
+        {/*
+          Say it, rather than presenting a Save that can only be refused. The
+          name, icon, colour and split all belong to the whole group now — they
+          travel on the roster — so changing them is an admin act.
+        */}
+        {!isPersonal && !mayEdit && (
+          <Banner icon="lock" text="Only an admin can change this group's details." />
+        )}
+        <PrimaryButton
+          label="Save changes"
+          onPress={handleSave}
+          disabled={!name.trim() || (!isPersonal && !mayEdit)}
+          loading={saving}
+        />
 
         {!isPersonal && (
           <View style={styles.danger}>

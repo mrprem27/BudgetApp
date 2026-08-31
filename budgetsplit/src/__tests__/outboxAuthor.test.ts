@@ -1,4 +1,4 @@
-import { softDeleteTxn, restoreTxn, updateTxn } from '../db/queries/transactions';
+import { softDeleteTxn, restoreTxn, updateTxn, PeerEntryError } from '../db/queries/transactions';
 import { rejectTxn } from '../db/queries/approval';
 import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb, type TestDb } from './helpers/testDb';
 
@@ -72,30 +72,41 @@ describe('the outbox never carries a peer entry', () => {
       .toEqual({ dispute_state: 'raise' });
   });
 
-  it('soft-deleting a peer entry does not queue it', async () => {
+  /*
+   * These two are now refused outright rather than merely not queued, which is
+   * the stronger guarantee: a swipe or an edit on somebody else's entry is not a
+   * quieter version of refusing it, it is a different act with no record and no
+   * way for them to find out. Both properties are worth pinning — the refusal,
+   * and the outbox staying empty when it happens.
+   */
+  it('refuses a bare soft delete of a peer entry, and queues nothing', async () => {
     const s = scene();
     const id = s.peerTxn();
-    await softDeleteTxn(asDb(s.db), id);
+    await expect(softDeleteTxn(asDb(s.db), id)).rejects.toThrow(PeerEntryError);
     expect(queued(s.db)).toEqual([]);
   });
 
-  it('restoring a peer entry does not queue it', async () => {
+  it('refuses an edit of a peer entry, and queues nothing', async () => {
     const s = scene();
     const id = s.peerTxn();
-    await softDeleteTxn(asDb(s.db), id);
-    await restoreTxn(asDb(s.db), id);
-    expect(queued(s.db)).toEqual([]);
-  });
-
-  it('editing a peer entry does not queue it', async () => {
-    const s = scene();
-    const id = s.peerTxn();
-    await updateTxn(asDb(s.db), {
+    await expect(updateTxn(asDb(s.db), {
       id, groupId: s.gid, kind: 'expense', entryMode: 'quick', date: Date.now(),
       category: 'Food', note: 'corrected',
       payments: [{ personId: s.peer, amount: 200000 }],
       shares: [{ personId: s.me, amount: 100000 }, { personId: s.peer, amount: 100000 }],
-    });
+    })).rejects.toThrow(PeerEntryError);
+    expect(queued(s.db)).toEqual([]);
+  });
+
+  it('restoring a peer entry does not queue it', async () => {
+    // Reached through `reopenApproval`, which legitimately un-deletes a peer entry
+    // after a rejection is withdrawn. It must not broadcast that either.
+    const s = scene();
+    const id = s.peerTxn();
+    await softDeleteTxn(asDb(s.db), id, false, true);
+    s.db.raw.prepare('DELETE FROM sync_outbox').run();
+
+    await restoreTxn(asDb(s.db), id);
     expect(queued(s.db)).toEqual([]);
   });
 });

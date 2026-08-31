@@ -1,4 +1,5 @@
 import type { CategoryBudgetStatus } from './budget';
+import { OTHERS_LABEL } from './categoryFold';
 
 /**
  * Mid-month re-plan (`V2-07`).
@@ -50,6 +51,13 @@ export function planRebalance(
   statuses: CategoryBudgetStatus[],
   overCategory: string,
 ): RebalancePlan | null {
+  // `Others` is a fold of several real lines, not a budget anybody set, so it can
+  // be neither the thing re-planned nor a donor — moving "its" money would mean
+  // moving an amount that belongs to categories this row only summarises.
+  // `applyRebalance` drops it on the way out; refusing it here means a plan is
+  // never SHOWN whose numbers would then not be applied.
+  if (overCategory === OTHERS_LABEL) return null;
+
   const target = statuses.find(s => s.category === overCategory);
   if (!target || target.remaining >= 0) return null;
 
@@ -58,7 +66,7 @@ export function planRebalance(
   let left = overspend;
 
   const candidates = statuses
-    .filter(s => s.category !== overCategory && s.cadence === target.cadence)
+    .filter(s => s.category !== overCategory && s.category !== OTHERS_LABEL && s.cadence === target.cadence)
     .map(s => ({ s, headroom: Math.max(0, s.remaining) }))
     .filter(c => c.headroom > 0)
     .sort((a, b) => b.headroom - a.headroom || a.s.category.localeCompare(b.s.category));
@@ -88,11 +96,23 @@ export function applyRebalance(
   plan: RebalancePlan,
 ): Array<{ category: string; cadence: CategoryBudgetStatus['cadence']; amount: number }> {
   const byCategory = new Map(plan.donors.map(d => [d.category, d.newAllocated]));
-  return statuses.map(s => ({
-    category: s.category,
-    cadence: s.cadence,
-    amount: s.category === plan.category
-      ? s.allocated + plan.covered
-      : byCategory.get(s.category) ?? s.allocated,
-  }));
+  return statuses
+    /*
+     * `Others` is a FOLD, not a category.
+     *
+     * `foldBudgetStatuses` invents it to gather every budget line whose category
+     * is not in the catalog, so it has no row of its own. Submitting it made
+     * `setCategoryBudgets` write a real one — and its preservation rule keeps any
+     * line that is neither known nor submitted, so the folded lines survived
+     * alongside it and the group's allocated total jumped by their sum out of
+     * nowhere. The next fold then gathered them into the now-real Others again.
+     */
+    .filter(s => s.category !== OTHERS_LABEL)
+    .map(s => ({
+      category: s.category,
+      cadence: s.cadence,
+      amount: s.category === plan.category
+        ? s.allocated + plan.covered
+        : byCategory.get(s.category) ?? s.allocated,
+    }));
 }

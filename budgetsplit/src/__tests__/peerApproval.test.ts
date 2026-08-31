@@ -3,7 +3,10 @@ import { approveTxn, rejectTxn, reopenApproval, getPendingApprovalCount, getPend
 import { pendingDisputes, markDisputeSent, recordDispute, disputesFor, markSynced } from '../db/queries/syncDoc';
 import { getMyExposure } from '../db/queries/balances';
 import { getCashPosition, proposeOverspendRaid } from '../db/queries/savings';
-import { getTransactionsForGroup, getLedgerStats, updateTxn, getActiveRecurringRules, insertTxn } from '../db/queries/transactions';
+import {
+  getTransactionsForGroup, getLedgerStats, updateTxn, getActiveRecurringRules, insertTxn,
+  softDeleteTxn, PeerEntryError,
+} from '../db/queries/transactions';
 import { materializeDueOccurrences } from '../db/queries/recurring';
 import { PayMethod } from '../constants/enums';
 import { getMyGlobalBudgetSummary } from '../lib/budget';
@@ -162,20 +165,46 @@ describe('a peer entry waiting on me', () => {
    * every share and payment row, so an approval stored on those would vanish here
    * — and the entry would silently start counting without my ever accepting it.
    */
-  it('survives an edit that rewrites the entry\'s shares', async () => {
+  /**
+   * I can refuse an entry somebody else wrote. I cannot rewrite it.
+   *
+   * Nothing gated this, so a peer's ₹4,000 dinner could be quietly edited down to
+   * ₹400 here — my copy disagreeing with theirs permanently, with no version bump
+   * on their side to reconcile it and nothing to tell either of us. The honest
+   * answers are approve and reject, and both exist.
+   */
+  it('cannot be edited at all — only accepted or refused', async () => {
     const { db, me, aarav, flat } = await setup();
     const before = await snapshot(db, me);
     const res = await ingestPeerTxn(asDb(db), envelope(flat, me, aarav));
     if (!res.ok) throw new Error(res.reason);
 
-    await updateTxn(asDb(db), {
+    await expect(updateTxn(asDb(db), {
       id: res.txnId, groupId: flat, kind: 'expense', date: Date.now(), category: 'Food',
       payments: [{ personId: aarav, amount: BILL }],
       shares: [{ personId: me, amount: MY_SHARE }, { personId: aarav, amount: MY_SHARE }],
-    });
+    })).rejects.toThrow(PeerEntryError);
 
+    // Refused means untouched: still waiting, and still moving none of my numbers.
     expect(await getPendingApprovalCount(asDb(db))).toBe(1);
     expect(await snapshot(db, me)).toEqual(before);
+  });
+
+  it('cannot be swiped away either — that is what refusing is for', async () => {
+    const { db, me, aarav, flat } = await setup();
+    const res = await ingestPeerTxn(asDb(db), envelope(flat, me, aarav));
+    if (!res.ok) throw new Error(res.reason);
+
+    await expect(softDeleteTxn(asDb(db), res.txnId)).rejects.toThrow(PeerEntryError);
+    expect(await db.getFirstAsync('SELECT is_deleted FROM txn WHERE id = ?', [res.txnId]))
+      .toEqual({ is_deleted: 0 });
+
+    // ...and the labelled path still works, and still tells them.
+    await rejectTxn(asDb(db), res.txnId);
+    expect(await db.getFirstAsync('SELECT is_deleted FROM txn WHERE id = ?', [res.txnId]))
+      .toEqual({ is_deleted: 1 });
+    expect(await db.getFirstAsync('SELECT dispute_state FROM txn_approval WHERE txn_id = ?', [res.txnId]))
+      .toEqual({ dispute_state: 'raise' });
   });
 });
 

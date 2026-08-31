@@ -71,6 +71,18 @@ export default function MembersScreen() {
 
   const memberIds = new Set(members.map(m => m.id));
 
+  /**
+   * Whether to offer the swipe at all.
+   *
+   * Not for myself, not for a non-admin, and **not for the creator** —
+   * `canRemoveMember` refuses them for everybody including another admin, so that
+   * swipe existed purely to be told no. Hiding a control that can only be refused
+   * is the same courtesy the Delete button already gets.
+   */
+  function canSwipeToRemove(person: Person): boolean {
+    return person.is_me !== 1 && mayManage && !roleOf.get(person.id)?.is_creator;
+  }
+
   function togglePending(id: string) {
     setPendingIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
@@ -83,9 +95,15 @@ export default function MembersScreen() {
       setShowAdd(false);
       setPendingIds([]);
       await reload(); refresh();
-    } catch {
+    } catch (e) {
+      // Say which rule refused it. "Something went wrong · Please try again" on a
+      // PermissionError is advice that can only ever fail, and the removal path
+      // below already explains itself properly.
       haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
+      Alert.alert(
+        "Couldn't add them",
+        e instanceof Error ? e.message : 'Please try again.',
+      );
     }
   }
 
@@ -194,7 +212,7 @@ export default function MembersScreen() {
                 <Swipeable
                   key={item.id}
                   ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
-                  renderRightActions={item.is_me ? undefined : renderRightActions}
+                  renderRightActions={canSwipeToRemove(item) ? renderRightActions : undefined}
                   overshootRight={false}
                   friction={2}
                 >
@@ -256,13 +274,18 @@ export default function MembersScreen() {
           </View>
         )}
 
-        <View style={styles.addButtons}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
-            <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-            <Text style={styles.addBtnText}>Add or create person</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        </View>
+        {/* Admins only, matching `canAddMember`. A member tapping this picked
+            people, tapped "Add 2 people", and got a generic retry prompt that
+            could never succeed. */}
+        {mayManage && (
+          <View style={styles.addButtons}>
+            <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
+              <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
+              <Text style={styles.addBtnText}>Add or create person</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/*
           Sharing lives on Members because that is what it is: giving a specific

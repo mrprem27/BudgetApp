@@ -102,7 +102,9 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
   // would leave a moment where the entry is marked 'rejected' but not yet deleted,
   // and 'rejected' is not filtered, so it would briefly count as my money. If the
   // second write then failed, it would stay that way.
-  await softDeleteTxn(db, txnId);
+  // The one caller allowed to remove somebody else's entry, because it is the
+  // labelled way to do it: the decision is recorded and an objection is queued.
+  await softDeleteTxn(db, txnId, false, true);
   /*
    * INSERT OR REPLACE, not UPDATE.
    *

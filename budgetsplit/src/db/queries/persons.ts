@@ -294,10 +294,16 @@ export async function addMemberToGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   personId: string,
-  /** Who is acting. Admins only — omit only from setup paths that predate any group. */
-  actorId?: string,
+  /**
+   * Who is acting. Admins only, and **required** — it used to be optional with
+   * the guard written as `if (actorId && …)`, so omitting it did not fail, it
+   * skipped the check. `group/[id]/edit.tsx` omitted it, which meant any member
+   * could open Edit group, tick or untick anybody including the CREATOR, and save.
+   * The rule held on the screen that asked for it and not on the one that did not.
+   */
+  actorId: string,
 ): Promise<void> {
-  if (actorId && !canAddMember(await getGroupContext(db, groupId, actorId))) {
+  if (!canAddMember(await getGroupContext(db, groupId, actorId))) {
     throw new PermissionError('add members to this group');
   }
   await db.withTransactionAsync(async () => {
@@ -320,10 +326,11 @@ export async function removeMemberFromGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   personId: string,
-  actorId?: string,
+  /** Required, for the reason on `addMemberToGroup`. */
+  actorId: string,
 ): Promise<void> {
   // Refuses the creator for everyone, including the creator themselves.
-  if (actorId && !canRemoveMember(await getGroupContext(db, groupId, actorId), personId)) {
+  if (!canRemoveMember(await getGroupContext(db, groupId, actorId), personId)) {
     throw new PermissionError('remove this member');
   }
   await db.withTransactionAsync(async () => {

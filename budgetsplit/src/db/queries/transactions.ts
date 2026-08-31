@@ -9,6 +9,20 @@ import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
 import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode } from '../../constants/enums';
 
+/**
+ * Raised when a write would change an entry somebody else wrote.
+ *
+ * Its own type rather than a `PermissionError`, because this is not about rank —
+ * no admin may rewrite what another person recorded either. The available
+ * answers are approve and reject, and both are elsewhere.
+ */
+export class PeerEntryError extends Error {
+  constructor(action: string) {
+    super(`You can't ${action}. You can accept it or say it's wrong instead.`);
+    this.name = 'PeerEntryError';
+  }
+}
+
 export type Txn = {
   id: string;
   group_id: string;
@@ -559,7 +573,25 @@ export async function softDeleteTxn(
   db: SQLite.SQLiteDatabase,
   txnId: string,
   cascadeOccurrences = false,
+  /**
+   * Only `rejectTxn` passes this.
+   *
+   * Deleting an entry SOMEBODY ELSE wrote is not an ordinary delete, and there is
+   * already a labelled way to do it: refusing it, which records the decision and
+   * tells them. A bare swipe did the same thing anonymously — the entry left my
+   * ledger, they were never told, and our two copies disagreed with nothing
+   * anywhere to reconcile them. That is the failure `txn_dispute` exists to stop.
+   */
+  allowPeerEntry = false,
 ): Promise<void> {
+  if (!allowPeerEntry) {
+    const author = await db.getFirstAsync<{ author_person_id: string | null }>(
+      'SELECT author_person_id FROM txn WHERE id = ?', [txnId],
+    );
+    if (author?.author_person_id) {
+      throw new PeerEntryError('delete an entry somebody else wrote');
+    }
+  }
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
     await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [Date.now(), txnId]);
@@ -729,6 +761,24 @@ export async function updateTxn(
   db: SQLite.SQLiteDatabase,
   input: UpdateTxnInput,
 ): Promise<void> {
+  /*
+   * I can refuse an entry somebody else wrote. I cannot rewrite it.
+   *
+   * `approval.ts` states the rule and this is where it was missing: nothing gated
+   * editing, so a peer's ₹4,000 dinner could be quietly changed to ₹400 here. My
+   * copy would then disagree with theirs permanently, with no version bump on
+   * their side to reconcile it and nothing to tell either of us.
+   *
+   * The honest actions on somebody else's entry are approve and reject, and both
+   * already exist.
+   */
+  const author = await db.getFirstAsync<{ author_person_id: string | null }>(
+    'SELECT author_person_id FROM txn WHERE id = ?', [input.id],
+  );
+  if (author?.author_person_id) {
+    throw new PeerEntryError('edit an entry somebody else wrote');
+  }
+
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     // `group_id` is here because the Add screen's destination pill is live in edit

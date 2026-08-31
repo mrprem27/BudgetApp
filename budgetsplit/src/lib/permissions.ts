@@ -17,6 +17,27 @@ import type { GroupRole } from '../constants/enums';
  * **Enforced at the query layer, not here and not in screens.** These functions
  * decide; `db/queries/*` refuse. A screen hiding a button is a courtesy, not a
  * control — the write path is the control.
+ *
+ * That claim used to be half true, which is worse than not making it. Membership
+ * was guarded as `if (actorId && …)` with `actorId` optional, so a caller that
+ * omitted it did not fail — it skipped the check, and `group/[id]/edit.tsx` did
+ * exactly that. Group rename, the default split and simplify-debt had no
+ * capability at all. Sharing a group — which is granting membership, and
+ * discloses every member's name and account id — was ungated on both paths. Each
+ * is now checked in the query, and the actor is required rather than optional.
+ *
+ * What is deliberately NOT a permission:
+ * - **Archiving and unarchiving.** They change my own list and nothing anyone
+ *   else can see, so there is nobody to protect.
+ * - **Editing or deleting somebody else's entry.** Not a matter of rank — no
+ *   admin may rewrite what another person recorded either. `PeerEntryError`
+ *   refuses it outright, and approve/reject is the way to answer one.
+ *
+ * The one rule that remains advisory is the wire: a peer can push whatever
+ * `EntryDoc` and whatever roster it likes, and `ingestPeerTxn` checks membership,
+ * authorship and balance but never role. Enforcing role across devices needs the
+ * server, which today has exactly one such rule (`DELETE /sync/groups/:id` is
+ * owner-only).
  */
 
 /** Everything a permission decision needs about the actor and the group. */
@@ -62,6 +83,18 @@ export const canEditGroupBudget = isAdmin;
 export function canSetOverrideFor(ctx: GroupContext, targetPersonId: string): boolean {
   return isMember(ctx) && ctx.actorId === targetPersonId;
 }
+
+/**
+ * Rename the group, change its icon or colour, or change the **default split**
+ * and whether debts are simplified.
+ *
+ * There was no capability for this at all, and no check anywhere, so any member
+ * could rename a shared group for everybody and change the split mode every
+ * future expense in it defaults to. The last two are not cosmetic: they decide
+ * what the settle-up instructions say, and they now travel on the roster, so one
+ * member's change reaches every phone.
+ */
+export const canEditGroup = isAdmin;
 
 /** Add someone to the group. */
 export const canAddMember = isAdmin;

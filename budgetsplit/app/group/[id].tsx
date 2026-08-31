@@ -135,9 +135,21 @@ export default function GroupDetailScreen() {
   }
 
   async function handleToggleSimplify(on: boolean) {
+    // Optimistic, then reverted on refusal or failure. The switch used to flip and
+    // stay flipped whatever happened, so a refused or failed write left the screen
+    // claiming a setting the database did not have until the next load.
     setSimplifyOn(on);
     haptic.selection();
-    await setSimplifyDebt(db, id, on);
+    try {
+      await setSimplifyDebt(db, id, on, meId);
+    } catch (e) {
+      setSimplifyOn(!on);
+      haptic.error();
+      Alert.alert(
+        "Couldn't change this",
+        e instanceof Error ? e.message : 'Please try again.',
+      );
+    }
   }
 
   // simplify(net) feeds both the balance card and the settlements list — memoize once.
@@ -330,6 +342,15 @@ export default function GroupDetailScreen() {
             setRebalance(null);
             await reload();
             refresh();
+          } catch (e) {
+            // `setCategoryBudgets` refuses a non-admin. With no catch that arrived
+            // as an unhandled rejection: the sheet stayed open, the spinner
+            // cleared, nothing was written and nothing was said.
+            haptic.error();
+            Alert.alert(
+              "Couldn't re-plan",
+              e instanceof Error ? e.message : 'Please try again.',
+            );
           } finally {
             setApplyingRebalance(false);
           }

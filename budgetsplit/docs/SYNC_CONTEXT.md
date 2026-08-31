@@ -124,10 +124,13 @@ identical to working — which is what Settings → Sync → **Sync activity**
 - **Delivery is at-least-once.** Forget an entry only *after* the server accepts it.
 - **Never silent last-write-wins on money, and never an auto-merge.** A `409` returns
   the current row for a human to resolve.
-- **A transfer always needs approval**, however much you trust the sender, in every
-  group. No per-group override may waive it: an incoming transfer fails for reasons
-  neither party controls, and *"I paid you ₹5,000"* erases a real debt in the same
-  write.
+- **A transfer that NAMES ME always needs approval**, however much you trust the
+  sender, in every group. No per-group override may waive it: an incoming transfer
+  fails for reasons neither party controls, and *"I paid you ₹5,000"* erases a real
+  debt in the same write. `touchesMe` is the boundary and it is deliberate — a
+  settlement between two *other* people moves none of my money (only which of them
+  `simplify()` suggests I pay, which re-derives on every read), so it follows the
+  ordinary trust rule instead.
 - **`remote_uid == null` ⇒ inert.** No account, no write path. Checked *before* any
   trust or override.
 - **Approval must never live on `txn_share` / `txn_payment`** — both are DELETEd and

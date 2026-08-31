@@ -32,7 +32,7 @@ export type BudgetGroup = {
 
 import type { SplitMode, GroupRole } from '../../constants/enums';
 import {
-  canChangeRole, canDeleteGroup, PermissionError, type GroupContext,
+  canChangeRole, canDeleteGroup, canEditGroup, PermissionError, type GroupContext,
 } from '../../lib/permissions';
 export type { SplitMode } from '../../constants/enums';
 
@@ -187,22 +187,44 @@ export async function setSimplifyDebt(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   on: boolean,
+  actorId: string,
 ): Promise<void> {
+  // Same capability as any other group setting, and for the same reason: this one
+  // decides what everybody is told to pay.
+  if (!canEditGroup(await getGroupContext(db, groupId, actorId))) {
+    throw new PermissionError('change how this group settles up');
+  }
   await db.runAsync('UPDATE budget_group SET simplify_debt=? WHERE id=?', [on ? 1 : 0, groupId]);
+  await logAudit(db, {
+    entityType: 'group', entityId: groupId, groupId, action: 'updated',
+    summary: on ? 'Turned on simplified settling' : 'Turned off simplified settling',
+  });
   // This decides what the SETTLE-UP INSTRUCTIONS look like — "pay Rohan ₹2,000"
   // versus two smaller direct payments — so leaving it on one device means the
   // group is told two different things about the same ledger.
   await markRosterDirty(db, groupId);
 }
 
+/**
+ * Rename / recolour a group, and optionally change its default split.
+ *
+ * `actorId` is required and checked. There was no capability for this and no
+ * check anywhere, so any member could rename a shared group for everybody and
+ * change the mode every future expense in it defaults to — and both now travel on
+ * the roster, so one member's change reaches every phone.
+ */
 export async function updateGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   name: string,
   icon: string,
   color: string,
-  defaultSplit?: SplitMode,
+  defaultSplit: SplitMode | undefined,
+  actorId: string,
 ): Promise<void> {
+  if (!canEditGroup(await getGroupContext(db, groupId, actorId))) {
+    throw new PermissionError('edit this group');
+  }
   await db.withTransactionAsync(async () => {
     if (defaultSplit) {
       await db.runAsync(

@@ -26,15 +26,15 @@ describe('a roster that changed needs republishing', () => {
   }
 
   it('marks it when somebody joins the group', async () => {
-    const { db, flat } = await shared();
+    const { db, me, flat } = await shared();
     const ravi = addPerson(db, 'Ravi');
-    await addMemberToGroup(asDb(db), flat, ravi);
+    await addMemberToGroup(asDb(db), flat, ravi, me);
     expect(await dirtyRosters(asDb(db))).toContain(flat);
   });
 
   it('marks it when somebody leaves', async () => {
-    const { db, flat, aarav } = await shared();
-    await removeMemberFromGroup(asDb(db), flat, aarav);
+    const { db, me, flat, aarav } = await shared();
+    await removeMemberFromGroup(asDb(db), flat, aarav, me);
     expect(await dirtyRosters(asDb(db))).toContain(flat);
   });
 
@@ -46,8 +46,8 @@ describe('a roster that changed needs republishing', () => {
   });
 
   it('marks it when the group itself is renamed', async () => {
-    const { db, flat } = await shared();
-    await updateGroup(asDb(db), flat, 'The Flat', 'home', '#20C4B8');
+    const { db, me, flat } = await shared();
+    await updateGroup(asDb(db), flat, 'The Flat', 'home', '#20C4B8', undefined, me);
     expect(await dirtyRosters(asDb(db))).toContain(flat);
   });
 
@@ -58,7 +58,7 @@ describe('a roster that changed needs republishing', () => {
     addMember(db, personal, me);
     const other = addPerson(db, 'Someone');
 
-    await addMemberToGroup(asDb(db), personal, other);
+    await addMemberToGroup(asDb(db), personal, other, me);
     await markRosterDirty(asDb(db), personal);
 
     // Enforced in the SQL, not at the call site — a writer that has to remember
@@ -67,9 +67,9 @@ describe('a roster that changed needs republishing', () => {
   });
 
   it('clears once published, and does not re-fire on its own', async () => {
-    const { db, flat } = await shared();
+    const { db, me, flat } = await shared();
     const ravi = addPerson(db, 'Ravi');
-    await addMemberToGroup(asDb(db), flat, ravi);
+    await addMemberToGroup(asDb(db), flat, ravi, me);
 
     await clearRosterDirty(asDb(db), flat);
     expect(await dirtyRosters(asDb(db))).not.toContain(flat);
