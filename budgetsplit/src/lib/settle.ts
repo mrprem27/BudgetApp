@@ -36,16 +36,32 @@ export function simplify(net: Record<string, number>): Settlement[] {
  * Raw pairwise debts — who owes whom directly, WITHOUT global minimization.
  * Used when a group's "Simplify debts" toggle is off.
  *
- * For each expense/settlement txn, every share-holder owes each payer a slice
- * of their share proportional to how much that payer fronted. Settlements use
- * the same formula (payer + / receiver −), so a settlement naturally cancels
- * the matching debt. Reverse pairs (A→B and B→A) are netted at the end.
+ * ## One transaction at a time, from each person's net position in it
  *
- * Slices are allocated so that each share is fully spent AND each payer is
- * credited exactly what they fronted (see the carry below). Rounding each slice
- * independently used to leave a person's net a paise away from the ledger's,
- * which showed as the same group reporting different figures either side of the
- * "Simplify debts" toggle.
+ * Within a single transaction, what somebody owes is exactly what they consumed
+ * minus what they fronted. Matching the negatives against the positives *inside
+ * that transaction* is therefore the whole answer, and it is `simplify` scoped to
+ * one row rather than to the group — which is precisely what "raw" means here:
+ * debts arise from the bills they arose from, and are not routed across the
+ * group's other business.
+ *
+ * ## What this replaces, and why it had to
+ *
+ * It used to allocate every share across every payer proportionally, carrying a
+ * fractional remainder between shares. The share-holder's own slice was then
+ * discarded — correctly, you do not owe yourself — but only AFTER the carry had
+ * already been mutated for it. That fraction then belonged to nobody: it rolled
+ * into the next share, could drive a carry negative, and a negative carry makes
+ * `Math.floor` return **−1**, which the remainder loop then over-corrected.
+ *
+ * The visible result was debts invented out of nothing. Three people who each
+ * paid one paise and each owed one paise — everybody exactly square, every net
+ * zero — produced two pairwise debts, so the group could never reach "settled
+ * up" with Simplify turned off. The amounts at risk were sub-paise; the state was
+ * unreachable, which is worse, because it is the one the user is trying to get to.
+ *
+ * Settlements need no special case: a payer is positive and a receiver negative,
+ * so a settlement cancels the debt it repays by arithmetic rather than by rule.
  */
 export function rawDebts(
   txns: Array<{
@@ -57,41 +73,19 @@ export function rawDebts(
   const pair: Record<string, number> = {}; // `${debtor}->${creditor}` => paise
   for (const t of txns) {
     if (t.kind === 'income') continue;
-    const totalPaid = t.payments.reduce((a, p) => a + p.amount, 0);
-    if (totalPaid <= 0) continue;
-    // Allocate every share across the payers with a carried remainder, so BOTH
-    // margins come out exact: each share is fully allocated, AND each payer is
-    // credited exactly what they fronted. Rounding each slice on its own gets
-    // the first right and the second wrong — the leftover paise always landed on
-    // the same (first) payer, so their net drifted away from the ledger.
-    const carry = t.payments.map(() => 0);
-    for (const s of t.shares) {
-      if (s.amount <= 0) continue;
 
-      const slices = t.payments.map((p, idx) => {
-        const want = (s.amount * p.amount) / totalPaid + carry[idx];
-        const base = Math.floor(want);
-        carry[idx] = want - base; // fraction owed forward to the next share
-        return base;
-      });
+    // Each person's position in THIS transaction: fronted minus consumed.
+    // Integer paise throughout, so there is nothing to round and nothing to
+    // carry — the arithmetic that produced phantom debts is simply gone.
+    const net: Record<string, number> = {};
+    for (const p of t.payments) net[p.personId] = (net[p.personId] ?? 0) + p.amount;
+    for (const s of t.shares) net[s.personId] = (net[s.personId] ?? 0) - s.amount;
 
-      // Hand the rounding remainder to whoever is furthest along fractionally.
-      let remainder = s.amount - slices.reduce((a, b) => a + b, 0);
-      while (remainder > 0) {
-        let best = 0;
-        for (let i = 1; i < carry.length; i++) if (carry[i] > carry[best]) best = i;
-        slices[best]++;
-        carry[best] -= 1;
-        remainder--;
-      }
-
-      t.payments.forEach((p, idx) => {
-        if (p.personId === s.personId) return; // you don't owe yourself
-        const owe = slices[idx];
-        if (owe <= 0) return;
-        const key = `${s.personId}->${p.personId}`;
-        pair[key] = (pair[key] ?? 0) + owe;
-      });
+    // Scoped to the row, which is what makes these raw: `simplify` over the whole
+    // group is the other toggle.
+    for (const d of simplify(net)) {
+      const key = `${d.from}->${d.to}`;
+      pair[key] = (pair[key] ?? 0) + d.amount;
     }
   }
 

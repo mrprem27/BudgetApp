@@ -170,26 +170,70 @@ export function splitEqual(total: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
+/**
+ * Percentages of a total.
+ *
+ * **Only distributes the rounding remainder when the percentages actually sum to
+ * 100.** They are the user's raw input and frequently do not — 33 + 33 + 33, or
+ * a half-typed 50 + 40 — and the shortfall is theirs to reconcile, which is what
+ * `validateShares` and the "still unassigned" figure exist to tell them.
+ *
+ * The old version distributed unconditionally, so any total under 100% added a
+ * spare paise to EVERY member: 50 + 40 of ₹1,000 came out as ₹500.01 and ₹400.01.
+ * Nothing was ever saved unbalanced, because the save is blocked either way — but
+ * the amounts on screen were each a paise too high, and the "unassigned" figure
+ * read ₹99.98 for a gap the user could see was ₹100.00. A number that disagrees
+ * with the arithmetic beside it is worse than a number that is merely missing.
+ */
 export function splitByPercent(total: number, percentages: number[]): number[] {
+  const sum = percentages.reduce((a, b) => a + b, 0);
   const raw = percentages.map(p => Math.floor((total * p) / 100));
-  const assigned = raw.reduce((a, b) => a + b, 0);
-  let remainder = total - assigned;
-  return raw.map(v => {
-    if (remainder > 0) { remainder--; return v + 1; }
-    return v;
-  });
+  // Not a full 100%: hand back exactly what was asked for and let the caller
+  // surface the gap.
+  if (Math.abs(sum - 100) > 1e-9) return raw;
+  return largestRemainder(total, percentages);
+}
+
+/**
+ * Split `total` across weights so the parts sum to EXACTLY `total`, giving the
+ * spare paise to whoever was rounded down hardest.
+ *
+ * The one allocation engine. Every proportional split in the app goes through it,
+ * because "close enough" is not a thing money can be: parts that do not sum to
+ * the total either invent a paise or lose one, and the app then disagrees with
+ * itself about a figure the user can see.
+ *
+ * Largest-remainder, not first-n. Both are exact, but handing every spare paise
+ * to whoever happens to be first in the array means the same person absorbs it
+ * every single time — over a shared flat's year of bills that is a systematic
+ * tilt, not a rounding artefact.
+ */
+export function largestRemainder(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (sum === 0) return weights.map(() => 0);
+
+  const exact = weights.map(w => (total * w) / sum);
+  const floors = exact.map(Math.floor);
+  // Bounded by the number of weights, since each floor discards less than 1.
+  let remainder = total - floors.reduce((a, b) => a + b, 0);
+
+  // Descending fractional part; index as the tie-break so the result is stable
+  // rather than dependent on the sort's implementation.
+  const order = exact
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+
+  const out = [...floors];
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    out[i] += 1;
+    remainder -= 1;
+  }
+  return out;
 }
 
 export function splitByShares(total: number, ratios: number[]): number[] {
-  const sum = ratios.reduce((a, b) => a + b, 0);
-  if (sum === 0) return ratios.map(() => 0);
-  const scaled = ratios.map(r => Math.floor((total * r) / sum));
-  const assigned = scaled.reduce((a, b) => a + b, 0);
-  let remainder = total - assigned;
-  return scaled.map(v => {
-    if (remainder > 0) { remainder--; return v + 1; }
-    return v;
-  });
+  return largestRemainder(total, ratios);
 }
 
 /**

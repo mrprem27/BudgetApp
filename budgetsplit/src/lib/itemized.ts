@@ -1,4 +1,4 @@
-import { parseToPaise, splitByMode } from './money';
+import { parseToPaise, splitByMode, largestRemainder } from './money';
 import type { SplitMode } from '../constants/enums';
 import type { Person } from '../db/queries/persons';
 import type { ItemizedAdjustment } from '../db/queries/transactions';
@@ -64,28 +64,48 @@ export function computePerPersonShares(
   const total = computeAdjustedTotal(subtotal, adjustments);
   const ratio = subtotal > 0 ? total / subtotal : 1;
 
-  const raw: Record<string, number> = {};
-  for (const m of members) raw[m.id] = 0;
+  /*
+   * Each person's share of the SUBTOTAL first, exactly, with no scaling yet.
+   *
+   * The adjustment is then applied once, over the whole bill, by
+   * `largestRemainder`. That ordering is the fix, and the previous one could
+   * leave a bill permanently unsaveable.
+   *
+   * It scaled each person's slice of each item by `ratio` and rounded — so the
+   * error was up to half a paise per item PER PERSON — and then tried to absorb
+   * the total drift with a pass that moved at most ±1 paise per member. With more
+   * items than members it simply could not close: four ₹100 dishes shared three
+   * ways with a 5% service charge came out 1 paise over, the screen said
+   * "₹0.01 over-assigned" with every item already assigned, and there was no
+   * control anywhere that could change it. Save was dead.
+   *
+   * Rounding once, at the end, is exact by construction: the parts sum to the
+   * total because that is what `largestRemainder` guarantees.
+   */
+  const base: Record<string, number> = {};
+  for (const m of members) base[m.id] = 0;
 
   for (const item of items) {
     if (item.assignedTo.length === 0) continue;
-    // Split the item by its own mode, then scale each share by the adjustment ratio.
-    const base = computeItemSubtotal(item);
-    const split = splitItemBase(item, base);
+    const itemBase = computeItemSubtotal(item);
+    const split = splitItemBase(item, itemBase);
     for (const pid of item.assignedTo) {
-      raw[pid] = (raw[pid] ?? 0) + Math.round((split[pid] ?? 0) * ratio);
+      base[pid] = (base[pid] ?? 0) + (split[pid] ?? 0);
     }
   }
 
-  const assigned = Object.values(raw).reduce((a, b) => a + b, 0);
-  const unassignedItems = items.filter(i => i.assignedTo.length === 0);
-  if (unassignedItems.length === 0) {
-    let diff = total - assigned;
-    for (const m of members) {
-      if (diff === 0) break;
-      if (raw[m.id] > 0) { raw[m.id] += diff > 0 ? 1 : -1; diff += diff > 0 ? -1 : 1; }
-    }
+  // Something is unassigned, so the shares are NOT meant to reach the total —
+  // the gap is what the screen asks the user to close. Scale each share on its
+  // own and leave it short.
+  if (items.some(i => i.assignedTo.length === 0)) {
+    const scaled: Record<string, number> = {};
+    for (const m of members) scaled[m.id] = Math.round((base[m.id] ?? 0) * ratio);
+    return scaled;
   }
 
-  return raw;
+  const ids = members.map(m => m.id);
+  const parts = largestRemainder(total, ids.map(id => base[id] ?? 0));
+  const out: Record<string, number> = {};
+  ids.forEach((id, i) => { out[id] = parts[i]; });
+  return out;
 }

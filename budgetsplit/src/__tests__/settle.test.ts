@@ -31,6 +31,45 @@ describe('rawDebts', () => {
   });
 
   /**
+   * Everybody square must read as settled up.
+   *
+   * The old allocation carried a fractional remainder between shares, and
+   * discarded the share-holder's own slice only AFTER mutating the carry for it.
+   * That fraction then belonged to nobody: it rolled forward, drove a carry
+   * negative, and a negative carry makes `Math.floor` return −1, which the
+   * remainder loop over-corrected.
+   *
+   * Three people each paying one paise and each owing one paise — every net
+   * exactly zero — produced debts out of nothing, so with Simplify off the group
+   * could never reach "settled up". Sub-paise amounts; an unreachable state,
+   * which is worse, because it is the one the user is trying to get to.
+   */
+  it('invents nothing when everyone is exactly square', () => {
+    const r = rawDebts([txn([['a', 1], ['b', 1], ['c', 1]], [['a', 1], ['b', 1], ['c', 1]])]);
+    expect(r).toEqual([]);
+  });
+
+  it('invents nothing on an amount that cannot divide evenly', () => {
+    // 1 paise across three people has no exact proportional answer, which is the
+    // shape that broke it. Whatever it reports must still net to zero.
+    const r = rawDebts([txn([['a', 1]], [['a', 1]])]);
+    expect(r).toEqual([]);
+  });
+
+  it('splits a self-funded share correctly', () => {
+    // a fronted 30 and consumed 100; b fronted 70. a owes b exactly 70 — not the
+    // whole 100, because a's own 30 covers part of their own share.
+    const r = rawDebts([txn([['a', 30], ['b', 70]], [['a', 100]])]);
+    expect(r).toEqual([{ from: 'a', to: 'b', amount: 70 }]);
+  });
+
+  it('splits one bill across two payers without rounding drift', () => {
+    const r = rawDebts([txn([['a', 100], ['b', 100]], [['c', 200]])]);
+    expect(r.reduce((s, d) => s + d.amount, 0)).toBe(200);
+    expect(r.every(d => d.from === 'c')).toBe(true);
+  });
+
+  /**
    * The two views are alternatives for the same group and are never summed
    * together. Their TOTALS legitimately differ — `simplify` cancels chains
    * (a→b→c collapses to a→c) while `rawDebts` shows the direct debts — so the

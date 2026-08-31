@@ -57,7 +57,17 @@ export function getRange(tab: TabKey): { from: number; to: number } {
     // Ends at `now`: "spent" is what happened, not what is scheduled. A fee dated
     // the 28th and logged on the 2nd used to count as already spent for the month.
     case 'month': return { from: startOfMonth(now).getTime(), to: now.getTime() };
-    case 'year':  return { from: startOfYear(now).getTime(), to: endOfYear(now).getTime() };
+    // ...and the same for the year, which was the one case that did not follow the
+    // rule the comment above states. It ran to `endOfYear`, so a future-dated entry
+    // — a school fee logged in March and dated December, which `getSafeToSpend`
+    // deliberately treats as a FUTURE one-off — counted as already spent. On 15
+    // March the same card then showed "SPENT THIS YEAR ₹90,000" beside a pace bar
+    // reading ₹40,000, because the budget half uses `windowForCadence`, which
+    // correctly ends at now. Two numbers, one card, 2.25x apart, both labelled
+    // "year". And `getPrevRange` compares against last year only up to the same
+    // elapsed point, so the delta was measuring a full year against a
+    // year-to-date on top of that.
+    case 'year':  return { from: startOfYear(now).getTime(), to: now.getTime() };
   }
 }
 
