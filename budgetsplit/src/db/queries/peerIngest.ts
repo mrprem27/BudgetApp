@@ -106,9 +106,17 @@ export async function ingestPeerTxn(
   db: SQLite.SQLiteDatabase,
   env: PeerEnvelope,
 ): Promise<IngestResult> {
-  // F5 guard. `seed.ts` mints `is_me` with a fresh uuid per install, so one
-  // account can end up with two "me" rows — and then both "who wrote this" and
-  // "are they trusted" read the wrong one. Refuse rather than guess: a wrong
+  // Two rows claiming to be me. Kept as a floor, not as the description of a live
+  // defect: no write path produces two `is_me = 1` rows — `seedIfNeeded` runs only
+  // on an empty person table, and every other INSERT hardcodes 0.
+  //
+  // The shape that DID happen is a second row with `is_me = 0` carrying my own
+  // account id, minted by `adoptGroup` when my own `remote_uid` was still NULL.
+  // That is now prevented and repaired by `claimMyAccount`, which runs at the top
+  // of every sync — this guard could never have seen it, since the count is 1.
+  //
+  // Left in place because if a future path ever does mint a second one, both "who
+  // wrote this" and "are they trusted" read the wrong one. Refuse rather than guess: a wrong
   // answer here silently applies a stranger's entry.
   const meRows = await db.getAllAsync<Person>('SELECT * FROM person WHERE is_me = 1');
   if (meRows.length !== 1) return { ok: false, reason: 'ambiguous-me' };

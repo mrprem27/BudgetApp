@@ -16,6 +16,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { useServerSession } from '../../src/hooks/useServerSession';
 import { useStore } from '../../src/store';
 import { haptic } from '../../src/lib/haptics';
+import { useSQLiteContext } from 'expo-sqlite';
+import { claimMyAccount } from '../../src/db/queries/persons';
 import {
   requestMagicLink, verifyMagicLink, signOut, updateProfile, uploadAvatar,
   extractAuthToken, deviceLabel,
@@ -28,12 +30,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * The account screen: sign in by email link, see what the server holds about
  * you, sign out.
  *
- * An account buys exactly one thing today — a backup that survives losing this
- * phone (`settings/backup.tsx`). It does not sync: the ledger stays local-first,
- * and everything on this screen works or fails without touching it.
+ * An account buys two things: a backup that survives losing this phone
+ * (`settings/backup.tsx`), and the identity that shared groups are exchanged
+ * under (`lib/syncEngine`). The ledger itself stays local-first — everything else
+ * on this screen works or fails without touching it.
+ *
+ * Signing in also BINDS this device's own person row to the account, which is
+ * what makes an entry this phone writes resolvable on anyone else's. See
+ * `claimMyAccount`.
  */
 export default function AccountScreen() {
   const router = useRouter();
+  const db = useSQLiteContext();
   const { session, ready, configured, reload } = useServerSession();
   const me = useStore(s => s.me);
 
@@ -74,7 +82,25 @@ export default function AccountScreen() {
     setVerifying(true);
     setError(null);
     try {
-      await verifyMagicLink(token);
+      const { user } = await verifyMagicLink(token);
+      /*
+       * Bind the ledger's "me" to the account that just signed in.
+       *
+       * Sync runs this too, but it must also happen HERE: this is the only place
+       * that can tell the user when it is refused, and the two refusals both need
+       * saying. `other-account` means this phone already holds someone else's
+       * ledger — silently rebinding would re-author every entry in it to a
+       * stranger. `ambiguous-me` means the database has two rows claiming to be
+       * you, and guessing which one is the wrong kind of brave.
+       */
+      const claim = await claimMyAccount(db, { uid: user.id, email: user.email });
+      if (!claim.ok) {
+        setError(
+          claim.reason === 'other-account'
+            ? 'This phone already holds another account’s data. Sign in with that account, or start fresh from Settings → Storage.'
+            : 'Signed in, but this phone’s own profile could not be matched to the account. Sharing will not work until that is sorted.',
+        );
+      }
       setSentTo(null);
       setCode('');
       await reload();

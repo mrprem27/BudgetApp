@@ -8,6 +8,7 @@ import {
   type EntryDoc, type RosterDoc, type NameCollision,
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
+import { claimMyAccount } from '../db/queries/persons';
 import { sealEntry, openEntry, unwrapGroupKey, wrapGroupKey, newGroupKey } from './groupCrypto';
 import { deviceIdentity, deviceSecret, bindDeviceToAccount } from './deviceKey';
 import {
@@ -102,6 +103,24 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
    * second person's sync is refused on every launch and never recovers.
    */
   await bindDeviceToAccount(session.user.id).catch(() => {});
+
+  /*
+   * And is the LEDGER's idea of me bound to that identity?
+   *
+   * Everything downstream depends on it. My own entries go out with
+   * `author: {uid: null}` and are refused by every receiver; an arriving roster
+   * that names me by account id resolves to nobody, so `adoptGroup` mints a
+   * phantom "me" and puts THAT in the group; and `ingestPeerTxn` then answers
+   * `not-a-member`, which the pull treats as recoverable — so the cursor holds
+   * and the group stops syncing silently, forever.
+   *
+   * Run here, before anything reads or writes a roster, and idempotent so a
+   * device that signed in on an older build heals itself with no migration.
+   * A refusal is not fatal to the sync: it means this phone holds somebody else's
+   * ledger, or has no `is_me` row, and the right place to say so is the Account
+   * screen rather than a background task.
+   */
+  await claimMyAccount(db, { uid: session.user.id, email: session.user.email }).catch(() => {});
 
   const identity = await deviceIdentity().catch(() => null);
   // No keychain means nowhere to keep the secret that opens this device's wraps.

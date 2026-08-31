@@ -62,6 +62,85 @@ export async function setRemoteUid(
   await db.runAsync('UPDATE person SET remote_uid = ? WHERE id = ?', [remoteUid, personId]);
 }
 
+/** What `claimMyAccount` did, so a caller can say why the groups went quiet. */
+export type ClaimResult =
+  | { ok: true; changed: boolean }
+  | { ok: false; reason: 'no-me' | 'ambiguous-me' | 'other-account' };
+
+/**
+ * Bind THIS device's `is_me` row to the account that just signed in.
+ *
+ * ## Why nothing synced before this existed
+ *
+ * `setRemoteUid` was reachable from exactly one screen, Linked people, and that
+ * screen filters `is_me !== 1` — correctly, because you must never bind someone
+ * *else's* account to your own row. But there was no other path, so your own
+ * `remote_uid` stayed NULL forever, and every consequence followed from that:
+ *
+ * - `authorRef` sent `uid: null`, so the receiver's `toPeerEnvelope` refused
+ *   every entry this device authored.
+ * - `adoptGroup` resolves a roster member by `uid` first. With mine NULL the
+ *   lookup missed, so it created a **second person row carrying my own account
+ *   id** with `is_me = 0`, and put THAT row in `group_member`.
+ * - `ingestPeerTxn` then failed `ids.has(me.id)` and answered `not-a-member`,
+ *   which the pull classifies as *recoverable* — so the cursor held and that
+ *   group stopped syncing, silently, on every launch, forever.
+ *
+ * And because `idx_person_remote_uid` is unique over non-null values, the phantom
+ * now OWNED my uid: no later fix could simply set it on the right row. It has to
+ * be merged, which is why that runs first here.
+ *
+ * ## The order is the function
+ *
+ * 1. Refuse if there is not exactly one `is_me`. A wrong answer re-authors history.
+ * 2. Merge any other row already holding this uid into `is_me` — before the bind,
+ *    or the unique index rejects it.
+ * 3. Write `remote_uid`, and `email` from the verified session. This is the only
+ *    thing that has ever written `person.email`.
+ * 4. Mark every shared roster dirty: my uid just became knowable, and the roster
+ *    is what tells the other phones.
+ *
+ * Idempotent, so it can run on every sync and heal a device that signed in on an
+ * older build with no migration.
+ */
+export async function claimMyAccount(
+  db: SQLite.SQLiteDatabase,
+  account: { uid: string; email?: string | null },
+): Promise<ClaimResult> {
+  const meRows = await db.getAllAsync<Person>('SELECT * FROM person WHERE is_me = 1');
+  if (meRows.length === 0) return { ok: false, reason: 'no-me' };
+  if (meRows.length > 1) return { ok: false, reason: 'ambiguous-me' };
+  const me = meRows[0];
+
+  if (me.remote_uid && me.remote_uid !== account.uid) {
+    // Signing in as somebody else on a phone that already holds a ledger. Silently
+    // rebinding would re-author every historical entry to a stranger's account —
+    // the same reasoning `bindDeviceToAccount` uses for the device key.
+    return { ok: false, reason: 'other-account' };
+  }
+
+  const holder = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM person WHERE remote_uid = ? AND is_me = 0', [account.uid],
+  );
+  if (holder) await mergePerson(db, holder.id, me.id);
+
+  const already = me.remote_uid === account.uid && (!account.email || me.email === account.email);
+  if (!already) {
+    await db.runAsync(
+      'UPDATE person SET remote_uid = ?, email = COALESCE(email, ?) WHERE id = ?',
+      [account.uid, account.email ?? null, me.id],
+    );
+  }
+
+  const changed = !!holder || !already;
+  if (changed) {
+    for (const groupId of await sharedGroupsOfPerson(db, me.id)) {
+      await markRosterDirty(db, groupId);
+    }
+  }
+  return { ok: true, changed };
+}
+
 /** The local person bound to this account, if any. */
 export async function personByRemoteUid(
   db: SQLite.SQLiteDatabase,

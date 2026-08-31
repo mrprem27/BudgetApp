@@ -7,6 +7,8 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { haptic } from '../src/lib/haptics';
 import { extractAuthToken, serverConfigured, verifyMagicLink } from '../src/lib/serverApi';
+import { useSQLiteContext } from 'expo-sqlite';
+import { claimMyAccount } from '../src/db/queries/persons';
 
 /**
  * Where a tapped sign-in link lands: `budgetsplit:///auth?token=…`, redirected
@@ -19,6 +21,7 @@ import { extractAuthToken, serverConfigured, verifyMagicLink } from '../src/lib/
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  const db = useSQLiteContext();
   const params = useLocalSearchParams<{ token?: string }>();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -43,7 +46,14 @@ export default function AuthCallbackScreen() {
         return;
       }
       try {
-        await verifyMagicLink(token);
+        const { user } = await verifyMagicLink(token);
+        // Bind the ledger's "me" to the account, exactly as the Account screen
+        // does. This is the path most people take — the emailed link — so leaving
+        // it out here would mean sharing quietly not working for the majority,
+        // and working for whoever happened to paste the code by hand instead.
+        // Best-effort: the session IS established, and a refusal has somewhere to
+        // be reported (the Account screen this navigates to).
+        await claimMyAccount(db, { uid: user.id, email: user.email }).catch(() => {});
         setDone(true);
         haptic.success();
         goToAccount();
@@ -52,7 +62,7 @@ export default function AuthCallbackScreen() {
         setError(e instanceof Error ? e.message : 'Could not finish signing in. Please try again.');
       }
     })();
-  }, [raw, goToAccount]);
+  }, [raw, goToAccount, db]);
 
   if (error) {
     return (
