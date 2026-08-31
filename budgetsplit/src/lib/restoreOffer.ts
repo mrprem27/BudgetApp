@@ -23,12 +23,32 @@ import { settings } from './settings';
  */
 
 /** What the offer needs to know, and nothing more. */
-export type RestoreOffer = {
-  /** How many copies the account holds — "your most recent of 4". */
-  count: number;
-  /** When the newest was taken. */
-  newestAt: number;
-};
+export type RestoreOffer =
+  | {
+      kind: 'restore';
+      /** How many copies the account holds — "your most recent of 4". */
+      count: number;
+      /** When the newest was taken. */
+      newestAt: number;
+    }
+  /**
+   * A fresh phone with no session, which cannot be asked about backups because
+   * asking requires signing in first.
+   *
+   * This is the case the feature previously fell straight through, and it is
+   * exactly the case it was built for. `pendingRestoreOffer` returned null when
+   * there was no session — and a replacement phone has none, because a session
+   * lives in this install's keychain. Meanwhile onboarding tells the user
+   * "everything stays on this phone — no account, nothing uploaded", so nothing
+   * anywhere suggests signing in, and the only route back to their data was
+   * guessing at Settings → Account and then Settings → Backup.
+   *
+   * So the whole feature was unreachable on precisely the device it exists for.
+   * Offering sign-in is not a restore and promises nothing — it says the door is
+   * there. Same fresh-device guard, so it is never shown to somebody with work
+   * on this phone.
+   */
+  | { kind: 'sign-in' };
 
 /**
  * Null when there is nothing to offer, or nobody to offer it to.
@@ -40,19 +60,25 @@ export async function pendingRestoreOffer(
   db: SQLite.SQLiteDatabase,
 ): Promise<RestoreOffer | null> {
   if (!serverConfigured()) return null;
-  if (!(await getStoredSession())) return null;
 
   // Asked once. Someone who said no is setting this phone up as a fresh start,
   // and asking again on every launch would be nagging them out of a decision
   // they already made.
   if (await settings.restoreOfferDismissed().catch(() => false)) return null;
 
+  // Both branches below are only ever offered on a phone with nothing on it.
   if (!(await isFreshDevice(db))) return null;
+
+  // No session, so there is nothing to ask the server. Point at the door instead
+  // of returning null, which is what made this whole feature unreachable on a
+  // replacement phone — the one device it exists for.
+  if (!(await getStoredSession())) return { kind: 'sign-in' };
 
   try {
     const backups = await listServerBackups();
     if (backups.length === 0) return null;
     return {
+      kind: 'restore',
       count: backups.length,
       newestAt: Math.max(...backups.map(b => b.createdAt)),
     };

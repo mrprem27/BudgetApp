@@ -11,13 +11,14 @@ import { Banner } from '../../src/components/ui/Banner';
 import { settings } from '../../src/lib/settings';
 import { dateTime } from '../../src/lib/dateFormat';
 import { haptic } from '../../src/lib/haptics';
-import { serverConfigured } from '../../src/lib/serverApi';
+import { serverConfigured, getStoredSession } from '../../src/lib/serverApi';
+import { newRecoveryCode, normalizeRecoveryCode } from '../../src/lib/recoveryCode';
 import { useServerSession } from '../../src/hooks/useServerSession';
 import { pendingUploadCount } from '../../src/db/queries/syncOutbox';
 import { getAllGroups, sharedGroupsOf } from '../../src/db/queries/groups';
 import { pendingGroupInvites, acceptGroupInvite } from '../../src/lib/syncEngine';
 import { rememberSyncPassphrase, forgetSyncPassphrase, maybeSnapshot } from '../../src/lib/syncSnapshot';
-import { PassphraseSheet } from '../../src/components/finance/backup/PassphraseSheet';
+import { RecoveryCodeSheet } from '../../src/components/finance/backup/RecoveryCodeSheet';
 import type { SyncGroup } from '../../src/lib/serverApi';
 
 /**
@@ -42,7 +43,8 @@ export default function SyncScreen() {
   const [lastAt, setLastAt] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [everything, setEverything] = useState(false);
-  const [askPass, setAskPass] = useState(false);
+  /** The code being shown once, before the switch actually flips. */
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [savingPass, setSavingPass] = useState(false);
 
   const load = useCallback(() => {
@@ -96,14 +98,26 @@ export default function SyncScreen() {
   /**
    * The second switch: a whole-app encrypted copy, not entry sync.
    *
-   * Turning it ON asks for a passphrase, because that is the only thing that can
-   * open it on a phone this one has never met. It is held in this device's
-   * keychain so snapshots can run unattended, and never leaves — which is also
-   * why forgetting it is unrecoverable, said here rather than discovered later.
+   * Turning it on GENERATES the key rather than asking for one.
+   *
+   * The passphrase's only job is keeping the server blind, and 20 characters of
+   * real randomness do that better than anything a person types. Asking somebody
+   * to invent — and never forget — an unrecoverable secret is a wall most people
+   * do not climb: they leave the switch off, and "all my data comes with me" is
+   * then quietly false for most users, which is worse than what the passphrase was
+   * protecting against.
+   *
+   * Shown once, with a copy button, and said plainly: losing the phone AND never
+   * saving the code means the copy is unreadable. That is exactly today's position
+   * for anybody with no account — the status quo, with an upside.
    */
   async function toggleEverything(next: boolean) {
     haptic.selection();
-    if (next) { setAskPass(true); return; }
+    if (next) {
+      const code = await newRecoveryCode();
+      setRecoveryCode(code);
+      return;
+    }
 
     setEverything(false);
     await settings.setSyncEverything(false);
@@ -115,19 +129,23 @@ export default function SyncScreen() {
     );
   }
 
-  async function confirmPassphrase(passphrase: string) {
+  /** Called once the user has had the chance to save the code. */
+  async function confirmRecoveryCode(code: string) {
     setSavingPass(true);
-    const held = await rememberSyncPassphrase(passphrase);
+    const session = await getStoredSession();
+    // Stored WITH its owner, so a phone that changes hands cannot seal the next
+    // person's snapshot with this one — see `storedSyncPassphrase`.
+    const held = await rememberSyncPassphrase(normalizeRecoveryCode(code), session?.user.id);
     if (!held) {
       setSavingPass(false);
-      setAskPass(false);
+      setRecoveryCode(null);
       haptic.error();
-      Alert.alert('Cannot store the passphrase', 'This device has no secure storage, so an automatic copy could not be opened again.');
+      Alert.alert('Cannot store the code', 'This device has no secure storage, so an automatic copy could not be opened again.');
       return;
     }
     await settings.setSyncEverything(true);
     setEverything(true);
-    setAskPass(false);
+    setRecoveryCode(null);
     setSavingPass(false);
     haptic.success();
     // Take the first one now rather than in six hours: turning it on and having
@@ -136,8 +154,8 @@ export default function SyncScreen() {
     Alert.alert(
       r.ok ? 'First copy saved' : 'Turned on',
       r.ok
-        ? 'Everything on this phone is now on your account, encrypted. It refreshes in the background from here on.\n\nKeep that passphrase — without it nobody, including us, can open this.'
-        : 'The first copy will be made shortly.\n\nKeep that passphrase — without it nobody, including us, can open this.',
+        ? 'Everything on this phone is now on your account, encrypted. It refreshes in the background from here on.'
+        : 'The first copy will be made shortly.',
     );
     load();
   }
@@ -355,11 +373,11 @@ export default function SyncScreen() {
         </Text>
       </ScrollView>
 
-      <PassphraseSheet
-        visible={askPass}
-        onClose={() => setAskPass(false)}
-        mode="create"
-        onSubmit={confirmPassphrase}
+      <RecoveryCodeSheet
+        visible={recoveryCode !== null}
+        code={recoveryCode}
+        onClose={() => setRecoveryCode(null)}
+        onConfirm={confirmRecoveryCode}
         submitting={savingPass}
       />
     </View>

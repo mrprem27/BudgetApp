@@ -229,20 +229,45 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
     let alive = true;
     pendingRestoreOffer(db).then(offer => {
       if (!alive || !offer) return;
+      // Sticky either way: saying no means this phone IS the fresh start, and
+      // asking again every launch would nag them out of a decision already made.
+      const dismiss = () => { settings.setRestoreOfferDismissed(true).catch(() => {}); };
+
+      /*
+       * No session, so there is nothing to ask the server yet — but this is a
+       * phone with nothing on it, which is exactly when somebody is most likely
+       * to be setting up a replacement. Offering the door is not a promise that
+       * anything is behind it, and it is the step that was missing: onboarding
+       * says "no account, nothing uploaded", so nothing anywhere suggested
+       * signing in, and the restore feature was unreachable on the one device it
+       * exists for.
+       */
+      if (offer.kind === 'sign-in') {
+        Alert.alert(
+          'Used BudgetSplit before?',
+          'If you had it on another phone and turned on "keep a copy of everything", '
+          + 'signing in with the same email brings that copy back.\n\n'
+          + 'Otherwise just carry on — nothing here needs an account.',
+          [
+            { text: 'Start fresh', style: 'cancel', onPress: dismiss },
+            { text: 'Sign in', onPress: () => router.push('/settings/account') },
+          ],
+        );
+        return;
+      }
+
       Alert.alert(
         'Welcome back',
         `Your account has ${offer.count === 1 ? 'a saved copy' : `${offer.count} saved copies`} of your `
         + `BudgetSplit data, the most recent from ${dateTime(new Date(offer.newestAt))}.\n\n`
-        + 'Bringing it back needs the passphrase you set when you turned this on. '
+        // "the code you saved" rather than naming one: somebody who turned this on
+        // before recovery codes existed has a passphrase they invented, and telling
+        // them to find a code they were never given is how a good backup gets
+        // written off as unopenable.
+        + 'Bringing it back needs the code you saved when you turned this on. '
         + 'Nothing here is overwritten — this phone has nothing on it yet.',
         [
-          {
-            text: 'Start fresh',
-            style: 'cancel',
-            // Sticky: saying no means this phone IS the fresh start, and asking
-            // again every launch would nag them out of a decision already made.
-            onPress: () => { settings.setRestoreOfferDismissed(true).catch(() => {}); },
-          },
+          { text: 'Start fresh', style: 'cancel', onPress: dismiss },
           {
             text: 'Restore',
             onPress: () => router.push('/settings/backup?open=account'),

@@ -76,9 +76,25 @@ describe('offering a restore', () => {
     expect(await withMocks({ backups: [] })(db)).toBeNull();
   });
 
-  it('says nothing when signed out, or on a build with no server', async () => {
+  /**
+   * Signed out on an EMPTY phone is the case this whole feature exists for, and
+   * it used to return null.
+   *
+   * A replacement phone has no session — a session lives in this install's
+   * keychain — so the offer fell straight through. And onboarding says
+   * "everything stays on this phone, no account, nothing uploaded", so nothing
+   * anywhere suggested signing in either. The only route back to your data was
+   * guessing at Settings → Account and then Settings → Backup, which is not a
+   * route.
+   */
+  it('offers sign-in when signed out on a phone with nothing on it', async () => {
     const db = await openTestDb();
-    expect(await withMocks({ signedIn: false })(db)).toBeNull();
+    expect(await withMocks({ signedIn: false })(db)).toEqual({ kind: 'sign-in' });
+  });
+
+  it('says nothing on a build with no server', async () => {
+    // Nothing to sign in TO. Offering would be a door with no room behind it.
+    const db = await openTestDb();
     expect(await withMocks({ configured: false })(db)).toBeNull();
   });
 
