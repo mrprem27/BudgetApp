@@ -318,16 +318,61 @@ export async function setGroupTrust(
 }
 
 /**
+ * Refused merges. A merge cannot be undone, so anything ambiguous stops here
+ * rather than being resolved by whichever row happened to survive.
+ */
+export class MergePersonError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MergePersonError';
+  }
+}
+
+/** Every column outside `person` that names a person, and how a merge moves it. */
+const MERGE_SIMPLE_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [
+  ['txn', 'author_person_id'],
+  ['budget_group', 'created_by'],
+  ['pending_txn', 'counterparty_id'],
+  ['pending_txn', 'author_person_id'],
+  ['pending_txn', 'payer_person_id'],
+];
+
+/**
  * Two rows are one person: fold the newcomer into the one already here.
  *
- * Every reference moves — payments, shares, group memberships, authorship,
- * per-group trust, disputes — and only then does the duplicate go. Doing it in
- * that order means a failure leaves two rows that both work, rather than
- * references pointing at a person who no longer exists.
+ * ## The money bug this used to have
  *
- * `INSERT OR IGNORE` before `DELETE` on the two composite-key tables: both people
- * may already be in the same group, or on the same transaction, and a bare UPDATE
- * would collide with the row that is already there.
+ * The composite-key tables were moved with `INSERT OR IGNORE` then `DELETE`.
+ * When both rows were on the SAME transaction — which is precisely what a sync
+ * name-collision produces — the `OR IGNORE` was ignored because the survivor
+ * already had a row, and the `DELETE` then removed the other person's amount.
+ * A ₹3,600 bill split two ways came out as payments ₹3,600 / shares ₹2,400:
+ * permanently unbalanced, invisible, and past every guard, because
+ * `validateShares` runs on write and never again.
+ *
+ * Two rows for one human on one expense means that human paid twice, or owes two
+ * shares. The answer is to **add them**, which is what the upsert does. (The
+ * `WHERE` in the SELECT is not optional: SQLite cannot parse `ON CONFLICT` after
+ * an unfiltered `INSERT ... SELECT` without it.)
+ *
+ * ## Everything moves, or nothing does
+ *
+ * The old docstring claimed "every reference moves" and listed six things while
+ * moving five, missing `budget_group.created_by` — so merging a group's creator
+ * left `created_by` pointing at a deleted row, `isCreator` false for everybody,
+ * and that group's budget and membership permanently uneditable with no screen
+ * able to repair it. `MERGE_SIMPLE_COLUMNS` is the real list, in one place, so
+ * the next column that names a person is one line rather than an omission.
+ *
+ * `txn_dispute` is deliberately absent: it is keyed on `by_uid`, a server account
+ * id, not a local person id. The survivor inherits `remote_uid` below, so those
+ * rows resolve to the right person with nothing moved.
+ *
+ * ## Trust fails closed
+ *
+ * Where the two rows disagree, the more cautious answer wins — globally and per
+ * group. A merge must never *widen* what someone is allowed to write on your
+ * ledger; stale-and-more-permissive is the one failure that matters here.
  */
 export async function mergePerson(
   db: SQLite.SQLiteDatabase,
@@ -335,38 +380,113 @@ export async function mergePerson(
   intoId: string,
 ): Promise<void> {
   if (fromId === intoId) return;
+
+  // Two accounts is not a duplicate — it is two people, or a mis-tap on a
+  // one-way door. Discarding one silently (which COALESCE below would do) makes
+  // every entry that account later authors arrive as `unknown-author`, with
+  // nothing to point at. Refuse before anything is written.
+  const pair = await db.getAllAsync<Person>(
+    'SELECT * FROM person WHERE id IN (?, ?)', [fromId, intoId],
+  );
+  const from = pair.find(p => p.id === fromId);
+  const into = pair.find(p => p.id === intoId);
+  if (!from || !into) throw new MergePersonError('One of those people no longer exists.');
+  if (from.remote_uid && into.remote_uid && from.remote_uid !== into.remote_uid) {
+    throw new MergePersonError(
+      'Those two are linked to different accounts, so they cannot be the same person.',
+    );
+  }
+  // `is_me` is not a label, it is the row every balance is measured against.
+  // Folding it into someone else re-authors your own history to them.
+  if (from.is_me === 1) throw new MergePersonError('You cannot merge yourself into someone else.');
+
   await db.withTransactionAsync(async () => {
     for (const t of ['txn_payment', 'txn_share'] as const) {
       await db.runAsync(
-        `INSERT OR IGNORE INTO ${t} (txn_id, person_id, amount)
-         SELECT txn_id, ?, amount FROM ${t} WHERE person_id = ?`, [intoId, fromId],
+        `INSERT INTO ${t} (txn_id, person_id, amount)
+         SELECT txn_id, ?, amount FROM ${t} WHERE person_id = ?
+         ON CONFLICT(txn_id, person_id) DO UPDATE SET amount = amount + excluded.amount`,
+        [intoId, fromId],
       );
       await db.runAsync(`DELETE FROM ${t} WHERE person_id = ?`, [fromId]);
     }
+
+    // Membership: keep the STRONGER role and the EARLIER join date. `OR IGNORE`
+    // kept whatever the survivor already had, which silently demoted an admin to
+    // member whenever the admin was the row being folded in.
     await db.runAsync(
-      `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
-       SELECT group_id, ?, joined_at, role FROM group_member WHERE person_id = ?`, [intoId, fromId],
+      `INSERT INTO group_member (group_id, person_id, joined_at, role)
+       SELECT group_id, ?, joined_at, role FROM group_member WHERE person_id = ?
+       ON CONFLICT(group_id, person_id) DO UPDATE SET
+         role      = CASE WHEN role = 'admin' OR excluded.role = 'admin' THEN 'admin' ELSE role END,
+         joined_at = MIN(COALESCE(joined_at, excluded.joined_at), COALESCE(excluded.joined_at, joined_at))`,
+      [intoId, fromId],
     );
     await db.runAsync('DELETE FROM group_member WHERE person_id = ?', [fromId]);
+
+    // Per-group trust: 'review' wins over 'trusted' on disagreement.
     await db.runAsync(
-      `INSERT OR IGNORE INTO person_group_trust (person_id, group_id, trust_state, updated_at)
-       SELECT ?, group_id, trust_state, updated_at FROM person_group_trust WHERE person_id = ?`,
+      `INSERT INTO person_group_trust (person_id, group_id, trust_state, updated_at)
+       SELECT ?, group_id, trust_state, updated_at FROM person_group_trust WHERE person_id = ?
+       ON CONFLICT(person_id, group_id) DO UPDATE SET
+         trust_state = CASE WHEN trust_state = 'review' OR excluded.trust_state = 'review'
+                            THEN 'review' ELSE 'trusted' END,
+         updated_at  = MAX(updated_at, excluded.updated_at)`,
       [intoId, fromId],
     );
     await db.runAsync('DELETE FROM person_group_trust WHERE person_id = ?', [fromId]);
-    await db.runAsync('UPDATE txn SET author_person_id = ? WHERE author_person_id = ?', [intoId, fromId]);
 
-    // The survivor keeps its own name, but inherits anything it was missing —
-    // the incoming row is the one that carries the account id.
+    // Budget overrides are private to the person. Where both rows have one for
+    // the same category, the survivor's is the one they have been living with;
+    // the collision is dropped rather than added, because two allowances for one
+    // category is not a bigger allowance, it is a duplicate.
+    await db.runAsync(
+      `DELETE FROM category_budget WHERE person_id = ? AND EXISTS (
+         SELECT 1 FROM category_budget k
+          WHERE k.person_id = ? AND k.group_id = category_budget.group_id
+            AND k.category = category_budget.category AND k.period = category_budget.period)`,
+      [fromId, intoId],
+    );
+    await db.runAsync('UPDATE category_budget SET person_id = ? WHERE person_id = ?', [intoId, fromId]);
+
+    for (const [table, column] of MERGE_SIMPLE_COLUMNS) {
+      await db.runAsync(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`, [intoId, fromId]);
+    }
+    // History about a member is history about the survivor now.
+    await db.runAsync(
+      "UPDATE audit_log SET entity_id = ? WHERE entity_type = 'member' AND entity_id = ?",
+      [intoId, fromId],
+    );
+
+    // Delete BEFORE inheriting, and take the values from the row read up front
+    // rather than a subselect.
+    //
+    // `idx_person_remote_uid` is unique over non-null `remote_uid`. Writing the
+    // duplicate's account id onto the survivor while the duplicate still holds it
+    // is two rows with one uid, so SQLite refuses the UPDATE and the whole merge
+    // rolls back — in exactly the case that matters most, folding in a person row
+    // that arrived from a peer's roster carrying their account id.
+    await db.runAsync('DELETE FROM person WHERE id = ?', [fromId]);
+
+    // The survivor keeps its own name and inherits anything it was missing.
+    // Trust takes the more cautious of the two.
     await db.runAsync(
       `UPDATE person SET
-         remote_uid = COALESCE(remote_uid, (SELECT remote_uid FROM person WHERE id = ?)),
-         email      = COALESCE(email,      (SELECT email      FROM person WHERE id = ?)),
-         mobile     = COALESCE(mobile,     (SELECT mobile     FROM person WHERE id = ?)),
-         upi_vpa    = COALESCE(upi_vpa,    (SELECT upi_vpa    FROM person WHERE id = ?))
+         remote_uid  = COALESCE(remote_uid, ?),
+         email       = COALESCE(email, ?),
+         mobile      = COALESCE(mobile, ?),
+         upi_vpa     = COALESCE(upi_vpa, ?),
+         image_uri   = COALESCE(image_uri, ?),
+         trust_state = CASE WHEN trust_state = 'review' OR ? = 'review' THEN 'review' ELSE trust_state END
        WHERE id = ?`,
-      [fromId, fromId, fromId, fromId, intoId],
+      [from.remote_uid, from.email, from.mobile, from.upi_vpa, from.image_uri, from.trust_state, intoId],
     );
-    await db.runAsync('DELETE FROM person WHERE id = ?', [fromId]);
   });
+
+  // Membership and names just changed, so every phone sharing a group with the
+  // survivor is now holding a roster that names a person id this device deleted.
+  // Without this, their entries resolve to nobody and the pull cursor holds.
+  for (const groupId of await sharedGroupsOfPerson(db, intoId)) {
+    await markRosterDirty(db, groupId);
+  }
 }

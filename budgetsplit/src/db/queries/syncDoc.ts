@@ -46,6 +46,26 @@ export type EntryDoc = {
   recurFreq: string | null;
   recurInterval: number | null;
   recurEnd: number | null;
+  /**
+   * The rule this entry is an occurrence of, and which due date it fills.
+   *
+   * Both optional so an entry from an older build still opens — absent means "a
+   * plain entry", which is what every entry was before this existed.
+   *
+   * They are on the wire for two reasons, and both are about not charging
+   * somebody twice. The receiver needs `parentRecurId` to know this is a month of
+   * a rule it already accepted, rather than a fresh expense to be approved all
+   * over again — approving a rule is meant to be the last time you are asked. And
+   * `getClaimedOccurrences` dedupes on `(parent_recur_id, recur_override_date)`,
+   * which only works if an arriving occurrence carries them; without that it
+   * landed as an unrelated expense claiming nothing, and every device generated
+   * its own copy of the same rent.
+   *
+   * The id is the AUTHOR'S local rule id, like every other id here. It resolves
+   * because both devices adopt the same id for the rule (see the roster).
+   */
+  parentRecurId?: string | null;
+  recurOverrideDate?: number | null;
   author: PersonRef;
   payments: Array<{ person: PersonRef; amount: number }>;
   shares: Array<{ person: PersonRef; amount: number }>;
@@ -62,6 +82,8 @@ type TxnRow = {
   recur_freq: string | null;
   recur_interval: number | null;
   recur_end: number | null;
+  parent_recur_id: string | null;
+  recur_override_date: number | null;
   sync_version: number;
   is_deleted: number;
 };
@@ -87,7 +109,8 @@ export async function readEntryDoc(
 ): Promise<EntryForPush | null> {
   const t = await db.getFirstAsync<TxnRow>(
     `SELECT id, group_id, kind, date, category, note, pay_method,
-            recur_freq, recur_interval, recur_end, sync_version, is_deleted
+            recur_freq, recur_interval, recur_end, parent_recur_id, recur_override_date,
+            sync_version, is_deleted
        FROM txn WHERE id = ?`,
     [entryId],
   );
@@ -115,6 +138,8 @@ export async function readEntryDoc(
       recurFreq: t.recur_freq,
       recurInterval: t.recur_interval,
       recurEnd: t.recur_end,
+      parentRecurId: t.parent_recur_id,
+      recurOverrideDate: t.recur_override_date,
       author,
       payments,
       shares,
@@ -248,6 +273,10 @@ export function toPeerEnvelope(
     recurFreq: doc.recurFreq,
     recurInterval: doc.recurInterval,
     recurEnd: doc.recurEnd,
+    // `?? null` rather than passed through: an entry sealed by an older build has
+    // neither key, and `undefined` would reach the INSERT as a bind error.
+    parentRecurId: doc.parentRecurId ?? null,
+    recurOverrideDate: doc.recurOverrideDate ?? null,
     payments,
     shares,
   };

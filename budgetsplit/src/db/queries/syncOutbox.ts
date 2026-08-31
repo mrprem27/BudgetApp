@@ -14,15 +14,38 @@ import { NOT_AWAITING_APPROVAL } from './approvalSql';
  * mode with no symptom. Appending inside the caller's transaction is the whole
  * defence, so if you add a write path to `txn`, add a `queueEntry` beside it.
  *
- * **Nothing awaiting my approval is ever queued.** An entry someone else wrote and
- * I have not accepted is not mine to broadcast — re-sending it would give it a
- * second author and make my copy look authoritative. `NOT_AWAITING_APPROVAL`
- * enforces that, and `approvalInvariant.test.ts` is what caught its absence here.
+ * **Only entries I wrote are ever queued**, and both guards below say so in SQL
+ * rather than trusting a caller to remember. Two separate rules, and the first
+ * was missing entirely:
+ *
+ * 1. `t.author_person_id IS NULL` — the entry is mine. Broadcasting somebody
+ *    else's entry means broadcasting my *opinion* of it as its current state,
+ *    and the worst case is not hypothetical: rejecting a **trusted** peer's
+ *    entry soft-deletes it locally and used to queue that tombstone, so the
+ *    server took the deletion and it vanished from everyone's ledger. A
+ *    trusted author's entry applies on arrival and therefore has no
+ *    `txn_approval` row at all, so `NOT_AWAITING_APPROVAL` never saw it.
+ *    `approval.ts` states the rule this restores: rejecting "does NOT edit
+ *    their copy, and must not" — an objection travels as a dispute, which is
+ *    what `txn_dispute` is for.
+ * 2. `NOT_AWAITING_APPROVAL` — an entry I have not accepted is not mine to
+ *    re-send; it would arrive with a second author and my copy would look
+ *    authoritative.
  *
  * Recurring RULES are queued on purpose, so this does NOT carry
  * `recur_freq IS NULL`. A peer can send a rule, and a rule they cannot see is a
  * bill that silently posts on their device with no explanation.
  */
+
+/**
+ * The entry is one I wrote. `author_person_id` is NULL for my own rows and set
+ * for anything `ingestPeerTxn` wrote, so NULL is the whole test.
+ *
+ * Exported so `outboxAuthorInvariant.test.ts` can read the real statements and
+ * fail on any new write to `sync_outbox` that omits it — the same mechanism
+ * `approvalInvariant.test.ts` uses, which has now caught this class three times.
+ */
+export const AUTHORED_BY_ME = 't.author_person_id IS NULL';
 
 /**
  * Mark an entry as needing to go up.
@@ -37,6 +60,12 @@ import { NOT_AWAITING_APPROVAL } from './approvalSql';
  * `INSERT OR REPLACE` keyed on `entry_id`, so editing one expense five times
  * queues it once. The drain re-reads the entry, so the newest state wins and there
  * is nothing stale to replay.
+ *
+ * Selects from the entry row rather than out of thin air. That is what lets the
+ * two authorship guards apply at all — and it is also what makes this statement
+ * visible to `approvalInvariant.test.ts`, which only scans literals that read
+ * from the txn table and so could not see the old form. Every caller queues
+ * *after* writing the row, inside the same transaction, so the join finds it.
  */
 export async function queueEntry(
   db: SQLite.SQLiteDatabase,
@@ -45,9 +74,13 @@ export async function queueEntry(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO sync_outbox (entry_id, group_id, queued_at)
-     SELECT ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM budget_group WHERE id = ? AND is_personal = 0)`,
-    [entryId, groupId, Date.now(), groupId],
+     SELECT t.id, ?, ?
+       FROM txn t
+      WHERE t.id = ?
+        AND ${AUTHORED_BY_ME}
+        AND EXISTS (SELECT 1 FROM budget_group g WHERE g.id = ? AND g.is_personal = 0)
+        AND ${NOT_AWAITING_APPROVAL}`,
+    [groupId, Date.now(), entryId, groupId],
   );
 }
 
@@ -69,6 +102,7 @@ export async function queueSeries(
      SELECT t.id, ?, ?
        FROM txn t
       WHERE (t.id = ? OR t.parent_recur_id = ?)
+        AND ${AUTHORED_BY_ME}
         AND EXISTS (SELECT 1 FROM budget_group g WHERE g.id = ? AND g.is_personal = 0)
         AND ${NOT_AWAITING_APPROVAL}`,
     [groupId, Date.now(), seriesId, seriesId, groupId],

@@ -49,6 +49,16 @@ export type PeerEnvelope = {
   recurFreq?: string | null;
   recurInterval?: number | null;
   recurEnd?: number | null;
+  /**
+   * Set to make this an OCCURRENCE of a rule rather than a standalone expense.
+   *
+   * Carrying it is what makes "approve the rule, not every month" true across
+   * devices. Only the rule's author materializes it, so its months arrive here as
+   * ordinary peer entries — and without this link each one would ask for approval
+   * again, which is precisely what approving the rule was supposed to settle.
+   */
+  parentRecurId?: string | null;
+  recurOverrideDate?: number | null;
   category: string;
   note?: string | null;
   payMethod?: string | null;
@@ -73,18 +83,19 @@ export type IngestRefusal =
   | 'not-a-member'        // author or I am not in that group
   | 'personal-group'      // only shared-group data ever syncs
   | 'unbalanced'          // shares do not sum to payments
+  | 'not-positive'        // an amount is zero or negative — see the guard
   | 'stale';              // I already hold this version, or a newer one
 
 /**
  * Accept an entry another person wrote.
  *
- * **This is the seam.** Nothing in the app calls it — there is no transport yet.
- * Sync will call it once per envelope; the tests call it now, which is what makes
- * the whole trust model exercisable before a peer write path exists.
+ * **This is the seam** — the single write path for anything that came from
+ * another device. `lib/syncEngine`'s pull calls it once per envelope.
  *
  * The order of the guards matters: identity first (who is this, and can I even
  * evaluate trust), then authority (are they entitled to write here), then shape
- * (does the money add up). Only then does anything touch the ledger.
+ * (is every amount real money, and does it add up). Only then does anything touch
+ * the ledger.
  *
  * On success the entry is a real `txn` — visible in the group ledger immediately,
  * because the group agrees on what happened. Whether it counts as *my* money is
@@ -126,6 +137,26 @@ export async function ingestPeerTxn(
   // Both ends: they must be entitled to write here, and it must concern me.
   if (!ids.has(author.id) || !ids.has(me.id)) return { ok: false, reason: 'not-a-member' };
 
+
+  /*
+   * Every amount is real money moving one way. Zero is nothing, and a negative
+   * is a credit nobody typed.
+   *
+   * This has to come BEFORE the balance check, because balance alone does not
+   * catch it: `payments: [{Aarav, -5000}]` with `shares: [{me, -5000}]` sums
+   * correctly, so `validateShares` passes, and from a TRUSTED author there is no
+   * approval step either. It lands applied, and `getGroupNet` reads it as Aarav
+   * being owed ₹5,000 out of an entry containing no positive money at all — with
+   * "Aarav added ₹-5,000.00" written into the audit log, the one record a
+   * disagreement gets settled from.
+   *
+   * Locally this cannot happen: `parseToPaise` and every split path produce
+   * positive paise. But an envelope is not local input, and a peer's build is
+   * not something this device gets to assume anything about.
+   */
+  if ([...env.payments, ...env.shares].some(r => !Number.isInteger(r.amount) || r.amount <= 0)) {
+    return { ok: false, reason: 'not-positive' };
+  }
 
   const total = env.payments.reduce((a, p) => a + p.amount, 0);
   const check = validateShares(total, env.shares);
@@ -175,7 +206,32 @@ export async function ingestPeerTxn(
   // rather than inside `requiresMyApproval` so that function stays pure and
   // db-free, which is what makes the whole trust model testable without a schema.
   const groupTrust = await getGroupTrust(db, author.id, env.groupId);
-  const applied = !wasRejected && !requiresMyApproval(author, { kind: env.kind, touchesMe }, groupTrust);
+
+  /*
+   * An occurrence of a rule I have already accepted needs no second answer.
+   *
+   * Approving a recurring rule is meant to be the LAST time you are asked — that
+   * is the whole reason approval sits on the rule rather than on each month. Only
+   * the rule's author materializes it (see `materializeDueOccurrences`), so its
+   * months arrive here as ordinary peer entries; without this they would each ask
+   * again, turning one decision into a monthly interruption for as long as the
+   * rule lives.
+   *
+   * Narrow on purpose. It inherits only from a rule that is present, is a rule,
+   * and is NOT itself waiting or rejected — so it can never be a way to smuggle
+   * an entry past a decision I have not made. A transfer is still excluded
+   * because `requiresMyApproval` refuses those ahead of everything.
+   */
+  const fromAcceptedRule = env.kind !== 'settlement' && env.parentRecurId != null
+    && !!(await db.getFirstAsync<{ n: number }>(
+      `SELECT 1 AS n FROM txn t
+        WHERE t.id = ? AND t.recur_freq IS NOT NULL AND t.is_deleted = 0
+          AND NOT EXISTS (SELECT 1 FROM txn_approval a WHERE a.txn_id = t.id AND a.state != 'approved')`,
+      [env.parentRecurId],
+    ));
+
+  const applied = !wasRejected
+    && (fromAcceptedRule || !requiresMyApproval(author, { kind: env.kind, touchesMe }, groupTrust));
   const now = Date.now();
   const deleted = env.isDeleted ? 1 : 0;
 
@@ -192,11 +248,13 @@ export async function ingestPeerTxn(
       await db.runAsync(
         `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?,
                         recur_freq=?, recur_interval=?, recur_end=?,
+                        parent_recur_id=?, recur_override_date=?,
                         author_person_id=?, sync_version=?, is_deleted=?, updated_at=?
           WHERE id = ?`,
         [
           env.kind, env.date, env.category, env.note ?? null, env.payMethod ?? null,
           env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
+          env.parentRecurId ?? null, env.recurOverrideDate ?? null,
           author.id, env.version, deleted, now, id,
         ],
       );
@@ -207,14 +265,19 @@ export async function ingestPeerTxn(
       await db.runAsync('DELETE FROM txn_share WHERE txn_id = ?', [id]);
     } else {
       await db.runAsync(
+        // `tags` is NULL, not '': every other write path stores "no tags" as NULL
+        // (`serializeTags([])`), and `getTagsByFrequency` filters `tags IS NOT NULL`,
+        // so an empty string made peer rows look like they carried tags.
         `INSERT INTO txn
            (id,group_id,kind,entry_mode,date,category,note,tags,tz,pay_method,source,
-            recur_freq,recur_interval,recur_end,author_person_id,sync_version,is_deleted,created_at,updated_at)
-         VALUES (?,?,?,'quick',?,?,?,'',?,?,'peer',?,?,?,?,?,?,?,?)`,
+            recur_freq,recur_interval,recur_end,parent_recur_id,recur_override_date,
+            author_person_id,sync_version,is_deleted,created_at,updated_at)
+         VALUES (?,?,?,'quick',?,?,?,NULL,?,?,'peer',?,?,?,?,?,?,?,?,?,?)`,
         [
           id, env.groupId, env.kind, env.date, env.category, env.note ?? null,
           localTz(), env.payMethod ?? null,
           env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
+          env.parentRecurId ?? null, env.recurOverrideDate ?? null,
           author.id, env.version, deleted, now, now,
         ],
       );

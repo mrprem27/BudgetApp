@@ -227,6 +227,28 @@ describe('what ingestion refuses', () => {
     expect(r).toEqual({ ok: false, reason: 'unbalanced' });
   });
 
+  /*
+   * A negative entry BALANCES, which is why the sum check cannot catch it and why
+   * this needs its own guard ahead of it. From a trusted author there is no
+   * approval step either, so it lands applied: `getGroupNet` then reads it as the
+   * sender being owed money out of an entry with no positive amount in it, and
+   * the audit log records "added ₹-5,000.00".
+   */
+  it.each([
+    ['a negative payment', { payments: [{ personId: 'AARAV', amount: -BILL }], shares: [{ personId: 'ME', amount: -BILL }] }],
+    ['a zero share', { shares: [{ personId: 'ME', amount: 0 }, { personId: 'AARAV', amount: 0 }], payments: [{ personId: 'AARAV', amount: 0 }] }],
+  ])('refuses %s even though it balances', async (_label, patch) => {
+    const { db, me, aarav, flat } = await setup();
+    const swap = (rows: { personId: string; amount: number }[]) =>
+      rows.map(r => ({ ...r, personId: r.personId === 'ME' ? me : aarav }));
+    const r = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      payments: swap(patch.payments),
+      shares: swap(patch.shares),
+    });
+    expect(r).toEqual({ ok: false, reason: 'not-positive' });
+  });
+
   it('refuses a share parked on someone outside the group', async () => {
     const { db, me, aarav, flat } = await setup();
     const stranger = addPerson(db, 'Stranger', false);
@@ -338,16 +360,82 @@ describe('a peer recurring rule', () => {
     expect(await snapshot(db, me)).toEqual(before);
   });
 
-  it('starts posting once the rule itself is approved', async () => {
+  /**
+   * Only the rule's AUTHOR posts its occurrences.
+   *
+   * Approving a peer's rule used to make this device start materializing it —
+   * and so did theirs, because a rule travels to everyone. Both phones woke on
+   * the 1st, each minted its own uuid for the same month, each queued it, and
+   * each received the other's. A ₹30,000 shared rent rule posted ₹60,000 every
+   * month, forever, and nothing on either screen explained it.
+   */
+  it('never posts a peer rule from this device, approved or not', async () => {
     const { db, me, aarav, flat } = await setup();
     const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
     if (!res.ok) throw new Error(res.reason);
     await approveTxn(asDb(db), res.txnId);
 
-    expect(await materializeDueOccurrences(asDb(db))).toBeGreaterThan(0);
-    // Occurrences of an approved rule need no further approval — that is the
-    // whole point of approving the rule rather than each month.
+    expect(await materializeDueOccurrences(asDb(db))).toBe(0);
+  });
+
+  /**
+   * The other half of that trade, and the reason it is safe to make.
+   *
+   * If the author's months arrived as ordinary peer entries, an untrusted author
+   * would have me approving the same rent every month — turning one decision into
+   * an indefinite interruption, which is exactly what approving a RULE was meant
+   * to settle. The occurrence carries its rule id, so it inherits that decision.
+   */
+  it('counts an occurrence of a rule I approved without asking again', async () => {
+    const { db, me, aarav, flat } = await setup();          // Aarav is on `review`
+    const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    if (!res.ok) throw new Error(res.reason);
+    await approveTxn(asDb(db), res.txnId);
+
+    const occ = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      entryId: 'occ-1',
+      parentRecurId: res.txnId,
+      recurOverrideDate: Date.now(),
+    });
+    expect(occ).toMatchObject({ ok: true, applied: true });
     expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+  });
+
+  it('still asks about an occurrence whose rule I have not accepted', async () => {
+    // The narrowness check. Inheriting from a rule that is itself waiting would
+    // be a way to smuggle spending past a decision I never made.
+    const { db, me, aarav, flat } = await setup();
+    const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    if (!res.ok) throw new Error(res.reason);
+
+    const occ = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      entryId: 'occ-1',
+      parentRecurId: res.txnId,
+      recurOverrideDate: Date.now(),
+    });
+    expect(occ).toMatchObject({ ok: true, applied: false });
+  });
+
+  it('still asks about a transfer, however the rule was decided', async () => {
+    // A transfer is confirmed by both sides in every case. No rule, and no trust,
+    // may waive it: "I paid you ₹5,000" erases a real debt in the same write.
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    const res = await ingestPeerTxn(asDb(db), rule(flat, me, aarav));
+    if (!res.ok) throw new Error(res.reason);
+    await approveTxn(asDb(db), res.txnId);
+
+    const occ = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      entryId: 'occ-1',
+      kind: 'settlement' as const,
+      parentRecurId: res.txnId,
+      recurOverrideDate: Date.now(),
+      payments: [{ personId: aarav, amount: MY_SHARE }],
+      shares: [{ personId: me, amount: MY_SHARE }],
+    });
+    expect(occ).toMatchObject({ ok: true, applied: false });
   });
 
   it('is not announced as a committed bill while it waits', async () => {

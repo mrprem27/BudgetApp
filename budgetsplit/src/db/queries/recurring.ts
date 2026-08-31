@@ -50,6 +50,7 @@ export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): 
       ['paused', now, now, txnId],
     );
     if (row) {
+      await queueEntry(db, txnId, row.group_id);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'paused', summary: `Paused recurring · ${row.category}`,
@@ -91,6 +92,7 @@ export async function resumeRecurring(db: SQLite.SQLiteDatabase, txnId: string):
       ['active', now, txnId],
     );
     if (row) {
+      await queueEntry(db, txnId, row.group_id);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'resumed', summary: `Resumed recurring · ${row.category}`,
@@ -108,6 +110,7 @@ export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Pr
       ['ended', now, now, txnId],
     );
     if (row) {
+      await queueEntry(db, txnId, row.group_id);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'ended', summary: `Ended recurring · ${row.category}`,
@@ -117,10 +120,23 @@ export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Pr
 }
 
 /**
- * Turn an already-committed transaction into a recurring rule's anchor row —
- * an UPDATE, not a new insert, so the most recent occurrence isn't
- * double-counted. Used by the Review "looks recurring?" suggestion flow;
- * `materializeDueOccurrences` picks up future instances from it going forward.
+ * Turn an already-committed transaction into a recurring rule's anchor row.
+ *
+ * An UPDATE, not a new insert, so the rule keeps the id everything already
+ * points at. But a rule is a TEMPLATE: `recur_freq IS NULL` excludes it from
+ * every ledger and every aggregate. So the moment this UPDATE lands, the ₹2,000
+ * the user actually spent stops existing in any total — and it only came back
+ * because the next materialize run happened to recreate it at the same date.
+ *
+ * That is a coincidence with a hole in it. `MATERIALIZE_HORIZON_MS` skips
+ * anything older than ~3 months, so converting an older transaction — exactly
+ * what the Review "looks recurring?" suggestion offers on an imported statement —
+ * deleted it from the ledger permanently, with no row, no audit line and no
+ * symptom beyond a total that quietly shrank.
+ *
+ * So the occurrence is written here, explicitly, in the same transaction: the
+ * spend that already happened stays a real entry, and the rule governs what comes
+ * next. Materialization then finds it claimed and leaves that date alone.
  */
 export async function convertToRecurring(
   db: SQLite.SQLiteDatabase,
@@ -131,16 +147,25 @@ export async function convertToRecurring(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
+    if (!row) return;
+    const splits = await loadSplits(db, row);
+
     await db.runAsync(
       'UPDATE txn SET recur_freq=?, recur_interval=?, recur_state=?, recur_end=NULL, updated_at=? WHERE id=?',
       [freq, interval, 'active', now, txnId],
     );
-    if (row) {
-      await logAudit(db, {
-        entityType: 'recurring', entityId: txnId, groupId: row.group_id,
-        action: 'created', summary: `Made recurring from a suggestion · ${row.category}`,
-      });
-    }
+    // The rule itself changed shape and must reach the group: a peer holding the
+    // old plain expense would otherwise keep it as a one-off while this device
+    // treats it as a rule.
+    await queueEntry(db, txnId, row.group_id);
+
+    // Hand the original spend back to the ledger as this rule's first occurrence.
+    await insertOccurrence(db, row, splits, row.date, now);
+
+    await logAudit(db, {
+      entityType: 'recurring', entityId: txnId, groupId: row.group_id,
+      action: 'created', summary: `Made recurring from a suggestion · ${row.category}`,
+    });
   });
 }
 
@@ -192,6 +217,61 @@ async function getClaimedOccurrences(
   return map;
 }
 
+/**
+ * Turn one due date of a rule into a real, editable transaction.
+ *
+ * Extracted so `convertToRecurring` writes an occurrence the same way
+ * materialization does. It used to rely on the next materialize run to produce
+ * the anchor's own occurrence, which quietly failed for anything older than
+ * `MATERIALIZE_HORIZON_MS`: the row became a rule (and rules are excluded from
+ * every ledger read), the back-fill skipped it as too old, and the money was
+ * simply gone.
+ *
+ * Every descriptive column the template carries must come across. `pay_method` is
+ * the one that cost money: it is the axis `cash.ts` and `CASH_TOTALS_SQL` split
+ * on, so a recurring CARD bill materializing as NULL was booked as cash out
+ * instead of debt — understating available cash and `creditUsed` by the same
+ * amount every month, compounding. The SQL/TS parity test could not see it,
+ * because both sides read the same corrupted row.
+ *
+ * `recur_*` are deliberately NULL: an occurrence is a real transaction, not a
+ * rule. Caller must already hold a transaction — this opens none.
+ */
+async function insertOccurrence(
+  db: SQLite.SQLiteDatabase,
+  template: Txn,
+  splits: { payments: { personId: string; amount: number }[]; shares: { personId: string; amount: number }[] },
+  occ: number,
+  now: number,
+): Promise<string> {
+  const newId = uuid();
+  await db.runAsync(
+    `INSERT INTO txn
+       (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
+        pay_method,currency,source,tz,lat,lng,place_label,
+        recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
+    [
+      newId, template.group_id, template.kind, template.entry_mode, occ, template.category, template.note,
+      template.attachment_uri, template.tags, template.adjustments,
+      template.pay_method, template.currency, template.source, template.tz,
+      template.lat, template.lng, template.place_label,
+      occ, template.id, now, now,
+    ],
+  );
+  // A fourth INSERT INTO txn, distinct from the three in transactions.ts.
+  // Occurrences are real entries a peer must see, and the caller makes N of them
+  // per run — so it queues per occurrence, not per call.
+  await queueEntry(db, newId, template.group_id);
+  for (const p of splits.payments) {
+    await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
+  }
+  for (const s of splits.shares) {
+    await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
+  }
+  return newId;
+}
+
 /** Merge skip + claimed-occurrence sets for one series into a single omit-set. */
 function mergedOmit(skips?: Set<number>, claimed?: Set<number>): Set<number> | undefined {
   if (!skips && !claimed) return undefined;
@@ -221,9 +301,26 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
     // approving indefinite future spending, so until I have, it must not quietly
     // start posting occurrences — which would be the loudest possible version of
     // the thing this model exists to stop.
+    // `author_person_id IS NULL` — only rules I WROTE post from this device.
+    //
+    // A rule travels to every member of a shared group, and materialization runs
+    // on every device that opens the app. Both phones therefore woke up on the
+    // 1st, each minted its own uuid for the same occurrence, each queued it, and
+    // each received the other's — because `getClaimedOccurrences` dedupes on
+    // `(parent_recur_id, recur_override_date)` LOCALLY, and neither of those
+    // columns is on `EntryDoc`, so an incoming occurrence arrives as an ordinary
+    // expense claiming nothing. A ₹30,000 shared rent rule posted ₹60,000 every
+    // month, forever, with nothing on either screen to explain it.
+    //
+    // One author, one poster. The other members still SEE the rule and its
+    // upcoming occurrences (those are generated virtually for display), and the
+    // real entry reaches them the ordinary way — over sync, from the person whose
+    // rule it is. The cost is that a rule stops posting while its author does not
+    // open the app, which is visibly nothing rather than invisibly double.
     `SELECT t.* FROM txn t
       WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
         AND t.recur_mode = 'auto'
+        AND t.author_person_id IS NULL
         AND ${NOT_AWAITING_APPROVAL}`,
   );
   if (templates.length === 0) return 0;
@@ -253,38 +350,7 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
         // first-run back-fill; only recent due ones become real editable rows.
         if (occ < horizonStart) continue;
         if (skips?.has(occ) || claimed?.has(occ)) continue;
-        const newId = uuid();
-        // Every descriptive column the template carries must come across. `pay_method` is
-        // the one that cost money: it is the axis `cash.ts` and `CASH_TOTALS_SQL` split on,
-        // so a recurring CARD bill materializing as NULL was booked as cash out instead of
-        // debt — understating available cash and `creditUsed` by the same amount every
-        // month, compounding. The SQL/TS parity test could not see it, because both sides
-        // read the same corrupted row.
-        //
-        // `recur_*` are deliberately NULL: an occurrence is a real transaction, not a rule.
-        await db.runAsync(
-          `INSERT INTO txn
-             (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-              pay_method,currency,source,tz,lat,lng,place_label,
-              recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
-          [
-            newId, t.group_id, t.kind, t.entry_mode, occ, t.category, t.note,
-            t.attachment_uri, t.tags, t.adjustments,
-            t.pay_method, t.currency, t.source, t.tz, t.lat, t.lng, t.place_label,
-            occ, t.id, now, now,
-          ],
-        );
-        // A fourth INSERT INTO txn, distinct from the three in transactions.ts.
-        // Occurrences are real entries a peer must see, and this loop makes N of
-        // them per run — so it queues per occurrence, not per call.
-        await queueEntry(db, newId, t.group_id);
-        for (const p of rw.payments) {
-          await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
-        }
-        for (const s of rw.shares) {
-          await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
-        }
+        await insertOccurrence(db, t, rw, occ, now);
         created++;
       }
     }

@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { NOT_AWAITING_APPROVAL } from './approvalSql';
+import { AUTHORED_BY_ME } from './syncOutbox';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { TXN_KIND_FOR_CATEGORY, type CategoryKind } from '../../constants/enums';
@@ -190,6 +191,7 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
        SELECT t.id, t.group_id, ?
          FROM txn t JOIN budget_group g ON g.id = t.group_id
         WHERE t.category = ? AND t.kind = ? AND g.is_personal = 0
+          AND ${AUTHORED_BY_ME}
           AND ${NOT_AWAITING_APPROVAL}`,
       [now, n, txnKind],
     );

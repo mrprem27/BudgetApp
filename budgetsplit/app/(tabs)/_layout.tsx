@@ -74,7 +74,16 @@ function askAboutMerges(
         onPress: () => {
           mergePerson(db, first.incomingId, first.existingId)
             .then(refresh)
-            .catch(() => {});
+            // A merge can now REFUSE — two different accounts, or you as the
+            // one being folded away — and a refusal the user never sees looks
+            // exactly like a merge that worked. They tapped a one-way door and
+            // are owed the reason it did not open.
+            .catch((e: unknown) => {
+              Alert.alert(
+                "Couldn't merge them",
+                e instanceof Error ? e.message : 'Something went wrong. They have been kept separate.',
+              );
+            });
         },
       },
     ],
