@@ -283,6 +283,28 @@ export async function signOut(): Promise<void> {
   await clearSession();
 }
 
+/**
+ * Close the account on the server, then clear this device exactly as a sign-out
+ * does. Required by App Store Review 5.1.1(v): an app that creates an account
+ * must let the user delete it from inside the app.
+ *
+ * Unlike {@link signOut} this does **not** swallow a failed request. A sign-out
+ * that only half-works leaves a session row to expire on its own; a deletion
+ * that only half-works would leave the account open while the app says it is
+ * gone — so the error surfaces and the local session is kept, because the user
+ * has to be able to try again.
+ *
+ * What it does not touch: the local database. The ledger is this device's, it
+ * was never the account's, and "delete my account" is not "delete my
+ * transactions" — Settings has its own explicit wipe for that. `remote_uid` stays
+ * for the same reason sign-out leaves it: clearing it would turn every entry a
+ * peer ever authored into `unknown-author`.
+ */
+export async function deleteAccount(): Promise<void> {
+  await sendAuthed('/me', { method: 'DELETE' });
+  await clearSession();
+}
+
 // --- Profile --------------------------------------------------------------
 
 async function readUser(response: Response): Promise<ServerUser> {

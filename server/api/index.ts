@@ -76,7 +76,7 @@ import {
 import { mailProvider, sendMail } from './mailer';
 import { storage } from './storage';
 
-const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at';
+const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at, deleted_at';
 
 /**
  * Backups and avatars need R2; sign-in and linking do not. R2 must be enabled
@@ -137,7 +137,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (path === '/me') {
     if (method === 'GET') return getMe(request, env, url);
     if (method === 'PATCH') return patchMe(request, env, url);
-    return methodNotAllowed('GET, PATCH');
+    if (method === 'DELETE') return deleteAccount(request, env);
+    return methodNotAllowed('GET, PATCH, DELETE');
   }
   if (path === '/me/avatar') {
     if (method === 'GET') return getAvatar(request, env);
@@ -490,6 +491,110 @@ async function patchMe(request: Request, env: Env, url: URL): Promise<Response> 
 }
 
 /**
+ * `DELETE /me` — close the account.
+ *
+ * Required by App Store Review 5.1.1(v): an app that creates an account must let
+ * the user delete it from inside the app. There was no route at all.
+ *
+ * ## What is destroyed
+ *
+ * Everything that identifies the person or gives anything access:
+ *
+ * - the email, name, phone and avatar URL, overwritten in place on `users`;
+ * - every session, so every signed-in device is signed out at once;
+ * - every unused magic link for that address, so a link already in an inbox
+ *   cannot resurrect the account;
+ * - every device key and every `sync_wrap` sealed to one, which is what makes
+ *   this irreversible in the way that matters — no future device of theirs can
+ *   decrypt a group's entries, because the wraps that would have let it are gone;
+ * - every backup blob in R2 and its row.
+ *
+ * ## What survives, and why
+ *
+ * Their entries in shared groups, and their disputes. Those are not the account's
+ * data, they are the GROUP'S record of what was spent, held on four other
+ * people's phones already. Cascading a delete through them would rewrite other
+ * people's ledgers because a fifth person closed their account — the same rule
+ * removal follows everywhere else here: it ends a relationship, never a record.
+ * `0010_account_deletion.sql` has the full argument.
+ *
+ * Their membership is ended rather than erased (`removed_at`), so no group keeps
+ * delivering to an account that no longer exists, and live links are tombstoned
+ * with `ended_by` set to them — the shape `0007_link_end.sql` built so the other
+ * side is told once instead of quietly finding somebody gone.
+ *
+ * ## Ordering
+ *
+ * R2 first, then D1. D1 has no cross-binding transaction with R2, so one of the
+ * two orders leaves garbage on a failure and the other loses the only pointer to
+ * it. Deleting the blobs first means a failure leaves rows pointing at objects
+ * that are already gone — recoverable, and the retry is idempotent. The reverse
+ * would orphan paid-for bytes nothing can ever name again.
+ */
+async function deleteAccount(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (!auth) return unauthorized();
+  const userId = auth.user.id;
+  const now = Date.now();
+
+  // 1. R2 first (see Ordering above): backups, then the avatar.
+  const files = storage(env);
+  if (files) {
+    const blobs = await env.DB.prepare('SELECT r2_key FROM backups WHERE user_id = ?')
+      .bind(userId).all<{ r2_key: string }>();
+    for (const b of blobs.results ?? []) await files.delete(b.r2_key);
+    if (auth.user.avatar_url && isAvatarKey(auth.user.avatar_url)) {
+      await files.delete(auth.user.avatar_url);
+    }
+  }
+
+  // 2. D1, in one batch so a failure part-way leaves the account intact and
+  // signed in rather than half-erased and unusable.
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM backups WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM magic_links WHERE email = ?').bind(auth.user.email),
+    // Wraps before device keys: sync_wrap references device_key.
+    env.DB.prepare('DELETE FROM sync_wrap WHERE device_id IN (SELECT device_id FROM device_key WHERE user_id = ?)').bind(userId),
+    env.DB.prepare('DELETE FROM device_key WHERE user_id = ?').bind(userId),
+    // Requests they sent, and blocks they set: both are theirs alone.
+    env.DB.prepare("DELETE FROM friend_request WHERE from_user = ?").bind(userId),
+    env.DB.prepare('DELETE FROM friend_block WHERE owner_user = ?').bind(userId),
+    // Requests addressed TO them are cancelled, not deleted: the sender's list
+    // has to be able to say what happened to a request they made.
+    env.DB.prepare("UPDATE friend_request SET state = 'cancelled', decided_at = ? WHERE to_user = ? AND state = 'pending'")
+      .bind(now, userId),
+    // Unclaimed invites go; a claimed one is half of somebody else's pending
+    // decision, so it is left for `decideClaim` to find gone-quiet.
+    env.DB.prepare('DELETE FROM invites WHERE from_user = ? AND claimed_by IS NULL').bind(userId),
+    // Live links end, attributed, exactly as an unlink does.
+    env.DB.prepare('UPDATE links SET ended_at = ?, ended_by = ? WHERE (user_a = ? OR user_b = ?) AND ended_at IS NULL')
+      .bind(now, userId, userId, userId),
+    // Membership ends so nothing keeps delivering to a dead account.
+    env.DB.prepare('UPDATE sync_member SET removed_at = ? WHERE user_id = ? AND removed_at IS NULL')
+      .bind(now, userId),
+    // Groups they own and nobody else is in are tombstoned. A group with other
+    // live members is deliberately left alone — see the migration.
+    env.DB.prepare(
+      `UPDATE sync_group SET deleted_at = ?
+        WHERE owner_user = ? AND deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM sync_member m
+             WHERE m.group_id = sync_group.id AND m.user_id <> ? AND m.removed_at IS NULL
+          )`,
+    ).bind(now, userId, userId),
+    // Finally the identity itself. The email is replaced rather than nulled
+    // (NOT NULL UNIQUE) with a value nobody can type, which also frees the real
+    // address for a genuinely new account.
+    env.DB.prepare(
+      'UPDATE users SET email = ?, name = NULL, phone = NULL, avatar_url = NULL, deleted_at = ? WHERE id = ?',
+    ).bind(`deleted+${userId}@account.invalid`, now, userId),
+  ]);
+
+  return json({ ok: true });
+}
+
+/**
  * Image in, stored in R2 under a per-user key that overwrites itself.
  *
  * Two accepted shapes: raw `image/*` bytes (what any HTTP client would send),
@@ -726,15 +831,23 @@ async function toLinkDto(env: Env, link: LinkRow, viewerId: string, origin: stri
 
   const otherShares = (viewerIsA ? link.share_phone_b : link.share_phone_a) === 1;
   const dto = toUserDto(other, origin);
+  /*
+   * A closed account has a scrubbed row, and the scrubbed email is a synthetic
+   * `deleted+<id>@account.invalid` that must never reach a screen. This link is
+   * already ended (closing an account ends every live link, attributed), so it
+   * only appears in the recently-ended list — which exists precisely to explain
+   * a disappearance. Say what happened instead of showing a placeholder address.
+   */
+  const gone = other.deleted_at != null;
   return {
     id: link.id,
     createdAt: link.created_at,
     sharingMyPhone: (viewerIsA ? link.share_phone_a : link.share_phone_b) === 1,
     person: {
       id: dto.id,
-      name: dto.name,
-      email: dto.email,
-      phone: otherShares ? dto.phone : null,
+      name: gone ? 'Deleted account' : dto.name,
+      email: gone ? '' : dto.email,
+      phone: gone || !otherShares ? null : dto.phone,
       // The avatar URL is bearer-authed against *my* session and would 404 for
       // someone else's picture, so it isn't offered for a linked person yet.
       avatarUrl: null,

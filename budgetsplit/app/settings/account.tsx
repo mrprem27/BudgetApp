@@ -21,7 +21,7 @@ import { claimMyAccount } from '../../src/db/queries/persons';
 import { forgetSyncPassphrase } from '../../src/lib/syncSnapshot';
 import { settings } from '../../src/lib/settings';
 import {
-  requestMagicLink, verifyMagicLink, signOut, updateProfile, uploadAvatar,
+  requestMagicLink, verifyMagicLink, signOut, deleteAccount, updateProfile, uploadAvatar,
   extractAuthToken, deviceLabel,
 } from '../../src/lib/serverApi';
 
@@ -56,6 +56,7 @@ export default function AccountScreen() {
   const [showPhone, setShowPhone] = useState(false);
   const [phoneText, setPhoneText] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong. Please try again.');
@@ -191,6 +192,68 @@ export default function AccountScreen() {
     );
   }
 
+  /**
+   * Closing the account. Required by App Store Review 5.1.1(v) — an app that
+   * creates an account must let the user delete it from inside the app, not by
+   * emailing support.
+   *
+   * Two confirmations, because it cannot be undone and because the first one is
+   * a thing people tap while reading the second line. What the copy has to be
+   * exact about is the boundary users get wrong in both directions: the ledger on
+   * this phone is NOT deleted (Settings has its own wipe for that), and the
+   * entries already on other people's phones are not withdrawn — they are the
+   * group's record of what was spent, and no more recallable than a message
+   * somebody already read.
+   */
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete your account?',
+      'Your email, name, phone and every backup on the server are deleted, and every '
+      + 'signed-in device is signed out.\n\n'
+      + 'Your transactions on this phone stay exactly as they are — this deletes the '
+      + 'account, not your data. Expenses you already shared stay with the people you '
+      + 'shared them with.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => Alert.alert(
+            'This cannot be undone',
+            'Your backups are deleted from the server and cannot be recovered. You can '
+            + 'sign up again with the same email, but it will be a new, empty account.',
+            [
+              { text: 'Keep my account', style: 'cancel' },
+              { text: 'Delete account', style: 'destructive', onPress: runDeleteAccount },
+            ],
+          ),
+        },
+      ],
+    );
+  }
+
+  async function runDeleteAccount() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteAccount();
+      // Same local cleanup as signing out: the passphrase and the unattended
+      // snapshot switch outlive a session otherwise, and this phone now has no
+      // account to snapshot to at all.
+      await forgetSyncPassphrase();
+      await settings.setSyncEverything(false).catch(() => {});
+      await reload();
+      haptic.warning();
+    } catch (e) {
+      // Deliberately not swallowed, unlike sign-out: a deletion that half-worked
+      // must not leave the app claiming the account is gone while it is open.
+      haptic.error();
+      setError(message(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Account" onBack={() => router.back()} />
@@ -255,6 +318,14 @@ export default function AccountScreen() {
                 label="Sign out"
                 tint={colors.expense}
                 onPress={handleSignOut}
+              />
+              <View style={settingsRowDivider} />
+              <SettingsRow
+                icon="trash-2"
+                label="Delete account"
+                tint={colors.expense}
+                onPress={deleting ? undefined : handleDeleteAccount}
+                right={deleting ? <ActivityIndicator size="small" color={colors.expense} /> : undefined}
               />
             </Card>
 

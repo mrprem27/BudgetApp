@@ -212,7 +212,14 @@ export type AuthedUser = { user: UserRow; sessionToken: string };
 /**
  * Resolve the `Authorization: Bearer <token>` header to a live session's user,
  * refreshing the rolling expiry when it's a day stale. Returns null for a
- * missing, unknown or expired session — the caller answers 401.
+ * missing, unknown, expired or CLOSED-ACCOUNT session — the caller answers 401.
+ *
+ * `deleted_at IS NULL` is the guard, and it is belt to the braces: `DELETE /me`
+ * deletes every session it can see, so a live token for a closed account should
+ * not exist. Should-not-exist is not a security boundary — a batch that fails
+ * after the scrub, or a session written by a request already in flight, leaves
+ * one — and every authenticated route in the Worker goes through this function,
+ * so this is the one place the check is worth having.
  */
 export async function authenticate(request: Request, env: Env): Promise<AuthedUser | null> {
   const header = request.headers.get('authorization');
@@ -224,7 +231,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthedUs
     `SELECT s.token AS session_token, s.expires_at, s.created_at AS session_created_at,
             u.id, u.email, u.name, u.phone, u.avatar_url, u.created_at
        FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token = ?`,
+      WHERE s.token = ? AND u.deleted_at IS NULL`,
   ).bind(token).first<UserRow & { session_token: string; expires_at: number; session_created_at: number }>();
 
   if (!row) return null;

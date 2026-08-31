@@ -62,6 +62,14 @@ export type UserRow = {
    */
   avatar_url: string | null;
   created_at: number;
+  /**
+   * Set when the account was closed (`DELETE /me`). The row survives because six
+   * tables reference it and those rows are other people's records — see
+   * `migrations/0010_account_deletion.sql`. Every identifying column has been
+   * overwritten by then, so nothing here can be shown as a person; check this
+   * before rendering one.
+   */
+  deleted_at?: number | null;
 };
 
 /** True when `users.avatar_url` points at our own R2 object rather than elsewhere. */
