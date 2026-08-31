@@ -4,10 +4,19 @@ import type { BudgetGroup } from '../db/queries/groups';
 jest.mock('../db/queries/transactions', () => ({
   getTransactionsInRange: jest.fn(),
 }));
+// The report CSV is the group export scoped to a month, so it reads `getMe` for
+// the Direction column the same way.
+jest.mock('../db/queries/persons', () => ({
+  getMe: jest.fn(async () => ({ id: 'p1' })),
+}));
 
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { buildReportCsv, buildReportHtml, type PdfSummary } from '../lib/reportExport';
-import { splitCsvLine } from '../lib/importParse';
+import { splitCsvLine, GROUP_EXPORT_HEADER, isBudgetSplitExport, parseBudgetSplitExport } from '../lib/importParse';
+
+/** Header is Date,Group,Category,Kind,Direction,Amount,Note. */
+const AMOUNT = 5;
+const NOTE = 6;
 
 const mockRange = getTransactionsInRange as jest.MockedFunction<typeof getTransactionsInRange>;
 const db = {} as never;
@@ -32,7 +41,10 @@ describe('buildReportCsv', () => {
   it('emits only the header when there are no transactions', async () => {
     mockRange.mockResolvedValue([]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    expect(csv).toBe('Date,Group,Category,Kind,Amount (Rs),Note');
+    // Not a header of its own. This wrote `Amount (Rs)` where the group export
+    // writes `Amount`, so a report CSV failed `isBudgetSplitExport` and re-imported
+    // through the generic bank heuristic with its Category and Kind guessed.
+    expect(csv).toBe(GROUP_EXPORT_HEADER);
   });
 
   it('writes one row per transaction across all groups', async () => {
@@ -44,7 +56,7 @@ describe('buildReportCsv', () => {
   it('converts paise to a 2-decimal rupee amount', async () => {
     mockRange.mockResolvedValue([txn({ payments: [{ personId: 'p1', amount: 123456 }], shares: [{ personId: 'p1', amount: 123456 }] })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    expect(splitCsvLine(csv.split('\n')[1])[4]).toBe('1234.56');
+    expect(splitCsvLine(csv.split('\n')[1])[AMOUNT]).toBe('1234.56');
   });
 
   // Canonical row total (txnTotal): the payments side for every kind — income has
@@ -57,20 +69,32 @@ describe('buildReportCsv', () => {
       txn({ id: 't3', kind: 'expense', payments: [], shares: [{ personId: 'p1', amount: 30000 }] }),
     ]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    const amounts = csv.split('\n').slice(1).map(l => splitCsvLine(l)[4]);
+    const amounts = csv.split('\n').slice(1).map(l => splitCsvLine(l)[AMOUNT]);
     expect(amounts).toEqual(['5000.00', '900.00', '300.00']);
   });
 
-  it('formats the date as yyyy-MM-dd (no time component)', async () => {
+  // Now carries the time, because it shares the group export's row builder — and
+  // a re-import that keeps the time is strictly better than one that discards it.
+  it('formats the date as yyyy-MM-dd HH:mm', async () => {
     mockRange.mockResolvedValue([txn({ date: new Date(2026, 0, 5, 9, 7).getTime() })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    expect(splitCsvLine(csv.split('\n')[1])[0]).toBe('2026-01-05');
+    expect(splitCsvLine(csv.split('\n')[1])[0]).toBe('2026-01-05 09:07');
+  });
+
+  // D21: the whole point of aligning the two headers.
+  it('can be re-imported, which the (Rs) header made impossible', async () => {
+    mockRange.mockResolvedValue([txn({ category: 'Groceries', note: 'weekly shop' })]);
+    const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
+    expect(isBudgetSplitExport(csv)).toBe(true);
+    expect(parseBudgetSplitExport(csv).rows[0]).toMatchObject({
+      amount: 25000, kind: 'expense', category: 'Groceries', description: 'weekly shop',
+    });
   });
 
   it('renders a null note as an empty field', async () => {
     mockRange.mockResolvedValue([txn({ note: null as unknown as string })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    expect(splitCsvLine(csv.split('\n')[1])[5]).toBe('');
+    expect(splitCsvLine(csv.split('\n')[1])[NOTE]).toBe('');
   });
 
   // Quote-escaping must apply to EVERY quoted field, not just the note — an
@@ -78,14 +102,14 @@ describe('buildReportCsv', () => {
   it('escapes embedded quotes in the note', async () => {
     mockRange.mockResolvedValue([txn({ note: 'the "good" cafe' })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
-    expect(splitCsvLine(csv.split('\n')[1])[5]).toBe('the "good" cafe');
+    expect(splitCsvLine(csv.split('\n')[1])[NOTE]).toBe('the "good" cafe');
   });
 
   it('escapes embedded quotes in the group name', async () => {
     mockRange.mockResolvedValue([txn()]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip "2026"')], MONTH);
     const cells = splitCsvLine(csv.split('\n')[1]);
-    expect(cells).toHaveLength(6);
+    expect(cells).toHaveLength(7);
     expect(cells[1]).toBe('Trip "2026"');
   });
 
@@ -93,14 +117,14 @@ describe('buildReportCsv', () => {
     mockRange.mockResolvedValue([txn({ category: 'Food "out"' })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip')], MONTH);
     const cells = splitCsvLine(csv.split('\n')[1]);
-    expect(cells).toHaveLength(6);
+    expect(cells).toHaveLength(7);
     expect(cells[2]).toBe('Food "out"');
   });
 
   it('keeps columns aligned when fields contain commas', async () => {
     mockRange.mockResolvedValue([txn({ category: 'Food, Drink', note: 'a, b' })]);
     const csv = await buildReportCsv(db, [group('g1', 'Trip, 2026')], MONTH);
-    expect(splitCsvLine(csv.split('\n')[1])).toHaveLength(6);
+    expect(splitCsvLine(csv.split('\n')[1])).toHaveLength(7);
   });
 });
 

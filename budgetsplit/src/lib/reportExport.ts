@@ -2,7 +2,9 @@ import type * as SQLite from 'expo-sqlite';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { fullDate, monthLabel } from './dateFormat';
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { csvQuote } from './importParse';
+import { getMe } from '../db/queries/persons';
+import { GROUP_EXPORT_HEADER } from './importParse';
+import { rowLine } from './groupExport';
 import { formatRupees } from './money';
 import { txnTotal } from './splitMath';
 import type { BudgetGroup } from '../db/queries/groups';
@@ -17,7 +19,18 @@ import type { BudgetGroup } from '../db/queries/groups';
 /** The subset of a group summary the PDF needs. */
 export type PdfSummary = { group: BudgetGroup; income: number; expense: number };
 
-/** Month transactions as a CSV string (one row per transaction). */
+/**
+ * Month transactions as a CSV string (one row per transaction).
+ *
+ * Same header and same row builder as the group export, deliberately. This wrote
+ * `Amount (Rs)` where the group export writes `Amount`, and assembled its own
+ * otherwise-identical row — so a report CSV failed `isBudgetSplitExport`, fell
+ * through to the generic bank-statement heuristic on re-import, and arrived with
+ * its Category and Kind guessed. Two builders for one format is also how the
+ * group export got a Direction column and this one did not.
+ *
+ * The only thing that changes here is scope: one month, and the groups passed in.
+ */
 export async function buildReportCsv(
   db: SQLite.SQLiteDatabase,
   groups: BudgetGroup[],
@@ -26,16 +39,12 @@ export async function buildReportCsv(
   const fromMs = startOfMonth(month).getTime();
   const toMs = endOfMonth(month).getTime();
 
-  const lines = ['Date,Group,Category,Kind,Amount (Rs),Note'];
+  const me = await getMe(db);
+  const meId = me?.id ?? '';
+  const lines = [GROUP_EXPORT_HEADER];
   for (const g of groups) {
     const txns = await getTransactionsInRange(db, g.id, fromMs, toMs);
-    for (const t of txns) {
-      const date = format(new Date(t.date), 'yyyy-MM-dd');
-      const amt = (txnTotal(t) / 100).toFixed(2);
-      // Every quoted field goes through csvQuote — group name and category can
-      // contain a quote just as easily as the note can.
-      lines.push(`${date},${csvQuote(g.name)},${csvQuote(t.category)},${t.kind},${amt},${csvQuote(t.note)}`);
-    }
+    for (const t of txns) lines.push(rowLine(g.name, t, meId));
   }
   return lines.join('\n');
 }

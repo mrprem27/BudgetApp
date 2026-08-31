@@ -20,7 +20,7 @@ Paid to Sandeep Malik
 UPI Transaction ID: 651859540084
 ₹950`;
 
-const OUR_EXPORT = `${GROUP_EXPORT_HEADER}\n2026-06-01,Flat,Groceries,expense,450,Milk`;
+const OUR_EXPORT = `${GROUP_EXPORT_HEADER}\n2026-06-01,Flat,Groceries,expense,debit,450,Milk`;
 
 describe('parseAnyText', () => {
   it('recognises a Paytm CSV without the picker', () => {

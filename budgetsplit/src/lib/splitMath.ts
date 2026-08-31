@@ -75,6 +75,36 @@ export function myIncomeOf(txn: { payments: readonly Share[] }, meId: string): n
   return myPaidOf(txn, meId);
 }
 
+/**
+ * Which way this row moved MY cash: `'debit'` out, `'credit'` in.
+ *
+ * Only a settlement genuinely needs asking — an expense always leaves and income
+ * always arrives — but a settlement is two-sided and its direction is not
+ * recoverable from `kind`. The CSV export inferred `debit` from the kind alone,
+ * so "Rahul sent me ₹5,000" re-imported as ₹5,000 paid out and cash was wrong by
+ * twice the amount.
+ *
+ * The read matches the shape `reviewCommit.planCommit` writes, and works for both
+ * settlement shapes at once: a group settlement carries the payer in `payments`
+ * and the receiver in `shares`, and a personal one carries only the side that
+ * moved (`payments` alone when outbound, `shares` alone when inbound). So: paid
+ * by me is out; otherwise owed to me is in.
+ *
+ * A settlement between two OTHER people moves none of my cash — `CASH_TOTALS_SQL`
+ * already ignores it. It reports `'debit'` because the caller needs one of the two,
+ * and no export row should be reached with it in the first place.
+ */
+export function cashDirectionOf(
+  txn: { kind: string; payments: readonly Share[]; shares: readonly Share[] },
+  meId: string,
+): 'debit' | 'credit' {
+  if (txn.kind === 'income') return 'credit';
+  if (txn.kind !== 'settlement') return 'debit';
+  if (txn.payments.some(p => p.personId === meId)) return 'debit';
+  if (txn.shares.some(s => s.personId === meId)) return 'credit';
+  return 'debit';
+}
+
 export type ShareInputs = {
   members: Person[];
   splitMembers: string[];
