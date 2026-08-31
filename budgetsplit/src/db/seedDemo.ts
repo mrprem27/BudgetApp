@@ -23,6 +23,7 @@ import { insertGoal, fundGoal, withdrawFromGoal, reorderGoals } from './queries/
 import { insertPending } from './queries/pending';
 import { seedGlobalCategories } from './seedCategories';
 import { setMoneyProfile, clearMoneyProfile } from './queries/moneyProfile';
+import { insertAsset } from './queries/assets';
 import { RecurFreq, PayMethod } from '../constants/enums';
 
 /** Rupees → integer paise. */
@@ -36,6 +37,10 @@ const ALL_TABLES = [
   'txn_payment', 'txn_share', 'txn_approval', 'txn_dispute', 'sync_outbox', 'line_item', 'recur_skip', 'txn',
   'category_budget', 'group_member', 'budget_group',
   'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
+  // `asset` IS per-run data: it holds the demo's investments, gold and FD, and
+  // leaving it behind meant a wiped app still reported Rs 1,50,000 of net worth
+  // with nothing on any screen to attribute it to. `seedWipe.test.ts` caught it.
+  'asset',
 ];
 
 /** Delete every row from every data table (settings/feature-flags + the global
@@ -307,10 +312,15 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     openingBank: R(210000),
     openingCash: R(45000),
     openingWallet: R(45000),
-    investments: R(150000),
     creditLimit: R(60000),
     creditUsed: R(10000),
   });
+
+  // Investments are a NAMED asset register now, so the demo shows what that is
+  // for: one figure could never tell an index fund from the gold in a locker.
+  await insertAsset(db, { name: 'Index funds', kind: 'investment', icon: 'trending-up', color: '#0EA5E9', balance: R(95000) });
+  await insertAsset(db, { name: 'Gold', kind: 'gold', icon: 'star', color: '#F59E0B', balance: R(40000) });
+  await insertAsset(db, { name: 'Bank FD', kind: 'deposit', icon: 'lock', color: '#8B7CF8', balance: R(15000) });
 
   // --- Savings: goals funded directly from cash (funded / reached / empty / deadline / w-draw)
   // `priority` (emergency/need/want) is a real protect-from-raid tag now, so these

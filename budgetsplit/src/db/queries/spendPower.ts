@@ -2,7 +2,6 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { INVESTMENT_CATEGORY } from '../../constants/categories';
-import { getMoneyProfile, setMoneyProfileRows } from './moneyProfile';
 import { startOfMonth } from 'date-fns';
 import {
   computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,
@@ -15,10 +14,11 @@ import { monthlyContribution } from '../../lib/savings';
 import { getCashPosition, getGoals, getGoalSavedMap, getTotalMoney } from './savings';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
-import { getTransactionsInRange, insertTxn, insertTxnRows } from './transactions';
+import { getTransactionsInRange, insertTxn } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
 import { PayMethod } from '../../constants/enums';
+import { defaultInvestmentAsset, transferToAsset } from './assets';
 
 export type GoalFundingStatus = {
   /** Monthly goal-funding commitment across active, uncompleted goals (paise). */
@@ -137,22 +137,17 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
 /**
  * Move money into investments — a transfer, not an expense.
  *
- * Today buying an SIP is logged as an **expense** (`smartCategory` maps "sip",
- * "mutual fund", "zerodha" and friends to the `Investments / SIP` expense
+ * Buying an SIP used to be logged as an **expense** (`smartCategory` still maps
+ * "sip", "mutual fund" and "zerodha" to the `Investments / SIP` expense
  * category). That is wrong three ways at once: it is not consumption, so it
  * violates the money boundary; it eats a budget and skews the Reports donut; and
- * net worth *falls* by the amount when it should be flat, because cash drops and
- * `money.investments` never moves.
+ * net worth *falls* by the amount when it should be flat.
  *
- * Deliberately built as a sibling of `payCardBill` rather than as an Add-screen
- * destination. `TransferBody` hard-types both endpoints as a `Person`, and
- * `buildTransferPlans` refuses when the two share no group — investments share
- * none. This produces the correct row with no changes to the Add screen, and it is
- * exactly the row the eventual accounts model wants: a settlement with a marker.
- *
- * `shares: []` and a personal-group settlement means the ledger shows it, spend
- * analysis excludes it (AGENTS §12), and `settledOut` takes it out of the bucket
- * it came from — one row, both sides, the same trick the card bill uses.
+ * The Savings tab's one-tap version of {@link transferToAsset}. It exists so the
+ * common case — "I moved money into investments" — does not force the user to
+ * name an asset first; `defaultInvestmentAsset` resolves the one the migration
+ * created from their old `money.investments` figure. Anyone who wants gold and an
+ * FD kept apart names them, and the Add screen's Transfer offers them by name.
  */
 export async function moveToInvestments(
   db: SQLite.SQLiteDatabase,
@@ -161,49 +156,23 @@ export async function moveToInvestments(
   fromAsset: PayMethod = PayMethod.Bank,
   note?: string,
 ): Promise<string> {
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('An investment needs a positive amount');
-  const me = await getMe(db);
-  if (!me) throw new Error('No current user');
-  const personal = personalGroupOf(await getAllGroups(db));
-  if (!personal) throw new Error('No personal group');
-
   /*
-   * Both halves or neither.
+   * One line now, because the asset register owns both halves.
    *
-   * These were two separate transactions — `insertTxn` then `setMoneyProfile` —
-   * and a kill between them (the OS reclaiming a backgrounded app is the ordinary
-   * case, not a rare one) booked ₹50,000 out of the bank and never raised
-   * investments. Net worth fell by the amount invested and stayed there, with a
-   * transfer row on the ledger that looked entirely correct. Nothing could detect
-   * it afterwards, because a running total is not derivable from the rows.
+   * This used to write the transaction and then bump `money.investments` — two
+   * figures, two transactions, and a kill between them booked the cash out and
+   * never raised investments, so net worth fell by the amount invested and stayed
+   * there under a ledger row that looked entirely correct.
    *
-   * So this uses the no-transaction variants of both writes inside one
-   * transaction. `insertTxn`/`setMoneyProfile` open their own and expo-sqlite
-   * cannot nest.
+   * `transferToAsset` does both inside one transaction and against a NAMED asset,
+   * so "investments" is no longer a single opaque number that cannot tell gold
+   * from an FD. Kept as its own function because the Savings tab's "Moved to
+   * investments" action is a real, separate thing a user does, and it should not
+   * have to pick an asset to do it — `defaultInvestmentAsset` picks the one the
+   * migration created.
    */
-  const id = uuid();
-  const now = Date.now();
-  await db.withTransactionAsync(async () => {
-    await insertTxnRows(db, {
-      groupId: personal.id,
-      kind: 'settlement',
-      entryMode: 'quick',
-      date: now,
-      category: INVESTMENT_CATEGORY,
-      note: note ?? 'Moved to investments',
-      payMethod: fromAsset,
-      payments: [{ personId: me.id, amount: amountPaise }],
-      shares: [],
-    }, id, now);
-
-    // The other half. Stated rather than derived, unlike the card baseline: there is
-    // no "investment spend since" window to measure against, and a user's holdings
-    // move on their own with the market anyway — so this is a running figure they
-    // can still correct by hand.
-    const profile = await getMoneyProfile(db);
-    await setMoneyProfileRows(db, { investments: profile.investments + amountPaise });
-  });
-  return id;
+  const asset = await defaultInvestmentAsset(db);
+  return transferToAsset(db, asset.id, amountPaise, fromAsset, note ?? 'Moved to investments');
 }
 
 export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number, note?: string): Promise<string> {

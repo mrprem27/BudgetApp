@@ -176,6 +176,43 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 -- The group_id and entity_id indexes live in INDEXES below, as (col, created_at DESC)
 -- composites -- every read of this table also sorts by created_at.
 
+-- Named assets: gold, a flat, an FD, a mutual-fund folio.
+--
+-- Money that leaves your account without being spent has to land somewhere, and
+-- before this it landed in a single number in settings called money.investments.
+-- One number cannot answer "what is my gold worth" and "how much is in the FD",
+-- so the honest options were to log an investment as an EXPENSE -- which
+-- double-counts, because the cash already moved and the expense counts it again
+-- as consumption -- or to leave net worth wrong.
+--
+-- Every balance is integer paise and NEVER negative: selling more of an asset
+-- than it holds is refused, not clamped, because a negative asset is not a
+-- position anyone has.
+--
+-- PERSONAL BY DEFINITION. This table never travels in group sync -- what you own
+-- is not the group's business, and no roster, entry or wrap references it. It
+-- rides the encrypted snapshot like budgets and goals do, so it is in
+-- BACKUP_TABLES; backupCoverage.test.ts fails until it is, which is that guard
+-- working rather than a chore.
+CREATE TABLE IF NOT EXISTS asset (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  -- What kind of thing it is. Drives the default icon and nothing financial --
+  -- an asset is an asset, and the math must not care which sort it is.
+  kind         TEXT NOT NULL DEFAULT 'other'
+                 CHECK(kind IN ('investment','property','gold','deposit','vehicle','other')),
+  icon         TEXT,
+  color        TEXT,
+  -- Paise. Moved only by transfers in/out and by the user restating it, both of
+  -- which write a transaction row so the change is explainable afterwards.
+  balance      INTEGER NOT NULL DEFAULT 0,
+  is_archived  INTEGER NOT NULL DEFAULT 0,
+  -- Manual order, like savings goals -- the same drag-rank decision.
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+
 -- Savings Goals / Bucket List. Kept entirely separate from budgets: money lives
 -- in the Savings Pool and is earmarked to goals; it never inflates a budget.
 CREATE TABLE IF NOT EXISTS savings_goal (
@@ -389,6 +426,9 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE category ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense'",
   // v2: multi-currency — default null means app-wide default (INR).
   "ALTER TABLE txn ADD COLUMN currency TEXT",
+  // Which named asset a transfer moved money into or out of. NULL for every other
+  // row, which is every row that existed before the asset register.
+  "ALTER TABLE txn ADD COLUMN asset_id TEXT",
   // DEAD, like budget_group's three limit columns: never read, never written.
   // Kept for the same reason (dropping it means rebuilding the table on every
   // device to remove a NULL), and the app-wide default in `settings` is the one
@@ -685,6 +725,41 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
    * `group_member` gets no admin row from the UPDATE alone, and a group with an
    * admin who is not a member is the same dead end in a different shape.
    */
+  /*
+   * `money.investments` becomes the first row of the asset register.
+   *
+   * The figure is real user data — someone typed what their investments are worth
+   * — so it is moved, not dropped. Both halves matter and both are here:
+   *
+   * 1. INSERT an asset holding that value. Guarded by `NOT EXISTS`, so a database
+   *    that already has assets (a demo seed, or a restore of a newer backup)
+   *    cannot get a duplicate "Investments" row on top of them.
+   * 2. ZERO the settings key. This is the half that must not be forgotten:
+   *    `getMoneyProfile` now derives `investments` from the asset total, so a
+   *    non-zero key left behind is simply a second, stale number claiming to be
+   *    the same thing. It is set to '0' rather than deleted so a backup written
+   *    afterwards still carries the key, and restoring that backup into an older
+   *    build reads ₹0 rather than nothing — wrong, but not catastrophically so.
+   *
+   * Getting this wrong in either direction is silent: skip the insert and net
+   * worth drops by the whole investment; skip the zeroing and (on a build that
+   * still read the key) it doubles.
+   */
+  {
+    key: 'fix_assets_from_investments_v1',
+    sql: [
+      `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
+         SELECT 'asset_migrated_investments', 'Investments', 'investment', 'trending-up', NULL,
+                CAST(s.value AS INTEGER), 0, 0,
+                CAST(strftime('%s','now') AS INTEGER) * 1000,
+                CAST(strftime('%s','now') AS INTEGER) * 1000
+           FROM settings s
+          WHERE s.key = 'money.investments'
+            AND CAST(s.value AS INTEGER) > 0
+            AND NOT EXISTS (SELECT 1 FROM asset)`,
+      "UPDATE settings SET value = '0' WHERE key = 'money.investments'",
+    ],
+  },
   {
     key: 'fix_group_creator_roles_v2',
     sql: [
@@ -974,6 +1049,10 @@ export const INDEXES = `
     -- idx_savings_txn_goal (same leftmost column).
     CREATE INDEX IF NOT EXISTS idx_savings_txn_goal_date ON savings_txn(goal_id, date DESC);
     DROP INDEX IF EXISTS idx_savings_txn_goal;
+
+    -- Every read of assets is "the live ones, in the user's order" -- it feeds
+    -- net worth, so it runs on Home, Plan and Savings on every load.
+    CREATE INDEX IF NOT EXISTS idx_asset_live ON asset(sort_order) WHERE is_archived = 0;
 `;
 
 /**
@@ -1069,7 +1148,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
+        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,author_person_id,'
         + 'sync_version,is_deleted,created_at,updated_at';
       await rebuildTable(db, 'txn_new', `
         CREATE TABLE txn_new (
@@ -1098,6 +1177,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           pay_method     TEXT,
           currency       TEXT,
           source         TEXT,
+          asset_id       TEXT,
           author_person_id TEXT,
           sync_version   INTEGER NOT NULL DEFAULT 0,
           is_deleted     INTEGER NOT NULL DEFAULT 0,

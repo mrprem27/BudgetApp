@@ -269,6 +269,12 @@ export type InsertTxnInput = {
   lng?: number;
   placeLabel?: string;
   payMethod?: PayMethod;
+  /**
+   * The named asset this transfer moved money into or out of, so the row can be
+   * traced back to it — which is what lets an asset be deleted only when nothing
+   * references it, and what an asset's own history reads.
+   */
+  assetId?: string;
   currency?: string;
   /** Where this came from. Omit for hand-typed — null is what every pre-existing row is. */
   source?: TxnSource;
@@ -327,8 +333,8 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
@@ -339,6 +345,7 @@ export async function insertTxnRows(
         input.payMethod ?? null,
         input.currency ?? null,
         input.source ?? null,
+        input.assetId ?? null,
         now, now,
       ],
     );

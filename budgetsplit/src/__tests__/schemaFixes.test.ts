@@ -52,6 +52,12 @@ function makeDb(): DatabaseSync {
     CREATE TABLE savings_txn (
       id TEXT PRIMARY KEY, goal_id TEXT, amount INTEGER NOT NULL, kind TEXT NOT NULL
     );
+    CREATE TABLE asset (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'other',
+      icon TEXT, color TEXT, balance INTEGER NOT NULL DEFAULT 0,
+      is_archived INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
   `);
   return db;
 }
@@ -506,5 +512,81 @@ describe('launch invariants: the creator can always administer the group', () =>
     expect(roles(db, 'g1')).toEqual(before);
     // And in particular a plain member is still a plain member.
     expect(before).toContainEqual({ person_id: 'me', role: 'member', deleted_at: null });
+  });
+});
+
+/**
+ * `money.investments` was one number that could not tell gold from an FD from a
+ * flat. Moving it into the asset register has two halves and BOTH are silent if
+ * missed: skip the insert and net worth drops by the whole investment; skip the
+ * zeroing and there are two numbers claiming to be the same thing.
+ */
+describe('investments become the first asset', () => {
+  const assets = (db: DatabaseSync) =>
+    db.prepare('SELECT id, name, kind, balance FROM asset ORDER BY sort_order').all() as
+      { id: string; name: string; kind: string; balance: number }[];
+  const investmentsKey = (db: DatabaseSync) =>
+    (db.prepare("SELECT value FROM settings WHERE key = 'money.investments'").get() as { value: string } | undefined)?.value;
+
+  function withInvestments(paise: string): DatabaseSync {
+    const db = makeDb();
+    db.exec(`INSERT INTO settings (key, value) VALUES ('money.investments','${paise}');`);
+    return db;
+  }
+
+  it('mints an asset holding exactly what the number said', async () => {
+    const db = withInvestments('150000');
+    await launch(db);
+    expect(assets(db)).toEqual([
+      { id: 'asset_migrated_investments', name: 'Investments', kind: 'investment', balance: 150000 },
+    ]);
+  });
+
+  it('zeroes the settings key, so nothing else can still claim to be that money', async () => {
+    const db = withInvestments('150000');
+    await launch(db);
+    // '0' rather than deleted: a backup written afterwards still carries the key,
+    // so restoring it into an older build reads Rs 0 rather than nothing at all.
+    expect(investmentsKey(db)).toBe('0');
+  });
+
+  it('creates nothing when there were no investments', async () => {
+    const db = withInvestments('0');
+    await launch(db);
+    expect(assets(db)).toEqual([]);
+  });
+
+  it('creates nothing when the key was never written', async () => {
+    const db = makeDb();
+    await launch(db);
+    expect(assets(db)).toEqual([]);
+  });
+
+  /**
+   * The case that would DOUBLE somebody's net worth: a database that already has
+   * assets — a demo seed, or a restore of a backup made after the register
+   * shipped — must not also get a migrated row on top of them.
+   */
+  it('leaves an existing register alone rather than adding to it', async () => {
+    const db = withInvestments('150000');
+    db.exec(`
+      INSERT INTO asset (id, name, kind, balance, is_archived, sort_order, created_at, updated_at)
+        VALUES ('a1','Gold','gold',40000,0,0,1,1);
+    `);
+    await launch(db);
+    expect(assets(db)).toEqual([{ id: 'a1', name: 'Gold', kind: 'gold', balance: 40000 }]);
+    // The key is still zeroed: the value it held is represented by the assets that
+    // are already there, and leaving it would be the second source of truth again.
+    expect(investmentsKey(db)).toBe('0');
+  });
+
+  it('does not run twice', async () => {
+    const db = withInvestments('150000');
+    await launch(db);
+    // Somebody invests more; the migration must not re-mint from a stale key.
+    db.exec("UPDATE settings SET value = '999' WHERE key = 'money.investments'");
+    expect(await launch(db)).toEqual([]);
+    expect(assets(db)).toHaveLength(1);
+    expect(assets(db)[0].balance).toBe(150000);
   });
 });

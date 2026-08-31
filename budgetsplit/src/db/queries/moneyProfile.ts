@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import type { MoneyProfile } from '../../lib/cash';
+import { getAssetsTotal } from './assets';
 
 /**
  * The user's real-money inputs for the Plan screen's "Total Money": starting cash,
@@ -76,7 +77,22 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
     openingCash: hasBuckets ? Number(map[KEYS.openingCash]) || 0 : 0,
     openingBank: hasBuckets ? Number(map[KEYS.openingBank]) || 0 : legacyOpening,
     openingWallet: Number(map[KEYS.openingWallet]) || 0,
-    investments: Number(map[KEYS.investments]) || 0,
+    /*
+     * DERIVED from the asset register, not stored.
+     *
+     * `money.investments` used to be the whole answer to "what do you own that
+     * isn't cash", which meant it could not tell gold from an FD from a flat. It
+     * is now the SUM of live assets, and the stored key is zeroed by the
+     * `fix_assets_from_investments_v1` migration once its value has been turned
+     * into an asset row — because two places holding a number that both claim to
+     * be your investments is how net worth ends up with two answers.
+     *
+     * Read here rather than at every call site so `computeTotalMoney` and its
+     * consumers (Total Money, Safe-to-Spend's headroom, the health score) need no
+     * change at all: the field they already read now means the same thing, sourced
+     * from somewhere that can be itemised.
+     */
+    investments: await getAssetsTotal(db),
     creditLimit: Number(map[KEYS.creditLimit]) || 0,
     creditUsed: Number(map[KEYS.creditUsed]) || 0,
     updatedAt: num(KEYS.updatedAt),
@@ -96,9 +112,18 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
  * does, and that was exactly the problem: submitting an unchanged `creditUsed` alongside a
  * new investments figure re-based the card window and discarded the spend it was measuring.
  */
+/**
+ * What can still be WRITTEN. `investments` is absent on purpose: it is derived
+ * from the asset register now, so a write here would be a second source of truth
+ * that silently disagrees with the assets it claims to total. The compiler
+ * finding every old caller is the point of narrowing the type rather than
+ * ignoring the field.
+ */
+export type MoneyProfileWrite = Partial<Omit<MoneyProfile, 'investments'>>;
+
 export async function setMoneyProfile(
   db: SQLite.SQLiteDatabase,
-  partial: Partial<MoneyProfile>,
+  partial: MoneyProfileWrite,
 ): Promise<void> {
   await db.withTransactionAsync(async () => { await setMoneyProfileRows(db, partial); });
 }
@@ -117,13 +142,12 @@ export async function setMoneyProfile(
  */
 export async function setMoneyProfileRows(
   db: SQLite.SQLiteDatabase,
-  partial: Partial<MoneyProfile>,
+  partial: MoneyProfileWrite,
 ): Promise<void> {
   const entries: [string, number][] = [];
   if (partial.openingBank !== undefined) entries.push([KEYS.openingBank, Math.round(partial.openingBank)]);
   if (partial.openingCash !== undefined) entries.push([KEYS.openingCash, Math.round(partial.openingCash)]);
   if (partial.openingWallet !== undefined) entries.push([KEYS.openingWallet, Math.round(partial.openingWallet)]);
-  if (partial.investments !== undefined) entries.push([KEYS.investments, Math.round(partial.investments)]);
   if (partial.creditLimit !== undefined) entries.push([KEYS.creditLimit, Math.round(partial.creditLimit)]);
   if (partial.creditUsed !== undefined) entries.push([KEYS.creditUsed, Math.round(partial.creditUsed)]);
   if (entries.length === 0) return;

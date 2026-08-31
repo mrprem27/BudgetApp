@@ -113,6 +113,11 @@ export const BACKUP_TABLES = [
   'category', 'category_tombstone', 'category_budget',
   'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
+  // `asset` is personal by definition — it never travels in group sync, so the
+  // snapshot is the only thing standing between the user and losing their whole
+  // net-worth position on a new phone. It sits after `txn` because a transfer row
+  // references it.
+  'asset',
 ] as const;
 
 /**
@@ -149,6 +154,11 @@ export const NEVER_BACKED_UP: Record<string, string> = {
 const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>([
   'txn_approval', 'category_tombstone', 'person_group_trust', 'txn_dispute',
   'friend_request',
+  // A backup written before the asset register cannot contain assets — and it
+  // still carries `money.investments` in `settings`, which the one-time migration
+  // turns into an asset row on the next launch after the restore. So restoring
+  // one loses nothing.
+  'asset',
 ]);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];

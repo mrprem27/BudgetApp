@@ -9,6 +9,7 @@ import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
 import { applyPersona, type OnboardingIntent } from './personaDefaults';
 import { GROUP_COLORS } from '../constants/palette';
+import { insertAsset } from '../db/queries/assets';
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
 export type OnboardingData = {
@@ -142,8 +143,27 @@ export async function finalizeOnboarding(
     // reminded. The reminder itself still respects the OS permission.
     try { await setReminderPrefs({ backup: true }); } catch { /* best-effort */ }
 
-    // Opening money position (cash / investments / credit).
+    // Opening money position (cash / credit).
     try { await setMoneyProfile(db, data.money); } catch { /* best-effort */ }
+
+    /*
+     * Investments are a NAMED asset now, so the onboarding answer becomes the
+     * user's first asset rather than a number in `settings`.
+     *
+     * This is written separately and deliberately: `setMoneyProfile` no longer
+     * accepts `investments`, and because `data.money` is a variable rather than an
+     * object literal TypeScript does NOT flag the extra property — so without this
+     * the figure someone typed during setup would silently do nothing, and their
+     * net worth would open short by exactly that amount.
+     */
+    if (data.money.investments > 0) {
+      try {
+        await insertAsset(db, {
+          name: 'Investments', kind: 'investment', icon: 'trending-up',
+          balance: data.money.investments,
+        });
+      } catch { /* best-effort */ }
+    }
 
     // A capture default only: it seeds the Add screen's pay-method chip and never
     // touches the money model.

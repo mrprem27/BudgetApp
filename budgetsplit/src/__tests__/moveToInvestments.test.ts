@@ -67,10 +67,11 @@ describe('moveToInvestments', () => {
     const { db } = await setup();
     const before = await getMoneyProfile(asDb(db));
 
-    // Fail on the profile write — the second half, i.e. after the txn rows exist.
+    // Fail on the ASSET write — the second half, i.e. after the txn rows exist.
+    // (It used to be an INSERT INTO settings; the register owns that half now.)
     const real = db.runAsync.bind(db);
     jest.spyOn(db, 'runAsync').mockImplementation(async (sql: string, ...rest: unknown[]) => {
-      if (/INSERT INTO settings/.test(sql)) throw new Error('killed mid-write');
+      if (/UPDATE asset SET balance/.test(sql)) throw new Error('killed mid-write');
       return real(sql, ...(rest as never[]));
     });
 

@@ -4,12 +4,15 @@ import { openingTotal } from '../lib/cash';
 // `setMoneyProfile` touches only three db methods, so a KV fake exercises the real logic
 // without expo-sqlite. What is being pinned is which *timestamp* a write is allowed to move.
 
-function fakeDb(seed: Record<string, string> = {}) {
+function fakeDb(seed: Record<string, string> = {}, assetsTotal = 0) {
   const store = { ...seed };
   const db = {
     store,
     getAllAsync: async (_sql: string, keys: string[]) =>
       keys.filter(k => k in store).map(k => ({ key: k, value: store[k] })),
+    // `getMoneyProfile` derives `investments` from the asset register now
+    // (`getAssetsTotal`), so the stub has to answer that one aggregate too.
+    getFirstAsync: async (_sql: string) => ({ total: assetsTotal }),
     runAsync: async (_sql: string, [key, value]: [string, string]) => { store[key] = value; },
     withTransactionAsync: async (fn: () => Promise<void>) => { await fn(); },
   };
@@ -17,13 +20,18 @@ function fakeDb(seed: Record<string, string> = {}) {
 }
 
 describe('money profile timestamps', () => {
-  it('does not move the card baseline when only investments change', async () => {
+  it('does not move the card baseline when an unrelated figure changes', async () => {
     // The bug: one shared stamp served both "how stale are these figures" and "from when do
-    // we count card spend". Opening the Plan editor to update investments re-based the card
+    // we count card spend". Opening the Plan editor to update another figure re-based the card
     // window, so every card transaction since fell below it and `creditUsed` collapsed back
     // to the stored figure — net worth jumping overnight with nothing to explain it.
+    //
+    // The unrelated edit used to be `investments`; that is derived from the asset
+    // register now and is no longer writable here, so `openingBank` plays the part.
+    // The property under test is unchanged: only a write that INCLUDES creditUsed
+    // may move the baseline.
     const db = fakeDb();
-    await setMoneyProfile(db, { creditUsed: 20_000, investments: 100 });
+    await setMoneyProfile(db, { creditUsed: 20_000, openingBank: 100 });
     const first = await getMoneyProfile(db);
     expect(first.cardBaselineAt).not.toBeNull();
 
@@ -32,7 +40,7 @@ describe('money profile timestamps', () => {
     db.store['money.card_baseline_at'] = String(Number(db.store['money.card_baseline_at']) - 60_000);
     const before = await getMoneyProfile(db);
 
-    await setMoneyProfile(db, { investments: 500 });
+    await setMoneyProfile(db, { openingBank: 500 });
     const after = await getMoneyProfile(db);
 
     expect(after.cardBaselineAt).toBe(before.cardBaselineAt);   // the money-critical one
