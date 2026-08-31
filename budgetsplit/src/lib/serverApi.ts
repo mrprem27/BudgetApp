@@ -476,6 +476,22 @@ export async function publishSyncGroup(
   await sendAuthed('/sync/groups', { method: 'POST', json: { groupId, wraps } });
 }
 
+/**
+ * Hand MY OWN other devices the key to a group I am already in.
+ *
+ * A wrap is per device, and nothing used to create one for a device that showed
+ * up later — so a second phone, or a reinstall on the same one, saw every group
+ * listed as approved with `wrappedKey: null` and could never read a byte of it.
+ * The server refuses any wrap naming a device that is not mine.
+ */
+export async function pushSyncWraps(
+  groupId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
+): Promise<void> {
+  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/wraps`, {
+    method: 'POST', json: { wraps },
+  });
+}
+
 export async function inviteSyncMember(
   groupId: string, userId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
 ): Promise<void> {

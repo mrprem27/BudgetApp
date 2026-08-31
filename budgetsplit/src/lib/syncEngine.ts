@@ -16,7 +16,7 @@ import { deviceIdentity, deviceSecret, bindDeviceToAccount } from './deviceKey';
 import {
   getStoredSession,
   listSyncGroups, pullSyncEntries, pushSyncEntry, registerDevice, listDeviceKeys,
-  publishSyncGroup, inviteSyncMember, joinSyncGroup,
+  publishSyncGroup, inviteSyncMember, joinSyncGroup, pushSyncWraps,
   pushSyncDispute, pullSyncDisputes,
   ServerRequestError, serverConfigured, type SyncGroup,
 } from './serverApi';
@@ -140,6 +140,11 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
     const secret = await deviceSecret();
     if (!secret) return { ...NOTHING, skipped: 'no-device-key' };
 
+    // Before anything reads or writes: make sure my OTHER devices can open what
+    // this one can. A second phone or a reinstall otherwise sits on a list of
+    // approved groups it will never be able to read.
+    await rewrapForMyDevices(groups, await keyring(groups, secret)).catch(() => {});
+
     const vanished = await reconcileVanished(db, groups);
     await drainRosters(db, groups, secret);
     const push = await drain(db, groups, secret);
@@ -175,6 +180,39 @@ async function keyring(groups: SyncGroup[], secret: Uint8Array): Promise<Map<str
     if (key) keys.set(g.id, key);
   }
   return keys;
+}
+
+/**
+ * Give my other devices the key to every group this one can open.
+ *
+ * A wrap is made per DEVICE, deliberately — a key wrapped to a person cannot be
+ * opened by their second phone. But nothing ever created one for a device that
+ * appeared later, so signing in on a new phone, or reinstalling on this one,
+ * produced a device id with no wraps at all: every group came back `approved` with
+ * `wrappedKey: null` and stayed unreadable forever. The only escape was for another
+ * member to re-share, which used to mint a fresh key and break everyone else.
+ *
+ * Runs on every sync and is normally a no-op — a device that already has its wrap
+ * costs one comparison. Best-effort: this is a repair, and failing it must never
+ * stop the sync that follows.
+ */
+async function rewrapForMyDevices(groups: SyncGroup[], keys: Map<string, Uint8Array>): Promise<void> {
+  const openable = groups.filter(g => keys.has(g.id));
+  if (openable.length === 0) return;
+
+  const devices = await listDeviceKeys();
+  if (devices.length < 2) return;   // nothing to catch up
+
+  for (const g of openable) {
+    const key = keys.get(g.id)!;
+    // Which of my devices lack a wrap for this group is not something the server
+    // will tell me — `listSyncGroups` answers only for the calling device. So wrap
+    // for all of them and let the upsert absorb the ones already there.
+    const wraps = await Promise.all(
+      devices.map(async d => ({ deviceId: d.deviceId, wrappedKey: await wrapGroupKey(key, d.publicKey) })),
+    );
+    await pushSyncWraps(g.id, wraps).catch(() => {});
+  }
 }
 
 /**
@@ -301,9 +339,17 @@ async function drainRosters(
       if (e instanceof ServerRequestError && e.status === 409) {
         const current = (e.detail?.current as { version?: number } | undefined)?.version;
         if (typeof current === 'number') await setRosterVersion(db, groupId, current);
+        // Carry on to the next group. A 409 is a fact about THIS group's roster —
+        // somebody else published one — and nothing about it says the next group's
+        // roster cannot go. Breaking here meant one stale version stalled every
+        // other dirty roster in the same sync. The ordering rule that makes the
+        // entry drain stop on failure is about a person arriving before the entry
+        // that names them, which is within one group; rosters for different groups
+        // are independent.
+        continue;
       }
-      // Stop rather than skip, like every other drain: ordering is what keeps a
-      // person arriving before the entry that names them.
+      // Anything else is almost certainly the connection, and the rest of the
+      // batch will fail the same way. Stop.
       break;
     }
   }
@@ -456,7 +502,7 @@ const MAX_PULL_PAGES = 5;
 
 export type ShareResult =
   | { ok: true; devices: number }
-  | { ok: false; reason: 'not-signed-in' | 'no-device-key' | 'not-linked' | 'no-devices' | 'not-allowed' | 'failed' };
+  | { ok: false; reason: 'not-signed-in' | 'no-device-key' | 'not-linked' | 'no-devices' | 'not-allowed' | 'no-key' | 'failed' };
 
 /**
  * Share a group with someone: publish it, and hand them the key.
@@ -513,7 +559,34 @@ export async function shareGroup(
      */
     if (theirs.length === 0) return { ok: false, reason: 'no-devices' };
 
-    const key = await newGroupKey();
+    /*
+     * REUSE the group's key. Minting one per share is what broke sharing with a
+     * second person.
+     *
+     * This called `newGroupKey()` unconditionally, and the server's publish
+     * returns early for a group it already has WITHOUT re-wrapping. So: share with
+     * A under K1 and every entry is sealed with K1; share with B, mint K2, the
+     * publish is a no-op so my own wraps stay K1, and B is handed K2 — a key that
+     * opens nothing that exists. B saw a group and never a single entry, forever,
+     * and nothing said so.
+     *
+     * A group already on the server that this device cannot open is refused rather
+     * than re-keyed. Re-keying would leave every entry already up there sealed with
+     * a key nobody holds any more — unrecoverable, because the old one only ever
+     * lived in one device's memory.
+     */
+    const published = (await listSyncGroups(identity.deviceId)).find(g => g.id === groupId);
+    let key: Uint8Array;
+    if (published) {
+      const secret = await deviceSecret();
+      if (!secret || !published.wrappedKey) return { ok: false, reason: 'no-key' };
+      const existing = await unwrapGroupKey(published.wrappedKey, secret).catch(() => null);
+      if (!existing) return { ok: false, reason: 'no-key' };
+      key = existing;
+    } else {
+      key = await newGroupKey();
+    }
+
     const wrapsFor = async (devices: typeof mine) => Promise.all(
       devices.map(async d => ({ deviceId: d.deviceId, wrappedKey: await wrapGroupKey(key, d.publicKey) })),
     );

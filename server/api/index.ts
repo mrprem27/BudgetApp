@@ -196,6 +196,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!id || id.includes('/')) return notFound('No such group');
     return inviteSyncMember(request, env, id);
   }
+  if (path.startsWith('/sync/groups/') && path.endsWith('/wraps')) {
+    if (method !== 'POST') return methodNotAllowed('POST');
+    const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/wraps'.length));
+    if (!id || id.includes('/')) return notFound('No such group');
+    return addSyncWraps(request, env, id);
+  }
   if (path.startsWith('/sync/groups/') && path.endsWith('/join')) {
     if (method !== 'POST') return methodNotAllowed('POST');
     const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/join'.length));
@@ -977,6 +983,22 @@ async function publishSyncGroup(request: Request, env: Env): Promise<Response> {
     // Someone else's group under an id we happen to share is not ours to take
     // over. Local uuids collide only by accident or on purpose; both answer 403.
     if (existing.owner_user !== auth.user.id) return forbidden('That group id belongs to another account');
+    /*
+     * Idempotent, but NOT a no-op: the wraps still land.
+     *
+     * Returning here without running them was half of why sharing a group with a
+     * second person was broken. The owner re-shares, sends wraps for their own
+     * devices, and this dropped them on the floor — so a second phone, or a
+     * reinstalled one, could never be given the key it was just handed, and the
+     * client had no way to tell that from success.
+     *
+     * `wrapStatements` upserts and refuses any wrap aimed at a device that is not
+     * theirs, so re-sending the same wrap is free and sending someone else's is
+     * still refused.
+     */
+    const again = await wrapStatements(env, groupId, auth.user.id, body.wraps, Date.now());
+    if (typeof again === 'string') return badRequest(again);
+    if (again.length > 0) await env.DB.batch(again);
     return json({ group: { id: groupId, owner: auth.user.id } });
   }
 
@@ -1003,6 +1025,41 @@ async function publishSyncGroup(request: Request, env: Env): Promise<Response> {
 
   await env.DB.batch(statements);
   return json({ group: { id: groupId, owner: auth.user.id } }, 201);
+}
+
+/**
+ * `{ wraps }` → give MY OWN devices the key to a group I am already in.
+ *
+ * The hole this closes: a wrap is made per DEVICE, and nothing anywhere created
+ * one for a device that appeared later. Sign in on a second phone, or reinstall on
+ * the same one, and `listSyncGroups` returns every group with `wrappedKey: null`
+ * — forever. The group is listed, is approved, and cannot be read, and the only
+ * escape was for another member to re-share it, which (before this change) minted
+ * a new key and broke everyone else instead.
+ *
+ * The key never reaches this Worker. A device that can already open the group
+ * wraps it for the caller's other devices and posts the results.
+ *
+ * `wrapStatements` is what keeps this safe, and it is the same function the
+ * publish and invite paths use: a wrap naming a device that is not the caller's is
+ * refused. So the worst this can do is give me access I already have.
+ */
+async function addSyncWraps(request: Request, env: Env, groupId: string): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (!auth) return unauthorized();
+  const body = await parseJsonObject(request);
+  if (!body) return badRequest('Invalid JSON body');
+
+  // Membership, not ownership: anyone in the group holds the key already, so
+  // there is nothing here an approved member could learn that they could not.
+  if (!(await approvedMember(env, groupId, auth.user.id))) {
+    return forbidden('You are not a member of that group');
+  }
+
+  const statements = await wrapStatements(env, groupId, auth.user.id, body.wraps, Date.now());
+  if (typeof statements === 'string') return badRequest(statements);
+  if (statements.length > 0) await env.DB.batch(statements);
+  return json({ wraps: statements.length });
 }
 
 /**

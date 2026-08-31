@@ -50,10 +50,28 @@ export async function readAllTables(db: SQLite.SQLiteDatabase): Promise<BackupTa
  * `UNIQUE(name, kind)`, and `applyOneTimeFixes` throwing takes the whole app to
  * the "Couldn't start BudgetSplit" screen, permanently.
  *
- * Prefix-matched rather than an exact list so a new `fix_*` cannot be forgotten.
+ * `sync.` is the second family, for a different reason: those keys describe THIS
+ * device's conversation with the server — the pull cursor per group, and the
+ * roster version the server last accepted. They are not user data and they do not
+ * belong to a backup.
+ *
+ * The cursor is the one that loses data, and it loses it silently. Restore device
+ * A's backup onto device B and B inherits A's pull position — so every entry
+ * between B's real position and A's is fetched by nobody: it is behind the cursor
+ * from the first sync onwards and never comes back. Pulling from too FAR BACK is
+ * harmless by comparison, because every ingest is idempotent and answers `stale`.
+ * Asymmetric, so take the cheap side and start from nothing.
+ *
+ * A restored roster version is milder: it collides at a number the server has
+ * already used, and `drainRosters` records the version the 409 reports and leaves
+ * the group dirty, so the next sync lands. One wasted round trip, not a permanent
+ * state — but still not something a backup should be carrying.
+ *
+ * Prefix-matched rather than an exact list so a new `fix_*` or `sync.*` cannot be
+ * forgotten.
  */
 function isDeviceOnlySetting(key: string): boolean {
-  return key.startsWith('fix_') || key === 'category_global_v1';
+  return key.startsWith('fix_') || key.startsWith('sync.') || key === 'category_global_v1';
 }
 
 export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: BackupTables): Promise<void> {
