@@ -29,6 +29,18 @@ export type BudgetGroup = {
   created_at: number;
   /** Immutable creator. Always an admin; can never be removed or demoted. */
   created_by: string | null;
+  /** Set when this group ended for everyone. See `deleteGroup`. */
+  deleted_at: number | null;
+  /**
+   * The friend this group IS, when it was created implicitly for splitting with
+   * one person. Null for every ordinary group.
+   *
+   * **Presentational only.** The Groups tab and the destination picker hide these
+   * because the person's own screen already shows everything about them — but no
+   * balance, settle or sync query may filter on it. A pair group is a shared group
+   * in every respect that touches money.
+   */
+  pair_person_id: string | null;
 };
 
 import type { SplitMode, GroupRole } from '../../constants/enums';
@@ -101,6 +113,25 @@ export function personalGroupOf(groups: BudgetGroup[]): BudgetGroup | null {
  */
 export function sharedGroupsOf(groups: BudgetGroup[]): BudgetGroup[] {
   return groups.filter(g => g.is_personal !== 1);
+}
+
+/**
+ * The groups a LIST should show: everything except the implicit two-person groups
+ * created for splitting with one friend.
+ *
+ * **Presentational, and nothing more.** A pair group is a shared group in every
+ * respect that touches money — it is in `getAllGroups`, in every balance, in
+ * every sync path — and it is hidden here only because the person's own screen
+ * already shows all of it: the net, the per-group breakdown and every shared
+ * transaction. Showing it twice would make the Groups tab a list of contacts.
+ *
+ * Deliberately a helper over an in-hand list rather than a clause in
+ * `getAllGroups`. In the query it would have silently removed those groups from
+ * balances, budgets and settle-up, which is the one thing this must never do:
+ * money would go into a group that no figure counted.
+ */
+export function listableGroups(groups: BudgetGroup[]): BudgetGroup[] {
+  return groups.filter(g => g.pair_person_id == null);
 }
 
 /** What a breakdown needs to name and colour one slice of spend. */
@@ -197,7 +228,19 @@ export async function insertGroup(
     // no longer seed their own copies.
   });
 
-  return { id, name, icon, color, carry_over: 0, is_shared: 0, is_archived: 0, is_personal: 0, simplify_debt: 1, default_split: defaultSplit, created_at: now, created_by: creator };
+  /*
+   * Read back, not hand-assembled.
+   *
+   * This used to return a literal whose `is_personal` and `simplify_debt` were
+   * copies of column DEFAULTS the INSERT above never names. That is a value that
+   * is true until somebody changes a default, and then quietly is not — and it
+   * meant adding a column obliged every caller of this function to be re-checked.
+   */
+  const created = await db.getFirstAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE id = ?', [id],
+  );
+  if (!created) throw new Error('Group was not created');
+  return created;
 }
 
 export async function setSimplifyDebt(
@@ -361,6 +404,74 @@ export async function deleteGroup(
   // files it must unlink, and "none" is the honest answer rather than a changed
   // signature at every call site.
   return { ok: true, orphanedAttachments: [] };
+}
+
+/**
+ * The two-person group for splitting with one friend, made on first use.
+ *
+ * ## Why this exists
+ *
+ * Only shared groups sync — enforced inside `queueEntry`'s own SQL — so "I bought
+ * lunch, Aarav owes me half" had nowhere to live that could travel. It went into
+ * the Personal group and stopped there, which made the single most ordinary thing
+ * anyone does with a splitting app the one thing sync could not carry.
+ *
+ * ## Why a group rather than a new kind of thing
+ *
+ * `txn.group_id` is NOT NULL, `getFriendBalances` joins `group_member` twice,
+ * `computeTransferScopes` iterates groups and `simplify()` runs over a group's
+ * net. A friend-scoped sync primitive would therefore be a SECOND money model
+ * that has to agree with the first forever — and a figure that moves while the
+ * others do not is the failure AGENTS §13 calls worse than all of them moving.
+ *
+ * As an ordinary shared group this inherits the roster, the per-device key wrap,
+ * compare-and-set, the cursor, disputes, trust and approval, and adds no new sync
+ * machinery at all. It also survives the thing that always happens next: the first
+ * weekend away turns "me and Aarav" into "me, Aarav and Priya", which is
+ * `addMemberToGroup` rather than a data migration under a live balance.
+ *
+ * ## Lazily, on the first expense
+ *
+ * Never on adding a friend. A group per contact you have never split with is
+ * clutter, and clutter is what makes a list stop being trusted.
+ *
+ * Name, icon and colour are seeded from the person and then FROZEN. If the user
+ * edits the name it must stay edited, so this never re-derives them.
+ */
+export async function getOrCreatePairGroup(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  personId: string,
+): Promise<BudgetGroup> {
+  const existing = await db.getFirstAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE pair_person_id = ?', [personId],
+  );
+  // A pair group that was archived comes back rather than being duplicated —
+  // adding an expense with somebody is exactly the moment to un-hide it.
+  if (existing) {
+    if (existing.is_archived === 1 && existing.deleted_at == null) {
+      await db.runAsync('UPDATE budget_group SET is_archived = 0 WHERE id = ?', [existing.id]);
+      return { ...existing, is_archived: 0 };
+    }
+    return existing;
+  }
+
+  const person = await db.getFirstAsync<{ name: string; avatar_color: string }>(
+    'SELECT name, avatar_color FROM person WHERE id = ?', [personId],
+  );
+  if (!person) throw new Error('No such person');
+
+  /*
+   * Through `insertGroup`, never a hand-rolled INSERT.
+   *
+   * That function carries the creator/admin defaulting whose absence produced
+   * groups with no admin at all — nobody able to edit the budget or manage
+   * members, permanently, with no UI able to repair it. Its own doc calls a plain
+   * optional here "a footgun every caller stepped on".
+   */
+  const group = await insertGroup(db, person.name, 'users', person.avatar_color, [personId], 'equal', meId);
+  await db.runAsync('UPDATE budget_group SET pair_person_id = ? WHERE id = ?', [personId, group.id]);
+  return { ...group, pair_person_id: personId };
 }
 
 export type LeaveGroupResult =

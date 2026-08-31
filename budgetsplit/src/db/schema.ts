@@ -445,6 +445,25 @@ export const COLUMN_MIGRATIONS = [
   // gated on one. Backfilled below to the `is_me` person, which is true by
   // construction: every group on this device was created by you.
   "ALTER TABLE budget_group ADD COLUMN created_by TEXT",
+  // The friend this group IS, for a two-person group created implicitly on the
+  // first expense you split with somebody outside any group.
+  //
+  // Only shared groups sync -- enforced inside queueEntry's SQL -- so before this
+  // existed, "I bought lunch, Aarav owes me half" had nowhere to live that could
+  // travel. It went in the Personal group and stopped there, which made the most
+  // ordinary thing anyone does with a splitting app the one thing sync could not
+  // carry.
+  //
+  // A pair group is an ordinary shared group in every respect: same roster, same
+  // key wrap, same versioning, same cursor, same trust and approval. That is the
+  // reason for this shape rather than a friend-scoped sync primitive -- txn.group_id
+  // is NOT NULL and every balance is group-keyed, so the alternative is a second
+  // money model that has to agree with the first forever.
+  //
+  // Presentational only: the Groups tab and the destination picker hide these, and
+  // the person screen already shows everything about them. No balance query may
+  // filter on it.
+  "ALTER TABLE budget_group ADD COLUMN pair_person_id TEXT REFERENCES person(id)",
   // Per-member role: 'admin' or 'member'. There is no separate 'owner' role — the
   // creator is identified by `budget_group.created_by`, is always treated as an
   // admin, and cannot be demoted or removed by anyone. Keeping creator-ness out of
@@ -812,6 +831,11 @@ export const INDEXES = `
     -- linked account, so almost every value stays NULL.
     CREATE UNIQUE INDEX IF NOT EXISTS idx_person_remote_uid
       ON person(remote_uid) WHERE remote_uid IS NOT NULL;
+    -- One pair group per person. Partial so NULLs stay distinct, the same
+    -- construction as idx_person_remote_uid above -- without it every ordinary
+    -- group would collide on NULL and only one could exist.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_group_pair
+      ON budget_group(pair_person_id) WHERE pair_person_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_txn_group_date ON txn(group_id, date);
     CREATE INDEX IF NOT EXISTS idx_txn_parent     ON txn(parent_recur_id);
     CREATE INDEX IF NOT EXISTS idx_txn_recurring  ON txn(group_id, recur_state) WHERE recur_freq IS NOT NULL;

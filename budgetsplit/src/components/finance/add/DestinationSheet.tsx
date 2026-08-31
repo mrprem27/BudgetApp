@@ -6,6 +6,8 @@ import { Card } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
 import { Divider } from '../../ui/Divider';
 import { IconCircle } from '../../ui/IconCircle';
+import { SectionHeader } from '../../ui/SectionHeader';
+import { MemberAvatar } from '../MemberAvatar';
 import { asFeather } from '../../../constants/palette';
 import { colors, layout } from '../../tokens';
 import type { BudgetGroup } from '../../../db/queries/groups';
@@ -17,6 +19,18 @@ type Props = {
   groups: BudgetGroup[];
   selectedId: string;
   onSelect: (id: string) => void;
+  /**
+   * People you can split with directly, without a group.
+   *
+   * Picking one creates their two-person group on first use — see
+   * `getOrCreatePairGroup`. That is the only way a 1:1 split can travel at all,
+   * because only shared groups sync, so before this the most ordinary thing
+   * anybody does with a splitting app went into Personal and stopped there.
+   */
+  people?: Array<{ id: string; name: string; avatar_color: string }>;
+  onSelectPerson?: (personId: string) => void;
+  /** The pair group currently selected, so their row shows the check. */
+  selectedPersonId?: string | null;
   /** Tint for the selected check — the screen's kind colour, so the sheet agrees
    *  with the form behind it instead of hardcoding the expense accent. */
   accent?: string;
@@ -30,7 +44,10 @@ type Props = {
  * so they can actually be hit — the pills this replaces were ~32pt with no
  * hitSlop, well under AGENTS.md §6.
  */
-export function DestinationSheet({ visible, onClose, groups, selectedId, onSelect, accent = colors.accent }: Props) {
+export function DestinationSheet({
+  visible, onClose, groups, selectedId, onSelect,
+  people = [], onSelectPerson, selectedPersonId, accent = colors.accent,
+}: Props) {
   return (
     <SheetModal visible={visible} onClose={onClose} title="Where does this go?">
       <Card clip>
@@ -53,6 +70,37 @@ export function DestinationSheet({ visible, onClose, groups, selectedId, onSelec
           );
         })}
       </Card>
+
+      {/*
+        People, under the groups and labelled, because "just the two of us" is a
+        different question from "which group". Their pair group is made on the
+        first expense, so this list is contacts rather than a second list of
+        groups you never created.
+      */}
+      {people.length > 0 && onSelectPerson && (
+        <>
+          <SectionHeader title="Just with someone" />
+          <Card clip>
+            {people.map((p, i) => {
+              const active = p.id === selectedPersonId;
+              return (
+                <View key={p.id}>
+                  {i > 0 && <Divider indent="text" />}
+                  <ListRow
+                    leading={<MemberAvatar name={p.name} color={p.avatar_color} size={layout.iconCircle} />}
+                    title={p.name}
+                    value={active ? <Feather name="check" size={18} color={accent} /> : undefined}
+                    chevron={false}
+                    selected={active}
+                    onPress={() => { onClose(); if (!active) onSelectPerson(p.id); }}
+                    accessibilityLabel={`Split with ${p.name}`}
+                  />
+                </View>
+              );
+            })}
+          </Card>
+        </>
+      )}
     </SheetModal>
   );
 }

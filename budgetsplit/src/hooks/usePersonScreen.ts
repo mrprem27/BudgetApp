@@ -10,6 +10,7 @@ import { settleRhythmDays, settleRhythmLabel, isReceivableStale } from '../lib/s
 import { appliesImmediately } from '../lib/trust';
 import { getGroupTrustFor, setGroupTrust } from '../db/queries/persons';
 import { getSharedGroupsWith } from '../db/queries/groups';
+import { groupSyncStatuses, describeSyncStatus } from '../lib/groupSyncStatus';
 import { confirmAsync } from '../lib/confirm';
 import { asReceivableState, asTrustState } from '../constants/enums';
 import { haptic } from '../lib/haptics';
@@ -29,17 +30,28 @@ export function usePersonScreen(personId: string) {
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
     async (db) => {
       if (!me) throw new Error('No current user');
-      const [person, activity, balances, scopes, shared, overrides] = await Promise.all([
+      const [person, activity, balances, scopes, shared, overrides, statuses] = await Promise.all([
         getPersonById(db, personId),
         getSharedActivityWith(db, me.id, personId),
         getFriendBalances(db, me.id),
         computeTransferScopes(db, me.id, personId),
         getSharedGroupsWith(db, me.id, personId),
         getGroupTrustFor(db, personId),
+        groupSyncStatuses(db),
       ]);
+      /*
+       * The one sentence about what is waiting to reach THEM.
+       *
+       * Only for a group that is actually held — `sending` is the ordinary state
+       * and saying so on every screen would be noise. Scoped to the groups we
+       * share, so somebody else's stuck group is not reported here.
+       */
+      const sharedIds = new Set(shared.map(g => g.id));
+      const held = statuses.find(s => sharedIds.has(s.groupId) && s.state !== 'sending');
       return {
         person,
         activity,
+        syncNote: held && person ? describeSyncStatus(held, person.name) : null,
         // `getFriendBalances` returns everyone sharing a group, settled ones included,
         // so a missing row means we share no group rather than "balance zero".
         net: balances.find(b => b.personId === personId)?.net ?? 0,
@@ -143,6 +155,8 @@ export function usePersonScreen(personId: string) {
     trustState, trustIsLive, trustApplies, toggleTrusted,
     /** Groups we both belong to, and any per-group answer I have set. */
     sharedGroups: data?.shared ?? [],
+    /** What is waiting to reach them, when anything is. Never "not synced". */
+    syncNote: data?.syncNote ?? null,
     groupTrust: data?.overrides ?? new Map<string, string>(),
     setGroupTrustFor,
     loading, error, refreshing, onRefresh, reload,

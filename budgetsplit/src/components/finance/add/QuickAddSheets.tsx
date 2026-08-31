@@ -60,6 +60,11 @@ export function QuickAddSheets({
         groups={f.pickerGroups}
         selectedId={f.selectedGroupId}
         onSelect={f.selectGroup}
+        // Splitting with one person, no group involved. Their two-person group is
+        // created on the first expense — see `getOrCreatePairGroup`.
+        people={f.allPersons.filter(p => p.is_me !== 1)}
+        onSelectPerson={f.selectPerson}
+        selectedPersonId={f.selectedGroup?.pair_person_id ?? null}
         accent={accent}
       />
 

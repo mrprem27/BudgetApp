@@ -36,7 +36,7 @@ export default function PersonScreen() {
   const bottomPad = useContentInset({});
   const {
     me, person, activity, sections, net, scopes, rhythm,
-    receivableState, suggestWriteOff, toggleWrittenOff,
+    receivableState, suggestWriteOff, toggleWrittenOff, syncNote,
     trustState, trustIsLive, trustApplies, toggleTrusted,
     sharedGroups, groupTrust, setGroupTrustFor,
     loading, error, refreshing, onRefresh, reload,
@@ -136,6 +136,15 @@ export default function PersonScreen() {
               {suggestWriteOff && (
                 <Text style={styles.stale}>Quiet for longer than usual — still expecting this back?</Text>
               )}
+
+              {/*
+                What is waiting to reach them, and why.
+
+                Never "not synced" — the entries ARE recorded and already count in
+                every figure on this screen. What is unresolved is the other
+                person, and that is what this says.
+              */}
+              {syncNote && <Text style={styles.stale}>{syncNote}</Text>}
 
               {(net > 0 || receivableState === 'written_off') && (
                 <SecondaryButton

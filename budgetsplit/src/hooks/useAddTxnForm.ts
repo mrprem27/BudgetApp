@@ -7,7 +7,9 @@ import { settings } from '../lib/settings';
 import { matchCategory } from '../lib/smartCategory';
 import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../lib/smartCategoryLearn';
 import { DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
-import { getAllGroups, getGroupById, getGroupsByRecentUse } from '../db/queries/groups';
+import {
+  getAllGroups, getGroupById, getGroupsByRecentUse, getOrCreatePairGroup, listableGroups,
+} from '../db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
@@ -480,6 +482,21 @@ export function useAddTxnForm(params: AddTxnParams) {
     }
   }
 
+  /**
+   * Split with one person, with no group involved.
+   *
+   * Creates their two-person group on first use and selects it, which is what
+   * makes "I bought lunch, Aarav owes me half" something that can travel at all —
+   * only shared groups sync, so before this it went into Personal and stopped
+   * there. Nothing else about the Add screen changes: from here it is an ordinary
+   * shared group.
+   */
+  async function selectPerson(personId: string) {
+    if (!me) return;
+    const group = await getOrCreatePairGroup(db, me.id, personId);
+    await selectGroup(group.id);
+  }
+
   async function selectGroup(gid: string) {
     if (gid === selectedGroupId) return;
     setSelectedGroupId(gid);
@@ -763,9 +780,15 @@ export function useAddTxnForm(params: AddTxnParams) {
     isEditing, isRecurEdit, flags, saving,
     // core
     kind, onSelectKind, amountText, setAmountText, total,
-    groups, selectedGroupId, setSelectedGroupId, selectGroup, loadGroup, me,
-    /** Recency-ordered, for the destination picker. Falls back to store order. */
-    pickerGroups: pickerGroups.length ? pickerGroups : groups,
+    groups, selectedGroupId, setSelectedGroupId, selectGroup, selectPerson, loadGroup, me,
+    /**
+     * Recency-ordered, for the destination picker. Falls back to store order.
+     *
+     * Pair groups are filtered out because the picker offers PEOPLE separately —
+     * listing both would show the same friend twice, once as themselves and once
+     * as a group named after them.
+     */
+    pickerGroups: listableGroups(pickerGroups.length ? pickerGroups : groups),
     selectedGroup: groups.find(g => g.id === selectedGroupId) ?? null,
     categories, setCategories, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
     /** Merchant→category corrections the user has made. Exposed so voice entry inherits

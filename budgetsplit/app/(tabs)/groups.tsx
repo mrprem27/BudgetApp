@@ -12,7 +12,7 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../../src/th
 import { useStore } from '../../src/store';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, type SplitMode } from '../../src/db/queries/groups';
+import { insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, listableGroups, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
@@ -46,7 +46,10 @@ export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   // Groups come from the global store — hydrated at the root by StoreHydrator and
   // refreshed on the data-change signal, so this screen neither queries nor sets them.
-  const groups = useStore(s => s.groups);
+  // `listableGroups` hides the implicit two-person groups made for splitting with
+  // one friend. Presentational only — they are still in the store, still in every
+  // balance and still syncing; the person's own screen is where they are shown.
+  const groups = listableGroups(useStore(s => s.groups));
   const { refresh } = useDataRefresh();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
@@ -100,7 +103,9 @@ export default function GroupsScreen() {
     };
   }, [groups]);
 
-  const archived: BudgetGroup[] = data?.archived ?? [];
+  // Same rule as the active list: a pair group that was archived is still that
+  // person's, and belongs on their screen rather than in a list of groups.
+  const archived: BudgetGroup[] = listableGroups(data?.archived ?? []);
   const health: Record<string, GroupHealth> = data?.health ?? {};
   const memberMap: Record<string, Person[]> = data?.memberMap ?? {};
   const allPersons: Person[] = data?.allPersons ?? [];
