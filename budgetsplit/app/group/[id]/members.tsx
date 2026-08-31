@@ -272,7 +272,12 @@ export default function MembersScreen() {
           A personal group is never offered — it is the half of the app that must
           never leave the device.
         */}
-        {!isPersonal && (
+        {/*
+          Admins only, matching `canAddMember` — sharing IS letting someone in,
+          and it discloses every member's name and account to them. `shareGroup`
+          refuses it too; this only spares a member a button that can only say no.
+        */}
+        {!isPersonal && mayManage && (
           <ShareGroupRow groupId={groupId} members={members} onShared={reload} />
         )}
       </ScrollView>

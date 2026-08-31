@@ -450,6 +450,25 @@ export type RosterMember = {
   uid: string | null;
   name: string;
   color: string;
+  /**
+   * `'admin'` or `'member'`. Optional so a roster from an older build still opens;
+   * absent means `'member'`, which is what every adopted row used to become.
+   *
+   * Roles were device-local before this: `setMemberRole` wrote the row and told
+   * nobody, so promoting someone on one phone left them a plain member on every
+   * other. The shield toggle, `canChangeRole` and the whole admin/member
+   * distinction were one-device UI.
+   */
+  role?: string | null;
+  /**
+   * When this member left, or was removed. Absent means present.
+   *
+   * Carried rather than inferred from omission, because omission is
+   * indistinguishable from a roster that is simply stale — and `adoptGroup`
+   * cannot tell those apart. Backwards compatible for the same reason: an old
+   * roster has no field, so nobody is treated as removed.
+   */
+  removedAt?: number | null;
 };
 
 export type RosterDoc = {
@@ -457,6 +476,27 @@ export type RosterDoc = {
   icon: string;
   color: string;
   members: RosterMember[];
+  /**
+   * The creator's ACCOUNT id, so the receiver can resolve it to their own local
+   * row for that person.
+   *
+   * Without it an adopted group arrived with `created_by` NULL and every member
+   * at `'member'`, so `isCreator` and `isAdmin` were false for everybody: nobody
+   * could edit the budget, add or remove a member, change a role, or delete the
+   * group. Permanently — `fix_group_creator_roles_v2` exists to repair exactly
+   * that state, and it has been marked applied since first launch, so it never
+   * revisits.
+   */
+  createdBy?: string | null;
+  /**
+   * Group settings that change what the MONEY looks like, so they cannot stay on
+   * one device. `adoptGroup` used to hardcode `simplify_debt = 1` and
+   * `default_split = 'equal'`, so a group whose owner had turned Simplify off
+   * showed one set of settlement instructions on their phone and a different set
+   * on everyone else's — for the same ledger.
+   */
+  simplifyDebt?: number | null;
+  defaultSplit?: string | null;
 };
 
 /**
@@ -471,18 +511,42 @@ export async function readRosterDoc(
   db: SQLite.SQLiteDatabase,
   groupId: string,
 ): Promise<RosterDoc | null> {
-  const g = await db.getFirstAsync<{ name: string; icon: string; color: string }>(
-    'SELECT name, icon, color FROM budget_group WHERE id = ?', [groupId],
+  const g = await db.getFirstAsync<{
+    name: string; icon: string; color: string;
+    simplify_debt: number; default_split: string; created_by: string | null;
+  }>(
+    `SELECT name, icon, color, simplify_debt, default_split, created_by
+       FROM budget_group WHERE id = ?`,
+    [groupId],
   );
   if (!g) return null;
 
   const members = await db.getAllAsync<RosterMember>(
-    `SELECT p.id AS pid, p.remote_uid AS uid, p.name AS name, p.avatar_color AS color
+    `SELECT p.id AS pid, p.remote_uid AS uid, p.name AS name, p.avatar_color AS color, m.role AS role
        FROM group_member m JOIN person p ON p.id = m.person_id
       WHERE m.group_id = ?`,
     [groupId],
   );
-  return { name: g.name, icon: g.icon, color: g.color, members };
+
+  // The creator by ACCOUNT id, not by local person id — the receiver has its own
+  // id for that person and resolves it the same way it resolves everyone else.
+  // Null when the creator has no account, which is honest: the receiver then has
+  // nothing to bind it to and leaves `created_by` alone rather than guessing.
+  const creator = g.created_by
+    ? (await db.getFirstAsync<{ remote_uid: string | null }>(
+        'SELECT remote_uid FROM person WHERE id = ?', [g.created_by],
+      ))?.remote_uid ?? null
+    : null;
+
+  return {
+    name: g.name,
+    icon: g.icon,
+    color: g.color,
+    members,
+    createdBy: creator,
+    simplifyDebt: g.simplify_debt,
+    defaultSplit: g.default_split,
+  };
 }
 
 /** Someone on the roster who looks like someone this device already has. */
@@ -515,6 +579,21 @@ export type NameCollision = {
  *    that never reconcile — the same defect as F5 — and guessing right is not
  *    worth the times it does not.
  *
+ * ## It UPDATES, and that is the point of a living document
+ *
+ * This used to be `INSERT OR IGNORE` throughout, which made the whole republishing
+ * machinery a no-op after the first arrival. `updateGroup`, `updatePersonName`,
+ * `addMemberToGroup` and `removeMemberFromGroup` all correctly marked the roster
+ * dirty and `drainRosters` correctly sent a new version — and the receiver
+ * discarded every one of them. A rename never showed up, a recoloured group never
+ * changed, and **a removed member stayed a member forever on every other phone**,
+ * with `ingestPeerTxn` still happily accepting entries that named them.
+ *
+ * What it does NOT overwrite: the name and colour of a person whose local row I
+ * minted myself. They are mine — I added them, I named them, and a group I am in
+ * does not get to rename my contacts. Only rows living under the publisher's own
+ * id, which exist *because* a roster created them, follow their publisher.
+ *
  * Returns the collisions, for the caller to ask about.
  */
 export async function adoptGroup(
@@ -541,9 +620,22 @@ export async function adoptGroup(
       [groupId, doc.name, doc.icon, doc.color, Date.now()],
     );
 
+    // ...and then the version that keeps arriving. Only fields the publisher owns:
+    // `is_archived` is deliberately absent, because archiving is MY decision about
+    // my own list and nobody else's republish may undo it.
+    await db.runAsync(
+      `UPDATE budget_group
+          SET name = ?, icon = ?, color = ?,
+              simplify_debt = COALESCE(?, simplify_debt),
+              default_split = COALESCE(?, default_split)
+        WHERE id = ?`,
+      [doc.name, doc.icon, doc.color, doc.simplifyDebt ?? null, doc.defaultSplit ?? null, groupId],
+    );
+
     for (const m of doc.members) {
       const mine = m.uid ? byUid.get(m.uid) : undefined;
       const localId = mine ?? m.pid;
+      const role = m.role === 'admin' ? 'admin' : 'member';
 
       if (!mine && !haveId.has(m.pid)) {
         await db.runAsync(
@@ -551,14 +643,61 @@ export async function adoptGroup(
           [m.pid, m.name, m.color, m.uid],
         );
         haveId.add(m.pid);
+        // Keep the index current: the creator resolved below may be somebody this
+        // very loop just created, and a stale map would leave the group with no
+        // admin on exactly the first sync that could have given it one.
+        if (m.uid) byUid.set(m.uid, m.pid);
         // Same name, different row. Reported rather than resolved — see rule 3.
         const clash = existing.find(p => p.id !== m.pid && sameName(p.name, m.name));
         if (clash) collisions.push({ incomingId: m.pid, existingId: clash.id, name: m.name });
+      } else if (localId === m.pid) {
+        /*
+         * A row living under the PUBLISHER'S id exists only because a roster
+         * created it, so the publisher may rename it. Note this is the test, not
+         * `!mine`: an adopted row is given the member's `remote_uid` when it is
+         * created, so from the next sync onwards it resolves through rule 1 and
+         * would never be updated again — the rename would land exactly once, on
+         * the arrival that already had the right name.
+         *
+         * A row whose local id is my OWN uuid is mine: I added them and I named
+         * them, and a group I happen to be in does not get to rename my contacts.
+         */
+        await db.runAsync(
+          'UPDATE person SET name = ?, avatar_color = ? WHERE id = ?',
+          [m.name, m.color, m.pid],
+        );
+      }
+
+      if (m.removedAt != null) {
+        // They are out. Their ENTRIES stay — what someone spent is a fact about
+        // the past — and so does the person row, which other groups and their own
+        // history still reference.
+        await db.runAsync(
+          'DELETE FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, localId],
+        );
+        continue;
       }
 
       await db.runAsync(
-        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
-        [groupId, localId, Date.now(), 'member'],
+        `INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)
+         ON CONFLICT(group_id, person_id) DO UPDATE SET role = excluded.role`,
+        [groupId, localId, Date.now(), role],
+      );
+    }
+
+    /*
+     * The creator, resolved from their account id.
+     *
+     * Only ever set, never cleared: a roster published by a member whose device
+     * cannot resolve the creator (they have no account, or I have not matched
+     * them) carries null, and treating that as "no creator" would strip the admin
+     * this whole block exists to install.
+     */
+    const creatorLocalId = doc.createdBy ? byUid.get(doc.createdBy) ?? null : null;
+    if (creatorLocalId) {
+      await db.runAsync(
+        'UPDATE budget_group SET created_by = ? WHERE id = ? AND created_by IS NOT ?',
+        [creatorLocalId, groupId, creatorLocalId],
       );
     }
   });

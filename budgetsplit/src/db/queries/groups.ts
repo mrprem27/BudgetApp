@@ -189,6 +189,10 @@ export async function setSimplifyDebt(
   on: boolean,
 ): Promise<void> {
   await db.runAsync('UPDATE budget_group SET simplify_debt=? WHERE id=?', [on ? 1 : 0, groupId]);
+  // This decides what the SETTLE-UP INSTRUCTIONS look like — "pay Rohan ₹2,000"
+  // versus two smaller direct payments — so leaving it on one device means the
+  // group is told two different things about the same ledger.
+  await markRosterDirty(db, groupId);
 }
 
 export async function updateGroup(
@@ -372,6 +376,10 @@ export async function setMemberRole(
     'UPDATE group_member SET role = ? WHERE group_id = ? AND person_id = ?',
     [role, groupId, targetPersonId],
   );
+  // Roles travel on the roster. Without this, promoting somebody was a fact about
+  // one phone: they stayed a plain member everywhere else, and the shield toggle
+  // that appeared to grant it granted nothing.
+  await markRosterDirty(db, groupId);
 }
 
 

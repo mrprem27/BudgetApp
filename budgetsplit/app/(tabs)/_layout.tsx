@@ -53,41 +53,67 @@ function announceVanished(r: { vanished: string[] }) {
  * "Priya my flatmate" from "Priya from work" by name alone. Keeping them apart is
  * always recoverable; merging is not.
  *
- * One at a time, and only ever after a real answer.
+ * One at a time, and only ever after a real answer — but ALL of them.
+ *
+ * Only the first was ever asked about, and the rest were dropped on the floor and
+ * never came back: `adoptGroup` reports a clash only on the sync that CREATES the
+ * row, so on every later sync the rows already exist and `collisions` is empty. A
+ * trip group introducing a duplicate Priya, Rohan and Vikram asked about Priya
+ * and left the other two split across two rows each, permanently, with no UI
+ * anywhere that could merge them.
+ *
+ * Chained through the dismiss handler rather than stacked: two RN `<Alert>`s at
+ * once is the same "invisible view eats every touch" hazard `sheetStage` exists
+ * for, and three questions arriving in one breath is not a decision anyone makes
+ * carefully.
  */
+type Collision = { incomingId: string; existingId: string; name: string };
+
 function askAboutMerges(
   db: Parameters<typeof runSync>[0],
-  r: { collisions: Array<{ incomingId: string; existingId: string; name: string }> },
+  r: { collisions: Collision[] },
   refresh: () => void,
 ) {
-  const [first] = r.collisions;
-  if (!first) return;
-  Alert.alert(
-    `Two people called ${first.name}`,
-    `A shared group just introduced a ${first.name}, and you already have one. `
-    + 'Same person?\n\nIf you are not sure, keep them separate — you can merge later, '
-    + 'but a merge cannot be undone.',
-    [
-      { text: 'Keep separate', style: 'cancel' },
-      {
-        text: 'Same person',
-        onPress: () => {
-          mergePerson(db, first.incomingId, first.existingId)
-            .then(refresh)
-            // A merge can now REFUSE — two different accounts, or you as the
-            // one being folded away — and a refusal the user never sees looks
-            // exactly like a merge that worked. They tapped a one-way door and
-            // are owed the reason it did not open.
-            .catch((e: unknown) => {
-              Alert.alert(
-                "Couldn't merge them",
-                e instanceof Error ? e.message : 'Something went wrong. They have been kept separate.',
-              );
-            });
+  const queue = [...r.collisions];
+
+  const askNext = () => {
+    const next = queue.shift();
+    if (!next) return;
+    Alert.alert(
+      `Two people called ${next.name}`,
+      `A shared group just introduced a ${next.name}, and you already have one. `
+      + 'Same person?\n\nIf you are not sure, keep them separate — you can merge later, '
+      + 'but a merge cannot be undone.'
+      + (queue.length > 0 ? `\n\n${queue.length} more to check after this.` : ''),
+      [
+        { text: 'Keep separate', style: 'cancel', onPress: askNext },
+        {
+          text: 'Same person',
+          onPress: () => {
+            mergePerson(db, next.incomingId, next.existingId)
+              .then(() => { refresh(); askNext(); })
+              // A merge can now REFUSE — two different accounts, or you as the
+              // one being folded away — and a refusal the user never sees looks
+              // exactly like a merge that worked. They tapped a one-way door and
+              // are owed the reason it did not open.
+              //
+              // The next question waits for THIS alert to be dismissed. Firing it
+              // alongside would put two `<Alert>`s up at once, which on iOS leaves
+              // an invisible view that eats every touch.
+              .catch((e: unknown) => {
+                Alert.alert(
+                  "Couldn't merge them",
+                  e instanceof Error ? e.message : 'Something went wrong. They have been kept separate.',
+                  [{ text: 'OK', onPress: askNext }],
+                );
+              });
+          },
         },
-      },
-    ],
-  );
+      ],
+    );
+  };
+
+  askNext();
 }
 
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {

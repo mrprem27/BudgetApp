@@ -174,6 +174,8 @@ const REASON: Record<string, string> = {
   'not-linked': 'You are not linked with that person any more. Link again under Settings → Linked people.',
   'no-devices': 'They have an account but have not opened the app on a phone yet. '
     + 'Ask them to open BudgetSplit once, then try again.',
+  'not-allowed': 'Only an admin of this group can share it. Sharing lets someone in, '
+    + 'and it shows them everyone already here.',
   failed: 'Could not reach the server. Check your connection and try again.',
 };
 

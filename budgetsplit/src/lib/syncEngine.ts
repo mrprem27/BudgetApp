@@ -8,7 +8,9 @@ import {
   type EntryDoc, type RosterDoc, type NameCollision,
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
-import { claimMyAccount } from '../db/queries/persons';
+import { claimMyAccount, getMe } from '../db/queries/persons';
+import { getGroupContext } from '../db/queries/groups';
+import { canAddMember } from './permissions';
 import { sealEntry, openEntry, unwrapGroupKey, wrapGroupKey, newGroupKey } from './groupCrypto';
 import { deviceIdentity, deviceSecret, bindDeviceToAccount } from './deviceKey';
 import {
@@ -454,7 +456,7 @@ const MAX_PULL_PAGES = 5;
 
 export type ShareResult =
   | { ok: true; devices: number }
-  | { ok: false; reason: 'not-signed-in' | 'no-device-key' | 'not-linked' | 'no-devices' | 'failed' };
+  | { ok: false; reason: 'not-signed-in' | 'no-device-key' | 'not-linked' | 'no-devices' | 'not-allowed' | 'failed' };
 
 /**
  * Share a group with someone: publish it, and hand them the key.
@@ -478,6 +480,25 @@ export async function shareGroup(
   if (!serverConfigured()) return { ok: false, reason: 'not-signed-in' };
   const identity = await deviceIdentity().catch(() => null);
   if (!identity) return { ok: false, reason: 'no-device-key' };
+
+  /*
+   * Sharing IS granting membership, so it answers to the same permission.
+   *
+   * It was ungated, in the query layer and in the UI, while `canAddMember`
+   * refused a plain member from adding anybody — so the rule was enforced on the
+   * quiet local path and not on the one that publishes every member's name,
+   * colour and account id to a stranger's device. Whoever they invited then
+   * received the roster and every entry.
+   *
+   * Checked here rather than only in the row, because `permissions.ts` says it
+   * plainly: a screen hiding a button is a courtesy, the write path is the
+   * control.
+   */
+  const me = await getMe(db);
+  if (!me) return { ok: false, reason: 'not-signed-in' };
+  if (!canAddMember(await getGroupContext(db, groupId, me.id))) {
+    return { ok: false, reason: 'not-allowed' };
+  }
 
   try {
     const [mine, theirs] = await Promise.all([
