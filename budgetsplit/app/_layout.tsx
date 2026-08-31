@@ -10,7 +10,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { StatusBar } from 'expo-status-bar';
-import { openDB } from '../src/db/schema';
+import { openDB, applyConnectionPragmas } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/recurring';
@@ -31,7 +31,20 @@ import { StoreHydrator } from '../src/components/system/StoreHydrator';
 import { ToastProvider } from '../src/components/system/Toast';
 import { BrandedLoader } from '../src/components/system/BrandedLoader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { AppErrorBoundary } from '../src/components/system/AppErrorBoundary';
 import { isRestoring } from '../src/lib/restoreGuard';
+
+/**
+ * The last resort, and only that.
+ *
+ * `expo-router` wraps each route in its own `ErrorBoundary` export, so this one
+ * catches what no route boundary can: a throw inside the providers, the gates,
+ * or this layout itself. It replaces the navigator, which means Retry is the
+ * only way out and a crash on mount will loop — so screens that can plausibly
+ * throw should export their own instead of leaning on this. Still worth having:
+ * a message beats the white screen that every render throw produced before.
+ */
+export { AppErrorBoundary as ErrorBoundary };
 
 // Soft-deleted transactions older than this have long outlived the ~5s Undo
 // toast — their receipt photo is never coming back, so the reaper unlinks it.
@@ -166,7 +179,14 @@ export default function RootLayout() {
       */}
       <KeyboardProvider>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <SQLiteProvider databaseName="budgetsplit.db">
+        {/*
+          `onInit` because pragmas are PER CONNECTION, and this is the second
+          connection — the one every screen writes through. `openDB` sets the
+          same two on its own; without this the two disagreed about foreign-key
+          enforcement, which made the same delete succeed on one and fail on the
+          other. See `applyConnectionPragmas` for why the answer is OFF for now.
+        */}
+        <SQLiteProvider databaseName="budgetsplit.db" onInit={applyConnectionPragmas}>
           <FeatureFlagsProvider>
           <FlagsGate>
           <DataRefreshProvider>

@@ -22,6 +22,14 @@ import {
   setLinkPhoneSharing, removeLink,
   type ServerLink, type PendingClaim,
 } from '../../src/lib/serverApi';
+import { routeErrorBoundary } from '../../src/components/system/AppErrorBoundary';
+
+/**
+ * Route-level, so a throw here replaces this screen's content and leaves the
+ * stack, the header and the back gesture alive. This screen is the entry point
+ * to sharing a group, so being unable to leave it is being unable to sync.
+ */
+export const ErrorBoundary = routeErrorBoundary;
 
 /**
  * Who you're linked with, who's waiting on your approval, and what you're
@@ -50,9 +58,17 @@ export default function LinkedPeopleScreen() {
   /** The link currently being matched, if any. */
   const [matching, setMatching] = useState<ServerLink | null>(null);
 
-  /** Who this account is already bound to locally, by name. */
-  const boundName = (link: ServerLink) =>
-    people.find(p => p.remote_uid === link.person.id)?.name ?? null;
+  /**
+   * Who this account is already bound to locally, by name.
+   *
+   * Takes a nullable link because the match sheet's body is built on every
+   * render, including the renders where nothing is being matched. Passing a
+   * cast empty object instead read `link.person.id` off `undefined` — which
+   * `Array.find` hid for exactly as long as `people` was empty, so it crashed
+   * on the first render after the loader resolved for anyone with one contact.
+   */
+  const boundName = (link: ServerLink | null) =>
+    link ? people.find(p => p.remote_uid === link.person.id)?.name ?? null : null;
 
   const load = useCallback(async () => {
     setError(null);
@@ -369,7 +385,7 @@ export default function LinkedPeopleScreen() {
             </View>
           ))}
         </Card>
-        {boundName(matching ?? ({} as ServerLink)) && (
+        {boundName(matching) && (
           <SecondaryButton
             label="Unmatch"
             danger

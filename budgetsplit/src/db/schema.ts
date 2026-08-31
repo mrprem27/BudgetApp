@@ -674,8 +674,6 @@ export async function applyOneTimeFixes(
  * one (see `TXN_KIND_FOR_CATEGORY`).
  */
 export const CATEGORY_GLOBAL_V1_SQL = `
-  PRAGMA foreign_keys=OFF;
-  BEGIN TRANSACTION;
   CREATE TABLE category_g (
     id        TEXT PRIMARY KEY,
     group_id  TEXT REFERENCES budget_group(id),
@@ -690,8 +688,6 @@ export const CATEGORY_GLOBAL_V1_SQL = `
     SELECT id, NULL, name, icon, color, kind, section FROM category GROUP BY name, kind;
   DROP TABLE category;
   ALTER TABLE category_g RENAME TO category;
-  COMMIT;
-  PRAGMA foreign_keys=ON;
 `;
 
 /**
@@ -725,8 +721,6 @@ export async function applyCategoryGlobalMigration(
  * cannot be orphaned by the rebuild.
  */
 export const GOAL_PRIORITY_REVIVE_SQL = `
-  PRAGMA foreign_keys=OFF;
-  BEGIN TRANSACTION;
   CREATE TABLE savings_goal_new (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,
@@ -751,8 +745,6 @@ export const GOAL_PRIORITY_REVIVE_SQL = `
     FROM savings_goal;
   DROP TABLE savings_goal;
   ALTER TABLE savings_goal_new RENAME TO savings_goal;
-  COMMIT;
-  PRAGMA foreign_keys=ON;
 `;
 
 /**
@@ -816,15 +808,81 @@ export const INDEXES = `
     CREATE INDEX IF NOT EXISTS idx_txn_payment_person ON txn_payment(person_id);
 `;
 
+/**
+ * Foreign keys are OFF, on purpose, on **every** connection.
+ *
+ * `PRAGMA foreign_keys` is per-connection and defaults to OFF, and nothing used
+ * to set it — except the tail of each one-time rebuild below, which switched it
+ * ON and left it there. So the state after `openDB` depended on whether a
+ * migration happened to run on that launch, and the `SQLiteProvider` connection
+ * every screen writes through was always OFF. Same code, two behaviours, decided
+ * by migration history: `deleteGroup` succeeds on one connection and throws
+ * `FOREIGN KEY constraint failed` on the other.
+ *
+ * Choosing OFF rather than ON is deliberate and temporary. Several delete paths
+ * still orphan rows the constraints would refuse (`txn_approval` and
+ * `txn_dispute` survive `deleteGroup`; `mergePerson` leaves `created_by`
+ * dangling). Turning enforcement on before those are closed converts silent
+ * orphans into a delete that fails at the worst moment. Every `REFERENCES`
+ * clause in `SCHEMA` is therefore documentation today — believe the code, not
+ * the constraint. Flip this to ON once the delete paths are complete, and make
+ * that flip its own change so the fallout is attributable.
+ */
+export async function applyConnectionPragmas(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.execAsync('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=OFF;');
+}
+
+/**
+ * Run a one-time table rebuild so that failing leaves **nothing** behind.
+ *
+ * Every rebuild here is the same shape — build `X_new`, copy, drop `X`, rename —
+ * and each used to be one `execAsync` containing its own `BEGIN TRANSACTION` and
+ * `COMMIT`, with no `ROLLBACK` and a bare `catch` above it. `execAsync` stops at
+ * the first failing statement, so a failure part-way left two things behind: an
+ * **open transaction** on this connection for the rest of the process, and a
+ * half-built `X_new` in `sqlite_master`. The catch swallowed both.
+ *
+ * That compounds rather than degrades. Every later `BEGIN` on the same
+ * connection fails with "cannot start a transaction within a transaction", which
+ * takes out the remaining rebuilds, the one-time fixes, the category migration,
+ * and `seedIfNeeded`/`materializeDueOccurrences`/`runSavingsMaintenance` in the
+ * root layout. And on the *next* launch the same rebuild re-fires — its detection
+ * predicate is unchanged — and now dies immediately on "table X_new already
+ * exists". Permanently. Relaunching cannot repair it.
+ *
+ * Two things fix that: `withExclusiveTransactionAsync` rolls back on throw, and
+ * the scratch table is dropped first so a leftover from an earlier death cannot
+ * poison the retry. The `foreign_keys` pragma the old SQL toggled is gone — it is
+ * a no-op inside a transaction anyway, and `applyConnectionPragmas` now owns that
+ * setting for the whole connection.
+ */
+export async function rebuildTable(
+  db: SQLite.SQLiteDatabase,
+  scratchTable: string,
+  body: string,
+): Promise<void> {
+  await db.execAsync(`DROP TABLE IF EXISTS ${scratchTable};`);
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.execAsync(body);
+  });
+}
+
 export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('budgetsplit.db');
+  await applyConnectionPragmas(db);
   await db.execAsync(SCHEMA);
 
   for (const sql of COLUMN_MIGRATIONS) {
     try {
       await db.execAsync(sql);
-    } catch {
-      // Column already exists — safe to ignore.
+    } catch (e) {
+      // "Column already exists" is the expected outcome on every launch after
+      // the first, and the only one that is safe to ignore. Swallowing the rest
+      // is what turned a transient SQLITE_BUSY into a silent schema hole: the
+      // ALTER is skipped, and the very next rebuild names that column in its
+      // INSERT ... SELECT, so it dies too — see rebuildTable's note on how that
+      // compounds. Anything else must surface.
+      if (!/duplicate column name/i.test(String(e))) throw e;
     }
   }
 
@@ -845,9 +903,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
         + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,author_person_id,'
         + 'sync_version,is_deleted,created_at,updated_at';
-      await db.execAsync(`
-        PRAGMA foreign_keys=OFF;
-        BEGIN TRANSACTION;
+      await rebuildTable(db, 'txn_new', `
         CREATE TABLE txn_new (
           id             TEXT PRIMARY KEY,
           group_id       TEXT NOT NULL REFERENCES budget_group(id),
@@ -883,8 +939,6 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
         INSERT INTO txn_new (${cols}) SELECT ${cols} FROM txn;
         DROP TABLE txn;
         ALTER TABLE txn_new RENAME TO txn;
-        COMMIT;
-        PRAGMA foreign_keys=ON;
       `);
     }
   } catch {
@@ -900,12 +954,18 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='category'",
     );
     if (catDef && !catDef.sql.includes("'transfer'")) {
-      await db.execAsync(`
-        PRAGMA foreign_keys=OFF;
-        BEGIN TRANSACTION;
+      await rebuildTable(db, 'category_new', `
         CREATE TABLE category_new (
           id        TEXT PRIMARY KEY,
-          group_id  TEXT NOT NULL REFERENCES budget_group(id),
+          -- Nullable, unlike the table this replaces. A global category IS a row
+          -- with no group (Phase GC), and CATEGORY_GLOBAL_V1_SQL below is about
+          -- to write exactly that. Re-imposing NOT NULL here meant that if the
+          -- global migration then failed for any reason, the very next startup
+          -- step -- seedGlobalCategories, inserting group_id NULL -- threw
+          -- "NOT NULL constraint failed" out of openDB and into the
+          -- "Couldn't start BudgetSplit" screen, whose Retry re-ran the same
+          -- sequence. Unrecoverable, on data that was never damaged.
+          group_id  TEXT REFERENCES budget_group(id),
           name      TEXT NOT NULL,
           icon      TEXT,
           color     TEXT,
@@ -916,8 +976,6 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           SELECT id,group_id,name,icon,color,kind,section FROM category;
         DROP TABLE category;
         ALTER TABLE category_new RENAME TO category;
-        COMMIT;
-        PRAGMA foreign_keys=ON;
       `);
     }
   } catch {
@@ -935,9 +993,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='category_budget'",
     );
     if (cbDef && cbDef.sql.includes('UNIQUE')) {
-      await db.execAsync(`
-        PRAGMA foreign_keys=OFF;
-        BEGIN TRANSACTION;
+      await rebuildTable(db, 'category_budget_new', `
         CREATE TABLE category_budget_new (
           id        TEXT PRIMARY KEY,
           group_id  TEXT NOT NULL REFERENCES budget_group(id),
@@ -951,8 +1007,6 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           SELECT id,group_id,category,period,amount,cadence,person_id FROM category_budget;
         DROP TABLE category_budget;
         ALTER TABLE category_budget_new RENAME TO category_budget;
-        COMMIT;
-        PRAGMA foreign_keys=ON;
       `);
     }
   } catch {
@@ -968,7 +1022,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       async () => (await db.getFirstAsync<{ sql: string }>(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='savings_goal'",
       ))?.sql ?? null,
-      (sql) => db.execAsync(sql),
+      (sql) => rebuildTable(db, 'savings_goal_new', sql),
     );
   } catch {
     // Leave the old table intact if the rebuild fails; goals keep their stale
@@ -1017,7 +1071,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
   try {
     await applyCategoryGlobalMigration(
       async () => !!(await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key='category_global_v1'")),
-      (sql) => db.execAsync(sql),
+      (sql) => rebuildTable(db, 'category_g', sql),
       () => db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES ('category_global_v1', '1')").then(() => undefined),
     );
   } catch {
@@ -1026,7 +1080,20 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
 
   // Ensure the global catalog contains every default category (idempotent).
   // This is the ONLY category seeding — groups/demo never make their own copies.
-  await seedGlobalCategories(db);
+  //
+  // Guarded like every step above it, and it was the one that was not. It writes
+  // `group_id NULL`, so it is the step that fails when the category table still
+  // carries a NOT NULL on that column — i.e. exactly when the global migration
+  // just above did not complete. An unguarded throw here leaves `openDB`
+  // rejecting, which `_layout.tsx` renders as "Couldn't start BudgetSplit" with a
+  // Retry that re-runs the identical failure. Missing seed categories is a bad
+  // afternoon; an app that cannot open is the end of the story.
+  try {
+    await seedGlobalCategories(db);
+  } catch {
+    // Catalog stays as it is. The user's own categories and every transaction
+    // are untouched, and the app opens.
+  }
 
   // Backfill the section column per kind so a name shared across kinds (e.g.
   // 'Rent', 'Other') lands in the right section for its own kind.
@@ -1040,11 +1107,17 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       );
     }
   };
-  await backfillSections('expense', CATEGORY_SECTIONS);
-  await backfillSections('income', INCOME_SECTIONS);
-  await backfillSections('transfer', TRANSFER_SECTIONS);
-  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='income'");
-  await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='transfer'");
+  // Guarded for the same reason as the seed above: cosmetic grouping is not
+  // worth an app that will not open.
+  try {
+    await backfillSections('expense', CATEGORY_SECTIONS);
+    await backfillSections('income', INCOME_SECTIONS);
+    await backfillSections('transfer', TRANSFER_SECTIONS);
+    await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='income'");
+    await db.runAsync("UPDATE category SET section='Other' WHERE section IS NULL AND kind='transfer'");
+  } catch {
+    // Categories keep whatever section they already had, including none.
+  }
 
   return db;
 }

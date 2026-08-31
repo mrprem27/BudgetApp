@@ -14,6 +14,20 @@ import {
   canReadCipher,
 } from '../lib/backup';
 
+/**
+ * These tests run the REAL key derivation — `KDF_ITERATIONS` is 50,000, and
+ * `pbkdf2Sha256` yields to the event loop between blocks so it cannot freeze a
+ * screen. Several tests derive two keys, which on a loaded machine is comfortably
+ * past Jest's 5s default, and it failed on a *different* test each run: the
+ * signature of a timeout, not a defect.
+ *
+ * Raised here rather than globally, and the cost is not stubbed away, because
+ * what makes this file worth having is that it checks the real cipher against
+ * real CryptoJS output. A drift of one byte would not fail loudly — it would tell
+ * users their passphrase is wrong for a file that is fine.
+ */
+jest.setTimeout(60_000);
+
 function emptyTables(): BackupTables {
   const t = {} as BackupTables;
   for (const name of BACKUP_TABLES) t[name] = [];

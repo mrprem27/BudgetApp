@@ -11,9 +11,10 @@
  * in-memory implementation "not an empty stub, so the ... stores can be tested". That
  * instinct simply never reached the database.
  *
- * Only the five methods the app actually calls are implemented — `runAsync`, `execAsync`,
- * `getAllAsync`, `getFirstAsync`, `withTransactionAsync`. Anything else should throw loudly
- * rather than return undefined and be mistaken for a passing assertion.
+ * Only the methods the app actually calls are implemented — `runAsync`, `execAsync`,
+ * `getAllAsync`, `getFirstAsync`, `withTransactionAsync`, `withExclusiveTransactionAsync`.
+ * Anything else should throw loudly rather than return undefined and be mistaken for a
+ * passing assertion.
  */
 const { DatabaseSync } = require('node:sqlite');
 
@@ -56,6 +57,25 @@ function wrap(raw) {
       raw.exec('BEGIN');
       try {
         await fn();
+        raw.exec('COMMIT');
+      } catch (e) {
+        raw.exec('ROLLBACK');
+        throw e;
+      }
+    },
+
+    /**
+     * The exclusive variant, which is what a table rebuild and a restore use —
+     * both replace tables wholesale, and both need the rollback to be real. Expo
+     * hands the callback its own `txn` handle (a `Transaction extends
+     * SQLiteDatabase`), so this passes the same wrapped db back rather than
+     * nothing: a callback that used the handle would otherwise pass here and
+     * throw on a device.
+     */
+    async withExclusiveTransactionAsync(fn) {
+      raw.exec('BEGIN IMMEDIATE');
+      try {
+        await fn(db);
         raw.exec('COMMIT');
       } catch (e) {
         raw.exec('ROLLBACK');
