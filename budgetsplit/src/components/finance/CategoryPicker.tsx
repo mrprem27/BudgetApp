@@ -8,7 +8,6 @@ import type { Category } from '../../db/queries/categories';
 import { IconCircle } from '../ui/IconCircle';
 import { SheetModal } from '../ui/SheetModal';
 import { SHEET_PADDING_H } from '../ui/DraggableSheet';
-import { alpha } from '../../theme';
 
 type Props = {
   categories: Category[];
@@ -83,9 +82,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
       >
         {value ? (
           <View style={styles.fieldInner}>
-            <View style={[styles.iconDot, { backgroundColor: alpha(value.color ?? colors.accent, 13) }]}>
-              <Feather name={asFeather(value.icon, 'tag')} size={15} color={value.color ?? colors.accent} />
-            </View>
+            <IconCircle icon={asFeather(value.icon, 'tag')} size={28} color={value.color ?? colors.accent} iconSize={15} />
             <Text style={styles.fieldValue}>{value.name}</Text>
           </View>
         ) : (
@@ -148,9 +145,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
                     accessibilityLabel={item.name}
                     accessibilityState={{ selected: active }}
                   >
-                    <View style={[styles.tileIcon, { backgroundColor: alpha(item.color ?? colors.accent, 13) }]}>
-                      <Feather name={asFeather(item.icon, 'tag')} size={20} color={item.color ?? colors.accent} />
-                    </View>
+                    <IconCircle icon={asFeather(item.icon, 'tag')} size={40} color={item.color ?? colors.accent} />
                     <Text style={[styles.tileLabel, active && styles.tileLabelActive]} numberOfLines={1}>
                       {item.name}
                     </Text>
@@ -177,7 +172,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   fieldInner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flex: 1 },
-  iconDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   fieldValue: { ...type.body, color: colors.textPrimary },
   fieldPlaceholder: { ...type.body, color: colors.textMuted },
 
@@ -211,7 +205,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   tileActive: { borderColor: colors.accent, backgroundColor: colors.accentMuted },
-  tileIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   tileLabel: { ...type.caption, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 2 },
   tileLabelActive: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   createRow: {

@@ -16,6 +16,7 @@ import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 import { nextOccurrenceOnOrAfter, freqLabel } from '../../../src/lib/recurrence';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
+import { IconCircle } from '../../../src/components/ui/IconCircle';
 
 type Rule = TxnWithSplits;
 
@@ -108,9 +109,7 @@ export default function RecurringScreen() {
             return (
               <View key={r.id} style={[styles.card, highlightId === r.id && styles.cardHighlight]}>
                 <View style={styles.cardTop}>
-                  <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
-                    <Feather name={vis.icon} size={18} color={vis.color} />
-                  </View>
+                  <IconCircle icon={vis.icon} size={40} color={vis.color} iconSize={18} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cat} numberOfLines={1}>{r.category}</Text>
                     <Text style={styles.freq}>{freqLabel(r.recur_freq, r.recur_interval)}</Text>
@@ -206,7 +205,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   cardHighlight: { borderColor: colors.accent, borderWidth: 1.5, backgroundColor: colors.accentMuted },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  iconDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   cat: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   freq: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary },

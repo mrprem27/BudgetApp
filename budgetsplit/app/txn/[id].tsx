@@ -158,9 +158,7 @@ export default function TxnDetailScreen() {
         )}
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={[styles.iconDot, { backgroundColor: alpha(vis.color, 13) }]}>
-            <Feather name={vis.icon} size={24} color={vis.color} />
-          </View>
+          <IconCircle icon={vis.icon} size={56} color={vis.color} iconSize={24} style={styles.iconDot} />
           <Text style={styles.heroAmount}>{formatRupees(total)}</Text>
           <View style={styles.kindRow}>
             <View style={[styles.kindBadge, { backgroundColor: alpha(kindColor, 13) }]}>
@@ -401,9 +399,7 @@ export default function TxnDetailScreen() {
             return (
               <View key={h.id} style={styles.histRow}>
                 <View style={styles.histRail}>
-                  <View style={[styles.histIcon, { backgroundColor: alpha(meta.color, 13) }]}>
-                    <Feather name={meta.icon} size={11} color={meta.color} />
-                  </View>
+                  <IconCircle icon={meta.icon} size={22} color={meta.color} />
                   {!last && <View style={styles.histRailLine} />}
                 </View>
                 <View style={[styles.histContent, !last && { paddingBottom: space.md }]}>
@@ -501,7 +497,6 @@ const styles = StyleSheet.create({
   histCard: { paddingTop: space.sm, paddingBottom: space.md },
   histRow: { flexDirection: 'row', gap: space.sm },
   histRail: { width: 24, alignItems: 'center', paddingTop: space.sm },
-  histIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   histRailLine: { flex: 1, width: 1.5, backgroundColor: colors.border, marginTop: 2 },
   histContent: { flex: 1, paddingTop: space.sm },
   histText: { ...type.label, color: colors.textSecondary },

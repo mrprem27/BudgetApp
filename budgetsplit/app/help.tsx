@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { decor } from '../src/constants/palette';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { IconCircle } from '../src/components/ui/IconCircle';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
@@ -267,9 +268,7 @@ export default function HelpScreen() {
                           accessibilityLabel={item.title}
                           accessibilityState={{ expanded: isItemOpen }}
                         >
-                          <View style={[styles.iconDot, { backgroundColor: alpha(item.color, 13) }]}>
-                            <Feather name={item.icon} size={15} color={item.color} />
-                          </View>
+                          <IconCircle icon={item.icon} size={30} color={item.color} />
                           <Text style={styles.rowTitle}>{item.title}</Text>
                           <Feather name={isItemOpen ? 'minus' : 'plus'} size={16} color={colors.textMuted} />
                         </TouchableOpacity>
@@ -297,7 +296,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd },
-  iconDot: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { ...type.body, color: colors.textPrimary, flex: 1 },
   body: { ...type.body, color: colors.textSecondary, lineHeight: 22, paddingBottom: space.md, paddingLeft: 30 + space.sm },
 });

@@ -1,10 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, layout } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
-import { alpha } from '../../../theme';
+import { IconCircle } from '../../ui/IconCircle';
 
 export type CategoryRow = { name: string; paise: number };
 
@@ -105,9 +104,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
               accessibilityState={{ selected: isSel }}
               accessibilityLabel={`${row.name}, ${formatCompact(row.paise)}`}
             >
-              <View style={[styles.icon, { backgroundColor: alpha(vis.color, 13) }]}>
-                <Feather name={vis.icon} size={14} color={vis.color} />
-              </View>
+              <IconCircle icon={vis.icon} size={28} color={vis.color} />
               <Text style={[styles.name, isSel && styles.nameSelected]} numberOfLines={1}>{row.name}</Text>
               <AnimatedBar pct={barPct} color={barColor} />
               <Text style={styles.amount}>{formatCompact(row.paise)}</Text>

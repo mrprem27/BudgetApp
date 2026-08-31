@@ -13,6 +13,7 @@ import type { RowEdit, SplitState } from '../../../lib/reviewCommit';
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
 import { type TxnKind, PAY_METHOD_LABEL, PAY_METHOD_ICON, TXN_KIND_LABEL } from '../../../constants/enums';
+import { IconCircle } from '../../ui/IconCircle';
 
 /** Kind chips on each row. "Transfer" is the UI name for a `settlement` — money
  *  moving between accounts or people, which is neither spend nor earnings. */
@@ -144,9 +145,7 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
 
       <View style={styles.controls}>
         <TouchableOpacity style={styles.pill} onPress={() => onOpenCategory(row.id)} accessibilityRole="button" accessibilityLabel="Category">
-          <View style={[styles.pillDot, { backgroundColor: alpha(vis.color ?? colors.accent, 13) }]}>
-            <Feather name={asFeather(vis.icon, 'tag')} size={12} color={vis.color ?? colors.accent} />
-          </View>
+          <IconCircle icon={asFeather(vis.icon, 'tag')} size={20} color={vis.color ?? colors.accent} iconSize={12} />
           <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
           <Feather name="chevron-down" size={12} color={colors.textMuted} />
         </TouchableOpacity>
@@ -280,7 +279,6 @@ const styles = StyleSheet.create({
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.smd, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
   pillGroup: { borderColor: alpha(colors.settle, 33) },
   pillNeeded: { borderColor: colors.expense, backgroundColor: alpha(colors.expense, 9) },
-  pillDot: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pillText: { ...type.label, color: colors.textSecondary, flex: 1 },
   payPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.smd, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, alignSelf: 'flex-start', maxWidth: '60%' },
   payPillSet: { borderColor: alpha(colors.accent, 33) },

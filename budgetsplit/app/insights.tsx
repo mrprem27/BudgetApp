@@ -24,6 +24,7 @@ import { formatCompact, formatCompactMajor, formatAxisShort } from '../src/lib/m
 import { loadInsightsData } from '../src/lib/insightsData';
 import { plotWidth, axisSpacing } from '../src/lib/chartAxis';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
+import { IconCircle } from '../src/components/ui/IconCircle';
 
 function insightTint(tone: Insight['tone']): string {
   switch (tone) {
@@ -322,9 +323,7 @@ export default function InsightsScreen() {
                 const tint = insightTint(ins.tone);
                 return (
                   <View key={ins.text} style={[styles.savingsRow, i > 0 && styles.rowBorder]}>
-                    <View style={[styles.savingsIcon, { backgroundColor: alpha(tint, 13) }]}>
-                      <Feather name={asFeather(ins.icon, 'info')} size={14} color={tint} />
-                    </View>
+                    <IconCircle icon={asFeather(ins.icon, 'info')} size={28} color={tint} style={styles.savingsIcon} />
                     <InsightText text={ins.text} color={tint} style={styles.savingsText} />
                   </View>
                 );
