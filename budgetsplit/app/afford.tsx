@@ -407,7 +407,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', gap: space.sm, paddingTop: space.sm, paddingRight: space.md },
   costsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   costsLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.9, fontFamily: 'Inter_600SemiBold' },
-  necChip: { paddingHorizontal: space.md, height: 40, justifyContent: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  // §6 floor (was 40). These are the screen's primary input, tapped before anything else happens.
+  necChip: { paddingHorizontal: space.md, height: layout.touchMin, justifyContent: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
   necChipText: { ...type.body, color: colors.textSecondary },
   breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   breakdownDivider: { height: 1, backgroundColor: colors.border },

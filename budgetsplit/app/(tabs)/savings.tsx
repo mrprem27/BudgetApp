@@ -115,7 +115,7 @@ export default function SavingsScreen() {
               // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
               { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },
             ].filter(m => m.show).map(m => (
-              <TouchableOpacity key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to)} accessibilityRole="button" accessibilityLabel={m.label}>
+              <TouchableOpacity hitSlop={8} key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to)} accessibilityRole="button" accessibilityLabel={m.label}>
                 <Feather name={m.icon} size={18} color={colors.accent} />
               </TouchableOpacity>
             ))}
@@ -145,10 +145,10 @@ export default function SavingsScreen() {
                 Cover it from {overspend.withdrawals.map(w => `${w.name} ${formatCompact(w.amount)}`).join(', ')}? Nothing moves unless you say so.
               </Text>
               <View style={styles.overspendBtnRow}>
-                <TouchableOpacity style={styles.overspendPrimary} onPress={handleApproveOverspend} accessibilityRole="button" accessibilityLabel={`Use savings to cover ${formatCompact(overspend.total)}`}>
+                <TouchableOpacity hitSlop={8} style={styles.overspendPrimary} onPress={handleApproveOverspend} accessibilityRole="button" accessibilityLabel={`Use savings to cover ${formatCompact(overspend.total)}`}>
                   <Text style={styles.overspendPrimaryText}>Use savings</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.overspendGhost} onPress={handleDismissOverspend} accessibilityRole="button" accessibilityLabel="Keep my goals untouched">
+                <TouchableOpacity hitSlop={8} style={styles.overspendGhost} onPress={handleDismissOverspend} accessibilityRole="button" accessibilityLabel="Keep my goals untouched">
                   <Text style={styles.overspendGhostText}>Keep goals</Text>
                 </TouchableOpacity>
               </View>
@@ -336,14 +336,14 @@ export default function SavingsScreen() {
           <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Icon</Text>
           <View style={styles.iconGrid}>
             {GOAL_ICONS.map(ic => (
-              <TouchableOpacity key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} accessibilityState={{ selected: icon === ic }} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
+              <TouchableOpacity hitSlop={8} key={ic} style={[styles.iconOpt, icon === ic && { backgroundColor: color }]} accessibilityState={{ selected: icon === ic }} onPress={() => setIcon(ic)} accessibilityRole="button" accessibilityLabel={ic}>
                 <Feather name={asFeather(ic, 'tag')} size={18} color={icon === ic ? colors.bg : colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
           <View style={styles.colorRow}>
             {GOAL_COLORS.map(c => (
-              <TouchableOpacity key={c} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} onPress={() => setColor(c)} accessibilityRole="button" accessibilityLabel={c} accessibilityState={{ selected: color === c }} />
+              <TouchableOpacity hitSlop={8} key={c} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} onPress={() => setColor(c)} accessibilityRole="button" accessibilityLabel={c} accessibilityState={{ selected: color === c }} />
             ))}
           </View>
 

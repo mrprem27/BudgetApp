@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type, space, radius, layout } from '../tokens';
 
 export type ChipGroup = {
   key: string;
@@ -248,8 +248,9 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
 
   chip: {
+    // §6 floor — these were 30 high.
+    minHeight: layout.touchMin,
     paddingHorizontal: space.smd,
-    height: 30,
     justifyContent: 'center',
     borderRadius: radius.pill,
     backgroundColor: colors.bgMuted,

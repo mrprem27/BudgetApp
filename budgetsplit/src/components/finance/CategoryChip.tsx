@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, radius, space } from '../tokens';
+import { colors, type, radius, space, layout } from '../tokens';
 import { asFeather } from '../../constants/palette';
 import type { Category } from '../../db/queries/categories';
 
@@ -41,7 +41,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgMuted,
     borderRadius: radius.pill,
     paddingHorizontal: space.smd,
-    height: 32,
+    // §6 floor (was 32). A chip's height is a style choice, not a constraint, and
+    // this one is how a category gets picked on the screen people use most.
+    minHeight: layout.touchMin,
   },
   selected: {
     backgroundColor: colors.accent,

@@ -201,7 +201,7 @@ export default function ItemizedScreen() {
                               accessibilityLabel="Unit price"
                             />
                           </View>
-                          <TouchableOpacity style={styles.itemDoneBtn} onPress={() => f.setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
+                          <TouchableOpacity hitSlop={8} style={styles.itemDoneBtn} onPress={() => f.setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
                             <Feather name="check" size={16} color={colors.accent} />
                           </TouchableOpacity>
                         </View>

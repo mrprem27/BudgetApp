@@ -202,7 +202,7 @@ export default function CategoriesScreen() {
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
           {CATEGORY_KIND.map(k => (
-            <TouchableOpacity
+            <TouchableOpacity hitSlop={8}
               key={k}
               style={[styles.kindPill, kindTab === k && styles.kindPillActive]}
               onPress={() => switchKind(k)}
@@ -292,7 +292,7 @@ export default function CategoriesScreen() {
                       <Text style={styles.fieldLabel}>Icon</Text>
                       <View style={styles.iconGrid}>
                         {ICON_CHOICES.map(ic => (
-                          <TouchableOpacity
+                          <TouchableOpacity hitSlop={8}
                             key={ic}
                             style={[styles.iconOption, icon === ic && styles.iconSelected]}
                             onPress={() => setIcon(ic)}
@@ -307,7 +307,7 @@ export default function CategoriesScreen() {
                       <Text style={styles.fieldLabel}>Color</Text>
                       <View style={styles.colorRow}>
                         {COLOR_CHOICES.map(c => (
-                          <TouchableOpacity
+                          <TouchableOpacity hitSlop={8}
                             key={c}
                             style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSelected]}
                             onPress={() => setColor(c)}

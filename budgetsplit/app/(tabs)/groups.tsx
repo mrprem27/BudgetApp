@@ -296,6 +296,7 @@ export default function GroupsScreen() {
             {(archived.length > 0 || viewMode === 'archived') && (
               <TouchableOpacity
                 style={styles.headerAdd}
+                hitSlop={10}
                 onPress={() => setViewMode(v => (v === 'active' ? 'archived' : 'active'))}
                 accessibilityRole="button"
                 accessibilityLabel={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
@@ -304,7 +305,7 @@ export default function GroupsScreen() {
               </TouchableOpacity>
             )}
             {viewMode === 'active' && (
-              <TouchableOpacity style={styles.headerAdd} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
+              <TouchableOpacity style={styles.headerAdd} hitSlop={10} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
                 <Feather name="plus" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             )}

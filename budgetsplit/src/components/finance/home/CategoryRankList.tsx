@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from '../../tokens';
+import { colors, type, space, radius, shadow, layout } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
 import { alpha } from '../../../theme';
@@ -133,7 +133,9 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
   // Fixed height — must match placeholderRow so the card never resizes between a
   // filled period and an empty/partial one (the icon is 28, comfortably inside 32).
-  row: { height: 32, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs },
+  // minHeight, not height: these rows are tappable (they drive the donut selection),
+  // and 32 is well under the §6 floor. minHeight keeps a long label from clipping too.
+  row: { minHeight: layout.touchMin, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs },
   rowSelected: { backgroundColor: colors.bgMuted },
   nameSelected: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

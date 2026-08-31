@@ -425,7 +425,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl, gap: space.md },
   exportRow: { flexDirection: 'row', gap: space.xs },
-  exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: 36 },
+  // §6 floor. Was height: 36 — a label-bearing button has no reason to sit under it.
+  exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: layout.touchMin },
   exportBtnAlt: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   exportBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   exportBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },

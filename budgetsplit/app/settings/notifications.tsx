@@ -99,7 +99,7 @@ export default function NotificationsScreen() {
   }
 
   const Toggle = ({ on, onPress, label }: { on: boolean; onPress: () => void; label: string }) => (
-    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label}>
+    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} hitSlop={{ top: 9, bottom: 9 }} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label}>
       <View style={[styles.thumb, on && styles.thumbOn]} />
     </TouchableOpacity>
   );
@@ -148,11 +148,11 @@ export default function NotificationsScreen() {
                 <Feather name="calendar" size={15} color={colors.accent} />
                 <Text style={styles.configLabel}>Start {prefs.renewalLeadDays} day{prefs.renewalLeadDays === 1 ? '' : 's'} before</Text>
                 <View style={styles.stepper}>
-                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays - 1 })} disabled={prefs.renewalLeadDays <= 1} accessibilityRole="button" accessibilityLabel="Fewer days">
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays - 1 })} disabled={prefs.renewalLeadDays <= 1} hitSlop={10} accessibilityRole="button" accessibilityLabel="Fewer days">
                     <Feather name="minus" size={16} color={prefs.renewalLeadDays <= 1 ? colors.textMuted : colors.accent} />
                   </TouchableOpacity>
                   <Text style={styles.stepperVal}>{prefs.renewalLeadDays}</Text>
-                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays + 1 })} disabled={prefs.renewalLeadDays >= MAX_LEAD_DAYS} accessibilityRole="button" accessibilityLabel="More days">
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays + 1 })} disabled={prefs.renewalLeadDays >= MAX_LEAD_DAYS} hitSlop={10} accessibilityRole="button" accessibilityLabel="More days">
                     <Feather name="plus" size={16} color={prefs.renewalLeadDays >= MAX_LEAD_DAYS ? colors.textMuted : colors.accent} />
                   </TouchableOpacity>
                 </View>
