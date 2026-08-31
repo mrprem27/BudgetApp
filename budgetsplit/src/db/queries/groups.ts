@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
+import { markRosterDirty } from './syncDoc';
 
 export type BudgetGroup = {
   id: string;
@@ -214,7 +215,8 @@ export async function updateGroup(
       entityType: 'group', entityId: groupId, groupId,
       action: 'updated', summary: `Updated group · ${name}`,
     });
-  });
+  });  // Name, icon and colour are what the other phones display.
+  await markRosterDirty(db, groupId);
 }
 
 export type DeleteGroupResult = {

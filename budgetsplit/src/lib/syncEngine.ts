@@ -4,6 +4,7 @@ import {
   readEntryDoc, markSynced, pullCursor, setPullCursor, toPeerEnvelope, personResolver,
   pendingDisputes, markDisputeSent, recordDispute, archiveVanishedGroup,
   readRosterDoc, adoptGroup, ROSTER_ENTRY_ID,
+  dirtyRosters, clearRosterDirty, nextRosterVersion, setRosterVersion,
   type EntryDoc, type RosterDoc, type NameCollision,
 } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
@@ -119,6 +120,7 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
     if (!secret) return { ...NOTHING, skipped: 'no-device-key' };
 
     const vanished = await reconcileVanished(db, groups);
+    await drainRosters(db, groups, secret);
     const push = await drain(db, groups, secret);
     await drainDisputes(db, groups);
     const pull = await pullAll(db, groups, secret);
@@ -241,6 +243,52 @@ async function reconcileVanished(db: SQLite.SQLiteDatabase, groups: SyncGroup[])
 }
 
 /**
+ * Republish any roster that has changed since it last went up.
+ *
+ * Runs BEFORE the entry drain, and that order is the point: an entry naming a
+ * member the other phones have never heard of is refused as `not-a-member`, so
+ * the person has to arrive before the entry that mentions them.
+ */
+async function drainRosters(
+  db: SQLite.SQLiteDatabase,
+  groups: SyncGroup[],
+  secret: Uint8Array,
+): Promise<void> {
+  const keys = await keyring(groups, secret);
+  for (const groupId of await dirtyRosters(db)) {
+    const key = keys.get(groupId);
+    // Not shared, or not readable by this device. The flag stays set, so it goes
+    // the moment the group is genuinely shareable.
+    if (!key) continue;
+
+    const roster = await readRosterDoc(db, groupId);
+    if (!roster) { await clearRosterDirty(db, groupId); continue; }
+
+    const version = await nextRosterVersion(db, groupId);
+    try {
+      const ciphertext = await sealEntry(roster, key, groupId, ROSTER_ENTRY_ID, version);
+      await pushSyncEntry({ groupId, entryId: ROSTER_ENTRY_ID, version, ciphertext, isDeleted: false });
+      await setRosterVersion(db, groupId, version);
+      await clearRosterDirty(db, groupId);
+    } catch (e) {
+      /*
+       * A 409 means another device published a roster we have not seen. Recording
+       * the version it reports lets the next attempt land instead of colliding
+       * forever at the same number — and the flag stays set so there IS a next
+       * attempt.
+       */
+      if (e instanceof ServerRequestError && e.status === 409) {
+        const current = (e.detail?.current as { version?: number } | undefined)?.version;
+        if (typeof current === 'number') await setRosterVersion(db, groupId, current);
+      }
+      // Stop rather than skip, like every other drain: ordering is what keeps a
+      // person arriving before the entry that names them.
+      break;
+    }
+  }
+}
+
+/**
  * Send my objections — F10.
  *
  * Separate from the entry drain because a dispute is not an entry: it carries no
@@ -297,32 +345,57 @@ async function pullAll(
         pulled++;
       }
 
+      /*
+       * `held` is how far it is SAFE to say we have got.
+       *
+       * The cursor used to advance to the end of every page regardless, which
+       * quietly threw entries away: one naming a member this phone had never
+       * heard of could not be resolved, was skipped — and was then behind the
+       * cursor forever. A real expense that silently never arrives.
+       *
+       * So a RECOVERABLE failure stops the group here and leaves the cursor
+       * before it. The next sync re-fetches from that point, and because a
+       * republished roster carries a newer timestamp it lands in the same page and
+       * is applied first — so the entry that failed succeeds on the retry. It
+       * heals itself rather than needing anyone to notice.
+       */
+      let held = cursor;
+      let stalled = false;
+
       for (const e of res.entries) {
-        if (e.entryId === ROSTER_ENTRY_ID) continue;
+        if (e.entryId === ROSTER_ENTRY_ID) { held = e.updatedAt; continue; }
+
         const doc = await openEntry<EntryDoc>(
           e.ciphertext, key, groupId, e.entryId, e.version,
         );
         /*
-         * Null means the seal did not match where this entry claims to be: a
+         * PERMANENT. The seal does not match where this entry claims to be: a
          * wrong key, a tampered payload, or one replayed under another id or
-         * version. Skipped, never guessed at — and the cursor still advances,
-         * because retrying an entry that will never open is an infinite loop.
+         * version. Retrying it forever would be an infinite loop, so this one
+         * really does advance.
          */
-        if (!doc) continue;
+        if (!doc) { held = e.updatedAt; continue; }
 
-        // Rebuilt per entry now, deliberately: a roster earlier in this very page
-        // may have just created the people this entry names, and a resolver built
-        // once at the top would not know about them.
+        // Rebuilt per entry, deliberately: a roster earlier in this very page may
+        // have just created the people this entry names, and a resolver built once
+        // at the top would not know about them.
         const resolve = await personResolver(db);
         const envelope = toPeerEnvelope(resolve, groupId, e.entryId, e.version, e.isDeleted, doc);
-        if (!envelope) continue;
+        // RECOVERABLE: it names somebody unknown, so a roster is missing or stale.
+        if (!envelope) { stalled = true; break; }
 
         const result = await ingestPeerTxn(db, envelope);
-        if (result.ok) pulled++;
+        if (result.ok) { pulled++; held = e.updatedAt; continue; }
+        // Also recoverable, and the same cause: their roster has not landed yet.
+        if (result.reason === 'not-a-member') { stalled = true; break; }
+        // Everything else is a fact about the entry, not about this device's
+        // knowledge — unbalanced, stale, my own. Those never become admissible.
+        held = e.updatedAt;
       }
-      cursor = res.cursor;
+
+      cursor = held;
       await setPullCursor(db, groupId, cursor);
-      if (!res.more) break;
+      if (stalled || !res.more) break;
     }
 
     /*

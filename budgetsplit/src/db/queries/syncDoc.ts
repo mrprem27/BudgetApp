@@ -541,3 +541,79 @@ export async function adoptGroup(
 function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
+
+// --- Keeping the roster current --------------------------------------------
+
+/**
+ * The roster is a living document, not a one-shot.
+ *
+ * It used to be published once, when a group was shared. Everything after that —
+ * adding a flatmate, renaming the group, someone changing their own name — never
+ * reached the other phones. And a stale roster is not merely cosmetic: an entry
+ * naming a member the other device has never heard of cannot be resolved, so it
+ * is refused. Adding somebody to a shared group silently broke every entry that
+ * mentioned them.
+ *
+ * `dirty` is the same idea as `sync_outbox`, one row wide: the write path marks
+ * it, the drain publishes it and clears it. Kept in `settings` rather than a
+ * table because it is one flag per group and outlives nothing.
+ */
+const ROSTER_DIRTY = (groupId: string): string => `sync.roster.dirty.${groupId}`;
+const ROSTER_VERSION = (groupId: string): string => `sync.roster.version.${groupId}`;
+
+/**
+ * Mark a shared group's roster as needing republishing.
+ *
+ * Personal groups are excluded in the SQL, not at the call site, for the same
+ * reason `queueEntry` is: a writer that has to remember cannot be relied upon to.
+ */
+export async function markRosterDirty(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO settings (key, value)
+     SELECT ?, '1' WHERE EXISTS (SELECT 1 FROM budget_group WHERE id = ? AND is_personal = 0)`,
+    [ROSTER_DIRTY(groupId), groupId],
+  );
+}
+
+/** Groups whose roster has changed since it was last published. */
+export async function dirtyRosters(db: SQLite.SQLiteDatabase): Promise<string[]> {
+  const rows = await db.getAllAsync<{ key: string }>(
+    "SELECT key FROM settings WHERE key LIKE 'sync.roster.dirty.%'",
+  );
+  return rows.map(r => r.key.slice('sync.roster.dirty.'.length));
+}
+
+export async function clearRosterDirty(db: SQLite.SQLiteDatabase, groupId: string): Promise<void> {
+  await db.runAsync('DELETE FROM settings WHERE key = ?', [ROSTER_DIRTY(groupId)]);
+}
+
+/**
+ * The next version to publish this roster at.
+ *
+ * A real stored counter, because the server compare-and-sets on it. The previous
+ * code guessed by trying 1, 2, 3 and giving up — which silently stopped
+ * republishing on the fourth change a group ever had.
+ */
+export async function nextRosterVersion(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?', [ROSTER_VERSION(groupId)],
+  );
+  return (Number(row?.value ?? 0) || 0) + 1;
+}
+
+export async function setRosterVersion(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  version: number,
+): Promise<void> {
+  await db.runAsync(
+    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+    [ROSTER_VERSION(groupId), String(version)],
+  );
+}

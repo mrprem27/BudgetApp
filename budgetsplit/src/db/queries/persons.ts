@@ -3,6 +3,7 @@ import type { ReceivableState, TrustState } from '../../constants/enums';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
+import { markRosterDirty } from './syncDoc';
 import { getGroupContext } from './groups';
 import { canAddMember, canRemoveMember, PermissionError } from '../../lib/permissions';
 
@@ -176,6 +177,23 @@ export async function setPersonContact(
   await db.runAsync(`UPDATE person SET ${sets.join(', ')} WHERE id = ?`, [...binds, personId]);
 }
 
+/**
+ * Every shared group this person is in — so a rename reaches the phones that
+ * display it. A name nobody recognises is the same problem as no name at all.
+ */
+async function sharedGroupsOfPerson(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+): Promise<string[]> {
+  const rows = await db.getAllAsync<{ group_id: string }>(
+    `SELECT m.group_id FROM group_member m
+       JOIN budget_group g ON g.id = m.group_id AND g.is_personal = 0
+      WHERE m.person_id = ?`,
+    [personId],
+  );
+  return rows.map(r => r.group_id);
+}
+
 export async function updatePersonName(
   db: SQLite.SQLiteDatabase,
   personId: string,
@@ -189,6 +207,8 @@ export async function updatePersonName(
       summary: `Renamed ${prev?.name ?? 'person'} to ${name}`,
     });
   });
+  // A name only this phone knows is a person nobody else recognises.
+  for (const g of await sharedGroupsOfPerson(db, personId)) await markRosterDirty(db, g);
 }
 
 export async function addMemberToGroup(
@@ -212,6 +232,9 @@ export async function addMemberToGroup(
       summary: `Added ${p?.name ?? 'member'} to the group`,
     });
   });
+  // The other phones have to learn who this is, or every entry naming them is
+  // refused as `not-a-member` — silently, and for good.
+  await markRosterDirty(db, groupId);
 }
 
 export async function removeMemberFromGroup(
@@ -235,6 +258,7 @@ export async function removeMemberFromGroup(
       summary: `Removed ${p?.name ?? 'member'} from the group`,
     });
   });
+  await markRosterDirty(db, groupId);
 }
 
 // --- Per-group trust overrides ---------------------------------------------
