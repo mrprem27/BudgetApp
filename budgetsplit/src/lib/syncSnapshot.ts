@@ -3,6 +3,7 @@ import { readAllTables } from '../db/queries/backup';
 import { buildBackupPayload, encryptPayload } from './backup';
 import { uploadBackup, serverConfigured, getStoredSession } from './serverApi';
 import { settings } from './settings';
+import { isRestoring } from './restoreGuard';
 
 /**
  * "Everything" mode: an encrypted copy of the whole app, kept current on your
@@ -64,25 +65,59 @@ function keychain(): SecureStoreModule | null {
  * It is the same reasoning that put the session token there, one step more
  * serious.
  */
-export async function rememberSyncPassphrase(passphrase: string): Promise<boolean> {
+/**
+ * Whose passphrase this is.
+ *
+ * Stored beside it because the keychain outlives a session, and a phone can
+ * change hands. Without it: A signs out, hands the phone to B, B signs in — and
+ * within six hours `maybeSnapshot` read A's still-present database, sealed it
+ * with **A's** passphrase, and uploaded it to **B's account**. B then owns a
+ * backup of somebody else's ledger that they can never open, and A's data lives
+ * on an account A cannot delete it from.
+ */
+const PASSPHRASE_OWNER_KEY = 'budgetsplit.sync.passphrase.owner.v1';
+
+export async function rememberSyncPassphrase(passphrase: string, userId?: string): Promise<boolean> {
   const ks = keychain();
   if (!ks) return false;
   try {
     await ks.setItemAsync(PASSPHRASE_KEY, passphrase);
+    if (userId) await ks.setItemAsync(PASSPHRASE_OWNER_KEY, userId);
     return true;
   } catch {
     return false;
   }
 }
 
-export async function storedSyncPassphrase(): Promise<string | null> {
+/**
+ * The stored passphrase, but only if it belongs to the account asking.
+ *
+ * `userId` is optional for the manual backup path, which is the user acting on
+ * their own device right now. `maybeSnapshot` always passes it, because that one
+ * runs unattended and is the path that could otherwise upload one person's ledger
+ * to another person's account.
+ *
+ * A passphrase stored before this existed has no owner recorded. Treated as
+ * belonging to whoever is signed in, and stamped on read — the alternative is
+ * breaking snapshots for everyone who already had this switched on.
+ */
+export async function storedSyncPassphrase(userId?: string): Promise<string | null> {
   const ks = keychain();
   if (!ks) return null;
-  return ks.getItemAsync(PASSPHRASE_KEY).catch(() => null);
+  const passphrase = await ks.getItemAsync(PASSPHRASE_KEY).catch(() => null);
+  if (!passphrase || !userId) return passphrase;
+
+  const owner = await ks.getItemAsync(PASSPHRASE_OWNER_KEY).catch(() => null);
+  if (owner === null) {
+    await ks.setItemAsync(PASSPHRASE_OWNER_KEY, userId).catch(() => {});
+    return passphrase;
+  }
+  return owner === userId ? passphrase : null;
 }
 
 export async function forgetSyncPassphrase(): Promise<void> {
   await keychain()?.deleteItemAsync(PASSPHRASE_KEY).catch(() => {});
+  await keychain()?.deleteItemAsync(PASSPHRASE_OWNER_KEY).catch(() => {});
 }
 
 /**
@@ -98,24 +133,53 @@ export const SNAPSHOT_MIN_GAP_MS = 6 * 60 * 60 * 1000;
 
 export type SnapshotResult =
   | { ok: true; bytes: number }
-  | { ok: false; reason: 'off' | 'not-configured' | 'signed-out' | 'no-passphrase' | 'too-soon' | 'failed' };
+  | {
+      ok: false;
+      reason: 'off' | 'not-configured' | 'signed-out' | 'no-passphrase' | 'too-soon'
+        | 'restoring' | 'failed';
+    };
 
 /**
  * Take one if it is due. Never throws — it runs behind a foreground event, and a
  * failed upload must not reach a screen.
  */
 export async function maybeSnapshot(db: SQLite.SQLiteDatabase): Promise<SnapshotResult> {
+  const result = await runSnapshot(db);
+  /*
+   * Remember what happened, not only that it worked.
+   *
+   * Both callers used to throw the reason away, so a snapshot that had NEVER
+   * succeeded — a database past the 25 MiB ceiling, a cleared keychain — left
+   * Settings → Sync reading "On. A fresh phone can become this one again",
+   * forever, with no log, no timestamp and no error surface anywhere. The switch
+   * described an intention rather than a fact.
+   */
+  if (result.ok || result.reason !== 'too-soon') {
+    await settings.setLastSnapshotNote(result.ok ? null : result.reason).catch(() => {});
+  }
+  return result;
+}
+
+async function runSnapshot(db: SQLite.SQLiteDatabase): Promise<SnapshotResult> {
   if (!(await settings.syncEverything().catch(() => false))) return { ok: false, reason: 'off' };
   if (!serverConfigured()) return { ok: false, reason: 'not-configured' };
-  if (!(await getStoredSession())) return { ok: false, reason: 'signed-out' };
+  const session = await getStoredSession();
+  if (!session) return { ok: false, reason: 'signed-out' };
+  // A restore is replacing this database wholesale. Reading it now would upload a
+  // snapshot of rows that are about to stop existing, and `restoreGuard` covers
+  // only the root layout's writers — this runs from the tabs layout's own
+  // AppState listener, on the connection the restore holds exclusively.
+  if (isRestoring()) return { ok: false, reason: 'restoring' };
 
   const last = await settings.lastSnapshotAt().catch(() => null);
   if (last !== null && Date.now() - last < SNAPSHOT_MIN_GAP_MS) return { ok: false, reason: 'too-soon' };
 
-  // No passphrase means the user turned this on and never finished, or the
-  // keychain was cleared. Reported rather than guessed at — inventing one would
-  // produce a snapshot nobody can ever open.
-  const passphrase = await storedSyncPassphrase();
+  // No passphrase means the user turned this on and never finished, the keychain
+  // was cleared, or — the case that matters — the stored one belongs to a
+  // DIFFERENT account, because this phone changed hands. Reported rather than
+  // guessed at: inventing one produces a snapshot nobody can ever open, and using
+  // somebody else's uploads their ledger to this account.
+  const passphrase = await storedSyncPassphrase(session.user.id);
   if (!passphrase) return { ok: false, reason: 'no-passphrase' };
 
   try {
@@ -125,7 +189,9 @@ export async function maybeSnapshot(db: SQLite.SQLiteDatabase): Promise<Snapshot
     const tables = await readAllTables(db);
     const envelope = await encryptPayload(buildBackupPayload(tables), passphrase);
     const body = JSON.stringify(envelope);
-    const saved = await uploadBackup(body);
+    // Marked, so it is pruned against the snapshot quota and can never evict a
+    // backup somebody made on purpose.
+    const saved = await uploadBackup(body, 'snapshot');
     await settings.setLastSnapshotAt(Date.now()).catch(() => {});
     return { ok: true, bytes: saved.sizeBytes };
   } catch {

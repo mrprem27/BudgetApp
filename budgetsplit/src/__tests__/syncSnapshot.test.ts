@@ -38,6 +38,7 @@ describe('what stops a snapshot', () => {
         syncEverything: async () => false,
         lastSnapshotAt: async () => null,
         setLastSnapshotAt: async () => {},
+        setLastSnapshotNote: async () => {},
       },
     }));
     const secret = jest.fn();
@@ -63,6 +64,7 @@ describe('what stops a snapshot', () => {
         syncEverything: async () => true,
         lastSnapshotAt: async () => null,
         setLastSnapshotAt: async () => {},
+        setLastSnapshotNote: async () => {},
       },
     }));
     jest.doMock('../lib/serverApi', () => ({
@@ -91,6 +93,7 @@ describe('what stops a snapshot', () => {
         syncEverything: async () => true,
         lastSnapshotAt: async () => Date.now() - 60_000, // a minute ago
         setLastSnapshotAt: async () => {},
+        setLastSnapshotNote: async () => {},
       },
     }));
     jest.doMock('../lib/serverApi', () => ({

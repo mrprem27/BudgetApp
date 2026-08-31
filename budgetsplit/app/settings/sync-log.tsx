@@ -236,6 +236,8 @@ const SKIPPED: Record<string, string> = {
   'signed-out': 'You are signed out, so there is no account to sync with.',
   'not-configured': 'This build has no server configured.',
   'no-device-key': 'This device cannot store its own key, so it cannot sync.',
+  'session-expired': 'Your session ended. Sign in again under Account.',
+  restoring: 'Paused while a backup was being restored.',
 };
 
 const styles = StyleSheet.create({

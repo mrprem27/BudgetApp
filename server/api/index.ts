@@ -176,7 +176,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (path === '/backups') {
     if (method === 'GET') return listBackups(request, env);
-    if (method === 'POST') return createBackup(request, env);
+    if (method === 'POST') return createBackup(request, env, url);
     return methodNotAllowed('GET, POST');
   }
   if (path.startsWith('/backups/')) {
@@ -1084,7 +1084,7 @@ function friendRequestHtml(who: string, note: string | null, hasAccount: boolean
  * that opens it stays on the user's device. Any content-type is accepted for
  * the same reason — this endpoint's job is to be blind.
  */
-async function createBackup(request: Request, env: Env): Promise<Response> {
+async function createBackup(request: Request, env: Env, url: URL): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
   const files = storage(env);
@@ -1111,23 +1111,36 @@ async function createBackup(request: Request, env: Env): Promise<Response> {
   // R2 first, then D1: an object with no row is invisible dead storage the prune
   // below will never see, but a row with no object is a restore that 404s at the
   // worst possible moment. Prefer the leak.
+  // `?kind=snapshot` marks an automatic one. Anything else is manual, which is
+  // the safe default: a mislabelled manual backup is merely kept longer, while a
+  // mislabelled snapshot could push a deliberate backup out.
+  const kind = url.searchParams.get('kind') === 'snapshot' ? 'snapshot' : 'manual';
   await env.DB.prepare(
-    'INSERT INTO backups (id, user_id, r2_key, size_bytes, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, auth.user.id, key, bytes.byteLength, createdAt).run();
+    'INSERT INTO backups (id, user_id, r2_key, size_bytes, created_at, kind) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(id, auth.user.id, key, bytes.byteLength, createdAt, kind).run();
 
-  const pruned = await pruneOldBackups(env, auth.user.id);
+  const pruned = await pruneOldBackups(env, auth.user.id, kind);
   return json({
     backup: toBackupDto({ id, user_id: auth.user.id, r2_key: key, size_bytes: bytes.byteLength, created_at: createdAt }),
     pruned,
   }, 201);
 }
 
-/** Drops everything past the newest `MAX_BACKUPS_PER_USER`. Returns how many went. */
-async function pruneOldBackups(env: Env, userId: string): Promise<number> {
+/**
+ * Drops everything past the newest N **of the same kind**. Returns how many went.
+ *
+ * Scoped to one kind because they answer different questions. A snapshot is a
+ * rolling window of "this phone, recently"; a manual backup is a point somebody
+ * chose. Pruned together — which is what happened — the four-a-day snapshots
+ * filled all ten slots in about 60 hours and the careful backup made before a
+ * risky change was gone, with the deletion count returned by the API and
+ * discarded by the client.
+ */
+async function pruneOldBackups(env: Env, userId: string, kind: string): Promise<number> {
   const stale = await env.DB.prepare(
-    `SELECT id, r2_key FROM backups WHERE user_id = ?
+    `SELECT id, r2_key FROM backups WHERE user_id = ? AND kind = ?
       ORDER BY created_at DESC LIMIT -1 OFFSET ?`,
-  ).bind(userId, MAX_BACKUPS_PER_USER).all<{ id: string; r2_key: string }>();
+  ).bind(userId, kind, MAX_BACKUPS_PER_USER).all<{ id: string; r2_key: string }>();
   const rows = stale.results ?? [];
   if (rows.length === 0) return 0;
 

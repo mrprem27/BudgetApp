@@ -32,6 +32,15 @@ const K = {
   syncLog: 'sync_log',
   syncEverything: 'sync_everything',
   lastSnapshotAt: 'sync_last_snapshot_at',
+  /**
+   * Why the last automatic snapshot did not happen, or null when it did.
+   *
+   * Without this the switch could read "On" forever while no snapshot had EVER
+   * succeeded — the reason was computed and then discarded by both callers, so a
+   * database over the 25 MiB ceiling or a cleared keychain produced no log, no
+   * timestamp and no error surface anywhere.
+   */
+  lastSnapshotNote: 'sync_last_snapshot_note',
   restoreOfferDismissed: 'restore_offer_dismissed',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
@@ -145,6 +154,9 @@ export const settings = {
 
   lastSnapshotAt: () => getNumber(K.lastSnapshotAt),
   setLastSnapshotAt: (v: number) => setNumber(K.lastSnapshotAt, v),
+  lastSnapshotNote: () => getString(K.lastSnapshotNote),
+  setLastSnapshotNote: (v: string | null) =>
+    (v === null ? AsyncStorage.removeItem(K.lastSnapshotNote) : setString(K.lastSnapshotNote, v)),
 
   /**
    * They were offered their data back and said no.

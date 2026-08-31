@@ -18,6 +18,8 @@ import { useStore } from '../../src/store';
 import { haptic } from '../../src/lib/haptics';
 import { useSQLiteContext } from 'expo-sqlite';
 import { claimMyAccount } from '../../src/db/queries/persons';
+import { forgetSyncPassphrase } from '../../src/lib/syncSnapshot';
+import { settings } from '../../src/lib/settings';
 import {
   requestMagicLink, verifyMagicLink, signOut, updateProfile, uploadAvatar,
   extractAuthToken, deviceLabel,
@@ -162,6 +164,25 @@ export default function AccountScreen() {
           style: 'destructive',
           onPress: async () => {
             await signOut();
+            /*
+             * The passphrase and the "keep a copy of everything" switch go too.
+             *
+             * They outlived the session, and a phone can change hands: A signs
+             * out, B signs in, and within six hours the unattended snapshot read
+             * A's still-present database, sealed it with A's passphrase and
+             * uploaded it to B's account. B then held a backup of somebody else's
+             * ledger they could never open, and A's data lived on an account A
+             * could not delete it from. `maybeSnapshot` now refuses that outright
+             * by checking who the passphrase belongs to — this is the other half,
+             * so B is not shown a switch reading "On" for something they never
+             * turned on.
+             *
+             * `person.remote_uid` is deliberately NOT cleared. Signing out is a
+             * session change, not an identity change, and clearing it would turn
+             * every entry a peer ever authored into `unknown-author`.
+             */
+            await forgetSyncPassphrase();
+            await settings.setSyncEverything(false).catch(() => {});
             await reload();
             haptic.warning();
           },

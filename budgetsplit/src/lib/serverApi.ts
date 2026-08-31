@@ -321,11 +321,26 @@ export async function uploadAvatar(fileUri: string): Promise<ServerUser> {
 // --- Backups --------------------------------------------------------------
 
 /** `envelopeJson` is the already-encrypted `BackupEnvelope`, serialised. */
-export async function uploadBackup(envelopeJson: string): Promise<ServerBackup> {
-  const response = await sendAuthed('/backups', { method: 'POST', text: envelopeJson });
-  const data = await response.json() as { backup?: ServerBackup };
+/**
+ * Upload one encrypted envelope.
+ *
+ * `kind` matters, and defaulting it to `manual` is the safe direction. Manual
+ * backups and automatic snapshots are pruned against SEPARATE quotas now, because
+ * pruning them together meant four-a-day snapshots filled all ten slots in about
+ * 60 hours and silently deleted the careful backup somebody made before a risky
+ * change. A mislabelled manual backup is merely kept longer; a mislabelled
+ * snapshot could push a deliberate one out.
+ *
+ * `pruned` is returned rather than discarded, so a caller can say what went.
+ */
+export async function uploadBackup(
+  envelopeJson: string,
+  kind: 'manual' | 'snapshot' = 'manual',
+): Promise<ServerBackup & { pruned: number }> {
+  const response = await sendAuthed(`/backups?kind=${kind}`, { method: 'POST', text: envelopeJson });
+  const data = await response.json() as { backup?: ServerBackup; pruned?: number };
   if (!data.backup) throw new ServerRequestError(502, 'The server sent back an unexpected response.');
-  return data.backup;
+  return { ...data.backup, pruned: data.pruned ?? 0 };
 }
 
 export async function listServerBackups(): Promise<ServerBackup[]> {

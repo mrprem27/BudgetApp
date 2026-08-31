@@ -19,8 +19,9 @@ import {
   publishSyncGroup, inviteSyncMember, joinSyncGroup, pushSyncWraps,
   leaveSyncGroup, deleteSyncGroup,
   pushSyncDispute, pullSyncDisputes,
-  ServerRequestError, serverConfigured, type SyncGroup,
+  ServerRequestError, ServerAuthError, serverConfigured, type SyncGroup,
 } from './serverApi';
+import { isRestoring } from './restoreGuard';
 import { settings } from './settings';
 
 /**
@@ -65,7 +66,8 @@ export type SyncOutcome = {
   /** True when anything reached the database, so the caller knows to refresh. */
   changed: boolean;
   /** Why nothing happened, when nothing did. Not an error — a reason. */
-  skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'signed-out' | 'offline';
+  skipped?: 'disabled' | 'not-configured' | 'no-device-key' | 'signed-out'
+    | 'session-expired' | 'restoring' | 'offline';
 };
 
 const NOTHING: SyncOutcome = {
@@ -107,6 +109,11 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
 
   const session = await getStoredSession();
   if (!session) return { ...NOTHING, skipped: 'signed-out' };
+
+  // A restore is replacing this database wholesale, on the connection it holds
+  // exclusively. `restoreGuard` covers the root layout's writers; this runs from
+  // the tabs layout's own AppState listener, which it does not.
+  if (isRestoring()) return { ...NOTHING, skipped: 'restoring' };
 
   /*
    * Before anything else: is this identity even ours?
@@ -170,9 +177,21 @@ async function attemptSync(db: SQLite.SQLiteDatabase): Promise<SyncOutcome> {
       collisions: pull.collisions,
       changed: push.pushed > 0 || pull.pulled > 0 || vanished.length > 0,
     };
-  } catch {
-    // Offline, the Worker down, or a dead session — all three mean the same
-    // thing here and lead to the same next step, which is to try again later.
+  } catch (e) {
+    /*
+     * A dead session is NOT the same as being offline, and saying so was making
+     * the app contradict itself.
+     *
+     * `send` clears the stored session on any 401 and throws `ServerAuthError` —
+     * which was thrown in three places and caught by name in none. So an expired
+     * or revoked session landed here, became `offline`, and the Sync screen then
+     * showed two statements at once: "Could not reach the server last time" over
+     * "Sign in first — sync needs an account". The user is signed out and is told
+     * it is a network problem, and the one action that would fix it is the one
+     * they have no reason to take.
+     */
+    if (e instanceof ServerAuthError) return { ...NOTHING, skipped: 'session-expired' };
+    // Genuinely offline, or the Worker is down. Same next step: try again later.
     return { ...NOTHING, skipped: 'offline' };
   }
 }

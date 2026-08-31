@@ -379,6 +379,11 @@ const NOTE: Record<string, string | undefined> = {
   'not-configured': 'This build has no server configured.',
   'no-device-key': 'This device cannot store its own key, so it cannot sync.',
   'signed-out': 'You are signed out, so there is no account to sync with.',
+  // Its own line, because it used to be reported as `offline` — so the screen
+  // said "could not reach the server" above a banner saying "sign in first", and
+  // the one action that would fix it looked unrelated to the problem.
+  'session-expired': 'Your session ended, so sync stopped. Sign in again under Account.',
+  restoring: 'Paused while a backup is being restored.',
 };
 
 function Fact({ title, body }: { title: string; body: string }) {
