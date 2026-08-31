@@ -56,6 +56,35 @@ describe('moveToInvestments', () => {
     await expect(moveToInvestments(asDb(db), NaN)).rejects.toThrow();
   });
 
+  /**
+   * The two halves were two separate transactions, so a kill between them — the OS
+   * reclaiming a backgrounded app is ordinary, not rare — booked the cash out and
+   * never raised investments. Net worth fell by the amount invested and stayed
+   * there, under a transfer row that looked entirely correct, and nothing could
+   * detect it afterwards because a running total is not derivable from the rows.
+   */
+  it('writes both halves or neither', async () => {
+    const { db } = await setup();
+    const before = await getMoneyProfile(asDb(db));
+
+    // Fail on the profile write — the second half, i.e. after the txn rows exist.
+    const real = db.runAsync.bind(db);
+    jest.spyOn(db, 'runAsync').mockImplementation(async (sql: string, ...rest: unknown[]) => {
+      if (/INSERT INTO settings/.test(sql)) throw new Error('killed mid-write');
+      return real(sql, ...(rest as never[]));
+    });
+
+    await expect(moveToInvestments(asDb(db), 250000)).rejects.toThrow('killed mid-write');
+    jest.restoreAllMocks();
+
+    // Neither side landed: no cash out, and investments unchanged.
+    expect((await getMoneyProfile(asDb(db))).investments).toBe(before.investments);
+    const rows = await db.getAllAsync("SELECT id FROM txn WHERE category = 'Investment'");
+    expect(rows).toHaveLength(0);
+    // And the cash position is exactly what it was, not down by ₹2,500.
+    expect((await getCashPosition(asDb(db))).available).toBe(1000000);
+  });
+
   it('records it as a settlement with no counterparty, so analysis ignores it', async () => {
     // §12: settlements are excluded from category breakdowns and budgets. That is
     // what stops an investment eating a budget the way the expense version did.

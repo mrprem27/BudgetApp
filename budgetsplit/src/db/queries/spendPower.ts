@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
 import { INVESTMENT_CATEGORY } from '../../constants/categories';
-import { getMoneyProfile, setMoneyProfile } from './moneyProfile';
+import { getMoneyProfile, setMoneyProfileRows } from './moneyProfile';
 import { startOfMonth } from 'date-fns';
 import {
   computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,
@@ -13,7 +15,7 @@ import { monthlyContribution } from '../../lib/savings';
 import { getCashPosition, getGoals, getGoalSavedMap, getTotalMoney } from './savings';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
-import { getTransactionsInRange, insertTxn } from './transactions';
+import { getTransactionsInRange, insertTxn, insertTxnRows } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
 import { PayMethod } from '../../constants/enums';
@@ -165,24 +167,42 @@ export async function moveToInvestments(
   const personal = personalGroupOf(await getAllGroups(db));
   if (!personal) throw new Error('No personal group');
 
-  const id = await insertTxn(db, {
-    groupId: personal.id,
-    kind: 'settlement',
-    entryMode: 'quick',
-    date: Date.now(),
-    category: INVESTMENT_CATEGORY,
-    note: note ?? 'Moved to investments',
-    payMethod: fromAsset,
-    payments: [{ personId: me.id, amount: amountPaise }],
-    shares: [],
-  });
+  /*
+   * Both halves or neither.
+   *
+   * These were two separate transactions — `insertTxn` then `setMoneyProfile` —
+   * and a kill between them (the OS reclaiming a backgrounded app is the ordinary
+   * case, not a rare one) booked ₹50,000 out of the bank and never raised
+   * investments. Net worth fell by the amount invested and stayed there, with a
+   * transfer row on the ledger that looked entirely correct. Nothing could detect
+   * it afterwards, because a running total is not derivable from the rows.
+   *
+   * So this uses the no-transaction variants of both writes inside one
+   * transaction. `insertTxn`/`setMoneyProfile` open their own and expo-sqlite
+   * cannot nest.
+   */
+  const id = uuid();
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await insertTxnRows(db, {
+      groupId: personal.id,
+      kind: 'settlement',
+      entryMode: 'quick',
+      date: now,
+      category: INVESTMENT_CATEGORY,
+      note: note ?? 'Moved to investments',
+      payMethod: fromAsset,
+      payments: [{ personId: me.id, amount: amountPaise }],
+      shares: [],
+    }, id, now);
 
-  // The other half. Stated rather than derived, unlike the card baseline: there is
-  // no "investment spend since" window to measure against, and a user's holdings
-  // move on their own with the market anyway — so this is a running figure they
-  // can still correct by hand.
-  const profile = await getMoneyProfile(db);
-  await setMoneyProfile(db, { investments: profile.investments + amountPaise });
+    // The other half. Stated rather than derived, unlike the card baseline: there is
+    // no "investment spend since" window to measure against, and a user's holdings
+    // move on their own with the market anyway — so this is a running figure they
+    // can still correct by hand.
+    const profile = await getMoneyProfile(db);
+    await setMoneyProfileRows(db, { investments: profile.investments + amountPaise });
+  });
   return id;
 }
 

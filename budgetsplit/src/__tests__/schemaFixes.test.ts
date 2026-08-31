@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { ONE_TIME_FIXES, applyOneTimeFixes } from '../db/schema';
+import { ONE_TIME_FIXES, applyOneTimeFixes, applyLaunchInvariants } from '../db/schema';
 
 // The one-time DATA fixes in openDB() reclassify and DELETE user rows. They used
 // to run on EVERY launch, so anything the user did afterwards that looked like
@@ -26,11 +26,13 @@ function makeDb(): DatabaseSync {
       -- Added by COLUMN_MIGRATIONS in the real schema; included here because the
       -- creator/role fix writes it. This harness declares the subset the fixes
       -- touch, so a fix reaching a new column must extend it.
-      created_by TEXT
+      created_by TEXT,
+      deleted_at INTEGER
     );
     CREATE TABLE group_member (
       group_id TEXT NOT NULL, person_id TEXT NOT NULL, joined_at INTEGER,
       role TEXT NOT NULL DEFAULT 'member',
+      deleted_at INTEGER,
       PRIMARY KEY (group_id, person_id)
     );
     CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL);
@@ -67,6 +69,13 @@ function launch(db: DatabaseSync): Promise<string[]> {
     async (sql) => { db.exec(sql); },
     async (key) => { db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(key); },
   );
+}
+
+/** A full launch: the one-time fixes, then the invariants, in openDB's order. */
+async function fullLaunch(db: DatabaseSync): Promise<string[]> {
+  const ran = await launch(db);
+  await applyLaunchInvariants(async (sql) => { db.exec(sql); });
+  return ran;
 }
 
 const catNames = (db: DatabaseSync) =>
@@ -385,5 +394,117 @@ describe('creator repair after the backfill has already run (v2)', () => {
     const before = roles(db, 'gnew');
     expect(await launch(db)).toEqual([]);
     expect(roles(db, 'gnew')).toEqual(before);
+  });
+});
+
+/**
+ * The same defect arrived twice from two different causes, and the second time a
+ * one-time fix could not catch it: `fix_group_creator_roles_v1` was already
+ * recorded as applied on those databases, and a keyed migration does not revisit.
+ * "The creator can administer the group" is a property that must hold after every
+ * write, so it is re-asserted on every launch instead.
+ */
+describe('launch invariants: the creator can always administer the group', () => {
+  const roles = (db: DatabaseSync, id: string) =>
+    db.prepare('SELECT person_id, role, deleted_at FROM group_member WHERE group_id = ? ORDER BY person_id').all(id) as
+      { person_id: string; role: string; deleted_at: number | null }[];
+
+  /** A device long past both one-time fixes. */
+  function settled(): DatabaseSync {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO settings (key, value) VALUES
+        ('fix_group_creator_roles_v1','1'), ('fix_group_creator_roles_v2','1');
+      INSERT INTO person (id, name, is_me, email)
+        VALUES ('me','Me',1,NULL), ('rohan','Rohan',0,NULL), ('aarav','Aarav',0,NULL);
+    `);
+    return db;
+  }
+
+  it('promotes a creator who was left a plain member, after both fixes have run', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('g1','Flat','home','#000',0,1000,'me');
+      INSERT INTO group_member (group_id, person_id, joined_at, role)
+        VALUES ('g1','me',1000,'member'), ('g1','rohan',1000,'member');
+    `);
+    // Neither creator fix comes back — this is exactly the state a keyed
+    // migration cannot repair, and the reason this is an invariant instead.
+    expect(await fullLaunch(db)).not.toEqual(
+      expect.arrayContaining(['fix_group_creator_roles_v1', 'fix_group_creator_roles_v2']),
+    );
+    expect(roles(db, 'g1')).toEqual([
+      { person_id: 'me', role: 'admin', deleted_at: null },
+      { person_id: 'rohan', role: 'member', deleted_at: null },
+    ]);
+  });
+
+  it('adds the membership row when the creator has none at all', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('g1','Flat','home','#000',0,1000,'me');
+      INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES ('g1','rohan',1000,'member');
+    `);
+    await fullLaunch(db);
+    expect(roles(db, 'g1')).toContainEqual({ person_id: 'me', role: 'admin', deleted_at: null });
+  });
+
+  /**
+   * The line the one-time fixes crossed and this must not: an adopted group whose
+   * roster has not landed yet has no creator, and naming ME as its creator would
+   * hand me delete rights over somebody else's group — and publish that claim back.
+   */
+  it('never guesses a creator for a group that has none', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('adopted','Goa','map','#111',0,1200,NULL);
+      INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES ('adopted','me',1200,'member');
+    `);
+    await fullLaunch(db);
+    const g = db.prepare('SELECT created_by FROM budget_group WHERE id = ?').get('adopted') as { created_by: string | null };
+    expect(g.created_by).toBeNull();
+    expect(roles(db, 'adopted')).toEqual([{ person_id: 'me', role: 'member', deleted_at: null }]);
+  });
+
+  /** Leaving is a decision. A re-assert on every launch must not undo it. */
+  it('does not bring a creator who left back into the group', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('g1','Flat','home','#000',0,1000,'me');
+      INSERT INTO group_member (group_id, person_id, joined_at, role, deleted_at)
+        VALUES ('g1','me',1000,'admin',5000), ('g1','rohan',1000,'admin',NULL);
+    `);
+    await fullLaunch(db);
+    expect(roles(db, 'g1')).toContainEqual({ person_id: 'me', role: 'admin', deleted_at: 5000 });
+  });
+
+  it('leaves a deleted group alone', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by, deleted_at)
+        VALUES ('gone','Old','home','#000',0,1000,'me',7000);
+    `);
+    await fullLaunch(db);
+    expect(roles(db, 'gone')).toEqual([]);
+  });
+
+  it('is idempotent, and touches nothing on a healthy database', async () => {
+    const db = settled();
+    db.exec(`
+      INSERT INTO budget_group (id, name, icon, color, is_personal, created_at, created_by)
+        VALUES ('g1','Flat','home','#000',0,1000,'rohan');
+      INSERT INTO group_member (group_id, person_id, joined_at, role)
+        VALUES ('g1','rohan',1000,'admin'), ('g1','me',1000,'member'), ('g1','aarav',1000,'member');
+    `);
+    await fullLaunch(db);
+    const before = roles(db, 'g1');
+    await fullLaunch(db);
+    expect(roles(db, 'g1')).toEqual(before);
+    // And in particular a plain member is still a plain member.
+    expect(before).toContainEqual({ person_id: 'me', role: 'member', deleted_at: null });
   });
 });

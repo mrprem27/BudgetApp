@@ -100,6 +100,25 @@ export async function setMoneyProfile(
   db: SQLite.SQLiteDatabase,
   partial: Partial<MoneyProfile>,
 ): Promise<void> {
+  await db.withTransactionAsync(async () => { await setMoneyProfileRows(db, partial); });
+}
+
+/**
+ * The writes without the transaction — call it inside an existing
+ * `withTransactionAsync` (expo-sqlite can't nest), the same arrangement
+ * `insertTxnRows` has under `insertTxn`.
+ *
+ * It exists for `moveToInvestments`, which writes a transaction row AND this
+ * figure and must not be able to write one without the other: a kill between the
+ * two booked the cash out and never raised investments, so net worth fell by the
+ * amount invested, permanently, with no row on any screen explaining it.
+ *
+ * @internal shared with queries/spendPower.ts
+ */
+export async function setMoneyProfileRows(
+  db: SQLite.SQLiteDatabase,
+  partial: Partial<MoneyProfile>,
+): Promise<void> {
   const entries: [string, number][] = [];
   if (partial.openingBank !== undefined) entries.push([KEYS.openingBank, Math.round(partial.openingBank)]);
   if (partial.openingCash !== undefined) entries.push([KEYS.openingCash, Math.round(partial.openingCash)]);
@@ -112,15 +131,13 @@ export async function setMoneyProfile(
   // Only a write that restates the card balance may move the window that balance is
   // measured from.
   if (partial.creditUsed !== undefined) entries.push([KEYS.cardBaselineAt, Date.now()]);
-  await db.withTransactionAsync(async () => {
-    for (const [key, value] of entries) {
-      await db.runAsync(
-        `INSERT INTO settings (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [key, String(value)],
-      );
-    }
-  });
+  for (const [key, value] of entries) {
+    await db.runAsync(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, String(value)],
+    );
+  }
 }
 
 /**

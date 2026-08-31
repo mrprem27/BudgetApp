@@ -162,7 +162,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_group   ON audit_log(group_id);
+-- The group_id and entity_id indexes live in INDEXES below, as (col, created_at DESC)
+-- composites -- every read of this table also sorts by created_at.
 
 -- Savings Goals / Bucket List. Kept entirely separate from budgets: money lives
 -- in the Savings Pool and is earmarked to goals; it never inflates a budget.
@@ -201,7 +202,8 @@ CREATE TABLE IF NOT EXISTS savings_txn (
   note        TEXT,
   created_at  INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_savings_txn_goal ON savings_txn(goal_id);
+-- The goal_id index lives in INDEXES below, as (goal_id, date DESC) -- the goal
+-- ledger is read goal-first and shown newest-first.
 
 -- Imported rows awaiting Review (Import → Review inbox). Heuristically parsed from
 -- a pasted statement; the user classifies each, then it becomes a real txn (and is
@@ -682,6 +684,54 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
 ];
 
 /**
+ * Re-asserted on EVERY launch, unlike the one-time fixes above.
+ *
+ * A group whose creator has no active admin membership row is permanently
+ * unadministrable: every budget edit, every membership change and the delete are
+ * all refused — correctly — by a gate that nobody can satisfy. That has now
+ * happened twice from two different causes (`insertGroup`'s optional `creatorId`,
+ * then an adopted roster arriving before its creator's person row), and both
+ * times the repair was a one-time fix keyed in `settings` — which does not
+ * revisit, so it could not catch the second occurrence on a database that had
+ * already run the first. A property that must hold after every write is an
+ * invariant, not a migration.
+ *
+ * Both statements are conservative about what they know:
+ *
+ * - They never GUESS a creator. `fix_group_creator_roles_v1/v2` set
+ *   `created_by` to the `is_me` person where it was NULL, which was sound then
+ *   (this device had no other user) and is not sound now — an adopted group whose
+ *   roster has not landed yet would name ME the creator of somebody else's group,
+ *   handing me delete rights over it and publishing that claim back to them. So
+ *   that stays a one-time legacy repair, and this only acts where `created_by` is
+ *   already known.
+ * - They never resurrect a departed creator. `INSERT OR IGNORE` skips a member
+ *   row that exists at all, soft-deleted included, and the UPDATE only touches
+ *   active rows — so a creator who left stays left.
+ *
+ * Re-asserting admin cannot undo a deliberate demotion either: `canChangeRole`
+ * refuses to change the creator's role, so "the creator is an admin" has no
+ * legitimate exception to overwrite.
+ */
+export const LAUNCH_INVARIANTS: string[] = [
+  `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
+     SELECT g.id, g.created_by, g.created_at, 'admin'
+       FROM budget_group g
+      WHERE g.created_by IS NOT NULL AND g.deleted_at IS NULL`,
+  `UPDATE group_member SET role = 'admin'
+     WHERE deleted_at IS NULL
+       AND role <> 'admin'
+       AND person_id = (SELECT created_by FROM budget_group WHERE id = group_member.group_id)`,
+];
+
+/** Run {@link LAUNCH_INVARIANTS}. Engine-agnostic, like `applyOneTimeFixes`. */
+export async function applyLaunchInvariants(
+  exec: (sql: string) => Promise<void>,
+): Promise<void> {
+  for (const sql of LAUNCH_INVARIANTS) await exec(sql);
+}
+
+/**
  * Apply every fix this database hasn't had yet, recording each key as it lands.
  * A failure leaves that key unwritten so the fix retries on the next launch.
  * Engine-agnostic (callbacks, not a driver) so the test can drive it with
@@ -856,6 +906,59 @@ export const INDEXES = `
     -- these the screen is a full scan of both split tables.
     CREATE INDEX IF NOT EXISTS idx_txn_share_person   ON txn_share(person_id);
     CREATE INDEX IF NOT EXISTS idx_txn_payment_person ON txn_payment(person_id);
+
+    -- ---- Indexes for reads that had none. Each one below was a full table scan.
+
+    -- category is read kind-first by six callers (the Add screen picker,
+    -- homeData, reportsData, the budget status on Home, analytics, voice drain)
+    -- and its only other index is UNIQUE(name, kind), which leads on name. The
+    -- composite serves the filter and the ORDER BY name together.
+    CREATE INDEX IF NOT EXISTS idx_category_kind_name ON category(kind, name);
+
+    -- The two partial budget indexes above are unusable for a bare
+    -- WHERE group_id = ?: neither person_id IS NULL nor IS NOT NULL is implied,
+    -- so SQLite falls back to a scan on the hottest budget read there is
+    -- (getCategoryBudgetRows, reached from budget status, analytics, the
+    -- category detail screen and the budget editor).
+    CREATE INDEX IF NOT EXISTS idx_catbudget_group ON category_budget(group_id);
+
+    -- group_member's PK is (group_id, person_id), so it cannot serve a
+    -- person-first probe -- which is exactly what getFriendBalances' self-join
+    -- and sharedGroupsOfPerson do, on the Add screen and every person rename.
+    CREATE INDEX IF NOT EXISTS idx_group_member_person ON group_member(person_id);
+
+    -- audit_log is append-only and never pruned, so an unindexed entity_id
+    -- lookup scans the whole history -- and useTxnDetail does one every time a
+    -- transaction is opened. created_at DESC is in the index so the ORDER BY
+    -- comes free rather than sorting the matches.
+    CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_id, created_at DESC);
+    -- Supersedes idx_audit_group, whose group_id-only shape filtered but still
+    -- forced a sort. Same leftmost column, so nothing loses its index.
+    CREATE INDEX IF NOT EXISTS idx_audit_group_created ON audit_log(group_id, created_at DESC);
+    DROP INDEX IF EXISTS idx_audit_group;
+
+    -- Every sync drain reads the outbox ordered by queued_at and takes 50; with
+    -- no index that sorts the entire queue first. The group_id index serves the
+    -- three DELETEs (delete group, stop syncing, group vanished) and the
+    -- per-group pending count on the group screen.
+    CREATE INDEX IF NOT EXISTS idx_outbox_queued ON sync_outbox(queued_at);
+    CREATE INDEX IF NOT EXISTS idx_outbox_group  ON sync_outbox(group_id);
+
+    -- idx_txn_approval_pending leads on txn_id, so it filters the pending rows
+    -- and then hands them back in txn_id order -- the approvals inbox sorts them
+    -- every time. Same partial predicate, ordered the way the screen reads them.
+    CREATE INDEX IF NOT EXISTS idx_txn_approval_created
+      ON txn_approval(created_at) WHERE state = 'pending';
+    -- pendingDisputes runs on every sync drain and dispute_state has no index at
+    -- all; it is NULL for all but a handful of rows, so a partial index is tiny.
+    CREATE INDEX IF NOT EXISTS idx_txn_approval_dispute
+      ON txn_approval(decided_at) WHERE dispute_state IS NOT NULL;
+
+    -- A goal's history is read goal-first and shown newest-first. The date is in
+    -- the index so the ledger does not re-sort on every open. Supersedes
+    -- idx_savings_txn_goal (same leftmost column).
+    CREATE INDEX IF NOT EXISTS idx_savings_txn_goal_date ON savings_txn(goal_id, date DESC);
+    DROP INDEX IF EXISTS idx_savings_txn_goal;
 `;
 
 /**
@@ -1114,6 +1217,18 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     );
   } catch {
     // Leave the data as-is if a legacy repair fails. The app still opens.
+  }
+
+  // --- Launch invariants ----------------------------------------------------
+  // Not a migration: re-asserted every launch, because "the creator can
+  // administer the group" has to survive writes that have not been written yet.
+  // See LAUNCH_INVARIANTS for why it never guesses a creator and never brings a
+  // departed one back. Guarded like everything else here — an unadministrable
+  // group is bad, an app that will not open is worse.
+  try {
+    await applyLaunchInvariants((sql) => db.execAsync(sql));
+  } catch {
+    // Leave roles as-is if the re-assert fails; the next launch tries again.
   }
 
   // Phase GC: collapse the per-group category rows into a single GLOBAL catalog.
