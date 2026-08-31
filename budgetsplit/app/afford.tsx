@@ -364,7 +364,22 @@ export default function AffordScreen() {
             <View style={{ gap: space.sm, marginTop: space.sm }}>
               <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings')} />
               <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.replace('/add/quick')} accessibilityRole="button">
+                {/*
+                  * Carries the amount and category through.
+                  *
+                  * This opened an empty Add form, so the user retyped the figure
+                  * and re-picked the category they had just entered here — on the
+                  * screen whose entire premise is that they have already told the
+                  * app what they want to buy. `add/quick` takes both as params
+                  * (`amount` in paise, all digits) and always has.
+                  */}
+                <TouchableOpacity
+                  style={styles.ghostBtn}
+                  onPress={() => router.replace(
+                    `/add/quick?amount=${amount}${categoryName ? `&category=${encodeURIComponent(categoryName)}` : ''}`,
+                  )}
+                  accessibilityRole="button"
+                >
                   <Text style={styles.ghostBtnText}>{verdict === AffordVerdict.No ? 'Buy anyway' : 'Log it'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => router.back()} accessibilityRole="button">

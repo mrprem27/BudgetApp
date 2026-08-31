@@ -25,6 +25,7 @@ import { DetailChips } from '../../src/components/finance/add/DetailChips';
 import { SplitSummary } from '../../src/components/finance/add/SplitSummary';
 import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance/add/QuickAddSheets';
 import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
+import { backOr } from '../../src/lib/nav';
 
 const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
@@ -71,7 +72,7 @@ export default function QuickAddScreen() {
   return (
     <Screen
       header={
-        <AddHeader form={f} accent={accent} onClose={() => router.back()} onOpenSheet={open} />
+        <AddHeader form={f} accent={accent} onClose={() => backOr(router, '/(tabs)')} onOpenSheet={open} />
       }
     >
       {/* One behavior, both platforms. Was `'height'` on Android with a magic

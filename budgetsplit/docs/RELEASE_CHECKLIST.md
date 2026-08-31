@@ -173,8 +173,15 @@ a user does actually travel".
       other people's records — cascading would rewrite four ledgers because a
       fifth person closed their account. See
       `server/api/migrations/0010_account_deletion.sql` for the full argument.
-      **Still yours to do: `wrangler d1 migrations apply` and `wrangler deploy`,
-      and answer the App Store privacy question about deletion.**
+      **Applied and deployed 2026-08-31** — version `429c2230`. Four migrations
+      were pending, not one: `0007_link_end`, `0008_friend_requests` and
+      `0009_backup_kind` had never been applied either, so the friend-request
+      routes had no tables behind them. Verified after: `friend_request` and
+      `friend_block` exist, `users.deleted_at` exists, and `DELETE /me` answers
+      `401` unauthenticated (not `405`).
+      **Still yours to do: answer the App Store privacy question about deletion,
+      and run §0a's no-enumeration diff — it needs a real session, so it cannot
+      be done without receiving a sign-in email.**
 - [ ] **Privacy policy + App Store listing.** Required even for external
       TestFlight, and newly sharp: a server now holds email addresses.
 - [x] **Update the store-listing copy.** ✅ Draft rewritten in `STORE_LISTING.md`

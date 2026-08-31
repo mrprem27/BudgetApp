@@ -26,8 +26,9 @@ import { myShareOrTotal, myIncomeOf, txnTotal } from '../../src/lib/splitMath';
 import { getMe } from '../../src/db/queries/persons';
 import type { RecurFreq, TxnKind } from '../../src/constants/enums';
 import { formatCompact } from '../../src/lib/money';
+import { backOr } from '../../src/lib/nav';
 
-type Sub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null };
+type Sub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null; paused: boolean };
 
 // Normalise a recurring charge to a per-month figure for the running totals.
 const toMonthly = recurringMonthlyEquivalent;
@@ -53,7 +54,15 @@ export default function RecurringScreen() {
     // Every kind: recurring income (salary) belongs on this screen too — it was
     // invisible everywhere until it first materialized, which made onboarding's
     // income answer look like it did nothing.
-    const rules = byGroup.flat().filter(t => t.recur_freq && (!t.recur_state || t.recur_state === 'active'));
+    /*
+     * Paused rules are IN this list, and that is the whole point of the screen.
+     *
+     * They were filtered out while the row offered a Pause button and no Resume
+     * anywhere in the app — so Pause removed the rule from the only screen that
+     * lists it, permanently, with no undo. This screen's own docblock above says
+     * a paused rule "belongs here and nowhere else"; the filter contradicted it.
+     */
+    const rules = byGroup.flat().filter(t => t.recur_freq && t.recur_state !== 'ended');
     // Skips have to be loaded, not inferred: "next" must be the next date that actually
     // happens, not the next one the schedule would produce.
     const skips = await getSkipsMap(db, rules.map(r => r.id));
@@ -71,26 +80,38 @@ export default function RecurringScreen() {
         : txnTotal(t),
       freq: t.recur_freq!,
       interval: t.recur_interval,
-      nextMs: nextUnskippedOccurrence(t, now, skips.get(t.id)),
+      // A paused rule has no next charge — `materializeDueOccurrences` filters on
+      // `recur_state = 'active'` — so showing the schedule's next date would
+      // advertise a charge that will not happen.
+      nextMs: t.recur_state === 'paused' ? null : nextUnskippedOccurrence(t, now, skips.get(t.id)),
+      paused: t.recur_state === 'paused',
     }));
-    list.sort((a, b) => (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
+    // Paused rules sink below the live ones: they are here to be found and
+    // resumed, not to lead a list of what is about to be charged.
+    list.sort((a, b) =>
+      Number(a.paused) - Number(b.paused) || (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
     return list;
   }, []);
 
   const subs = data ?? [];
-  const { skipNext, pause, edit, end } = useRecurringActions(reload);
+  const { skipNext, pause, resume, edit, end } = useRecurringActions(reload);
   // Never one total across kinds (AGENTS §12): money out and money in are
   // summed and shown separately.
   const outSubs = subs.filter(s => s.kind !== 'income');
   const inSubs = subs.filter(s => s.kind === 'income');
-  const monthlyOut = outSubs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
-  const monthlyIn = inSubs.reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  // Paused rules are listed but never summed: a paused subscription is not money
+  // leaving each month, and counting it would overstate the committed total.
+  const live = (rows: Sub[]) => rows.filter(s => !s.paused);
+  const monthlyOut = live(outSubs).reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  const monthlyIn = live(inSubs).reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  const activeCount = live(subs).length;
+  const pausedCount = subs.length - activeCount;
   const nextUp = subs.find(s => s.nextMs != null);
 
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Recurring" onBack={() => router.back()} />
+        <ScreenHeader title="Recurring" onBack={() => backOr(router, '/plan')} />
         <ErrorState onRetry={reload} />
       </View>
     );
@@ -98,7 +119,7 @@ export default function RecurringScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Recurring" onBack={() => router.back()} />
+      <ScreenHeader title="Recurring" onBack={() => backOr(router, '/plan')} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -126,7 +147,9 @@ export default function RecurringScreen() {
                   </Text>
                 </View>
                 <View style={styles.totalRight}>
-                  <Text style={styles.totalCount}>{subs.length} active</Text>
+                  <Text style={styles.totalCount}>
+                    {activeCount} active{pausedCount > 0 ? ` · ${pausedCount} paused` : ''}
+                  </Text>
                   {nextUp?.nextMs != null && (
                     <Text style={styles.totalNext}>next {shortDate(nextUp.nextMs)}</Text>
                   )}
@@ -152,7 +175,8 @@ export default function RecurringScreen() {
                             />
                           }
                           title={s.name}
-                          subtitle={`${s.category} · ${freqLabel(s.freq, s.interval)}${s.nextMs != null ? ` · next ${shortDate(s.nextMs)}` : ''}`}
+                          subtitle={`${s.category} · ${freqLabel(s.freq, s.interval)}${
+                            s.paused ? ' · paused' : s.nextMs != null ? ` · next ${shortDate(s.nextMs)}` : ''}`}
                           value={<AmountText paise={s.amount} size="sm" forceColor={s.kind === 'income' ? colors.income : colors.textPrimary} rounded />}
                           onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
                           accessibilityLabel={`${s.name}, ${freqLabel(s.freq, s.interval)}`}
@@ -161,8 +185,14 @@ export default function RecurringScreen() {
                             tap targets — far under AGENTS §6 — and one of them is destructive. */}
                         <View style={styles.actionRow}>
                           <SecondaryButton label="Edit" size="sm" onPress={() => edit(s.id)} style={styles.actionBtn} />
-                          <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
-                          <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />
+                          {/* Skipping the next occurrence of a rule that generates
+                              none is a no-op the user cannot see the result of. */}
+                          {!s.paused && (
+                            <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
+                          )}
+                          {s.paused
+                            ? <SecondaryButton label="Resume" size="sm" onPress={() => resume(s.id)} style={styles.actionBtn} />
+                            : <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />}
                           <SecondaryButton label="Stop" size="sm" danger onPress={() => end(s.id)} style={styles.actionBtn} />
                         </View>
                       </View>

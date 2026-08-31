@@ -77,8 +77,24 @@ export function CategoryDonut({ data, total, onOpen, selectedName, onSelect }: P
 
   const selected = sel >= 0 && sel < segs.length ? segs[sel] : null;
 
+  /*
+   * `i` indexes `segs`, so the selection must be read from `segs` — not `data`.
+   *
+   * `computeDonutWedges` DROPS any category worth zero or less, so the two arrays
+   * are only the same length while every value is positive. One ₹0 category and
+   * every index past it is off by one: tapping a wedge selected a different
+   * category, and since the parent drives selection by name, the popped-out
+   * slice, the centre label, the amount, the percentage and the 6-month trend
+   * chart all then described something the user had not tapped.
+   *
+   * Today's only caller happens to build its data from amounts it has already
+   * filtered to `> 0`, so this is latent rather than live — which is exactly why
+   * it survived: nothing on screen would look wrong until a caller passes a zero.
+   * A `DonutWedge` is a `DonutSeg` plus geometry, so the callback contract is
+   * unchanged.
+   */
   function handleWedgePress(i: number) {
-    onSelect?.(sel === i ? null : (data[i] ?? null));
+    onSelect?.(sel === i ? null : (segs[i] ?? null));
   }
 
   if (!segs.length) {

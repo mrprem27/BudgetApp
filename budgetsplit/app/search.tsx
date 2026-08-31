@@ -84,9 +84,22 @@ export default function SearchScreen() {
       return hay.includes(q);
     });
 
+    /*
+     * Grouped by `date` — WHEN IT HAPPENED — like every other ledger surface.
+     *
+     * This grouped by `created_at`, the moment the row was written, while the
+     * query that produced these rows both filters and orders by `date`. Three
+     * things went wrong at once: a bill dated in March but entered today sat
+     * under SEPTEMBER here and under March everywhere else, so searching for it
+     * found it in the wrong place; rows inside a section arrived in `date` order
+     * under a header derived from a different column, so a section could read out
+     * of order against itself; and an imported statement, whose rows are all
+     * created within the same minute, collapsed three years of history into one
+     * month.
+     */
     const map = new Map<string, TxnWithSplits[]>();
     for (const t of filtered) {
-      const d = new Date(t.created_at);
+      const d = new Date(t.date);
       const key = isFinite(d.getTime()) ? monthLabel(startOfMonth(d)).toUpperCase() : 'OLDER';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(t);

@@ -35,6 +35,7 @@ import type { TxnWithSplits } from '../src/db/queries/transactions';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../src/lib/reportsData';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
+import { backOr } from '../src/lib/nav';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
@@ -179,7 +180,7 @@ export default function ReportsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Reports" onBack={() => router.back()} right={exportButtons} />
+      <ScreenHeader title="Reports" onBack={() => backOr(router, '/(tabs)')} right={exportButtons} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
 
       <View style={styles.monthNav}>

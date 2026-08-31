@@ -112,7 +112,10 @@ export default function EditGroupScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Archive', style: 'destructive', onPress: async () => {
         const ok = await archiveGroupSafe(db, id);
-        if (ok) { haptic.warning(); refresh(); router.replace('/groups'); }
+        // `dismissTo`, like delete and leave below — `replace` swaps only THIS
+        // screen, leaving the group's detail screen underneath it, so Back from
+        // the groups list walked straight back into the group just archived.
+        if (ok) { haptic.warning(); refresh(); router.dismissTo('/groups'); }
       } },
     ]);
   }

@@ -22,6 +22,7 @@ import type { Person } from '../../src/db/queries/persons';
 import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../src/hooks/useTxnDetail';
+import { authorLabel } from '../../src/lib/txnDetail';
 import { Chip } from '../../src/components/ui/Chip';
 import { parseTags } from '../../src/lib/tags';
 
@@ -42,7 +43,7 @@ export default function TxnDetailScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
 
   const {
-    txn, members, me, groupName, isPersonal, history, items, parentRule, disputes,
+    txn, members, me, groupName, isPersonal, history, items, parentRule, author, disputes,
     loading, error, reload,
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,
@@ -198,11 +199,17 @@ export default function TxnDetailScreen() {
               <Row label="Paid via" value={PAY_METHOD_LABEL[txn.pay_method]} />
             </>
           )}
-          {/* "Added by" is shared-group attribution — meaningless in the solo ledger. */}
+          {/*
+            * "Added by" is shared-group attribution — meaningless in the solo ledger.
+            *
+            * It read "Added by you" on every entry, co-members' included, on the
+            * screen where you decide whether to trust that person. `authorLabel`
+            * reads `author_person_id`, which is the column that answers it.
+            */}
           {!isPersonal && (
             <>
               <View style={styles.divider} />
-              <Row label="Added by" value={me?.name ? `${me.name} (you)` : 'You'} />
+              <Row label="Added by" value={authorLabel(author, me)} />
             </>
           )}
           {!!txn.parent_recur_id && (

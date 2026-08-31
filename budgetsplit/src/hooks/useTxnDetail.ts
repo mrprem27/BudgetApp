@@ -12,7 +12,7 @@ import {
   getTxnById, getLineItems, setTxnAttachment, softDeleteTxn, restoreTxn,
 } from '../db/queries/transactions';
 import { getGroupById } from '../db/queries/groups';
-import { getGroupMembers, getMe } from '../db/queries/persons';
+import { getGroupMembers, getMe, getPersonById } from '../db/queries/persons';
 import { getAuditLog } from '../db/queries/audit';
 import { useToast } from '../components/system/Toast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
@@ -34,7 +34,7 @@ export function useTxnDetail(id: string) {
   const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
     const t = await getTxnById(database, id);
     if (!t) {
-      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null, disputes: [] };
+      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null, author: null, disputes: [] };
     }
     const [grp, mems, meRow, hist, li, disputes] = await Promise.all([
       getGroupById(database, t.group_id),
@@ -45,6 +45,8 @@ export function useTxnDetail(id: string) {
       disputesFor(database, id),
     ]);
     const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
+    // Null for my own entries, which is what `author_person_id IS NULL` means.
+    const author = t.author_person_id ? await getPersonById(database, t.author_person_id) : null;
     return {
       txn: t,
       members: mems,
@@ -54,6 +56,7 @@ export function useTxnDetail(id: string) {
       history: hist,
       items: li,
       parentRule,
+      author,
       disputes,
     };
   }, [id]);
@@ -66,6 +69,7 @@ export function useTxnDetail(id: string) {
   const history = data?.history ?? [];
   const items = data?.items ?? [];
   const parentRule = data?.parentRule ?? null;
+  const author = data?.author ?? null;
 
   async function attachReceipt(source: 'camera' | 'gallery') {
     // Same pre-flight as the Add screen's receipt chip, and read from the same rule
@@ -158,7 +162,7 @@ export function useTxnDetail(id: string) {
   }
 
   return {
-    txn, members, me, groupName, isPersonal, history, items, parentRule,
+    txn, members, me, groupName, isPersonal, history, items, parentRule, author,
     disputes: data?.disputes ?? [],
     loading, error, reload,
     showAttachment, setShowAttachment,

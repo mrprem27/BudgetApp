@@ -28,7 +28,6 @@ import { BalanceChip } from '../../src/components/ui/BalanceChip';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { PressableScale } from '../../src/components/ui/PressableScale';
-import { FadeIn } from '../../src/components/ui/FadeIn';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { haptic } from '../../src/lib/haptics';
@@ -158,7 +157,7 @@ export default function GroupsScreen() {
     }
   }
 
-  function renderGroup({ item, index }: { item: BudgetGroup; index: number }) {
+  function renderGroup({ item }: { item: BudgetGroup }) {
     const h = health[item.id];
     const isArchivedView = viewMode === 'archived';
 
@@ -174,61 +173,65 @@ export default function GroupsScreen() {
       </TouchableOpacity>
     );
 
+    /*
+     * No per-row FadeIn. It was `<FadeIn delay={Math.min(index, 6) * 55}>` right
+     * here, which AGENTS §11 bans by name: rows mount on RECYCLE, so every row
+     * scrolling back into view appeared blank and then faded in again. The
+     * PressableScale spring is the feedback a row needs.
+     */
     return (
-      <FadeIn delay={Math.min(index, 6) * 55}>
-        <Swipeable
-          ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
-          renderRightActions={item.is_personal ? undefined : renderRightActions}
-          overshootRight={false}
-          friction={2}
+      <Swipeable
+        ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); }}
+        renderRightActions={item.is_personal ? undefined : renderRightActions}
+        overshootRight={false}
+        friction={2}
+      >
+        <PressableScale
+          style={[styles.groupCard, isArchivedView && styles.groupCardArchived]}
+          onPress={() => isArchivedView ? handleRestore(item) : router.push(item.is_personal === 1 ? '/personal' : `/group/${item.id}`)}
+          accessibilityLabel={item.name}
         >
-          <PressableScale
-            style={[styles.groupCard, isArchivedView && styles.groupCardArchived]}
-            onPress={() => isArchivedView ? handleRestore(item) : router.push(item.is_personal === 1 ? '/personal' : `/group/${item.id}`)}
-            accessibilityLabel={item.name}
-          >
-            <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
-            <View style={[styles.groupIcon, { backgroundColor: alpha(item.color, 13) }]}>
-              <Feather name={asFeather(item.icon, 'credit-card')} size={20} color={item.color} />
-            </View>
-            <View style={styles.groupInfo}>
-              <Text style={[styles.groupName, isArchivedView && { color: colors.textSecondary }]} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.groupSub} numberOfLines={1}>
-                {isArchivedView
-                  ? 'Archived — tap to restore'
-                  : item.is_personal === 1
-                  ? `Everything involving you · ${formatCompact(h?.spent ?? 0)}/mo`
-                  : `${h?.members ?? 0} ${(h?.members ?? 0) === 1 ? 'member' : 'members'} · ${formatCompact(h?.spent ?? 0)} this month`
-                }
-              </Text>
-              {!isArchivedView && item.is_personal !== 1 && (memberMap[item.id]?.length ?? 0) > 0 && (
-                <View style={styles.stackRow}>
-                  <AvatarStack people={memberMap[item.id] ?? []} size={22} max={3} />
-                </View>
-              )}
-              {!isArchivedView && h && h.pct !== null && (
-                <View style={styles.budgetRow}>
-                  <View style={{ flex: 1 }}>
-                    <BudgetBar pct={h.pct} health={h.health} height={5} />
-                  </View>
-                  <Text style={[styles.budgetPct, (h.pct ?? 0) > 100 && { color: colors.healthRed }]}>{utilLabel(h.pct)}</Text>
-                  {h.over > 0 && <Text style={styles.overBadge}>{h.over} over</Text>}
-                </View>
-              )}
-            </View>
-            {isArchivedView ? (
-              <Feather name="rotate-ccw" size={16} color={colors.accent} />
-            ) : (h?.net ?? 0) !== 0 ? (
-              <View style={styles.trailingCol}>
-                <BalanceChip net={h?.net ?? 0} />
-                <Feather name="chevron-right" size={14} color={colors.textMuted} />
+          <View style={[styles.cardStripe, { backgroundColor: item.color }]} />
+          <View style={[styles.groupIcon, { backgroundColor: alpha(item.color, 13) }]}>
+            <Feather name={asFeather(item.icon, 'credit-card')} size={20} color={item.color} />
+          </View>
+          <View style={styles.groupInfo}>
+            <Text style={[styles.groupName, isArchivedView && { color: colors.textSecondary }]} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.groupSub} numberOfLines={1}>
+              {isArchivedView
+                ? 'Archived — tap to restore'
+                : item.is_personal === 1
+                ? `Everything involving you · ${formatCompact(h?.spent ?? 0)}/mo`
+                : `${h?.members ?? 0} ${(h?.members ?? 0) === 1 ? 'member' : 'members'} · ${formatCompact(h?.spent ?? 0)} this month`
+              }
+            </Text>
+            {!isArchivedView && item.is_personal !== 1 && (memberMap[item.id]?.length ?? 0) > 0 && (
+              <View style={styles.stackRow}>
+                <AvatarStack people={memberMap[item.id] ?? []} size={22} max={3} />
               </View>
-            ) : (
-              <Feather name="chevron-right" size={18} color={colors.textMuted} />
             )}
-          </PressableScale>
-        </Swipeable>
-      </FadeIn>
+            {!isArchivedView && h && h.pct !== null && (
+              <View style={styles.budgetRow}>
+                <View style={{ flex: 1 }}>
+                  <BudgetBar pct={h.pct} health={h.health} height={5} />
+                </View>
+                <Text style={[styles.budgetPct, (h.pct ?? 0) > 100 && { color: colors.healthRed }]}>{utilLabel(h.pct)}</Text>
+                {h.over > 0 && <Text style={styles.overBadge}>{h.over} over</Text>}
+              </View>
+            )}
+          </View>
+          {isArchivedView ? (
+            <Feather name="rotate-ccw" size={16} color={colors.accent} />
+          ) : (h?.net ?? 0) !== 0 ? (
+            <View style={styles.trailingCol}>
+              <BalanceChip net={h?.net ?? 0} />
+              <Feather name="chevron-right" size={14} color={colors.textMuted} />
+            </View>
+          ) : (
+            <Feather name="chevron-right" size={18} color={colors.textMuted} />
+          )}
+        </PressableScale>
+      </Swipeable>
     );
   }
 
