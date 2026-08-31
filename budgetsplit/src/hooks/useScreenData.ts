@@ -14,7 +14,14 @@ type Options = {
 export type ScreenData<T> = {
   /** Loader result; undefined until the first load resolves. */
   data: T | undefined;
-  /** True until the first load resolves or fails. */
+  /**
+   * True while the data on hand does not describe the current `deps` — i.e. on
+   * the first load, and again whenever `deps` change.
+   *
+   * Deliberately NOT true for a refocus, a pull-to-refresh or a cross-screen
+   * write: those re-read the same inputs, so what is on screen is still correct
+   * and replacing it with a skeleton would flash for no reason.
+   */
   loading: boolean;
   /** True if the most recent load threw. */
   error: boolean;
@@ -87,8 +94,27 @@ export function useScreenData<T>(
   const reload = useCallback(() => run('load'), [run]);
   const onRefresh = useCallback(() => { void run('refresh'); }, [run]);
 
-  // Load on mount + whenever deps (via `run`) change.
-  useEffect(() => { void run('load'); }, [run]);
+  /*
+   * Load on mount + whenever deps (via `run`) change — and go back to `loading`
+   * when they do.
+   *
+   * `loading` was only ever set false, never true again, so it meant "the first
+   * load has finished" forever after. A deps change is different in kind from a
+   * refocus or a cross-screen write: those re-read the SAME inputs, so the data
+   * on screen is merely a moment old and still describes what it claims to. A
+   * deps change means the data now describes DIFFERENT inputs — it is not stale,
+   * it is mislabelled.
+   *
+   * Reports is where that showed: changing the month left last month's Spent,
+   * Earned, donut and deltas on screen under the new month's heading, and its
+   * loader floors itself at 450ms to stop the skeleton flashing, which
+   * guaranteed the wrong numbers were displayed under the wrong label for at
+   * least that long. Someone reading them had no way to know.
+   */
+  useEffect(() => {
+    setLoading(true);
+    void run('load');
+  }, [run]);
 
   // Track focus so a cross-screen write only re-queries the screen the user is
   // actually looking at. Backgrounded tabs (Home/Groups/Savings all stay mounted)

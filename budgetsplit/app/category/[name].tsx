@@ -373,7 +373,15 @@ export default function CategoryDetailScreen() {
           loadError ? (
             <ErrorState onRetry={reload} />
           ) : loading ? null : (
-            <EmptyState icon="inbox" title="No transactions" body={`No expenses in this category ${PERIOD_NOUN[period]}.`} />
+            <EmptyState
+              icon="inbox"
+              title="No transactions"
+              body={`No expenses in this category ${PERIOD_NOUN[period]}.`}
+              actionLabel={`Add a ${categoryName} expense`}
+              // The screen already knows the category — making the user re-pick it
+              // is the same defect as Afford's "Log it".
+              onAction={() => router.push({ pathname: '/add/quick', params: { category: categoryName } })}
+            />
           )
         }
       />

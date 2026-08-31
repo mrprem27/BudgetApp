@@ -249,6 +249,7 @@ export default function GroupDetailScreen() {
           groupName={group.name}
           onDeleteTxn={handleDelete}
           onEditTxn={handleEditTxn}
+          onAddTxn={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           refreshing={refreshing}
           onRefresh={onRefresh}
         />

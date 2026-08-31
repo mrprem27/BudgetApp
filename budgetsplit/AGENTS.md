@@ -403,6 +403,7 @@ it's on the exempt list below.
 | `afford`, `group/[id]/edit`, `settings/notifications` | Forms. A pull gesture fights the keyboard and there's no feed to refresh. |
 | `txn/[id]` | Detail + actions, not a feed. Refetches on focus already. |
 | `add/*` | Wizards. Never. |
+| `(tabs)/settings` | A menu, not a feed. Its one loaded figure (the category count) exists to label a row, and it already refetches on focus — a pull gesture on a list of navigation rows suggests content that can change underneath you, and none can. |
 
 ---
 

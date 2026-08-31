@@ -306,6 +306,8 @@ export default function ReportsScreen() {
               icon="bar-chart-2"
               title="Nothing to report yet"
               body="Add some transactions and your monthly income, spending and category breakdowns will appear here."
+              actionLabel="Add a transaction"
+              onAction={() => router.push('/add/quick')}
             />
           )}
 

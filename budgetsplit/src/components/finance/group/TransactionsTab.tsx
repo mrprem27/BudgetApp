@@ -19,13 +19,15 @@ type Props = {
   groupName: string;
   onDeleteTxn: (id: string) => void;
   onEditTxn: (txn: TxnWithSplits) => void;
+  /** Add an expense in THIS group — the empty state's CTA (§2). */
+  onAddTxn: () => void;
   refreshing: boolean;
   onRefresh: () => void;
 };
 
 /** Group ledger: collapsible filter bar + date-sectioned transaction list. Owns its
  *  own search/kind filter (tab-local UI state). */
-export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, refreshing, onRefresh }: Props) {
+export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
   const [filterKind, setFilterKind] = useState('all');
   const [search, setSearch] = useState('');
@@ -99,9 +101,23 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
       renderItem={renderTxn}
       ListEmptyComponent={
         txns.length === 0 ? (
-          <EmptyState icon="list" title="No expenses yet" body={`Tap + to log your first expense in ${groupName}.`} />
+          <EmptyState
+            icon="list"
+            title="No expenses yet"
+            body={`Log your first expense in ${groupName} and it will appear here.`}
+            actionLabel="Add an expense"
+            onAction={onAddTxn}
+          />
         ) : (
-          <EmptyState icon="search" title="No matches" body="Try a different filter or search." tint={colors.textSecondary} />
+          // The filter is this tab's own state, so the way out is right here.
+          <EmptyState
+            icon="search"
+            title="No matches"
+            body="Nothing in this group matches the current filter."
+            tint={colors.textSecondary}
+            actionLabel="Clear filters"
+            onAction={() => { setFilterKind('all'); setSearch(''); }}
+          />
         )
       }
     />

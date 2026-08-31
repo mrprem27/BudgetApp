@@ -269,6 +269,12 @@ export default function PersonalScreen() {
                     title="Nothing here yet"
                     body={filter === 'personal' ? 'Your personal expenses & income will show here.' : 'No transactions match this filter.'}
                     tint={colors.textSecondary}
+                    // A filter hiding everything and an empty ledger need different
+                    // ways out — clearing the filter, or adding the first entry.
+                    actionLabel={filter === 'personal' ? 'Add a transaction' : 'Show everything'}
+                    onAction={filter === 'personal'
+                      ? () => router.push('/add/quick')
+                      : () => setFilter('personal')}
                   />
                 )
               }
@@ -319,7 +325,14 @@ export default function PersonalScreen() {
           {tab === 'recurring' && (
             <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
               {recurGroups.length === 0 ? (
-                <EmptyState icon="repeat" title="No recurring items" body="Mark an expense as Recurring when you add it and it'll show here, grouped by where it lives." tint={colors.textSecondary} />
+                <EmptyState
+                  icon="repeat"
+                  title="No recurring items"
+                  body="Mark an expense as Recurring when you add it and it'll show here, grouped by where it lives."
+                  tint={colors.textSecondary}
+                  actionLabel="Add a recurring item"
+                  onAction={() => router.push('/add/quick')}
+                />
               ) : recurGroups.map(rg => {
                 const isOpen = !collapsed.has(rg.groupId);
                 const monthly = rg.rules.reduce((s, r) => {

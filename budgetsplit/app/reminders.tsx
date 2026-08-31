@@ -92,7 +92,27 @@ export default function RemindersScreen() {
                         <View style={styles.dueChip}><Text style={styles.dueChipText}>{dueLabel(b.daysUntil)}</Text></View>
                       </View>
                       <Text style={styles.rowSub}>{formatRupees(b.amount)} · {shortDate(b.dateMs)}</Text>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button">
+                      {/*
+                        * Carries the bill through. This opened a blank form, so
+                        * the user read "Netflix ₹649 due tomorrow", tapped Log
+                        * payment, and retyped all four fields the row had just
+                        * shown them. `groupId` matters most: logging a shared
+                        * flat bill into Personal silently loses its split.
+                        */}
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={() => router.push({
+                          pathname: '/add/quick',
+                          params: {
+                            kind: 'expense',
+                            groupId: b.groupId,
+                            amount: String(b.amount),
+                            category: b.category,
+                            note: b.name,
+                          },
+                        })}
+                        accessibilityRole="button"
+                      >
                         <Text style={styles.actionBtnText}>Log payment</Text>
                       </TouchableOpacity>
                     </View>

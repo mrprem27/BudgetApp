@@ -19,6 +19,7 @@ import {
   freeBytes, totalBytes, getCacheStorage, getAvatarStorage, clearExportCache,
 } from '../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, storageAdvice, formatBytes, allowsAttachments } from '../../src/lib/storage';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 
 /**
  * What this device has left, what BudgetSplit is using, and how to get some back.
@@ -36,7 +37,7 @@ export default function StorageSettingsScreen() {
   // All four probes are synchronous filesystem walks, so they run in the loader rather than
   // on render, and `useScreenData` re-runs them on focus — the receipts figure has to move
   // after you delete a photo, or the button looks broken.
-  const { data, error, reload } = useScreenData(async () => ({
+  const { data, error, refreshing, onRefresh, reload } = useScreenData(async () => ({
     free: freeBytes(),
     total: totalBytes(),
     receipts: getAttachmentStorage(),
@@ -114,7 +115,10 @@ export default function StorageSettingsScreen() {
           onRetry={reload}
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           {/* The device figure is the hero: it's the number that decides what the app is
               allowed to do, and everything below is a way of changing it. */}
           <Card padded style={styles.hero}>

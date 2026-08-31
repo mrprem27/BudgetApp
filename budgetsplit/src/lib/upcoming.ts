@@ -73,6 +73,12 @@ export type UpcomingItem = {
   /** What to show: the note if present, else the category. */
   name: string;
   category: string;
+  /**
+   * The group the rule lives in. Carried so "Log payment" can open the Add form
+   * IN that group — logging a shared flat bill into Personal loses its split,
+   * which is a money-model error, not a convenience one.
+   */
+  groupId: string;
   /** My share of the occurrence, in paise (falls back to full amount if I'm not in the split). */
   amount: number;
   /** Projected next occurrence (ms). */
@@ -137,6 +143,7 @@ export function buildUpcoming(
       id: txn.id,
       name: (txn.note && txn.note.trim()) || txn.category,
       category: txn.category,
+      groupId: txn.group_id,
       amount,
       dateMs: next,
       daysUntil: Math.max(0, Math.round((next - nowMs) / DAY_MS)),

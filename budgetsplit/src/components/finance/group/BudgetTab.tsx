@@ -175,8 +175,12 @@ export function BudgetTab({
         <EmptyState
           icon="filter"
           title="Nothing here"
-          body="No categories match this filter. Tap the highlighted count above to clear it."
+          body="No categories match this filter."
           tint={colors.textSecondary}
+          // Was "Tap the highlighted count above to clear it" — instructions for a
+          // control off-screen, which is what §2's CTA requirement exists to replace.
+          actionLabel="Show all categories"
+          onAction={() => setFilter('all')}
         />
       ) : (
         SECTION_ORDER.map(section => {

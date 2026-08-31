@@ -273,7 +273,15 @@ export default function FriendsScreen() {
                 </View>
               )}
               <View style={styles.card}>
-                {filtered.length === 0 && !loading && <Text style={styles.noMatch}>No people match “{query}”.</Text>}
+                {filtered.length === 0 && !loading && (
+                  <EmptyState
+                    icon="search"
+                    title="No matches"
+                    body={`Nobody here matches “${query}”.`}
+                    actionLabel="Clear search"
+                    onAction={() => setQuery('')}
+                  />
+                )}
                 {filtered.map((p, i) => {
                   const bal = balances[p.id];
                   const net = bal?.net ?? 0;
@@ -332,7 +340,28 @@ export default function FriendsScreen() {
             </>
           )}
 
+          {/*
+            * A real empty state, per §2 — this screen had none at all. With no
+            * contacts the CONTACTS block above is gated off entirely, so a new
+            * user saw their own row and then blank space. `EmptyState` was even
+            * imported here and never rendered.
+            *
+            * The dashed tile is hidden in that case rather than shown alongside:
+            * the empty state carries the same action, and two add affordances one
+            * above the other is worse than the blank was.
+            */}
+          {people.length === 0 && !loading && (
+            <EmptyState
+              icon="users"
+              title="No one here yet"
+              body="Add the people you split with. A name is enough — you can connect their account later so expenses reach their phone."
+              actionLabel="Add a person"
+              onAction={() => { setAddName(''); setShowAdd(true); }}
+            />
+          )}
+
           {/* Add a person — dashed tile */}
+          {people.length > 0 && (
           <TouchableOpacity style={styles.addTile} onPress={() => { setAddName(''); setShowAdd(true); }} accessibilityRole="button" accessibilityLabel="Add a person">
             <View style={styles.addTileCircle}><Feather name="plus" size={18} color={colors.accent} /></View>
             <View style={{ flex: 1 }}>
@@ -340,6 +369,7 @@ export default function FriendsScreen() {
               <Text style={styles.addTileSub}>Just a name is enough to start splitting</Text>
             </View>
           </TouchableOpacity>
+          )}
         </ScrollView>
       )}
 
