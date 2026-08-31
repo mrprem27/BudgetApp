@@ -32,6 +32,8 @@ export function PersonNameSheet({
   onChangeVpa,
   phone,
   onChangePhone,
+  email,
+  onChangeEmail,
   onDelete,
 }: {
   visible: boolean;
@@ -52,6 +54,16 @@ export function PersonNameSheet({
    */
   phone?: string;
   onChangePhone?: (v: string) => void;
+  /**
+   * Their email — how a friend request is addressed, and the only identifier
+   * that is the same on both phones.
+   *
+   * Here rather than on a screen of its own, so adding somebody and inviting them
+   * is one act. `person.email` existed as a column for months with no writer and
+   * no field anywhere; this is it.
+   */
+  email?: string;
+  onChangeEmail?: (v: string) => void;
   /**
    * Remove this person entirely. Omit to hide.
    *
@@ -118,6 +130,30 @@ export function PersonNameSheet({
           />
           <Text style={styles.hint}>
             Used to remind them on WhatsApp. Stays on this device.
+          </Text>
+        </>
+      )}
+      {onChangeEmail && (
+        <>
+          <Input
+            label="Email (optional)"
+            value={email ?? ''}
+            onChangeText={onChangeEmail}
+            placeholder="them@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={254}
+            style={styles.gap}
+          />
+          {/*
+            Says what happens, and deliberately says nothing about whether that
+            address has an account. The server answers identically either way —
+            that is what stops it being a directory — and a hint here would put
+            the same oracle back in the client.
+          */}
+          <Text style={styles.hint}>
+            We’ll ask them to connect. Nothing is shared until they say yes.
           </Text>
         </>
       )}

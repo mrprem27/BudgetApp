@@ -30,6 +30,48 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ---
 
+## 0a · The no-enumeration check — run this before every deploy
+
+Friend requests are addressed by **email**, and this API has refused to be a
+directory in three separate places, because a lookup route turns the user table
+into a way to check whether an address belongs to somebody using a finance app.
+
+A route leaks only if its **response** differs. `POST /friend-requests` must
+therefore answer identically whether the address has an account or not — same
+status, same headers, same body — and send one email either way. Only the email
+body differs, and that reaches nobody but the inbox holder.
+
+This cannot be a unit test: it is a property of the deployed Worker, and the
+whole point is that both branches look the same from outside.
+
+```sh
+API=https://budgetsplit-api.budgetsplit.workers.dev
+TOKEN=<a real session token>
+
+curl -sD - -o /tmp/has.json -X POST "$API/friend-requests" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"email":"<an address that HAS an account>"}' > /tmp/has.head
+
+curl -sD - -o /tmp/none.json -X POST "$API/friend-requests" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"email":"definitely-nobody-'"$RANDOM"'@example.com"}' > /tmp/none.head
+
+# Both must be empty. `date` and `cf-ray` differ per request and are filtered.
+diff <(grep -iv '^\(date\|cf-ray\|report-to\|nel\):' /tmp/has.head) \
+     <(grep -iv '^\(date\|cf-ray\|report-to\|nel\):' /tmp/none.head)
+diff /tmp/has.json /tmp/none.json
+```
+
+- [ ] Both diffs are empty, against the deployed Worker.
+- [ ] Repeat past the rate limits (21 sends in a day, and 6 to one address): still
+      `202`, still identical. A `429` here would itself be an oracle — "this
+      address is worth rate-limiting" is information about the address.
+- [ ] The app never renders anything derived from account existence. The only
+      chips are `Invited · waiting` and `Connected`; "not on BudgetSplit yet"
+      would put the oracle back in the client after the API declined to be one.
+
+---
+
 ## 0 · Is the app actually workable? — the sync ledger
 
 Checked against the code, not remembered. This is the answer to "does everything

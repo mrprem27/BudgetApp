@@ -106,7 +106,10 @@ export class BackupVersionError extends Error {}
 /** Forward (insert) order — parents before children, traced from every
  *  `REFERENCES` in `db/schema.ts`. Reverse this order for deletes. */
 export const BACKUP_TABLES = [
-  'person', 'budget_group', 'group_member', 'person_group_trust',
+  // `friend_request` sits after `person` because it references it. It IS user
+  // data: it holds which local person each invited address was meant for, and
+  // losing that on a new phone loses the binding an accepted request depends on.
+  'person', 'friend_request', 'budget_group', 'group_member', 'person_group_trust',
   'category', 'category_tombstone', 'category_budget',
   'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
@@ -145,6 +148,7 @@ export const NEVER_BACKED_UP: Record<string, string> = {
  */
 const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>([
   'txn_approval', 'category_tombstone', 'person_group_trust', 'txn_dispute',
+  'friend_request',
 ]);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];

@@ -31,6 +31,37 @@ export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * you are no longer connected to.
  */
 export const ENDED_LINK_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long a friend request waits.
+ *
+ * 30 days, not `INVITE_TTL_MS`'s 7. An invite is handed over in a conversation
+ * that is already happening; a request to an email address may be waiting for
+ * somebody to install the app and sign up at all, and expiring before they do
+ * would make "email is the unifier" a promise that quietly does not hold.
+ */
+export const FRIEND_REQUEST_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** A greeting, not a message. Long enough for "hey, it's Prem from the flat". */
+export const MAX_REQUEST_NOTE = 140;
+
+/**
+ * Three limits, and each stops a different thing.
+ *
+ * This is the only route in the API that sends mail to an address the CALLER
+ * chose, so the third one matters most: without a per-recipient cap, twenty
+ * accounts each spending their own daily budget at one victim is twenty times the
+ * mail and no rule broken.
+ *
+ * All of them answer the same `202` as a success. A `429` here would be an
+ * oracle — "this address is worth rate-limiting" is information about the
+ * address.
+ */
+export const FRIEND_REQUESTS_PER_SENDER_DAY = 20;
+export const FRIEND_REQUESTS_PER_RECIPIENT_DAY = 5;
+/** A resend inside this window is silently a no-op rather than a second email. */
+export const FRIEND_REQUEST_RESEND_GAP_MS = 24 * 60 * 60 * 1000;
+export const FRIEND_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Magic-link requests allowed per email per window. Stops an email-bomb. */
 export const MAGIC_LINK_MAX_PER_WINDOW = 5;
 export const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;

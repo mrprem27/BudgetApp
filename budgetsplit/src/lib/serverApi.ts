@@ -419,6 +419,73 @@ export async function listEndedLinks(): Promise<EndedLink[]> {
   return data.ended ?? [];
 }
 
+// --- Friend requests, by email ---------------------------------------------
+
+export type IncomingRequest = {
+  id: string;
+  note: string | null;
+  createdAt: number;
+  from: { name: string | null; email: string };
+};
+
+export type OutgoingRequest = {
+  id: string;
+  email: string;
+  state: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  createdAt: number;
+  decidedAt: number | null;
+};
+
+/**
+ * Ask somebody to connect, by email address.
+ *
+ * **This never tells you whether that address has an account**, and the app must
+ * not try to infer it. The server answers an identical `202` for an account, no
+ * account, a block and a rate limit, and sends one email in every case — that is
+ * what keeps this from being a directory, which three separate places in the API
+ * refuse to become. Any UI that said "not on BudgetSplit yet" would put the
+ * enumeration oracle back in the client after the server declined to be one.
+ *
+ * So the only honest states to show are `Invited · waiting` and `Connected`.
+ */
+export async function sendFriendRequest(email: string, note?: string): Promise<void> {
+  await sendAuthed('/friend-requests', { method: 'POST', json: { email, note } });
+}
+
+export async function listFriendRequests(): Promise<{
+  incoming: IncomingRequest[];
+  outgoing: OutgoingRequest[];
+}> {
+  const response = await sendAuthed('/friend-requests');
+  const data = await response.json() as { incoming?: IncomingRequest[]; outgoing?: OutgoingRequest[] };
+  return { incoming: data.incoming ?? [], outgoing: data.outgoing ?? [] };
+}
+
+/**
+ * Accept, and get back who it was.
+ *
+ * The sender's account id comes with it so the device can bind `remote_uid` on
+ * the person row the user already chose — they typed the address and picked the
+ * person, so unlike the QR path there is nothing left to guess about who claimed
+ * what.
+ */
+export async function acceptFriendRequest(
+  id: string,
+): Promise<{ id: string; name: string | null; email: string } | null> {
+  const response = await sendAuthed(`/friend-requests/${encodeURIComponent(id)}/accept`, { method: 'POST' });
+  const data = await response.json() as { person?: { id: string; name: string | null; email: string } | null };
+  return data.person ?? null;
+}
+
+/** Declining is not silence — the sender is told. Blocking is what silences. */
+export async function declineFriendRequest(id: string, block = false): Promise<void> {
+  await sendAuthed(`/friend-requests/${encodeURIComponent(id)}/decline`, { method: 'POST', json: { block } });
+}
+
+export async function cancelFriendRequest(id: string): Promise<void> {
+  await sendAuthed(`/friend-requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 /** Flips only my own side. I can never change what they disclose to me. */
 export async function setLinkPhoneSharing(id: string, sharePhone: boolean): Promise<void> {
   await sendAuthed(`/links/${encodeURIComponent(id)}`, { method: 'PATCH', json: { sharePhone } });

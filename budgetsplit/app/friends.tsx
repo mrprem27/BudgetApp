@@ -13,6 +13,8 @@ import { Input } from '../src/components/ui/Input';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa, setPersonContact, deletePerson } from '../src/db/queries/persons';
+import { recordSentRequest, pendingInvitesByPerson } from '../src/db/queries/friendRequests';
+import { sendFriendRequest, listFriendRequests, serverConfigured, getStoredSession } from '../src/lib/serverApi';
 import { getFriendBalances, type FriendBalance } from '../src/db/queries/balances';
 import { AVATAR_COLORS } from '../src/constants/categories';
 import { pickAndSaveAvatar } from '../src/lib/avatar';
@@ -35,22 +37,25 @@ export default function FriendsScreen() {
   const [renameText, setRenameText] = useState('');
   const [renameVpa, setRenameVpa] = useState('');
   const [renamePhone, setRenamePhone] = useState('');
+  const [renameEmail, setRenameEmail] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [query, setQuery] = useState('');
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [all, bals] = await Promise.all([
+    const [all, bals, invited] = await Promise.all([
       getAllPersons(db),
       me ? getFriendBalances(db, me.id) : Promise.resolve([] as FriendBalance[]),
+      pendingInvitesByPerson(db),
     ]);
     const balances: Record<string, FriendBalance> = {};
     for (const b of bals) balances[b.personId] = b;
-    return { people: all.filter(p => !p.is_me), balances };
+    return { people: all.filter(p => !p.is_me), balances, invited };
   }, [me?.id]);
   const people = data?.people ?? [];
   const balances = data?.balances ?? {};
+  const invited = data?.invited ?? new Map<string, string>();
 
   const q = query.trim().toLowerCase();
   const filtered = q ? people.filter(p => p.name.toLowerCase().includes(q)) : people;
@@ -93,6 +98,7 @@ export default function FriendsScreen() {
     setRenameText(p.name);
     setRenameVpa(p.upi_vpa ?? '');
     setRenamePhone(p.mobile ?? '');
+    setRenameEmail(p.email ?? '');
   }
 
   /**
@@ -133,26 +139,74 @@ export default function FriendsScreen() {
     );
   }
 
+  /**
+   * Save the details, and — if an address was added — ask that person to connect.
+   *
+   * One act, deliberately. Adding somebody and inviting them are the same
+   * intention, and splitting them across two screens is how an invite step ends
+   * up never being found.
+   *
+   * The invite is best-effort and never blocks the save: the address is theirs
+   * whether or not the request went out, and a failed send is something to retry,
+   * not a reason to lose what they typed.
+   */
   async function handleRename() {
     const trimmed = renameText.trim();
     const vpa = renameVpa.trim() || null;
     const phone = renamePhone.trim() || null;
+    const email = renameEmail.trim().toLowerCase() || null;
     const vpaChanged = vpa !== (renamePerson?.upi_vpa ?? null);
     const phoneChanged = phone !== (renamePerson?.mobile ?? null);
+    const emailChanged = email !== (renamePerson?.email ?? null);
     if (!renamePerson || !trimmed) { setRenamePerson(null); return; }
-    if (trimmed === renamePerson.name && !vpaChanged && !phoneChanged) { setRenamePerson(null); return; }
+    if (trimmed === renamePerson.name && !vpaChanged && !phoneChanged && !emailChanged) {
+      setRenamePerson(null); return;
+    }
+    const person = renamePerson;
     try {
-      if (trimmed !== renamePerson.name) await updatePersonName(db, renamePerson.id, trimmed);
-      if (vpaChanged) await setPersonUpiVpa(db, renamePerson.id, vpa);
+      if (trimmed !== person.name) await updatePersonName(db, person.id, trimmed);
+      if (vpaChanged) await setPersonUpiVpa(db, person.id, vpa);
       // Stored as typed. No country-code guessing: this number is dialled by a
       // human or handed to WhatsApp, never used as a key.
-      if (phoneChanged) await setPersonContact(db, renamePerson.id, { mobile: phone });
+      if (phoneChanged) await setPersonContact(db, person.id, { mobile: phone });
+      if (emailChanged) await setPersonContact(db, person.id, { email });
       haptic.success();
       setRenamePerson(null);
       refresh();
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
+      return;
+    }
+    if (emailChanged && email) await inviteByEmail(person, email);
+  }
+
+  /**
+   * Ask an address to connect, and remember which person row it was for.
+   *
+   * That second half is the whole reason a local mirror table exists: when the
+   * request is accepted, the account id has to land on the row the user actually
+   * chose, not on a match they are asked to make later and will not find.
+   */
+  async function inviteByEmail(person: Person, email: string) {
+    if (!serverConfigured() || !(await getStoredSession())) {
+      // No account yet. The address is saved, and the row will offer to invite
+      // once there is somewhere to send from — rather than failing at them now.
+      return;
+    }
+    try {
+      await sendFriendRequest(email);
+      const sent = (await listFriendRequests()).outgoing
+        .find(r => r.email === email && r.state === 'pending');
+      if (sent) await recordSentRequest(db, { id: sent.id, email, personId: person.id });
+      await reload();
+      refresh();
+    } catch (e) {
+      haptic.error();
+      Alert.alert(
+        'Saved, but the invite didn’t go',
+        e instanceof Error ? e.message : 'Try again from their row.',
+      );
     }
   }
 
@@ -252,6 +306,18 @@ export default function FriendsScreen() {
                             );
                           })()}
                           {groupCount > 0 && <Text style={styles.groupsCount}>{groupCount} {groupCount === 1 ? 'group' : 'groups'}</Text>}
+                          {/*
+                            Two states only: waiting, or connected. It must NEVER
+                            say anything derived from whether that address has an
+                            account — "not on BudgetSplit yet" would put the
+                            enumeration oracle back in the client, after the API
+                            deliberately declined to be one.
+                          */}
+                          {p.remote_uid
+                            ? <Text style={styles.inviteChip}>Connected</Text>
+                            : invited.has(p.id)
+                              ? <Text style={styles.inviteChip}>Invited · waiting</Text>
+                              : null}
                         </View>
                       </TouchableOpacity>
                       {net !== 0 && (
@@ -288,6 +354,8 @@ export default function FriendsScreen() {
         onChangeVpa={setRenameVpa}
         phone={renamePhone}
         onChangePhone={setRenamePhone}
+        email={renameEmail}
+        onChangeEmail={setRenameEmail}
         onDelete={confirmDeletePerson}
       />
 
@@ -326,6 +394,7 @@ const styles = StyleSheet.create({
   balChip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   balChipText: { ...type.caption, fontSize: 10, fontFamily: 'Inter_600SemiBold' },
   groupsCount: { ...type.caption, fontSize: 10, color: colors.textMuted },
+  inviteChip: { ...type.caption, fontSize: 10, color: colors.textMuted },
   settlePill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
   settlePillText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   addPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },

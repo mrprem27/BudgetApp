@@ -20,7 +20,8 @@ import { haptic } from '../../src/lib/haptics';
 import {
   createInvite, listPendingClaims, decideClaim, listLinks,
   setLinkPhoneSharing, removeLink,
-  type ServerLink, type PendingClaim,
+  listFriendRequests, acceptFriendRequest, declineFriendRequest,
+  type ServerLink, type PendingClaim, type IncomingRequest,
 } from '../../src/lib/serverApi';
 import { routeErrorBoundary } from '../../src/components/system/AppErrorBoundary';
 
@@ -47,6 +48,7 @@ export default function LinkedPeopleScreen() {
 
   const [links, setLinks] = useState<ServerLink[]>([]);
   const [claims, setClaims] = useState<PendingClaim[]>([]);
+  const [requests, setRequests] = useState<IncomingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const db = useSQLiteContext();
@@ -73,11 +75,12 @@ export default function LinkedPeopleScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [nextLinks, nextClaims, nextPeople] = await Promise.all([
-        listLinks(), listPendingClaims(), getAllPersons(db),
+      const [nextLinks, nextClaims, nextPeople, nextRequests] = await Promise.all([
+        listLinks(), listPendingClaims(), getAllPersons(db), listFriendRequests(),
       ]);
       setLinks(nextLinks);
       setClaims(nextClaims);
+      setRequests(nextRequests.incoming);
       setPeople(nextPeople.filter(p => p.is_me !== 1));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load your linked people.');
@@ -107,6 +110,28 @@ export default function LinkedPeopleScreen() {
     } catch (e) {
       haptic.error();
       setError(e instanceof Error ? e.message : 'Could not match this account.');
+    }
+  }
+
+  /**
+   * Answer a request addressed to my email.
+   *
+   * Declining tells them. Silence would mean they ask again forever, and the
+   * thing that silences somebody is a block — a separate, deliberate act.
+   */
+  async function handleRequest(req: IncomingRequest, accept: boolean) {
+    setBusy(req.id);
+    setError(null);
+    try {
+      if (accept) await acceptFriendRequest(req.id);
+      else await declineFriendRequest(req.id);
+      haptic.success();
+      await load();
+    } catch (e) {
+      haptic.error();
+      setError(e instanceof Error ? e.message : 'Could not answer that request.');
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -206,6 +231,54 @@ export default function LinkedPeopleScreen() {
         ) : (
           <>
             {error && <Text style={styles.error}>{error}</Text>}
+
+            {/*
+              Requests sent to my email address, which is a different thing from a
+              forwarded invite link and says so. An invite can be passed around, so
+              claiming one only ASKS and the sender decides; a request was
+              addressed to my inbox, so it is mine to answer.
+            */}
+            {requests.length > 0 && (
+              <>
+                <SectionHeader title="Wants to connect" />
+                <Card>
+                  {requests.map((req, i) => (
+                    <View key={req.id}>
+                      {i > 0 && <Divider indent="text" />}
+                      <ListRow
+                        icon="mail"
+                        title={req.from.name ?? req.from.email}
+                        subtitle={req.note
+                          ? `${req.from.email} · “${req.note}”`
+                          : `${req.from.email} · ${format(new Date(req.createdAt), 'd MMM, h:mm a')}`}
+                        variant="stacked"
+                        chevron={false}
+                      />
+                      <View style={styles.decideRow}>
+                        <SecondaryButton
+                          label="No thanks"
+                          size="md"
+                          danger
+                          onPress={() => handleRequest(req, false)}
+                          disabled={busy === req.id}
+                          style={styles.decideBtn}
+                        />
+                        <PrimaryButton
+                          label="Connect"
+                          onPress={() => handleRequest(req, true)}
+                          loading={busy === req.id}
+                          style={styles.decideBtn}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </Card>
+                <Text style={styles.hint}>
+                  They asked using your email address. Nothing is shared until you connect,
+                  and declining tells them so they don’t keep asking.
+                </Text>
+              </>
+            )}
 
             {claims.length > 0 && (
               <>

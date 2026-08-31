@@ -265,6 +265,32 @@ CREATE TABLE IF NOT EXISTS sync_outbox (
   queued_at INTEGER NOT NULL
 );
 
+-- A friend request, mirrored locally.
+--
+-- The server is the authority on the request's STATE; this table exists for the
+-- one thing the server cannot know and must never be told: WHICH LOCAL PERSON I
+-- MEANT. I typed an address against a row in my People list, and when that
+-- request is accepted the account id has to land on THAT row -- otherwise the
+-- match is a guess, or a manual step nobody will find.
+--
+-- It is also what lets the People screen say "Invited, waiting" while offline,
+-- rather than a contact that looks the same as one nobody was ever asked about.
+--
+-- person_id is nullable because a request can be sent from the request inbox to
+-- somebody who is not in my list yet.
+--
+-- NO BACKTICKS IN HERE. They terminate the SCHEMA template literal, which is
+-- trap 1 in docs/SYNC_CONTEXT.md and has now cost four separate debugging
+-- sessions.
+CREATE TABLE IF NOT EXISTS friend_request (
+  id         TEXT PRIMARY KEY,
+  direction  TEXT NOT NULL CHECK(direction IN ('outgoing','incoming')),
+  email      TEXT NOT NULL,
+  person_id  TEXT REFERENCES person(id),
+  state      TEXT NOT NULL CHECK(state IN ('pending','accepted','declined','cancelled')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS txn_approval (
   txn_id     TEXT PRIMARY KEY REFERENCES txn(id),
   state      TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
