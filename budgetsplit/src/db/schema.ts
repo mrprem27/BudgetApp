@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS budget_group (
   name           TEXT NOT NULL,
   icon           TEXT NOT NULL,
   color          TEXT NOT NULL,
+  -- DEAD. Never read, never written, by anything. Kept because dropping them
+  -- means rebuilding this table on every existing device to remove four values
+  -- that are all NULL -- real risk, zero gain -- and because leaving them out of
+  -- CREATE TABLE while old databases still have them is exactly the schema drift
+  -- that produces a bug reproducible on one phone and not another.
+  --
+  -- Do NOT wire them up. A group-level spending cap is a SECOND, contradictory
+  -- answer to the question category_budget already answers (see lib/budget.ts):
+  -- two limits over the same spend, disagreeing, with nothing on screen saying
+  -- which one the user is looking at. If a whole-group cap is wanted, it belongs
+  -- in category_budget as a row, not here as a column.
   limit_daily    INTEGER,
   limit_monthly  INTEGER,
   limit_yearly   INTEGER,
@@ -378,6 +389,10 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE category ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense'",
   // v2: multi-currency — default null means app-wide default (INR).
   "ALTER TABLE txn ADD COLUMN currency TEXT",
+  // DEAD, like budget_group's three limit columns: never read, never written.
+  // Kept for the same reason (dropping it means rebuilding the table on every
+  // device to remove a NULL), and the app-wide default in `settings` is the one
+  // answer — a per-group currency would let one group's total be in two.
   "ALTER TABLE budget_group ADD COLUMN default_currency TEXT",
   // v3: section persists where a category belongs (custom categories no longer lost).
   "ALTER TABLE category ADD COLUMN section TEXT",

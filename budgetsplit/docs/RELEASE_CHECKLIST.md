@@ -162,6 +162,19 @@ a user does actually travel".
       named branches are ancestors of it, so their commits are on the remote too.
       The only unpushed commits are three merge commits on an unrelated `Test`
       branch. Verified with `git log --branches --not --remotes`.
+- [x] ~~**No way to delete your account.**~~ **Closed — `DELETE /me` plus a
+      Delete account row on the account screen.** App Store Review 5.1.1(v)
+      requires an app that creates an account to let the user delete it *from
+      inside the app*, so this was a rejection at submission. It destroys the
+      email, name, phone, avatar, every session, every unused magic link for that
+      address, every device key and the `sync_wrap`s sealed to them (so no future
+      device of theirs can decrypt anything), and every backup blob in R2. The
+      `users` row survives, scrubbed: six tables reference it and those rows are
+      other people's records — cascading would rewrite four ledgers because a
+      fifth person closed their account. See
+      `server/api/migrations/0010_account_deletion.sql` for the full argument.
+      **Still yours to do: `wrangler d1 migrations apply` and `wrangler deploy`,
+      and answer the App Store privacy question about deletion.**
 - [ ] **Privacy policy + App Store listing.** Required even for external
       TestFlight, and newly sharp: a server now holds email addresses.
 - [x] **Update the store-listing copy.** ✅ Draft rewritten in `STORE_LISTING.md`

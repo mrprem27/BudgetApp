@@ -199,13 +199,18 @@ identical to working — which is what Settings → Sync → **Sync activity**
 ## 7 · Server (`server/api`)
 
 Migrations `0001_init` · `0002_profile` · `0003_links` · `0004_sync` ·
-`0005_sync_limits` · `0006_disputes`. **Forward-only, by hand, no rollback.**
+`0005_sync_limits` · `0006_disputes` · `0007_link_end` · `0008_friend_requests` ·
+`0009_backup_kind` · `0010_account_deletion`.
+**Forward-only, by hand, no rollback.**
 
 Tables: `users` `magic_links` `sessions` `backups` `invites` `links`
 `device_key` `sync_group` `sync_member` `sync_wrap` `sync_entry` `sync_dispute`
+`friend_request` `friend_block`
 
 | Route | Notes |
 |---|---|
+| `DELETE /me` | Close the account. Scrubs the identity, deletes every session, device key, wrap and backup blob; **does not** delete entries in shared groups — they are the group's record, not the account's. Membership ends, live links are tombstoned with `ended_by`. |
+| `POST/GET /friend-requests`, `/:id/accept` \| `/decline` \| `DELETE` | Addressed by email. **Always `202`**, never `429` — a differing response is the directory this design refuses to be. |
 | `POST/GET /sync/devices` | Register / look up public keys. Refuses a device id owned by another account. |
 | `GET/POST /sync/groups` | List (reports `deleted`/`removed`, does not hide them) / publish |
 | `POST /sync/groups/:id/members` \| `/join` \| `/leave` | Invite, accept, leave |
@@ -227,10 +232,24 @@ Tables: `users` `magic_links` `sessions` `backups` `invites` `links`
   right* — but the per-item breakdown is not on `EntryDoc`, so the other phone shows
   one expense. Cosmetic, not financial.
 - **Budgets, goals, money profile** are personal; they travel only in the snapshot.
-- **F5 is the one live defect**: `seed.ts` can mint two `is_me` rows.
-  `ingestPeerTxn` *refuses* rather than guessing (`ambiguous-me`), which stops a
-  stranger's entry applying, but does not fix the rows.
+- **F5 is not the live defect it was recorded as.** The note said `seed.ts` could
+  mint two `is_me` rows; no path actually does, so the `ambiguous-me` count check
+  guards something unreachable. The producible shape was the opposite one — a
+  SECOND row carrying your uid with `is_me = 0`, minted by `adoptGroup` before
+  your own row could hold a uid — which a count of `is_me` rows cannot see.
+  `claimMyAccount` handles it directly: it looks for that holder and merges it
+  into the `is_me` row before binding. The count check stays as a refusal, since
+  guessing which of two selves you are is worse than stopping.
 - **F8 half-open**: no change-email / merge flow.
+- **A closed account's shared entries stay.** `DELETE /me` scrubs the identity and
+  destroys every key, but `sync_entry` rows they authored survive under an opaque
+  id. That is deliberate — see `0010_account_deletion.sql` — and it is the same
+  rule removal follows everywhere: it ends a relationship, never a record. Their
+  own devices can no longer read those groups, because the wraps are gone.
+- **CSV exports carry a `Direction` column** (`GROUP_EXPORT_HEADER`). Files written
+  before it still import, via `GROUP_EXPORT_HEADER_V1`, and fall back to inferring
+  direction from the kind — which is right for everything except an inbound
+  settlement, and that is the best those files can support.
 - **Never run on a phone.** Everything is verified against the deployed Worker or by
   tests. That is not the same thing.
 
