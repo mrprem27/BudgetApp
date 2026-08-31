@@ -34,11 +34,30 @@ export function computeContributions(
   members: Person[],
   net: Record<string, number>,
 ): Contributions {
+  /*
+   * The numerator and the denominator must describe the same people.
+   *
+   * `total` counted EVERY payer while `fairShare` divided by the CURRENT members,
+   * so a departed member's spending stayed in the total and their head left the
+   * count. Four people spending ₹40,000 with one since removed reported a fair
+   * share of ₹13,333 for a group whose real per-head figure was ₹10,000 — and the
+   * rows underneath, which are per current member, no longer summed to the total
+   * displayed above them.
+   *
+   * Counting only current members' payments is the version that holds together:
+   * the total is what these people spent, the rows are those same people, and the
+   * fair share is the total over their number. A removed member's money has not
+   * been erased — their entries and their balance are untouched, and both are on
+   * their own screen — it is simply not part of "who paid what" among the people
+   * who are here.
+   */
+  const current = new Set(members.map(m => m.id));
   const paid: Record<string, number> = {};
   let total = 0;
   for (const t of txns) {
     if (t.is_deleted || t.kind !== 'expense') continue;
     for (const p of t.payments) {
+      if (!current.has(p.personId)) continue;
       paid[p.personId] = (paid[p.personId] ?? 0) + p.amount;
       total += p.amount;
     }

@@ -1,7 +1,6 @@
 import * as SQLite from 'expo-sqlite';
-import { getGroupNet, getGlobalNet } from '../db/queries/balances';
+import { getNetByGroup } from '../db/queries/balances';
 import { getGroupMembers } from '../db/queries/persons';
-import { getAllGroups } from '../db/queries/groups';
 import { simplify } from './settle';
 
 /** A per-group settlement target between two people: how much, and which way. */
@@ -32,24 +31,63 @@ export async function computeTransferScopes(
   meId: string,
   otherId: string,
 ): Promise<TransferScopes> {
-  const all = await getAllGroups(db);
+  /*
+   * ONE population, and the headline is the sum of the rows.
+   *
+   * These were computed from two different sets and disagreed. The per-group rows
+   * came from `getAllGroups`, which excludes archived groups; the combined figure
+   * came from `getGlobalNet`, whose only scope clause is `is_personal = 0` — so
+   * archived balances were in the total and in no row.
+   *
+   * That is not a display quirk, it is a misdirected payment. Owing ₹5,000 in an
+   * archived Goa trip and ₹2,000 in the live flat showed "All groups ₹7,000",
+   * and `planAllGroupsSettlement` could only allocate to the ₹2,000 of live
+   * scope — so the whole ₹7,000 landed in the flat, leaving it ₹5,000 in credit
+   * while Goa still said ₹5,000 owed. The global net stayed right, so nothing
+   * surfaced it.
+   *
+   * `getNetByGroup` is the same population every balance in the app is built on
+   * (all non-personal groups, archived included), so using it here makes the
+   * scopes agree with `getFriendBalances` by construction rather than by
+   * coincidence.
+   */
+  const [byGroup, names] = await Promise.all([
+    getNetByGroup(db),
+    db.getAllAsync<{ id: string; name: string; is_archived: number }>(
+      'SELECT id, name, is_archived FROM budget_group WHERE is_personal = 0 AND deleted_at IS NULL',
+    ),
+  ]);
+  const nameOf = new Map(names.map(g => [g.id, g]));
+
   const groups: ScopeEntry[] = [];
-  for (const g of all) {
-    if (g.is_personal === 1) continue; // personal group has no counterpart
-    const ids = new Set((await getGroupMembers(db, g.id)).map(m => m.id));
+  let net = 0;   // signed, positive = they owe me
+  for (const [groupId, groupNet] of byGroup) {
+    const meta = nameOf.get(groupId);
+    if (!meta) continue;   // personal, or ended for everyone
+    const ids = new Set((await getGroupMembers(db, groupId)).map(m => m.id));
     if (!ids.has(meId) || !ids.has(otherId)) continue;
-    const pair = pairBetween(await getGroupNet(db, g.id), meId, otherId);
+
+    const pair = pairBetween(groupNet, meId, otherId);
+    const amount = pair?.amount ?? 0;
+    if (pair) net += pair.to === meId ? amount : -amount;
     groups.push({
-      groupId: g.id, name: g.name,
-      amount: pair?.amount ?? 0,
+      groupId,
+      // Labelled, because an archived group appearing in a settle list is
+      // otherwise a group the user cannot find anywhere else.
+      name: meta.is_archived === 1 ? `${meta.name} · Archived` : meta.name,
+      amount,
       from: pair?.from ?? meId,
       to: pair?.to ?? otherId,
     });
   }
-  const gpair = pairBetween(await getGlobalNet(db), meId, otherId);
+
   return {
     groups,
-    all: { amount: gpair?.amount ?? 0, from: gpair?.from ?? meId, to: gpair?.to ?? otherId },
+    all: {
+      amount: Math.abs(net),
+      from: net >= 0 ? otherId : meId,
+      to: net >= 0 ? meId : otherId,
+    },
   };
 }
 

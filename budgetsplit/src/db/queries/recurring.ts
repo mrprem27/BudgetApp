@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { queueEntry } from './syncOutbox';
+import { queueEntry, queueSeries } from './syncOutbox';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
@@ -447,15 +447,43 @@ export async function splitRecurringSeries(
   // rules and double-counted occurrences.
   await db.withTransactionAsync(async () => {
     await insertTxnRows(db, forward, newId, now);
+
+    /*
+     * Carry the FUTURE skips onto the new rule.
+     *
+     * `recur_skip` is keyed on `(series_id, occurrence_date)` and every lookup is
+     * per series id, so splitting the series left every skip behind on the old
+     * one. Skip next month's gym on the 3rd, edit the amount on the 5th, and the
+     * new rule — which starts on exactly that skipped date — materialised it
+     * anyway. The user's explicit "not this one" was silently undone by an
+     * unrelated edit, and it posted real money.
+     *
+     * `resumeRecurring` writes its dormant window into the same table, so a
+     * pause-then-edit-then-resume back-posted the gap for the same reason.
+     *
+     * Only from the split forward: skips before it belong to occurrences the old
+     * rule already accounted for.
+     */
+    await db.runAsync(
+      `INSERT OR IGNORE INTO recur_skip (series_id, occurrence_date, created_at)
+       SELECT ?, occurrence_date, ? FROM recur_skip
+        WHERE series_id = ? AND occurrence_date >= ?`,
+      [newId, now, seriesId, splitDate],
+    );
+
     if (splitDate <= old.date) {
       // The old rule never produced a past occurrence — fully superseded.
       await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [now, seriesId]);
+      await queueSeries(db, seriesId, old.group_id);
     } else {
       // Cap the old rule just before the split; its past occurrences remain.
       await db.runAsync(
         'UPDATE txn SET recur_end=?, recur_state=?, updated_at=? WHERE id=?',
         [splitDate - 1, 'ended', now, seriesId],
       );
+      // The cap is a change the group has to see: a peer still holding the
+      // uncapped rule would keep posting it past the split alongside the new one.
+      await queueEntry(db, seriesId, old.group_id);
     }
     await logAudit(db, {
       entityType: 'recurring', entityId: seriesId, groupId: old.group_id,

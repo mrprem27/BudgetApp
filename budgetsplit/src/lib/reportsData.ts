@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, format } from 'date-fns';
-import { getAllGroups, type BudgetGroup } from '../db/queries/groups';
+import { getAllGroups, getArchivedGroups, type BudgetGroup } from '../db/queries/groups';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange, type TxnWithSplits } from '../db/queries/transactions';
 import { foldUncategorized } from './categoryFold';
@@ -63,7 +63,24 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[], meId: string): 
 }
 
 export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
-      const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
+      /*
+       * Archived groups included, so the page adds up to itself.
+       *
+       * The hero total comes from `getTransactionsInRange(db, null, …)`, which
+       * never joins `budget_group` and so counts every group — while the cards
+       * below it came from `getAllGroups`, which excludes archived ones. A trip
+       * archived last month with ₹6,000 of my share inside the selected month put
+       * the hero at ₹26,000 above cards summing to ₹20,000, with nothing on the
+       * screen naming the difference.
+       *
+       * The hero is the half that is right: money spent in a group you have since
+       * hidden was still spent, which is the same reason balances count archived
+       * groups. So the cards are what had to widen.
+       */
+      const [live, archived, me] = await Promise.all([
+        getAllGroups(db), getArchivedGroups(db), getMe(db),
+      ]);
+      const grps = [...live, ...archived];
       // Every figure below is my share (see `buildSummary`).
       const meId = me?.id ?? '';
 
@@ -127,15 +144,15 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
 
       const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
 
-      // Build spending-by-category pie chart data for the selected month
-      const monthCatMap: Record<string, number> = {};
-      for (const s of sums) {
-        for (const c of s.topCats) {
-          monthCatMap[c.name] = (monthCatMap[c.name] ?? 0) + c.amount;
-        }
-      }
-      // Add all categories from all groups (not just top 3). `allMonthTxns` and the
-      // adopted expense category names were already fetched above.
+      /*
+       * Spending by category for the pie, from EVERY transaction in the month.
+       *
+       * A second map was built here from each group's `topCats` and then never
+       * read. Not a wrong number, but a top-3-per-group aggregate sitting three
+       * lines above an all-categories one — two variables that disagree by
+       * construction, and a ready-made trap for whoever reaches for the nearer
+       * name. Deleted rather than left to be found.
+       */
       const knownExpense = new Set(knownExpenseCats.map(c => c.name));
       const fullCatMapRaw: Record<string, number> = {};
       for (const t of allMonthTxns) {

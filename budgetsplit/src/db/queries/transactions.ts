@@ -449,17 +449,24 @@ export async function insertItemizedTxn(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
+      // `currency` and `source` are here because `InsertItemizedTxnInput` extends
+      // `InsertTxnInput` and therefore ACCEPTS them — they were accepted and
+      // silently dropped. `source` is the one that mattered: it exists so that an
+      // email alert, a Paytm row and a hand-typed expense stop being
+      // indistinguishable, and an itemized bill built from a scanned receipt is
+      // exactly that case, landing as NULL — "typed by hand".
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,source,
+          is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
-        input.payMethod ?? null, now, now,
+        input.payMethod ?? null, input.currency ?? null, input.source ?? null, now, now,
       ],
     );
     // Its own INSERT INTO txn — this function deliberately does NOT reuse
@@ -506,17 +513,23 @@ export async function updateItemizedTxn(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE txn SET category=?, note=?, attachment_uri=?, tags=?, adjustments=?, date=?, pay_method=?, updated_at=? WHERE id=?`,
+      // `group_id` is here for the same reason `updateTxn` has it: the Add
+      // screen's destination pill is live in edit mode. Without it, moving an
+      // itemized bill to another group changed the audit line and nothing else —
+      // the row stayed put, and the queue below re-read the OLD group, so it kept
+      // syncing to the group the user had just moved it out of.
+      `UPDATE txn SET group_id=?, category=?, note=?, attachment_uri=?, tags=?, adjustments=?,
+                      date=?, pay_method=?, currency=?, updated_at=? WHERE id=?`,
       [
-        input.category, input.note ?? null, input.attachmentUri ?? null,
+        input.groupId, input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
-        input.date, input.payMethod ?? null, now, id,
+        input.date, input.payMethod ?? null, input.currency ?? null, now, id,
       ],
     );
-    // Same reason as the insert above: this path has its own UPDATE.
-    const owner = await db.getFirstAsync<Txn>('SELECT group_id FROM txn WHERE id=?', [id]);
-    if (owner) await queueEntry(db, id, owner.group_id);
+    // Against the NEW group, so a bill moved into Personal stops queueing and one
+    // moved the other way starts. `queueEntry`'s SQL enforces both.
+    await queueEntry(db, id, input.groupId);
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
