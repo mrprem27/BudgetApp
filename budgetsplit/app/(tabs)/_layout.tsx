@@ -12,7 +12,7 @@ import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { dateTime } from '../../src/lib/dateFormat';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
-import { runSync } from '../../src/lib/syncEngine';
+import { runSync, type Vanished } from '../../src/lib/syncEngine';
 import { maybeSnapshot } from '../../src/lib/syncSnapshot';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
 import { mergePerson } from '../../src/db/queries/persons';
@@ -33,16 +33,41 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
  * But it does leave the group list, and a group quietly disappearing is exactly
  * the kind of thing that reads as data loss. So it is announced once, and the
  * message says plainly that nothing was lost.
+ *
+ * **The two cases are announced separately.** They used to share one message that
+ * hedged between them — "deleted by whoever created it, OR you are no longer a
+ * member" — which told the user neither thing. They are different events with
+ * different next steps: a deleted group is over for everybody and there is nothing
+ * to do about it, while being removed from one means it is still running without
+ * you, and there is somebody you could ask why.
  */
-function announceVanished(r: { vanished: string[] }) {
+function announceVanished(r: { vanished: Vanished[] }) {
   if (r.vanished.length === 0) return;
-  const n = r.vanished.length;
-  Alert.alert(
-    n === 1 ? 'A shared group has ended' : `${n} shared groups have ended`,
-    'The group was deleted by whoever created it, or you are no longer a member. '
-    + 'Nothing has been deleted here — everything you spent is still in your history, '
-    + 'and the group has moved to Archived.',
-  );
+  const kept = 'Nothing has been deleted here — everything you spent is still in your history, '
+    + 'and the group has moved to Archived.';
+
+  const deleted = r.vanished.filter(v => v.state === 'deleted').length;
+  const removed = r.vanished.filter(v => v.state === 'removed').length;
+
+  // One at a time: two Alerts at once leaves an invisible view that eats every
+  // touch on iOS, which is the hazard `sheetStage` exists for.
+  const showRemoved = () => {
+    if (removed === 0) return;
+    Alert.alert(
+      removed === 1 ? 'You were removed from a group' : `You were removed from ${removed} groups`,
+      `Someone in ${removed === 1 ? 'it' : 'them'} took you out, so you will not see new activity there. ${kept}`,
+    );
+  };
+
+  if (deleted > 0) {
+    Alert.alert(
+      deleted === 1 ? 'A shared group has ended' : `${deleted} shared groups have ended`,
+      `Whoever created ${deleted === 1 ? 'it' : 'them'} deleted ${deleted === 1 ? 'it' : 'them'} for everyone. ${kept}`,
+      [{ text: 'OK', onPress: showRemoved }],
+    );
+    return;
+  }
+  showRemoved();
 }
 
 /**

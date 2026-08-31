@@ -17,6 +17,7 @@ import {
   getStoredSession,
   listSyncGroups, pullSyncEntries, pushSyncEntry, registerDevice, listDeviceKeys,
   publishSyncGroup, inviteSyncMember, joinSyncGroup, pushSyncWraps,
+  leaveSyncGroup, deleteSyncGroup,
   pushSyncDispute, pullSyncDisputes,
   ServerRequestError, serverConfigured, type SyncGroup,
 } from './serverApi';
@@ -37,13 +38,23 @@ import { settings } from './settings';
  * correct.
  */
 
+/** A group that ended for me, and how. */
+export type Vanished = { groupId: string; state: 'deleted' | 'removed' };
+
 export type SyncOutcome = {
   pushed: number;
   pulled: number;
   /** Entries the server refused as stale. Someone else changed them first. */
   conflicts: string[];
-  /** Groups that were deleted for everyone, or that I am no longer in. */
-  vanished: string[];
+  /**
+   * Groups that stopped existing for me, and WHICH of the two things happened.
+   *
+   * Carried separately because they are different events with different next
+   * steps, and collapsing them into one message made both vague: `deleted` is
+   * over for everybody and there is nothing to do, while `removed` means the
+   * group is still running without me and there is somebody I could ask.
+   */
+  vanished: Vanished[];
   /**
    * People a shared group introduced who look like people already here.
    *
@@ -292,11 +303,15 @@ async function drain(
  * and no cursor is advanced against one. The server refuses those writes anyway;
  * this is what stops the device retrying them on every launch forever.
  */
-async function reconcileVanished(db: SQLite.SQLiteDatabase, groups: SyncGroup[]): Promise<string[]> {
-  const gone: string[] = [];
+async function reconcileVanished(db: SQLite.SQLiteDatabase, groups: SyncGroup[]): Promise<Vanished[]> {
+  const gone: Vanished[] = [];
   for (const g of groups) {
     if (g.state !== 'deleted' && g.state !== 'removed') continue;
-    if (await archiveVanishedGroup(db, g.id)) gone.push(g.id);
+    // Which of the two it was travels with it. They are not the same event and do
+    // not have the same next step: a deleted group is over for everyone, while
+    // being removed from one leaves it running without me — and somebody I could
+    // ask about it.
+    if (await archiveVanishedGroup(db, g.id)) gone.push({ groupId: g.id, state: g.state });
   }
   return gone;
 }
@@ -639,6 +654,71 @@ async function pushRoster(
       // Anything else, and a stale roster is better than a failed share.
       if (!(e instanceof ServerRequestError && e.status === 409)) return;
     }
+  }
+}
+
+/**
+ * Publish a group's roster right now, out of band.
+ *
+ * Leaving and deleting both need this, and both need it BEFORE they tell the
+ * server, because the moment `removed_at` or `deleted_at` is set every write from
+ * this device is refused — so a roster published afterwards never lands and the
+ * others never learn what happened. Waiting for the next ordinary sync is not an
+ * option either: by then the group is gone from this device's list.
+ *
+ * Best-effort by design. Failing to publish must not stop somebody leaving a
+ * group they want out of; it only means the others find out on the server's terms
+ * (`listSyncGroups` reporting `removed`) instead of ours.
+ */
+export async function publishRosterNow(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<boolean> {
+  try {
+    const identity = await deviceIdentity();
+    const secret = await deviceSecret();
+    if (!identity || !secret) return false;
+    const groups = await listSyncGroups(identity.deviceId);
+    const key = (await keyring(groups, secret)).get(groupId);
+    if (!key) return false;
+
+    const roster = await readRosterDoc(db, groupId);
+    if (!roster) return false;
+    const version = await nextRosterVersion(db, groupId);
+    const ciphertext = await sealEntry(roster, key, groupId, ROSTER_ENTRY_ID, version);
+    await pushSyncEntry({ groupId, entryId: ROSTER_ENTRY_ID, version, ciphertext, isDeleted: false });
+    await setRosterVersion(db, groupId, version);
+    await clearRosterDirty(db, groupId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Tell the server this group is over for me — leaving, or deleting it for
+ * everyone.
+ *
+ * Both routes existed in `serverApi` with **zero callers**, so neither half ever
+ * ran: a local delete never reached `sync_group`, which is why the group came
+ * back on the next pull. The receiving side (`reconcileVanished` →
+ * `archiveVanishedGroup`) has been wired and waiting the whole time.
+ */
+export async function announceGroupExit(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  mode: 'leave' | 'delete',
+): Promise<void> {
+  if (!serverConfigured()) return;
+  if (!(await getStoredSession())) return;
+  // Roster first, always. See `publishRosterNow`.
+  await publishRosterNow(db, groupId);
+  try {
+    if (mode === 'leave') await leaveSyncGroup(groupId);
+    else await deleteSyncGroup(groupId);
+  } catch {
+    // The server may refuse (not the owner) or be unreachable. Locally this is
+    // still over, and `reconcileVanished` reconciles the two on a later sync.
   }
 }
 

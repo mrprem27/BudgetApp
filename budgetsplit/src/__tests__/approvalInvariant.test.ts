@@ -78,11 +78,10 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     contains: 'ORDER BY t.recur_state ASC',
     why: 'getRecurringForGroup — the group\'s recurring LIST, a ledger view. It shows a peer\'s rule while I am deciding on it, marked pending, exactly as the group ledger shows their one-off. Nothing spends from it; materializeDueOccurrences is the query that spawns money, and that one filters.',
   },
-  {
-    file: 'groups.ts',
-    contains: 'attachment_uri IS NOT NULL',
-    why: 'Collecting receipt files before deleting a group. Same hygiene reasoning.',
-  },
+  // (An entry for `groups.ts` collecting `attachment_uri IS NOT NULL` lived here.
+  // `deleteGroup` is a tombstone now — it deletes no transactions, so no receipt
+  // is orphaned and the query is gone. Removed rather than left as a dead
+  // exemption, which is exactly what the last test in this file guards against.)
 ];
 
 /** SQL string literals (template or single-quoted) that select FROM txn. */

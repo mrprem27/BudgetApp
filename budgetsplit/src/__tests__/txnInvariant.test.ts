@@ -29,9 +29,13 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
-    file: 'groups.ts',
-    contains: 'attachment_uri',
-    why: 'Collecting receipt files before deleting a group — a rule row can own an attachment too, and the file must still be unlinked.',
+    // (An entry for `groups.ts` collecting `attachment_uri` lived here.
+    // `deleteGroup` is a tombstone now — it deletes no transactions, so no receipt
+    // is orphaned and the query is gone. Removed rather than left as a dead
+    // exemption, which the last test in this file exists to catch.)
+    file: 'transactions.ts',
+    contains: 'attachment_uri IS NOT NULL AND updated_at <',
+    why: 'reapDeletedAttachments — soft-deleted rows whose receipt files can now be unlinked. Must see every deleted row, including a rule template that owned one.',
   },
   {
     file: 'backup.ts',

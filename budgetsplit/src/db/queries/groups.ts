@@ -123,7 +123,22 @@ export async function getArchivedGroups(db: SQLite.SQLiteDatabase): Promise<Budg
   );
 }
 
-export async function unarchiveGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<void> {
+/**
+ * Bring an archived group back into the active list.
+ *
+ * Refuses a group carrying `deleted_at`. The two flags mean different things and
+ * only one of them is reversible: `is_archived` is *out of my list, still mine,
+ * can come back*, while `deleted_at` is *this group ended, and I know it* — set
+ * when I delete it for everyone, and when `reconcileVanished` learns somebody
+ * else did. Restoring the second would put back a group that exists for nobody,
+ * still queueing entries at a server that has tombstoned it.
+ */
+export async function unarchiveGroup(db: SQLite.SQLiteDatabase, groupId: string): Promise<boolean> {
+  const existing = await db.getFirstAsync<{ deleted_at: number | null }>(
+    'SELECT deleted_at FROM budget_group WHERE id = ?', [groupId],
+  );
+  if (!existing || existing.deleted_at != null) return false;
+
   await db.withTransactionAsync(async () => {
     const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
     await db.runAsync('UPDATE budget_group SET is_archived=0 WHERE id=?', [groupId]);
@@ -132,6 +147,7 @@ export async function unarchiveGroup(db: SQLite.SQLiteDatabase, groupId: string)
       action: 'updated', summary: `Restored group · ${g?.name ?? ''}`,
     });
   });
+  return true;
 }
 
 export async function insertGroup(
@@ -274,35 +290,55 @@ export async function deleteGroup(
     throw new PermissionError('delete this group');
   }
 
-  // Read the receipt paths BEFORE the rows go: once the txns are deleted there is
-  // no way left to find them, and they'd sit on disk counting toward the storage
-  // total forever.
-  const attachments = await db.getAllAsync<{ attachment_uri: string }>(
-    'SELECT attachment_uri FROM txn WHERE group_id=? AND attachment_uri IS NOT NULL', [groupId],
-  );
-
+  /*
+   * ## It is a tombstone, not a wipe
+   *
+   * This used to hard-delete every txn, share, payment and line item in the
+   * group. Two things were wrong with that, and the second is worse than the
+   * first.
+   *
+   * It destroyed the deleter's OWN history. My share of each of those bills has
+   * already counted as my spending, in months that are already closed, so
+   * deleting them silently rewrote figures I had made decisions on — with no
+   * undo. `archiveVanishedGroup` refuses to do that to me when somebody ELSE
+   * deletes a group, and there is no principled reason to be harsher to the
+   * person pressing the button. They are the only one who can do it by accident.
+   *
+   * And the group came BACK. Nothing told the server, so `sync_group` was still
+   * live and the local `sync.cursor` row had just been deleted — which means the
+   * next pull started from zero, fetched the `__roster__` entry first, and
+   * `adoptGroup` recreated the whole group from it. Empty, because every entry
+   * was gone locally, and unadministrable, because adoption did not carry a
+   * creator. So the delete produced a husk instead of nothing.
+   *
+   * The server is told first, by the caller (`deleteSyncGroup`), because the owner
+   * check lives there and a local delete the server refused would leave the two
+   * permanently disagreeing about whether the group exists.
+   */
   await db.withTransactionAsync(async () => {
+    const now = Date.now();
+    // `deleted_at` means "this group ended, and I know it" — set both when I
+    // delete it and when `reconcileVanished` learns somebody else did.
+    // `is_archived` keeps it out of the active list. `unarchiveGroup` refuses a
+    // group carrying `deleted_at`, so this cannot be walked back into a group
+    // that no longer exists for anyone else.
     await db.runAsync(
-      `DELETE FROM txn_payment WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
-    await db.runAsync(
-      `DELETE FROM txn_share WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
-    await db.runAsync(
-      `DELETE FROM line_item WHERE txn_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
-    await db.runAsync(
-      `DELETE FROM recur_skip WHERE series_id IN (SELECT id FROM txn WHERE group_id=?)`, [groupId]);
+      'UPDATE budget_group SET deleted_at = ?, is_archived = 1, updated_at = ? WHERE id = ?',
+      [now, now, groupId],
+    );
     /*
-     * The delivery queue and the pull cursor, before the entries they name.
+     * The delivery queue and both pull cursors.
      *
-     * `sync_outbox.entry_id REFERENCES txn(id)`, so leaving these behind points
-     * every queued row at an id that is about to stop existing — the same defect
-     * a restore had, arriving by a second route. The cursor has to go too: keeping
-     * it would mean that re-joining this group later starts from a timestamp that
-     * skips its entire history.
+     * Nothing is left to deliver and there is nowhere to deliver it, so a queued
+     * row would retry against a group the server has tombstoned on every sync
+     * forever. The `#disputes` cursor goes with the entry cursor —
+     * `archiveVanishedGroup` already deletes both, and this path used to forget
+     * the second one.
      */
     await db.runAsync('DELETE FROM sync_outbox WHERE group_id=?', [groupId]);
-    await db.runAsync('DELETE FROM settings WHERE key=?', [`sync.cursor.${groupId}`]);
-    await db.runAsync('DELETE FROM txn WHERE group_id=?', [groupId]);
-    await db.runAsync('DELETE FROM group_member WHERE group_id=?', [groupId]);
+    await db.runAsync('DELETE FROM settings WHERE key=? OR key=?', [
+      `sync.cursor.${groupId}`, `sync.cursor.${groupId}#disputes`,
+    ]);
     // Unreviewed imports that were drafted into this group. Left pointing at a
     // dead group they became permanently un-committable and sat in Review forever.
     // Reset rather than delete — the row is a real imported transaction the user
@@ -314,21 +350,102 @@ export async function deleteGroup(
        WHERE dest_group_id = ?`,
       [groupId],
     );
-    // Categories are a global catalog now — not owned by the group. Only this
-    // group's budget lines go.
-    await db.runAsync('DELETE FROM category_budget WHERE group_id=?', [groupId]);
-    await db.runAsync('DELETE FROM budget_group WHERE id=?', [groupId]);
-    // The group's own history goes with it. Must precede the logAudit below —
-    // that row is written with group_id NULL precisely so it survives as the
-    // record that the group was deleted.
-    await db.runAsync('DELETE FROM audit_log WHERE group_id=?', [groupId]);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId: null,
       action: 'deleted', summary: `Deleted group · ${g.name}`,
     });
   });
 
-  return { ok: true, orphanedAttachments: attachments.map(a => a.attachment_uri) };
+  // Nothing is orphaned any more: the entries stay, so their receipts are still
+  // referenced. Kept in the return shape because the caller's contract is about
+  // files it must unlink, and "none" is the honest answer rather than a changed
+  // signature at every call site.
+  return { ok: true, orphanedAttachments: [] };
+}
+
+export type LeaveGroupResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'personal' | 'creator' | 'not-a-member' };
+
+/**
+ * Leave a group somebody else runs.
+ *
+ * There was no way to do this at all. `leaveSyncGroup` existed in `serverApi` with
+ * zero callers, `members.tsx` suppressed the remove action for yourself, and the
+ * only exit was a local delete — which resurrected the group on the next pull.
+ * Somebody could share a group with you and you could not get out of it.
+ *
+ * **The creator cannot leave.** `canRemoveMember` already refuses them for
+ * everybody, and a group with no un-removable admin is precisely the state that
+ * rule exists to prevent. Their exit is Delete. (Handing ownership to somebody
+ * else would be the other answer, and it is not built.)
+ *
+ * ORDER MATTERS, and this is the only place it is written down:
+ *
+ * 1. Mark my membership as ended, and mark the roster dirty.
+ * 2. Publish the roster — the CALLER does this, before step 3.
+ * 3. Tell the server I have left.
+ *
+ * Backwards, and nobody ever learns. The moment `removed_at` is set the server
+ * refuses every write from me, so a roster published after leaving is rejected and
+ * the others keep me as a member forever, with my entries still resolving and my
+ * share still counting in their splits.
+ *
+ * Nothing of mine is deleted. Same rule as everywhere else here: my share of every
+ * one of those bills has already counted as my spending, in months that are
+ * closed. The group leaves my active list; the history stays exactly where it is.
+ */
+export async function leaveGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  meId: string,
+): Promise<LeaveGroupResult> {
+  const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
+  if (!g) return { ok: false, reason: 'not-found' };
+  if (g.is_personal === 1) return { ok: false, reason: 'personal' };
+  if (g.created_by === meId) return { ok: false, reason: 'creator' };
+
+  const mine = await db.getFirstAsync<{ n: number }>(
+    `SELECT 1 AS n FROM group_member WHERE group_id = ? AND person_id = ? AND ${MEMBER_ACTIVE}`,
+    [groupId, meId],
+  );
+  if (!mine) return { ok: false, reason: 'not-a-member' };
+
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'UPDATE group_member SET deleted_at = ?, updated_at = ? WHERE group_id = ? AND person_id = ?',
+      [now, now, groupId, meId],
+    );
+    await db.runAsync(
+      'UPDATE budget_group SET is_archived = 1, updated_at = ? WHERE id = ?', [now, groupId],
+    );
+    await logAudit(db, {
+      entityType: 'group', entityId: groupId, groupId,
+      action: 'updated', summary: `Left group · ${g.name}`,
+    });
+  });
+  // Published by the caller before it tells the server. Deliberately NOT cleared
+  // here — the outbox and cursors are dropped by the caller after the roster has
+  // gone, because dropping them now would leave nothing able to publish it.
+  await markRosterDirty(db, groupId);
+  return { ok: true };
+}
+
+/**
+ * Stop syncing a group this device is done with — after the roster carrying the
+ * departure has been published.
+ */
+export async function stopSyncingGroup(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+): Promise<void> {
+  await db.runAsync('DELETE FROM sync_outbox WHERE group_id = ?', [groupId]);
+  await db.runAsync('DELETE FROM settings WHERE key = ? OR key = ? OR key = ?', [
+    `sync.cursor.${groupId}`,
+    `sync.cursor.${groupId}#disputes`,
+    `sync.roster.dirty.${groupId}`,
+  ]);
 }
 
 /** Soft-delete (archive). Personal group can never be archived. */

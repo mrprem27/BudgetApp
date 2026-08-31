@@ -13,8 +13,13 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Banner } from '../../../src/components/ui/Banner';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { GroupForm } from '../../../src/components/finance/GroupForm';
-import { getGroupById, updateGroup, archiveGroupSafe, deleteGroup, type SplitMode } from '../../../src/db/queries/groups';
-import { deleteAttachment } from '../../../src/lib/attachment';
+import {
+  getGroupById, updateGroup, archiveGroupSafe, deleteGroup, leaveGroup, stopSyncingGroup,
+  type SplitMode,
+} from '../../../src/db/queries/groups';
+import { getGroupNet } from '../../../src/db/queries/balances';
+import { announceGroupExit } from '../../../src/lib/syncEngine';
+import { oweView } from '../../../src/lib/owe';
 import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, type Person } from '../../../src/db/queries/persons';
 import { GROUP_COLORS } from '../../../src/constants/palette';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
@@ -39,12 +44,15 @@ export default function EditGroupScreen() {
   // initial-members snapshot (used by handleSave to diff adds/removals).
   const { data, error, reload } = useScreenData(async (db) => {
     const group = id ? await getGroupById(db, id) : null;
-    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[], meId: '', ctx: null };
+    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[], meId: '', ctx: null, myNet: 0 };
     const [mems, persons, me] = await Promise.all([getGroupMembers(db, id), getAllPersons(db), getMe(db)]);
     const meId = me?.id;
     const initialMembers = mems.filter(p => p.id !== meId).map(p => p.id);
     const ctx = meId ? await getGroupContext(db, id, meId) : null;
-    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers, meId: meId ?? '', ctx };
+    // Where I stand in this group, so leaving can say the figure rather than
+    // block on it. Read from the group's own net — never recomputed here.
+    const myNet = meId ? (await getGroupNet(db, id))[meId] ?? 0 : 0;
+    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers, meId: meId ?? '', ctx, myNet };
   }, [id]);
 
   const allPersons = data?.allPersons ?? [];
@@ -110,21 +118,78 @@ export default function EditGroupScreen() {
   }
 
   function confirmDelete() {
-    Alert.alert('Delete this group?', 'This permanently deletes the group and all its expenses, splits and budgets. This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        const res = await deleteGroup(db, id, meId);
-        if (res.ok) {
-          // Unlink the receipts the deleted transactions owned; best-effort, and
-          // never allowed to block navigation out of a group that is already gone.
-          for (const uri of res.orphanedAttachments) await deleteAttachment(uri);
+    Alert.alert(
+      'Delete for everyone?',
+      'This group closes for you and everyone in it, and nobody can add to it again.\n\n'
+      + 'Your own history is kept — what you spent still counts in the months it happened in.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete for everyone', style: 'destructive', onPress: async () => {
+          try {
+            // Server first: the owner check lives there, and a local delete it
+            // refused would leave the two permanently disagreeing about whether
+            // this group exists. The roster goes with it, before `deleted_at`
+            // makes every write from this device refused.
+            await announceGroupExit(db, id, 'delete');
+            const res = await deleteGroup(db, id, meId);
+            if (!res.ok) {
+              Alert.alert('Can’t delete', 'The Personal group can’t be deleted.');
+              return;
+            }
+            haptic.warning();
+            refresh();
+            router.dismissTo('/groups');
+          } catch (e) {
+            haptic.error();
+            Alert.alert('Couldn’t delete', e instanceof Error ? e.message : 'Please try again.');
+          }
+        } },
+      ],
+    );
+  }
+
+  /**
+   * Leaving is the non-creator's exit, and there was none: `leaveSyncGroup` had
+   * no callers, Members hides the remove action for yourself, and a local delete
+   * resurrected the group on the next pull. Somebody could share a group with you
+   * and you could not get out of it.
+   */
+  function confirmLeave() {
+    const owed = data?.myNet ?? 0;
+    const settleFirst = owed !== 0;
+    Alert.alert(
+      'Leave this group?',
+      (settleFirst
+        ? `${oweView(owed).withName(name || 'this group')}. Leaving does not clear it.\n\n`
+        : '')
+      + 'You stop getting its updates and can’t add to it. Everything you’ve already '
+      + 'shared stays, for you and for them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ...(settleFirst
+          ? [{ text: 'Settle up first', onPress: () => router.push('/(tabs)/groups' as const) }]
+          : []),
+        { text: settleFirst ? 'Leave anyway' : 'Leave', style: 'destructive' as const, onPress: async () => {
+          const res = await leaveGroup(db, id, meId);
+          if (!res.ok) {
+            Alert.alert(
+              'Can’t leave',
+              res.reason === 'creator'
+                ? 'You created this group, so it always keeps you — otherwise nobody could manage it. Delete it for everyone instead.'
+                : 'Please try again.',
+            );
+            return;
+          }
+          // Publish the departure, tell the server, THEN stop syncing — dropping
+          // the queue first would leave nothing able to publish it.
+          await announceGroupExit(db, id, 'leave');
+          await stopSyncingGroup(db, id);
           haptic.warning();
           refresh();
-          router.replace('/groups');
-        }
-        else Alert.alert('Can’t delete', 'The Personal group can’t be deleted.');
-      } },
-    ]);
+          router.dismissTo('/groups');
+        } },
+      ],
+    );
   }
 
   return (
@@ -169,11 +234,16 @@ export default function EditGroupScreen() {
             <TouchableOpacity style={styles.dangerBtn} onPress={confirmArchive} accessibilityRole="button">
               <Text style={styles.dangerArchive}>Archive group</Text>
             </TouchableOpacity>
-            {/* Creator only. The query refuses it either way; hiding it means an
-                admin is not offered an action that would then be rejected. */}
-            {mayDelete && (
+            {/* The creator's exit is Delete; everyone else's is Leave. The two are
+                mutually exclusive because a group must always keep the one person
+                who cannot be removed from it. */}
+            {mayDelete ? (
               <TouchableOpacity style={[styles.dangerBtn, styles.deleteBtn]} onPress={confirmDelete} accessibilityRole="button">
-                <Text style={styles.dangerDelete}>Delete group</Text>
+                <Text style={styles.dangerDelete}>Delete for everyone</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[styles.dangerBtn, styles.deleteBtn]} onPress={confirmLeave} accessibilityRole="button">
+                <Text style={styles.dangerDelete}>Leave group</Text>
               </TouchableOpacity>
             )}
           </View>

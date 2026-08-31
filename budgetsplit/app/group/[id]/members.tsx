@@ -152,19 +152,36 @@ export default function MembersScreen() {
       );
       return;
     }
+    /*
+     * A balance WARNS, it does not block.
+     *
+     * Refusing the removal until it is settled sounds careful and is not: it holds
+     * an admin hostage to a number, so somebody who has simply left your life
+     * keeps a permanent place in your group. And it protects nothing — removal
+     * does not touch a single entry, so the debt survives it either way and stays
+     * on the person's screen to be settled whenever.
+     *
+     * What it must never do is invent a figure. No auto-settlement, no write-off,
+     * no "clearing" anything: the amount stays exactly as it is, on both sides.
+     */
     const balance = net[person.id] ?? 0;
-    if (balance !== 0) {
-      Alert.alert(
-        `Can't remove ${person.name}`,
-        `Settle up ${formatRupees(Math.abs(balance))} first before removing.`,
-        [{ text: 'OK' }],
-      );
-      return;
-    }
-    Alert.alert(`Remove ${person.name}?`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove', style: 'destructive',
+    const owed = oweView(balance);
+    Alert.alert(
+      `Remove ${person.name}?`,
+      balance !== 0
+        ? `${owed.withName(person.name)}. Removing them does not clear it, and keeps every expense you have shared.`
+        : 'Everything you have shared with them stays exactly as it is.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ...(balance !== 0
+          ? [{
+              text: 'Settle up first',
+              onPress: () => router.push(`/add/quick?kind=transfer&to=${person.id}` as const),
+            }]
+          : []),
+        {
+          text: balance !== 0 ? 'Remove anyway' : 'Remove',
+          style: 'destructive' as const,
         onPress: async () => {
           try {
             await removeMemberFromGroup(db, groupId, person.id, meId);
@@ -173,13 +190,17 @@ export default function MembersScreen() {
               message: `Removed ${person.name}`,
               onUndo: async () => { try { await addMemberToGroup(db, groupId, person.id, meId); await reload(); refresh(); } catch { /* ignore */ } },
             });
-          } catch {
+          } catch (e) {
             haptic.error();
-            Alert.alert('Something went wrong', 'Please try again.');
+            Alert.alert(
+              `Couldn't remove ${person.name}`,
+              e instanceof Error ? e.message : 'Please try again.',
+            );
           }
         },
-      },
-    ]);
+        },
+      ],
+    );
   }
 
   return (
