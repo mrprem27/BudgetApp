@@ -106,10 +106,26 @@ export class BackupVersionError extends Error {}
 /** Forward (insert) order — parents before children, traced from every
  *  `REFERENCES` in `db/schema.ts`. Reverse this order for deletes. */
 export const BACKUP_TABLES = [
-  'person', 'budget_group', 'group_member', 'category', 'category_tombstone', 'category_budget',
-  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval',
+  'person', 'budget_group', 'group_member', 'person_group_trust',
+  'category', 'category_tombstone', 'category_budget',
+  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
 ] as const;
+
+/**
+ * Tables that are deliberately NOT backed up, and why.
+ *
+ * Every table in the schema must appear either here or in `BACKUP_TABLES` —
+ * `backupCoverage.test.ts` reads the schema and fails on anything in neither.
+ * That guard exists because two tables added in one day ended up in neither list,
+ * which meant they were lost on a new phone AND left pointing at deleted parents
+ * after a restore. Silently, both ways.
+ */
+export const NEVER_BACKED_UP: Record<string, string> = {
+  sync_outbox:
+    'A delivery queue, not user data. Its rows reference txn ids that a restore '
+    + 'deletes, so it is emptied by restoreAllTables rather than carried.',
+};
 
 /**
  * Tables that did not exist in the first backups, and so may legitimately be
@@ -127,7 +143,9 @@ export const BACKUP_TABLES = [
  * `category_tombstone` restores empty for older files too, which is the same
  * behaviour those files already had — no worse, and correct from here on.
  */
-const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>(['txn_approval', 'category_tombstone']);
+const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>([
+  'txn_approval', 'category_tombstone', 'person_group_trust', 'txn_dispute',
+]);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];
 export type BackupTables = Record<BackupTableName, Record<string, unknown>[]>;
