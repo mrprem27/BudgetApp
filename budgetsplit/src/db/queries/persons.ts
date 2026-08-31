@@ -4,6 +4,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
 import { markRosterDirty } from './syncDoc';
+import { memberActive } from './memberSql';
 import { getGroupContext } from './groups';
 import { canAddMember, canRemoveMember, PermissionError } from '../../lib/permissions';
 
@@ -195,7 +196,7 @@ export async function getGroupMembers(db: SQLite.SQLiteDatabase, groupId: string
   return db.getAllAsync<Person>(
     `SELECT p.*, gm.joined_at FROM person p
      JOIN group_member gm ON gm.person_id = p.id
-     WHERE gm.group_id = ?
+     WHERE gm.group_id = ? AND ${memberActive('gm')}
      ORDER BY p.is_me DESC, p.name ASC`,
     [groupId],
   );
@@ -267,7 +268,7 @@ async function sharedGroupsOfPerson(
   const rows = await db.getAllAsync<{ group_id: string }>(
     `SELECT m.group_id FROM group_member m
        JOIN budget_group g ON g.id = m.group_id AND g.is_personal = 0
-      WHERE m.person_id = ?`,
+      WHERE m.person_id = ? AND ${memberActive('m')}`,
     [personId],
   );
   return rows.map(r => r.group_id);
@@ -308,7 +309,12 @@ export async function addMemberToGroup(
   }
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)',
+      // `deleted_at = NULL` on conflict: re-adding somebody who left must bring
+      // them back, and the row is still there because removal is soft now.
+      // `OR IGNORE` would have left them marked as gone while appearing in the
+      // member picker as already added — present and absent at once.
+      `INSERT INTO group_member (group_id, person_id, joined_at) VALUES (?, ?, ?)
+       ON CONFLICT(group_id, person_id) DO UPDATE SET deleted_at = NULL, joined_at = excluded.joined_at`,
       [groupId, personId, Date.now()],
     );
     const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
@@ -335,9 +341,24 @@ export async function removeMemberFromGroup(
   }
   await db.withTransactionAsync(async () => {
     const p = await db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [personId]);
+    /*
+     * Soft. The row stays, marked with when they left.
+     *
+     * Two reasons, and the schema stated the first when the column was added and
+     * nothing used it: *"a hard delete cannot propagate — the other device keeps
+     * the row and pushes it back."* Removing them here and simply omitting them
+     * from the next roster told the other phones nothing, because absence from a
+     * roster is indistinguishable from a roster that is merely stale. They stayed
+     * a member everywhere else forever.
+     *
+     * The second is the rule this whole area serves: removal ends a relationship,
+     * never a record. Their entries, their shares and their balance are all
+     * untouched — what they spent is a fact about the past, and my share of it has
+     * already counted in months that are closed.
+     */
     await db.runAsync(
-      'DELETE FROM group_member WHERE group_id = ? AND person_id = ?',
-      [groupId, personId],
+      'UPDATE group_member SET deleted_at = ?, updated_at = ? WHERE group_id = ? AND person_id = ?',
+      [Date.now(), Date.now(), groupId, personId],
     );
     await logAudit(db, {
       entityType: 'member', entityId: personId, groupId, action: 'deleted',

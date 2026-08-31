@@ -3,6 +3,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
 import { markRosterDirty } from './syncDoc';
+import { memberActive, MEMBER_ACTIVE } from './memberSql';
 
 export type BudgetGroup = {
   id: string;
@@ -363,8 +364,12 @@ export async function getGroupContext(
   const [g, m] = await Promise.all([
     db.getFirstAsync<{ created_by: string | null }>(
       'SELECT created_by FROM budget_group WHERE id = ?', [groupId]),
+    // Somebody who has LEFT has no role here. Without this they would keep every
+    // permission they had — including, for an admin, removing the people still in
+    // a group they are no longer part of.
     db.getFirstAsync<{ role: GroupRole }>(
-      'SELECT role FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, actorId]),
+      `SELECT role FROM group_member WHERE group_id = ? AND person_id = ? AND ${MEMBER_ACTIVE}`,
+      [groupId, actorId]),
   ]);
   return { createdBy: g?.created_by ?? null, actorId, actorRole: m?.role ?? null };
 }
@@ -377,7 +382,7 @@ export async function getGroupMembersWithRoles(
   const rows = await db.getAllAsync<{ person_id: string; role: GroupRole; created_by: string | null }>(
     `SELECT gm.person_id, gm.role, bg.created_by
        FROM group_member gm JOIN budget_group bg ON bg.id = gm.group_id
-      WHERE gm.group_id = ?`,
+      WHERE gm.group_id = ? AND ${memberActive('gm')}`,
     [groupId],
   );
   return rows
@@ -419,8 +424,8 @@ export async function getSharedGroupsWith(
 ): Promise<Array<{ id: string; name: string }>> {
   return db.getAllAsync<{ id: string; name: string }>(
     `SELECT g.id, g.name FROM budget_group g
-       JOIN group_member a ON a.group_id = g.id AND a.person_id = ?
-       JOIN group_member b ON b.group_id = g.id AND b.person_id = ?
+       JOIN group_member a ON a.group_id = g.id AND a.person_id = ? AND ${memberActive('a')}
+       JOIN group_member b ON b.group_id = g.id AND b.person_id = ? AND ${memberActive('b')}
       WHERE g.is_personal = 0 AND g.is_archived = 0
       ORDER BY g.created_at ASC`,
     [meId, personId],

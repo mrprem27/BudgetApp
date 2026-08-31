@@ -521,8 +521,19 @@ export async function readRosterDoc(
   );
   if (!g) return null;
 
+  /*
+   * Includes people who have LEFT, with `removedAt` — the one read of
+   * `group_member` that must, and the reason `memberInvariant.test.ts` allowlists
+   * it.
+   *
+   * The roster is how a removal travels. Publishing only current members means
+   * the departed simply vanish from the document, and absence is
+   * indistinguishable from a roster that is merely stale — so `adoptGroup` cannot
+   * act on it and they stay a member on every other phone forever.
+   */
   const members = await db.getAllAsync<RosterMember>(
-    `SELECT p.id AS pid, p.remote_uid AS uid, p.name AS name, p.avatar_color AS color, m.role AS role
+    `SELECT p.id AS pid, p.remote_uid AS uid, p.name AS name, p.avatar_color AS color,
+            m.role AS role, m.deleted_at AS removedAt
        FROM group_member m JOIN person p ON p.id = m.person_id
       WHERE m.group_id = ?`,
     [groupId],
@@ -668,20 +679,21 @@ export async function adoptGroup(
         );
       }
 
-      if (m.removedAt != null) {
-        // They are out. Their ENTRIES stay — what someone spent is a fact about
-        // the past — and so does the person row, which other groups and their own
-        // history still reference.
-        await db.runAsync(
-          'DELETE FROM group_member WHERE group_id = ? AND person_id = ?', [groupId, localId],
-        );
-        continue;
-      }
-
+      /*
+       * Membership is carried as a value, not as presence-or-absence, so both
+       * directions land: someone who left is marked, and someone re-added has
+       * their `deleted_at` cleared. Soft on this side too — the row is what makes
+       * the removal itself something the next roster can carry onward.
+       *
+       * Their ENTRIES stay either way, and so does the person row, which other
+       * groups and their own history still reference.
+       */
       await db.runAsync(
-        `INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)
-         ON CONFLICT(group_id, person_id) DO UPDATE SET role = excluded.role`,
-        [groupId, localId, Date.now(), role],
+        `INSERT INTO group_member (group_id, person_id, joined_at, role, deleted_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(group_id, person_id) DO UPDATE SET
+           role = excluded.role, deleted_at = excluded.deleted_at`,
+        [groupId, localId, Date.now(), role, m.removedAt ?? null],
       );
     }
 

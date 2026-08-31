@@ -6,6 +6,7 @@ import { formatRupees } from '../../lib/money';
 import { validateShares } from '../../lib/splitMath';
 import { requiresMyApproval } from '../../lib/trust';
 import { getGroupTrust } from './persons';
+import { MEMBER_ACTIVE } from './memberSql';
 import type { Person } from './persons';
 import { localTz } from './transactions';
 
@@ -139,7 +140,11 @@ export async function ingestPeerTxn(
   if (group.is_personal === 1) return { ok: false, reason: 'personal-group' };
 
   const members = await db.getAllAsync<{ person_id: string }>(
-    'SELECT person_id FROM group_member WHERE group_id = ?', [env.groupId],
+    // Current members only. Somebody who has left cannot author an entry here any
+    // more, and a share cannot be parked on them — which is exactly what a stale
+    // peer would try, since their device may not have seen the removal yet.
+    `SELECT person_id FROM group_member WHERE group_id = ? AND ${MEMBER_ACTIVE}`,
+    [env.groupId],
   );
   const ids = new Set(members.map(m => m.person_id));
   // Both ends: they must be entitled to write here, and it must concern me.

@@ -59,9 +59,11 @@ function roster(over: Partial<RosterDoc> = {}, members?: RosterDoc['members']): 
 const group = (db: TestDb) =>
   db.raw.prepare('SELECT name, icon, color, simplify_debt, default_split, created_by FROM budget_group WHERE id = ?').get(FLAT);
 
+/** Who is in the group NOW — removal is soft, so the row itself survives. */
 const memberIds = (db: TestDb) =>
-  (db.raw.prepare('SELECT person_id FROM group_member WHERE group_id = ? ORDER BY person_id').all(FLAT) as { person_id: string }[])
-    .map(r => r.person_id);
+  (db.raw.prepare(
+    'SELECT person_id FROM group_member WHERE group_id = ? AND deleted_at IS NULL ORDER BY person_id',
+  ).all(FLAT) as { person_id: string }[]).map(r => r.person_id);
 
 describe('a republished roster is applied, not discarded', () => {
   it('renames and recolours the group', async () => {

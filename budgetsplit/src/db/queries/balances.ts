@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { NOT_AWAITING_APPROVAL } from './approvalSql';
+import { memberActive } from './memberSql';
 import { simplify } from '../../lib/settle';
 import { asReceivableState, type ReceivableState } from '../../constants/enums';
 
@@ -175,16 +176,42 @@ export async function getFriendBalances(
             COUNT(DISTINCT gm2.group_id) as group_count
      FROM group_member gm1
      JOIN group_member gm2 ON gm1.group_id = gm2.group_id AND gm2.person_id != ?
+       AND ${memberActive('gm2')}
      JOIN person p ON p.id = gm2.person_id
      JOIN budget_group bg ON bg.id = gm1.group_id AND bg.is_personal = 0
-     WHERE gm1.person_id = ?
+     WHERE gm1.person_id = ? AND ${memberActive('gm1')}
      GROUP BY p.id`,
     [meId, meId],
   );
 
   const perPerson = await netPerPerson(db, meId);
 
-  return rows.map(r => {
+  /*
+   * Somebody who LEFT, and still owes or is owed.
+   *
+   * The membership query above is "who is in a group with me now", and after a
+   * removal that correctly stops including them. But their entries do not go
+   * anywhere — that is the whole point of removal being soft — so their balance
+   * is still real and still in `netPerPerson`. Dropping them from this list would
+   * make that money disappear from `getMyExposure` and every owe/owed headline
+   * built on it, while the group's own screen still showed it.
+   *
+   * So they stay while there is something outstanding, and fall off the list by
+   * themselves once it is settled. `groupCount: 0` is the honest answer to "how
+   * many groups do we share" and is what marks them as a former member.
+   */
+  const listed = new Set(rows.map(r => r.person_id));
+  const owedBy = [...perPerson.entries()].filter(([pid, net]) => net !== 0 && !listed.has(pid));
+  const formerRows = owedBy.length === 0 ? [] : await db.getAllAsync<{
+    person_id: string; name: string; avatar_color: string; image_uri: string | null;
+    receivable_state: string | null; group_count: number;
+  }>(
+    `SELECT id AS person_id, name, avatar_color, image_uri, receivable_state, 0 AS group_count
+       FROM person WHERE id IN (${owedBy.map(() => '?').join(',')})`,
+    owedBy.map(([pid]) => pid),
+  );
+
+  return [...rows, ...formerRows].map(r => {
     return {
       personId: r.person_id,
       name: r.name,

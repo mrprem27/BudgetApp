@@ -43,9 +43,14 @@ function myFlat() {
 const nameOf = (db: TestDb, gid: string) =>
   db.raw.prepare('SELECT name, simplify_debt FROM budget_group WHERE id = ?').get(gid);
 
+/**
+ * ACTIVE membership. Removal is soft — the row stays, marked with when they left
+ * — so counting rows would report somebody who has gone as still present.
+ */
 const isMember = (db: TestDb, gid: string, pid: string) =>
-  (db.raw.prepare('SELECT COUNT(*) AS c FROM group_member WHERE group_id = ? AND person_id = ?')
-    .get(gid, pid) as { c: number }).c === 1;
+  (db.raw.prepare(
+    'SELECT COUNT(*) AS c FROM group_member WHERE group_id = ? AND person_id = ? AND deleted_at IS NULL',
+  ).get(gid, pid) as { c: number }).c === 1;
 
 describe('membership is admin-only, and the actor is not optional', () => {
   it('refuses a plain member adding somebody', async () => {
