@@ -1,7 +1,13 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SectionList, Linking, Share, Alert, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
+import { IconCircle } from '../../src/components/ui/IconCircle';
+import { TrustSheet } from '../../src/components/finance/TrustSheet';
+import { trustStateLabel, groupTrustLabel, trustInert } from '../../src/lib/trustCopy';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -31,6 +37,8 @@ import type { MyActivityItem } from '../../src/db/queries/transactions';
  * came from group by group, and every transaction you are both on.
  */
 export default function PersonScreen() {
+  /** Which trust choice is open: the person-level one, or one group's exception. */
+  const [trustSheet, setTrustSheet] = useState<{ groupId: string | null } | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const bottomPad = useContentInset({});
@@ -156,69 +164,57 @@ export default function PersonScreen() {
               )}
 
               {/*
-                Trust is about what they can do to your numbers, not about the
-                balance — so it shows whatever the balance is. The hint is honest
-                about whether it can do anything yet: with no account there is no
-                write path, and saying "protected" would be theatre.
+                Trust is a SETTING WITH A STATE, not an imperative.
+
+                This was a full-width `Trust {name}` button — an action label — sat
+                above rows reading `Counts straight away`, which are state labels,
+                all of them accent-coloured, full-width and floating bare on the
+                background. One told you what would happen if you tapped; the others
+                told you what was already true, and nothing distinguished them.
+
+                Now it is a Card of ListRows (§3/§4): each shows its current value
+                and opens a sheet listing every option. The per-group rows sit under
+                the same roof because an exception is the same kind of thing as the
+                setting it excepts.
               */}
-              <SecondaryButton
-                label={trustState === 'trusted' ? `Review ${name}'s entries` : `Trust ${name}`}
-                size="sm"
-                onPress={toggleTrusted}
-                style={styles.trustBtn}
-              />
-              <Text style={styles.trustHint}>
-                {!trustIsLive
-                  ? `${name} has no linked account, so nothing can be added on their behalf yet.`
-                  : trustApplies
-                    ? 'Their entries count straight away, in every group you share.'
-                    : 'Their entries wait for your approval before touching your numbers.'}
-              </Text>
-
-              {/*
-                Per-group exceptions.
-
-                Only shown once trust can actually do something, and only when
-                there is more than one group — with one group an override and the
-                global answer are the same statement said twice.
-
-                Each row cycles trusted → waits → follows the answer above.
-                Clearing has to be reachable, or "trusted everywhere except the
-                trip" becomes a one-way door.
-              */}
-              {trustIsLive && sharedGroups.length > 1 && (
-                <View style={styles.groupTrust}>
-                  <Text style={styles.groupTrustLabel}>OR DECIDE PER GROUP</Text>
-                  {sharedGroups.map(g => {
-                    const set = groupTrust.get(g.id) ?? null;
-                    return (
-                      <TouchableOpacity
-                        key={g.id}
-                        style={styles.groupTrustRow}
-                        onPress={() => {
-                          haptic.selection();
-                          setGroupTrustFor(g.id, set === null ? 'trusted' : set === 'trusted' ? 'review' : null);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Trust for ${g.name}`}
-                      >
-                        {/* Archived groups are listed so an override set in one
-                            stays clearable — otherwise the row survives with no
-                            control to reach it, and silently governs again if the
-                            group is ever restored. Labelled, so it is obvious why
-                            a hidden group is in this list. */}
-                        <Text style={styles.groupTrustName} numberOfLines={1}>
-                          {g.is_archived === 1 ? `${g.name} · Archived` : g.name}
-                        </Text>
-                        <Text style={[styles.groupTrustValue, set === null && styles.groupTrustInherit]}>
-                          {set === 'trusted' ? 'Counts straight away'
-                            : set === 'review' ? 'Waits for you'
-                              : 'Same as above'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+              {trustIsLive ? (
+                <Card style={styles.trustCard}>
+                  <ListRow
+                    leading={<IconCircle icon="shield" size={layout.iconCircle} color={colors.accent} />}
+                    title="Their entries"
+                    value={trustStateLabel(trustState === 'trusted' ? 'trusted' : 'review')}
+                    onPress={() => setTrustSheet({ groupId: null })}
+                    accessibilityLabel={`Their entries: ${trustStateLabel(trustState === 'trusted' ? 'trusted' : 'review')}. Change`}
+                  />
+                  {/*
+                    Shown whenever an exception EXISTS, not only when the old gate
+                    (`sharedGroups.length > 1`) allowed it. A stored override used to
+                    survive with no control able to reach it — §13 calls that a
+                    one-way door.
+                  */}
+                  {(sharedGroups.length > 1 || groupTrust.size > 0) && sharedGroups.map(g => (
+                    <React.Fragment key={g.id}>
+                      <Divider indent="text" />
+                      <ListRow
+                        variant="stacked"
+                        // The shared-groups list carries id/name/archived only, so one neutral
+                        // glyph rather than re-querying every group for its icon.
+                        leading={<IconCircle icon="users" size={layout.iconCircle} color={colors.accent} />}
+                        title={g.is_archived === 1 ? `${g.name} · Archived` : g.name}
+                        value={groupTrustLabel(
+                          (groupTrust.get(g.id) as 'trusted' | 'review' | undefined) ?? null,
+                          trustState === 'trusted' ? 'trusted' : 'review',
+                        )}
+                        onPress={() => setTrustSheet({ groupId: g.id })}
+                        accessibilityLabel={`${g.name}. Change what happens to ${name}'s entries here`}
+                      />
+                    </React.Fragment>
+                  ))}
+                </Card>
+              ) : (
+                // No account, no write path, so the control would do nothing. Say
+                // why rather than render a full-width button that cannot act.
+                <Text style={styles.trustHint}>{trustInert(name)}</Text>
               )}
 
               {/* Only when they owe YOU and we have a number. `canRemind` owns
@@ -255,6 +251,22 @@ export default function PersonScreen() {
           }
         />
       )}
+      <TrustSheet
+        visible={!!trustSheet}
+        onClose={() => setTrustSheet(null)}
+        name={name}
+        scope={trustSheet?.groupId ? (sharedGroups.find(g => g.id === trustSheet.groupId)?.name ?? null) : null}
+        value={trustSheet?.groupId
+          ? ((groupTrust.get(trustSheet.groupId) as 'trusted' | 'review' | undefined) ?? null)
+          : (trustState === 'trusted' ? 'trusted' : 'review')}
+        inherited={trustState === 'trusted' ? 'trusted' : 'review'}
+        onChoose={(next) => {
+          // Person-level has no null: one of the two answers is always in force.
+          if (trustSheet?.groupId) setGroupTrustFor(trustSheet.groupId, next);
+          else if (next !== null && next !== trustState) toggleTrusted();
+        }}
+      />
+
     </View>
   );
 }
@@ -270,6 +282,7 @@ const styles = StyleSheet.create({
   stale: { ...type.caption, color: colors.healthAmber, marginTop: space.xs, textAlign: 'center' },
   writeOffBtn: { marginTop: space.sm },
   trustBtn: { marginTop: space.md },
+  trustCard: { marginTop: space.md, alignSelf: 'stretch' },
   trustHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
   groupTrust: { marginTop: space.md, alignSelf: 'stretch' },
   groupTrustLabel: { ...type.sectionLabel, color: colors.textSecondary, marginBottom: space.sm },

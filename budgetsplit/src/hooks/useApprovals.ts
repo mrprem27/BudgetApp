@@ -12,6 +12,7 @@ import { groupByAuthor, isIncomingTransfer, type PendingEntry } from '../lib/app
 import { confirmAsync } from '../lib/confirm';
 import type { PayMethod } from '../constants/enums';
 import { haptic } from '../lib/haptics';
+import { trustAndApproveBody, trustConfirmTitle } from '../lib/trustCopy';
 
 /**
  * The approvals queue: entries other people wrote that are waiting on me.
@@ -106,10 +107,9 @@ export function useApprovals() {
    */
   async function trustAuthor(authorId: string, name: string, pending: PendingEntry[]) {
     const ok = await confirmAsync(
-      `Trust ${name}?`,
-      `Anything ${name} adds in a shared group will count straight away, without waiting for you. `
-      + `Money they say they have sent you still has to be confirmed each time.`,
-      'Trust',
+      trustConfirmTitle(name, 'trusted'),
+      trustAndApproveBody(name, pending.filter(e => !isIncomingTransfer(e)).length),
+      'Trust and approve',
     );
     if (!ok) return;
     await setTrustState(db, authorId, 'trusted');

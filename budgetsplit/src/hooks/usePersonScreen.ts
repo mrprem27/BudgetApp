@@ -15,6 +15,7 @@ import { confirmAsync } from '../lib/confirm';
 import { asReceivableState, asTrustState } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { useSQLiteContext } from 'expo-sqlite';
+import { trustConfirmBody, trustConfirmCta, trustConfirmTitle } from '../lib/trustCopy';
 
 /**
  * Everything the person detail screen shows: our shared history, what it nets to,
@@ -101,12 +102,13 @@ export function usePersonScreen(personId: string) {
   async function toggleTrusted() {
     const next = trustState === 'trusted' ? 'review' : 'trusted';
     const name = data?.person?.name ?? 'this person';
+    // One source for both screens' wording — this one used to omit the transfer
+    // carve-out entirely, so the same decision read as unconditional here and
+    // conditional in the approvals queue.
     const ok = await confirmAsync(
-      next === 'trusted' ? `Trust ${name}?` : `Review ${name}'s entries?`,
-      next === 'trusted'
-        ? `Anything ${name} adds in a group you share will count straight away, without waiting for you.`
-        : `Anything ${name} adds will wait for your approval before it touches your numbers. Entries you have already accepted stay accepted.`,
-      next === 'trusted' ? 'Trust' : 'Review each one',
+      trustConfirmTitle(name, next),
+      trustConfirmBody(name, next),
+      trustConfirmCta(next),
     );
     if (!ok) return;
     await setTrustState(db, personId, next);

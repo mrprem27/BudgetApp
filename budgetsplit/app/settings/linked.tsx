@@ -462,7 +462,7 @@ export default function LinkedPeopleScreen() {
         Two guards worth stating: an account can only be bound to ONE person (the
         partial unique index enforces it — two answers to "who wrote this" is
         failure F5 in a different place), and matching says *who they are*, never
-        *that you trust them*. Trust stays a separate switch on their own screen.
+        *that you trust them*. Trust stays a separate setting on their own screen.
       */}
       <SheetModal
         visible={!!matching}

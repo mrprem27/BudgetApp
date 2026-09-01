@@ -7,6 +7,7 @@ import { Divider } from '../../ui/Divider';
 import { ListRow } from '../../ui/ListRow';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
+import { trustAndApproveLabel, trustMeans } from '../../../lib/trustCopy';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { describeImpact, isIncomingTransfer, type PendingEntry } from '../../../lib/approvalData';
 import { PayMethodSelector } from '../PayMethodSelector';
@@ -63,15 +64,22 @@ export function ApprovalCard({
         </Text>
       )}
 
+      {/*
+        * The label names BOTH halves, because this button does both.
+        *
+        * It read `Trust {authorName}` — identical to the person screen's button,
+        * which only sets the flag. This one also approves everything waiting
+        * (`useApprovals.trustAuthor`), so the same words cleared a queue in one
+        * place and did not in the other. A user who learned the word here learned
+        * the wrong thing for there.
+        */}
       <SecondaryButton
-        label={`Trust ${authorName}`}
+        label={trustAndApproveLabel(authorName, entries.length)}
         size="md"
         onPress={onTrust}
         style={styles.trustBtn}
       />
-      <Text style={styles.hint}>
-        Their entries would count straight away, in every group you share.
-      </Text>
+      <Text style={styles.hint}>{trustMeans(authorName)}</Text>
     </>
   );
 }
