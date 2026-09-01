@@ -273,14 +273,20 @@ export default function FriendsScreen() {
                 </View>
               )}
               <View style={styles.card}>
+                {/*
+                  * One line, not an empty state. §2 is about EMPTY DATA — a
+                  * 64pt icon circle, a title, a body and a PrimaryButton, ~200pt
+                  * in all. This is a filtered view of data that exists, and the
+                  * filter is one field away; a full empty state for a transient
+                  * search miss is louder than the thing it interrupts.
+                  */}
                 {filtered.length === 0 && !loading && (
-                  <EmptyState
-                    icon="search"
-                    title="No matches"
-                    body={`Nobody here matches “${query}”.`}
-                    actionLabel="Clear search"
-                    onAction={() => setQuery('')}
-                  />
+                  <View style={styles.noMatchRow}>
+                    <Text style={styles.noMatch}>No people match “{query}”.</Text>
+                    <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
+                      <Text style={styles.noMatchClear}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
                 {filtered.map((p, i) => {
                   const bal = balances[p.id];
@@ -412,7 +418,9 @@ const styles = StyleSheet.create({
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, height: 44, marginBottom: space.sm },
   searchInput: { flex: 1, ...type.body, color: colors.textPrimary, padding: 0 },
-  noMatch: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.lg },
+  noMatchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.lg },
+  noMatch: { ...type.body, color: colors.textMuted },
+  noMatchClear: { ...type.body, color: colors.accent },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: space.md, ...shadow.sm },
   youCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
   youTag: { ...type.caption, color: colors.accent },

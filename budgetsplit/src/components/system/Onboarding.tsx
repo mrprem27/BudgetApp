@@ -127,10 +127,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               ⛔ LogoAssembly itself is untouched, as it always must be. Only these
               three delays moved. */}
           <View style={[styles.heroBottom, { paddingBottom: bottomPad }]}>
-            <FadeIn delay={2400} offset={14}>
+            <FadeIn delay={1400} offset={14}>
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
-            <FadeIn delay={2550} offset={10} style={styles.taglineWrap}>
+            <FadeIn delay={1550} offset={10} style={styles.taglineWrap}>
               {/* "No bank login" leads, ahead of "nothing in the cloud". It is the
                   concrete, checkable version of the same promise — every competitor
                   in this market either asks for a bank connection or reads your SMS,
@@ -138,7 +138,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   vaguer cloud claim follows it rather than standing alone. */}
               <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
             </FadeIn>
-            <FadeIn delay={2700} style={styles.footer}>
+            <FadeIn delay={1700} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
               <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
             </FadeIn>

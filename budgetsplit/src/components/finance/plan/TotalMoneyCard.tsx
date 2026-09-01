@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
@@ -59,8 +59,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
           <Feather name="edit-2" size={14} color={colors.textMuted} />
         </View>
       </View>
-      {/* The one hero figure on this screen, landing on its value (§1, §11). */}
-      <AmountText paise={money.available} size="xl" compact animate forceColor={negativeCash ? colors.expense : colors.textPrimary} />
+      <AmountText paise={money.available} size="xl" compact forceColor={negativeCash ? colors.expense : colors.textPrimary} />
       <Text style={styles.heroHint}>
         {negativeCash ? 'You’ve spent past your cash. Investments and credit are shown below.' : 'Cash you can spend right now.'}
       </Text>
@@ -91,28 +90,28 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
         </>
       )}
       {/*
-        * Itemised, because it can be now. This was one "Investments" line over a
-        * single stored number that could not tell gold from an FD from a flat —
-        * and the only way to change it was to retype the total.
+        * ONE line, and it is the way in — not an itemised list.
+        *
+        * This briefly rendered a SubRow per asset. Unbounded (six assets, six new
+        * rows), duplicating the screen that exists to show exactly that, inside a
+        * card already carrying Cash + three buckets + unattributed + Investments +
+        * Credit used + Headroom + the limit line. A summary card that lists its own
+        * detail has stopped being a summary.
+        *
+        * The count is the affordance instead: "3 assets ›" says there is more and
+        * where it is, in one line, and taps through.
         */}
-      <SubRow label="Investments &amp; assets" value={formatCompact(money.investments)} />
-      {assets?.map(a => (
-        <SubRow key={a.id} label={`  ${a.name}`} value={formatCompact(a.balance)} />
-      ))}
+      <SubRow
+        label="Investments & assets"
+        value={formatCompact(money.investments)}
+        hint={assets?.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : undefined}
+        onPress={onManageAssets}
+      />
       {money.creditUsed > 0 && <SubRow label="Credit used" value={`−${formatCompact(money.creditUsed)}`} valueColor={colors.expense} />}
 
       {/* Headroom, deliberately outside both figures. */}
       <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
       <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
-
-      {onManageAssets && (
-        <PressableScale style={styles.payBillBtn} onPress={onManageAssets} accessibilityLabel="Manage your assets">
-          <Feather name="package" size={14} color={colors.accent} />
-          <Text style={styles.payBillText}>
-            {assets?.length ? 'Your assets — add, sell, or update a value' : 'Own gold, a flat, an FD? Add it'}
-          </Text>
-        </PressableScale>
-      )}
 
       {/* Investments have a real way UP now — not just re-typing the figure.
           Buying an SIP was logged as an expense, which dropped net worth by the
@@ -144,12 +143,38 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-function SubRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <View style={styles.subRow}>
+/**
+ * `onPress` turns a sub-row into the way into its own screen — a chevron and a
+ * trailing hint, no extra button. The card was growing a stacked full-width CTA
+ * per destination; three of them was ~150pt of identical accent outlines under a
+ * summary, all shouting equally.
+ */
+function SubRow({ label, value, valueColor, hint, onPress }: {
+  label: string; value: string; valueColor?: string; hint?: string; onPress?: () => void;
+}) {
+  // Label left, everything else right — the row is `space-between`, so the
+  // trailing items have to be one group or they spread across the whole width.
+  const body = (
+    <>
       <Text style={styles.subLabel}>{label}</Text>
-      {value ? <Text style={[styles.subValue, valueColor ? { color: valueColor } : null]}>{value}</Text> : null}
-    </View>
+      <View style={styles.subRight}>
+        {hint ? <Text style={styles.subHint}>{hint}</Text> : null}
+        {value ? <Text style={[styles.subValue, valueColor ? { color: valueColor } : null]}>{value}</Text> : null}
+        {onPress ? <Feather name="chevron-right" size={13} color={colors.textMuted} /> : null}
+      </View>
+    </>
+  );
+  if (!onPress) return <View style={styles.subRow}>{body}</View>;
+  return (
+    <TouchableOpacity
+      style={styles.subRow}
+      onPress={onPress}
+      hitSlop={{ top: 6, bottom: 6 }}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${value}. ${hint ?? ''}`}
+    >
+      {body}
+    </TouchableOpacity>
   );
 }
 
@@ -165,6 +190,8 @@ const styles = StyleSheet.create({
   rowLabelStrong: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   rowValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   rowValueStrong: { color: colors.textPrimary, fontSize: 14 },
+  subRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  subHint: { ...type.caption, color: colors.textMuted },
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3, paddingLeft: space.md },
   subLabel: { ...type.caption, color: colors.textMuted },
   subValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },

@@ -293,7 +293,6 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 | `FadeIn` | A single element entering on mount |
 | `Stagger` | A list cascading in. Enforces the 330ms cap for you |
 | `Collapse` | A row leaving, and the gap closing behind it |
-| `AnimatedNumber` | The one hero figure on a screen landing on its value. Reach it via `AmountText`'s `animate` prop for money |
 | `AnimatedBar` | Progress / meter fills |
 
 Rules:
@@ -334,11 +333,14 @@ Rules:
 - Navigation: modals slide from bottom, push screens slide from right, tabs fade
 - ⛔ `LogoAssembly.tsx` and the onboarding hero ring/fan are **never** modified.
 - **A primitive with no callers gets deleted, not kept "for later".** `StepTransition`
-  shipped unused for months: its only real home was onboarding, whose hero animation is
-  off-limits by the rule directly above, so it was dead by construction — a claim the
-  shelf made about itself that was not true. Removed rather than left as a false promise.
-  `AnimatedNumber` was in the same state and was wired instead, because it had somewhere
-  real to go (the Plan hero).
+  and `AnimatedNumber` both shipped unused for months and are both gone.
+  `StepTransition`'s only real home was onboarding, whose hero animation is off-limits by
+  the rule directly above — dead by construction. `AnimatedNumber` was wired to the Plan
+  hero to avoid deleting it, and that was the wrong instinct: the hero is gated on its
+  data, so the component mounted already holding the final figure, and making it count up
+  meant **the largest number on the screen read ₹0 and spun up on every visit**, with the
+  compact string changing width as it counted so the glyphs jittered. Finding a use for a
+  primitive is not the same as it having one.
 
 ---
 

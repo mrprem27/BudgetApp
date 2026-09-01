@@ -69,7 +69,7 @@ export function FilterBar({
           key={`${g.key}:${o.value}`}
           style={[styles.chip, isActive && styles.chipActive]}
           onPress={() => onSelect(g.key, o.value)}
-          hitSlop={{ top: 6, bottom: 6 }}
+          hitSlop={{ top: 7, bottom: 7 }}
           accessibilityRole="button"
           accessibilityState={{ selected: isActive }}
         >
@@ -184,7 +184,7 @@ export function FilterBar({
                   key={o.value}
                   style={[styles.chip, isActive && styles.chipActive]}
                   onPress={() => onSelect(g.key, o.value)}
-                  hitSlop={{ top: 6, bottom: 6 }}
+                  hitSlop={{ top: 7, bottom: 7 }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isActive }}
                 >
@@ -249,8 +249,9 @@ const styles = StyleSheet.create({
 
   chip: {
     // 30, deliberately — see CategoryRankList. A filter row is dense by design and
-    // these sit above content; `hitSlop` on each chip covers §6 without pushing the
-    // list down by 14px per row.
+    // these sit above content; `hitSlop` of 7 on each chip makes the tap area 44
+    // without pushing the list down by 14px per row. (It was 6, i.e. 42 — the
+    // comment claimed §6 was covered and it was two points short.)
     height: 30,
     paddingHorizontal: space.smd,
     justifyContent: 'center',
