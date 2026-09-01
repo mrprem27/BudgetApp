@@ -193,6 +193,7 @@ export default function AffordScreen() {
                 <TouchableOpacity
                   key={o.key}
                   style={[styles.necChip, on && { borderColor: colors.accent, backgroundColor: alpha(colors.accent, 10) }]}
+                  hitSlop={{ top: 2, bottom: 2 }}
                   onPress={() => setFrequency(o.key)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
@@ -237,6 +238,7 @@ export default function AffordScreen() {
                 <TouchableOpacity
                   key={o.key}
                   style={[styles.necChip, on && { borderColor: o.color, backgroundColor: alpha(o.color, 10) }]}
+                  hitSlop={{ top: 2, bottom: 2 }}
                   onPress={() => setNecessity(on ? null : o.key)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
@@ -407,8 +409,9 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', gap: space.sm, paddingTop: space.sm, paddingRight: space.md },
   costsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   costsLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.9, fontFamily: 'Inter_600SemiBold' },
-  // §6 floor (was 40). These are the screen's primary input, tapped before anything else happens.
-  necChip: { paddingHorizontal: space.md, height: layout.touchMin, justifyContent: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
+  // 40, deliberately. A chip row, like the others — raising it changed the rhythm of
+  // the whole screen. `hitSlop` gives the tap area §6 asks for.
+  necChip: { paddingHorizontal: space.md, height: 40, justifyContent: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
   necChipText: { ...type.body, color: colors.textSecondary },
   breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
   breakdownDivider: { height: 1, backgroundColor: colors.border },

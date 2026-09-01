@@ -52,7 +52,7 @@ export default function ReportsScreen() {
   // after adding a transaction shows fresh analytics — keyed on [month].
   // Data assembly lives in lib/reportsData; the 450ms floor keeps the skeleton
   // from flashing on a fast local query.
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+  const { data, loading, stale, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const startedAt = Date.now();
     try {
       return await loadReportsData(db, month);
@@ -135,6 +135,7 @@ export default function ReportsScreen() {
     <View style={styles.exportRow}>
       <TouchableOpacity
         style={styles.exportBtn}
+        hitSlop={{ top: 6, bottom: 6 }}
         onPress={exportCSV}
         disabled={exporting}
         accessibilityRole="button"
@@ -151,6 +152,7 @@ export default function ReportsScreen() {
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.exportBtn, styles.exportBtnAlt]}
+        hitSlop={{ top: 6, bottom: 6 }}
         onPress={exportPDF}
         disabled={pdfExporting}
         accessibilityRole="button"
@@ -205,7 +207,20 @@ export default function ReportsScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {/*
+        * `stale` as well as `loading`, and Reports is the ONLY screen that needs it.
+        *
+        * Every figure below sits under the month name in the header, so leaving
+        * August's Spent, Earned, donut and deltas on screen while September loads
+        * is not "a moment behind" — it is the wrong number under the right label,
+        * with nothing to tell the reader. The 450ms floor in the loader guarantees
+        * it lasts long enough to be read.
+        *
+        * Nowhere else does this: elsewhere `loading` alone is right, because
+        * blanking a screen to avoid a few stale milliseconds is the worse trade
+        * (it emptied the Dashboard on every Day/Month/Year tap).
+        */}
+      {loading || stale ? (
         <View style={{ gap: space.md, marginTop: space.xs }}>
           <SkeletonCard height={120} />
           <SkeletonCard height={120} />
@@ -425,8 +440,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl, gap: space.md },
   exportRow: { flexDirection: 'row', gap: space.xs },
-  // §6 floor. Was height: 36 — a label-bearing button has no reason to sit under it.
-  exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: layout.touchMin },
+  // 36, deliberately. These sit inside the ScreenHeader's right slot, and a header
+  // is a fixed-height bar — 44 made it chunky for no gain. `hitSlop` covers §6.
+  exportBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, minWidth: 56, alignItems: 'center', justifyContent: 'center', height: 36 },
   exportBtnAlt: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   exportBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   exportBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },

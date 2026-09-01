@@ -15,14 +15,33 @@ export type ScreenData<T> = {
   /** Loader result; undefined until the first load resolves. */
   data: T | undefined;
   /**
-   * True while the data on hand does not describe the current `deps` — i.e. on
-   * the first load, and again whenever `deps` change.
+   * **There is nothing to show yet** — no load has ever resolved.
    *
-   * Deliberately NOT true for a refocus, a pull-to-refresh or a cross-screen
-   * write: those re-read the same inputs, so what is on screen is still correct
-   * and replacing it with a skeleton would flash for no reason.
+   * Most screens render `loading ? null` or a skeleton, so this must mean "the
+   * screen is empty", nothing more. It was briefly widened to "the data does not
+   * describe the current deps", which fires on every `deps` change — and since a
+   * period pill or a month arrow IS a dep, the Dashboard blanked and faded itself
+   * back in on every Day/Month/Year tap, along with five other screens.
+   *
+   * If you need "the figures on screen are about to be relabelled", that is
+   * {@link ScreenData.stale}, not this.
    */
   loading: boolean;
+  /**
+   * A refetch caused by a **`deps` change** is in flight, and there is already
+   * data on screen — so what is displayed describes the PREVIOUS deps.
+   *
+   * Only worth reacting to when the surrounding UI relabels the data: Reports
+   * puts a month name above its figures, so showing August's numbers under
+   * "September" is a lie, and it shows a skeleton instead. Everywhere else the
+   * honest thing is to leave the content up — a local SQLite read is tens of
+   * milliseconds, and a screen that empties is far worse than one that is briefly
+   * a beat behind.
+   *
+   * Never true for a refocus, a pull-to-refresh or a cross-screen write: those
+   * re-read the SAME inputs, so nothing on screen is mislabelled.
+   */
+  stale: boolean;
   /** True if the most recent load threw. */
   error: boolean;
   /** True while a pull-to-refresh is in flight. */
@@ -59,6 +78,7 @@ export function useScreenData<T>(
 
   const [data, setData] = useState<T>();
   const [loading, setLoading] = useState(true);
+  const [stale, setStale] = useState(false);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,6 +105,7 @@ export function useScreenData<T>(
     } finally {
       if (mounted.current) {
         setLoading(false);
+        setStale(false);
         if (mode === 'refresh') setRefreshing(false);
       }
     }
@@ -94,27 +115,35 @@ export function useScreenData<T>(
   const reload = useCallback(() => run('load'), [run]);
   const onRefresh = useCallback(() => { void run('refresh'); }, [run]);
 
+  // Whether any load has ever resolved. A ref, not `data`, because the effect
+  // below needs the answer for the render it is reacting to, and state is a render
+  // behind.
+  const prevExists = useRef(false);
+  useEffect(() => { if (data !== undefined) prevExists.current = true; }, [data]);
+
   /*
-   * Load on mount + whenever deps (via `run`) change — and go back to `loading`
-   * when they do.
+   * Load on mount + whenever deps (via `run`) change.
    *
-   * `loading` was only ever set false, never true again, so it meant "the first
-   * load has finished" forever after. A deps change is different in kind from a
-   * refocus or a cross-screen write: those re-read the SAME inputs, so the data
-   * on screen is merely a moment old and still describes what it claims to. A
-   * deps change means the data now describes DIFFERENT inputs — it is not stale,
-   * it is mislabelled.
+   * A deps change raises `stale`, NOT `loading`, and the difference is the whole
+   * point of having two flags:
    *
-   * Reports is where that showed: changing the month left last month's Spent,
-   * Earned, donut and deltas on screen under the new month's heading, and its
-   * loader floors itself at 450ms to stop the skeleton flashing, which
-   * guaranteed the wrong numbers were displayed under the wrong label for at
-   * least that long. Someone reading them had no way to know.
+   * - `loading` means "there is nothing to show". Setting it here made every deps
+   *   change empty the screen — and a period pill, a month arrow and a kind tab
+   *   are all deps, so the Dashboard blanked and re-faded on every Day/Month/Year
+   *   tap, as did report-transactions, categories and history.
+   * - `stale` means "what is on screen describes the previous deps". Reports acts
+   *   on it, because it prints a month name above its figures and showing August's
+   *   numbers under "September" is a lie. Nobody else needs to: a local read is
+   *   tens of milliseconds, and content that is a beat behind beats no content.
+   *
+   * Only raised when data already exists — on the very first run `loading` is
+   * already true and there is nothing to be stale about.
    */
   useEffect(() => {
-    setLoading(true);
+    setStale(prevExists.current);
     void run('load');
   }, [run]);
+
 
   // Track focus so a cross-screen write only re-queries the screen the user is
   // actually looking at. Backgrounded tabs (Home/Groups/Savings all stay mounted)
@@ -144,5 +173,5 @@ export function useScreenData<T>(
     else dirty.current = true;
   });
 
-  return { data, loading, error, refreshing, onRefresh, reload };
+  return { data, loading, stale, error, refreshing, onRefresh, reload };
 }
