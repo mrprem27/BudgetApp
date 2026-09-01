@@ -195,6 +195,37 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 96px; }
 }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
+
+/* ---------------------------------------------------------------- panels */
+.panel { display: grid; gap: 18px; max-width: 900px; }
+.panel h3 { font-size: 13px; letter-spacing: .02em; color: var(--ink); margin-bottom: 2px; }
+.panel p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 68ch; }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px 17px; box-shadow: var(--shadow); }
+.block > h3 { margin-bottom: 9px; }
+pre.tree, pre.tpl {
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55; margin: 0;
+  overflow-x: auto; color: var(--ink-2); background: var(--raised);
+  border: 1px solid var(--line-soft); border-radius: 8px; padding: 13px 15px;
+}
+table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.grid th {
+  text-align: left; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--ink-3); font-weight: 500;
+  padding: 0 10px 7px 0; border-bottom: 1px solid var(--line);
+}
+table.grid td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: top; }
+table.grid tr:last-child td { border-bottom: 0; }
+table.grid td.k { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+.scroll { overflow-x: auto; }
+
+/* ladder rows: the tier is the structure, the marker is the state */
+.tier { display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+.tier:last-child { border-bottom: 0; }
+.tier .t { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+.tier .x { color: var(--ink-2); }
+.t0 { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 8px; padding: 11px 13px; font-size: 13.5px; color: var(--ink-2); margin-bottom: 10px; }
+.t0 b { color: var(--accent); font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; display: block; margin-bottom: 3px; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 640px) {
   .row { grid-template-columns: 1fr; gap: 7px; }
@@ -238,8 +269,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 96px; }
 <script>
 const D = window.__DATA__;
 
-/* Every row shares one shape: an id you cite, a claim, some state encoded as a
-   pill, and a detail body. Sections differ only in what fills those slots. */
+/* Twelve tabs for thirteen sections: §0 and §1 share the Overview panel. A section
+   is either a list of citable rows or a prose panel; nothing else. */
 
 const VERDICT = {
   'COLLAPSE':             { cls: 'acc',  label: 'collapse' },
@@ -250,143 +281,265 @@ const VERDICT = {
 };
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/* Markdown leaks through from the source doc; render the two marks that matter. */
+/* Markdown leaks through from the source doc; render the marks that carry meaning. */
 const md = s => esc(s)
   .replace(/`([^`]+)`/g, '<code>$1</code>')
   .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  .replace(/~~([^~]+)~~/g, '<s>$1</s>')
   .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
 const bar = (n, max, hot) => {
   if (n == null) return '';
   const w = Math.max(3, Math.round((n / max) * 68));
-  const cls = n === 0 ? 'zero' : (hot ? 'hot' : '');
-  return `<span class="bar ${cls}"><i style="width:${w}px"></i>${n}</span>`;
+  return `<span class="bar ${n === 0 ? 'zero' : (hot ? 'hot' : '')}"><i style="width:${w}px"></i>${n}</span>`;
 };
 const field = (k, v) => v ? `<div class="dfield"><dt>${esc(k)}</dt><dd>${md(v)}</dd></div>` : '';
+/* `· a · b · c` renders as a list, not a paragraph, wherever the doc uses bullets. */
+const fieldList = (k, v) => {
+  if (!v) return '';
+  const parts = v.split('·').map(x => x.trim()).filter(Boolean);
+  if (parts.length < 2) return field(k, v);
+  return `<div class="dfield"><dt>${esc(k)}</dt><dd><ul class="isnot">${
+    parts.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>`;
+};
+const grid = (head, body) => `<div class="scroll"><table class="grid"><thead><tr>${
+  head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+
+/* A ladder marker is state, so it renders as state. */
+function marker(s) {
+  const cls = s.startsWith('✅') ? 'ok' : s.startsWith('🔍') ? 'acc' : s.startsWith('❌') ? 'warn' : '';
+  return `<span class="pill ${cls}">${esc(s)}</span>`;
+}
+
+const maxFlow = Math.max(...D.flows.map(f => f.entries || 0));
+const maxScr = Math.max(...D.screens.map(s => s.entries || 0));
+
+/* ------------------------------------------------------------------ panels */
+function overviewPanel() {
+  return `<div class="panel">
+    <div class="block">
+      <h3>How to cite something</h3>
+      <p>Every entry has an id. Cite it and say what is wrong; the prose can change under it.</p>
+      <pre class="tpl">${esc(D.issueTpl)}</pre>
+      <h3 style="margin-top:14px">Addressing a part of a flow</h3>
+      <pre class="tpl">${esc(D.subIds)}</pre>
+    </div>
+    <div class="block">
+      <h3>The nine namespaces</h3>
+      ${grid(['id', 'is', 'example', 'answers'], D.legend.map(l =>
+        `<tr><td class="k">${esc(l.p)}-</td><td>${md(l.is)}</td><td>${md(l.eg)}</td><td>${md(l.answers)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>Which section answers which question</h3>
+      ${grid(['question', 'section'], D.router.map(r =>
+        `<tr><td>${md(r.q)}</td><td class="k">${esc(r.s)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>Three money worlds</h3>
+      ${grid(['world', 'answers', 'root entities'], D.worlds.map(w =>
+        `<tr><td class="k">${esc(w.w)}</td><td>${md(w.q)}</td><td>${md(w.e)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>What it deliberately is not</h3>
+      <ul class="isnot">${D.notList.map(n =>
+        `<li><strong>${md(n.what)}</strong> ${md(n.why)}</li>`).join('')}</ul>
+    </div>
+    <div class="block">
+      <h3>Everything that leaves the device</h3>
+      <p>Nothing else. No analytics SDK, no crash reporter, no ad network.</p>
+      ${grid(['destination', 'what', 'when', 'gate'], D.egress.map(e =>
+        `<tr><td class="k">${md(e.to)}</td><td>${md(e.what)}</td><td>${md(e.when)}</td><td>${md(e.gate)}</td></tr>`).join(''))}
+    </div>
+  </div>`;
+}
+
+function relationsPanel() {
+  return `<div class="panel">
+    <div class="block">
+      <h3>Ownership</h3>
+      <p>Two roots. Everything else hangs off one of them, or off nothing.</p>
+      <pre class="tree">${esc(D.tree)}</pre>
+    </div>
+    <div class="block">
+      <h3>Cascade and lifetime — what a delete actually does</h3>
+      <p>Written from the code that deletes, not the schema: <code>PRAGMA foreign_keys</code> is
+         <strong>off</strong>, so no <code>REFERENCES</code> clause does anything at runtime. Every
+         rule below is a hand-written statement somebody has to remember.</p>
+      ${grid(['delete', 'what happens to children', 'where'], D.cascade.map(c =>
+        `<tr><td class="k">${esc(c.id)} ${esc(c.verb)}</td><td>${md(c.effect)}</td><td class="k">${md(c.where)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>Cardinality</h3>
+      ${grid(['from', '', 'to', 'note'], D.cardinality.map(c =>
+        `<tr><td class="k">${esc(c.from)} ${esc(c.fromName)}</td><td>${md(c.card)}</td><td class="k">${esc(c.to)} ${esc(c.toName)}</td><td>${md(c.note)}</td></tr>`).join(''))}
+      <p style="margin-top:11px"><strong>E-50 has no row here.</strong> Balances are derived on
+         every read. The only stored fact about a debt is the deliberate write-off.</p>
+    </div>
+  </div>`;
+}
+
+function scenarioPanel(q) {
+  const hit = l => !q || (l.id + ' ' + l.name + ' ' + l.rows.map(r => r.text).join(' ') + ' ' + (l.raw || '')).toLowerCase().includes(q);
+  const ladders = D.ladders.filter(hit);
+  const cross = D.crossings.filter(c => !q || (c.id + ' ' + c.name + ' ' + c.bites).toLowerCase().includes(q));
+  return `<div class="panel">
+    ${ladders.map(l => `<div class="block">
+      <h3>${esc(l.id)} · ${esc(l.name)}</h3>
+      ${l.t0 ? `<div class="t0"><b>T0 — NOMINAL</b>${md(l.t0)}</div>` : ''}
+      ${l.rows.map(r => `<div class="tier"><span class="t">.${esc(r.t)}</span><span class="x">${md(r.text)}</span>${marker(r.status)}</div>`).join('')}
+      ${l.raw ? `<pre class="tree">${esc(l.raw)}</pre>` : ''}
+    </div>`).join('')}
+    ${D.laddersCompact.filter(l => !q || (l.id + l.text).toLowerCase().includes(q)).map(l => `<div class="block">
+      <h3>${esc(l.id)}</h3><pre class="tree">${esc(l.text)}</pre></div>`).join('')}
+    ${cross.length ? `<div class="block">
+      <h3>The remaining ladders — the crossings that bite</h3>
+      ${grid(['ladder', 'flow', 'where it misbehaves'], cross.map(c =>
+        `<tr><td class="k">${esc(c.id)}${c.also ? '/' + esc(c.also) : ''}</td><td>${md(c.name)}</td><td>${md(c.bites)}</td></tr>`).join(''))}
+    </div>` : ''}
+  </div>`;
+}
+
+function idmapPanel() {
+  return `<div class="panel">
+    <div class="block">
+      <h3>What replaced what</h3>
+      ${grid(['was', 'now'], D.supersede.map(s =>
+        `<tr><td class="k">${md(s.was)}</td><td>${md(s.now)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>The guards</h3>
+      <p>Eight tests bind this document to the code. What none of them do is check that the prose is
+         <em>true</em> — they check that it is consistent with the code's shape.</p>
+      ${grid(['test', 'holds'], D.guards.map(g =>
+        `<tr><td class="k">${esc(g.file)}</td><td>${md(g.holds)}</td></tr>`).join(''))}
+    </div>
+    <div class="block">
+      <h3>Screen and flow ids are unchanged</h3>
+      <p><code>S-19</code> is <code>SC-19</code>; <code>FLOW-04</code> is <code>FL-04</code>. Old
+         citations resolve. <code>SC-42</code>, <code>SC-43</code> and <code>SC-44</code> are new —
+         <code>/assets</code>, <code>/settings/sync</code> and <code>/settings/sync-log</code> had
+         no id and no behaviour section anywhere before this document.</p>
+    </div>
+  </div>`;
+}
 
 /* ------------------------------------------------------------------ sections */
-const maxFlow = Math.max(...D.flows.map(f => f.entries || 0));
-const maxScr  = Math.max(...D.screens.map(s => s.entries || 0));
-
 const SECTIONS = [
-  {
-    key: 'ov', label: 'Complexity', n: D.ovs.length,
+  { key: 'about', label: 'Overview', panel: overviewPanel },
+
+  { key: 'ov', label: 'Complexity', n: D.ovs.length,
     lede: `<p class="lede"><strong>The section that answers "we have made too many complicated flows."</strong> Every finding carries a verdict. Twelve of the 27 close as <em>rename only</em> or <em>keep, documented</em> — at zero code risk. That is the useful result: the app is less over-built than it feels and more under-named.</p>`,
-    tally: [
-      ['acc',  4,  'collapse now'],
-      ['flag', 5,  'after the pilot'],
-      ['ok',   12, 'vocabulary only'],
-      ['warn', 6,  'need a decision'],
-    ],
+    tally: [['acc', 4, 'collapse now'], ['flag', 5, 'after the pilot'], ['ok', 12, 'vocabulary only'], ['warn', 6, 'need a decision']],
     groupBy: o => VERDICT[o.verdict] ? VERDICT[o.verdict].label : 'unclassified',
     order: ['collapse', 'after pilot', 'rename only', 'keep, documented', 'needs decision'],
     row: o => ({
-      id: o.id,
-      title: md(o.title),
-      pills: [
-        VERDICT[o.verdict] ? { cls: VERDICT[o.verdict].cls, t: VERDICT[o.verdict].label } : null,
-        o.kind ? { cls: '', t: o.kind.replace(/-/g, ' ') } : null,
-      ],
-      detail: field('Cost today', o.cost) + field('Proposal', o.collapse)
-            + field('Trigger', o.trigger) + field('Note', o.note),
-      text: o.title + ' ' + o.kind + ' ' + o.verdict + ' ' + o.cost + ' ' + o.collapse,
-    }),
-  },
-  {
-    key: 'ent', label: 'Entities', n: D.entities.length,
-    lede: `<p class="lede"><strong>53 nouns, and what each one is not.</strong> The <em>is not</em> field is where a concept gets fenced off from the others wearing its name — and where the hardest questions in this app came from. Writing <code>E-50</code> honestly produced the settle-up problem no test would have found.</p>`,
+      id: o.id, title: md(o.title),
+      pills: [VERDICT[o.verdict] ? { cls: VERDICT[o.verdict].cls, t: VERDICT[o.verdict].label } : null,
+              o.kind ? { cls: '', t: o.kind.replace(/-/g, ' ') } : null],
+      detail: fieldList('The things', o.detail) + field('Evidence', o.evidence) + field('Cost today', o.cost)
+            + field('Proposal', o.collapse) + field('Blast radius', o.blast) + field('Risk', o.risk)
+            + field('Verdict', o.verdictNote) + field('Trigger', o.trigger) + field('Note', o.note),
+      text: [o.title, o.kind, o.verdict, o.detail, o.evidence, o.cost, o.collapse].join(' '),
+    }) },
+
+  { key: 'ent', label: 'Entities', n: D.entities.length,
+    lede: `<p class="lede"><strong>53 nouns, and what each one is not.</strong> The <em>is not</em> field is where a concept gets fenced off from the others wearing its name — and where the hardest questions in this app came from. A field left empty is information: an entity that references nothing is a leaf, one whose sync line is blank cannot travel.</p>`,
     tally: [['acc', 22, 'in SQLite'], ['flag', 18, 'derived, no table'], ['ok', 13, 'device or wire']],
     groupBy: e => ({ table: 'Stored in SQLite', derived: 'Derived — no table', external: 'Device, external or wire' })[e.kind],
     order: ['Stored in SQLite', 'Derived — no table', 'Device, external or wire'],
     row: e => ({
-      id: e.id,
-      title: `<span class="nm">${esc(e.name)}</span>`,
-      gloss: e.gloss,
-      pills: [
-        e.kind === 'derived' ? { cls: 'flag', t: 'derived' } : null,
-        e.kind === 'external' ? { cls: '', t: 'off-database' } : null,
-        e.aliasWord ? { cls: 'warn', t: e.aliasWord + ' names' } : null,
-      ],
-      detail: (e.isNot.length
-          ? `<div class="dfield"><dt>Is not</dt><dd><ul class="isnot">${e.isNot.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>`
-          : '')
-        + field('Storage', e.storage) + field('Also called', e.aliases) + field('Open', e.open),
-      text: e.name + ' ' + e.gloss + ' ' + e.isNot.join(' ') + ' ' + e.aliases,
-    }),
-  },
-  {
-    key: 'fl', label: 'Flows', n: D.flows.length,
-    lede: `<p class="lede"><strong>54 verbs, each with the number of ways in.</strong> The count is a metric to watch fall. <code>FL-04</code> — add an expense — has 24 entry points and 11 parameters, and is the destination of every settle-up, every "log it", the daily-log notification and the Siri shortcut. A ceiling now holds it at 24.</p>`,
+      id: e.id, title: `<span class="nm">${esc(e.name)}</span>`, gloss: e.gloss,
+      pills: [e.kind === 'derived' ? { cls: 'flag', t: 'derived' } : null,
+              e.kind === 'external' ? { cls: '', t: 'off-database' } : null,
+              e.aliasWord ? { cls: 'warn', t: e.aliasWord + ' names' } : null],
+      detail: (e.isNot.length ? `<div class="dfield"><dt>Is not</dt><dd><ul class="isnot">${
+                 e.isNot.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>` : '')
+            + field('Storage', e.storage) + field('Identity', e.identity) + field('Owned by', e.owned)
+            + field('Scopes', e.scopes) + fieldList('References', e.refs) + fieldList('Referenced by', e.refBy)
+            + field('Lifecycle', e.lifecycle) + field('Create', e.create) + field('Edit', e.edit)
+            + field('Delete', e.del) + field('Sync', e.sync) + field('Note', e.reading)
+            + field('Also called', e.aliases) + fieldList('Surfaces', e.surfaces)
+            + fieldList('Invariants', e.invariants) + field('Open', e.open),
+      text: [e.name, e.gloss, e.isNot.join(' '), e.aliases, e.storage, e.sync, e.lifecycle].join(' '),
+    }) },
+
+  { key: 'rel', label: 'Relations', panel: relationsPanel },
+
+  { key: 'fl', label: 'Flows', n: D.flows.length,
+    lede: `<p class="lede"><strong>54 verbs, each with the number of ways in.</strong> The count is a metric to watch fall. <code>FL-04</code> — add an expense — has 24 entry points and 11 parameters, and is the destination of every settle-up, every "log it", the daily-log notification and the Siri shortcut. A ceiling now holds it at 24. Steps are capped at nine: a flow needing a tenth is two flows.</p>`,
     tally: [['warn', 24, 'ways into Add'], ['acc', 9, 'step cap per flow'], ['flag', 11, 'params on one screen']],
     row: f => ({
-      id: f.id,
-      title: esc(f.name),
-      pills: [f.params ? { cls: 'warn', t: f.params + ' params' } : null],
+      id: f.id, title: esc(f.name),
+      pills: [f.params ? { cls: 'warn', t: f.params + ' params' } : null,
+              f.terse ? null : { cls: '', t: 'full entry' }],
       right: bar(f.entries, maxFlow, f.entries >= 8),
-      detail: field('Entry points', f.entries == null ? 'Not a user-initiated flow — it runs on its own, or it does not exist.' : `${f.entries} in the app.`),
-      text: f.name,
-    }),
-  },
-  {
-    key: 'dq', label: 'Decisions', n: D.dqs.length,
+      detail: field('Trigger', f.trigger) + fieldList('Entry points', f.entry) + field('Preconditions', f.pre)
+            + fieldList('Steps', f.steps) + field('Entities', f.ents) + field('Writes', f.writes)
+            + field('Exit and back-stack', f.exit) + fieldList('Branches', f.branches)
+            + fieldList('Failure modes', f.failures) + field('Reversible', f.reversible)
+            + field('Known problems', f.problems) + field('Summary', f.summary),
+      text: [f.name, f.trigger, f.steps, f.branches, f.failures, f.problems, f.summary].join(' '),
+    }) },
+
+  { key: 'sn', label: 'Scenarios', panel: scenarioPanel,
+    lede: `<p class="lede"><strong>Every case for a flow, nominal to pathological.</strong> Rows are <em>generated</em>, not brainstormed: cross the flow with the axes and they fall out. That is what makes coverage checkable. Most are <code>❓</code> — the honest state of a suite with 2,221 passing tests and zero component-render coverage.</p>` },
+
+  { key: 'dq', label: 'Decisions', n: D.dqs.length,
     lede: `<p class="lede"><strong>30 questions, 29 still open.</strong> Each names <em>the default if nobody ever decides</em> — because most of these will not be decided, and the default is what ships. A closed one is struck through and kept, never deleted, or every citation of it rots.</p>`,
     tally: [['acc', 8, 'product'], ['flag', 15, 'technical'], ['warn', 7, 'blocked elsewhere']],
     groupBy: d => ({ product: 'Product and business', technical: 'Technical', blocked: 'Blocked outside this repo' })[d.group],
     order: ['Product and business', 'Technical', 'Blocked outside this repo'],
     row: d => ({
-      id: d.id,
-      title: md(d.q),
+      id: d.id, title: md(d.q),
       pills: [d.closed ? { cls: 'ok', t: 'closed' } : null],
-      detail: field(d.group === 'blocked' ? 'Owner' : 'Default', d.fallback)
-            + field(d.group === 'blocked' ? 'Effect' : 'Trigger', d.trigger),
-      text: d.q + ' ' + d.fallback + ' ' + d.trigger,
-    }),
-  },
-  {
-    key: 'sc', label: 'Screens', n: D.screens.length,
+      detail: field(d.group === 'blocked' ? 'Owner' : 'Default if never decided', d.fallback)
+            + field(d.group === 'blocked' ? 'Consequence today' : 'Trigger', d.trigger),
+      text: [d.q, d.fallback, d.trigger].join(' '),
+    }) },
+
+  { key: 'sc', label: 'Screens', n: D.screens.length,
     lede: `<p class="lede"><strong>44 routes, and how many ways there are into each.</strong> Two have none, correctly — they are deep-link landing pads. One has a single unlabeled icon, which is why nobody finds it.</p>`,
     row: s => ({
-      id: s.id,
-      title: `<span class="nm">${esc(s.route)}</span>`,
-      gloss: s.purpose,
+      id: s.id, title: `<span class="nm">${esc(s.route)}</span>`, gloss: s.purpose,
       right: bar(s.entries, maxScr, s.entries >= 8),
-      detail: field('Entry points', s.entries === 0
-        ? 'None in the app. Reached only by deep link.'
-        : (s.entries === 1 ? 'One. If it is unlabeled, this screen is effectively hidden.' : `${s.entries} in the app.`)),
-      text: s.route + ' ' + s.purpose,
-    }),
-  },
-  {
-    key: 'iv', label: 'Invariants', n: D.ivs.length,
+      detail: field('Entry points', s.entries === 0 ? 'None in the app. Reached only by deep link.'
+              : s.entries === 1 ? 'One. If it is unlabeled, this screen is effectively hidden.'
+              : `${s.entries} in the app.`) + field('Note', s.note),
+      text: [s.route, s.purpose, s.note].join(' '),
+    }) },
+
+  { key: 'ax', label: 'Axes', n: D.axes.length,
+    lede: `<p class="lede"><strong>Eleven questions you can ask of anything.</strong> These generate the scenario ladders rather than decorating them: cross a flow with an axis and the rows write themselves, so a ladder missing a crossing is a <em>visible</em> gap.</p>`,
+    row: a => ({
+      id: a.id, title: esc(a.name), gloss: a.values,
+      detail: field('Why it changes behaviour', a.why),
+      text: [a.name, a.values, a.why].join(' '),
+    }) },
+
+  { key: 'iv', label: 'Invariants', n: D.ivs.length,
     lede: `<p class="lede"><strong>22 rules that must never be false.</strong> Read the <em>held by</em> column: nine are enforced by a test that reads the real source. The rest are enforced by people remembering, which is worth knowing before relying on one.</p>`,
     row: v => {
       const mech = !/unenforced/i.test(v.heldBy);
-      return {
-        id: v.id,
-        title: md(v.rule),
+      return { id: v.id, title: md(v.rule),
         pills: [{ cls: mech ? 'ok' : 'warn', t: mech ? 'test-enforced' : 'by hand' }],
-        detail: field('Held by', v.heldBy) + field('Constrains', v.on),
-        text: v.rule + ' ' + v.heldBy,
-      };
-    },
-  },
-  {
-    key: 'fe', label: 'Features', n: D.feats.length,
+        detail: field('Held by', v.heldBy) + fieldList('Constrains', v.on),
+        text: [v.rule, v.heldBy, v.on].join(' ') };
+    } },
+
+  { key: 'fe', label: 'Features', n: D.feats.length,
     lede: `<p class="lede"><strong>70 capabilities and their real state.</strong> Flags are user preferences, never entitlements — there is no paywall anywhere in the app, and repurposing one as a gate is forbidden. Several features are complete, tested, and have never run on a phone.</p>`,
     row: f => {
       const s = f.state;
       const cls = /never|unproven|dead|broken|partly/i.test(s) ? 'warn'
                 : /parked|blocked|dropped/i.test(s) ? 'flag'
                 : /flag:/i.test(s) ? 'acc' : 'ok';
-      return {
-        id: f.id,
-        title: esc(f.name),
+      return { id: f.id, title: esc(f.name),
         pills: [{ cls, t: s.replace(/`|\*\*/g, '').split(',')[0].slice(0, 26) }],
-        detail: field('State', s),
-        text: f.name + ' ' + s,
-      };
-    },
-  },
+        detail: field('State', s) + fieldList('Where', f.where) + fieldList('Entities', f.ents),
+        text: [f.name, s, f.where].join(' ') };
+    } },
+
+  { key: 'map', label: 'ID map', panel: idmapPanel },
 ];
 
 /* --------------------------------------------------------------- rendering */
@@ -398,12 +551,10 @@ const countEl = document.getElementById('count');
 const qEl = document.getElementById('q');
 
 tabs.innerHTML = SECTIONS.map(s =>
-  `<button class="tab" role="tab" data-k="${s.key}" aria-selected="${s.key === active}">${esc(s.label)}<span class="n">${s.n}</span></button>`
-).join('');
+  `<button class="tab" role="tab" data-k="${s.key}" aria-selected="${s.key === active}">${esc(s.label)}${
+    s.n ? `<span class="n">${s.n}</span>` : ''}</button>`).join('');
 
-function dataFor(key) {
-  return { ov: D.ovs, ent: D.entities, fl: D.flows, dq: D.dqs, sc: D.screens, iv: D.ivs, fe: D.feats }[key];
-}
+const DATA = { ov: D.ovs, ent: D.entities, fl: D.flows, dq: D.dqs, sc: D.screens, iv: D.ivs, fe: D.feats, ax: D.axes };
 
 function render() {
   const sec = SECTIONS.find(s => s.key === active);
@@ -411,12 +562,19 @@ function render() {
   /* A sub-id like FL-06.E7 should still find its flow. */
   const base = q.replace(/^([a-z]{1,2}-\d+)\..*$/i, '$1');
 
-  const items = dataFor(active).map(sec.row).filter(r => {
+  if (sec.panel) {
+    lede.innerHTML = q ? '' : (sec.lede || '');
+    view.innerHTML = sec.panel(q);
+    countEl.textContent = q ? 'filtered' : '';
+    return;
+  }
+
+  const src = DATA[sec.key];
+  const items = src.map(sec.row).filter(r => {
     if (!q) return true;
     const hay = (r.id + ' ' + (r.text || '')).toLowerCase();
     return hay.includes(q) || hay.includes(base);
   });
-
   countEl.textContent = q ? `${items.length} of ${sec.n}` : `${sec.n} entries`;
 
   let head = q ? '' : (sec.lede || '');
@@ -427,7 +585,7 @@ function render() {
   lede.innerHTML = head;
 
   if (!items.length) {
-    view.innerHTML = `<div class="empty"><p>Nothing matches “${esc(qEl.value)}”.</p></div>`;
+    view.innerHTML = `<div class="empty"><p>Nothing matches &ldquo;${esc(qEl.value)}&rdquo;.</p></div>`;
     return;
   }
 
@@ -454,7 +612,7 @@ function render() {
   if (sec.groupBy && !q) {
     const buckets = new Map();
     items.forEach((r, i) => {
-      const g = sec.groupBy(dataFor(active)[i]);
+      const g = sec.groupBy(src[i]);
       if (!buckets.has(g)) buckets.set(g, []);
       buckets.get(g).push(r);
     });
@@ -479,7 +637,6 @@ tabs.addEventListener('click', e => {
 
 qEl.addEventListener('input', render);
 
-function toggle(el) { el.classList.toggle('open'); }
 view.addEventListener('click', e => {
   const cite = e.target.closest('[data-cite]');
   if (cite) {
@@ -493,12 +650,12 @@ view.addEventListener('click', e => {
     return;
   }
   const row = e.target.closest('.row');
-  if (row) toggle(row);
+  if (row) row.classList.toggle('open');
 });
 view.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const row = e.target.closest('.row');
-  if (row && !e.target.closest('[data-cite]')) { e.preventDefault(); toggle(row); }
+  if (row && !e.target.closest('[data-cite]')) { e.preventDefault(); row.classList.toggle('open'); }
 });
 
 const toast = document.getElementById('toast');
