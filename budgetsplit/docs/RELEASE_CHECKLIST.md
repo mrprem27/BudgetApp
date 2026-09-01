@@ -23,9 +23,13 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 - **Target:** limited TestFlight pilot to friends. Not a public App Store launch.
 - **App version:** 2.0.0 · bundle `com.prem.budgetsplit`
-- **Code state:** `feat/pre-pilot-consistency` (13 commits) + `feat/accounts-and-identity`
-  (11 commits) — **25 commits unpushed**, nothing backed up off this machine.
-- **Suite:** 97 files / 1517 tests green · `tsc --noEmit` clean in app *and* Worker.
+- **Code state:** `feat/sync-s2` — **45 commits unpushed**, nothing backed up off
+  this machine. (Pushing needs a deliberate `gh` account switch: this repo is
+  personal `mrprem27` only, and `gh`'s active account is the company one.)
+- **Suite:** 153 suites / 2117 tests green · `tsc --noEmit` clean in app *and* Worker.
+- **Worker:** deployed 2026-08-31, version `429c2230`. Migrations `0007`–`0010`
+  applied to D1 — three of them had never been applied, so the friend-request
+  routes had been shipped with no tables behind them.
 - **Cost to date:** ₹0. Workers/D1/KV free plan, free-tier email. No card on file.
 
 ---
@@ -1083,3 +1087,58 @@ period spend, because a horizon-scoped headline inside a card the period pills
 drive contradicted its own control. Card repayment is modelled. Onboarding was
 rebuilt so every answer lands somewhere visible — of eight questions, only three
 used to.
+
+---
+
+## Appendix · The asset register (Phase 13, 2026-09-01)
+
+*Money that leaves your account without being spent.* Asked for as "transfer from
+account to investment or some asset, rather than an expense".
+
+Before this it landed in one number in `settings` called `money.investments`,
+which could answer "how much is invested" and nothing else — not what the gold is
+worth, not how much is in the FD, not what the flat cost. So both available
+answers were wrong: log it as an **expense**, which double-counts (the cash
+already moved, and the expense counts it again as consumption and eats a budget),
+or log nothing and watch net worth fall by the amount invested.
+
+**The rule:** a transfer moves money between two things you own, so net worth does
+not change. Cash down and the asset up, or the reverse, both written in **one**
+transaction. Transfers out are the same movement backwards and are **not income**
+— counting them as earnings would inflate every income figure and ratio on the day
+you sold something.
+
+`money_profile.investments` is now **derived** — the sum of live assets — which is
+what let `computeTotalMoney` and everything downstream of it (Total Money,
+Safe-to-Spend's headroom, the health score) stay untouched: the field they already
+read means the same thing, sourced from somewhere that can be itemised.
+
+Three things that were nearly silent, and are the ones to re-check on a device:
+
+1. **A restore would have lost the whole figure.** The legacy conversion was a
+   keyed one-time fix, and `restoreAllTables` preserves this device's `fix_%`
+   markers — so restoring a pre-register backup brought the old number back with
+   an empty asset table and the fix refused to re-run. It is a launch invariant
+   now: `money.investments > 0` means "not converted yet", and zeroing it is the
+   idempotence.
+2. **Onboarding's investments answer.** `setMoneyProfile` no longer accepts the
+   field, but the call passes a variable, so TypeScript does not flag it — the
+   figure would have vanished and net worth opened short by exactly that amount.
+3. **The Add screen still calls it spending.** `smartCategory` maps "sip",
+   "mutual fund", "zerodha" and "gold" to the `Investments / SIP` **expense**
+   category, so typing "SIP 5000" lands there by itself. The screen now recognises
+   that category and offers the register — a nudge, not a block, since it might
+   genuinely be a brokerage fee.
+
+**To verify on the phone:** move ₹5,000 into an asset and confirm Available drops
+by ₹5,000 while net worth does not move; take it back out and confirm both return;
+archive an asset and confirm net worth drops by its balance; check the Plan card
+itemises each asset under Investments.
+
+**Deliberately not built:** an asset as a destination *inside* the Add screen's
+Transfer. That flow hard-types both endpoints as a `Person` and routes through
+`computeTransferScopes`/`buildTransferPlans`, which refuse when the two share no
+group — assets share none. Threading a non-person id through it is a bigger change
+than the register, and the entry points that exist (Plan → Assets, the Total Money
+card, the Add screen's nudge) cover the same need without destabilising the
+most-used screen in the app.
