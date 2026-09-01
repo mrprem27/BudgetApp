@@ -270,8 +270,8 @@ export default function GroupDetailScreen() {
           onRefresh={onRefresh}
           analytics={analytics}
           catStatus={catStatus}
-          onEditBudget={() => router.push(`/group/${id}/budget`)}
-          onCreateBudget={() => router.push(`/group/${id}/budget`)}
+          onOpenBudget={() => router.push(`/group/${id}/budget`)}
+          groupName={group.name}
           onRebalance={(category) => setRebalance(planRebalance(catStatus, category))}
           canEditGroupDefault={data?.ctx ? canEditGroupBudget(data.ctx) : false}
           overrideCount={data?.overrideCount ?? 0}

@@ -5,6 +5,9 @@ import { colors, type, space, radius } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
+import {
+  overrideConfirmTitle, overrideConfirmBody, overrideConfirmCta, overrideConfirmCancel,
+} from '../../../lib/budgetCopy';
 
 /**
  * Consent before your first override in a group.
@@ -23,23 +26,18 @@ export function OwnBudgetSheet({
   onConfirm: () => void;
 }) {
   return (
-    <SheetModal visible={visible} onClose={onCancel} title="Set your own budget here?">
+    <SheetModal visible={visible} onClose={onCancel} title={overrideConfirmTitle}>
       <View style={styles.iconWrap}>
         <Feather name="user" size={22} color={colors.accent} />
       </View>
-      <Text style={styles.body}>
-        You follow {groupName}'s budget right now. Your own amounts replace it — only for
-        you, only in this group. Nobody else sees them and the group's copy doesn't change.
-      </Text>
-      <Text style={styles.body}>
-        Every category you fill in stops following the group: if an admin changes that
-        category later, your amount stays. Categories you leave blank keep following it.
-      </Text>
-      <Text style={styles.body}>
-        Clear an amount any time to go back to following the group.
-      </Text>
-      <PrimaryButton label="Set my own" onPress={onConfirm} style={styles.primary} />
-      <SecondaryButton label="Keep following the group" onPress={onCancel} />
+      {/* From `lib/budgetCopy`, not written here: this sheet, the editor's hint and
+          the Budget tab's empty state described the same policy in three different
+          sets of words. */}
+      {overrideConfirmBody(groupName).map(para => (
+        <Text key={para} style={styles.body}>{para}</Text>
+      ))}
+      <PrimaryButton label={overrideConfirmCta} onPress={onConfirm} style={styles.primary} />
+      <SecondaryButton label={overrideConfirmCancel} onPress={onCancel} />
     </SheetModal>
   );
 }

@@ -26,6 +26,7 @@ import type { BudgetCadence, BudgetLevel } from '../../../db/queries/categoryBud
 import type { BudgetScope } from '../../../lib/budgetEditor';
 import { BudgetAmountRow, CADENCE_LABEL } from './BudgetAmountRow';
 import { OwnBudgetSheet } from './OwnBudgetSheet';
+import { perPersonMeans, PERIOD_RESETS } from '../../../lib/budgetCopy';
 
 const CADENCES: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
@@ -121,7 +122,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           {/* Segmented, not chips: this is "pick exactly one", and the two are
               alternatives rather than toggles. */}
           {e.levelControlVisible && (
-            <View style={styles.levelWrap}>
+            <View style={[styles.levelWrap, styles.block]}>
               <TabPills
                 tabs={[
                   { key: 'group', label: 'Group default' },
@@ -133,9 +134,11 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
               <Text style={styles.hint}>{e.copy.hint}</Text>
             </View>
           )}
-          {!e.levelControlVisible && <Text style={styles.hint}>{e.copy.hint}</Text>}
+          {!e.levelControlVisible && <Text style={[styles.hint, styles.block]}>{e.copy.hint}</Text>}
 
-          <View style={styles.totalCard}>
+          {/* `Card`, not a hand-rolled surface carrying `shadow.md` — heavier than
+              any real card in the app (§3 is `shadow.sm`) for a single number. */}
+          <Card padded style={[styles.totalCard, styles.block]}>
             <Text style={styles.totalLabel}>{e.copy.heroLabel}</Text>
             <Text style={styles.totalAmount}>{formatRupees(e.rollup.amount)}</Text>
             <Text style={styles.totalSub}>
@@ -146,18 +149,17 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
                 ? ` · plus ${formatCompact(e.rollup.pooled)} in ${e.rollup.pooledCount} yearly/one-time`
                 : ' · one-time not counted'}
             </Text>
-          </View>
+          </Card>
 
           {scope === 'global' && e.budgetTarget > 0 && e.rollup.amount === 0 && (
-            <Text style={styles.explain}>
+            <Text style={[styles.explain, styles.block]}>
               At setup you said about {formatCompact(e.budgetTarget)} a month. Set the
               categories that add up to it.
             </Text>
           )}
 
-          <Text style={styles.explain}>
-            {scope === 'group' ? 'Amounts are per person, not the group total. ' : ''}
-            Each period starts fresh — limits reset and unused amounts don't carry over.
+          <Text style={[styles.explain, styles.block]}>
+            {scope === 'group' ? `${perPersonMeans} ` : ''}{PERIOD_RESETS}
           </Text>
 
           {e.outside.length > 0 && (
@@ -273,13 +275,19 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { flex: 1 },
-  scroll: { padding: layout.screenPaddingH, gap: space.md },
+  /*
+   * No `gap`. `SectionCard` carries its own `marginBottom: space.md` (§3), so a
+   * container gap stacked with it and put **32px** between every card — which
+   * across a screen of forty category rows in eight cards is what read as
+   * scattered. AGENTS §12 names this exact bug.
+   *
+   * The blocks that are NOT SectionCards space themselves below.
+   */
+  scroll: { padding: layout.screenPaddingH },
+  block: { marginBottom: space.md },
   levelWrap: { gap: space.sm },
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
-  totalCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1,
-    borderColor: colors.border, padding: space.lg, alignItems: 'center', gap: space.xs, ...shadow.md,
-  },
+  totalCard: { alignItems: 'center', gap: space.xs },
   totalLabel: { ...type.label, color: colors.textSecondary },
   totalAmount: { ...type.amountXL, color: colors.accent },
   totalSub: { ...type.caption, color: colors.textMuted },

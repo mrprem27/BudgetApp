@@ -1,9 +1,13 @@
 import React, { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getGroupById } from '../../../src/db/queries/groups';
 import { isGlobalBudgetGroup } from '../../../src/lib/budget';
 import { BudgetEditor } from '../../../src/components/finance/budget/BudgetEditor';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { SkeletonCard } from '../../../src/components/ui/Skeleton';
+import { colors, space, layout } from '../../../src/theme';
 
 /**
  * One group's budget — the admin's default and your own override of it.
@@ -32,9 +36,25 @@ export default function GroupBudgetScreen() {
     return () => { alive = false; };
   }, [db, id, category, router]);
 
-  // Nothing is rendered until we know, so the group editor never flashes before
-  // forwarding.
-  if (!id || isPersonal !== false) return null;
+  /*
+   * The group editor must never flash before forwarding — but a bare `null` is a
+   * blank screen with a header-less void under it, and this route is reached from a
+   * tap that just pushed a screen. A skeleton says "this is loading" for the frame
+   * or two the group lookup takes, and shows the same header you are about to get,
+   * so nothing jumps when it resolves.
+   */
+  if (!id || isPersonal !== false) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Budget" onBack={() => router.back()} />
+        <View style={styles.skeleton}>
+          <SkeletonCard height={92} />
+          <SkeletonCard height={64} />
+          <SkeletonCard height={64} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <BudgetEditor
@@ -44,3 +64,8 @@ export default function GroupBudgetScreen() {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  skeleton: { padding: layout.screenPaddingH, gap: space.md },
+});

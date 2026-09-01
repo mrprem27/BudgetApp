@@ -3,6 +3,7 @@ import type { Category } from '../db/queries/categories';
 import { categorySection, SECTION_ORDER } from '../constants/categories';
 import { OTHERS_LABEL } from './categoryFold';
 import { parseToPaise, paiseToInput } from './money';
+import { budgetEditorHint } from './budgetCopy';
 
 /**
  * Pure logic for the budget editor. Lives here rather than in the screen because
@@ -177,29 +178,29 @@ export function budgetEditorCopy(
   level: BudgetLevel,
   opts: { groupName?: string; overrideCount?: number } = {},
 ): BudgetEditorCopy {
-  if (scope === 'global') {
-    return {
-      title: 'My Budget',
-      heroLabel: '≈ Monthly, yours',
-      hint: 'Your limits across everything — personal spending and your share of every group.',
-      cta: 'Save my budget',
-    };
-  }
   const groupName = opts.groupName ?? 'this group';
+  // The hint is the one sentence that states the policy, so it comes from
+  // `lib/budgetCopy` — the same place the Budget tab's empty state and the consent
+  // sheet read from. Four wordings of one policy is how a policy stops being
+  // learnable (see that file).
+  const hint = budgetEditorHint({
+    scope, level, groupName, overrideCount: opts.overrideCount ?? 0,
+  });
+  if (scope === 'global') {
+    return { title: 'My Budget', heroLabel: '≈ Monthly, yours', hint, cta: 'Save my budget' };
+  }
   if (level === 'personal') {
     return {
       title: `${groupName} budget`,
       heroLabel: '≈ Monthly, yours',
-      hint: `Yours only, in ${groupName}. Categories you leave blank keep following the group.`,
+      hint,
       cta: 'Save mine for this group',
     };
   }
   return {
     title: `${groupName} budget`,
     heroLabel: '≈ Monthly, per person',
-    hint: (opts.overrideCount ?? 0) > 0
-      ? 'The amount every member starts from. You have your own for some categories.'
-      : 'The amount every member starts from — including you, until you set your own.',
+    hint,
     cta: 'Save for everyone',
   };
 }

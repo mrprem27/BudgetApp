@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SectionList, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SectionList, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,15 +7,14 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { TabPills } from '../src/components/ui/TabPills';
-import { Chip } from '../src/components/ui/Chip';
 import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
-import { BudgetCategoryRow } from '../src/components/finance/BudgetCategoryRow';
+import { BudgetList } from '../src/components/finance/budget/BudgetList';
+import { budgetCaption } from '../src/lib/budgetCopy';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
-import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { SheetModal } from '../src/components/ui/SheetModal';
 import { FAB } from '../src/components/ui/FAB';
@@ -28,9 +27,7 @@ import { getMyExposure } from '../src/db/queries/balances';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useContentInset } from '../src/hooks/useContentInset';
 import { useStore } from '../src/store';
-import { getMyGlobalBudgetStatus } from '../src/lib/budget';
-import { BudgetBar } from '../src/components/finance/BudgetBar';
-import { categoryVisual } from '../src/constants/categories';
+import { getMyGlobalBudgetSummary } from '../src/lib/budget';
 import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
@@ -73,7 +70,7 @@ export default function PersonalScreen() {
       getAllPersons(db),
       getAllGroups(db),
       getMyExposure(db, me.id),
-      getMyGlobalBudgetStatus(db, me.id),
+      getMyGlobalBudgetSummary(db, me.id),
     ]);
     return {
       persons: allPersons,
@@ -88,7 +85,11 @@ export default function PersonalScreen() {
   const persons = data?.persons ?? [];
   const activity = data?.activity ?? [];
   const groups = data?.groups ?? [];
-  const budget = data?.budget ?? [];
+  // `getMyGlobalBudgetSummary` is the canonical answer to "how am I doing against
+  // my budget" — it carries the overview figures as well as the rows. This screen
+  // used `getMyGlobalBudgetStatus`, which returns rows only, which is why it had no
+  // overview to render.
+  const budget = data?.budget ?? null;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
 
   // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
@@ -266,44 +267,36 @@ export default function PersonalScreen() {
             />
           )}
 
-          {/* BUDGET — global: my total share-spend (personal + groups) vs my limits */}
+          {/* BUDGET — global: my total share-spend (personal + groups) vs my limits.
+              The same `BudgetList` the group Budget tab renders. It used to be a
+              heading, a note, a hand-rolled list and a hand-rolled empty card with a
+              naked 22pt icon where §2 requires the 64pt circle — the same idea as the
+              group tab at a lower level of finish, missing the overview and the
+              filters entirely. */}
           {tab === 'budget' && (
-            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-              {budget.length === 0 ? (
-                <View style={styles.budgetCard}>
-                  <Feather name="target" size={22} color={colors.accent} />
-                  <Text style={styles.budgetTitle}>No budget yet</Text>
-                  <Text style={styles.budgetBody}>Set category limits measured against your total spending — personal plus your share of group expenses.</Text>
-                  <PrimaryButton label="Set a budget" onPress={openBudgetEditor} style={{ marginTop: space.xs }} />
-                </View>
-              ) : (
-                <>
-                  <View style={styles.budgetHeadRow}>
-                    <Text style={styles.budgetHeading}>Your spending vs budget</Text>
-                    <Chip label="Edit" icon="edit-2" onPress={openBudgetEditor} />
-                  </View>
-                  <Text style={styles.budgetNote}>Counts your share across personal + all groups.</Text>
-                  <View style={styles.budgetList}>
-                    {budget.map((b, i) => {
-                      const vis = categoryVisual(b.category);
-                      const tint = b.health === 'red' ? colors.expense : b.health === 'amber' ? colors.healthAmber : colors.income;
-                      return (
-                        <View key={`${b.category}-${b.cadence}`} style={i < budget.length - 1 ? styles.budgetRowBorder : undefined}>
-                          <BudgetCategoryRow
-                            category={b.category}
-                            cadence={b.cadence}
-                            spent={b.spent}
-                            allocated={b.allocated}
-                            pct={b.pct}
-                            health={b.health}
-                          />
-                        </View>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-            </ScrollView>
+            <BudgetList
+              rows={budget?.rows ?? []}
+              spent={budget?.spent ?? 0}
+              allocated={budget?.allocated ?? 0}
+              pct={budget?.pct ?? null}
+              pooledAllocated={budget?.pooled ?? 0}
+              pooledCount={budget?.pooledCount ?? 0}
+              caption={budgetCaption({ scope: 'global', allocated: formatCompact(budget?.allocated ?? 0) })}
+              onEdit={openBudgetEditor}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              bottomPad={bottomPad}
+              empty={
+                <EmptyState
+                  icon="target"
+                  title="No budget yet"
+                  body="Set category limits measured against your total spending — personal plus your share of every group."
+                  tint={colors.textSecondary}
+                  actionLabel="Set a budget"
+                  onAction={openBudgetEditor}
+                />
+              }
+            />
           )}
 
           {/* Single-tap FAB — pre-fills the personal group. */}
@@ -345,19 +338,10 @@ const styles = StyleSheet.create({
   summaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.3 },
 
 
-  listContent: { paddingHorizontal: layout.screenPaddingH, gap: space.sm },
   // No `gap` here: a date section's rows form ONE card, so any gap between them
   // slices it into separate slabs. `SectionHeader` supplies its own spacing.
   activityContent: { paddingHorizontal: layout.screenPaddingH },
 
-  budgetCard: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
-  budgetTitle: { ...type.subheading, color: colors.textPrimary },
-  budgetBody: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  budgetHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  budgetHeading: { ...type.subheading, color: colors.textPrimary },
-  budgetNote: { ...type.caption, color: colors.textMuted, marginTop: 2, marginBottom: space.xs },
-  budgetList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  budgetRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
 
 
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
