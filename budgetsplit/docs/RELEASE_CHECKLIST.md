@@ -27,10 +27,61 @@ claim cites `file:line` or it gets deleted rather than debated.
   this machine. (Pushing needs a deliberate `gh` account switch: this repo is
   personal `mrprem27` only, and `gh`'s active account is the company one.)
 - **Suite:** 153 suites / 2117 tests green · `tsc --noEmit` clean in app *and* Worker.
-- **Worker:** deployed 2026-08-31, version `429c2230`. Migrations `0007`–`0010`
+- **Worker:** deployed 2026-09-01, version `0c1a54e0`. Migrations `0007`–`0010`
   applied to D1 — three of them had never been applied, so the friend-request
   routes had been shipped with no tables behind them.
 - **Cost to date:** ₹0. Workers/D1/KV free plan, free-tier email. No card on file.
+
+---
+
+## 0 · What is left, in order
+
+Code is done. Everything below needs a **phone**, and nothing below can be done
+from a machine. Stop at the first thing that fails — each step assumes the one
+above it worked.
+
+### 1. Get it on a device (blocks everything else)
+- [ ] Paid Apple Developer account active (Gate 0 — nothing ships without it).
+- [ ] `npx expo run:ios --device` on your own phone. If it opens, the 48 commits
+      are real; the bundle is proven to build but has never launched.
+- [ ] Walk the app cold, signed out, no data. It must never show
+      "Couldn't start BudgetSplit".
+
+### 2. Prove the asset register (new, and the most likely to be wrong)
+- [ ] Plan → Available money → **Assets**. Add "Gold", worth ₹40,000.
+- [ ] **Add** ₹5,000 from Bank → *Available* drops ₹5,000, **net worth does not move.**
+- [ ] **Take out** ₹5,000 to Bank → both return exactly to where they started.
+- [ ] **Worth now** → ₹50,000 → net worth rises ₹10,000, *Available* does not move,
+      and **no row appears in the ledger** (a price change is not a transfer).
+- [ ] Try taking out more than it holds → refused, nothing moves.
+- [ ] Delete an asset transfer from the ledger → **net worth must not jump.**
+      Undo it → both halves come back. *(This was broken; it is the single most
+      important line on this page.)*
+- [ ] Type "SIP 5000" into Add → it offers the register instead of saving as spending.
+- [ ] Stop counting an asset → net worth drops by its balance, its transfers stay
+      in history.
+
+### 3. Prove sync, on TWO phones with TWO accounts
+This has never run. Everything about it is verified by tests only.
+- [ ] Sign in on both (email magic link).
+- [ ] Phone A: add Phone B by **email** → B accepts → A's "Invited · waiting"
+      clears and the two are connected.
+- [ ] A adds an expense in a shared group → it reaches B.
+- [ ] B adds one → it reaches A.
+- [ ] Remove a member → their history stays, the balance still shows.
+- [ ] Delete a group → it closes on both, past months still add up.
+- [ ] **Reinstall A**, sign in, restore → the groups come back readable.
+
+### 4. Restore, specifically
+- [ ] Back up, wipe, restore → **investments/assets come back at the right value**
+      (a pre-register backup converts on restore; this path was silently losing
+      the whole figure).
+
+### 5. Before submitting
+- [ ] Run §0a's no-enumeration curl diff — it needs a real session, so it can only
+      be done once you can sign in.
+- [ ] Answer the App Store privacy question about account deletion
+      (`DELETE /me` exists and is live).
 
 ---
 
