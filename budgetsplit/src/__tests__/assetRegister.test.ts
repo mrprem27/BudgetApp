@@ -5,7 +5,9 @@ import {
 } from '../db/queries/assets';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
-import { getTransactionsInRange } from '../db/queries/transactions';
+import {
+  getTransactionsInRange, softDeleteTxn, restoreTxn, insertTxn, updateTxn, AssetTransferError,
+} from '../db/queries/transactions';
 import { PayMethod } from '../constants/enums';
 import { INVESTMENT_CATEGORY, INVESTMENT_EXPENSE_CATEGORY } from '../constants/categories';
 import { matchCategory } from '../lib/smartCategory';
@@ -268,5 +270,99 @@ describe('the two investment categories stay apart', () => {
     expect(row?.category).not.toBe(INVESTMENT_EXPENSE_CATEGORY);
     // §12: a settlement, so no category breakdown or budget counts it.
     expect(row?.kind).toBe('settlement');
+  });
+});
+
+/**
+ * Deleting an asset transfer from the LEDGER must move both halves.
+ *
+ * This is the defect that made net worth invent money, and it is the one to
+ * distrust: every cash read filters `is_deleted = 0`, so soft-deleting a transfer
+ * reverses the cash side ALL BY ITSELF while `asset.balance` stayed where the
+ * transfer put it. Delete a ₹50,000 "Moved to Gold" row from the transaction
+ * detail screen and net worth rose ₹50,000 out of nothing — then Safe-to-Spend,
+ * the surplus sweep and the overspend raid all acted on the inflated figure.
+ *
+ * The mirror loses money instead: delete a transfer OUT and cash drops while the
+ * asset stays reduced.
+ */
+describe('deleting an asset transfer moves both halves', () => {
+  it('takes the money back out of the asset when the row is deleted', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+    const before = await netWorth(db);
+
+    const id = await transferToAsset(asDb(db), gold.id, 500000);
+    await softDeleteTxn(asDb(db), id);
+
+    // Cash came back...
+    expect((await getCashPosition(asDb(db))).available).toBe(OPENING);
+    // ...so the asset must NOT still be holding it.
+    expect((await getAssetById(asDb(db), gold.id))!.balance).toBe(0);
+    expect(await netWorth(db)).toBe(before);
+  });
+
+  it('puts it back when the delete is undone', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+
+    const id = await transferToAsset(asDb(db), gold.id, 500000);
+    const during = await netWorth(db);
+    await softDeleteTxn(asDb(db), id);
+    await restoreTxn(asDb(db), id);
+
+    expect((await getAssetById(asDb(db), gold.id))!.balance).toBe(500000);
+    expect((await getCashPosition(asDb(db))).available).toBe(OPENING - 500000);
+    expect(await netWorth(db)).toBe(during);
+  });
+
+  it('puts the money BACK IN when a transfer OUT is deleted — the mirror', async () => {
+    const { db } = await setup();
+    const fd = await insertAsset(asDb(db), { name: 'Bank FD', balance: 500000 });
+    const before = await netWorth(db);
+
+    const id = await transferFromAsset(asDb(db), fd.id, 200000);
+    await softDeleteTxn(asDb(db), id);
+
+    expect((await getAssetById(asDb(db), fd.id))!.balance).toBe(500000);
+    expect((await getCashPosition(asDb(db))).available).toBe(OPENING);
+    expect(await netWorth(db)).toBe(before);
+  });
+
+  it('leaves an ordinary expense alone — only asset rows reverse anything', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold', balance: 40000 });
+    await transferToAsset(asDb(db), gold.id, 100000);
+
+    // A normal personal expense, no asset_id.
+    const me = await db.getFirstAsync<{ id: string }>('SELECT id FROM person WHERE is_me = 1');
+    const g = await db.getFirstAsync<{ id: string }>('SELECT id FROM budget_group LIMIT 1');
+    const other = await insertTxn(asDb(db), {
+      groupId: g!.id, kind: 'expense', entryMode: 'quick', date: Date.now(),
+      category: 'Food', payments: [{ personId: me!.id, amount: 25000 }],
+      shares: [{ personId: me!.id, amount: 25000 }],
+    });
+    await softDeleteTxn(asDb(db), other);
+
+    // The asset is untouched by an unrelated delete.
+    expect((await getAssetById(asDb(db), gold.id))!.balance).toBe(140000);
+  });
+
+  /** An asset transfer cannot be edited through the generic path — both halves
+   *  would not move, so the register owns the change instead. */
+  it('refuses to edit an asset transfer through updateTxn', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+    const id = await transferToAsset(asDb(db), gold.id, 500000);
+    const me = await db.getFirstAsync<{ id: string }>('SELECT id FROM person WHERE is_me = 1');
+    const g = await db.getFirstAsync<{ id: string }>('SELECT id FROM budget_group LIMIT 1');
+
+    await expect(updateTxn(asDb(db), {
+      id, groupId: g!.id, kind: 'settlement', date: Date.now(), category: 'Investment',
+      payments: [{ personId: me!.id, amount: 50000 }], shares: [],
+    })).rejects.toThrow(AssetTransferError);
+
+    // And nothing moved on either side.
+    expect((await getAssetById(asDb(db), gold.id))!.balance).toBe(500000);
   });
 });
