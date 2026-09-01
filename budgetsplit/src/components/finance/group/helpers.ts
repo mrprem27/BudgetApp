@@ -12,10 +12,6 @@ export function healthColor(h: 'green' | 'amber' | 'red' | 'none'): string {
     : colors.textSecondary;
 }
 
-export function recBg(sev: 'warn' | 'info' | 'good'): string {
-  return sev === 'warn' ? colors.expenseTint : sev === 'good' ? colors.accentMuted : colors.bgMuted;
-}
-
 export function recColor(sev: 'warn' | 'info' | 'good'): string {
   return sev === 'warn' ? colors.expense : sev === 'good' ? colors.income : colors.textSecondary;
 }

@@ -226,7 +226,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 |---|---|---|---|
 | S-20 | **Reports** | `app/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
 | S-21 | **Report transactions** | `app/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
-| S-22 | **Insights** | `app/insights.tsx` | The single narrative-insight home: velocity hero, month-end forecast chart, category shifts, what-if slider, recommendations, savings insights. |
+| S-22 | **Insights** | `app/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
 | S-23 | **Search** | `app/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
 
 ### 3.8 Settings sub-screens & utilities
@@ -1282,11 +1282,27 @@ All figures are **my share**, on the same basis as Home (`getMyGlobalBudgetStatu
 is compared against). A `SampleNote` under the eyebrow discloses how many transactions the
 projections rest on. `loadInsightsData` takes an injected `now` so it is deterministic.
 
-`ScreenHeader` "Insights" + month pill → eyebrow; **velocity hero** (only when projected to
-overspend) → "See what to cut" (`/group/{personal}`); month-end **forecast line chart** (x-axis
-labels sized so they don't truncate); **shifts vs last month**; 🔘 **what-if** `10% · 20% · 30%`;
-recommendations; drivers; savings insights. Donut / trend /
-owe-owed / recurring analytics live in **Reports**, not here — insights has one home.
+`ScreenHeader` "Insights", then **one headline `Card`, always rendered**: month + days in, a
+"N days left" `Badge`, spend so far as the single hero figure, `of ₹X · N% used`, a `BudgetBar`,
+and the month-end verdict — *"you'll be ₹X over by month-end"* or *"you'll finish with ₹X to
+spare"* — plus the pace line. With no budget set it shows spend + projection and a **Set a
+budget** chip, because every section below needs something to measure against. It used to render
+**only when you were projected to overspend**, so a good month opened on a chart; and its bar
+filled `budget / projected`, making the filled part your *budget* and the empty part the
+overspend — inverted from `BudgetBar` and Home's `ForecastCard`.
+
+Below it, collapsible `SectionCard`s (open: **Needs attention**; closed: the rest), each header
+carrying its own count or total so a closed section still says something:
+
+- **Needs attention** — over-budget categories worst-first (tap → `/category/{name}`), then the
+  rule-engine notes that aren't repeats. `over-*`, `projected` and `ontrack` are filtered out:
+  the first duplicated the driver rows, the second is the headline's own sentence, and the third
+  fired once *per group*, so four groups printed "All budgets are on track" four times.
+- **Month-end forecast** — the line chart (x-axis labels sized so they don't truncate).
+- **Changed vs last month** · **What if I cut back?** (`10% · 20% · 30%` chips) · **Ways to save**.
+
+Donut / trend / owe-owed / recurring analytics live in **Reports**, not here — insights has one
+home.
 
 ---
 

@@ -22,7 +22,14 @@ import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast'
  */
 
 type Shift = { cat: string; thisAmt: number; pct: number };
-type Rec = { key: string; severity: 'warn' | 'info' | 'good'; icon: string; text: string; group: string };
+/**
+ * `id` is the rule that produced this line (`over-Food`, `near-Food`, `projected`,
+ * `ontrack`, …), carried through so a screen can drop the ones it already renders
+ * some other way. `key` prefixes it with the group so React keys stay unique
+ * across groups; parsing the rule back out of `key` would break on a category name
+ * containing a colon.
+ */
+type Rec = { key: string; id: string; severity: 'warn' | 'info' | 'good'; icon: string; text: string; group: string };
 type Driver = { key: string; category: string; over: number; group: string };
 type LinePoint = { value: number; label?: string; hideDataPoint?: boolean; dataPointColor?: string; dataPointRadius?: number };
 
@@ -170,7 +177,7 @@ export async function loadInsightsData(
     const budget = mine?.allocated ?? 0;
 
     const recommendations: Rec[] = analyticsByGroup.flatMap(({ group, a }) =>
-      a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
+      a.recommendations.map(r => ({ key: `${group.id}:${r.id}`, id: r.id, severity: r.severity, icon: r.icon, text: r.text, group: group.name })),
     );
     const drivers: Driver[] = [
       // My Budget's own overspend, labelled as mine rather than as a group's.
