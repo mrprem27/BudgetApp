@@ -1,4 +1,5 @@
 import React from 'react';
+import { Chip } from '../../src/components/ui/Chip';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, type, space, layout, alpha } from '../../src/theme';
@@ -14,7 +15,6 @@ import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
-import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useRecurringActions } from '../../src/hooks/useRecurringActions';
@@ -107,7 +107,9 @@ export default function RecurringScreen() {
   }, []);
 
   const subs = data ?? [];
-  const { skipNext, pause, resume, edit, end } = useRecurringActions(reload);
+  // Edit and Stop are not here: they are destructive or navigational, and live on
+  // the rule's own screen — which is where tapping a row already goes.
+  const { skipNext, pause, resume } = useRecurringActions(reload);
   /*
    * THREE kinds, three sums. §12 forbids one total across them, and this was
    * quietly breaking it: `kind !== 'income'` folded standing TRANSFERS into a
@@ -193,38 +195,48 @@ export default function RecurringScreen() {
                 <Card clip>
                   {rows.map((s, i) => {
                     const vis = categoryVisual(s.category);
+                    /*
+                     * No actions on the list. The row taps through to this rule's
+                     * own screen, where Edit, Skip, Pause and Stop already live.
+                     *
+                     * It used to carry FOUR `SecondaryButton`s permanently visible —
+                     * 52pt of chrome on a 75pt row, ~29% of the screen's height, for
+                     * maintenance nobody is doing while reading a list. They did not
+                     * even fit: four labels across a 390pt screen leaves ~75pt each,
+                     * "Skip next" needs ~78, and the container has a fixed height
+                     * with no `numberOfLines`, so it wrapped and clipped.
+                     *
+                     * A swipe was tried in between and rejected: it trades visible
+                     * clutter for an invisible gesture, on a screen whose complaint
+                     * was that it is confusing. A list should be a list.
+                     */
                     return (
                       <View key={s.id}>
-                        {i > 0 && <Divider indent="none" />}
+                        {i > 0 && <Divider indent="text" />}
                         <ListRow
                           leading={
                             <IconCircle
                               icon={asFeather(vis?.icon, s.kind === 'income' ? 'trending-up' : 'refresh-cw')}
-                              size={layout.avatarSize}
+                              size={layout.iconCircle}
                               color={vis?.color ?? (s.kind === 'income' ? colors.income : colors.accent)}
                             />
                           }
                           title={s.name}
-                          subtitle={`${s.category} · ${freqLabel(s.freq, s.interval)}${
-                            s.paused ? ' · paused' : s.nextMs != null ? ` · next ${shortDate(s.nextMs)}` : ''}`}
-                          value={<AmountText paise={s.amount} size="sm" forceColor={s.kind === 'income' ? colors.income : colors.textPrimary} rounded />}
+                          subtitle={`${s.name === s.category ? '' : `${s.category} · `}${freqLabel(s.freq, s.interval)}${
+                            s.nextMs != null ? ` · next ${shortDate(s.nextMs)}` : ''}`}
+                          value={
+                            <View style={styles.rowValue}>
+                              {/* Paused is a state, so it looks like one — it was a
+                                  lowercase word appended to a muted subtitle while
+                                  the amount stayed at full weight, so a paused rule
+                                  was visually identical to a live one. */}
+                              {s.paused && <Chip label="Paused" icon="pause" />}
+                              <AmountText paise={s.amount} size="sm" forceColor={s.kind === 'income' ? colors.income : colors.textPrimary} rounded />
+                            </View>
+                          }
                           onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
-                          accessibilityLabel={`${s.name}, ${freqLabel(s.freq, s.interval)}`}
+                          accessibilityLabel={`${s.name}, ${freqLabel(s.freq, s.interval)}${s.paused ? ', paused' : ''}`}
                         />
-                        {/* Real buttons, not caption-sized text links. All three were ~13px
-                            tap targets — far under AGENTS §6 — and one of them is destructive. */}
-                        <View style={styles.actionRow}>
-                          <SecondaryButton label="Edit" size="sm" onPress={() => edit(s.id)} style={styles.actionBtn} />
-                          {/* Skipping the next occurrence of a rule that generates
-                              none is a no-op the user cannot see the result of. */}
-                          {!s.paused && (
-                            <SecondaryButton label="Skip next" size="sm" onPress={() => skipNext(s.id)} style={styles.actionBtn} />
-                          )}
-                          {s.paused
-                            ? <SecondaryButton label="Resume" size="sm" onPress={() => resume(s.id)} style={styles.actionBtn} />
-                            : <SecondaryButton label="Pause" size="sm" onPress={() => pause(s.id)} style={styles.actionBtn} />}
-                          <SecondaryButton label="Stop" size="sm" danger onPress={() => end(s.id)} style={styles.actionBtn} />
-                        </View>
                       </View>
                     );
                   })}
@@ -232,7 +244,7 @@ export default function RecurringScreen() {
               </View>
             ))}
 
-            <Text style={styles.footHint}>Tap a row to manage its schedule.</Text>
+            <Text style={styles.footHint}>Tap a row to edit, pause or stop it.</Text>
           </>
         ) : null}
       </ScrollView>
@@ -253,8 +265,6 @@ const styles = StyleSheet.create({
   totalCount: { ...type.caption, color: colors.textSecondary },
   totalNext: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   count: { ...type.amountSM, color: colors.textSecondary },
-  actionRow: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md },
-  // SecondaryButton is width:100% by default; these share the row instead.
-  actionBtn: { flex: 1, width: undefined, paddingHorizontal: space.sm },
+  rowValue: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   footHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.md },
 });
