@@ -131,7 +131,7 @@ export type MoneyProfile = {
   openingCash: number;
   openingBank: number;
   openingWallet: number;
-  /** Total investments balance entered by the user (paise). Informational. */
+  /** Everything you own that isn't cash, in paise — the sum of the live asset register, NOT a figure anybody types. See db/queries/assets.ts. */
   investments: number;
   /** Credit card limit (paise). */
   creditLimit: number;

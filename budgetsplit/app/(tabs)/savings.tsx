@@ -126,7 +126,7 @@ export default function SavingsScreen() {
         <ErrorState onRetry={() => reload()} />
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {/* Total Money — cash + investments + available credit, with breakdown */}
+        {/* Total Money — cash + assets + available credit, with breakdown */}
         {money && (
           <TotalMoneyCard
             money={money}
@@ -294,6 +294,7 @@ export default function SavingsScreen() {
       />
 
       <MoveToInvestmentsSheet
+        assets={assets}
         visible={showMoveInvest}
         onClose={() => setShowMoveInvest(false)}
         cashAvailable={money?.cashAvailable ?? 0}

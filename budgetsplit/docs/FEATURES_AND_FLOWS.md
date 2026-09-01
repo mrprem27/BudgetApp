@@ -118,7 +118,7 @@ preservation case asserting that a skipped answer removes only its own artifact)
   budgets exist.
 - Each contact → `insertPerson`; if any were added, `insertGroup` creates the group they named
   with `[me, ...contacts]` as members.
-- `setMoneyProfile` writes cash / investments / credit.
+- `setMoneyProfile` writes cash / credit (investments are the asset register now — `MoneyProfileWrite` omits the field).
 - `setReminderPrefs({ backup: true })` — the monthly backup nudge defaults on, because with no
   sync a lost phone is total data loss and a skipped notification prompt used to mean no
   mitigation at all (`V2-02`).

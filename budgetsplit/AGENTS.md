@@ -388,8 +388,15 @@ are **not income** — you already owned that money, it only changed shape.
 was one number in `settings` doing that job, which could not tell gold from an FD from a
 flat, and the only way to change it was to retype the total — which is why buying an
 investment got logged as an expense. Two things must stay true: nothing writes
-`investments` (the `MoneyProfileWrite` type omits it, so the compiler enforces this), and
-an archived asset stops counting, because archiving is how you say you no longer own it.
+`investments`, and an archived asset stops counting, because archiving is how you say you no
+longer own it.
+
+`MoneyProfileWrite` omits the field, which catches most of it — but **not all**, and the two
+gaps are worth knowing because both have already bitten. Excess-property checking only fires
+on object *literals*, so `setMoneyProfile(db, data.money)` with a variable passes silently
+(that is how onboarding's figure nearly vanished); and `tsconfig` excludes `src/__tests__`,
+so a test can write the field and still compile. Neither is a reason to distrust the type —
+it is a reason not to call it enforcement.
 
 **Never show one total across kinds.** Money in, money out and money moved do not belong in
 a single figure — a "₹12,400 total" over a mixed list is measuring nothing. Sum per kind and

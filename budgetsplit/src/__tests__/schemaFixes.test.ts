@@ -517,14 +517,25 @@ describe('launch invariants: the creator can always administer the group', () =>
 
 /**
  * `money.investments` was one number that could not tell gold from an FD from a
- * flat. Moving it into the asset register has two halves and BOTH are silent if
- * missed: skip the insert and net worth drops by the whole investment; skip the
- * zeroing and there are two numbers claiming to be the same thing.
+ * flat. Turning it into an asset has two halves and BOTH are silent if missed:
+ * skip the insert and net worth drops by the whole investment; skip the zeroing
+ * and there are two numbers claiming to be the same thing.
+ *
+ * It is a LAUNCH INVARIANT, not a keyed one-time fix, and these tests are mostly
+ * about why. A keyed fix records itself in `settings`, and `restoreAllTables`
+ * PRESERVES this device's `fix_%` markers across a restore — so restoring a
+ * backup written before the register brought the old figure back with an empty
+ * asset table and the fix refused to re-run, leaving net worth short by the whole
+ * investment on exactly the path somebody uses after losing their phone.
+ *
+ * The condition describes itself, which is what makes the invariant shape right:
+ * `money.investments > 0` MEANS "not represented in the register yet", and
+ * zeroing it is the idempotence.
  */
-describe('investments become the first asset', () => {
+describe('investments become an asset', () => {
   const assets = (db: DatabaseSync) =>
-    db.prepare('SELECT id, name, kind, balance FROM asset ORDER BY sort_order').all() as
-      { id: string; name: string; kind: string; balance: number }[];
+    db.prepare('SELECT name, kind, balance FROM asset ORDER BY sort_order').all() as
+      { name: string; kind: string; balance: number }[];
   const investmentsKey = (db: DatabaseSync) =>
     (db.prepare("SELECT value FROM settings WHERE key = 'money.investments'").get() as { value: string } | undefined)?.value;
 
@@ -536,15 +547,13 @@ describe('investments become the first asset', () => {
 
   it('mints an asset holding exactly what the number said', async () => {
     const db = withInvestments('150000');
-    await launch(db);
-    expect(assets(db)).toEqual([
-      { id: 'asset_migrated_investments', name: 'Investments', kind: 'investment', balance: 150000 },
-    ]);
+    await fullLaunch(db);
+    expect(assets(db)).toEqual([{ name: 'Investments', kind: 'investment', balance: 150000 }]);
   });
 
-  it('zeroes the settings key, so nothing else can still claim to be that money', async () => {
+  it('zeroes the key, so nothing else can still claim to be that money', async () => {
     const db = withInvestments('150000');
-    await launch(db);
+    await fullLaunch(db);
     // '0' rather than deleted: a backup written afterwards still carries the key,
     // so restoring it into an older build reads Rs 0 rather than nothing at all.
     expect(investmentsKey(db)).toBe('0');
@@ -552,41 +561,60 @@ describe('investments become the first asset', () => {
 
   it('creates nothing when there were no investments', async () => {
     const db = withInvestments('0');
-    await launch(db);
+    await fullLaunch(db);
     expect(assets(db)).toEqual([]);
   });
 
   it('creates nothing when the key was never written', async () => {
     const db = makeDb();
-    await launch(db);
+    await fullLaunch(db);
     expect(assets(db)).toEqual([]);
   });
 
+  it('does not run twice', async () => {
+    const db = withInvestments('150000');
+    await fullLaunch(db);
+    await fullLaunch(db);
+    expect(assets(db)).toHaveLength(1);
+    expect(assets(db)[0].balance).toBe(150000);
+  });
+
   /**
-   * The case that would DOUBLE somebody's net worth: a database that already has
-   * assets — a demo seed, or a restore of a backup made after the register
-   * shipped — must not also get a migrated row on top of them.
+   * The restore this exists for. `restoreAllTables` wipes `settings` EXCEPT the
+   * `fix_%` markers, puts the backup's rows back, and restores `asset` empty
+   * because a pre-register backup has no such key. A keyed migration was already
+   * marked done on this device and would refuse — so this must convert anyway.
    */
-  it('leaves an existing register alone rather than adding to it', async () => {
+  it('converts a figure restored from a pre-register backup, markers and all', async () => {
+    const db = makeDb();
+    // A device long past every keyed fix, exactly as restore leaves it.
+    db.exec(`
+      INSERT INTO settings (key, value) VALUES
+        ${ONE_TIME_FIXES.map(f => `('${f.key}','1')`).join(',')};
+      INSERT INTO settings (key, value) VALUES ('money.investments','150000');
+    `);
+    expect(await fullLaunch(db)).toEqual([]);   // no keyed fix comes back
+    expect(assets(db)).toEqual([{ name: 'Investments', kind: 'investment', balance: 150000 }]);
+    expect(investmentsKey(db)).toBe('0');
+  });
+
+  /**
+   * And it must convert even when the register is NOT empty. An "only if empty"
+   * guard was here and was wrong in the same direction: it would refuse a restored
+   * figure on any device that had ever created a single asset — including one
+   * created during onboarding minutes earlier.
+   */
+  it('converts alongside assets that already exist, rather than refusing', async () => {
     const db = withInvestments('150000');
     db.exec(`
       INSERT INTO asset (id, name, kind, balance, is_archived, sort_order, created_at, updated_at)
         VALUES ('a1','Gold','gold',40000,0,0,1,1);
     `);
-    await launch(db);
-    expect(assets(db)).toEqual([{ id: 'a1', name: 'Gold', kind: 'gold', balance: 40000 }]);
-    // The key is still zeroed: the value it held is represented by the assets that
-    // are already there, and leaving it would be the second source of truth again.
+    await fullLaunch(db);
+    expect(assets(db)).toEqual([
+      { name: 'Gold', kind: 'gold', balance: 40000 },
+      { name: 'Investments', kind: 'investment', balance: 150000 },
+    ]);
     expect(investmentsKey(db)).toBe('0');
-  });
-
-  it('does not run twice', async () => {
-    const db = withInvestments('150000');
-    await launch(db);
-    // Somebody invests more; the migration must not re-mint from a stale key.
-    db.exec("UPDATE settings SET value = '999' WHERE key = 'money.investments'");
-    expect(await launch(db)).toEqual([]);
-    expect(assets(db)).toHaveLength(1);
-    expect(assets(db)[0].balance).toBe(150000);
   });
 });

@@ -162,7 +162,19 @@ export async function finalizeOnboarding(
           name: 'Investments', kind: 'investment', icon: 'trending-up',
           balance: data.money.investments,
         });
-      } catch { /* best-effort */ }
+      } catch {
+        /*
+         * NOT swallowed like its cash/credit sibling above, and the difference
+         * matters: those land in `settings`, which has other writers and a visible
+         * editor. This number has no other record anywhere, so a silent failure
+         * loses it outright. Falling back to the old key means the launch
+         * invariant converts it on the very next start.
+         */
+        try { await db.runAsync(
+          "INSERT OR REPLACE INTO settings (key, value) VALUES ('money.investments', ?)",
+          [String(Math.round(data.money.investments))],
+        ); } catch { /* genuinely nothing left to try */ }
+      }
     }
 
     // A capture default only: it seeds the Add screen's pay-method chip and never

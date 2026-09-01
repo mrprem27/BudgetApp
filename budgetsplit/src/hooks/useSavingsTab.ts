@@ -13,6 +13,7 @@ import {
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
 import { moveToInvestments, payCardBill } from '../db/queries/spendPower';
+import { transferToAsset } from '../db/queries/assets';
 import type { PayMethod } from '../constants/enums';
 import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
@@ -117,8 +118,11 @@ export function useSavingsTab() {
     refresh();
   }
 
-  async function handleMoveToInvestments(amountPaise: number, from: PayMethod) {
-    await moveToInvestments(db, amountPaise, from);
+  async function handleMoveToInvestments(amountPaise: number, from: PayMethod, assetId: string | null) {
+    // A named destination goes straight to the register; `moveToInvestments` is
+    // the no-assets-yet path, and it is the one that mints "Investments".
+    if (assetId) await transferToAsset(db, assetId, amountPaise, from);
+    else await moveToInvestments(db, amountPaise, from);
     haptic.success();
     setShowMoveInvest(false);
     await reload();

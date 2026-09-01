@@ -3,9 +3,14 @@ import type { MoneyProfile } from '../../lib/cash';
 import { getAssetsTotal } from './assets';
 
 /**
- * The user's real-money inputs for the Plan screen's "Total Money": starting cash,
- * investments, and credit (limit + used). Stored in the SQLite `settings` KV table
- * (all values integer paise) so financial truth stays in the DB alongside txns.
+ * The user's real-money inputs for the Plan screen's "Total Money": starting cash
+ * and credit (limit + used). Stored in the SQLite `settings` KV table (all values
+ * integer paise) so financial truth stays in the DB alongside txns.
+ *
+ * `investments` is the exception and is NOT stored here — it is derived from the
+ * asset register on every read (see the field below). The key survives in `KEYS`
+ * only so the launch invariant that converts a legacy value has something to
+ * find; nothing consumes it.
  */
 const KEYS = {
   // Cash-in-hand from here on. Historically it meant "all my money" — see the
@@ -83,9 +88,10 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
      * `money.investments` used to be the whole answer to "what do you own that
      * isn't cash", which meant it could not tell gold from an FD from a flat. It
      * is now the SUM of live assets, and the stored key is zeroed by the
-     * `fix_assets_from_investments_v1` migration once its value has been turned
-     * into an asset row — because two places holding a number that both claim to
-     * be your investments is how net worth ends up with two answers.
+     * `LAUNCH_INVARIANTS` conversion once its value has been turned into an asset
+     * row — because two places holding a number that both claim to be your
+     * investments is how net worth ends up with two answers. The key is still read
+     * above only because `KEYS` drives the query; nothing uses the value.
      *
      * Read here rather than at every call site so `computeTotalMoney` and its
      * consumers (Total Money, Safe-to-Spend's headroom, the health score) need no

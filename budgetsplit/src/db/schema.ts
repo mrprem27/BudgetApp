@@ -725,41 +725,6 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
    * `group_member` gets no admin row from the UPDATE alone, and a group with an
    * admin who is not a member is the same dead end in a different shape.
    */
-  /*
-   * `money.investments` becomes the first row of the asset register.
-   *
-   * The figure is real user data — someone typed what their investments are worth
-   * — so it is moved, not dropped. Both halves matter and both are here:
-   *
-   * 1. INSERT an asset holding that value. Guarded by `NOT EXISTS`, so a database
-   *    that already has assets (a demo seed, or a restore of a newer backup)
-   *    cannot get a duplicate "Investments" row on top of them.
-   * 2. ZERO the settings key. This is the half that must not be forgotten:
-   *    `getMoneyProfile` now derives `investments` from the asset total, so a
-   *    non-zero key left behind is simply a second, stale number claiming to be
-   *    the same thing. It is set to '0' rather than deleted so a backup written
-   *    afterwards still carries the key, and restoring that backup into an older
-   *    build reads ₹0 rather than nothing — wrong, but not catastrophically so.
-   *
-   * Getting this wrong in either direction is silent: skip the insert and net
-   * worth drops by the whole investment; skip the zeroing and (on a build that
-   * still read the key) it doubles.
-   */
-  {
-    key: 'fix_assets_from_investments_v1',
-    sql: [
-      `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
-         SELECT 'asset_migrated_investments', 'Investments', 'investment', 'trending-up', NULL,
-                CAST(s.value AS INTEGER), 0, 0,
-                CAST(strftime('%s','now') AS INTEGER) * 1000,
-                CAST(strftime('%s','now') AS INTEGER) * 1000
-           FROM settings s
-          WHERE s.key = 'money.investments'
-            AND CAST(s.value AS INTEGER) > 0
-            AND NOT EXISTS (SELECT 1 FROM asset)`,
-      "UPDATE settings SET value = '0' WHERE key = 'money.investments'",
-    ],
-  },
   {
     key: 'fix_group_creator_roles_v2',
     sql: [
@@ -804,6 +769,41 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
  * legitimate exception to overwrite.
  */
 export const LAUNCH_INVARIANTS: string[] = [
+  /*
+   * `money.investments` becomes a row in the asset register.
+   *
+   * An INVARIANT, not a keyed one-time fix, and the difference is a real bug it
+   * already had. A keyed fix records itself in `settings`, and `restoreAllTables`
+   * deliberately PRESERVES this device's `fix_%` markers across a restore (see
+   * `queries/backup.ts`) — so restoring a backup written before the register put
+   * a non-zero `money.investments` back with an empty `asset` table, the fix
+   * refused to re-run because it was already marked done, and net worth was
+   * permanently short by the whole investment with the number sitting unread in
+   * `settings`. Silently, and on exactly the path people use after losing a phone.
+   *
+   * The condition describes itself, which is what makes an invariant the right
+   * shape: `money.investments > 0` MEANS "this value is not represented in the
+   * register yet". Zeroing the key is therefore the idempotence — no marker
+   * needed, and it is correct however the non-zero value got there.
+   *
+   * There is deliberately no "only if the register is empty" guard. That was here
+   * and it was wrong in the same direction: it would refuse to convert a restored
+   * figure on any device that had ever created a single asset. The id is random
+   * rather than fixed for the same reason — a fixed one collides if a backup
+   * already contains the row.
+   */
+  `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'Investments', 'investment', 'trending-up', NULL,
+            CAST(s.value AS INTEGER), 0,
+            COALESCE((SELECT MAX(sort_order) + 1 FROM asset), 0),
+            CAST(strftime('%s','now') AS INTEGER) * 1000,
+            CAST(strftime('%s','now') AS INTEGER) * 1000
+       FROM settings s
+      WHERE s.key = 'money.investments' AND CAST(s.value AS INTEGER) > 0`,
+  // The half that must not be forgotten: this is what stops it running again, and
+  // what stops a second number claiming to be the same money.
+  "UPDATE settings SET value = '0' WHERE key = 'money.investments' AND CAST(value AS INTEGER) > 0",
+
   `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
      SELECT g.id, g.created_by, g.created_at, 'admin'
        FROM budget_group g

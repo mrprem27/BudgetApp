@@ -2,6 +2,7 @@ import { openTestDb } from './dbHarness';
 import { resetToEmpty, loadDemoData } from '../db/seedDemo';
 import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
 import { openingTotal } from '../lib/cash';
+import { insertAsset } from '../db/queries/assets';
 
 /**
  * "Erase all data" has to actually leave an empty app.
@@ -34,7 +35,10 @@ describe('resetToEmpty clears the money profile', () => {
 
   it('clears a hand-entered profile too, not just the demo one', async () => {
     const db = await openTestDb();
-    await setMoneyProfile(db, { openingCash: 12345, investments: 6789, creditLimit: 0, creditUsed: 0 });
+    // No `investments` here: it is derived from the asset register now, so
+    // `MoneyProfileWrite` omits it. An asset stands in for what it used to mean.
+    await setMoneyProfile(db, { openingCash: 12345, creditLimit: 0, creditUsed: 0 });
+    await insertAsset(db, { name: 'Gold', balance: 6789 });
     await resetToEmpty(db);
     expect((await getMoneyProfile(db)).openingCash).toBe(0);
   });

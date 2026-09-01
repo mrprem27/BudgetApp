@@ -154,10 +154,15 @@ export const NEVER_BACKED_UP: Record<string, string> = {
 const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>([
   'txn_approval', 'category_tombstone', 'person_group_trust', 'txn_dispute',
   'friend_request',
-  // A backup written before the asset register cannot contain assets — and it
-  // still carries `money.investments` in `settings`, which the one-time migration
-  // turns into an asset row on the next launch after the restore. So restoring
-  // one loses nothing.
+  // A backup written before the asset register cannot contain assets — it carries
+  // the old `money.investments` in `settings` instead, and the launch invariant
+  // converts that into an asset row on the next start.
+  //
+  // It has to be an INVARIANT for exactly this path: `restoreAllTables` preserves
+  // this device's `fix_%` markers, so a keyed migration would already be marked
+  // done and would refuse to convert the restored figure — leaving net worth
+  // short by the whole investment, silently, right after somebody recovered their
+  // phone. See LAUNCH_INVARIANTS in db/schema.ts.
   'asset',
 ]);
 

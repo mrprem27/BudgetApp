@@ -248,7 +248,7 @@ Was documented here as a dead table with zero reads/writes. It is neither, and t
 error is not cosmetic: believing it dead is exactly what would make someone dismiss
 the restore defect that lives in it.
 
-It holds two unrelated things. **`money.*`** — opening cash, investments, the credit
+It holds two unrelated things. **`money.*`** — opening cash and the credit
 baseline (`db/queries/moneyProfile.ts`) — is real user data. **One-time-fix markers**
 (`ONE_TIME_FIXES`, `category_global_v1`, `schema.ts`) are *device* state recording
 what has already been done to this database.
