@@ -40,12 +40,19 @@ Code is done. Everything below needs a **phone**, and nothing below can be done
 from a machine. Stop at the first thing that fails — each step assumes the one
 above it worked.
 
-### 1. Get it on a device (blocks everything else)
-- [ ] Paid Apple Developer account active (Gate 0 — nothing ships without it).
-- [ ] `npx expo run:ios --device` on your own phone. If it opens, the 48 commits
-      are real; the bundle is proven to build but has never launched.
+### 1. Get it on a device
+**The paid Apple account is deferred (2026-09-01), and that blocks LESS than it
+looks.** A free Apple ID signs a build onto your own phone for 7 days, which is
+everything steps 1–4 need. The paid account is only for handing it to somebody
+else — TestFlight, the friend pilot, the store. So: test now, distribute later.
+
+- [ ] `npx expo run:ios --device` with your own free Apple ID in Xcode's signing
+      tab. If it opens, the 49 commits are real; the bundle is proven to build
+      but has never launched.
 - [ ] Walk the app cold, signed out, no data. It must never show
       "Couldn't start BudgetSplit".
+- [ ] Re-sign when it expires (7 days) — same command. Nothing is lost; the
+      database is untouched by a re-install of the same bundle id.
 
 ### 2. Prove the asset register (new, and the most likely to be wrong)
 - [ ] Plan → Available money → **Assets**. Add "Gold", worth ₹40,000.
@@ -77,7 +84,10 @@ This has never run. Everything about it is verified by tests only.
       (a pre-register backup converts on restore; this path was silently losing
       the whole figure).
 
-### 5. Before submitting
+### 5. Only when the paid account arrives (deferred)
+Nothing here can start until it does, and nothing above waits for it.
+- [ ] Paid Apple Developer account active.
+- [ ] TestFlight build → the friend pilot.
 - [ ] Run §0a's no-enumeration curl diff — it needs a real session, so it can only
       be done once you can sign in.
 - [ ] Answer the App Store privacy question about account deletion
