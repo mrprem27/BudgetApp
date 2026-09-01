@@ -175,7 +175,7 @@ for (const st of tail.split(/\n(?=FL-\d+ · )/)) {
     trigger: '', entry: clean(((m[3] || '').match(/\(([^)]*)\)/) || [, ''])[1]),
     pre: '', steps: '', ents: '', writes: '', exit: '', branches: '', failures: '',
     reversible: '', problems: '',
-    summary: clean(m[4].replace(/```/g, '')),
+    summary: clean(m[4].replace(/```/g, '')).replace(/\s*Ladder SN-\d+\.\s*$/, ''),
     terse: true,
   });
 }
@@ -191,7 +191,24 @@ for (const block of s9.split(/^### (?=SN-\d)/m).slice(1)) {
   const t0 = (block.match(/^\*\*T0\*\* — ([\s\S]*?)(?=\n\n)/m) || [, ''])[1];
   const rows = [...block.matchAll(/^\| \.(T[0-4][a-z]) \| ([\s\S]*?) \| `([^`]*)` \|$/gm)]
     .map(m => ({ t: m[1], text: clean(m[2]), status: m[3] }));
-  const raw = rows.length ? '' : block.split('\n').slice(1).join('\n').trim().slice(0, 4000);
+  if (!rows.length) {
+    // Matrix form: header names the tiers, the first cell is the case letter.
+    const tbl = block.split('\n').filter(l => /^\|/.test(l));
+    const head = (tbl[0] || '').split('|').map(clean);
+    const tiers = head.map(h => (h.match(/^T\d$/) ? h : null));
+    for (const line of tbl.slice(2)) {
+      const cells = line.split('|').map(clean);
+      const letter = cells[1];
+      if (!/^[a-z]$/.test(letter || '')) continue;
+      cells.forEach((c, i) => {
+        if (!tiers[i] || !c) return;
+        const st = (c.match(/`([^`]*)`\s*$/) || [, '❓'])[1];
+        rows.push({ t: tiers[i] + letter, text: clean(c.replace(/`[^`]*`\s*$/, '')), status: st });
+      });
+    }
+    rows.sort((a, b) => a.t.localeCompare(b.t));
+  }
+  const raw = rows.length ? '' : ((block.match(/```\n([\s\S]*?)```/) || [, ''])[1] || '').trimEnd();
   ladders.push({ id: hm[1], name: clean(hm[2]), t0: clean(t0), rows, raw });
 }
 /* The compact ladders and the crossings table both matter; carry them as prose. */

@@ -239,13 +239,27 @@ const humanList = s => String(s || '')
   .map(x => x.replace(ID, m => D.names[m] || m))
   .join(' · ');
 
+/* A short glossary. The document is written for whoever edits the code and uses
+   its vocabulary; this page is read by whoever decides what is wrong with the app.
+   Only words with an exact plain equivalent are swapped — anything ambiguous stays,
+   because a wrong word is worse than a technical one. */
+const PLAIN = [
+  [/\bpredicates?\b/g, m => m.endsWith('s') ? 'conditions' : 'condition'],
+  [/\blaunch invariant\b/g, 'startup check'],
+  [/\bentity types?\b/g, 'kinds of thing'],
+  [/\bflows\b/g, 'tasks'], [/\bflow\b/g, 'task'],
+  [/\bscenario ladder\b/g, 'list of cases'],
+  [/\bLadder SN-\d+\.?/g, ''],
+];
+const plain = s => PLAIN.reduce((a, [re, to]) => a.replace(re, to), String(s || ''));
+
 const mark = s => s
   .replace(/`([^`]+)`/g, '<code>$1</code>')
   .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   .replace(/~~([^~]+)~~/g, '<s>$1</s>')
   .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
-const md = s => mark(esc(String(s || '')
+const md = s => mark(esc(plain(s)
     /* A trailing sentence that is NOTHING but cross-references is noise; the ids
        live on the rows themselves. The lookbehind is load-bearing — without it
        this also eats the "E-07" out of "who paid and who owes are E-06 and E-07",
@@ -499,7 +513,7 @@ const CROSS = {
         under it can change without breaking your reference.</p>
         <pre class="pre">${esc(D.issueTpl)}</pre>
         <p style="color:var(--ink-2);font-size:14px;margin:12px 0 8px">You can point at part of a task, too:</p>
-        <pre class="pre">${esc(D.subIds)}</pre></div>`, true)}
+        <pre class="pre">${esc(plain(D.subIds))}</pre></div>`, true)}
       ${group('What the app is for', D.worlds.length, `<div class="body">${
         D.worlds.map(w => `<div class="kv"><dt>${esc(w.w)}</dt><dd>${md(w.q)}</dd></div>`).join('')}</div>`, false)}
       ${group('What it deliberately is not', D.notList.length, `<div class="body">${
