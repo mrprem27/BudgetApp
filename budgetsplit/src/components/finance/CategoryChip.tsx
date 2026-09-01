@@ -16,6 +16,7 @@ export function CategoryChip({ category, selected, onPress, style }: Props) {
   return (
     <TouchableOpacity
       style={[styles.chip, selected && styles.selected, style]}
+      hitSlop={{ top: 6, bottom: 6 }}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={category.name}
@@ -41,9 +42,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgMuted,
     borderRadius: radius.pill,
     paddingHorizontal: space.smd,
-    // §6 floor (was 32). A chip's height is a style choice, not a constraint, and
-    // this one is how a category gets picked on the screen people use most.
-    minHeight: layout.touchMin,
+    // 32, deliberately — see CategoryRankList. These sit in a horizontal row on the
+    // Add screen and 44 changed that screen's whole rhythm. `hitSlop` covers §6.
+    height: 32,
   },
   selected: {
     backgroundColor: colors.accent,

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { colors, type, space, radius, shadow } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
 import { IconCircle } from '../../ui/IconCircle';
@@ -98,6 +98,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
             <TouchableOpacity
               key={row.name}
               style={[styles.row, isSel && styles.rowSelected]}
+              hitSlop={{ top: 6, bottom: 6 }}
               activeOpacity={0.7}
               onPress={() => onPressCategory(row.name)}
               accessibilityRole="button"
@@ -130,9 +131,13 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
   // Fixed height — must match placeholderRow so the card never resizes between a
   // filled period and an empty/partial one (the icon is 28, comfortably inside 32).
-  // minHeight, not height: these rows are tappable (they drive the donut selection),
-  // and 32 is well under the §6 floor. minHeight keeps a long label from clipping too.
-  row: { minHeight: layout.touchMin, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs },
+  // 32, deliberately. This is a DENSE breakdown list, not a settings row — raising
+  // it to the 44pt floor stretched the whole card by ~37% and made the Dashboard
+  // look sparse and broken. §6 is about the TAP AREA, and `hitSlop` on the row
+  // gives that without touching the layout, which is the same lever the icon
+  // buttons use. Changing a working screen's density to satisfy a rule the rule
+  // did not require is exactly the overreach AGENTS warns about for designs.
+  row: { height: 32, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.sm, marginHorizontal: -4, paddingHorizontal: space.xs },
   rowSelected: { backgroundColor: colors.bgMuted },
   nameSelected: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

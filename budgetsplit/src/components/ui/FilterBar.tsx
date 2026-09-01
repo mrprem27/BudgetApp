@@ -248,8 +248,10 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
 
   chip: {
-    // §6 floor — these were 30 high.
-    minHeight: layout.touchMin,
+    // 30, deliberately — see CategoryRankList. A filter row is dense by design and
+    // these sit above content; `hitSlop` on each chip covers §6 without pushing the
+    // list down by 14px per row.
+    height: 30,
     paddingHorizontal: space.smd,
     justifyContent: 'center',
     borderRadius: radius.pill,
