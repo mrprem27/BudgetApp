@@ -111,7 +111,7 @@ export default function RecurringScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Recurring" onBack={() => backOr(router, '/plan')} />
+        <ScreenHeader title="Recurring" onBack={() => backOr(router, '/(tabs)/savings')} />
         <ErrorState onRetry={reload} />
       </View>
     );
@@ -119,7 +119,7 @@ export default function RecurringScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Recurring" onBack={() => backOr(router, '/plan')} />
+      <ScreenHeader title="Recurring" onBack={() => backOr(router, '/(tabs)/savings')} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

@@ -3,6 +3,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 import { seedGlobalCategories } from '../seedCategories';
 import { BACKUP_TABLES, assertSafeColumnNames, type BackupTables, type BackupPhotos } from '../../lib/backup';
 import { collectPhotoUris, photoKey, rewritePhotoUris } from '../../lib/backupPhotos';
+import { applyLaunchInvariants } from '../schema';
 
 /**
  * The SQL half of backup/restore — `lib/backup.ts` owns the pure shaping,
@@ -137,10 +138,32 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
       }
     });
   } finally {
-    await db.execAsync('PRAGMA foreign_keys=ON;');
+    /*
+     * Back to OFF, which is what `applyConnectionPragmas` sets on EVERY connection.
+     *
+     * This said `ON`, and it runs on the shared provider connection every screen
+     * writes through — so from the first restore onward that connection enforced
+     * constraints the delete paths cannot satisfy, and `deleteGroup` started
+     * throwing `FOREIGN KEY constraint failed` on a device where it had always
+     * worked. That is precisely the same-code-two-behaviours bug the pragma work
+     * on this branch exists to kill, reintroduced from inside it.
+     */
+    await db.execAsync('PRAGMA foreign_keys=OFF;');
   }
 
   await seedGlobalCategories(db);
+
+  /*
+   * The restored data may be from BEFORE a schema invariant existed, and this is
+   * the one path that installs new data without a cold start.
+   *
+   * A backup written before the asset register carries `money.investments` in
+   * `settings` and no `asset` rows. Without this, net worth reads ₹0 invested on
+   * exactly the screen somebody opens right after recovering their phone — and if
+   * they re-create the asset by hand, the next launch converts the key too and
+   * counts the same money twice.
+   */
+  await applyLaunchInvariants((sql) => db.execAsync(sql));
 }
 
 // --- Photo files ---------------------------------------------------------

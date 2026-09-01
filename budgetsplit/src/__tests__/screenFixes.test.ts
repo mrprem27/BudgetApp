@@ -1,6 +1,8 @@
 import { computeDonutWedges } from '../lib/donut';
 import { authorLabel } from '../lib/txnDetail';
 import { backOr } from '../lib/nav';
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join } from 'path';
 import type { Person } from '../db/queries/persons';
 
 /**
@@ -91,5 +93,56 @@ describe('backOr', () => {
     // A push would leave the deep-linked screen under the fallback, so Back from
     // the fallback would return to the screen the user just left.
     expect(s.calls[0].startsWith('replace:')).toBe(true);
+  });
+});
+
+/**
+ * `backOr`'s fallback must be a route that EXISTS.
+ *
+ * The first version typed it as `string` and cast it to `never` internally, which
+ * silently disabled expo-router's typed-route checking — and shipped
+ * `backOr(router, '/plan')` on the recurring screen, where `/plan` is not a route
+ * at all (the Plan screen is the savings tab). So the one path the function was
+ * written for — a renewal notification cold-starting straight into
+ * `/plan/recurring` — landed on the Unmatched Route screen instead of Plan.
+ *
+ * The generic signature stops a repeat at compile time. This catches it in the
+ * other direction: against the filesystem, which is what expo-router routes from.
+ */
+describe('every backOr fallback names a real route', () => {
+  const APP = join(__dirname, '..', '..', 'app');
+
+  /** Route paths expo-router derives from `app/`, group segments included. */
+  function routes(dir: string, prefix = ''): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir)) {
+      const p = join(dir, entry);
+      if (statSync(p).isDirectory()) { out.push(...routes(p, `${prefix}/${entry}`)); continue; }
+      if (!/\.tsx$/.test(entry) || entry.startsWith('_')) continue;
+      const name = entry.replace(/\.tsx$/, '');
+      out.push(name === 'index' ? (prefix || '/') : `${prefix}/${name}`);
+    }
+    return out;
+  }
+
+  it('finds the app directory, so an empty match cannot pass vacuously', () => {
+    expect(routes(APP).length).toBeGreaterThan(20);
+  });
+
+  it('has no fallback pointing at a route that does not exist', () => {
+    const known = new Set(routes(APP));
+    // A group segment is optional in a URL: `/(tabs)/savings` is also `/savings`.
+    for (const r of [...known]) known.add(r.replace(/\/\([^)]+\)/g, ''));
+
+    const bad: string[] = [];
+    for (const file of readdirSync(APP, { recursive: true, encoding: 'utf8' })) {
+      if (!/\.tsx$/.test(file)) continue;
+      const src = readFileSync(join(APP, file), 'utf8');
+      for (const m of src.matchAll(/backOr\(\s*\w+\s*,\s*'([^']+)'/g)) {
+        const target = m[1].split('?')[0];
+        if (!known.has(target)) bad.push(`${file}: ${m[1]}`);
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });

@@ -36,7 +36,13 @@ const R = (rupees: number) => Math.round(rupees * 100);
 const ALL_TABLES = [
   'txn_payment', 'txn_share', 'txn_approval', 'txn_dispute', 'sync_outbox', 'line_item', 'recur_skip', 'txn',
   'category_budget', 'group_member', 'budget_group',
-  'savings_txn', 'savings_goal', 'audit_log', 'pending_txn', 'person',
+  'savings_txn', 'savings_goal', 'audit_log', 'pending_txn',
+  // Both reference `person`, so they go before it — and both were missed when
+  // they were added. A wiped app still listed "Invited, waiting" for people who
+  // no longer existed, and trust overrides survived pointing at deleted persons
+  // AND deleted groups, with foreign keys off to catch neither.
+  'friend_request', 'person_group_trust',
+  'person',
   // `asset` IS per-run data: it holds the demo's investments, gold and FD, and
   // leaving it behind meant a wiped app still reported Rs 1,50,000 of net worth
   // with nothing on any screen to attribute it to. `seedWipe.test.ts` caught it.
@@ -50,7 +56,10 @@ export async function wipeAllData(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const t of ALL_TABLES) {
     await db.runAsync(`DELETE FROM ${t}`);
   }
-  await db.execAsync('PRAGMA foreign_keys=ON;');
+  // OFF, not ON — `applyConnectionPragmas` sets OFF on every connection, and this
+  // runs on the shared one. Restoring it to ON here left that connection enforcing
+  // constraints the delete paths cannot satisfy for the rest of the session.
+  await db.execAsync('PRAGMA foreign_keys=OFF;');
   // Self-heal: guarantee the global catalog exists (idempotent) so categories
   // always resolve after a wipe, even on an older DB that once wiped them.
   await seedGlobalCategories(db);

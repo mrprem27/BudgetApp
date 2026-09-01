@@ -30,9 +30,22 @@ type Props = {
 export const AnimatedNumber = memo(function AnimatedNumber({
   value, format, duration = 650, style, accessibilityLabel,
 }: Props) {
-  const anim = useRef(new Animated.Value(value)).current;
-  const [shown, setShown] = useState(value);
   const reduced = useReducedMotion();
+  /*
+   * Seeded at 0, not at `value`, so the first render actually counts UP.
+   *
+   * Seeding from `value` meant nothing moved on the render that matters: the
+   * figures this is for are gated on their data (`{money && <TotalMoneyCard …>}`),
+   * so the component mounts already holding the final number and `Animated.timing`
+   * ran from N to N. The count-up only appeared after an edit — never on the load
+   * it was written for.
+   *
+   * Under Reduce Motion it seeds at `value` instead. Starting at 0 there would
+   * paint one frame of "₹0" before the effect corrected it — a flash shown only
+   * to the people who asked for no motion, which is the wrong way round.
+   */
+  const anim = useRef(new Animated.Value(reduced ? value : 0)).current;
+  const [shown, setShown] = useState(reduced ? value : 0);
 
   useEffect(() => {
     if (reduced) { setShown(value); return; }

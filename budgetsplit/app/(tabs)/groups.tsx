@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Animated, Alert,
@@ -48,7 +48,21 @@ export default function GroupsScreen() {
   // `listableGroups` hides the implicit two-person groups made for splitting with
   // one friend. Presentational only — they are still in the store, still in every
   // balance and still syncing; the person's own screen is where they are shown.
-  const groups = listableGroups(useStore(s => s.groups));
+  /*
+   * MEMOIZED, and it has to be. `listableGroups` is a `.filter()`, so calling it
+   * inline returns a NEW ARRAY on every render — and this array is a
+   * `useScreenData` dep (see the loader below). A new dep identity rebuilds the
+   * loader's `useCallback`, which fires its effect, which sets state, which
+   * re-renders, which builds another new array: an unbounded loop, re-running a
+   * per-group analytics/members/net query set every cycle.
+   *
+   * It was silent before `useScreenData` learned to show a skeleton on a deps
+   * change; now it also means `loading` never settles, so the empty state never
+   * appears either. The store slice itself is stable, so memoising on it is
+   * enough.
+   */
+  const storeGroups = useStore(s => s.groups);
+  const groups = useMemo(() => listableGroups(storeGroups), [storeGroups]);
   const { refresh } = useDataRefresh();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');

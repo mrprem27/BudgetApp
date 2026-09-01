@@ -94,10 +94,29 @@ export function computePerPersonShares(
     }
   }
 
-  // Something is unassigned, so the shares are NOT meant to reach the total —
-  // the gap is what the screen asks the user to close. Scale each share on its
-  // own and leave it short.
-  if (items.some(i => i.assignedTo.length === 0)) {
+  /*
+   * The shares are only meant to REACH the total when the bases already account
+   * for the whole subtotal. Two ways they might not:
+   *
+   * - an item nobody is assigned to; or
+   * - an `exact`/`percent` item the user has under- or over-assigned, which
+   *   `splitItemBase` deliberately allows ("any shortfall/overage is the user's
+   *   remainder to reconcile").
+   *
+   * `largestRemainder` RENORMALISES — it hands out `total × wᵢ / Σw` — so running
+   * it over bases that fall short silently rewrites what the user typed: ₹40 and
+   * ₹40 entered on a ₹100 item came back as ₹50 and ₹50, `unassignedTotal` read
+   * zero, the "you haven't assigned everything" guard never fired, and 5000/5000
+   * was written to `txn_share`. Over-assignment scaled *down* just as quietly.
+   *
+   * So renormalising is reserved for the case it is correct for — bases that
+   * already sum to the subtotal, where scaling by `total/subtotal` is exactly
+   * what it computes, and rounding once at the end is what keeps a bill with more
+   * items than members saveable. Otherwise each share is scaled on its own and
+   * the gap survives to the screen, which is what asks the user to close it.
+   */
+  const baseSum = members.reduce((s, m) => s + (base[m.id] ?? 0), 0);
+  if (items.some(i => i.assignedTo.length === 0) || baseSum !== subtotal) {
     const scaled: Record<string, number> = {};
     for (const m of members) scaled[m.id] = Math.round((base[m.id] ?? 0) * ratio);
     return scaled;

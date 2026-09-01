@@ -29,6 +29,13 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
+    file: 'assets.ts',
+    contains: 'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?',
+    why: 'deleteAsset\u2019s reference count. It must see EVERY row that names the asset — '
+      + 'soft-deleted ones included (Undo can bring one back) and rule templates included — '
+      + 'because the question is "does anything point at this", not "does anything spend".',
+  },
+  {
     // (An entry for `groups.ts` collecting `attachment_uri` lived here.
     // `deleteGroup` is a tombstone now — it deletes no transactions, so no receipt
     // is orphaned and the query is gone. Removed rather than left as a dead

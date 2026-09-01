@@ -1064,12 +1064,25 @@ async function listFriendRequests(request: Request, env: Env): Promise<Response>
   // My own outgoing ones, INCLUDING declines. A decline the sender never sees
   // means they ask again forever; silence is what blocking is for, and blocking
   // is a separate deliberate act.
+  /*
+   * `to_user` rides along, and it is the whole point of the outgoing list.
+   *
+   * The sending device recorded WHICH LOCAL PERSON it meant when it sent the
+   * request; folding the answer back is what binds that person's `remote_uid`, so
+   * their entries can reach this phone. Without the account id there is nothing to
+   * bind, the local row stays "Invited · waiting" forever, and the only way to
+   * connect them is the manual Match screen — which is the flow email requests
+   * exist to replace.
+   *
+   * Disclosed only to the sender, only after that person chose to accept, and only
+   * an opaque id. It is not a lookup: the request had to be sent and answered.
+   */
   const outgoing = await env.DB.prepare(
-    `SELECT id, to_email, state, created_at, decided_at FROM friend_request
+    `SELECT id, to_email, to_user, state, created_at, decided_at FROM friend_request
       WHERE from_user = ? AND (state != 'pending' OR expires_at > ?)
       ORDER BY created_at DESC LIMIT 50`,
   ).bind(auth.user.id, Date.now())
-    .all<{ id: string; to_email: string; state: string; created_at: number; decided_at: number | null }>();
+    .all<{ id: string; to_email: string; to_user: string | null; state: string; created_at: number; decided_at: number | null }>();
 
   return json({
     incoming: (incoming.results ?? []).map(r => ({
@@ -1080,6 +1093,8 @@ async function listFriendRequests(request: Request, env: Env): Promise<Response>
     })),
     outgoing: (outgoing.results ?? []).map(r => ({
       id: r.id, email: r.to_email, state: r.state, createdAt: r.created_at, decidedAt: r.decided_at,
+      // Only ever set once they accepted — see the query above.
+      accountId: r.state === 'accepted' ? r.to_user : null,
     })),
   });
 }

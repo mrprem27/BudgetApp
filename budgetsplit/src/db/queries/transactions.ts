@@ -49,6 +49,14 @@ export type Txn = {
   lng: number | null;
   place_label: string | null;
   pay_method: PayMethod | null;
+  /**
+   * The named asset a transfer moved money into or out of. NULL on every other
+   * row — which is every row that existed before the asset register.
+   *
+   * Load-bearing: `softDeleteTxn`/`restoreTxn` read it to move the asset balance
+   * with the row, so both halves of a transfer stay together.
+   */
+  asset_id: string | null;
   source: TxnSource | null;
   /** Who wrote it. NULL = me, on this device — which is every row today. */
   author_person_id: string | null;
@@ -564,6 +572,43 @@ export async function updateItemizedTxn(
 /** Restore a soft-deleted transaction (the Undo of softDeleteTxn). Pass
  *  `cascadeOccurrences` to also restore a rule's materialized occurrences —
  *  only when the matching delete cascaded. */
+/**
+ * Move an asset transfer's balance back (on delete) or forward again (on undo).
+ *
+ * Lives here rather than in `queries/assets.ts` because it must run INSIDE the
+ * caller's transaction — the whole point is that the row's state and the asset's
+ * balance commit together. Reads the direction from the row's own payment/share
+ * shape, which is what `transferToAsset`/`transferFromAsset` wrote and what
+ * `CASH_TOTALS_SQL` reads, so there is no second source of truth about which way
+ * the money went.
+ *
+ * @internal
+ */
+async function reverseAssetSide(
+  db: SQLite.SQLiteDatabase,
+  txnId: string,
+  assetId: string,
+  action: 'delete' | 'restore',
+): Promise<void> {
+  const [paid, owed] = await Promise.all([
+    db.getFirstAsync<{ total: number }>('SELECT COALESCE(SUM(amount),0) AS total FROM txn_payment WHERE txn_id=?', [txnId]),
+    db.getFirstAsync<{ total: number }>('SELECT COALESCE(SUM(amount),0) AS total FROM txn_share WHERE txn_id=?', [txnId]),
+  ]);
+  // payments-only = money went in; shares-only = money came out.
+  const inbound = (paid?.total ?? 0) > 0;
+  const amount = inbound ? (paid?.total ?? 0) : (owed?.total ?? 0);
+  if (amount <= 0) return;
+
+  // Deleting undoes what the transfer did; restoring re-does it.
+  const sign = (inbound ? 1 : -1) * (action === 'delete' ? -1 : 1);
+  await db.runAsync(
+    // Clamped at zero: an asset balance is never negative (see the `asset` table),
+    // and a restore of a very old withdrawal could otherwise drive it under.
+    'UPDATE asset SET balance = MAX(0, balance + ?), updated_at = ? WHERE id = ?',
+    [sign * amount, Date.now(), assetId],
+  );
+}
+
 export async function restoreTxn(
   db: SQLite.SQLiteDatabase,
   txnId: string,
@@ -571,8 +616,11 @@ export async function restoreTxn(
 ): Promise<void> {
   const now = Date.now();
   await db.withTransactionAsync(async () => {
-    const row = await db.getFirstAsync<Txn>('SELECT group_id FROM txn WHERE id=?', [txnId]);
+    const row = await db.getFirstAsync<Txn>('SELECT group_id, asset_id FROM txn WHERE id=?', [txnId]);
     await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE id=?', [now, txnId]);
+    // The mirror of the reversal in `softDeleteTxn` — Undo has to put the asset
+    // side back, or the row returns to the ledger with only its cash half.
+    if (row?.asset_id) await reverseAssetSide(db, txnId, row.asset_id, 'restore');
     if (cascadeOccurrences) {
       await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE parent_recur_id=?', [now, txnId]);
     }
@@ -618,6 +666,21 @@ export async function softDeleteTxn(
     if (cascadeOccurrences && row?.recur_freq) {
       await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE parent_recur_id=?', [Date.now(), txnId]);
     }
+    /*
+     * BOTH halves of an asset transfer move together, on the way out too.
+     *
+     * Cash reads all filter `is_deleted = 0`, so soft-deleting a transfer
+     * reverses the cash side by itself — while `asset.balance` stayed where the
+     * transfer put it. Net worth jumped by the amount, with nothing on any screen
+     * to explain it, which is the same failure the one-transaction write in
+     * `queries/assets.ts` exists to prevent, reached from the other direction.
+     *
+     * The direction is read off the row's own shape, exactly as it was written:
+     * payments-only means money went INTO the asset (so undo takes it back out),
+     * shares-only means it came out (so undo puts it back).
+     */
+    if (row?.asset_id) await reverseAssetSide(db, txnId, row.asset_id, 'delete');
+
     // A soft delete is a change the peer must see, not an absence of one — it
     // travels as the entry's current state, with is_deleted set.
     if (row) await queueSeries(db, txnId, row.group_id);
@@ -777,6 +840,19 @@ export type UpdateTxnInput = {
 };
 
 /** Edit an existing transaction: rewrite the row + its payments/shares. */
+/**
+ * Raised when a caller tries to edit an asset transfer through the generic path.
+ *
+ * A sibling of `PeerEntryError`: both mean "this row is real, and this is not the
+ * way to change it". The UI catches it and points at the Assets screen.
+ */
+export class AssetTransferError extends Error {
+  constructor() {
+    super('Edit this on the Assets screen, so the asset moves with it.');
+    this.name = 'AssetTransferError';
+  }
+}
+
 export async function updateTxn(
   db: SQLite.SQLiteDatabase,
   input: UpdateTxnInput,
@@ -797,6 +873,27 @@ export async function updateTxn(
   );
   if (author?.author_person_id) {
     throw new PeerEntryError('edit an entry somebody else wrote');
+  }
+
+  /*
+   * An asset transfer cannot be edited through here, and refusing is the honest
+   * answer rather than a limitation.
+   *
+   * This path rewrites `txn_payment`/`txn_share` wholesale, which moves the CASH
+   * half of a transfer while `asset.balance` stays where it was: editing ₹50,000
+   * down to ₹5,000 left the asset holding ₹50,000 and net worth ₹45,000 too high,
+   * silently. Teaching this function to reconcile the difference would put a
+   * second implementation of the transfer rule here, competing with
+   * `queries/assets.ts` — which is the thing that must own it.
+   *
+   * The register has the real actions: take money out, put more in, or restate
+   * what it is worth. Each moves both halves.
+   */
+  const linked = await db.getFirstAsync<{ asset_id: string | null }>(
+    'SELECT asset_id FROM txn WHERE id = ?', [input.id],
+  );
+  if (linked?.asset_id) {
+    throw new AssetTransferError();
   }
 
   const now = Date.now();

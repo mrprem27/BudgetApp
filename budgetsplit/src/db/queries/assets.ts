@@ -165,8 +165,11 @@ export async function setAssetOrder(db: SQLite.SQLiteDatabase, idsInOrder: strin
 /** An asset with transfers against it can be archived but not destroyed; one that
  *  never moved is a typo and can go. */
 export async function deleteAsset(db: SQLite.SQLiteDatabase, id: string): Promise<{ ok: true } | { ok: false; reason: 'has-history' }> {
+  // Soft-deleted rows count too. The Undo toast can bring one back, and a
+  // restored transfer pointing at an asset that no longer exists is an orphan
+  // whose balance can never be reconciled.
   const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM txn WHERE asset_id = ? AND is_deleted = 0", [id],
+    'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?', [id],
   );
   if ((row?.n ?? 0) > 0) return { ok: false, reason: 'has-history' };
   await db.runAsync('DELETE FROM asset WHERE id = ?', [id]);
@@ -275,10 +278,21 @@ export async function transferFromAsset(
       payments: [],
       shares: [{ personId: me.id, amount }],
     }, id, now);
-    await db.runAsync(
-      'UPDATE asset SET balance = balance - ?, updated_at = ? WHERE id = ?',
-      [amount, now, asset.id],
+    /*
+     * Guarded again HERE, in SQL, inside the transaction.
+     *
+     * `transferContext` read the balance before the transaction opened, so two
+     * overlapping withdrawals could both pass that check and drive the balance
+     * below zero — against the never-negative promise the table is built on. The
+     * WHERE clause makes the check and the write the same operation.
+     */
+    const res = await db.runAsync(
+      'UPDATE asset SET balance = balance - ?, updated_at = ? WHERE id = ? AND balance >= ?',
+      [amount, now, asset.id, amount],
     );
+    if (res.changes === 0) {
+      throw new AssetError('insufficient', `${asset.name} does not hold that much any more`);
+    }
   });
   return id;
 }

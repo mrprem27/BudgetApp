@@ -111,13 +111,19 @@ export const BACKUP_TABLES = [
   // losing that on a new phone loses the binding an accepted request depends on.
   'person', 'friend_request', 'budget_group', 'group_member', 'person_group_trust',
   'category', 'category_tombstone', 'category_budget',
-  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
-  'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
   // `asset` is personal by definition — it never travels in group sync, so the
   // snapshot is the only thing standing between the user and losing their whole
-  // net-worth position on a new phone. It sits after `txn` because a transfer row
-  // references it.
+  // net-worth position on a new phone.
+  //
+  // BEFORE `txn`, because `txn.asset_id` points at it: this list is parents-first
+  // and the delete pass reverses it, so listing it after `txn` had the inserts
+  // referencing assets that did not exist yet and the deletes removing the parent
+  // first. Harmless today only because `asset_id` carries no REFERENCES clause and
+  // foreign keys are off — i.e. a trap armed for whoever turns them on, which
+  // `applyConnectionPragmas` says is the plan.
   'asset',
+  'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
+  'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
 ] as const;
 
 /**

@@ -20,7 +20,15 @@ import { setCategoryBudgets, type BudgetLevel, type BudgetCadence } from '../../
 export type TestDb = {
   getAllAsync<T>(sql: string, params?: unknown[]): Promise<T[]>;
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
-  runAsync(sql: string, params?: unknown[]): Promise<void>;
+  /**
+   * Returns what `expo-sqlite` returns, not void.
+   *
+   * The mock dropped the result, so `res.changes` — which real code uses to tell
+   * a guarded UPDATE that matched from one that did not — read `undefined` here
+   * and threw. A mock that is narrower than the API it stands in for turns a
+   * correct guard into a test failure, which is the wrong way round.
+   */
+  runAsync(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowId: number }>;
   execAsync(sql: string): Promise<void>;
   withTransactionAsync(fn: () => Promise<void>): Promise<void>;
   withExclusiveTransactionAsync(fn: () => Promise<void>): Promise<void>;
@@ -59,7 +67,9 @@ export function createTestDb(): TestDb {
       return (db.prepare(sql).get(...clean(params)) as T) ?? null;
     },
     async runAsync(sql: string, params: unknown[] = []) {
-      db.prepare(sql).run(...clean(params));
+      const r = db.prepare(sql).run(...clean(params));
+      // node:sqlite spells it `lastInsertRowid`; expo-sqlite spells it `lastInsertRowId`.
+      return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
     },
     async execAsync(sql: string) {
       db.exec(sql);

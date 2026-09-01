@@ -29,6 +29,13 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
+    file: 'assets.ts',
+    contains: 'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?',
+    why: 'deleteAsset\u2019s reference count. It must see EVERY row that names the asset — '
+      + 'soft-deleted ones included (Undo can bring one back) and rule templates included — '
+      + 'because the question is "does anything point at this", not "does anything spend".',
+  },
+  {
     file: 'transactions.ts',
     contains: 'ORDER BY t.date DESC, t.created_at DESC',
     why: 'getTransactionsForGroup — the group ledger. The whole design is that the group agrees on what happened while my own numbers ignore it, so this is the one place a pending entry MUST appear. AGENTS §13.',

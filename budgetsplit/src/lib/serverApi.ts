@@ -471,6 +471,14 @@ export type OutgoingRequest = {
   state: 'pending' | 'accepted' | 'declined' | 'cancelled';
   createdAt: number;
   decidedAt: number | null;
+  /**
+   * Their account id, set only once they accepted.
+   *
+   * This is what `applyRequestOutcome` binds to the local person the sender
+   * chose when they sent the request — the step that makes an email request
+   * actually connect two phones rather than just deliver an email.
+   */
+  accountId: string | null;
 };
 
 /**

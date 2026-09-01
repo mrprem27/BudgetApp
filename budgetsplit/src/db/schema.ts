@@ -791,18 +791,27 @@ export const LAUNCH_INVARIANTS: string[] = [
    * figure on any device that had ever created a single asset. The id is random
    * rather than fixed for the same reason — a fixed one collides if a backup
    * already contains the row.
+   *
+   * ONE STATEMENT, wrapped in its own BEGIN/COMMIT, because the two halves must
+   * not be able to half-land. As two separate `execAsync` calls, an insert that
+   * committed while the update did not — SQLITE_BUSY, or the OS killing the app
+   * during startup, which is exactly when this runs — left the key non-zero, so
+   * the NEXT launch minted a SECOND "Investments" asset. Net worth double-counts
+   * the whole figure, permanently, and nothing can detect it: the ids are random
+   * and there is no guard to collapse them.
    */
-  `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
+  `BEGIN;
+   INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
      SELECT lower(hex(randomblob(16))), 'Investments', 'investment', 'trending-up', NULL,
             CAST(s.value AS INTEGER), 0,
             COALESCE((SELECT MAX(sort_order) + 1 FROM asset), 0),
             CAST(strftime('%s','now') AS INTEGER) * 1000,
             CAST(strftime('%s','now') AS INTEGER) * 1000
        FROM settings s
-      WHERE s.key = 'money.investments' AND CAST(s.value AS INTEGER) > 0`,
-  // The half that must not be forgotten: this is what stops it running again, and
-  // what stops a second number claiming to be the same money.
-  "UPDATE settings SET value = '0' WHERE key = 'money.investments' AND CAST(value AS INTEGER) > 0",
+      WHERE s.key = 'money.investments' AND CAST(s.value AS INTEGER) > 0;
+   UPDATE settings SET value = '0'
+     WHERE key = 'money.investments' AND CAST(value AS INTEGER) > 0;
+   COMMIT;`,
 
   `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role)
      SELECT g.id, g.created_by, g.created_at, 'admin'

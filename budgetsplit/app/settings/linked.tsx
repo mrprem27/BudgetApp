@@ -24,6 +24,7 @@ import {
   type ServerLink, type PendingClaim, type IncomingRequest,
 } from '../../src/lib/serverApi';
 import { routeErrorBoundary } from '../../src/components/system/AppErrorBoundary';
+import { applyRequestOutcome } from '../../src/db/queries/friendRequests';
 
 /**
  * Route-level, so a throw here replaces this screen's content and leaves the
@@ -82,6 +83,26 @@ export default function LinkedPeopleScreen() {
       setClaims(nextClaims);
       setRequests(nextRequests.incoming);
       setPeople(nextPeople.filter(p => p.is_me !== 1));
+
+      /*
+       * Fold the server's answers into the local mirror — and bind the account of
+       * anyone who accepted.
+       *
+       * `outgoing` was fetched and thrown away, so nothing ever moved a sent
+       * request off 'pending': `pendingInvitesByPerson` showed "Invited · waiting"
+       * forever, and the binding that `db/queries/friendRequests.ts` calls "the
+       * point of this whole file" never happened. An email request delivered an
+       * email and then connected nothing.
+       *
+       * Best-effort per request: one that fails must not stop the others, and the
+       * next load tries again.
+       */
+      for (const req of nextRequests.outgoing) {
+        if (req.state === 'pending') continue;
+        await applyRequestOutcome(db, {
+          id: req.id, state: req.state, email: req.email, accountId: req.accountId,
+        }).catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load your linked people.');
     } finally {

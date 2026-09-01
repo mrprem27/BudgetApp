@@ -3,11 +3,18 @@
  * which is not exported under a public name, so typing against it means reaching
  * into `expo-router/build/`. Structural also keeps this file free of React and
  * RN, so it is unit-testable like everything else in `src/lib`.
+ *
+ * Generic over the href, so the REAL router's typed-route union flows through to
+ * `fallback` at the call site. The first version took `fallback: string` and cast
+ * it to `never` internally, which silently disabled expo-router's route checking
+ * — and shipped `backOr(router, '/plan')` on a screen where `/plan` is not a
+ * route at all, so the one path this function exists for (a cold-started deep
+ * link) landed on the Unmatched Route screen instead of Plan.
  */
-export type BackRouter = {
+export type BackRouter<Href> = {
   canGoBack: () => boolean;
   back: () => void;
-  replace: (href: never) => void;
+  replace: (href: Href) => void;
 };
 
 /**
@@ -32,7 +39,7 @@ export type BackRouter = {
  * `replace`, not `push`: the stranded route should not stay behind the fallback,
  * or Back from the fallback returns to the screen the user just left.
  */
-export function backOr(router: BackRouter, fallback: string): void {
+export function backOr<Href>(router: BackRouter<Href>, fallback: Href): void {
   if (router.canGoBack()) router.back();
-  else router.replace(fallback as never);
+  else router.replace(fallback);
 }

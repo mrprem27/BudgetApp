@@ -173,3 +173,71 @@ describe('an itemized bill always adds up', () => {
     expect(sum(computePerPersonShares([orphan], [], members))).toBe(0);
   });
 });
+
+/**
+ * `largestRemainder` RENORMALISES — it hands out `total × wᵢ / Σw`. That is
+ * exactly right when the bases already account for the whole subtotal, and
+ * silently destructive when they do not.
+ *
+ * `splitItemBase` deliberately allows an `exact`/`percent` item to be under- or
+ * over-assigned ("any shortfall/overage is the user's remainder to reconcile"),
+ * so running the renormalising path over those bases rewrote what somebody
+ * typed — and, worse, made the shares sum to the total, so the screen's
+ * "you haven't assigned everything" guard never fired.
+ */
+describe('an itemized bill never rewrites the amounts you typed', () => {
+  const member = (id: string) => ({ id, name: id }) as Person;
+  const members = [member('a'), member('b')];
+  // `qty` and `unitPrice` are the raw STRINGS the form holds, not paise.
+  const item = (over: Record<string, unknown> = {}): LineItemDraft => ({
+    id: 'i1', name: 'Pizza', qty: '1', unitPrice: '100',
+    assignedTo: ['a', 'b'], splitMode: 'exact', splitValues: {},
+    ...over,
+  } as LineItemDraft);
+
+  it('leaves an under-assigned exact split short instead of scaling it up', () => {
+    // ₹100 item, ₹40 each typed. The gap is ₹20 and it must stay visible.
+    const shares = computePerPersonShares(
+      [item({ splitValues: { a: '40', b: '40' } })], [], members,
+    );
+    expect(shares).toEqual({ a: 4000, b: 4000 });
+    expect(shares.a + shares.b).toBe(8000);   // NOT 10000
+  });
+
+  it('leaves an over-assigned exact split over instead of scaling it down', () => {
+    const shares = computePerPersonShares(
+      [item({ splitValues: { a: '60', b: '60' } })], [], members,
+    );
+    expect(shares).toEqual({ a: 6000, b: 6000 });
+    expect(shares.a + shares.b).toBe(12000);  // NOT 10000
+  });
+
+  it('leaves a percent split that does not reach 100 short', () => {
+    const shares = computePerPersonShares(
+      [item({ splitMode: 'percent', splitValues: { a: '30', b: '30' } })], [], members,
+    );
+    expect(shares.a + shares.b).toBe(6000);   // 60% of ₹100, NOT ₹100
+  });
+
+  // The case renormalising exists for, and which must keep working: bases that
+  // DO account for the subtotal still land exactly on the total.
+  it('still lands exactly on the total when the split is complete', () => {
+    const shares = computePerPersonShares(
+      [item({ splitValues: { a: '50', b: '50' } })], [], members,
+    );
+    expect(shares.a + shares.b).toBe(10000);
+  });
+
+  it('still closes a bill with more items than members and an adjustment', () => {
+    // The defect renormalising was introduced for: four ₹100 dishes three ways
+    // with a 5% service charge used to come out 1 paise over and could not save.
+    const three = [member('a'), member('b'), member('c')];
+    const dishes = [1, 2, 3, 4].map(n => item({
+      id: `i${n}`, assignedTo: ['a', 'b', 'c'], splitMode: 'equal', splitValues: {},
+    }));
+    const shares = computePerPersonShares(
+      dishes, [{ type: 'service', mode: 'percent', value: '5' }] as Adjustment[], three,
+    );
+    expect(shares.a + shares.b + shares.c).toBe(42000);   // ₹400 + 5%
+  });
+});

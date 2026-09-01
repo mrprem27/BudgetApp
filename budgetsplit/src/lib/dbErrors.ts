@@ -64,5 +64,29 @@ export function saveFailureMessage(e: unknown): { title: string; body: string } 
       body: 'Your device has no room left, so this couldn\'t be saved. Free up some space and it will save normally.',
     };
   }
+  /*
+   * Refusals, not failures. Both of these mean the write was declined for a
+   * reason, so "Try again" is the wrong instruction — it will be declined again.
+   *
+   * Matched on `name` rather than `instanceof`, because these classes live in
+   * `db/queries/transactions.ts` and `src/lib` must not import from the db layer
+   * (AGENTS' layering rule). The names are set explicitly on both classes.
+   */
+  const name = e instanceof Error ? e.name : '';
+  if (name === 'AssetTransferError') {
+    return {
+      title: 'Edit this on the Assets screen',
+      body: 'Money moved into an asset has two halves — the cash and the asset itself — '
+        + 'and they have to move together. Take money out, put more in, or update what '
+        + 'it is worth, and both sides stay right.',
+    };
+  }
+  if (name === 'PeerEntryError') {
+    return {
+      title: 'This isn\u2019t yours to change',
+      body: e instanceof Error && e.message ? e.message : 'Somebody else recorded this entry. '
+        + 'You can accept it or refuse it, but not rewrite it.',
+    };
+  }
   return { title: 'Error', body: 'Could not save. Try again.' };
 }

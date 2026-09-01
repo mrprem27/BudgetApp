@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';
@@ -44,11 +44,20 @@ export function MoveToInvestmentsSheet({
   const [amount, setAmount] = useState('');
   const [from, setFrom] = useState<string>('bank');
   const [assetId, setAssetId] = useState<string | null>(null);
+  /*
+   * Keyed on `visible` ALONE. `assets` is rebuilt on every loader result — and
+   * `useSavingsTab` reloads on focus and on any cross-screen write — so having it
+   * in the deps meant a background refresh blanked the amount somebody was
+   * halfway through typing and reset the destination under them. Read through a
+   * ref so the seed still uses the current list without depending on its identity.
+   */
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
   useEffect(() => {
     if (!visible) return;
     setAmount(''); setFrom('bank');
-    setAssetId(assets[0]?.id ?? null);
-  }, [visible, assets]);
+    setAssetId(assetsRef.current[0]?.id ?? null);
+  }, [visible]);
 
   const paise = parseToPaise(amount);
   const target = assets.find(a => a.id === assetId) ?? null;

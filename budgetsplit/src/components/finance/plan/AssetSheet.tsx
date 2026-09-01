@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
@@ -55,8 +55,21 @@ export function AssetSheet({
   onArchive: (asset: Asset) => void;
   onDelete: (asset: Asset) => void;
 }) {
-  const mode = state?.mode ?? 'create';
-  const asset = state?.asset;
+  /*
+   * The sheet keeps rendering for 240ms after `visible` goes false — `SheetModal`
+   * holds its children mounted through the slide-out. Reading `mode`/`asset`
+   * straight off `state` meant that for the whole exit animation the content
+   * flipped to the create form: the title became "Add an asset", the Name and
+   * Kind chips appeared, the amount block and danger row vanished. Every
+   * dismissal flashed a different sheet on its way out.
+   *
+   * So the last non-null state is what renders. `state` still drives `visible`.
+   */
+  const last = useRef(state);
+  if (state) last.current = state;
+  const shown = state ?? last.current;
+  const mode = shown?.mode ?? 'create';
+  const asset = shown?.asset;
 
   const [name, setName] = useState('');
   const [kind, setKind] = useState<AssetKind>('investment');

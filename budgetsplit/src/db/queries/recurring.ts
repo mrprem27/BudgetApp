@@ -248,13 +248,17 @@ async function insertOccurrence(
   await db.runAsync(
     `INSERT INTO txn
        (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-        pay_method,currency,source,tz,lat,lng,place_label,
+        pay_method,currency,source,asset_id,tz,lat,lng,place_label,
         recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,is_deleted,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,0,?,?)`,
     [
       newId, template.group_id, template.kind, template.entry_mode, occ, template.category, template.note,
       template.attachment_uri, template.tags, template.adjustments,
-      template.pay_method, template.currency, template.source, template.tz,
+      // `asset_id` belongs to the descriptive set this docblock promises to carry.
+      // Without it a recurring asset transfer books cash out every period with no
+      // link to the asset and no balance movement — net worth falling by the
+      // amount, monthly, which is what the one-transaction write exists to stop.
+      template.pay_method, template.currency, template.source, template.asset_id, template.tz,
       template.lat, template.lng, template.place_label,
       occ, template.id, now, now,
     ],

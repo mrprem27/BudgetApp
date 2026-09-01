@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
@@ -37,15 +37,25 @@ export function MoneyEditorSheet({
   const [limit, setLimit] = useState('');
   const [used, setUsed] = useState('');
 
-  // Re-seed the fields whenever the sheet (re)opens with the latest profile.
+  /*
+   * Keyed on `visible` ALONE, and read through a ref.
+   *
+   * `initial` is built as an object literal by the caller, so it is a new
+   * identity on every parent render — with it in the deps, any re-render while
+   * the sheet was open re-seeded all five fields and discarded whatever the user
+   * had typed. Same defect `MoveToInvestmentsSheet` had, one step worse.
+   */
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
   useEffect(() => {
     if (!visible) return;
+    const initial = initialRef.current;
     setBank(toInput(initial.openingBank));
     setCash(toInput(initial.openingCash));
     setWallet(toInput(initial.openingWallet));
     setLimit(toInput(initial.creditLimit));
     setUsed(toInput(initial.creditUsed));
-  }, [visible, initial]);
+  }, [visible]);
 
   const usedPaise = parseToPaise(used);
   const limitPaise = parseToPaise(limit);

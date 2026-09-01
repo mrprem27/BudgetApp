@@ -98,12 +98,25 @@ describe('readAllTables / restoreAllTables', () => {
     expect(left).toHaveLength(0);
   });
 
-  it('leaves foreign_keys back ON after restoring, even though it was toggled off mid-operation', async () => {
+  /**
+   * OFF, not ON — this used to assert ON, which was the bug.
+   *
+   * `applyConnectionPragmas` sets FK OFF on EVERY connection, deliberately and
+   * temporarily, because several delete paths still orphan rows the constraints
+   * would refuse. Restore runs on the shared provider connection every screen
+   * writes through, so turning FKs back ON in its `finally` left that connection
+   * enforcing them for the rest of the session: `deleteGroup` started throwing
+   * `FOREIGN KEY constraint failed` on a device where it had always worked.
+   *
+   * That is the same-code-two-behaviours bug the pragma work exists to kill,
+   * reintroduced from inside it — and a test asserting ON was holding it in place.
+   */
+  it('leaves foreign_keys OFF after restoring, matching every other connection', async () => {
     const db = createTestDb();
     await restoreAllTables(asDb(db), emptyTables());
 
     const pragma = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys');
-    expect(pragma?.foreign_keys).toBe(1);
+    expect(pragma?.foreign_keys).toBe(0);
   });
 });
 
