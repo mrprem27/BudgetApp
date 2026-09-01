@@ -7,11 +7,23 @@ after it, with the trigger that un-parks it.
 This file replaces `V2_LAUNCH_CHECKLIST.md`, `DEBT_TRACKER.md`, `V2_FIX_PLAN.md`,
 `UI_UX_SWEEP.md`, `STATUS.md`, `PILOT_READINESS_REVIEW.md` and `TAGS.md`. They are
 deleted, not archived — git history has them if a decision's reasoning is ever
-needed. What survives alongside this file is **reference**, not tracking:
-`FEATURES_AND_FLOWS.md` (what each screen does), `ARCHITECTURE.md` (how it's
-built), `AGENTS.md` (build/design rules), and the dated analyses
-(`V2_PRODUCT_REVIEW.md`, `AUDIT*.md`, `COMPETITIVE_ANALYSIS.md`,
-`PERSONAL_REDESIGN.md`).
+needed.
+
+**Four live documents, one question each** (2026-09-01):
+
+| Doc | Answers |
+|---|---|
+| `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 44 screens, 54 flows, scenario ladders, the complexity register (`OV-`) and the open decisions (`DQ-`) |
+| `SCREENS.md` | What each screen looks like — layout, copy, states, sheets. Formerly `FEATURES_AND_FLOWS.md` |
+| **this file** | Can we ship |
+| `AGENTS.md` | How we build. Absorbed `ARCHITECTURE.md`, which is deleted |
+
+The dated analyses (`AUDIT*.md`, `V2_PRODUCT_REVIEW.md`, `COMPETITIVE_ANALYSIS.md`,
+`PERSONAL_REDESIGN.md`, `SYNC_CONTEXT.md`) moved to `docs/history/`, each with a
+frozen banner naming its live successor. They are never edited to keep a test green.
+
+The sync pre-mortem below is **`SYNC-F1…F12`**, renamed from `F1…F12` because that
+collided with `AUDIT.md`'s `F-01…F-34` in prose.
 
 **Interactive version:** <https://claude.ai/code/artifact/c81d7ac6-60f3-4bad-b542-ed99c3eed37c>
 — same content, but tickable on the phone while you walk the app, with a notes
@@ -149,15 +161,15 @@ a user does actually travel".
 - [x] **Edits and deletions** — an edit is a new version; a deletion is a tombstone.
 - [x] **Recurring rules** — `recurFreq`/`interval`/`end` ride on the entry.
 - [x] **Who is in the group** — the roster document, republished on every change.
-- [x] **Rejections** — as an objection the author sees (F10).
+- [x] **Rejections** — as an objection the author sees (SYNC-F10).
 - [x] **Leaving and deleting a group** — tombstoned, and the other phones archive
-      without losing their own history (F11).
+      without losing their own history (SYNC-F11).
 - [x] **Everything personal** — as an encrypted snapshot on your account, restored
       by passphrase on a new phone. Newest-wins, and it says so.
 
 ### Does NOT travel, and each is a deliberate line
 
-- [ ] **Receipt photos.** Rows sync, photos never do (F4). A restore nulls a URI it
+- [ ] **Receipt photos.** Rows sync, photos never do (SYNC-F4). A restore nulls a URI it
       cannot honour. Deliberate: size, and the 25 MiB per-copy ceiling.
 - [ ] **Itemized line items.** An itemized bill arrives with its totals and shares
       intact — **the money is right** — but the per-item breakdown is not carried,
@@ -261,7 +273,7 @@ a user does actually travel".
       and they are ON by default. An undeclared data type is a rejection.
       Original note: In-app copy was corrected on 2026-08-17
       (`VOICE_SHORTCUT_PRIVACY`, `help.tsx`, `Onboarding.tsx`, the backup
-      explainer, `FEATURES_AND_FLOWS` §19). The listing is not in this repo and
+      explainer, and the egress table now in `SYSTEM.md` §1). The listing is not in this repo and
       still says "nothing leaves your device", which stopped being true when
       sign-in shipped.
 - [ ] **India DPDP posture.** The moment one real user signs in, an email address
@@ -697,23 +709,23 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 ### 3.1 Identity / sync pre-mortem — hold these lines in S2/S3
 
-Nine ways the design goes wrong. Only **F5 is a live defect today**; the rest are
+Nine ways the design goes wrong. Only **SYNC-F5 is a live defect today**; the rest are
 constraints to design against.
 
 | | Failure | The wall that stops it |
 |---|---|---|
-| F1 | Invite links are made to be forwarded — first stranger to tap gets linked, and gets your number | **Sender approves the claim.** Tapping creates a pending request; nothing binds until approval |
-| F2 | "Stop sharing my number" cannot take it back — it's already on their device | Word it as a **disclosure** ("Shared with Rohan on 12 Aug"), never a revocable permission |
-| F3 ✅ | Document-level last-write-wins silently discards a co-editor's edit, and the shares-sum-to-payments invariant still passes | **Built.** Compare-and-set on `txn.sync_version`; `PUT /sync/entries` refuses a stale push with 409 and the current row attached. Never silent LWW on money — and never an auto-merge either |
-| F4 | `attachment_uri` is a `file://` path from another device — "receipt attached" over nothing | Rows sync, photos never do; the receiving device nulls the URI |
-| F5 | ⚠️ **`seed.ts` writes `is_me = 1` with a fresh `uuid()` per install** — one account can get two "me" rows, and every my-share figure silently reads one of them | Bind the local `is_me` row to `person.remote_uid` at sign-in |
-| F6 | `category` has `UNIQUE(name, kind)`, so adding `is_deleted` makes delete-then-re-add "Groceries" fail | No `is_deleted` on `category`; sync through the existing `category_tombstone` |
-| F7 | `settings` holds one-time migration flags (`schema.ts:771-786`) — syncing it wholesale makes a device **skip a migration and record it as done** | Explicit key allowlist. Migration flags are device state and are never synced |
-| F8 ⚠️ | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
-| F9 | ~~Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true~~ | **Closed.** `confirmRestore` refuses outright while `settings.syncEnabled()` is on, and offers the Sync screen. A refusal rather than a warning because the damage lands on other people's phones — where the person causing it cannot see it and the people suffering it cannot undo it |
-| F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
-| F11 ⚠️ | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
-| F12 ✅ | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | **Built.** The key is wrapped once per DEVICE and stored server-side, so any member who still holds it can reissue a wrap. It is never derived from one device's secret — which is also why reinstalling mints a new device key rather than resurrecting the old one |
+| SYNC-F1 | Invite links are made to be forwarded — first stranger to tap gets linked, and gets your number | **Sender approves the claim.** Tapping creates a pending request; nothing binds until approval |
+| SYNC-F2 | "Stop sharing my number" cannot take it back — it's already on their device | Word it as a **disclosure** ("Shared with Rohan on 12 Aug"), never a revocable permission |
+| SYNC-F3 ✅ | Document-level last-write-wins silently discards a co-editor's edit, and the shares-sum-to-payments invariant still passes | **Built.** Compare-and-set on `txn.sync_version`; `PUT /sync/entries` refuses a stale push with 409 and the current row attached. Never silent LWW on money — and never an auto-merge either |
+| SYNC-F4 | `attachment_uri` is a `file://` path from another device — "receipt attached" over nothing | Rows sync, photos never do; the receiving device nulls the URI |
+| SYNC-F5 | ⚠️ **`seed.ts` writes `is_me = 1` with a fresh `uuid()` per install** — one account can get two "me" rows, and every my-share figure silently reads one of them | Bind the local `is_me` row to `person.remote_uid` at sign-in |
+| SYNC-F6 | `category` has `UNIQUE(name, kind)`, so adding `is_deleted` makes delete-then-re-add "Groceries" fail | No `is_deleted` on `category`; sync through the existing `category_tombstone` |
+| SYNC-F7 | `settings` holds one-time migration flags (`schema.ts:771-786`) — syncing it wholesale makes a device **skip a migration and record it as done** | Explicit key allowlist. Migration flags are device state and are never synced |
+| SYNC-F8 ⚠️ | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
+| SYNC-F9 | ~~Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true~~ | **Closed.** `confirmRestore` refuses outright while `settings.syncEnabled()` is on, and offers the Sync screen. A refusal rather than a warning because the damage lands on other people's phones — where the person causing it cannot see it and the people suffering it cannot undo it |
+| SYNC-F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
+| SYNC-F11 ⚠️ | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
+| SYNC-F12 ✅ | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | **Built.** The key is wrapped once per DEVICE and stored server-side, so any member who still holds it can reissue a wrap. It is never derived from one device's secret — which is also why reinstalling mints a new device key rather than resurrecting the old one |
 
 ---
 
@@ -759,13 +771,13 @@ net worth are never sent.
   of the 64 KiB per-request cap.
 - ✅ Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
   which is the only moment a re-wrap costs nothing.
-- ✅ F11 closed. `deleteGroup` is creator-only, leaving is its own route, and a
+- ✅ SYNC-F11 closed. `deleteGroup` is creator-only, leaving is its own route, and a
   deletion now propagates: the server reports `deleted`/`removed` instead of
   dropping the group from the list, and the client archives it, stops syncing it,
   and says so once. **Nothing is deleted locally** — my share of every entry
   already counted as spending in closed months, and erasing it for a decision that
   was not mine has no undo.
-- ✅ F10 closed: a rejection reaches the author as an objection on the entry, and
+- ✅ SYNC-F10 closed: a rejection reaches the author as an objection on the entry, and
   withdrawing it travels too.
 - ✅ Sharing has a UI: group → Members → Share with a member, and invitations are
   answered at the top of Settings → Sync. Settings → Sync also shows when sync
@@ -884,6 +896,14 @@ Recorded so nobody re-discovers them as bugs.
 
 Each line is real, evidenced, and not blocking the pilot.
 
+> **Shape debt now lives in `SYSTEM.md` §10 as `OV-01…OV-27`**, with a proposed
+> collapse, a blast radius, a risk and a verdict on each. Twelve of the 27 close as
+> `RENAME-ONLY` or `KEEP-DOCUMENTED` — at zero code risk — which is the useful
+> finding: the app is less over-built than it feels and more under-named.
+> Undecided questions live in `SYSTEM.md` §11 as `DQ-01…DQ-86`, each with the
+> default that ships if nobody ever decides. This section keeps only what is
+> release-shaped.
+
 ### Blocked outside the codebase
 
 - **GPay import** — blocked on the source export format.
@@ -913,7 +933,7 @@ Each line is real, evidenced, and not blocking the pilot.
   was advertising a group-level budget the app does not have. The physical columns
   stay: dropping one in SQLite needs a table rebuild, which is not worth a
   migration for three fields nobody reads. `person.remote_uid` is **not** dead —
-  §3.1 F5 reserves it for the duplicate-`is_me` fix.
+  §3.1 SYNC-F5 reserves it for the duplicate-`is_me` fix.
 - **Transfer has no `DetailChips`** — no tags, receipt, time, location or repeat;
   its note writes `transferNote`, a *different field* from every other kind's
   `note`. Consolidating means deciding which fields a settlement legitimately
@@ -997,7 +1017,7 @@ actually carries.
       Settings read "Backed up just now" when the newest backup might be six months
       old. Stamped with the backup's own date, so the nudge fires straight away
       after restoring something old — which is the right moment for it.
-- [x] **F9 — restore while sync is on.** ✅ Refused, with the Sync screen one tap
+- [x] **SYNC-F9 — restore while sync is on.** ✅ Refused, with the Sync screen one tap
       away. A restore is wipe-and-replace, so under sync it would push a snapshot
       other people were never part of over their copies.
 

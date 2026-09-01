@@ -15,7 +15,7 @@ import path from 'path';
 
 const ROOT = path.resolve(__dirname, '../..');
 const APP = path.join(ROOT, 'app');
-const DOC = path.join(ROOT, 'docs/FEATURES_AND_FLOWS.md');
+const DOC = path.join(ROOT, 'docs/SCREENS.md');
 
 /** Layout/group files are structure, not screens — documented as the nav shell instead. */
 const NOT_A_SCREEN = /^_layout\.tsx$/;
@@ -67,7 +67,7 @@ function mentioned(route: string, file: string): boolean {
   return doc.includes(route) || doc.includes(asBrace) || asAnyBrace.test(doc);
 }
 
-describe('FEATURES_AND_FLOWS.md covers every screen', () => {
+describe('SCREENS.md covers every screen', () => {
   it('finds the route files at all (guards against a bad path)', () => {
     expect(files.length).toBeGreaterThan(20);
     expect(files.some(f => f.endsWith(path.join('app', 'review.tsx')))).toBe(true);

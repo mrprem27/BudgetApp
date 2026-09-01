@@ -1,3 +1,11 @@
+> **FROZEN 2026-09-01.** A record of a past state, not a description of the app.
+> Never edited to keep a test green — a dated finding is supposed to keep saying what it
+> found. Live successor: `SYSTEM.md` §10 (`OV-`) and §11 (`DQ-`).
+>
+> Ids defined here (`F-`, `DEBT-`, `BL-`, `ISS-`, `INT-`, `V2-`, `DRIFT-`) are frozen: never
+> extended, never renumbered, cited only as the *origin* of an `OV-` or `DQ-` in `SYSTEM.md`.
+> See `SYSTEM.md` §12 for the triage.
+
 # BudgetSplit — V2 Product Analysis & Final Feature Closeout
 
 > **Reviewed:** 2026-08-05 against `main` @ `1d7f256` (+ the uncommitted working tree).

@@ -18,12 +18,27 @@ import path from 'path';
 
 const ROOT = path.resolve(__dirname, '../..');
 const DOCS = path.join(ROOT, 'docs');
-const REVIEW = path.join(DOCS, 'V2_PRODUCT_REVIEW.md');
+const REVIEW = path.join(DOCS, 'history/V2_PRODUCT_REVIEW.md');
 
 const CITATION = /\bV2-(\d+)\b/g;
 
+/**
+ * Recursive since 2026-09-01, when the dated reviews moved to `docs/history/`. The
+ * note above about skipping nothing is the reason: a dangling ID inside a frozen
+ * document is arguably worse than one in a live document, because the frozen one is
+ * where a reader goes looking for the definition.
+ */
 function docFiles(): string[] {
-  return fs.readdirSync(DOCS).filter(f => f.endsWith('.md')).map(f => path.join(DOCS, f));
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.md')) out.push(full);
+    }
+  };
+  walk(DOCS);
+  return out;
 }
 
 /**

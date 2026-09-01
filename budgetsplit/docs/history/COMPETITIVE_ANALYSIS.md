@@ -1,3 +1,11 @@
+> **FROZEN 2026-09-01.** A record of a past state, not a description of the app.
+> Never edited to keep a test green — a dated finding is supposed to keep saying what it
+> found. Live successor: `SYSTEM.md` §1 — what the app is and is deliberately not.
+>
+> Ids defined here (`F-`, `DEBT-`, `BL-`, `ISS-`, `INT-`, `V2-`, `DRIFT-`) are frozen: never
+> extended, never renumbered, cited only as the *origin* of an `OV-` or `DQ-` in `SYSTEM.md`.
+> See `SYSTEM.md` §12 for the triage.
+
 # BudgetSplit — Competitive Analysis & Business-Logic Audit
 
 > **Methodology (2026-07-28):** 12 research/synthesis agents, web-search-grounded, run against

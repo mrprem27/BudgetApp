@@ -1,3 +1,11 @@
+> **FROZEN 2026-09-01.** A record of a past state, not a description of the app.
+> Never edited to keep a test green — a dated finding is supposed to keep saying what it
+> found. Live successor: `SCREENS.md` S-14, and `SYSTEM.md` `SC-14`.
+>
+> Ids defined here (`F-`, `DEBT-`, `BL-`, `ISS-`, `INT-`, `V2-`, `DRIFT-`) are frozen: never
+> extended, never renumbered, cited only as the *origin* of an `OV-` or `DQ-` in `SYSTEM.md`.
+> See `SYSTEM.md` §12 for the triage.
+
 # Personal / Budget / Insights Redesign — Agreed Spec & Plan
 
 > Status: **agreed 2026-06-27**, not yet built. This is the reference for the phased work.

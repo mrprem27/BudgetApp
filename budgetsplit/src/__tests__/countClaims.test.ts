@@ -69,11 +69,26 @@ const HOOK_COUNT = fs.readdirSync(path.join(ROOT, 'src/hooks')).filter(f => f.en
 type Subject = {
   what: string;
   count: number;
-  /** The line must be talking about this subject at all. Keeps subset claims out. */
+  /**
+   * The line must be talking about this subject at all, and a claim only counts when
+   * it sits within PROXIMITY characters of one of these occurrences.
+   *
+   * Proximity matters because one line legitimately names two subjects:
+   * "`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (111 modules)".
+   * A line-level gate lets each subject check the other's number and fails both.
+   */
   gate: RegExp;
   /** Captures the asserted number. Group 1. */
   claims: RegExp[];
 };
+
+/** Distance from a position to the nearest mention of a subject on the same line. */
+function distanceToSubject(line: string, gate: RegExp, at: number): number {
+  const g = new RegExp(gate.source, gate.flags.includes('g') ? gate.flags : gate.flags + 'g');
+  let best = Infinity;
+  for (const m of line.matchAll(g)) best = Math.min(best, Math.abs(m.index! - at));
+  return best;
+}
 
 const SUBJECTS: Subject[] = [
   {
@@ -128,6 +143,13 @@ describe('documented counts match the source', () => {
           for (const m of scrubbed.matchAll(claim)) {
             const n = Number(m[1]);
             if (!Number.isFinite(n) || n === subject.count) continue;
+            // Nearest subject wins. On a line naming two subjects — "`queries/`
+            // (23 modules); `src/lib/` (111 modules)" — each number belongs to
+            // whichever subject it sits closest to, and to no other.
+            const mine = distanceToSubject(scrubbed, subject.gate, m.index!);
+            const stolen = SUBJECTS.some(other =>
+              other !== subject && distanceToSubject(scrubbed, other.gate, m.index!) < mine);
+            if (stolen) continue;
             // Two claim patterns can match the same words; report the line once.
             const msg = `${path.relative(ROOT, file)}:${i + 1} says ${n} ${subject.what}, source has ${subject.count}`;
             if (!wrong.includes(msg)) wrong.push(msg);

@@ -1,10 +1,16 @@
-# BudgetSplit — Features & User Flows
+# BudgetSplit — Screens
 
-> **The single source of truth for behaviour.** Every screen, every state, every component
-> (top → bottom), every user action with its exact destination, every pill — plus the
-> cross-cutting rules (validation, permissions, notifications, network) that don't belong to
-> one screen. For how it's built, see [ARCHITECTURE.md](./ARCHITECTURE.md); for per-feature
-> status IDs, [AUDIT.md](./AUDIT.md) §1.
+> **What each screen looks like.** Every screen, every state, every component (top → bottom),
+> every user action with its exact destination, every pill.
+>
+> **Renamed from `FEATURES_AND_FLOWS.md` on 2026-09-01**, and narrowed. It is no longer the
+> source of truth for behaviour as a whole — [SYSTEM.md](./SYSTEM.md) is, and it holds what
+> moved out: the feature register (`FE-`), the flow catalog (`FL-`), the validation and money
+> rules (`IV-`), and everything that leaves the device (§1). The screen ids here are the same
+> numbers as `SYSTEM.md`'s `SC-`, so `S-19` and `SC-19` are one screen.
+>
+> For how it's built, see [AGENTS.md](../AGENTS.md), which absorbed `ARCHITECTURE.md`. The
+> dated analyses are frozen in [history/](./history/) and describe a past state.
 >
 > **Notation:** `→` = navigates to · *(sheet)* = bottom-sheet modal · *(toggle)* = switch,
 > no nav · 🔘 = pill/segmented control. Pushed screens have a `‹` back chevron

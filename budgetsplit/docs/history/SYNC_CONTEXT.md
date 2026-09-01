@@ -1,3 +1,11 @@
+> **FROZEN 2026-09-01.** A record of a past state, not a description of the app.
+> Never edited to keep a test green — a dated finding is supposed to keep saying what it
+> found. Live successor: `SYSTEM.md` — `E-88` sync docs, `AX-07` sync state, `SN-32` the ladder.
+>
+> Ids defined here (`F-`, `DEBT-`, `BL-`, `ISS-`, `INT-`, `V2-`, `DRIFT-`) are frozen: never
+> extended, never renumbered, cited only as the *origin* of an `OV-` or `DQ-` in `SYSTEM.md`.
+> See `SYSTEM.md` §12 for the triage.
+
 # Sync, backup and restore — copy-paste context
 
 Paste this whole file into a fresh session to work on sync, backup, restore or the

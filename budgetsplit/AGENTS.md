@@ -621,3 +621,74 @@ and no in-memory data mirror. Layering:
   1000-line monoliths.
 - Migrate legacy screens to `useScreenData` **opportunistically** — whenever you're already
   editing one for a feature, convert it; no big-bang migration.
+
+---
+
+## Stack and layout
+
+Absorbed from `docs/ARCHITECTURE.md` when that file was deleted on 2026-09-01. Everything else it
+held now lives in `docs/SYSTEM.md`: what the app is (§1), the schema and its relationships (§2, §3),
+the boot sequence and provider stack (§7). Its counts had drifted about 2× — `countClaims.test.ts`
+is what stops that recurring.
+
+| Concern | Choice |
+|---|---|
+| Runtime | React Native + **Expo SDK 56**. Read `https://docs.expo.dev/versions/v56.0.0/` before any Expo API work |
+| Navigation | **Expo Router**, file-based, `app/` |
+| Database | **expo-sqlite** — `budgetsplit.db`, WAL mode, **foreign keys OFF** (`SYSTEM.md` `DQ-19`) |
+| Data loading | **`useScreenData`** + `DataRefreshProvider` — see *State & Data Access* above |
+| Global state | **Zustand**, `src/store/index.ts`. `me` and `groups` only. Not a data mirror |
+| Local prefs | **AsyncStorage** — the second settings store (`SYSTEM.md` `E-80`, `OV-13`) |
+| Charts | **react-native-svg** (donut, health ring) + **gifted-charts** (reports trend) |
+| Gestures / animation | **react-native-gesture-handler**, **react-native-reanimated**, RN `Animated` |
+| Fonts | **SpaceMono** for money, **Inter** for everything else |
+| Crypto | **crypto-js** for passphrase backups; **X25519** device keys and per-group wraps for sync |
+| Server | Two Cloudflare Workers. `server/receipt-ocr-proxy/` is stateless and exists only to hold `GEMINI_API_KEY`. `server/api/` is accounts + encrypted backup + **sync** (D1 + KV, magic-link auth) and is deployed. Neither ever sees a readable transaction |
+| Network | Everything that leaves the device is listed in `SYSTEM.md` §1. No analytics, no crash reporter, no ad network. pdf.js is bundled, not fetched |
+
+**Sync exists.** Two documents asserted otherwise while `src/lib/syncEngine.ts` was deployed; that
+contradiction is what `SYSTEM.md` was written to end.
+
+```
+BudgetApp/
+├── budgetsplit/
+│   ├── app/                     # Expo Router routes — see SYSTEM.md §7 for all of them
+│   │   ├── _layout.tsx          # Boot: DB init, providers, gates, Stack
+│   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
+│   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
+│   │   ├── group/[id].tsx       # Group hub + [id]/{budget,edit,members}
+│   │   └── …                    # 44 routes in total
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ui/              # Generic primitives, domain-free
+│   │   │   ├── finance/         # Domain widgets: add/ backup/ group/ home/ plan/ review/
+│   │   │   ├── system/          # Onboarding, gates, providers, loader, PdfTextExtractor
+│   │   │   └── tokens.ts        # Re-export barrel — for components, not screens
+│   │   ├── theme/               # Canonical design tokens; constants/* are back-compat shims
+│   │   ├── constants/           # colors · typography · layout · palette · categories · enums
+│   │   ├── db/
+│   │   │   ├── schema.ts        # DDL + migrations + openDB + ONE_TIME_FIXES
+│   │   │   ├── seed.ts          # First-run seed · seedCategories.ts · seedDemo.ts
+│   │   │   └── queries/         # All SQL. Screens never inline it
+│   │   ├── hooks/               # useScreenData + the feature hooks
+│   │   ├── lib/                 # Pure logic. No React, no db, no RN
+│   │   ├── store/index.ts       # Zustand: me, groups
+│   │   └── __tests__/           # Pure-logic tests + the doc/source invariant guards
+│   ├── modules/expo-ocr/        # First-party native module — Apple Vision, iOS only
+│   └── docs/                    # SYSTEM · SCREENS · RELEASE_CHECKLIST · STORE_LISTING · history/
+└── server/                      # receipt-ocr-proxy/ · api/
+```
+
+**Component layering, enforced:** `ui/` must not import from `finance/` or `system/`;
+`finance/` and `system/` may import from `ui/`.
+
+### The four live documents
+
+One question each. Anything else in `docs/` is frozen history and must not be edited to stay green.
+
+| Doc | Answers |
+|---|---|
+| `docs/SYSTEM.md` | **What the app is** — entities, invariants, features, screens, flows, scenarios, complexity, open decisions. Cite its ids when filing anything |
+| `docs/SCREENS.md` | What each screen looks like — layout, copy, states, sheets |
+| `docs/RELEASE_CHECKLIST.md` | Can we ship |
+| `AGENTS.md` | How we build |
