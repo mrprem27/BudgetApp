@@ -328,6 +328,11 @@ Run it in two once-per-session passes as well: **Reduce Motion on**, and
       animation is untouched and the skip doesn't fight it.
 - [ ] **Group recurring totals switched basis** — whole bill with "your share ₹X"
       beneath, my-share on personal surfaces.
+- [ ] **Two tabs on Personal, not three.** The Recurring tab is gone: it listed
+      every rule in every shared group, so it was neither personal nor different
+      from Plan → Recurring. Confirm nothing is missed by its absence.
+- [ ] **Personal's Budget tab now looks like the group one** — it gained the
+      overview card, the bar and the three count filters it never had.
 - [ ] **Forecast will jump** for anyone with several recurring bills (it is now
       floored by committed bills).
 - [ ] **A saved split containing an explicit `0`** now excludes that person where
@@ -529,8 +534,11 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 - [ ] **S-22 Insights** — `app/insights.tsx`  
       Open: Home → Insights
       - [ ] X-axis day labels are whole numbers, not “1…” “2…”
-      - [ ] Forecast hero and chart tell the same story
-      - [ ] Ten cards don't read as ten equal shouts
+      - [ ] Forecast headline and chart tell the same story
+      - [ ] **On a month you are NOT overspending, it still opens with an answer**
+      - [ ] The bar fills with what you have *spent*, not with your budget
+      - [ ] Nothing is stated twice — no overrun in both a note and a row
+      - [ ] Sections open and close, and a closed one still says how much is in it
 
 - [ ] **S-16 Category detail** — `app/category/[name].tsx`  
       Open: Reports or Home → a category
@@ -588,11 +596,16 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] The pdf.js row is GONE — it's bundled now
       - [ ] Both reclaim actions say what they will and won't delete
 
-- [ ] **S-30 Reminders & recurring** — `app/reminders.tsx · plan/recurring.tsx`  
+- [ ] **S-30 Reminders & recurring** — `app/reminders.tsx · plan/recurring.tsx · recurring/[id].tsx`  
       Open: Home → Coming up; Plan → Recurring
       - [ ] Next-occurrence dates read unambiguously
       - [ ] Skip / Pause / Stop are distinguishable and look reversible
       - [ ] The monthly-equivalent total is labelled as an equivalent, not a charge
+      - [ ] **Tapping a rule from Plan, from a group, and from a transaction all land
+            on that same rule** — never on a list
+      - [ ] A shared rule shows **your share**, with the whole bill named under it —
+            the same figure Plan shows
+      - [ ] A rule with a note shows the note ("Netflix"), not its category
 
 - [ ] **S-13 Edit group** — `app/group/[id]/edit.tsx`  
       Open: Group → ⋯ → Edit
@@ -1045,7 +1058,7 @@ without this; the rest waits for the per-method baselines pass, which touches
 | **Repayment likelihood → expected recovery** | Per-person "how likely is this to come back", turning owed-to-me from a face value into an expected one, and ordering who to chase first. Three constraints decided up front: it stays **out of Safe-to-Spend** (every term there is certain money, and a probabilistic one makes the headline a guess); the maths is **Σ(amount × probability)**, not an average or median of probabilities — a median discards the amounts, so a 20%-likely ₹40,000 would rank below a 90%-likely ₹200; and the rating **never syncs**, because at S3 it could reach the person being rated | The WhatsApp composer ships — this is what gives it an order |
 | ~~**Goals surplus sweep**~~ | **Shipped.** `planSurplusSweep` (pure, refuses rather than guesses) + `runSurplusSweep`, opt-in via `settings.autoSweep`, off by default. Records the bucket it drew from, so a withdrawal returns there | — |
 | **Scheduled reminder nudge** | Needs an overdue scan, a per-person cooldown store, notification routing, and a cadence that cannot be guessed from an empty pilot. Get it wrong and users disable notifications, losing the channel permanently | The manual composer ships first — it is a strict prerequisite |
-| **Insights three-tier restructure** | One always-present headline (today it renders *only* when overspending, `insights.tsx:99`), then Fact, then Forecast. Rows 6/7/8/10 are four hand-written variants of one row | Post-pilot polish |
+| ~~**Insights restructure**~~ | **Shipped 2026-09-01.** One always-present headline (it rendered *only* when overspending) over collapsible `SectionCard`s. Recommendations + Driving overspend merged — both were built from the same over-budget categories. `insightsScreen.test.ts` locks it | — |
 | **Import restructure (remainder)** | pdf.js vendoring is done; `app/import.tsx` and `paytmParse.ts` are still one long screen and one long parser | Opportunistic |
 | **R2 object storage** | Needs a dashboard opt-in that can ask for a card; KV covers it today | Backups with receipt photos exceed ~25 MiB |
 | **Cloudflare Email Sending** | Needs Workers Paid ($5/mo) + a domain you own; Brevo free tier works | Deliverability from the current sender becomes a problem |
