@@ -116,7 +116,7 @@ export default function GroupDetailScreen() {
   const meId = me?.id ?? '';
   const isPersonal = group?.is_personal === 1;
 
-  const { handleDelete, handleEditTxn } = useGroupTxnActions(id, reload);
+  const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
 
   // Seed the simplify toggle from the group's saved preference on each fresh row.
   useEffect(() => { if (data?.group) setSimplifyOn(data.group.simplify_debt === 1); }, [data?.group]);

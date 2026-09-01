@@ -204,7 +204,10 @@ export default function GoalDetailScreen() {
               {formatCompact(surplus)} over target — well done!
             </Text>
             <View style={styles.surplusActions}>
-              <TouchableOpacity style={styles.surplusBtn} onPress={() => router.push('/savings')} accessibilityRole="button">
+              {/* `dismissTo`, not `push`: the Plan tab is already underneath this
+                  screen, so pushing it stacked a second copy and left this goal
+                  in the back stack behind it. */}
+              <TouchableOpacity style={styles.surplusBtn} onPress={() => router.dismissTo('/savings')} accessibilityRole="button">
                 <Text style={styles.surplusBtnText}>New goal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.surplusBtn} onPress={() => { setAmt(paiseToInput(surplus)); setShowWithdraw(true); }} accessibilityRole="button">

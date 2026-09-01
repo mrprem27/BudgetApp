@@ -99,7 +99,7 @@ export default function PersonalScreen() {
   const personalGroup = useMemo(() => groups.find(g => g.is_personal === 1) ?? null, [groups]);
 
   // Rows span every group, so the actions read the owning group off each txn.
-  const { handleDelete, handleEditTxn } = useGroupTxnActions(null, reload);
+  const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
 
   const filtered = useMemo(() => activity.filter(a =>
     filter === 'all' ? true

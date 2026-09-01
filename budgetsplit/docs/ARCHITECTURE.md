@@ -76,7 +76,7 @@ afford check, savings goals) ships as optional feature-flagged modules.
 ```
 BudgetApp/
 ├── budgetsplit/                 # the app
-│   ├── app/                     # Expo Router routes (34 screens)
+│   ├── app/                     # Expo Router routes (44 screens)
 │   │   ├── _layout.tsx          # Boot: DB init, providers, gates, Stack
 │   │   ├── (tabs)/              # Tab bar + 4 tabs
 │   │   │   ├── _layout.tsx      # Custom tab bar w/ docked center FAB
@@ -110,11 +110,11 @@ BudgetApp/
 │   │   ├── db/
 │   │   │   ├── schema.ts        # DDL + migrations + openDB + ONE_TIME_FIXES
 │   │   │   ├── seed.ts          # First-run seed · seedCategories.ts · seedDemo.ts
-│   │   │   └── queries/         # 13 modules: transactions · groups · persons · savings
+│   │   │   └── queries/         # 23 modules: transactions · groups · persons · savings
 │   │   │                        # · categories · categoryBudgets · balances · audit
 │   │   │                        # · pending · recurring · moneyProfile · cashQuery · backup
 │   │   ├── hooks/               # useScreenData + 8 feature hooks (use*Form / use*Tab / use*Screen)
-│   │   ├── lib/                 # Pure business logic / engines (57 modules + ocrProviders/)
+│   │   ├── lib/                 # Pure business logic / engines (111 modules + ocrProviders/)
 │   │   ├── store/index.ts       # Zustand store (me, groups)
 │   │   └── __tests__/           # Jest tests for pure lib logic + doc/flag invariants
 │   ├── modules/expo-ocr/        # First-party native module (Apple Vision, iOS only)

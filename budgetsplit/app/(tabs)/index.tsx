@@ -191,7 +191,10 @@ export default function DashboardScreen() {
               color={meInfo?.color ?? colors.accent}
               imageUri={meInfo?.image}
               size={36}
-              onPress={() => router.push('/settings')}
+              // `navigate`, not `push`: both are tabs, and pushing one stacks a
+              // second copy of the tab navigator on top of this one — Back then
+              // returned here instead of switching away. Same below for /groups.
+              onPress={() => router.navigate('/settings')}
             />
           </View>
         </View>
@@ -276,7 +279,7 @@ export default function DashboardScreen() {
                         </TouchableOpacity>
                       )}
                       {showGroupTile && (
-                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/groups')} accessibilityRole="button">
+                        <TouchableOpacity style={styles.startTile} onPress={() => router.navigate('/groups')} accessibilityRole="button">
                           <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.startTitle}>Create a group</Text>

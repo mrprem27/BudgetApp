@@ -167,7 +167,7 @@ right-slide push.
 
 ## 3. Screen index (S-XX)
 
-Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route files under
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 44 route files under
 `app/`; expo-router registers each implicitly by filename.
 
 ### 3.1 Shell / layout (not user-visible screens)

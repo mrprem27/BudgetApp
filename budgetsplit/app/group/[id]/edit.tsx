@@ -170,7 +170,7 @@ export default function EditGroupScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         ...(settleFirst
-          ? [{ text: 'Settle up first', onPress: () => router.push('/(tabs)/groups' as const) }]
+          ? [{ text: 'Settle up first', onPress: () => router.dismissTo('/groups') }]
           : []),
         { text: settleFirst ? 'Leave anyway' : 'Leave', style: 'destructive' as const, onPress: async () => {
           const res = await leaveGroup(db, id, meId);

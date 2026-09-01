@@ -12,11 +12,12 @@ import type { TxnWithSplits } from '../db/queries/transactions';
  * rule/occurrence handling + Undo) and open-for-edit. `reload` re-fetches the
  * screen after a write.
  *
- * `groupId` is only a fallback for the recurring-rule route — the target group is
- * read off the transaction itself, so this serves the cross-group Personal ledger
- * (where every row can belong to a different group) as well as a single group.
+ * Group-agnostic on purpose: every destination is derived from the transaction
+ * itself, so this serves the cross-group Personal and person ledgers (where each
+ * row can belong to a different group) as well as a single group's. It took a
+ * `groupId` fallback until the route that needed it turned out not to exist.
  */
-export function useGroupTxnActions(groupId: string | null, reload: () => Promise<void> | void) {
+export function useGroupTxnActions(reload: () => Promise<void> | void) {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useToast();
@@ -67,9 +68,15 @@ export function useGroupTxnActions(groupId: string | null, reload: () => Promise
   function handleEditTxn(txn: TxnWithSplits) {
     if (isRecurInstance(txn.id)) {
       // A materialized occurrence has no detail page of its own — open the rule
-      // in whichever group owns it.
-      const owner = txn.group_id || groupId;
-      if (owner) router.push(`/group/${owner}/recurring`);
+      // it came from. The id is the rule's with an `_n` suffix, the same
+      // derivation `handleDelete` already does above.
+      //
+      // This pointed at `/group/{id}/recurring` until it was noticed that the
+      // screen had been deleted — `app/recurring/[id].tsx` replaced it, and this
+      // one caller was missed. With no `+not-found.tsx` in `app/`, tapping Edit
+      // on a recurring row landed on expo-router's Unmatched Route screen, from
+      // three separate ledgers. `deadRouteRef.test.ts` is what stops it recurring.
+      router.push(`/recurring/${txn.id.replace(/_\d+$/, '')}`);
       return;
     }
     router.push(`/txn/${txn.id}`);

@@ -51,7 +51,7 @@ export default function PersonScreen() {
   } = usePersonScreen(id ?? '');
 
   // Rows span every shared group, so the actions read the owning group off each txn.
-  const { handleDelete, handleEditTxn } = useGroupTxnActions(null, reload);
+  const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
 
   useEffect(() => { if (!id) router.back(); }, [id, router]);
 
