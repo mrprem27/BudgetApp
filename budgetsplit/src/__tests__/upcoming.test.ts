@@ -116,3 +116,71 @@ describe('buildUpcoming', () => {
     expect(out[0].dateMs).toBeLessThan(out[1].dateMs);
   });
 });
+
+/**
+ * "Due this month" has to be a month.
+ *
+ * `loadSavingsTabData` passed `withinDays = undefined` — no window — so the block
+ * headed **"Due this month"** was really "the next five charges, whenever they
+ * fall". A yearly insurance bill due in eleven months appeared under it for anyone
+ * with fewer than five rules.
+ *
+ * That is not a wording slip. The comment beside that heading argues the title is
+ * the entire thing separating this block from the Recurring inventory — *"Due this
+ * month is a window, Recurring is the inventory"* — so a false title collapses the
+ * distinction the two screens rest on.
+ */
+describe('a windowed list only shows what falls inside the window', () => {
+  const NOW = ms(2026, 5, 10);          // 10 June
+  const daysLeftInJune = 20;            // to the 30th
+
+  /** A yearly rule whose next charge is eleven months out. */
+  const yearly = {
+    ...base, id: 'yr', category: 'Insurance', recur_freq: 'yearly',
+    date: ms(2026, 4, 20),              // last charged 20 May → next 20 May 2027
+  } as never;
+  const monthly = {
+    ...base, id: 'mo', category: 'Rent', recur_freq: 'monthly',
+    date: ms(2026, 4, 15),              // → 15 June, inside the month
+  } as never;
+
+  it('drops a charge that falls outside it', () => {
+    const rows = buildUpcoming([yearly, monthly], 'me', NOW, 5, daysLeftInJune);
+    expect(rows.map(r => r.category)).toEqual(['Rent']);
+  });
+
+  it('kept it when no window was given — the bug', () => {
+    // Proof the old call signature really did include it, so this test is
+    // guarding a behaviour change and not restating the implementation.
+    const rows = buildUpcoming([yearly, monthly], 'me', NOW, 5, undefined);
+    expect(rows.map(r => r.category)).toContain('Insurance');
+  });
+
+  it('shows nothing rather than something wrong when the month is empty', () => {
+    expect(buildUpcoming([yearly], 'me', NOW, 5, daysLeftInJune)).toEqual([]);
+  });
+});
+
+/**
+ * A rule somebody else proposed is not money you have committed.
+ *
+ * `getRecurringForGroup` deliberately returns pending peer rules so the group
+ * ledger can show them marked. Every consumer filters them — except the global
+ * Recurring inventory, which summed them into the hero. A flatmate's proposed
+ * "Gym ₹12,000/mo" added ₹4,000 to your committed total the moment they typed it,
+ * and appeared in no upcoming list to explain where it came from.
+ */
+describe('a peer rule awaiting approval is nobody else’s commitment', () => {
+  const pending = {
+    ...base, id: 'pk', category: 'Gym', recur_freq: 'monthly',
+    date: ms(2026, 5, 1), pendingApproval: true,
+  } as never;
+  const mine = {
+    ...base, id: 'mk', category: 'Rent', recur_freq: 'monthly', date: ms(2026, 5, 1),
+  } as never;
+
+  it('is excluded from the upcoming projection', () => {
+    const rows = buildUpcoming([pending, mine], 'me', ms(2026, 5, 10), 5, 60);
+    expect(rows.map(r => r.category)).toEqual(['Rent']);
+  });
+});

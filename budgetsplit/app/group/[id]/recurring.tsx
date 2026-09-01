@@ -102,7 +102,20 @@ export default function RecurringScreen() {
             const meta = stateMeta[r.recur_state] ?? stateMeta.active;
             const seriesSkips = skips.get(r.id);
             const next = nextOccurrence(r, seriesSkips);
-            const hasUpcomingSkips = (seriesSkips?.size ?? 0) > 0;
+            /*
+             * UPCOMING ones only, which is what the banner claims to count.
+             *
+             * `getSkipsMap` has no date filter, and `resumeRecurring` writes a skip
+             * row for every occurrence in the paused gap — all of them in the past.
+             * So pausing a daily rule for a month and resuming made the card read
+             * "30 upcoming occurrences skipped". The Undo Skip button was gated on
+             * the same predicate while `undoNextSkip` filters `>= now`, so it was
+             * offered when it could do nothing and answered "No skips to undo".
+             */
+            const upcomingSkips = seriesSkips
+              ? [...seriesSkips].filter(d => d >= Date.now()).length
+              : 0;
+            const hasUpcomingSkips = upcomingSkips > 0;
             // When active but no future occurrence exists (all past endDate), only allow Stop or Undo Skip.
             const hasFutureOccurrence = next !== null;
 
@@ -143,7 +156,7 @@ export default function RecurringScreen() {
                   <View style={styles.skipBanner}>
                     <Feather name="skip-forward" size={12} color={colors.healthAmber} />
                     <Text style={styles.skipBannerText}>
-                      {(seriesSkips?.size ?? 0) === 1 ? '1 upcoming occurrence skipped' : `${seriesSkips?.size} upcoming occurrences skipped`}
+                      {upcomingSkips === 1 ? '1 upcoming occurrence skipped' : `${upcomingSkips} upcoming occurrences skipped`}
                     </Text>
                   </View>
                 )}

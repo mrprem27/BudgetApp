@@ -89,7 +89,16 @@ export default function GroupDetailScreen() {
       catStatus = cs;
       analytics = an;
       const rules = await getRecurringForGroup(db, id);
-      recurringRules = rules.filter(r => r.recur_state === 'active');
+      /*
+       * Paused rules stay listed, same as the global screen.
+       *
+       * Filtering them out here meant pausing a rule from `/group/[id]/recurring`
+       * — reached FROM this tab — made it vanish from the tab you came back to,
+       * with Resume reachable only by remembering the deep link. That is the
+       * defect `app/plan/recurring.tsx` documents as fixed, still live one level
+       * down.
+       */
+      recurringRules = rules.filter(r => r.recur_state !== 'ended');
       recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
     }
     return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };

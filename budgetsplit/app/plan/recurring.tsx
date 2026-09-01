@@ -62,7 +62,20 @@ export default function RecurringScreen() {
      * lists it, permanently, with no undo. This screen's own docblock above says
      * a paused rule "belongs here and nowhere else"; the filter contradicted it.
      */
-    const rules = byGroup.flat().filter(t => t.recur_freq && t.recur_state !== 'ended');
+    const rules = byGroup.flat().filter(t =>
+      t.recur_freq
+      && t.recur_state !== 'ended'
+      /*
+       * NOT a rule somebody else proposed and I have not accepted.
+       *
+       * `getRecurringForGroup` deliberately includes pending peer rules, and every
+       * other consumer filters them (`lib/upcoming.ts:125`, `expandUpcoming:46`).
+       * This one did not — so a flatmate's proposed "Gym ₹12,000/mo" added ₹4,000
+       * to my committed total the moment they typed it, before I had agreed to
+       * anything, and appeared in no upcoming list to explain where it came from.
+       * The place to decide about a peer's rule is the approvals queue.
+       */
+      && !t.pendingApproval);
     // Skips have to be loaded, not inferred: "next" must be the next date that actually
     // happens, not the next one the schedule would produce.
     const skips = await getSkipsMap(db, rules.map(r => r.id));
@@ -95,15 +108,24 @@ export default function RecurringScreen() {
 
   const subs = data ?? [];
   const { skipNext, pause, resume, edit, end } = useRecurringActions(reload);
-  // Never one total across kinds (AGENTS §12): money out and money in are
-  // summed and shown separately.
-  const outSubs = subs.filter(s => s.kind !== 'income');
+  /*
+   * THREE kinds, three sums. §12 forbids one total across them, and this was
+   * quietly breaking it: `kind !== 'income'` folded standing TRANSFERS into a
+   * figure labelled "Money out · your share". A monthly ₹10,000 transfer to a
+   * savings account is money moving between your own pockets, not money spent —
+   * counting it as committed spending overstates the one number this screen
+   * exists to give, and `lib/upcoming.ts` refuses to do it on the same data.
+   */
+  const outSubs = subs.filter(s => s.kind === 'expense');
   const inSubs = subs.filter(s => s.kind === 'income');
+  const moveSubs = subs.filter(s => s.kind === 'settlement');
   // Paused rules are listed but never summed: a paused subscription is not money
   // leaving each month, and counting it would overstate the committed total.
   const live = (rows: Sub[]) => rows.filter(s => !s.paused);
-  const monthlyOut = live(outSubs).reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
-  const monthlyIn = live(inSubs).reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  const monthly = (rows: Sub[]) => live(rows).reduce((s, x) => s + toMonthly(x.amount, x.freq, x.interval), 0);
+  const monthlyOut = monthly(outSubs);
+  const monthlyIn = monthly(inSubs);
+  const monthlyMoved = monthly(moveSubs);
   const activeCount = live(subs).length;
   const pausedCount = subs.length - activeCount;
   const nextUp = subs.find(s => s.nextMs != null);
@@ -139,11 +161,16 @@ export default function RecurringScreen() {
             <Card padded style={styles.totalCard}>
               <View style={styles.totalRow}>
                 <View style={styles.totalLeft}>
-                  <Text style={styles.totalLabel}>Money out · your share</Text>
+                  {/* "a month" is not decoration: every row below shows its own
+                      PER-CHARGE amount, so a yearly ₹12,000 rule reads ₹12,000 in
+                      the list while contributing ₹1,000 here. Two bases in one
+                      card; only the label can tell them apart. */}
+                  <Text style={styles.totalLabel}>Spending a month · your share</Text>
                   <AmountText paise={monthlyOut} size="xl" forceColor={colors.textPrimary} />
                   <Text style={styles.totalSub}>
                     ≈ {formatCompact(monthlyOut * 12)} a year
                     {monthlyIn > 0 ? ` · +${formatCompact(monthlyIn)}/mo in` : ''}
+                    {monthlyMoved > 0 ? ` · ${formatCompact(monthlyMoved)}/mo moved` : ''}
                   </Text>
                 </View>
                 <View style={styles.totalRight}>
@@ -157,7 +184,10 @@ export default function RecurringScreen() {
               </View>
             </Card>
 
-            {([['Money out', outSubs], ['Money in', inSubs]] as const).map(([title, rows]) => rows.length === 0 ? null : (
+            {/* Transfers get their own section rather than hiding inside "Money
+                out" — they are the third kind, and §12 says a kind's total is its
+                own. */}
+            {([['Money out', outSubs], ['Money in', inSubs], ['Moved between your own', moveSubs]] as const).map(([title, rows]) => rows.length === 0 ? null : (
               <View key={title}>
                 <SectionHeader title={title} right={<Text style={styles.count}>{rows.length}</Text>} />
                 <Card clip>

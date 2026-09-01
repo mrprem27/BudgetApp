@@ -1,5 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths, differenceInCalendarDays } from 'date-fns';
 import { getGoals, getGoalSavedMap, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { computeTotalMoney } from './cash';
@@ -72,7 +72,19 @@ export async function loadSavingsTabData(
     const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
     const rules = recurringByGroup.flat();
     const skips = await getSkipsMap(db, rules.map(r => r.id));
-    upcoming = buildUpcoming(rules, me.id, now.getTime(), 5, undefined, skips);
+    /*
+     * A REAL window, because the heading claims one.
+     *
+     * This passed `undefined`, which means no window — so the list was "the next
+     * five charges, whenever they fall" under a heading reading "Due this month".
+     * A yearly insurance bill due in eleven months appeared there for anyone with
+     * fewer than five rules. The comment beside that heading argues the title is
+     * what separates this block from the Recurring inventory ("Due this month is a
+     * window, Recurring is the inventory") — so the title being false is not a
+     * wording slip, it collapses the distinction the two screens rest on.
+     */
+    const daysLeftInMonth = Math.max(0, differenceInCalendarDays(endOfMonth(now), now));
+    upcoming = buildUpcoming(rules, me.id, now.getTime(), 5, daysLeftInMonth, skips);
   }
 
   // `monthSpend` is returned as well as consumed: it is the basis half of the
