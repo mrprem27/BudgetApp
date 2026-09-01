@@ -92,7 +92,7 @@ export default function GroupDetailScreen() {
       /*
        * Paused rules stay listed, same as the global screen.
        *
-       * Filtering them out here meant pausing a rule from `/group/[id]/recurring`
+       * Filtering them out here meant pausing a rule from the rule's own screen
        * — reached FROM this tab — made it vanish from the tab you came back to,
        * with Resume reachable only by remembering the deep link. That is the
        * defect `app/plan/recurring.tsx` documents as fixed, still live one level
@@ -308,7 +308,7 @@ export default function GroupDetailScreen() {
           monthlyTotal={recurringMonthlyTotal}
           nextLabel={recurNextLabel}
           onAdd={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
-          onOpenRule={(ruleId) => router.push(`/group/${id}/recurring?focus=${ruleId}`)}
+          onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
         />
       )}
 

@@ -315,7 +315,7 @@ export default function CategoryDetailScreen() {
                   const mine = myShareOrTotal(r, myId);
                   const name = (r.note && r.note.trim()) || r.category;
                   return (
-                    <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/group/${r.group_id}/recurring?focus=${r.id}`)} accessibilityRole="button">
+                    <TouchableOpacity key={r.id} style={styles.insRow} onPress={() => router.push(`/recurring/${r.id}`)} accessibilityRole="button">
                       <Feather name="repeat" size={13} color={colors.settle} />
                       <Text style={[styles.insName, { flex: 1 }]} numberOfLines={1}>{name}</Text>
                       <Text style={styles.insMeta}>{r.recur_freq}</Text>

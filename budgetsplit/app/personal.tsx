@@ -12,8 +12,6 @@ import { FilterBar } from '../src/components/ui/FilterBar';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
-import { Divider } from '../src/components/ui/Divider';
-import { RecurringRow } from '../src/components/finance/RecurringRow';
 import { BudgetCategoryRow } from '../src/components/finance/BudgetCategoryRow';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -23,8 +21,7 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { FAB } from '../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { useGroupTxnActions } from '../src/hooks/useGroupTxnActions';
-import { getMyActivity, type TxnWithSplits, type MyActivityItem } from '../src/db/queries/transactions';
-import { getRecurringForGroup, getSkipsMap } from '../src/db/queries/recurring';
+import { getMyActivity, type MyActivityItem } from '../src/db/queries/transactions';
 import { getAllGroups } from '../src/db/queries/groups';
 import { getAllPersons } from '../src/db/queries/persons';
 import { getMyExposure } from '../src/db/queries/balances';
@@ -34,23 +31,28 @@ import { useStore } from '../src/store';
 import { getMyGlobalBudgetStatus } from '../src/lib/budget';
 import { BudgetBar } from '../src/components/finance/BudgetBar';
 import { categoryVisual } from '../src/constants/categories';
-import { recurringMonthlyEquivalent } from '../src/lib/recurrence';
 import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
-import { myShareOrTotal } from '../src/lib/splitMath';
 import { haptic } from '../src/lib/haptics';
 import { buildGroupExportCsv } from '../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
 
-type TabKey = 'activity' | 'budget' | 'recurring';
+/*
+ * Two tabs, not three.
+ *
+ * A third, "Recurring", listed every rule in every SHARED group — so it was
+ * neither personal nor different from `/plan/recurring`, which shows the same
+ * query and is one tap from the Plan tab. Two lists of the same rules, in two
+ * places, with two different groupings and two different subtotals, is the
+ * duplication that made the recurring flow unreadable. There is one inventory now,
+ * and every rule in it opens `/recurring/[id]`.
+ */
+type TabKey = 'activity' | 'budget';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'activity', label: 'Activity' },
   { key: 'budget', label: 'Budget' },
-  { key: 'recurring', label: 'Recurring' },
 ];
-
-type RecurGroup = { groupId: string; name: string; isPersonal: boolean; rules: TxnWithSplits[] };
 
 export default function PersonalScreen() {
   const db = useSQLiteContext();
@@ -62,7 +64,6 @@ export default function PersonalScreen() {
   const bottomPad = useContentInset({ fab: true });
   const [tab, setTab] = useState<TabKey>('activity');
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showMenu, setShowMenu] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
@@ -74,20 +75,11 @@ export default function PersonalScreen() {
       getMyExposure(db, me.id),
       getMyGlobalBudgetStatus(db, me.id),
     ]);
-    // Recurring rules grouped by their group (personal first).
-    const rulesByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const recurGroups: RecurGroup[] = grps
-      .map((g, i) => ({ groupId: g.id, name: g.is_personal === 1 ? 'Personal' : g.name, isPersonal: g.is_personal === 1, rules: rulesByGroup[i] }))
-      .filter(r => r.rules.length > 0)
-      .sort((a, b) => (a.isPersonal ? -1 : b.isPersonal ? 1 : 0));
-    const recurSkips = await getSkipsMap(db, recurGroups.flatMap(rg => rg.rules.map(r => r.id)));
     return {
       persons: allPersons,
       activity: acts,
       groups: grps,
       budget: bud,
-      recurGroups,
-      recurSkips,
       // Owe / Lent summary — single source of truth (netted per person).
       summary: { owe: exp.owe, lent: exp.owed },
     };
@@ -97,8 +89,6 @@ export default function PersonalScreen() {
   const activity = data?.activity ?? [];
   const groups = data?.groups ?? [];
   const budget = data?.budget ?? [];
-  const recurGroups = data?.recurGroups ?? [];
-  const recurSkips = data?.recurSkips;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
 
   // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
@@ -156,11 +146,6 @@ export default function PersonalScreen() {
   );
 
   const net = summary.lent - summary.owe;
-
-  function toggleCollapse(id: string) {
-    haptic.selection();
-    setCollapsed(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
 
   function openBudgetEditor() {
     router.push('/budget');
@@ -321,55 +306,6 @@ export default function PersonalScreen() {
             </ScrollView>
           )}
 
-          {/* RECURRING — collapsible, grouped by group (personal first) */}
-          {tab === 'recurring' && (
-            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-              {recurGroups.length === 0 ? (
-                <EmptyState
-                  icon="repeat"
-                  title="No recurring items"
-                  body="Mark an expense as Recurring when you add it and it'll show here, grouped by where it lives."
-                  tint={colors.textSecondary}
-                  actionLabel="Add a recurring item"
-                  onAction={() => router.push('/add/quick')}
-                />
-              ) : recurGroups.map(rg => {
-                const isOpen = !collapsed.has(rg.groupId);
-                const monthly = rg.rules.reduce((s, r) => {
-                  const mine = myShareOrTotal(r, myId);
-                  return s + (r.recur_freq ? recurringMonthlyEquivalent(mine, r.recur_freq, r.recur_interval) : 0);
-                }, 0);
-                return (
-                  <View key={rg.groupId} style={styles.recurGroup}>
-                    <TouchableOpacity style={styles.recurHeader} onPress={() => toggleCollapse(rg.groupId)} accessibilityRole="button">
-                      <Feather name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} color={colors.textSecondary} />
-                      <Text style={styles.recurGroupName}>{rg.name}</Text>
-                      <Text style={styles.recurGroupTotal}>{formatCompact(monthly)}/mo</Text>
-                    </TouchableOpacity>
-                    {isOpen && (
-                      <View style={styles.recurCard}>
-                        {rg.rules.map((r, i) => {
-                          return (
-                            <React.Fragment key={r.id}>
-                              {i > 0 && <Divider indent="text" />}
-                              <RecurringRow
-                                rule={r}
-                                meId={myId}
-                                showNext
-                                skipDates={recurSkips?.get(r.id)}
-                                onPress={() => router.push(`/group/${rg.groupId}/recurring?focus=${r.id}`)}
-                              />
-                            </React.Fragment>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
-          )}
-
           {/* Single-tap FAB — pre-fills the personal group. */}
           {personalGroup && (
             <FAB onPress={() => router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense`)} aboveTabBar={false} />
@@ -423,11 +359,6 @@ const styles = StyleSheet.create({
   budgetList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   budgetRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
 
-  recurGroup: { marginBottom: space.sm },
-  recurHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
-  recurGroupName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  recurGroupTotal: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  recurCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
 
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   personalNote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.md },

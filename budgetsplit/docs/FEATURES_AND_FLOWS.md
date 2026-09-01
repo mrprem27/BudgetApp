@@ -201,9 +201,8 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-10 | **My Budget** | `app/budget.tsx` | The **global** budget: your limits across personal spending and your share of every group. Stored as the Personal group's `person_id IS NULL` lines. No level control — there are no levels here. Takes **no group id**, which is what removed the `?? groups[0]` fallbacks that let a personal-sounding entry point open a *shared* group's editor. |
 | S-10b | **Group budget editor** | `app/group/[id]/budget.tsx` | A group's **default** (admin-only, what every member inherits) and **Mine** (your private per-category override). Switching to Mine asks first (`OwnBudgetSheet`) and only the categories you fill in become yours; blanks keep following the group. A personal group forwards to `/budget`. Both routes render `components/finance/budget/BudgetEditor`. |
 | S-11 | **Members** | `app/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
-| S-12 | **Group recurring** | `app/group/[id]/recurring.tsx` | Pause / resume / end / skip-next (with undo-skip). `?focus=<id>` highlights a rule for 2.6 s. |
 | S-13 | **Edit group** | `app/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
-| S-14 | **Personal** | `app/personal.tsx` | The unified personal screen: Activity / Budget / Recurring, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. |
+| S-14 | **Personal** | `app/personal.tsx` | The unified personal screen: Activity / Budget, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. A third *Recurring* tab was removed: it listed every rule in every shared group, so it was neither personal nor different from S-32. |
 
 ### 3.5 Detail screens
 
@@ -245,7 +244,8 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 34 route f
 | S-29 | **Help** | `app/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
 | S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
 | S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
-| S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. Per-row **Skip next · Pause · Stop** (shared `useRecurringActions`); row tap → `/group/{id}/recurring?focus={ruleId}`. |
+| S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. No per-row actions — the row taps through to S-35, where they live. |
+| S-41 | **Recurring rule** | `app/recurring/[id].tsx` | **One** rule: name (`note \|\| category`), cadence, **your share** (with the whole bill named under it when they differ), state, started/next dates, skipped-occurrence banner, and the actions as full rows — Edit · Skip the next one · Undo the next skip · Pause/Resume · Stop (shared `useRecurringActions`). Every recurring list in the app taps into this, and so does a `renew_*` reminder. Replaced `group/[id]/recurring.tsx`, which was the *group's* list rendered a second time and was the only place carrying the actions — so tapping a rule opened a list of rules. |
 | S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
 | S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet **or** to your account; restore **replaces all data**. See §13.3. |
 | S-36 | **Account** | `app/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out. Exists only in a build with `EXPO_PUBLIC_API_URL` set; buys exactly one capability, off-device encrypted backups (§13.3). |
@@ -350,7 +350,7 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 
 **Tab — Members:** Group balances (Total spent · Your balance); member rows (avatar, name, "is owed / owes / settled"); **Invite someone** → `/group/{id}/members`; 🔘 **Simplify debts** *(toggle)* ("Fewest payments" ↔ "Every direct debt", persisted to the group row); **BalanceRow** settlement rows ("N payments to settle") → **Settle amount** → `/add/quick?kind=transfer&from=&to=&amount=&groupId=`.
 
-**Tab — Recurring:** active / paused / ended rules; row → `/group/{id}/recurring?focus={ruleId}`; add → `/add/quick?groupId={id}&kind=expense`.
+**Tab — Recurring:** active / paused / ended rules; row → `/recurring/{ruleId}`; add → `/add/quick?groupId={id}&kind=expense`.
 
 **Insights view** (header chart icon): per-member spend bars, top categories, recommendations, via `InsightsTab`.
 
@@ -362,7 +362,6 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 | **Budget editor** | `group/[id]/budget.tsx` | Per-category limit + 🔘 cadence *(sheet)*; collapsible sections; **Save** → `setCategoryBudgets` (only amounts > 0). `?category=` auto-focuses and scrolls to a row. Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories`. `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts. | Error + retry · `EmptyState` "No categories yet" · pull-to-refresh |
 | **Edit group** | `group/[id]/edit.tsx` | `GroupForm`; **Save** diffs members (add/remove); Archive → `/groups`; Delete → `deleteGroup` (Personal can't be deleted). | Error + retry only — it's a form, deliberately no pull-to-refresh |
 | **Members** | `group/[id]/members.tsx` | Avatar tap → photo picker; rename *(sheet)*; swipe-Remove (**blocked if net ≠ 0** — "Settle up first"); **Add or create person** via `PersonPicker` (multi-select + inline create). | Error + retry · pull-to-refresh · no empty state (you are always a member) |
-| **Recurring** | `group/[id]/recurring.tsx` | Per-rule: **Skip** / **Undo skip** / **Pause·Resume** / **Stop** (confirm → `endRecurring`). `?focus=` highlights a card. | Error + retry · `EmptyState` "No recurring transactions" · pull-to-refresh |
 
 ---
 
@@ -1236,7 +1235,7 @@ date, and a back-dated entry must not bury itself at the bottom of the queue.
 refetches on focus already — it's a detail + actions surface, not a feed).
 
 Hero amount (kind-coloured) + category + note + cash line; meta card (When / Group / Paid via /
-Added by / recurring link → `/group/{id}/recurring?focus=` / Location → opens Maps); receipt
+Added by / recurring link → `/recurring/{ruleId}` / Location → opens Maps); receipt
 section (preview / add / replace / remove; not for settlements) with a **full-screen attachment
 viewer** (`Modal transparent animationType="fade"`); split summary; itemized line items
 (read-only); audit-log timeline; **Delete** (soft-delete + undo → back).
@@ -1250,7 +1249,7 @@ Reached from Home category rows (`?period=` carries the active tab) and the Repo
 comprehensive category page (all figures = **my share**). Period segment (Today/Month/Year);
 budget card (prorated) or amount card + "set budget" → `/group/{personal}/budget?category=`;
 **Where it goes** (personal vs each group); **Top places** (location-tagged); **Recurring** rules
-in the category → `/group/{id}/recurring?focus=`; **Goals** tagged to it → `/savings/{id}`;
+in the category → `/recurring/{ruleId}`; **Goals** tagged to it → `/savings/{id}`;
 transaction list → `/txn/{id}`.
 
 ---
@@ -1868,7 +1867,7 @@ to confirm the whole chain on a device without waiting for a real due date.
 
 | Reminder id | Opens |
 |---|---|
-| `renew_{ruleId}_d{n}` | `/plan/recurring?focus={ruleId}` — the rule, scrolled to and highlighted |
+| `renew_{ruleId}_d{n}` | `/recurring/{ruleId}` — the rule itself, with **Skip the next one** on it |
 | `daily_log` | `/add/quick` — the thing it is asking you to do |
 | `backup_nudge` | `/reports`, where the export lives |
 | anything else | nothing. A wrong destination is worse than none: it moves you away from what you were doing |
@@ -1965,7 +1964,7 @@ vs. surfaced").
 | `/group/[id]/budget` | none | `ErrorState` + retry | "No categories yet" | ✅ |
 | `/group/[id]/edit` | none | `ErrorState` + retry | n/a | ✖ form |
 | `/group/[id]/members` | none | `ErrorState` + retry | n/a (you're always a member) | ✅ |
-| `/group/[id]/recurring` | none | `ErrorState` + retry | "No recurring transactions" | ✅ |
+| `/recurring/[id]` | none | `ErrorState` + retry | "Recurring item not found" | ✅ |
 | `/help` | n/a | n/a | n/a | ✖ static |
 | `/history` | none | `ErrorState` + retry | "Nothing logged yet" | ✅ |
 | `/import` | button label → "Reading PDF…" | 5 specific Alerts (§10.1) | n/a | ✖ form |

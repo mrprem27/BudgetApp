@@ -234,7 +234,7 @@ export default function RecurringScreen() {
                               <AmountText paise={s.amount} size="sm" forceColor={s.kind === 'income' ? colors.income : colors.textPrimary} rounded />
                             </View>
                           }
-                          onPress={() => router.push(`/group/${s.groupId}/recurring?focus=${s.id}`)}
+                          onPress={() => router.push(`/recurring/${s.id}`)}
                           accessibilityLabel={`${s.name}, ${freqLabel(s.freq, s.interval)}${s.paused ? ', paused' : ''}`}
                         />
                       </View>

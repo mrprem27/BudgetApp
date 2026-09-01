@@ -215,7 +215,7 @@ export default function TxnDetailScreen() {
               <View style={styles.divider} />
               <TouchableOpacity
                 style={styles.recurRow}
-                onPress={() => router.push(`/group/${parentRule?.group_id ?? txn.group_id}/recurring?focus=${txn.parent_recur_id}`)}
+                onPress={() => router.push(`/recurring/${txn.parent_recur_id}`)}
                 accessibilityRole="button"
                 accessibilityLabel="View the recurring schedule that created this"
               >
