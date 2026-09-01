@@ -1,678 +1,586 @@
 <title>BudgetSplit System Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Palette taken from the app's own tokens (AGENTS.md §10) rather than invented:
-   this describes BudgetSplit, so it should look like BudgetSplit. Neutrals are
-   biased toward the teal accent in both themes. */
+/* Palette from the app's own tokens (AGENTS.md §10): this describes BudgetSplit,
+   so it should look like BudgetSplit. Neutrals lean teal in both themes. */
 :root {
-  --ground:   #EEF4F2;
-  --surface:  #FFFFFF;
-  --raised:   #F6FAF9;
-  --line:     #D6E3DF;
-  --line-soft:#E6EEEC;
-  --ink:      #0B1614;
-  --ink-2:    #415954;
-  --ink-3:    #6D8480;
-  --accent:   #0E8C82;
-  --accent-b: #D9F0ED;
-  --flag:     #6D5CD8;
-  --flag-b:   #E8E4FA;
-  --warn:     #C4432F;
-  --warn-b:   #FBE5E1;
-  --ok:       #0F7A55;
-  --ok-b:     #DCF2E8;
-  --shadow:   0 1px 2px rgba(11,22,20,.06), 0 8px 24px -12px rgba(11,22,20,.18);
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ground:#EEF4F2; --surface:#FFFFFF; --raised:#F5FAF9;
+  --line:#D6E3DF; --hair:#E7EFED;
+  --ink:#0B1614; --ink-2:#40564F; --ink-3:#6C8380;
+  --accent:#0E8C82; --accent-b:#D9F0ED;
+  --flag:#6250C9; --flag-b:#E7E4F8;
+  --warn:#BC4130; --warn-b:#FAE4E0;
+  --ok:#0F7A55; --ok-b:#DBF1E7;
+  --shadow:0 1px 2px rgba(11,22,20,.05), 0 10px 26px -18px rgba(11,22,20,.3);
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pad:20px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground:   #0A0F11;
-    --surface:  #13201F;
-    --raised:   #182C2A;
-    --line:     #21302E;
-    --line-soft:#1A2827;
-    --ink:      #ECF3F1;
-    --ink-2:    #A3B7B3;
-    --ink-3:    #7C918E;
-    --accent:   #20C4B8;
-    --accent-b: #10312F;
-    --flag:     #9E90FA;
-    --flag-b:   #221E3A;
-    --warn:     #FF8071;
-    --warn-b:   #35201D;
-    --ok:       #2BD49B;
-    --ok-b:     #103024;
-    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+    --ground:#0A0F11; --surface:#13201F; --raised:#182C2A;
+    --line:#22322F; --hair:#1B2A28;
+    --ink:#ECF3F1; --ink-2:#A5B9B5; --ink-3:#7E9390;
+    --accent:#20C4B8; --accent-b:#0F3230;
+    --flag:#A296FB; --flag-b:#231F3C;
+    --warn:#FF8878; --warn-b:#37211E;
+    --ok:#2BD49B; --ok-b:#0F3125;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -18px rgba(0,0,0,.8);
   }
 }
 :root[data-theme="dark"] {
-  --ground:#0A0F11; --surface:#13201F; --raised:#182C2A; --line:#21302E; --line-soft:#1A2827;
-  --ink:#ECF3F1; --ink-2:#A3B7B3; --ink-3:#7C918E;
-  --accent:#20C4B8; --accent-b:#10312F; --flag:#9E90FA; --flag-b:#221E3A;
-  --warn:#FF8071; --warn-b:#35201D; --ok:#2BD49B; --ok-b:#103024;
-  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+  --ground:#0A0F11; --surface:#13201F; --raised:#182C2A;
+  --line:#22322F; --hair:#1B2A28;
+  --ink:#ECF3F1; --ink-2:#A5B9B5; --ink-3:#7E9390;
+  --accent:#20C4B8; --accent-b:#0F3230;
+  --flag:#A296FB; --flag-b:#231F3C;
+  --warn:#FF8878; --warn-b:#37211E;
+  --ok:#2BD49B; --ok-b:#0F3125;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -18px rgba(0,0,0,.8);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
 body {
-  margin: 0; background: var(--ground); color: var(--ink);
-  font-family: var(--sans); font-size: 15px; line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
 }
-h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -.01em; }
-a { color: var(--accent); }
-code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
+h1,h2,h3 { margin:0; font-weight:600; letter-spacing:-.012em; text-wrap:balance; }
+p { margin:0; }
+code { font-family:var(--mono); font-size:.88em; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
 
-/* ---------------------------------------------------------------- masthead */
-.top {
-  position: sticky; top: 0; z-index: 20;
-  background: color-mix(in srgb, var(--ground) 88%, transparent);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
-}
-.top-in { max-width: 1180px; margin: 0 auto; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
-.brand b { font-size: 16px; font-weight: 600; letter-spacing: -.015em; }
-.brand span { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
-
-.find { position: relative; flex: 1 1 320px; max-width: 460px; }
+/* ------------------------------------------------------------------ chrome */
+.top { position:sticky; top:0; z-index:30; background:var(--ground); border-bottom:1px solid var(--line); }
+.top-in { max-width:900px; margin:0 auto; padding:12px var(--pad); display:flex; gap:12px; align-items:center; }
+.brand { font-size:15px; font-weight:600; margin-right:auto; white-space:nowrap; letter-spacing:-.015em; }
+.brand small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400; color:var(--ink-3); letter-spacing:0; }
+.find { position:relative; flex:1 1 auto; min-width:0; max-width:340px; }
 .find input {
-  width: 100%; padding: 9px 12px 9px 34px; border-radius: 8px;
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-  font-family: var(--mono); font-size: 13px;
+  width:100%; padding:10px 12px 10px 34px; border-radius:9px;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  font-family:var(--sans); font-size:16px; /* 16px keeps iOS from zooming on focus */
 }
-.find input::placeholder { color: var(--ink-3); }
-.find input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
-.find svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
-.hint { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
-
-.tbtn {
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
-  border-radius: 8px; padding: 8px 10px; cursor: pointer; font: inherit; font-size: 13px;
-  display: inline-flex; align-items: center; gap: 6px;
+.find input::placeholder { color:var(--ink-3); }
+.find svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--ink-3); }
+.iconbtn {
+  flex:none; width:40px; height:40px; display:grid; place-items:center;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink-2);
+  border-radius:9px; cursor:pointer;
 }
-.tbtn:hover { border-color: var(--accent); color: var(--ink); }
-.tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.iconbtn:hover { color:var(--ink); border-color:var(--accent); }
 
-/* ------------------------------------------------------------------- tabs */
-.tabs { border-bottom: 1px solid var(--line); background: var(--ground); position: sticky; top: 57px; z-index: 19; }
-.tabs-in { max-width: 1180px; margin: 0 auto; padding: 0 20px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-.tabs-in::-webkit-scrollbar { display: none; }
-.tab {
-  border: 0; background: none; color: var(--ink-3); cursor: pointer;
-  font: inherit; font-size: 13px; padding: 11px 12px; white-space: nowrap;
-  border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 7px;
+/* ------------------------------------------------------------------- nav */
+nav { position:sticky; top:65px; z-index:29; background:var(--ground); border-bottom:1px solid var(--line); }
+.nav-in { max-width:900px; margin:0 auto; padding:9px var(--pad) 11px; }
+.navrow { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.navrow::-webkit-scrollbar { display:none; }
+.navrow + .navrow { margin-top:7px; }
+.navlabel { font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-3); margin:0 0 5px 2px; }
+.chip {
+  flex:none; border:1px solid var(--line); background:var(--surface); color:var(--ink-2);
+  border-radius:20px; padding:7px 13px; font:inherit; font-size:13.5px; cursor:pointer;
+  white-space:nowrap; min-height:36px; display:inline-flex; align-items:center; gap:6px;
 }
-.tab:hover { color: var(--ink); }
-.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
-.tab .n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.tab[aria-selected="true"] .n { color: var(--accent); }
+.chip:hover { color:var(--ink); border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.chip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--ground); font-weight:500; }
+.chip b { font-family:var(--mono); font-size:11px; font-weight:400; opacity:.7; }
 
-/* ------------------------------------------------------------------ layout */
-main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 96px; }
-.lede { max-width: 66ch; color: var(--ink-2); font-size: 14.5px; margin: 0 0 22px; }
-.lede strong { color: var(--ink); font-weight: 600; }
+/* ------------------------------------------------------------------ page */
+main { max-width:900px; margin:0 auto; padding:22px var(--pad) 90px; }
+.hero h1 { font-size:23px; line-height:1.25; }
+.hero p { color:var(--ink-2); font-size:15.5px; margin-top:8px; max-width:62ch; }
+.stat { display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; }
+.stat div { font-size:13px; color:var(--ink-3); }
+.stat b { font-family:var(--mono); font-size:17px; color:var(--ink); font-weight:500; display:block; }
 
-.rows { display: flex; flex-direction: column; gap: 8px; }
-
-.row {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-  padding: 13px 15px; display: grid; grid-template-columns: 74px 1fr; gap: 14px;
-  cursor: pointer; box-shadow: var(--shadow);
+/* a collapsible group — native <details>, so it works with no JS and with a keyboard */
+details.grp { margin-top:16px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden; }
+details.grp > summary {
+  list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; gap:10px;
+  font-weight:600; font-size:14.5px; min-height:52px;
 }
-.row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.row.open { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+details.grp > summary::-webkit-details-marker { display:none; }
+details.grp > summary .cnt { margin-left:auto; font-family:var(--mono); font-size:12px; color:var(--ink-3); font-weight:400; }
+details.grp > summary .caret { color:var(--ink-3); transition:transform .15s ease; flex:none; }
+details.grp[open] > summary .caret { transform:rotate(90deg); }
+details.grp > summary:hover { background:var(--raised); }
+.grp-note { padding:0 16px 12px; margin-top:-4px; color:var(--ink-2); font-size:14px; max-width:62ch; }
 
-.rid {
-  font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--accent);
-  letter-spacing: .01em; padding-top: 1px;
+/* an item: id, headline, state, and an optional body */
+.item { border-top:1px solid var(--hair); }
+.item > summary {
+  list-style:none; cursor:pointer; padding:13px 16px; display:grid;
+  grid-template-columns:1fr auto; gap:4px 12px; align-items:start; min-height:52px;
 }
-.rbody { min-width: 0; }
-.rtitle { font-size: 14.5px; font-weight: 500; line-height: 1.4; }
-.rtitle .nm { font-family: var(--mono); font-size: 13.5px; }
-.rgloss { color: var(--ink-2); font-size: 13.5px; margin-top: 2px; }
-.rmeta { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.item > summary::-webkit-details-marker { display:none; }
+.item > summary:hover { background:var(--raised); }
+.item .h { font-size:15px; font-weight:500; line-height:1.45; }
+.item .h .mono { font-family:var(--mono); font-size:14px; }
+.item .sub { grid-column:1/-1; color:var(--ink-2); font-size:14px; line-height:1.5; }
+.item .tags { grid-column:1/-1; display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:3px; }
+.idtag { font-family:var(--mono); font-size:11px; color:var(--ink-3); white-space:nowrap; padding-top:3px; }
 
-.pill {
-  font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .04em;
-  text-transform: uppercase; padding: 2.5px 7px; border-radius: 5px;
-  background: var(--line-soft); color: var(--ink-3); white-space: nowrap;
+.tag {
+  font-size:11.5px; letter-spacing:.01em; padding:2px 8px; border-radius:20px;
+  background:var(--hair); color:var(--ink-3); white-space:nowrap;
 }
-.pill.acc  { background: var(--accent-b); color: var(--accent); }
-.pill.flag { background: var(--flag-b);   color: var(--flag); }
-.pill.warn { background: var(--warn-b);   color: var(--warn); }
-.pill.ok   { background: var(--ok-b);     color: var(--ok); }
+.tag.acc { background:var(--accent-b); color:var(--accent); }
+.tag.flag { background:var(--flag-b); color:var(--flag); }
+.tag.warn { background:var(--warn-b); color:var(--warn); }
+.tag.ok { background:var(--ok-b); color:var(--ok); }
 
-/* A magnitude, not decoration: how many ways in. */
-.bar { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.bar i { display: block; height: 5px; border-radius: 3px; background: var(--accent); opacity: .55; min-width: 3px; }
-.bar.hot i { background: var(--warn); opacity: .8; }
-.bar.zero i { background: var(--ink-3); opacity: .35; }
-
-.detail { grid-column: 1 / -1; margin-top: 11px; padding-top: 12px; border-top: 1px solid var(--line-soft); display: none; }
-.row.open .detail { display: block; }
-.dfield { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 5px 0; align-items: start; }
-.dfield > dt { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); padding-top: 3px; }
-.dfield > dd { margin: 0; font-size: 13.5px; color: var(--ink-2); }
-.dfield > dd strong { color: var(--ink); font-weight: 600; }
-.isnot { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.isnot li { position: relative; padding-left: 15px; font-size: 13.5px; color: var(--ink-2); }
-.isnot li::before { content: "✕"; position: absolute; left: 0; top: 0; color: var(--warn); font-size: 10px; line-height: 1.7; }
-.cite { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-.empty { padding: 56px 20px; text-align: center; color: var(--ink-3); }
-.empty p { font-family: var(--mono); font-size: 13px; }
-
-/* ------------------------------------------------------------------ groups */
-.grouphead {
-  display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px;
-  padding-bottom: 7px; border-bottom: 1px solid var(--line);
+.body { padding:2px 16px 16px; }
+.kv { display:grid; grid-template-columns:120px 1fr; gap:4px 14px; padding:7px 0; border-top:1px solid var(--hair); }
+.kv:first-child { border-top:0; }
+.kv dt { font-size:12px; color:var(--ink-3); }
+.kv dd { margin:0; font-size:14px; color:var(--ink-2); line-height:1.55; }
+.kv ul { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:5px; }
+.kv ul li { padding-left:15px; position:relative; }
+.kv ul li::before { content:"–"; position:absolute; left:0; color:var(--ink-3); }
+.kv.no ul li::before { content:"✕"; color:var(--warn); font-size:11px; }
+.kv ul.steps li { padding-left:0; display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:baseline; }
+.kv ul.steps li::before { content:none; }
+.sub-id { font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+.ref { font-family:var(--mono); font-size:.82em; color:var(--ink-3); }
+.cite { margin-top:12px; }
+.cite button {
+  border:1px solid var(--line); background:var(--raised); color:var(--ink-2);
+  border-radius:8px; padding:9px 14px; font:inherit; font-size:13.5px; cursor:pointer; min-height:40px;
 }
-.grouphead:first-child { margin-top: 4px; }
-.grouphead h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; }
-.grouphead .sub { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; font-variant-numeric: tabular-nums; }
+.cite button:hover { border-color:var(--accent); color:var(--ink); }
 
-/* -------------------------------------------------------------- tally strip */
-.tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; margin: 0 0 22px; }
-.tcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.tcard b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.tcard span { display: block; font-size: 12px; color: var(--ink-3); margin-top: 1px; }
-.tcard.acc b { color: var(--accent); } .tcard.flag b { color: var(--flag); }
-.tcard.ok b { color: var(--ok); } .tcard.warn b { color: var(--warn); }
-
-.note { background: var(--raised); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 15px; margin: 0 0 22px; font-size: 13.5px; color: var(--ink-2); max-width: 78ch; }
-.note strong { color: var(--ink); }
+pre.pre {
+  font-family:var(--mono); font-size:11.5px; line-height:1.55; margin:0;
+  overflow-x:auto; color:var(--ink-2); background:var(--raised);
+  border:1px solid var(--hair); border-radius:9px; padding:12px 14px;
+}
+.tier { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; padding:9px 0; border-top:1px solid var(--hair); font-size:14px; }
+.tier .t { font-family:var(--mono); font-size:11.5px; color:var(--ink-3); padding-top:2px; }
+.tier .x { color:var(--ink-2); line-height:1.5; }
+.tier .m { grid-column:2; }
+.empty { padding:50px 0; text-align:center; color:var(--ink-3); font-size:15px; }
 
 .toast {
-  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 14px);
-  background: var(--ink); color: var(--ground); padding: 9px 16px; border-radius: 8px;
-  font-family: var(--mono); font-size: 12.5px; opacity: 0; pointer-events: none;
-  transition: opacity .16s ease, transform .16s ease; z-index: 40;
+  position:fixed; left:50%; bottom:22px; transform:translate(-50%,12px);
+  background:var(--ink); color:var(--ground); padding:11px 18px; border-radius:9px;
+  font-size:14px; opacity:0; pointer-events:none; transition:opacity .16s, transform .16s; z-index:50;
 }
-.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.toast.on { opacity:1; transform:translate(-50%,0); }
 
-
-/* ---------------------------------------------------------------- panels */
-.panel { display: grid; gap: 18px; max-width: 900px; }
-.panel h3 { font-size: 13px; letter-spacing: .02em; color: var(--ink); margin-bottom: 2px; }
-.panel p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 68ch; }
-.block { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px 17px; box-shadow: var(--shadow); }
-.block > h3 { margin-bottom: 9px; }
-pre.tree, pre.tpl {
-  font-family: var(--mono); font-size: 11.5px; line-height: 1.55; margin: 0;
-  overflow-x: auto; color: var(--ink-2); background: var(--raised);
-  border: 1px solid var(--line-soft); border-radius: 8px; padding: 13px 15px;
+/* ------------------------------------------------------------- responsive */
+@media (min-width:760px) {
+  body { font-size:15px; }
+  :root { --pad:24px; }
+  .find input { font-size:14px; padding:9px 12px 9px 33px; }
+  .hero h1 { font-size:27px; }
 }
-table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
-table.grid th {
-  text-align: left; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--ink-3); font-weight: 500;
-  padding: 0 10px 7px 0; border-bottom: 1px solid var(--line);
+@media (max-width:759px) {
+  nav { top:61px; }
+  .brand small { display:none; }
+  .kv { grid-template-columns:1fr; gap:2px; }
+  .kv dt { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; }
 }
-table.grid td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: top; }
-table.grid tr:last-child td { border-bottom: 0; }
-table.grid td.k { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
-.scroll { overflow-x: auto; }
-
-/* ladder rows: the tier is the structure, the marker is the state */
-.tier { display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
-.tier:last-child { border-bottom: 0; }
-.tier .t { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
-.tier .x { color: var(--ink-2); }
-.t0 { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 8px; padding: 11px 13px; font-size: 13.5px; color: var(--ink-2); margin-bottom: 10px; }
-.t0 b { color: var(--accent); font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; display: block; margin-bottom: 3px; }
-
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-@media (max-width: 640px) {
-  .row { grid-template-columns: 1fr; gap: 7px; }
-  .dfield { grid-template-columns: 1fr; gap: 3px; }
-  .tabs { top: 96px; }
-}
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
 <script>window.__DATA__=/*__DATA__*/null/*__DATA__*/;</script>
 <header class="top">
   <div class="top-in">
-    <div class="brand">
-      <b>BudgetSplit System Map</b>
-      <span>docs/SYSTEM.md · 2026-09-01</span>
-    </div>
+    <div class="brand">System Map<small>BudgetSplit · docs/SYSTEM.md</small></div>
     <div class="find">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
-        <circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path>
       </svg>
-      <input id="q" type="search" placeholder="E-04 · settlement · FL-06.E7 · balance" aria-label="Filter by id or text" autocomplete="off" spellcheck="false">
+      <input id="q" type="search" placeholder="Search anything" aria-label="Search" autocomplete="off" spellcheck="false">
     </div>
-    <span class="hint" id="count"></span>
-    <button class="tbtn" id="theme" type="button" aria-label="Switch theme">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <button class="iconbtn" id="theme" type="button" aria-label="Switch theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
         <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
       </svg>
     </button>
   </div>
 </header>
 
-<nav class="tabs" aria-label="Sections">
-  <div class="tabs-in" id="tabs" role="tablist"></div>
+<nav>
+  <div class="nav-in">
+    <p class="navlabel">What the app does</p>
+    <div class="navrow" id="navAreas"></div>
+    <p class="navlabel" style="margin-top:9px">Across the whole app</p>
+    <div class="navrow" id="navCross"></div>
+  </div>
 </nav>
 
-<main>
-  <div id="lede"></div>
-  <div id="view" class="rows"></div>
-</main>
-
+<main id="main"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const D = window.__DATA__;
 
-/* Twelve tabs for thirteen sections: §0 and §1 share the Overview panel. A section
-   is either a list of citable rows or a prose panel; nothing else. */
-
-const VERDICT = {
-  'COLLAPSE':             { cls: 'acc',  label: 'collapse' },
-  'COLLAPSE-AFTER-PILOT': { cls: 'flag', label: 'after pilot' },
-  'RENAME-ONLY':          { cls: 'ok',   label: 'rename only' },
-  'KEEP-DOCUMENTED':      { cls: 'ok',   label: 'keep, documented' },
-  'NEEDS-DECISION':       { cls: 'warn', label: 'needs decision' },
-};
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/* Markdown leaks through from the source doc; render the marks that carry meaning. */
-const md = s => esc(s)
+
+/* Two different jobs, and conflating them is what made the first cut unreadable.
+ *
+ * A LIST of ids ("E-06 · E-07 · E-08") is pure address and reads far better as
+ * names. Substitute there.
+ *
+ * PROSE is not. "who paid and who owes are E-06 and E-07" becomes "who paid and
+ * who owes are who paid and who owes" the moment you substitute blindly — the
+ * sentence already said the thing the id points at. So in prose the ids stay, but
+ * they stop shouting: trailing pointer tails ("IV-04, OV-03.") are dropped
+ * outright, and what remains is set quietly. */
+const ID = /\b(?:E|SC|FL|AX|FE|SN|IV|OV|DQ)-\d+[a-z]?(?:\.[A-Za-z0-9]+)?\b/g;
+
+const humanList = s => String(s || '')
+  .split('·').map(x => x.trim()).filter(Boolean)
+  .map(x => x.replace(ID, m => D.names[m] || m))
+  .join(' · ');
+
+const mark = s => s
   .replace(/`([^`]+)`/g, '<code>$1</code>')
   .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   .replace(/~~([^~]+)~~/g, '<s>$1</s>')
   .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
-const bar = (n, max, hot) => {
-  if (n == null) return '';
-  const w = Math.max(3, Math.round((n / max) * 68));
-  return `<span class="bar ${n === 0 ? 'zero' : (hot ? 'hot' : '')}"><i style="width:${w}px"></i>${n}</span>`;
+const md = s => mark(esc(String(s || '')
+    /* A trailing sentence that is NOTHING but cross-references is noise; the ids
+       live on the rows themselves. The lookbehind is load-bearing — without it
+       this also eats the "E-07" out of "who paid and who owes are E-06 and E-07",
+       which is a reference doing real grammatical work. */
+    .replace(/(?<=\.)\s*(?:[A-Z]{1,4}-\d+[a-z]?[,\s]*)+\.\s*$/g, '')
+    /* A parenthetical id is pure aside — the sentence always reads without it. */
+    .replace(/\s*\((?:[A-Z]{1,4}-\d+[a-z]?[,;\s]*)+\)/g, '')
+    /* "SN-06.T4a" is a scenario nobody can look up in their head. */
+    .replace(/\bSN-(\d+)\.(T\d[a-z]?)\b/g,
+      (m, n, tier) => (D.names['SN-' + n] ? `${D.names['SN-' + n]}, case ${tier}` : m))
+    .replace(/\s{2,}/g, ' ')
+    .trim()))
+  .replace(ID, m => `<span class="ref">${m}</span>`);
+
+/* Sub-ids are how you cite one step or one failure, so keep them — but as a quiet
+   marker beside the line, not inline in the sentence. */
+const splitSub = v => String(v || '')
+  .split(/\s+(?=\.(?:S|FM|B|E|T)\d)/)
+  .map(x => x.trim()).filter(Boolean)
+  .map(x => {
+    const m = x.match(/^\.((?:S|FM|B|E|T)\d+[a-z]?)\s+([\s\S]*)$/);
+    return m ? { sub: m[1], text: m[2] } : { sub: '', text: x };
+  });
+
+const VERDICT = {
+  'COLLAPSE':             ['acc',  'fix it'],
+  'COLLAPSE-AFTER-PILOT': ['flag', 'after the pilot'],
+  'RENAME-ONLY':          ['ok',   'just a rename'],
+  'KEEP-DOCUMENTED':      ['ok',   'fine as it is'],
+  'NEEDS-DECISION':       ['warn', 'needs a decision'],
 };
-const field = (k, v) => v ? `<div class="dfield"><dt>${esc(k)}</dt><dd>${md(v)}</dd></div>` : '';
-/* `· a · b · c` renders as a list, not a paragraph, wherever the doc uses bullets. */
-const fieldList = (k, v) => {
-  if (!v) return '';
-  const parts = v.split('·').map(x => x.trim()).filter(Boolean);
-  if (parts.length < 2) return field(k, v);
-  return `<div class="dfield"><dt>${esc(k)}</dt><dd><ul class="isnot">${
+function featTag(state) {
+  const s = state || '';
+  if (/never run|unproven/i.test(s)) return ['warn', 'never tested on a phone'];
+  if (/dead|broken/i.test(s)) return ['warn', 'not working'];
+  if (/partly/i.test(s)) return ['warn', 'partly working'];
+  if (/parked|dropped|does not exist/i.test(s)) return ['flag', 'not built'];
+  if (/blocked/i.test(s)) return ['flag', 'blocked'];
+  if (/server-gated/i.test(s)) return ['flag', 'needs an account'];
+  const f = s.match(/flag:`?(\w+)`?/);
+  if (f) return ['acc', /off/i.test(s) ? 'switchable, off' : 'switchable'];
+  return ['ok', 'on'];
+}
+
+const kv = (k, v) => v ? `<div class="kv"><dt>${esc(k)}</dt><dd>${md(v)}</dd></div>` : '';
+const kvList = (k, v, cls) => {
+  const parts = humanList(v).split('·').map(x => x.trim()).filter(Boolean);
+  if (!parts.length) return '';
+  if (parts.length === 1) return kv(k, parts[0]);
+  return `<div class="kv ${cls || ''}"><dt>${esc(k)}</dt><dd><ul>${
     parts.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>`;
 };
-const grid = (head, body) => `<div class="scroll"><table class="grid"><thead><tr>${
-  head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+/* Steps, branches and failure modes: one line each, sub-id kept for citing. */
+const kvSteps = (k, v, cls) => {
+  const parts = splitSub(v);
+  if (!parts.length) return '';
+  if (parts.length === 1 && !parts[0].sub) return kv(k, v);
+  return `<div class="kv ${cls || ''}"><dt>${esc(k)}</dt><dd><ul class="steps">${
+    parts.map(p => `<li>${p.sub ? `<span class="sub-id">${esc(p.sub)}</span>` : ''}${md(p.text)}</li>`)
+      .join('')}</ul></dd></div>`;
+};
+const kvArr = (k, arr, cls) => !arr || !arr.length ? '' :
+  `<div class="kv ${cls || ''}"><dt>${esc(k)}</dt><dd><ul>${
+    arr.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>`;
 
-/* A ladder marker is state, so it renders as state. */
-function marker(s) {
-  const cls = s.startsWith('✅') ? 'ok' : s.startsWith('🔍') ? 'acc' : s.startsWith('❌') ? 'warn' : '';
-  return `<span class="pill ${cls}">${esc(s)}</span>`;
+/* One item shape everywhere: headline, optional sub, tags, an expandable body. */
+function item({ id, h, sub, tags, body }) {
+  return `<details class="item"><summary>
+      <span class="h">${h}</span>
+      <span class="idtag">${esc(id)}</span>
+      ${sub ? `<span class="sub">${sub}</span>` : ''}
+      ${tags && tags.length ? `<span class="tags">${tags.filter(Boolean).map(([c, t]) =>
+        `<span class="tag ${c}">${esc(t)}</span>`).join('')}</span>` : ''}
+    </summary>
+    <div class="body">${body || ''}
+      <div class="cite"><button type="button" data-cite="${esc(id)}">Copy issue template</button></div>
+    </div></details>`;
+}
+const group = (title, count, inner, open, note) => !inner ? '' : `
+  <details class="grp"${open ? ' open' : ''}><summary>
+    <svg class="caret" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg>
+    ${esc(title)}<span class="cnt">${count}</span></summary>
+    ${note ? `<p class="grp-note">${note}</p>` : ''}${inner}</details>`;
+
+/* ------------------------------------------------------------- item bodies */
+const byId = (arr) => Object.fromEntries(arr.map(x => [x.id, x]));
+const ENT = byId(D.entities), FL = byId(D.flows), SC = byId(D.screens),
+      FE = byId(D.feats), OV = byId(D.ovs), DQ = byId(D.dqs);
+
+const entItem = e => item({
+  id: e.id, h: esc(e.friendly), sub: `<span class="mono">${esc(e.name)}</span>${e.gloss ? ' — ' + md(e.gloss) : ''}`,
+  tags: [e.aliasWord ? ['warn', `also called ${e.aliasWord} other things`] : null,
+         e.kind === 'derived' ? ['flag', 'not stored — recomputed'] : null,
+         e.kind === 'external' ? ['flag', 'outside the database'] : null],
+  body: kvArr('What it is not', e.isNot, 'no') + kv('Stored', e.storage) + kv('Identified by', e.identity)
+      + kv('Belongs to', e.owned) + kv('Scopes', e.scopes) + kvList('Points at', e.refs)
+      + kvList('Pointed at by', e.refBy) + kv('Life', e.lifecycle) + kv('Created by', e.create)
+      + kv('Edited by', e.edit) + kv('Deleted by', e.del) + kv('Syncs', e.sync)
+      + kv('Note', e.reading) + kv('Other names', e.aliases) + kvList('Seen on', e.surfaces)
+      + kvList('Rules', e.invariants) + kvList('Problems', e.open),
+});
+const flItem = f => item({
+  id: f.id, h: esc(f.name), sub: f.trigger ? md(f.trigger) : (f.summary ? md(f.summary.slice(0, 160)) : ''),
+  tags: [f.entries != null ? ['', `${f.entries} way${f.entries === 1 ? '' : 's'} in`] : null,
+         f.params ? ['warn', `${f.params} parameters`] : null],
+  body: kvSteps('Where you start', f.entry) + kv('Needs first', f.pre) + kvSteps('Steps', f.steps)
+      + kv('Touches', f.ents) + kv('Writes', f.writes) + kv('Ends up', f.exit)
+      + kvSteps('Other paths', f.branches) + kvSteps('What goes wrong', f.failures, 'no')
+      + kv('Undo', f.reversible) + kvList('Known problems', f.problems) + kv('In short', f.summary),
+});
+const scItem = s => item({
+  id: s.id, h: `<span class="mono">${esc(s.route)}</span>`, sub: s.purpose ? md(s.purpose) : '',
+  tags: [s.entries === 0 ? ['flag', 'deep link only'] : s.entries === 1 ? ['warn', 'one way in']
+        : s.entries != null ? ['', `${s.entries} ways in`] : null],
+  body: kv('Note', s.note),
+});
+const feItem = f => { const [c, t] = featTag(f.state); return item({
+  id: f.id, h: esc(f.name), tags: [[c, t]],
+  body: kv('State', f.state) + kvList('Where', f.where) + kvList('Uses', f.ents) }); };
+const ovItem = o => { const v = VERDICT[o.verdict] || ['', o.verdict || '—']; return item({
+  id: o.id, h: md(o.title), tags: [v, o.kind ? ['', o.kind.replace(/-/g, ' ')] : null],
+  body: kvList('The things', o.detail) + kv('How we know', o.evidence) + kv('What it costs today', o.cost)
+      + kv('What to do', o.collapse) + kv('How big', o.blast) + kv('Risk', o.risk)
+      + kv('Verdict', o.verdictNote) + kv('When it becomes urgent', o.trigger) + kv('Note', o.note) }); };
+const dqItem = d => item({
+  id: d.id, h: md(d.q), tags: [d.closed ? ['ok', 'settled'] : null],
+  body: kv(d.group === 'blocked' ? 'Waiting on' : 'What happens if nobody decides', d.fallback)
+      + kv(d.group === 'blocked' ? 'Effect today' : 'What forces the decision', d.trigger),
+});
+const ivItem = v => { const mech = !/unenforced/i.test(v.heldBy); return item({
+  id: v.id, h: md(v.rule), tags: [mech ? ['ok', 'a test enforces this'] : ['warn', 'nothing enforces this']],
+  body: kv('Held by', v.heldBy) + kvList('Applies to', v.on) }); };
+const axItem = a => item({
+  id: a.id, h: esc(a.name), sub: esc(a.values), body: kv('Why it matters', a.why) });
+
+/* ---------------------------------------------------------------- the views */
+function areaView(a, q) {
+  const pick = (ids, map) => ids.map(i => map[i]).filter(Boolean).filter(x => match(x, q));
+  const fe = pick(a.fe, FE), fl = pick(a.fl, FL), sc = pick(a.sc, SC),
+        ent = pick(a.ent, ENT), ov = pick(a.ov, OV), dq = pick(a.dq, DQ);
+  const total = fe.length + fl.length + sc.length + ent.length + ov.length + dq.length;
+  if (q && !total) return '';
+  return `<section class="hero">
+      <h1>${esc(a.name)}</h1>
+      <p>${esc(a.blurb)}</p>
+    </section>
+    ${group('What it does', fe.length, fe.map(feItem).join(''), !q,
+        'Every capability in this area, and whether it actually works today.')}
+    ${group('How you do it', fl.length, fl.map(flItem).join(''), false,
+        'Each task end to end — where you start, the steps, and what goes wrong.')}
+    ${group('Screens', sc.length, sc.map(scItem).join(''), false)}
+    ${group('The things involved', ent.length, ent.map(entItem).join(''), false,
+        'The nouns. Each one says what it is <em>not</em>, which is where the confusion usually is.')}
+    ${group("What's confusing here", ov.length, ov.map(ovItem).join(''), !!q,
+        'Duplication and overload, each with a verdict.')}
+    ${group("What's undecided", dq.length, dq.map(dqItem).join(''), false,
+        'Open questions, and what happens if nobody ever answers them.')}`;
 }
 
-const maxFlow = Math.max(...D.flows.map(f => f.entries || 0));
-const maxScr = Math.max(...D.screens.map(s => s.entries || 0));
-
-/* ------------------------------------------------------------------ panels */
-function overviewPanel() {
-  return `<div class="panel">
-    <div class="block">
-      <h3>How to cite something</h3>
-      <p>Every entry has an id. Cite it and say what is wrong; the prose can change under it.</p>
-      <pre class="tpl">${esc(D.issueTpl)}</pre>
-      <h3 style="margin-top:14px">Addressing a part of a flow</h3>
-      <pre class="tpl">${esc(D.subIds)}</pre>
-    </div>
-    <div class="block">
-      <h3>The nine namespaces</h3>
-      ${grid(['id', 'is', 'example', 'answers'], D.legend.map(l =>
-        `<tr><td class="k">${esc(l.p)}-</td><td>${md(l.is)}</td><td>${md(l.eg)}</td><td>${md(l.answers)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>Which section answers which question</h3>
-      ${grid(['question', 'section'], D.router.map(r =>
-        `<tr><td>${md(r.q)}</td><td class="k">${esc(r.s)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>Three money worlds</h3>
-      ${grid(['world', 'answers', 'root entities'], D.worlds.map(w =>
-        `<tr><td class="k">${esc(w.w)}</td><td>${md(w.q)}</td><td>${md(w.e)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>What it deliberately is not</h3>
-      <ul class="isnot">${D.notList.map(n =>
-        `<li><strong>${md(n.what)}</strong> ${md(n.why)}</li>`).join('')}</ul>
-    </div>
-    <div class="block">
-      <h3>Everything that leaves the device</h3>
-      <p>Nothing else. No analytics SDK, no crash reporter, no ad network.</p>
-      ${grid(['destination', 'what', 'when', 'gate'], D.egress.map(e =>
-        `<tr><td class="k">${md(e.to)}</td><td>${md(e.what)}</td><td>${md(e.when)}</td><td>${md(e.gate)}</td></tr>`).join(''))}
-    </div>
-  </div>`;
+function match(x, q) {
+  if (!q) return true;
+  const base = q.replace(/^([a-z]{1,2}-\d+)\..*$/i, '$1');
+  const hay = JSON.stringify(x).toLowerCase();
+  return hay.includes(q) || hay.includes(base);
 }
 
-function relationsPanel() {
-  return `<div class="panel">
-    <div class="block">
-      <h3>Ownership</h3>
-      <p>Two roots. Everything else hangs off one of them, or off nothing.</p>
-      <pre class="tree">${esc(D.tree)}</pre>
-    </div>
-    <div class="block">
-      <h3>Cascade and lifetime — what a delete actually does</h3>
-      <p>Written from the code that deletes, not the schema: <code>PRAGMA foreign_keys</code> is
-         <strong>off</strong>, so no <code>REFERENCES</code> clause does anything at runtime. Every
-         rule below is a hand-written statement somebody has to remember.</p>
-      ${grid(['delete', 'what happens to children', 'where'], D.cascade.map(c =>
-        `<tr><td class="k">${esc(c.id)} ${esc(c.verb)}</td><td>${md(c.effect)}</td><td class="k">${md(c.where)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>Cardinality</h3>
-      ${grid(['from', '', 'to', 'note'], D.cardinality.map(c =>
-        `<tr><td class="k">${esc(c.from)} ${esc(c.fromName)}</td><td>${md(c.card)}</td><td class="k">${esc(c.to)} ${esc(c.toName)}</td><td>${md(c.note)}</td></tr>`).join(''))}
-      <p style="margin-top:11px"><strong>E-50 has no row here.</strong> Balances are derived on
-         every read. The only stored fact about a debt is the deliberate write-off.</p>
-    </div>
-  </div>`;
-}
+const CROSS = {
+  problems: {
+    label: 'Problems', n: D.ovs.length,
+    view: q => {
+      const order = ['COLLAPSE', 'COLLAPSE-AFTER-PILOT', 'RENAME-ONLY', 'KEEP-DOCUMENTED', 'NEEDS-DECISION'];
+      const heads = { 'COLLAPSE': 'Fix these', 'COLLAPSE-AFTER-PILOT': 'Fix after the pilot',
+        'RENAME-ONLY': 'Only the names are wrong', 'KEEP-DOCUMENTED': 'Looks wrong, is fine',
+        'NEEDS-DECISION': 'Cannot fix until something is decided' };
+      const items = D.ovs.filter(o => match(o, q));
+      return `<section class="hero"><h1>What's confusing, and what to do</h1>
+          <p>Twenty-seven findings. Twelve of them need no code at all — the app is less over-built
+             than it feels and more under-named.</p>
+          <div class="stat">
+            <div><b>4</b>fix now</div><div><b>5</b>after the pilot</div>
+            <div><b>12</b>naming only</div><div><b>6</b>need a decision</div>
+          </div></section>
+        ${order.map(v => {
+          const g = items.filter(o => o.verdict === v);
+          return group(heads[v], g.length, g.map(ovItem).join(''), v === 'COLLAPSE' || !!q);
+        }).join('')}`;
+    },
+  },
+  decisions: {
+    label: 'Decisions', n: D.dqs.length,
+    view: q => {
+      const heads = { product: 'Product and business', technical: 'Technical',
+        blocked: 'Waiting on someone else' };
+      const items = D.dqs.filter(d => match(d, q));
+      return `<section class="hero"><h1>What has not been decided</h1>
+          <p>Thirty questions, twenty-nine still open. Each says what happens if nobody ever answers
+             it — because most will not be answered, and the default is what ships.</p></section>
+        ${['product', 'technical', 'blocked'].map(gk => {
+          const g = items.filter(d => d.group === gk);
+          return group(heads[gk], g.length, g.map(dqItem).join(''), gk === 'product' || !!q);
+        }).join('')}`;
+    },
+  },
+  rules: {
+    label: 'Rules', n: D.ivs.length,
+    view: q => {
+      const items = D.ivs.filter(v => match(v, q));
+      const hard = items.filter(v => !/unenforced/i.test(v.heldBy));
+      const soft = items.filter(v => /unenforced/i.test(v.heldBy));
+      return `<section class="hero"><h1>Rules that must never be false</h1>
+          <p>Nine are enforced by a test that reads the real source. The rest are enforced by people
+             remembering — worth knowing before you rely on one.</p></section>
+        ${group('A test enforces these', hard.length, hard.map(ivItem).join(''), true)}
+        ${group('Nothing enforces these', soft.length, soft.map(ivItem).join(''), !!q)}`;
+    },
+  },
+  scenarios: {
+    label: 'Scenarios', n: D.ladders.length + D.laddersCompact.length,
+    view: q => {
+      const mk = s => {
+        const c = s.startsWith('✅') ? 'ok' : s.startsWith('🔍') ? 'acc' : s.startsWith('❌') ? 'warn' : '';
+        const t = s.startsWith('✅') ? 'tested' : s.startsWith('🔍') ? 'checked by hand'
+                : s.startsWith('❌') ? 'known broken' : 'nobody has checked';
+        return `<span class="tag ${c}">${esc(t)}</span>`;
+      };
+      const lad = D.ladders.filter(l => match(l, q));
+      return `<section class="hero"><h1>What happens when it goes wrong</h1>
+          <p>Each case is <em>generated</em> — cross a task with the things that vary and the rows
+             fall out, so a gap is visible rather than merely absent. Ordinary first, then two
+             people, then bad input, then the cases the database allows and the screens forbid.</p>
+          </section>
+        ${lad.map(l => group(l.name, l.rows.length || 1,
+          (l.t0 ? `<div class="body"><div class="kv"><dt>Normal</dt><dd>${md(l.t0)}</dd></div></div>` : '')
+          + (l.rows.length ? `<div class="body">${l.rows.map(r =>
+              `<div class="tier"><span class="t">${esc(r.t)}</span><span class="x">${md(r.text)}</span>
+               <span class="m">${mk(r.status)}</span></div>`).join('')}</div>`
+            : `<div class="body"><pre class="pre">${esc(l.raw || '')}</pre></div>`), false)).join('')}
+        ${group('Every other task, and where it misbehaves', D.crossings.length,
+          `<div class="body">${D.crossings.filter(c => match(c, q)).map(c =>
+            `<div class="kv"><dt>${esc(c.name)}</dt><dd>${md(c.bites)}</dd></div>`).join('')}</div>`, !!q)}`;
+    },
+  },
+  reference: {
+    label: 'Reference', n: 0,
+    view: q => `<section class="hero"><h1>Reference</h1>
+        <p>How to cite something, what the app is, what leaves the device, and what happens to the
+           data when you delete things.</p></section>
+      ${group('How to file an issue', 1, `<div class="body">
+        <p style="color:var(--ink-2);font-size:14px;margin-bottom:10px">Open any entry, press
+        <strong>Copy issue template</strong>, and fill it in. The id is the shared name — the wording
+        under it can change without breaking your reference.</p>
+        <pre class="pre">${esc(D.issueTpl)}</pre>
+        <p style="color:var(--ink-2);font-size:14px;margin:12px 0 8px">You can point at part of a task, too:</p>
+        <pre class="pre">${esc(D.subIds)}</pre></div>`, true)}
+      ${group('What the app is for', D.worlds.length, `<div class="body">${
+        D.worlds.map(w => `<div class="kv"><dt>${esc(w.w)}</dt><dd>${md(w.q)}</dd></div>`).join('')}</div>`, false)}
+      ${group('What it deliberately is not', D.notList.length, `<div class="body">${
+        D.notList.map(n => `<div class="kv"><dt>${esc(n.what.replace(/^Not /, 'Not '))}</dt><dd>${md(n.why)}</dd></div>`).join('')}</div>`, false)}
+      ${group('Everything that leaves the device', D.egress.length, `<div class="body">
+        <p style="color:var(--ink-2);font-size:14px;margin-bottom:8px">Nothing else. No analytics, no
+        crash reporter, no ad network.</p>${
+        D.egress.map(e => `<div class="kv"><dt>${md(e.to)}</dt><dd>${md(e.what)} — ${md(e.when)}</dd></div>`).join('')}</div>`, false)}
+      ${group('What a delete actually destroys', D.cascade.length, `<div class="body">
+        <p style="color:var(--ink-2);font-size:14px;margin-bottom:8px">Written from the code that
+        deletes, not the schema: foreign keys are <strong>off</strong>, so every rule here is a
+        hand-written statement somebody has to remember.</p>${
+        D.cascade.map(c => `<div class="kv"><dt>${esc(D.names[c.id] || c.id)} ${esc(c.verb)}</dt><dd>${md(c.effect)}</dd></div>`).join('')}</div>`, false)}
+      ${group('How things are connected', 1, `<div class="body"><pre class="pre">${esc(D.tree)}</pre></div>`, false)}
+      ${group('Things that vary', D.axes.length, D.axes.map(axItem).join(''), false,
+        'The dimensions every task is tested across.')}
+      ${group('What replaced what', D.supersede.length, `<div class="body">${
+        D.supersede.map(s => `<div class="kv"><dt>${md(s.was)}</dt><dd>${md(s.now)}</dd></div>`).join('')}</div>`, false)}
+      ${group('What keeps this page honest', D.guards.length, `<div class="body">
+        <p style="color:var(--ink-2);font-size:14px;margin-bottom:8px">Eight tests bind this to the
+        code. None can tell whether the words are <em>true</em> — only that they match the code's shape.</p>${
+        D.guards.map(g => `<div class="kv"><dt><code>${esc(g.file)}</code></dt><dd>${md(g.holds)}</dd></div>`).join('')}</div>`, false)}`,
+  },
+};
 
-function scenarioPanel(q) {
-  const hit = l => !q || (l.id + ' ' + l.name + ' ' + l.rows.map(r => r.text).join(' ') + ' ' + (l.raw || '')).toLowerCase().includes(q);
-  const ladders = D.ladders.filter(hit);
-  const cross = D.crossings.filter(c => !q || (c.id + ' ' + c.name + ' ' + c.bites).toLowerCase().includes(q));
-  return `<div class="panel">
-    ${ladders.map(l => `<div class="block">
-      <h3>${esc(l.id)} · ${esc(l.name)}</h3>
-      ${l.t0 ? `<div class="t0"><b>T0 — NOMINAL</b>${md(l.t0)}</div>` : ''}
-      ${l.rows.map(r => `<div class="tier"><span class="t">.${esc(r.t)}</span><span class="x">${md(r.text)}</span>${marker(r.status)}</div>`).join('')}
-      ${l.raw ? `<pre class="tree">${esc(l.raw)}</pre>` : ''}
-    </div>`).join('')}
-    ${D.laddersCompact.filter(l => !q || (l.id + l.text).toLowerCase().includes(q)).map(l => `<div class="block">
-      <h3>${esc(l.id)}</h3><pre class="tree">${esc(l.text)}</pre></div>`).join('')}
-    ${cross.length ? `<div class="block">
-      <h3>The remaining ladders — the crossings that bite</h3>
-      ${grid(['ladder', 'flow', 'where it misbehaves'], cross.map(c =>
-        `<tr><td class="k">${esc(c.id)}${c.also ? '/' + esc(c.also) : ''}</td><td>${md(c.name)}</td><td>${md(c.bites)}</td></tr>`).join(''))}
-    </div>` : ''}
-  </div>`;
-}
-
-function idmapPanel() {
-  return `<div class="panel">
-    <div class="block">
-      <h3>What replaced what</h3>
-      ${grid(['was', 'now'], D.supersede.map(s =>
-        `<tr><td class="k">${md(s.was)}</td><td>${md(s.now)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>The guards</h3>
-      <p>Eight tests bind this document to the code. What none of them do is check that the prose is
-         <em>true</em> — they check that it is consistent with the code's shape.</p>
-      ${grid(['test', 'holds'], D.guards.map(g =>
-        `<tr><td class="k">${esc(g.file)}</td><td>${md(g.holds)}</td></tr>`).join(''))}
-    </div>
-    <div class="block">
-      <h3>Screen and flow ids are unchanged</h3>
-      <p><code>S-19</code> is <code>SC-19</code>; <code>FLOW-04</code> is <code>FL-04</code>. Old
-         citations resolve. <code>SC-42</code>, <code>SC-43</code> and <code>SC-44</code> are new —
-         <code>/assets</code>, <code>/settings/sync</code> and <code>/settings/sync-log</code> had
-         no id and no behaviour section anywhere before this document.</p>
-    </div>
-  </div>`;
-}
-
-/* ------------------------------------------------------------------ sections */
-const SECTIONS = [
-  { key: 'about', label: 'Overview', panel: overviewPanel },
-
-  { key: 'ov', label: 'Complexity', n: D.ovs.length,
-    lede: `<p class="lede"><strong>The section that answers "we have made too many complicated flows."</strong> Every finding carries a verdict. Twelve of the 27 close as <em>rename only</em> or <em>keep, documented</em> — at zero code risk. That is the useful result: the app is less over-built than it feels and more under-named.</p>`,
-    tally: [['acc', 4, 'collapse now'], ['flag', 5, 'after the pilot'], ['ok', 12, 'vocabulary only'], ['warn', 6, 'need a decision']],
-    groupBy: o => VERDICT[o.verdict] ? VERDICT[o.verdict].label : 'unclassified',
-    order: ['collapse', 'after pilot', 'rename only', 'keep, documented', 'needs decision'],
-    row: o => ({
-      id: o.id, title: md(o.title),
-      pills: [VERDICT[o.verdict] ? { cls: VERDICT[o.verdict].cls, t: VERDICT[o.verdict].label } : null,
-              o.kind ? { cls: '', t: o.kind.replace(/-/g, ' ') } : null],
-      detail: fieldList('The things', o.detail) + field('Evidence', o.evidence) + field('Cost today', o.cost)
-            + field('Proposal', o.collapse) + field('Blast radius', o.blast) + field('Risk', o.risk)
-            + field('Verdict', o.verdictNote) + field('Trigger', o.trigger) + field('Note', o.note),
-      text: [o.title, o.kind, o.verdict, o.detail, o.evidence, o.cost, o.collapse].join(' '),
-    }) },
-
-  { key: 'ent', label: 'Entities', n: D.entities.length,
-    lede: `<p class="lede"><strong>53 nouns, and what each one is not.</strong> The <em>is not</em> field is where a concept gets fenced off from the others wearing its name — and where the hardest questions in this app came from. A field left empty is information: an entity that references nothing is a leaf, one whose sync line is blank cannot travel.</p>`,
-    tally: [['acc', 22, 'in SQLite'], ['flag', 18, 'derived, no table'], ['ok', 13, 'device or wire']],
-    groupBy: e => ({ table: 'Stored in SQLite', derived: 'Derived — no table', external: 'Device, external or wire' })[e.kind],
-    order: ['Stored in SQLite', 'Derived — no table', 'Device, external or wire'],
-    row: e => ({
-      id: e.id, title: `<span class="nm">${esc(e.name)}</span>`, gloss: e.gloss,
-      pills: [e.kind === 'derived' ? { cls: 'flag', t: 'derived' } : null,
-              e.kind === 'external' ? { cls: '', t: 'off-database' } : null,
-              e.aliasWord ? { cls: 'warn', t: e.aliasWord + ' names' } : null],
-      detail: (e.isNot.length ? `<div class="dfield"><dt>Is not</dt><dd><ul class="isnot">${
-                 e.isNot.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>` : '')
-            + field('Storage', e.storage) + field('Identity', e.identity) + field('Owned by', e.owned)
-            + field('Scopes', e.scopes) + fieldList('References', e.refs) + fieldList('Referenced by', e.refBy)
-            + field('Lifecycle', e.lifecycle) + field('Create', e.create) + field('Edit', e.edit)
-            + field('Delete', e.del) + field('Sync', e.sync) + field('Note', e.reading)
-            + field('Also called', e.aliases) + fieldList('Surfaces', e.surfaces)
-            + fieldList('Invariants', e.invariants) + field('Open', e.open),
-      text: [e.name, e.gloss, e.isNot.join(' '), e.aliases, e.storage, e.sync, e.lifecycle].join(' '),
-    }) },
-
-  { key: 'rel', label: 'Relations', panel: relationsPanel },
-
-  { key: 'fl', label: 'Flows', n: D.flows.length,
-    lede: `<p class="lede"><strong>54 verbs, each with the number of ways in.</strong> The count is a metric to watch fall. <code>FL-04</code> — add an expense — has 24 entry points and 11 parameters, and is the destination of every settle-up, every "log it", the daily-log notification and the Siri shortcut. A ceiling now holds it at 24. Steps are capped at nine: a flow needing a tenth is two flows.</p>`,
-    tally: [['warn', 24, 'ways into Add'], ['acc', 9, 'step cap per flow'], ['flag', 11, 'params on one screen']],
-    row: f => ({
-      id: f.id, title: esc(f.name),
-      pills: [f.params ? { cls: 'warn', t: f.params + ' params' } : null,
-              f.terse ? null : { cls: '', t: 'full entry' }],
-      right: bar(f.entries, maxFlow, f.entries >= 8),
-      detail: field('Trigger', f.trigger) + fieldList('Entry points', f.entry) + field('Preconditions', f.pre)
-            + fieldList('Steps', f.steps) + field('Entities', f.ents) + field('Writes', f.writes)
-            + field('Exit and back-stack', f.exit) + fieldList('Branches', f.branches)
-            + fieldList('Failure modes', f.failures) + field('Reversible', f.reversible)
-            + field('Known problems', f.problems) + field('Summary', f.summary),
-      text: [f.name, f.trigger, f.steps, f.branches, f.failures, f.problems, f.summary].join(' '),
-    }) },
-
-  { key: 'sn', label: 'Scenarios', panel: scenarioPanel,
-    lede: `<p class="lede"><strong>Every case for a flow, nominal to pathological.</strong> Rows are <em>generated</em>, not brainstormed: cross the flow with the axes and they fall out. That is what makes coverage checkable. Most are <code>❓</code> — the honest state of a suite with 2,221 passing tests and zero component-render coverage.</p>` },
-
-  { key: 'dq', label: 'Decisions', n: D.dqs.length,
-    lede: `<p class="lede"><strong>30 questions, 29 still open.</strong> Each names <em>the default if nobody ever decides</em> — because most of these will not be decided, and the default is what ships. A closed one is struck through and kept, never deleted, or every citation of it rots.</p>`,
-    tally: [['acc', 8, 'product'], ['flag', 15, 'technical'], ['warn', 7, 'blocked elsewhere']],
-    groupBy: d => ({ product: 'Product and business', technical: 'Technical', blocked: 'Blocked outside this repo' })[d.group],
-    order: ['Product and business', 'Technical', 'Blocked outside this repo'],
-    row: d => ({
-      id: d.id, title: md(d.q),
-      pills: [d.closed ? { cls: 'ok', t: 'closed' } : null],
-      detail: field(d.group === 'blocked' ? 'Owner' : 'Default if never decided', d.fallback)
-            + field(d.group === 'blocked' ? 'Consequence today' : 'Trigger', d.trigger),
-      text: [d.q, d.fallback, d.trigger].join(' '),
-    }) },
-
-  { key: 'sc', label: 'Screens', n: D.screens.length,
-    lede: `<p class="lede"><strong>44 routes, and how many ways there are into each.</strong> Two have none, correctly — they are deep-link landing pads. One has a single unlabeled icon, which is why nobody finds it.</p>`,
-    row: s => ({
-      id: s.id, title: `<span class="nm">${esc(s.route)}</span>`, gloss: s.purpose,
-      right: bar(s.entries, maxScr, s.entries >= 8),
-      detail: field('Entry points', s.entries === 0 ? 'None in the app. Reached only by deep link.'
-              : s.entries === 1 ? 'One. If it is unlabeled, this screen is effectively hidden.'
-              : `${s.entries} in the app.`) + field('Note', s.note),
-      text: [s.route, s.purpose, s.note].join(' '),
-    }) },
-
-  { key: 'ax', label: 'Axes', n: D.axes.length,
-    lede: `<p class="lede"><strong>Eleven questions you can ask of anything.</strong> These generate the scenario ladders rather than decorating them: cross a flow with an axis and the rows write themselves, so a ladder missing a crossing is a <em>visible</em> gap.</p>`,
-    row: a => ({
-      id: a.id, title: esc(a.name), gloss: a.values,
-      detail: field('Why it changes behaviour', a.why),
-      text: [a.name, a.values, a.why].join(' '),
-    }) },
-
-  { key: 'iv', label: 'Invariants', n: D.ivs.length,
-    lede: `<p class="lede"><strong>22 rules that must never be false.</strong> Read the <em>held by</em> column: nine are enforced by a test that reads the real source. The rest are enforced by people remembering, which is worth knowing before relying on one.</p>`,
-    row: v => {
-      const mech = !/unenforced/i.test(v.heldBy);
-      return { id: v.id, title: md(v.rule),
-        pills: [{ cls: mech ? 'ok' : 'warn', t: mech ? 'test-enforced' : 'by hand' }],
-        detail: field('Held by', v.heldBy) + fieldList('Constrains', v.on),
-        text: [v.rule, v.heldBy, v.on].join(' ') };
-    } },
-
-  { key: 'fe', label: 'Features', n: D.feats.length,
-    lede: `<p class="lede"><strong>70 capabilities and their real state.</strong> Flags are user preferences, never entitlements — there is no paywall anywhere in the app, and repurposing one as a gate is forbidden. Several features are complete, tested, and have never run on a phone.</p>`,
-    row: f => {
-      const s = f.state;
-      const cls = /never|unproven|dead|broken|partly/i.test(s) ? 'warn'
-                : /parked|blocked|dropped/i.test(s) ? 'flag'
-                : /flag:/i.test(s) ? 'acc' : 'ok';
-      return { id: f.id, title: esc(f.name),
-        pills: [{ cls, t: s.replace(/`|\*\*/g, '').split(',')[0].slice(0, 26) }],
-        detail: field('State', s) + fieldList('Where', f.where) + fieldList('Entities', f.ents),
-        text: [f.name, s, f.where].join(' ') };
-    } },
-
-  { key: 'map', label: 'ID map', panel: idmapPanel },
-];
-
-/* --------------------------------------------------------------- rendering */
-let active = 'ov';
-const tabs = document.getElementById('tabs');
-const view = document.getElementById('view');
-const lede = document.getElementById('lede');
-const countEl = document.getElementById('count');
+/* ------------------------------------------------------------------- shell */
+let active = D.AREAS[0].key;
+const main = document.getElementById('main');
 const qEl = document.getElementById('q');
 
-tabs.innerHTML = SECTIONS.map(s =>
-  `<button class="tab" role="tab" data-k="${s.key}" aria-selected="${s.key === active}">${esc(s.label)}${
-    s.n ? `<span class="n">${s.n}</span>` : ''}</button>`).join('');
-
-const DATA = { ov: D.ovs, ent: D.entities, fl: D.flows, dq: D.dqs, sc: D.screens, iv: D.ivs, fe: D.feats, ax: D.axes };
+document.getElementById('navAreas').innerHTML = D.AREAS.map(a =>
+  `<button class="chip" type="button" data-k="${a.key}" aria-pressed="${a.key === active}">${esc(a.name)}</button>`).join('');
+document.getElementById('navCross').innerHTML = Object.entries(CROSS).map(([k, c]) =>
+  `<button class="chip" type="button" data-k="${k}" aria-pressed="false">${esc(c.label)}${
+    c.n ? `<b>${c.n}</b>` : ''}</button>`).join('');
 
 function render() {
-  const sec = SECTIONS.find(s => s.key === active);
   const q = qEl.value.trim().toLowerCase();
-  /* A sub-id like FL-06.E7 should still find its flow. */
-  const base = q.replace(/^([a-z]{1,2}-\d+)\..*$/i, '$1');
+  document.querySelectorAll('.chip').forEach(c =>
+    c.setAttribute('aria-pressed', String(c.dataset.k === active)));
 
-  if (sec.panel) {
-    lede.innerHTML = q ? '' : (sec.lede || '');
-    view.innerHTML = sec.panel(q);
-    countEl.textContent = q ? 'filtered' : '';
+  if (q) {
+    /* A search is a question about the whole app, not the tab you happen to be on. */
+    const parts = D.AREAS.map(a => areaView(a, q)).filter(Boolean);
+    main.innerHTML = parts.length ? parts.join('') : `<p class="empty">Nothing matches “${esc(qEl.value)}”.</p>`;
     return;
   }
-
-  const src = DATA[sec.key];
-  const items = src.map(sec.row).filter(r => {
-    if (!q) return true;
-    const hay = (r.id + ' ' + (r.text || '')).toLowerCase();
-    return hay.includes(q) || hay.includes(base);
-  });
-  countEl.textContent = q ? `${items.length} of ${sec.n}` : `${sec.n} entries`;
-
-  let head = q ? '' : (sec.lede || '');
-  if (!q && sec.tally) {
-    head += `<div class="tally">${sec.tally.map(([c, n, l]) =>
-      `<div class="tcard ${c}"><b>${n}</b><span>${esc(l)}</span></div>`).join('')}</div>`;
-  }
-  lede.innerHTML = head;
-
-  if (!items.length) {
-    view.innerHTML = `<div class="empty"><p>Nothing matches &ldquo;${esc(qEl.value)}&rdquo;.</p></div>`;
-    return;
-  }
-
-  const card = r => `
-    <article class="row" tabindex="0" data-id="${r.id}">
-      <div class="rid">${esc(r.id)}</div>
-      <div class="rbody">
-        <div class="rtitle">${r.title}</div>
-        ${r.gloss ? `<div class="rgloss">${md(r.gloss)}</div>` : ''}
-        <div class="rmeta">
-          ${(r.pills || []).filter(Boolean).map(p => `<span class="pill ${p.cls}">${esc(p.t)}</span>`).join('')}
-          ${r.right || ''}
-        </div>
-      </div>
-      <div class="detail">
-        ${r.detail || ''}
-        <div class="cite">
-          <button class="tbtn" data-cite="${r.id}" type="button">Copy issue template</button>
-          <span class="hint">cite <code>${esc(r.id)}</code> when you file it</span>
-        </div>
-      </div>
-    </article>`;
-
-  if (sec.groupBy && !q) {
-    const buckets = new Map();
-    items.forEach((r, i) => {
-      const g = sec.groupBy(src[i]);
-      if (!buckets.has(g)) buckets.set(g, []);
-      buckets.get(g).push(r);
-    });
-    const order = sec.order || [...buckets.keys()];
-    view.innerHTML = order.filter(g => buckets.has(g)).map(g => `
-      <div class="grouphead"><h2>${esc(g)}</h2><span class="sub">${buckets.get(g).length}</span></div>
-      ${buckets.get(g).map(card).join('')}`).join('');
-  } else {
-    view.innerHTML = items.map(card).join('');
-  }
+  const area = D.AREAS.find(a => a.key === active);
+  main.innerHTML = area ? areaView(area, '') : CROSS[active].view('');
 }
 
-/* ------------------------------------------------------------- interaction */
-tabs.addEventListener('click', e => {
-  const b = e.target.closest('.tab');
+document.querySelector('nav').addEventListener('click', e => {
+  const b = e.target.closest('.chip');
   if (!b) return;
   active = b.dataset.k;
-  [...tabs.children].forEach(t => t.setAttribute('aria-selected', String(t.dataset.k === active)));
+  if (qEl.value) { qEl.value = ''; }
   render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
-
 qEl.addEventListener('input', render);
 
-view.addEventListener('click', e => {
-  const cite = e.target.closest('[data-cite]');
-  if (cite) {
-    e.stopPropagation();
-    const id = cite.dataset.cite;
-    const row = cite.closest('.row');
-    const what = row.querySelector('.rtitle').innerText.trim();
-    navigator.clipboard.writeText(
-      `Where:    ${id}  (${what})\nWhat:     \nExpected: \nRelated:  \n\n— docs/SYSTEM.md`
-    ).then(() => flash(`${id} template copied`), () => flash('Copy blocked by the browser'));
-    return;
-  }
-  const row = e.target.closest('.row');
-  if (row) row.classList.toggle('open');
-});
-view.addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const row = e.target.closest('.row');
-  if (row && !e.target.closest('[data-cite]')) { e.preventDefault(); row.classList.toggle('open'); }
+main.addEventListener('click', e => {
+  const b = e.target.closest('[data-cite]');
+  if (!b) return;
+  const id = b.dataset.cite;
+  const what = b.closest('.item').querySelector('.h').innerText.trim();
+  navigator.clipboard.writeText(
+    `Where:    ${id}  (${what})\nWhat:     \nExpected: \nRelated:  \n\n— docs/SYSTEM.md`
+  ).then(() => flash(`${id} copied — paste it into the issue`), () => flash('Copy blocked by the browser'));
 });
 
 const toast = document.getElementById('toast');
 let tid;
 function flash(msg) {
-  toast.textContent = msg;
-  toast.classList.add('on');
-  clearTimeout(tid);
-  tid = setTimeout(() => toast.classList.remove('on'), 1900);
+  toast.textContent = msg; toast.classList.add('on');
+  clearTimeout(tid); tid = setTimeout(() => toast.classList.remove('on'), 2000);
 }
 
-/* Theme: follow the OS until asked otherwise, then remember the choice. */
 const root = document.documentElement;
-try {
-  const saved = localStorage.getItem('bsm-theme');
-  if (saved) root.setAttribute('data-theme', saved);
-} catch (_) { /* private window, or site data blocked — the OS theme still applies */ }
+try { const s = localStorage.getItem('bsm-theme'); if (s) root.setAttribute('data-theme', s); }
+catch (_) { /* private window — the OS theme still applies */ }
 document.getElementById('theme').addEventListener('click', () => {
   const dark = root.getAttribute('data-theme') === 'dark'
     || (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);

@@ -75,6 +75,7 @@ for (const block of doc.split(/^### (?=E-\d)/m).slice(1)) {
   entities.push({
     id: hm[1],
     name: hm[2],
+    friendly: '',
     gloss: hm[3] ? clean(hm[3]) : '',
     kind: Number(hm[1].slice(2)) < 50 ? 'table' : Number(hm[1].slice(2)) < 80 ? 'derived' : 'external',
     isNot: bullets(f['Is not']),
@@ -235,6 +236,162 @@ for (const m of section(11).matchAll(/^\| `(DQ-\d+)` \| ([\s\S]*?) \| ([\s\S]*?)
   });
 }
 
+// ---- Areas: the app as eight things it does, not nine id namespaces --------
+//
+// Assignment is an explicit list, not a keyword guess, and every id must appear
+// exactly once — asserted below. A map you can read is worth more than a clever
+// one you cannot check.
+
+const AREAS = [
+  {
+    key: 'add', name: 'Recording money',
+    blurb: 'Getting a transaction into the app — typed, spoken, scanned or split by item — and everything that describes it afterwards: category, receipt, note, the ledger you find it in again.',
+    ent: ['E-04','E-06','E-07','E-08','E-09','E-10','E-60','E-83','E-86','E-92'],
+    fl:  ['FL-04','FL-05','FL-12','FL-13','FL-14','FL-17','FL-18','FL-40','FL-41','FL-53'],
+    sc:  ['SC-07','SC-08','SC-14','SC-15','SC-16','SC-23','SC-25','SC-35'],
+    fe:  ['FE-01','FE-02','FE-03','FE-04','FE-05','FE-06','FE-07','FE-08','FE-09','FE-10','FE-38','FE-40'],
+    ov:  ['OV-01','OV-06','OV-08','OV-18'],
+    dq:  ['DQ-16','DQ-18','DQ-20','DQ-22'],
+  },
+  {
+    key: 'split', name: 'Splitting and settling',
+    blurb: 'Groups, the people in them, who owes whom, and paying each other back. Balances are never stored — they are recomputed from payments and shares every time you look.',
+    ent: ['E-01','E-02','E-03','E-50','E-51','E-52','E-64','E-84','E-85'],
+    fl:  ['FL-06','FL-19','FL-20','FL-21','FL-22','FL-23','FL-26','FL-46','FL-47','FL-52'],
+    sc:  ['SC-04','SC-09','SC-11','SC-13','SC-26','SC-26a'],
+    fe:  ['FE-11','FE-12','FE-13','FE-14','FE-15','FE-17','FE-18','FE-19','FE-20','FE-21','FE-22'],
+    ov:  ['OV-02','OV-04','OV-05','OV-11','OV-14','OV-27'],
+    dq:  ['DQ-09','DQ-10','DQ-11','DQ-13','DQ-84'],
+  },
+  {
+    key: 'budget', name: 'Budgets and insight',
+    blurb: 'What you meant to spend, what you actually spent, and what the month is going to look like. Every figure here is your share of a bill, never the whole bill.',
+    ent: ['E-12','E-53','E-55','E-56','E-57','E-61','E-63'],
+    fl:  ['FL-07','FL-09','FL-38','FL-39','FL-42','FL-43'],
+    sc:  ['SC-03','SC-10','SC-10b','SC-20','SC-21','SC-22','SC-33'],
+    fe:  ['FE-25','FE-26','FE-32','FE-33','FE-34','FE-35','FE-36','FE-37','FE-42'],
+    ov:  ['OV-07','OV-19'],
+    dq:  ['DQ-02','DQ-12'],
+  },
+  {
+    key: 'savings', name: 'Savings and assets',
+    blurb: 'Money set aside and things you own. Buying gold or funding an SIP is a transfer, not an expense: the cash moved, nothing was consumed, and net worth must not change.',
+    ent: ['E-11','E-14','E-15','E-16','E-54','E-62'],
+    fl:  ['FL-10','FL-33','FL-34','FL-35','FL-36','FL-37','FL-45'],
+    sc:  ['SC-05','SC-17','SC-42'],
+    fe:  ['FE-27','FE-28','FE-29','FE-30','FE-31'],
+    ov:  ['OV-20'],
+    dq:  ['DQ-14','DQ-15'],
+  },
+  {
+    key: 'recurring', name: 'Recurring and reminders',
+    blurb: 'Things that happen every month, and being told about them. A recurring rule lives in the same table as a transaction — it is a row that has never happened, and every money query has to exclude it.',
+    ent: ['E-05','E-58','E-59','E-67','E-90','E-91'],
+    fl:  ['FL-15','FL-16','FL-44'],
+    sc:  ['SC-30','SC-31','SC-32','SC-41'],
+    fe:  ['FE-23','FE-24','FE-50','FE-60'],
+    ov:  ['OV-03','OV-12','OV-22'],
+    dq:  [],
+  },
+  {
+    key: 'import', name: 'Importing and review',
+    blurb: 'Statements, exports and pasted alerts, parsed into a staging inbox you edit in place before anything reaches the ledger. Nothing commits until you say so.',
+    ent: ['E-17','E-66'],
+    fl:  ['FL-08','FL-25','FL-48'],
+    sc:  ['SC-18','SC-19'],
+    fe:  ['FE-43','FE-44','FE-45','FE-46','FE-47','FE-48','FE-49','FE-51'],
+    ov:  ['OV-21','OV-24'],
+    dq:  ['DQ-81','DQ-82','DQ-83'],
+  },
+  {
+    key: 'sync', name: 'Accounts, sync and backup',
+    blurb: 'The optional half. An account buys off-device backup and shared-group sync and nothing else. Built end to end, encrypted per group — and no part of it has run on a phone.',
+    ent: ['E-18','E-19','E-20','E-21','E-22','E-65','E-82','E-87','E-88','E-89'],
+    fl:  ['FL-11','FL-24','FL-27','FL-28','FL-29','FL-30','FL-31','FL-32','FL-49'],
+    sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44'],
+    fe:  ['FE-16','FE-52','FE-53','FE-54','FE-55','FE-56','FE-57','FE-58','FE-59'],
+    ov:  [],
+    dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-85','DQ-86'],
+  },
+  {
+    key: 'shell', name: 'The app itself',
+    blurb: 'First run, settings, feature switches, the lock screen, storage and the history log — plus the navigation shell everything else sits inside.',
+    ent: ['E-13','E-80','E-81'],
+    fl:  ['FL-01','FL-02','FL-03','FL-50','FL-51','FL-54'],
+    sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29'],
+    fe:  ['FE-39','FE-41','FE-61','FE-62','FE-63','FE-64','FE-65','FE-66','FE-67','FE-68','FE-69','FE-70'],
+    ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26'],
+    dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80'],
+  },
+];
+
+/* Every id lands in exactly one area, or the build fails. An unassigned entry
+   would simply vanish from the page — the silent-loss failure this whole
+   document exists to end. */
+function assertPartition(label, all, picked) {
+  const seen = new Map();
+  for (const a of AREAS) for (const id of a[picked]) {
+    if (seen.has(id)) throw new Error(`${label}: ${id} is in both ${seen.get(id)} and ${a.key}`);
+    seen.set(id, a.key);
+  }
+  const ids = all.map(x => x.id);
+  const missing = ids.filter(id => !seen.has(id));
+  const unknown = [...seen.keys()].filter(id => !ids.includes(id));
+  if (missing.length) throw new Error(`${label}: unassigned — ${missing.join(', ')}`);
+  if (unknown.length) throw new Error(`${label}: assigned but not in the doc — ${unknown.join(', ')}`);
+}
+assertPartition('entities', entities, 'ent');
+assertPartition('flows', flows, 'fl');
+assertPartition('screens', screens, 'sc');
+assertPartition('features', feats, 'fe');
+assertPartition('complexity', ovs, 'ov');
+assertPartition('decisions', dqs, 'dq');
+
+
+/* Plain-English names. The document is written for someone editing the code; the
+   page is read by someone deciding what is wrong with the app. "txn_payment" and
+   "who paid" are the same thing, and only one of them is readable in a sentence. */
+const FRIENDLY = {
+  'E-01': 'people', 'E-02': 'groups', 'E-03': 'membership', 'E-04': 'transactions',
+  'E-05': 'skipped dates', 'E-06': 'who paid', 'E-07': 'who owes', 'E-08': 'bill lines',
+  'E-09': 'categories', 'E-10': 'deleted-category markers', 'E-11': 'stored settings',
+  'E-12': 'budget lines', 'E-13': 'the history log', 'E-14': 'assets', 'E-15': 'goals',
+  'E-16': 'goal movements', 'E-17': 'the review inbox', 'E-18': 'the send queue',
+  'E-19': 'invites', 'E-20': 'approvals', 'E-21': 'per-group trust', 'E-22': 'disputes',
+  'E-50': 'balances', 'E-51': 'what you owe and are owed', 'E-52': 'the settle-up plan',
+  'E-53': 'yours to spend', 'E-54': 'total money', 'E-55': 'the health score',
+  'E-56': 'the budget that applies', 'E-57': 'the forecast', 'E-58': 'upcoming bills',
+  'E-59': 'a recurring occurrence', 'E-60': 'the split maths', 'E-61': 'the afford verdict',
+  'E-62': 'the savings plan', 'E-63': 'spending by category', 'E-64': 'what you may do in a group',
+  'E-65': 'the trust decision', 'E-66': 'what saving will do', 'E-67': 'a suggested rule',
+  'E-80': 'app preferences', 'E-81': 'feature switches', 'E-82': 'this device key',
+  'E-83': 'receipt photos', 'E-84': 'an unconfirmed payment', 'E-85': 'an unconfirmed settle-up',
+  'E-86': 'a voice capture', 'E-87': 'your account', 'E-88': 'what syncs',
+  'E-89': 'the backup file', 'E-90': 'scheduled reminders', 'E-91': 'reminder preferences',
+  'E-92': 'learned categories',
+};
+
+/* A short human name per id, so the page can say "payments and shares" where the
+   document says "E-06 and E-07". The ids stay on the rows themselves, which is
+   where they are needed — for citing. */
+const names = {};
+for (const e of entities) names[e.id] = FRIENDLY[e.id] || e.name;
+for (const s of screens) names[s.id] = s.route;
+for (const f of flows) names[f.id] = f.name.toLowerCase();
+for (const a of axes) names[a.id] = a.name.toLowerCase();
+for (const l of ladders) names[l.id] = l.name.toLowerCase();
+/* Short labels for the pointer namespaces, so a list of them reads as English.
+   Derived from the entry's own first clause — no second place to keep in sync. */
+const short = (s, n) => {
+  const first = String(s).replace(/[`*]/g, '').split(/(?<=[a-z)])[.;—]\s/)[0].trim();
+  return first.length > n ? first.slice(0, n - 1).replace(/[\s,]+$/, '') + '…' : first;
+};
+for (const v of ivs) names[v.id] = short(v.rule, 46).toLowerCase();
+for (const o of ovs) names[o.id] = short(o.title, 52).toLowerCase();
+for (const d of dqs) names[d.id] = short(d.q.replace(/^~~|~~$/g, ''), 52).toLowerCase();
+for (const f of flows) names['SN-' + f.id.slice(3)] = names['SN-' + f.id.slice(3)] || f.name.toLowerCase();
+for (const f of feats) names[f.id] = f.name.toLowerCase();
+
 // ---- §0, §1, §12 prose ------------------------------------------------------
 const legend = [...section(0).matchAll(/^\| `([A-Z]{1,2})-` \| ([^|]*)\| ([^|]*)\| ([^|]*)\|$/gm)]
   .map(m => ({ p: m[1], is: clean(m[2]), eg: clean(m[3]), answers: clean(m[4]) }));
@@ -263,8 +420,10 @@ const meta = {
   sections: (doc.match(/^## §/gm) || []).length,
 };
 
+for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
+
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,
