@@ -9,7 +9,7 @@ import { computeSafeToSpend, type SafeToSpend } from '../../lib/safeToSpend';
 import { getSafeToSpend } from './spendPower';
 import { CASH_TOTALS_SQL, BUCKET_FLOWS_SQL } from './cashQuery';
 import type { AssetBucket } from '../../constants/enums';
-import { getMoneyProfile } from './moneyProfile';
+import { getMoneyProfile, type MoneyProfileWithMeta } from './moneyProfile';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getMe } from './persons';
 import { getTransactionsInRange, type TxnWithSplits } from './transactions';
@@ -543,7 +543,20 @@ export async function getCategorySpend30d(db: SQLite.SQLiteDatabase): Promise<Ca
 }
 
 /** Your real money — derived cash position across all groups, minus money in goals. */
-export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPosition> {
+export async function getCashPosition(
+  db: SQLite.SQLiteDatabase,
+  /**
+   * An already-loaded profile, when the caller has one.
+   *
+   * Reading it is no longer just a KV lookup: `investments` is derived from the
+   * asset register, so every `getMoneyProfile` is now an aggregate too. This
+   * function and `getTotalMoney` used to read it separately, so Plan issued four
+   * of them per load and Home five — twice each, since the savings tab's focus
+   * effect reloads. `asset` is tiny, so this was never going to be slow; it was
+   * simply the same question asked five times.
+   */
+  preloaded?: MoneyProfileWithMeta,
+): Promise<CashPosition> {
   const me = await getMe(db);
   const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0, cardSpend: 0 };
   if (!me) return empty;
@@ -553,7 +566,7 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
   // `cardBaselineAt` — NOT `updatedAt` — bounds the card-spend window, so it's read before
   // the totals query rather than alongside it. Using the general "last edited" stamp meant
   // any Plan edit re-based the window and erased the card spend it was measuring.
-  const profile = await getMoneyProfile(db);
+  const profile = preloaded ?? await getMoneyProfile(db);
   const [row, savedTotal] = await Promise.all([
     db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, profile.cardBaselineAt ?? 0, me.id, me.id, Date.now()]),
     getTotalSaved(db),
@@ -586,8 +599,9 @@ export async function getCashPosition(db: SQLite.SQLiteDatabase): Promise<CashPo
 
 /** The single "Total Money" figure + breakdown for the Plan screen. */
 export async function getTotalMoney(db: SQLite.SQLiteDatabase): Promise<TotalMoney> {
-  const [cash, profile] = await Promise.all([getCashPosition(db), getMoneyProfile(db)]);
-  return computeTotalMoney(cash, profile);
+  // One profile read, handed down — see `getCashPosition`'s `preloaded`.
+  const profile = await getMoneyProfile(db);
+  return computeTotalMoney(await getCashPosition(db, profile), profile);
 }
 
 // --- "Can I afford this?" snapshot ---------------------------------------

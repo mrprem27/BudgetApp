@@ -1,7 +1,8 @@
 import type * as SQLite from 'expo-sqlite';
 import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { getGoals, getGoalSavedMap, getTotalMoney, getCashPosition } from '../db/queries/savings';
+import { getGoals, getGoalSavedMap, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
+import { computeTotalMoney } from './cash';
 import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { getTransactionsInRange } from '../db/queries/transactions';
@@ -28,15 +29,19 @@ export async function loadSavingsTabData(
   /** Injected for determinism, same contract as the other loaders. */
   now: Date = new Date(),
 ) {
-  const [goals, saved, money, profile, grps, me, cashPos, assets] = await Promise.all([
-    getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db),
-    getAllGroups(db), getMe(db),
+  // The profile is read ONCE and handed to everything that needs it. It is no
+  // longer a cheap KV lookup — `investments` is derived from the asset register —
+  // and this loader used to issue four of them.
+  const profile = await getMoneyProfile(db);
+  const [goals, saved, grps, me, cashPos, assets] = await Promise.all([
+    getGoals(db), getGoalSavedMap(db), getAllGroups(db), getMe(db),
     // Same underlying figures as `getTotalMoney`, but carrying the per-bucket
     // detail. Only this screen needs it, which is why it is not on `TotalMoney`.
-    getCashPosition(db),
+    getCashPosition(db, profile),
     // Itemises the Investments line on TotalMoneyCard — the figure is their sum.
     getAssets(db),
   ]);
+  const money = computeTotalMoney(cashPos, profile);
   const meId = me?.id ?? '';
 
   // My share of this month's spend — the basis the budget below is measured in.

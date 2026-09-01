@@ -11,7 +11,9 @@ import { DAILY_SPEND_SQL, bucketsFromDailyRows, type DailySpendRow } from './spe
 import { expandUpcoming } from '../../lib/upcoming';
 import { myShareOf } from '../../lib/splitMath';
 import { monthlyContribution } from '../../lib/savings';
-import { getCashPosition, getGoals, getGoalSavedMap, getTotalMoney } from './savings';
+import { getCashPosition, getGoals, getGoalSavedMap } from './savings';
+import { getMoneyProfile } from './moneyProfile';
+import { computeTotalMoney } from '../../lib/cash';
 import { getAllGroups, personalGroupOf } from './groups';
 import { getRecurringForGroup, getSkipsMap } from './recurring';
 import { getTransactionsInRange, insertTxn } from './transactions';
@@ -83,11 +85,17 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
   const horizonMs = nowMs + STS_HORIZON_DAYS * DAY_MS;
   const windowStartMs = nowMs - EVERYDAY_WINDOW_DAYS * DAY_MS;
 
-  const [pos, money, groups, funding, exposure, futureTxns, dailyRows] = await Promise.all([
-    getCashPosition(db),
-    // Card debt never lowered `available` (it is debt, not cash out), so this is
-    // the only place it is claimed — see the header of lib/safeToSpend.ts.
-    getTotalMoney(db),
+  // One profile read for both, handed down — `getMoneyProfile` derives
+  // `investments` from the asset register, so it is an aggregate now and this
+  // function was issuing three of them per call, on Home's hot path.
+  const profile = await getMoneyProfile(db);
+  const pos = await getCashPosition(db, profile);
+  // Card debt never lowered `available` (it is debt, not cash out), so this is
+  // the only place it is claimed — see the header of lib/safeToSpend.ts. Derived
+  // from the two above rather than re-read, which is what `getTotalMoney` does.
+  const money = computeTotalMoney(pos, profile);
+
+  const [groups, funding, exposure, futureTxns, dailyRows] = await Promise.all([
     getAllGroups(db),
     getGoalFundingStatus(db, nowMs),
     getMyExposure(db, me.id),
@@ -147,7 +155,7 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
  * common case — "I moved money into investments" — does not force the user to
  * name an asset first; `defaultInvestmentAsset` resolves the one the migration
  * created from their old `money.investments` figure. Anyone who wants gold and an
- * FD kept apart names them, and the Add screen's Transfer offers them by name.
+ * FD kept apart names them on the Assets screen and moves money per asset there.
  */
 export async function moveToInvestments(
   db: SQLite.SQLiteDatabase,

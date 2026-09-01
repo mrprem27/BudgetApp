@@ -293,8 +293,7 @@ also point at `src/theme` — prefer `src/theme` in new code. White-on-fill text
 | `FadeIn` | A single element entering on mount |
 | `Stagger` | A list cascading in. Enforces the 330ms cap for you |
 | `Collapse` | A row leaving, and the gap closing behind it |
-| `StepTransition` | Moving between wizard steps (onboarding, itemized) |
-| `AnimatedNumber` | The one hero figure on a screen landing on its value |
+| `AnimatedNumber` | The one hero figure on a screen landing on its value. Reach it via `AmountText`'s `animate` prop for money |
 | `AnimatedBar` | Progress / meter fills |
 
 Rules:
@@ -334,6 +333,12 @@ Rules:
 - Skeleton loaders while data loads — never bare `ActivityIndicator` on full screens
 - Navigation: modals slide from bottom, push screens slide from right, tabs fade
 - ⛔ `LogoAssembly.tsx` and the onboarding hero ring/fan are **never** modified.
+- **A primitive with no callers gets deleted, not kept "for later".** `StepTransition`
+  shipped unused for months: its only real home was onboarding, whose hero animation is
+  off-limits by the rule directly above, so it was dead by construction — a claim the
+  shelf made about itself that was not true. Removed rather than left as a false promise.
+  `AnimatedNumber` was in the same state and was wired instead, because it had somewhere
+  real to go (the Plan hero).
 
 ---
 

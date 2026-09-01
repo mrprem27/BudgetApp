@@ -1142,3 +1142,18 @@ group — assets share none. Threading a non-person id through it is a bigger ch
 than the register, and the entry points that exist (Plan → Assets, the Total Money
 card, the Add screen's nudge) cover the same need without destabilising the
 most-used screen in the app.
+
+
+---
+
+## Deferred, deliberately (decided 2026-09-01)
+
+Not "not done" — decided, with the trigger that un-parks each.
+
+| Deferred | Why | Un-parks when |
+|---|---|---|
+| **An asset as a destination inside the Add screen's Transfer** | That flow hard-types both endpoints as a `Person` and routes through `computeTransferScopes`/`buildTransferPlans`, which refuse when the two share no group — assets share none. Three entry points already exist (Plan → Assets, the Total Money card, the Add screen's nudge when you type "SIP"). Threading a non-person id through the most-used screen in the app, unverified on a device, is the wrong risk to take first. | You reach for it there during the pilot and it isn't offered. |
+| **22 routes over 300 lines** (§"screen thinness") | Pure code movement across 22 files, no functional change, and every touched screen needs re-verifying by eye. Doing it before the pilot maximises what has to be re-checked for zero user-visible gain. | After pilot feedback, when you know which screens are actually changing. |
+| **~17 hand-rolled chips** (§9) | Same reasoning, higher visual risk: chips carry selected state and trailing affordances, so a bad swap breaks what a control is saying. The `IconCircle` sweep was done because a tinted disc has no state to get wrong. | Same trigger as above. |
+
+**Closed at the same time:** `StepTransition` was deleted (dead by construction — its only home was onboarding, whose hero animation is off-limits), and `AnimatedNumber` was wired to the Plan hero via `AmountText`'s new `animate` prop. An unused primitive is a claim the shelf makes about itself that isn't true; both are now either used or gone.

@@ -59,7 +59,8 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
           <Feather name="edit-2" size={14} color={colors.textMuted} />
         </View>
       </View>
-      <AmountText paise={money.available} size="xl" compact forceColor={negativeCash ? colors.expense : colors.textPrimary} />
+      {/* The one hero figure on this screen, landing on its value (§1, §11). */}
+      <AmountText paise={money.available} size="xl" compact animate forceColor={negativeCash ? colors.expense : colors.textPrimary} />
       <Text style={styles.heroHint}>
         {negativeCash ? 'You’ve spent past your cash. Investments and credit are shown below.' : 'Cash you can spend right now.'}
       </Text>

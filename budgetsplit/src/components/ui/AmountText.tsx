@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, TextStyle } from 'react-native';
 import { formatRupees, formatRupeesShort, formatCompact } from '../../lib/money';
 import { type, colors } from '../tokens';
+import { AnimatedNumber } from './anim/AnimatedNumber';
 
 type Size = 'xl' | 'lg' | 'md' | 'sm';
 
@@ -36,9 +37,16 @@ type Props = {
    * calmer than a hard ₹0).
    */
   zeroDash?: boolean;
+  /**
+   * Count up to the value instead of printing it — for the ONE hero figure on a
+   * screen (§1, §11). Off everywhere else on purpose: `AnimatedNumber` cannot use
+   * the native driver (text content has to be set from JS), so it must never go
+   * in a list row.
+   */
+  animate?: boolean;
 };
 
-export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false, zeroDash = false }: Props) {
+export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fit = false, rounded = false, compact = false, zeroDash = false, animate = false }: Props) {
   // Never render "₹NaN" — coerce a non-finite amount to 0 before formatting.
   const paise = Number.isFinite(rawPaise) ? rawPaise : 0;
 
@@ -59,6 +67,18 @@ export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fi
   // Screen readers always announce the exact amount, even when shown compact.
   const fullText = formatRupees(paise);
   const text = compact ? formatCompact(paise) : rounded ? formatRupeesShort(paise) : fullText;
+
+  if (animate) {
+    return (
+      <AnimatedNumber
+        value={paise}
+        format={(n) => (compact ? formatCompact(n) : rounded ? formatRupeesShort(n) : formatRupees(n))}
+        style={[styleMap[size], { color }, style]}
+        // Never a count-up in a screen reader: it would announce every frame.
+        accessibilityLabel={fullText}
+      />
+    );
+  }
 
   return (
     <Text
