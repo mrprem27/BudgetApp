@@ -1,5 +1,5 @@
 import { parseToPaise } from './money';
-import { splitCsvLine, type ParsedRow, type ParseResult, type ParsedDirection } from './importParse';
+import { splitCsvRows, type ParsedRow, type ParseResult, type ParsedDirection } from './importParse';
 import { TxnKind, PayMethod } from '../constants/enums';
 import type { Sheet } from './xlsx';
 
@@ -272,19 +272,32 @@ export function parsePaytmWorkbook(sheets: Sheet[]): ParseResult {
   return parseRows(sheet.rows);
 }
 
-/** Parse a Paytm CSV export (same columns as the workbook's history sheet). */
+/**
+ * Parse a Paytm CSV export (same columns as the workbook's history sheet).
+ *
+ * Tokenised over the whole text (`splitCsvRows`), not split on newlines first.
+ * Paytm's "Transaction Details" column is free text and carries newlines — a
+ * merchant address, a multi-line note — and splitting on `\n` before honouring
+ * quotes tore that row in half: the first fragment failed the column mapping and
+ * the second parsed as garbage, so the transaction was silently absent from the
+ * import and only the aggregate "N skipped" count hinted at it. Exactly the
+ * defect fixed in our own export path; this one was left behind.
+ */
 export function parsePaytmCsv(text: string): ParseResult {
-  const lines = (text ?? '').replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
-  return parseRows(lines.map(splitCsvLine));
+  return parseRows(splitCsvRows(text).filter(r => r.some(c => c?.trim())));
 }
 
-/** Does this CSV text look like a Paytm export? */
+/**
+ * Does this CSV text look like a Paytm export?
+ *
+ * Row-tokenised too, so a header sitting below a preamble row whose text contains
+ * a newline is still found. Only the first 15 rows are read: this runs on every
+ * import to pick a parser, and a header that far down is not one.
+ */
 export function isPaytmCsv(text: string): boolean {
-  const head = (text ?? '').replace(/^﻿/, '').split(/\r?\n/).slice(0, 15);
-  return head.some(l => {
-    const f = splitCsvLine(l);
-    return mapColumns(f) !== null && f.some(c => /transaction details/i.test(c ?? ''));
-  });
+  return splitCsvRows(text).slice(0, 15).some(f =>
+    mapColumns(f) !== null && f.some(c => /transaction details/i.test(c ?? '')),
+  );
 }
 
 // --- PDF-text path ---------------------------------------------------------

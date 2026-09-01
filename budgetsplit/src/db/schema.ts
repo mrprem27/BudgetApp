@@ -1,6 +1,7 @@
+import { v4 as uuid } from 'uuid';
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
-import { v4 as uuid } from 'uuid';
+
 import { CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS } from '../constants/categories';
 import { seedGlobalCategories } from './seedCategories';
 
@@ -824,6 +825,26 @@ export const LAUNCH_INVARIANTS: string[] = [
 ];
 
 /** Run {@link LAUNCH_INVARIANTS}. Engine-agnostic, like `applyOneTimeFixes`. */
+/**
+ * Split a SQL script into statements.
+ *
+ * Comments are stripped FIRST, and that is the whole point: `INDEXES` documents
+ * every index in `--` comments, two of which contain a semicolon mid-sentence
+ * ("no index at all; it is NULL for..."). Splitting the raw text on `;` cut those
+ * in half and fed the remainder to SQLite as SQL — two indexes failed with
+ * `near "it": syntax error`, silently, since the loop swallows failures.
+ *
+ * Safe because no statement here contains a string literal with `--` or `;` in
+ * it. It is not a general SQL parser and must not be used as one.
+ */
+function splitStatements(script: string): string[] {
+  return script
+    .replace(/--[^\n]*/g, '')
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export async function applyLaunchInvariants(
   exec: (sql: string) => Promise<void>,
 ): Promise<void> {
@@ -1286,12 +1307,33 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
     // high/medium/low values rather than the goal data being put at risk.
   }
 
-  // Hot-path indexes + budget uniqueness. Exported as `INDEXES` (not inline in
-  // SCHEMA) for two reasons: the one-time txn rebuild above drops and recreates
-  // the txn table, which would wipe any index defined alongside it; and the test
-  // harness needs the same DDL, which it cannot get from a string literal buried
-  // in this function. IF NOT EXISTS keeps it idempotent on every open.
-  await db.execAsync(INDEXES);
+  /*
+   * Hot-path indexes + budget uniqueness. Exported as `INDEXES` (not inline in
+   * SCHEMA) for two reasons: the one-time txn rebuild above drops and recreates
+   * the txn table, which would wipe any index defined alongside it; and the test
+   * harness needs the same DDL, which it cannot get from a string literal buried
+   * in this function. IF NOT EXISTS keeps it idempotent on every open.
+   *
+   * GUARDED, like every other step in this function — it was the only one that
+   * wasn't. Three of these are UNIQUE indexes over user-writable data, so a
+   * duplicate that already exists (a pair group created twice by an interrupted
+   * write, two budget lines for one category) throws out of `openDB` and reaches
+   * `_layout.tsx` as the "Couldn't start BudgetSplit" screen — whose Retry re-runs
+   * the identical failure. An app that will not open is the end of the story; a
+   * missing index is a slow screen.
+   *
+   * Statement-at-a-time so ONE bad index cannot cost the other fifteen. Running
+   * the whole batch in a single `execAsync` meant the first failure abandoned
+   * every index after it, including the ones that make Home and Plan fast.
+   */
+  for (const sql of splitStatements(INDEXES)) {
+    try {
+      await db.execAsync(`${sql};`);
+    } catch {
+      // This index stays missing. Every read still works, just unindexed, and the
+      // next launch tries again in case the duplicate has since been cleaned up.
+    }
+  }
 
   // --- One-time DATA fixes -------------------------------------------------
   // Legacy repairs that reclassify and DELETE user rows. Each runs at most once

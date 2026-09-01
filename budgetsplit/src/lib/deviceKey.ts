@@ -1,6 +1,7 @@
 import { getRandomBytesAsync, digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
 import { x25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from './bytes';
+import { keychain } from './keychain';
 
 /**
  * This device's identity for sync: a secret it keeps, and an id others can name.
@@ -15,34 +16,7 @@ import { bytesToHex, hexToBytes } from './bytes';
  * anything, which is what makes it safe for the server to hand them out.
  */
 
-type SecureStoreModule = {
-  getItemAsync(key: string): Promise<string | null>;
-  setItemAsync(key: string, value: string): Promise<void>;
-  deleteItemAsync(key: string): Promise<void>;
-};
 
-/**
- * Lazily required and cached — the same discipline `serverApi.ts` documents at
- * length, and for the same reason: `expo-secure-store` is a native module, this
- * file is reachable from a route, and expo-router loads routes eagerly. A
- * top-level import once crashed the entire app on launch on a build without the
- * module. A local-first app must not die because an optional feature's dependency
- * is missing.
- *
- * `undefined` = not attempted, `null` = attempted and unavailable.
- */
-let secureStore: SecureStoreModule | null | undefined;
-
-function keychain(): SecureStoreModule | null {
-  if (secureStore !== undefined) return secureStore;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    secureStore = require('expo-secure-store') as SecureStoreModule;
-  } catch {
-    secureStore = null;
-  }
-  return secureStore;
-}
 
 /** Versioned, like the session key, so a format change never reads stale bytes. */
 const SECRET_KEY = 'budgetsplit.device.secret.v1';

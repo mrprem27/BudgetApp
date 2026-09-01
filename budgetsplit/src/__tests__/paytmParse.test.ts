@@ -253,3 +253,36 @@ describe('Paytm PDF text', () => {
     expect(parsePaytmStatement('nothing to see here', NOW).rows).toEqual([]);
   });
 });
+
+/**
+ * Paytm's "Transaction Details" column is free text and carries newlines — a
+ * merchant address, a multi-line note. Splitting on `\n` before honouring quotes
+ * tore the row in half, so the transaction was silently absent from the import
+ * and only the aggregate "N skipped" count hinted at it.
+ *
+ * The same defect was fixed in our own export path and left behind here.
+ */
+describe('a Paytm row with a newline in its details survives', () => {
+  const header = 'Date,Transaction Details,Amount,Status\n';
+  const torn = `${header}24/07/2026,"Swiggy\nHSR Layout, Bangalore",-450.00,SUCCESS\n`;
+
+  it('is still detected as a Paytm export', () => {
+    expect(isPaytmCsv(torn)).toBe(true);
+  });
+
+  it('keeps the transaction instead of dropping it', () => {
+    const { rows, skipped } = parsePaytmCsv(torn);
+    expect(skipped).toBe(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(45000);
+    // The embedded newline survives into the description, rather than the row
+    // being cut where it appeared.
+    expect(rows[0].description).toContain('Swiggy');
+    expect(rows[0].description).toContain('HSR Layout');
+  });
+
+  it('still parses an ordinary export with no embedded newlines', () => {
+    const plain = `${header}24/07/2026,"Swiggy",-450.00,SUCCESS\n25/07/2026,"Salary",85000.00,SUCCESS\n`;
+    expect(parsePaytmCsv(plain).rows).toHaveLength(2);
+  });
+});

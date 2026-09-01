@@ -4,6 +4,7 @@ import { buildBackupPayload, encryptPayload } from './backup';
 import { uploadBackup, serverConfigured, getStoredSession } from './serverApi';
 import { settings } from './settings';
 import { isRestoring } from './restoreGuard';
+import { keychain } from './keychain';
 
 /**
  * "Everything" mode: an encrypted copy of the whole app, kept current on your
@@ -38,25 +39,7 @@ import { isRestoring } from './restoreGuard';
 
 const PASSPHRASE_KEY = 'budgetsplit.sync.passphrase.v1';
 
-type SecureStoreModule = {
-  getItemAsync(key: string): Promise<string | null>;
-  setItemAsync(key: string, value: string): Promise<void>;
-  deleteItemAsync(key: string): Promise<void>;
-};
 
-/** Same lazy-require discipline as `serverApi` — a missing native module must
- *  degrade to "this feature is off", never crash the app at launch. */
-let secureStore: SecureStoreModule | null | undefined;
-function keychain(): SecureStoreModule | null {
-  if (secureStore !== undefined) return secureStore;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    secureStore = require('expo-secure-store') as SecureStoreModule;
-  } catch {
-    secureStore = null;
-  }
-  return secureStore;
-}
 
 /**
  * Remember the passphrase for unattended snapshots on THIS device.

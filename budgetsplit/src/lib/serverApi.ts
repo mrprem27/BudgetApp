@@ -1,5 +1,6 @@
 import * as Device from 'expo-device';
 import { File } from 'expo-file-system';
+import { keychain, secureStorageAvailable } from './keychain';
 
 /**
  * The app's only talking-to-a-server code: sign-in (email magic link) and
@@ -18,42 +19,14 @@ import { File } from 'expo-file-system';
 
 const SESSION_KEY = 'budgetsplit.session.v1';
 
-type SecureStoreModule = {
-  getItemAsync(key: string): Promise<string | null>;
-  setItemAsync(key: string, value: string): Promise<void>;
-  deleteItemAsync(key: string): Promise<void>;
-};
 
 /**
- * `expo-secure-store` is a **native** module, and this file is imported by a
- * route — which expo-router loads eagerly at startup. A top-level
- * `import * as SecureStore` therefore meant that a JS bundle running on a native
- * build without the module (an OTA update ahead of its binary, or a stale dev
- * client) **crashed the whole app on launch**, not just the account screen:
- *
- *     Error: Cannot find native module 'ExpoSecureStore'
- *
- * A local-first app must not die because an optional feature's dependency is
- * absent. Required lazily and cached, so a missing module degrades to "no
- * account UI" — which is exactly what an unconfigured build already looks like.
- *
- * `undefined` = not yet attempted, `null` = attempted and unavailable.
+ * Re-exported so the ~dozen callers that ask "can this build hold a credential"
+ * keep their import. The accessor itself lives in `lib/keychain` — it was written
+ * out three times, and three copies of a launch-crash guard is three chances for
+ * one to drift.
  */
-let secureStore: SecureStoreModule | null | undefined;
-
-function keychain(): SecureStoreModule | null {
-  if (secureStore !== undefined) return secureStore;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    secureStore = require('expo-secure-store') as SecureStoreModule;
-  } catch {
-    secureStore = null;
-  }
-  return secureStore;
-}
-
-/** The session has nowhere safe to live, so the account layer stays off. */
-export const secureStorageAvailable = (): boolean => keychain() !== null;
+export { secureStorageAvailable };
 
 export type ServerUser = {
   id: string;
