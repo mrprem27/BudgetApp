@@ -116,6 +116,17 @@ export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
  * marker that tells an investment settlement apart from a card-bill repayment, and
  * a typo would silently make one look like the other.
  */
+/**
+ * The EXPENSE category `smartCategory` maps "sip", "mutual fund", "zerodha" and
+ * "gold" to. Named here so the Add screen can recognise it and offer the asset
+ * register instead — saving it as an expense double-counts the money and eats a
+ * budget, which is the whole thing the register exists to stop.
+ *
+ * Not the same as {@link INVESTMENT_CATEGORY} below, and the difference matters:
+ * that one is the TRANSFER category a real asset movement is filed under.
+ */
+export const INVESTMENT_EXPENSE_CATEGORY = 'Investments / SIP';
+
 export const INVESTMENT_CATEGORY = 'Investment';
 
 export const TRANSFER_CATEGORIES: CategoryDef[] = [

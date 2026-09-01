@@ -4,14 +4,16 @@ import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';
 import { PrimaryButton } from '../../ui/PrimaryButton';
+import { SecondaryButton } from '../../ui/SecondaryButton';
 import { formatCompact, parseToPaise } from '../../../lib/money';
 import type { MoneyProfile } from '../../../lib/cash';
+import type { MoneyProfileWrite } from '../../../db/queries/moneyProfile';
 
 /** Paise → an editable rupees string ('' for zero so the placeholder shows). */
 const toInput = (paise: number) => (paise ? String(paise / 100) : '');
 
 /**
- * Edit the real-money inputs behind "Total Money": cash on hand, investments,
+ * Edit the real-money inputs behind "Total Money": cash on hand,
  * and credit (limit + used). Used both from the Plan card and (the same fields)
  * at first-time setup. All values entered in rupees → saved as paise.
  */
@@ -20,16 +22,18 @@ export function MoneyEditorSheet({
   onClose,
   initial,
   onSave,
+  onManageAssets,
 }: {
   visible: boolean;
   onClose: () => void;
   initial: MoneyProfile;
-  onSave: (p: MoneyProfile) => void;
+  onSave: (p: MoneyProfileWrite) => void;
+  /** Opens the asset register — where investments live now. */
+  onManageAssets?: () => void;
 }) {
   const [bank, setBank] = useState('');
   const [cash, setCash] = useState('');
   const [wallet, setWallet] = useState('');
-  const [investments, setInvestments] = useState('');
   const [limit, setLimit] = useState('');
   const [used, setUsed] = useState('');
 
@@ -39,7 +43,6 @@ export function MoneyEditorSheet({
     setBank(toInput(initial.openingBank));
     setCash(toInput(initial.openingCash));
     setWallet(toInput(initial.openingWallet));
-    setInvestments(toInput(initial.investments));
     setLimit(toInput(initial.creditLimit));
     setUsed(toInput(initial.creditUsed));
   }, [visible, initial]);
@@ -53,7 +56,6 @@ export function MoneyEditorSheet({
       openingBank: parseToPaise(bank),
       openingCash: parseToPaise(cash),
       openingWallet: parseToPaise(wallet),
-      investments: parseToPaise(investments),
       creditLimit: limitPaise,
       creditUsed: usedPaise,
     });
@@ -95,9 +97,27 @@ export function MoneyEditorSheet({
           using the pay method on each one.
         </Text>
 
-        <Text style={styles.label}>Investments</Text>
-        <Input value={investments} onChangeText={setInvestments} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
-        <Text style={styles.hint}>Mutual funds, stocks, FDs… shown for context, never spent automatically.</Text>
+        {/*
+          * Investments are not a field here any more — they are the asset
+          * register, and this sheet writes the money profile. One number could
+          * not tell gold from an FD from a flat, and typing a new total was the
+          * only way to change it, which is why buying an SIP had to be logged as
+          * an expense and dropped net worth by the amount invested.
+          */}
+        {onManageAssets && (
+          <>
+            <Text style={styles.label}>Investments and assets</Text>
+            <SecondaryButton
+              label={`${formatCompact(initial.investments)} across your assets`}
+              onPress={onManageAssets}
+              style={styles.gap}
+            />
+            <Text style={styles.hint}>
+              Gold, a flat, an FD, a fund — named, so moving money in or out is a transfer
+              and your net worth stays put.
+            </Text>
+          </>
+        )}
 
         <Text style={styles.label}>Credit card limit</Text>
         <Input value={limit} onChangeText={setLimit} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />

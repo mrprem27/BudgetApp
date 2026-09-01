@@ -376,6 +376,21 @@ interchangeable in an aggregation, and the rule is:
 original purchase was already booked as an expense; counting the settlement too would
 double-count the same money. `cash.ts` is the exception on purpose — cash genuinely moved.
 
+**Money that leaves your account without being spent is a transfer to an ASSET.** Buying
+gold, funding an SIP, opening an FD: the cash moved but nothing was consumed, so net worth
+must not change. `db/queries/assets.ts` owns the register — named assets with balances — and
+both halves of a transfer (the `settlement` row and the asset balance) are written in ONE
+transaction, because a half-written one drops net worth by the amount invested and leaves a
+ledger row that looks entirely correct. Transfers OUT are the same movement backwards and
+are **not income** — you already owned that money, it only changed shape.
+
+`money_profile.investments` is **derived**, not stored: it is the sum of live assets. There
+was one number in `settings` doing that job, which could not tell gold from an FD from a
+flat, and the only way to change it was to retype the total — which is why buying an
+investment got logged as an expense. Two things must stay true: nothing writes
+`investments` (the `MoneyProfileWrite` type omits it, so the compiler enforces this), and
+an archived asset stops counting, because archiving is how you say you no longer own it.
+
 **Never show one total across kinds.** Money in, money out and money moved do not belong in
 a single figure — a "₹12,400 total" over a mixed list is measuring nothing. Sum per kind and
 label it (`spent` / `received` / `moved`), or show a two-sided figure. Both

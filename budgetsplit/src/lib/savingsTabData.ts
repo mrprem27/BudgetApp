@@ -10,6 +10,7 @@ import { getMyGlobalBudgetSummary } from './budget';
 import { forecastMonthEnd as computeForecastMonthEnd } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { myShareOf } from './splitMath';
+import { getAssets } from '../db/queries/assets';
 
 /**
  * Data assembly for the Savings/Plan tab — goals, money profile, the month-end
@@ -27,12 +28,14 @@ export async function loadSavingsTabData(
   /** Injected for determinism, same contract as the other loaders. */
   now: Date = new Date(),
 ) {
-  const [goals, saved, money, profile, grps, me, cashPos] = await Promise.all([
+  const [goals, saved, money, profile, grps, me, cashPos, assets] = await Promise.all([
     getGoals(db), getGoalSavedMap(db), getTotalMoney(db), getMoneyProfile(db),
     getAllGroups(db), getMe(db),
     // Same underlying figures as `getTotalMoney`, but carrying the per-bucket
     // detail. Only this screen needs it, which is why it is not on `TotalMoney`.
     getCashPosition(db),
+    // Itemises the Investments line on TotalMoneyCard — the figure is their sum.
+    getAssets(db),
   ]);
   const meId = me?.id ?? '';
 
@@ -70,5 +73,5 @@ export async function loadSavingsTabData(
   // `monthSpend` is returned as well as consumed: it is the basis half of the
   // forecast-vs-budget comparison, and a forecast is null before day 3, so this is
   // the only way to assert that both halves are my share.
-  return { goals, saved, money, profile, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, monthSpend: totalMonthSpend, forecastMonthEnd, forecastBudget, upcoming };
+  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, monthSpend: totalMonthSpend, forecastMonthEnd, forecastBudget, upcoming };
 }

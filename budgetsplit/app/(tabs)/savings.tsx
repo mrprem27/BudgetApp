@@ -86,7 +86,7 @@ export default function SavingsScreen() {
   const { flags } = useFeatureFlags();
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
-    goals, saved, money, profile, byBucket, unattributed, forecastMonthEnd, forecastBudget, upcoming,
+    goals, saved, money, profile, assets, byBucket, unattributed, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
@@ -127,7 +127,19 @@ export default function SavingsScreen() {
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Total Money — cash + investments + available credit, with breakdown */}
-        {money && <TotalMoneyCard money={money} byBucket={byBucket} unattributed={unattributed} updatedAt={profile.updatedAt} onEdit={() => setShowMoneyEditor(true)} onPayCardBill={() => setShowPayCardBill(true)} onMoveToInvestments={() => setShowMoveInvest(true)} />}
+        {money && (
+          <TotalMoneyCard
+            money={money}
+            byBucket={byBucket}
+            unattributed={unattributed}
+            updatedAt={profile.updatedAt}
+            assets={assets}
+            onEdit={() => setShowMoneyEditor(true)}
+            onPayCardBill={() => setShowPayCardBill(true)}
+            onMoveToInvestments={() => setShowMoveInvest(true)}
+            onManageAssets={() => router.push('/assets')}
+          />
+        )}
 
         {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
             money during app boot and tell you afterwards. */}
@@ -278,6 +290,7 @@ export default function SavingsScreen() {
         // the number above it is how you talk someone into saving a stale figure.
         initial={{ ...profile, creditUsed: money?.creditUsed ?? profile.creditUsed }}
         onSave={handleSaveMoney}
+        onManageAssets={() => { setShowMoneyEditor(false); router.push('/assets'); }}
       />
 
       <MoveToInvestmentsSheet

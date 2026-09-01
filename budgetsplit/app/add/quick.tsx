@@ -9,6 +9,8 @@ import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
 import { ADD_KIND, ADD_KIND_LABEL } from '../../src/constants/enums';
 import { insertCategory } from '../../src/db/queries/categories';
+import { INVESTMENT_EXPENSE_CATEGORY } from '../../src/constants/categories';
+import { Banner } from '../../src/components/ui/Banner';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { useVoiceDeepLink } from '../../src/hooks/useVoiceDeepLink';
@@ -184,6 +186,30 @@ export default function QuickAddScreen() {
                   accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
                 />
               </View>
+
+              {/*
+                * Buying an investment is not spending, and this is where people
+                * try to log it anyway — `smartCategory` maps "sip", "mutual fund",
+                * "zerodha" and "gold" straight to this category, so typing
+                * "SIP 5000" lands here by itself. Saving it as an expense
+                * double-counts the money (the cash already moved) and eats a
+                * budget it has no business eating, and net worth FALLS by the
+                * amount invested.
+                *
+                * A nudge rather than a block: it might genuinely be a brokerage
+                * fee. The register is one tap away, and the sentence says what
+                * the difference actually is.
+                */}
+              {kind === 'expense' && f.selectedCategory?.name === INVESTMENT_EXPENSE_CATEGORY && (
+                <View style={styles.formBlock}>
+                  <Banner
+                    icon="trending-up"
+                    text="Buying an investment isn’t spending — record it against an asset and your net worth stays put."
+                    actionLabel="Assets"
+                    onAction={() => router.push('/assets')}
+                  />
+                </View>
+              )}
 
               {kind === 'expense' && nudgeColor != null && f.nudgeRemaining != null && f.selectedCategory && (
                 <View style={styles.formBlock}>

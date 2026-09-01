@@ -11,6 +11,7 @@ import {
   type Priority, type SavingsFrequency, type OverspendRaid,
 } from '../db/queries/savings';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
+import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
 import { moveToInvestments, payCardBill } from '../db/queries/spendPower';
 import type { PayMethod } from '../constants/enums';
 import { loadSavingsTabData } from '../lib/savingsTabData';
@@ -67,6 +68,7 @@ export function useSavingsTab() {
   const byBucket = data?.byBucket;
   const unattributed = data?.unattributed ?? 0;
   const profile = data?.profile ?? { openingCash: 0, openingBank: 0, openingWallet: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
+  const assets = data?.assets ?? [];
   const forecastMonthEnd = data?.forecastMonthEnd ?? null;
   const forecastBudget = data?.forecastBudget ?? 0;
   const upcoming = data?.upcoming ?? [];
@@ -99,7 +101,7 @@ export function useSavingsTab() {
     })();
   }, [db, reload]));
 
-  async function handleSaveMoney(p: MoneyProfile) {
+  async function handleSaveMoney(p: MoneyProfileWrite) {
     await setMoneyProfile(db, p);
     haptic.success();
     setShowMoneyEditor(false);
@@ -206,7 +208,7 @@ export function useSavingsTab() {
   return {
     byBucket, unattributed,
     // data
-    goals, saved, money, profile, forecastMonthEnd, forecastBudget, upcoming,
+    goals, saved, money, profile, assets, forecastMonthEnd, forecastBudget, upcoming,
     loading, error, refreshing, onRefresh, reload,
     // overspend raid
     overspend, setOverspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,

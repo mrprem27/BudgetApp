@@ -28,7 +28,7 @@ const MONTH = 30 * 24 * 60 * 60 * 1000;
  * figures with no bank feed, so a staleness badge is the difference between an
  * honest snapshot and a confident-looking number nobody's touched in months.
  */
-export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill, onMoveToInvestments }: {
+export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets }: {
   money: TotalMoney;
   /** Per-bucket balances from `getCashPosition`. Absent until it has loaded. */
   byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
@@ -38,6 +38,9 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
   onEdit: () => void;
   onPayCardBill?: () => void;
   onMoveToInvestments?: () => void;
+  /** The register behind the Investments figure, itemised. */
+  assets?: { id: string; name: string; balance: number }[];
+  onManageAssets?: () => void;
 }) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
@@ -86,12 +89,29 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
           )}
         </>
       )}
-      <SubRow label="Investments" value={formatCompact(money.investments)} />
+      {/*
+        * Itemised, because it can be now. This was one "Investments" line over a
+        * single stored number that could not tell gold from an FD from a flat —
+        * and the only way to change it was to retype the total.
+        */}
+      <SubRow label="Investments &amp; assets" value={formatCompact(money.investments)} />
+      {assets?.map(a => (
+        <SubRow key={a.id} label={`  ${a.name}`} value={formatCompact(a.balance)} />
+      ))}
       {money.creditUsed > 0 && <SubRow label="Credit used" value={`−${formatCompact(money.creditUsed)}`} valueColor={colors.expense} />}
 
       {/* Headroom, deliberately outside both figures. */}
       <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
       <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
+
+      {onManageAssets && (
+        <PressableScale style={styles.payBillBtn} onPress={onManageAssets} accessibilityLabel="Manage your assets">
+          <Feather name="package" size={14} color={colors.accent} />
+          <Text style={styles.payBillText}>
+            {assets?.length ? 'Your assets — add, sell, or update a value' : 'Own gold, a flat, an FD? Add it'}
+          </Text>
+        </PressableScale>
+      )}
 
       {/* Investments have a real way UP now — not just re-typing the figure.
           Buying an SIP was logged as an expense, which dropped net worth by the

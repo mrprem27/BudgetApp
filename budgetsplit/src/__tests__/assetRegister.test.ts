@@ -7,6 +7,8 @@ import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { PayMethod } from '../constants/enums';
+import { INVESTMENT_CATEGORY, INVESTMENT_EXPENSE_CATEGORY } from '../constants/categories';
+import { matchCategory } from '../lib/smartCategory';
 import { createTestDb, addPerson, addGroup, addMember, asDb } from './helpers/testDb';
 
 /**
@@ -234,5 +236,37 @@ describe('managing the register', () => {
     // ...and then keep returning the same one.
     expect((await defaultInvestmentAsset(asDb(db))).id).toBe(first.id);
     expect(await getAssets(asDb(db))).toHaveLength(1);
+  });
+});
+
+/**
+ * The two investment categories are NOT the same, and confusing them is the
+ * double-count the register exists to stop.
+ */
+describe('the two investment categories stay apart', () => {
+  it('names the expense category the keyword mapping actually produces', () => {
+    // `smartCategory` maps "sip"/"mutual fund"/"zerodha"/"gold" here, so typing
+    // "SIP 5000" lands on it by itself. The Add screen recognises it and offers
+    // the register instead of letting it save as spending.
+    expect(INVESTMENT_EXPENSE_CATEGORY).toBe('Investments / SIP');
+    // `matchCategory` only ever returns a category the user actually has, so the
+    // catalog is passed in — that is the guard against guessing one they deleted.
+    const catalog = [{ name: INVESTMENT_EXPENSE_CATEGORY }];
+    expect(matchCategory('SIP 5000', catalog)).toBe(INVESTMENT_EXPENSE_CATEGORY);
+    expect(matchCategory('zerodha', catalog)).toBe(INVESTMENT_EXPENSE_CATEGORY);
+    expect(matchCategory('bought gold', catalog)).toBe(INVESTMENT_EXPENSE_CATEGORY);
+  });
+
+  it('files a real asset movement under the TRANSFER category, not that one', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+    const id = await transferToAsset(asDb(db), gold.id, 500000);
+    const row = await db.getFirstAsync<{ category: string; kind: string }>(
+      'SELECT category, kind FROM txn WHERE id = ?', [id],
+    );
+    expect(row?.category).toBe(INVESTMENT_CATEGORY);
+    expect(row?.category).not.toBe(INVESTMENT_EXPENSE_CATEGORY);
+    // §12: a settlement, so no category breakdown or budget counts it.
+    expect(row?.kind).toBe('settlement');
   });
 });
