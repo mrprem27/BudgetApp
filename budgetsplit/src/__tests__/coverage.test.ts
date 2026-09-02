@@ -40,13 +40,15 @@ afterAll(() => { try { fs.unlinkSync(OUT); } catch { /* already gone */ } });
 describe('the walkthrough leaves nothing out', () => {
   it('built the booklets at all', () => {
     expect(Object.keys(cov).sort())
-      .toEqual(['components', 'decisions', 'flows', 'problems', 'rules', 'screens']);
+      .toEqual(['components', 'decisions', 'flows', 'popups', 'problems', 'rules', 'screens']);
     for (const v of Object.values(cov)) expect(v.total).toBeGreaterThan(15);
   });
 
   /* One assertion each, so a failure names the thing that fell out rather than
      saying "coverage broke". */
-  for (const kind of ['screens', 'flows', 'components', 'rules', 'problems', 'decisions']) {
+  /* `popups` is the one that was missing entirely: 109 native alerts that are
+     neither a screen nor a component, and that no test in this repo can see. */
+  for (const kind of ['screens', 'flows', 'components', 'popups', 'rules', 'problems', 'decisions']) {
     it(`walks every one of the ${kind}`, () => {
       expect({ [kind]: cov[kind].missing }).toEqual({ [kind]: [] });
     });

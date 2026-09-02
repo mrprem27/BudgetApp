@@ -427,6 +427,7 @@ for (const f of feats) names[f.id] = f.name.toLowerCase();
 const path = require('path');
 
 const SRC = 'src';
+const ROOT_DIR = process.cwd();
 const COMP_DIR = path.join(SRC, 'components');
 
 function allFiles(dir, out = []) {
@@ -461,6 +462,25 @@ function importsOf(file) {
     }
   }
   return [...out];
+}
+
+/* Resolve a relative import to a real file, so the graph can cross out of
+   `components/` into `hooks/` and `lib/`. */
+const fileImportCache = new Map();
+function fileImports(file) {
+  if (fileImportCache.has(file)) return fileImportCache.get(file);
+  let out = [];
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    const dir = path.dirname(file);
+    out = [...text.matchAll(/from\s+'(\.[^']+)'/g)]
+      .map(m => path.resolve(dir, m[1]))
+      .flatMap(base => ['.tsx', '.ts', '/index.tsx', '/index.ts'].map(ext => base + ext))
+      .filter(f => fs.existsSync(f))
+      .map(f => path.relative(ROOT_DIR, f));
+  } catch (_) { out = []; }
+  fileImportCache.set(file, out);
+  return out;
 }
 
 const importCache = new Map();
@@ -529,6 +549,87 @@ const componentList = compFiles.map(compName).sort().map(n => ({
   screens: (screensOf[n] || []).sort(),
   sheet: /Sheet$/.test(n),
 }));
+
+/* One home per component: the screen reaching it with the fewest components, which
+   is the most specific screen using it. Assigned here rather than later, because
+   the popup pass needs it too and ran before it once. */
+for (const c of componentList) {
+  if (!c.screens.length) continue;
+  c.home = [...c.screens].sort((a, b) =>
+    (componentsOf[a] || []).length - (componentsOf[b] || []).length || a.localeCompare(b))[0];
+}
+
+/* Hooks raise alerts too, and a hook is not a component. Which screens reach any
+   given file, so a popup in `useTxnDetail` lands on the screen that uses it. */
+const fileReach = {};
+for (const [route, file] of Object.entries(routeFileFor)) {
+  const sc = screenByRoute[route];
+  if (!sc) continue;
+  const seen = new Set();
+  const stack = [file];
+  while (stack.length) {
+    const f = stack.pop();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    for (const spec of fileImports(f)) if (!seen.has(spec)) stack.push(spec);
+  }
+  for (const f of seen) (fileReach[f] = fileReach[f] || []).push(sc);
+}
+
+/* ---- Popups ---------------------------------------------------------------
+ *
+ * A route is not the only thing a person sees. The app raises 160 native alerts —
+ * confirmations, results, refusals — and none of them was in the walkthrough,
+ * because they are neither a screen nor a component. They are exactly the surfaces
+ * a walkthrough should catch: a wrong word in a confirm dialog is invisible to
+ * every test in the repo.
+ */
+const ALERT_RE = /Alert\.alert\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g;
+
+function alertsIn(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  const out = [];
+  for (const m of text.matchAll(ALERT_RE)) {
+    const title = (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\(.)/g, '$1').trim();
+    /* A template literal that is only an interpolation has no fixed title. */
+    if (!title || /^\$\{/.test(title) || title.length < 3) continue;
+    out.push(title);
+  }
+  return out;
+}
+
+/* file → the screen it belongs to: a route file is its own screen, a component
+   goes to the screen it was attributed to, a hook to every screen that reaches it. */
+const compHome = Object.fromEntries(componentList.filter(c => c.home).map(c => [c.name, c.home]));
+/* Fewest components = most specific screen, the same rule components use. */
+const pickHome = list => [...new Set(list)]
+  .sort((a, b) => (componentsOf[a] || []).length - (componentsOf[b] || []).length || a.localeCompare(b))[0];
+
+const alertsOf = {};          // SC-id → [title]
+const alertHomeless = [];
+for (const file of [...allFiles('app'), ...allFiles(SRC)]) {
+  if (!/\.tsx?$/.test(file) || file.includes('__tests__')) continue;
+  const titles = alertsIn(file);
+  if (!titles.length) continue;
+
+  const rel = path.relative(ROOT_DIR, file);
+  let sc = null;
+  if (rel.startsWith('app' + path.sep)) {
+    const entry = Object.entries(routeFileFor).find(([, f]) => f === file);
+    if (entry) sc = screenByRoute[entry[0]];
+  } else {
+    sc = compHome[path.basename(file, path.extname(file))]
+      || (fileReach[rel] ? pickHome(fileReach[rel]) : null);
+  }
+  if (sc) {
+    alertsOf[sc] = [...new Set([...(alertsOf[sc] || []), ...titles])];
+  } else {
+    alertHomeless.push({ file: rel, titles });
+  }
+}
+
+/* Nothing may be homeless — a popup with no screen is a popup nobody walks. */
+const allAlerts = [...new Set(Object.values(alertsOf).flat())];
 
 /* ---- The walkthrough ------------------------------------------------------
  * A task is a test script already: it says where to start, what to do, what should
@@ -711,7 +812,8 @@ function stopMinutes(s) {
     return 3 + stepsCount(f.steps) * 0.5 + partsCount(f.numbers) * 0.7
              + partsCount(f.alsoTry) * 1.2 + (writes ? 2 : 0);
   }
-  if (s.kind === 'screen') return 2 + (s.parts ? s.parts.length * 0.5 : 0);
+  if (s.kind === 'screen') return 2 + (s.parts ? s.parts.length * 0.5 : 0)
+                                    + (s.popups ? s.popups.length * 0.4 : 0);
   if (s.kind === 'rule') return 3;
   if (s.kind === 'problem') return 2.5;
   if (s.kind === 'decision') return 2;
@@ -719,7 +821,10 @@ function stopMinutes(s) {
 }
 
 /* Components have to be attached before anything can be timed. */
-for (const b of BOOKS) for (const s of b.stops) if (s.kind === 'screen') s.parts = notableAt(s.id);
+for (const b of BOOKS) for (const s of b.stops) if (s.kind === 'screen') {
+  s.parts = notableAt(s.id);
+  s.popups = (alertsOf[s.id] || []).slice().sort();
+}
 for (const b of BOOKS) for (const s of b.stops) s.min = Math.round(stopMinutes(s) * 10) / 10;
 
 /* ---- Split on TIME, not on stop count -------------------------------------
@@ -769,9 +874,13 @@ const time = {
 
 
 /* ---- Coverage: the claim, made checkable ---------------------------------- */
-const covered = { screen: new Set(), flow: new Set(), part: new Set(), rule: new Set(), problem: new Set(), decision: new Set() };
+const covered = { screen: new Set(), flow: new Set(), part: new Set(), popup: new Set(), rule: new Set(), problem: new Set(), decision: new Set() };
 for (const b of booklets) for (const s of b.stops) {
-  if (s.kind === 'screen') { covered.screen.add(s.id); (s.parts || []).forEach(p => covered.part.add(p)); }
+  if (s.kind === 'screen') {
+    covered.screen.add(s.id);
+    (s.parts || []).forEach(p => covered.part.add(p));
+    (s.popups || []).forEach(p => covered.popup.add(p));
+  }
   if (s.kind === 'flow') covered.flow.add(s.id);
   if (s.kind === 'rule') covered.rule.add(s.id);
   if (s.kind === 'problem') covered.problem.add(s.id);
@@ -782,6 +891,7 @@ const coverage = {
   screens:    { total: screens.length, missing: screens.filter(s => !covered.screen.has(s.id)).map(s => s.id) },
   flows:      { total: flows.length,   missing: flows.filter(f => !covered.flow.has(f.id)).map(f => f.id) },
   components: { total: notable.length, missing: notable.filter(n => !covered.part.has(n)) },
+  popups:     { total: allAlerts.length, missing: allAlerts.filter(n => !covered.popup.has(n)) },
   rules:      { total: ivs.length,     missing: ivs.filter(v => !covered.rule.has(v.id)).map(v => v.id) },
   problems:   { total: ovs.length,     missing: ovs.filter(o => !covered.problem.has(o.id)).map(o => o.id) },
   decisions:  { total: dqs.length,     missing: dqs.filter(d => !covered.decision.has(d.id)).map(d => d.id) },
@@ -818,7 +928,7 @@ const meta = {
 for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
 
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, time, componentList, componentsOf, orphanComponents, booklets, coverage,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, time, componentList, componentsOf, orphanComponents, alertsOf, allAlerts, alertHomeless, booklets, coverage,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,

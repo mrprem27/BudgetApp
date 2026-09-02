@@ -300,5 +300,23 @@ try {
   reset();
 } catch (e) { console.log('  THREW  step answers — ' + e.message); bad++; }
 
+/* Everything a person interacts with, uses or sees — not only the routes. */
+try {
+  reset();
+  const { fullMarkdown: fm6, setScope: ss6 } = globalThis.__p;
+  ss6('walk'); const walk6 = fm6('walk');
+  const missingPopup = D.allAlerts.filter(a => !walk6.includes(a));
+  console.log(missingPopup.length
+    ? `  BAD    ${missingPopup.length} popups never appear in the walkthrough`
+    : `  ok     all ${D.allAlerts.length} popups appear in the walkthrough`);
+  if (missingPopup.length) bad++;
+
+  const homeless = D.alertHomeless.length;
+  console.log(homeless ? `  BAD    ${homeless} files raise a popup with no screen`
+                       : '  ok     every popup belongs to a screen');
+  if (homeless) bad++;
+  reset();
+} catch (e) { console.log('  THREW  popups — ' + e.message); bad++; }
+
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

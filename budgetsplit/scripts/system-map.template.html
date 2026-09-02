@@ -401,6 +401,7 @@ pre.pre {
 .ib.fine[aria-pressed="true"] { background:var(--ok); border-color:var(--ok); color:var(--ground); }
 .ib.broken[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:var(--ground); }
 .stepn { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:6px; }
+.popup { font-style:italic; color:var(--ink); }
 
 /* a → b → c, as links rather than a sentence */
 .chain { display:inline; }
@@ -848,7 +849,7 @@ function flowStop(f) {
     ${block('Also try — optional, and where the interesting failures are', dotList(f.alsoTry), 'hard')}
     ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}`;
 }
-function screenStop(s, parts) {
+function screenStop(s, parts, popups) {
   const ways = s.entries === 0 ? 'Nothing in the app opens this — it arrives from a link.'
     : s.entries === 1 ? 'Exactly one way in. If it is an unlabelled icon, this screen is effectively hidden.'
     : `${s.entries} ways in.`;
@@ -857,6 +858,10 @@ function screenStop(s, parts) {
     ${s.purpose ? block('What it is for', `<p>${md(s.purpose)}</p>`) : ''}
     ${parts && parts.length ? block('The pieces on it — mark any that look wrong',
       `<ul class="ilist">${parts.map(p => itemRow('SC:' + s.id, p, `<span class="mono">${esc(p)}</span>`)).join('')}</ul>`) : ''}
+    ${popups && popups.length ? block(
+      `Popups this screen can raise — ${popups.length} of them. Make one appear if you can`,
+      `<ul class="ilist">${popups.map(x => itemRow('AL:' + s.id, x,
+        `<span class="popup">“${esc(x)}”</span>`)).join('')}</ul>`) : ''}
     ${block('Look for', `<ul>
       <li><span class="n">·</span><span>the empty state — is it designed, or a blank?</span></li>
       <li><span class="n">·</span><span>anything cut off, overlapping, or too small to tap</span></li>
@@ -898,7 +903,7 @@ function emptyStop() {
 
 function stopBody(stop) {
   if (stop.kind === 'flow') return flowStop(FLOW[stop.id]);
-  if (stop.kind === 'screen') return screenStop(SCREEN[stop.id], stop.parts);
+  if (stop.kind === 'screen') return screenStop(SCREEN[stop.id], stop.parts, stop.popups);
   if (stop.kind === 'rule') return ruleStop(RULE[stop.id]);
   if (stop.kind === 'problem') return problemStop(PROB[stop.id]);
   if (stop.kind === 'decision') return decisionStop(DEC[stop.id]);
@@ -1136,9 +1141,11 @@ function itemAnswers() {
     const [owner, item] = key.split('::');
     const sc = owner.startsWith('SC:') ? SCREEN[owner.slice(3)] : null;
     const fl = owner.startsWith('FL:') ? FLOW[owner.slice(3)] : null;
+    const al = owner.startsWith('AL:') ? SCREEN[owner.slice(3)] : null;
     let where = 'Every empty state';
     let label = item;
     if (sc) where = `${sc.route} — the pieces on it`;
+    if (al) { where = `${al.route} — a popup`; label = `“${item}”`; }
     if (fl) {
       where = `${fl.name} — step ${item.replace(/^S/, '')}`;
       /* Name the step, not just its number — "step 4" is unusable in a report. */
@@ -1314,6 +1321,10 @@ function stopMarkdown(stop) {
     out.push(...mdField('What it is for', s.purpose));
     if (stop.parts && stop.parts.length) {
       out.push('**The pieces on it**', ...stop.parts.map(p => `- \`${p}\``), '');
+    }
+    if (stop.popups && stop.popups.length) {
+      out.push(`**Popups it can raise** (${stop.popups.length})`,
+        ...stop.popups.map(x => `- "${x}"`), '');
     }
     out.push('**Look for**',
       '- the empty state — designed, or a blank?',
