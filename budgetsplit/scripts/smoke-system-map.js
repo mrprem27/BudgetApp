@@ -41,7 +41,7 @@ new Function(scripts[1] + `
                       answer: (id, k, v) => { bk.ans[id] = { ...(bk.ans[id] || {}), [k]: v }; },
                       addFinding: (text) => { bk.finds.push({ text, where: '', at: 0 }); },
                       reset: () => { bk.book = null; bk.pos = 0; bk.ans = {}; bk.finds = []; },
-                      stopId, exportMarkdown,
+                      stopId, exportMarkdown, showMarkdown: () => { showMd = true; },
                       main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
@@ -136,6 +136,25 @@ try {
   if (!ok) bad++;
   reset();
 } catch (e) { console.log('  THREW  export — ' + e.message); bad++; }
+
+/* The viewer sandbox blocks any download a page starts, so the readable panel is
+   the only way the notebook gets out other than the clipboard. It must contain the
+   same text the copy button produces. */
+try {
+  reset();
+  const b2 = D.booklets.find(x => x.stops.some(s => s.kind === 'flow'));
+  const s2 = b2.stops.find(x => x.kind === 'flow');
+  answer(stopId(s2), 'behave', 'broken');
+  answer(stopId(s2), 'note', 'panel round trip');
+  globalThis.__p.showMarkdown();
+  go('notebook'); render();
+  const html = main.innerHTML;
+  const okPanel = /data-md/.test(html) && html.includes('panel round trip') && html.includes(stopId(s2));
+  console.log(okPanel ? '  ok     the markdown panel shows the same export'
+                      : '  BAD    markdown panel missing or incomplete');
+  if (!okPanel) bad++;
+  reset();
+} catch (e) { console.log('  THREW  markdown panel — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

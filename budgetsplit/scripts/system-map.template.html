@@ -315,6 +315,15 @@ pre.pre {
 .xbtn { border:0; background:none; color:var(--ink-3); font-size:15px; cursor:pointer; padding:0 2px; margin-left:auto; }
 .xbtn:hover { color:var(--warn); }
 
+.mdbox { margin-top:14px; }
+.mdnote { font-size:13.5px; color:var(--ink-2); margin-bottom:9px; max-width:62ch; line-height:1.55; }
+.mdbox textarea {
+  width:100%; min-height:320px; resize:vertical; padding:13px;
+  border:1px solid var(--line); border-radius:11px; background:var(--surface);
+  color:var(--ink); font-family:var(--mono); font-size:12px; line-height:1.6;
+  white-space:pre; overflow-wrap:normal; overflow-x:auto;
+}
+
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
 <script>window.__DATA__=/*__DATA__*/null/*__DATA__*/;</script>
@@ -597,10 +606,10 @@ const stopId = s => s.kind === 'empty' ? 'EMPTY' : s.id;
 
 /* -------------------------------------------------------------- your answers */
 const KEY = 'bsw-v2';
-let bk = { book: null, pos: 0, ans: {}, finds: [], done: {} };
+let bk = { book: null, pos: 0, ans: {}, finds: [] };
 try {
   const raw = localStorage.getItem(KEY);
-  if (raw) bk = { book: null, pos: 0, ans: {}, finds: [], done: {}, ...JSON.parse(raw) };
+  if (raw) bk = { book: null, pos: 0, ans: {}, finds: [], ...JSON.parse(raw) };
   else {
     /* Carry over the first walkthrough's answers rather than throwing away
        whatever has already been walked. Runs once — after this, v2 exists. */
@@ -885,6 +894,7 @@ function exportMarkdown() {
   if (!rows.length && !bk.finds.length) out.push('_Nothing walked yet._');
   return out.join('\n');
 }
+let showMd = false;
 function notebookView() {
   const rows = [];
   for (const b of D.booklets) for (const s of b.stops) {
@@ -911,11 +921,18 @@ function notebookView() {
       </div>
       <div class="act">
         <button type="button" class="primary" data-copy>Copy everything</button>
+        <button type="button" data-show-md>${showMd ? 'Hide' : 'Show'} the markdown</button>
         <button type="button" data-add-find>＋ Add a finding</button>
         <button type="button" data-mode="shelf">Back to the booklets</button>
         <button type="button" class="danger" data-reset>Start over</button>
       </div>
     </section>
+    ${showMd ? `<div class="mdbox">
+      <p class="mdnote">Select it all and copy, if the button above did not work. The artifact
+         viewer blocks a page from saving a file, so this is the way out — it is the same text
+         the copy button puts on your clipboard.</p>
+      <textarea readonly data-md>${esc(exportMarkdown())}</textarea>
+    </div>` : ''}
     ${bk.finds.length ? `<div class="nb"><h3 class="nbh">Things you noticed yourself</h3>
       ${bk.finds.map((f, i) => `<div class="nbrow"><div class="top"><b>${esc(f.text)}</b>
         <button class="xbtn" type="button" data-drop-find="${i}" aria-label="Remove">✕</button></div>
@@ -1150,6 +1167,14 @@ main.addEventListener('click', e => {
   const drop = hit('[data-drop-find]');
   if (drop) { bk.finds.splice(Number(drop.dataset.dropFind), 1); save(); render(); return; }
 
+  if (hit('[data-show-md]')) {
+    showMd = !showMd; render();
+    if (showMd) {
+      const ta = main.querySelector('[data-md]');
+      if (ta) { ta.focus(); ta.select(); }
+    }
+    return;
+  }
   if (hit('[data-copy]')) {
     navigator.clipboard.writeText(exportMarkdown())
       .then(() => flash('Copied — paste it into the chat'), () => flash('Copy blocked by the browser'));
@@ -1157,7 +1182,7 @@ main.addEventListener('click', e => {
   }
   if (hit('[data-reset]')) {
     if (confirm('Clear every answer, note and finding? This cannot be undone.')) {
-      bk = { book: null, pos: 0, ans: {}, finds: [], done: {} }; save(); render();
+      bk = { book: null, pos: 0, ans: {}, finds: [] }; save(); render();
     }
     return;
   }
