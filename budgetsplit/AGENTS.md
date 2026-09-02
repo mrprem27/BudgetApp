@@ -246,10 +246,18 @@ Use `grow` for a chip that should fill its row; it wraps in a plain `View` becau
 these"; a segmented control says "pick exactly one". `RecurringControls`' frequency and
 end-mode were chip rows and read as multi-select.
 
-**One deliberate second pill weight exists:** `finance/add/ContextPill`. It is quieter
-and centred because a transaction's destination is *context above the hero*, not a field
-— uniform tokens, deliberate hierarchy. That distinction is the reason this rule is about
-hand-rolling rather than about looking identical.
+There is **no second pill weight**. `finance/add/ContextPill` was one — quieter and
+centred, because a transaction's destination is *context above the hero* rather than a
+field — and `AddHeader` replaced it, which cost a whole row less. The file sat with no
+callers until the component map found it and the rule below removed it. The point it was
+making survives: this rule is about **hand-rolling**, not about everything looking
+identical.
+
+**A component with no importer gets deleted, not kept "for later"** — the same rule as
+the animation primitives in §11, and now mechanical rather than remembered.
+`deadComponents.test.ts` walks the import graph from every route and fails on anything it
+cannot reach. `StepTransition`, `AnimatedNumber`, `Stagger` and `ContextPill` all shipped
+unused; the first two were caught by eye, months late, and the last two by the test.
 
 ---
 

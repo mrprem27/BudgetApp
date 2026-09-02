@@ -35,8 +35,13 @@ global.clearTimeout = () => {};
 
 new Function(scripts[0])();
 new Function(scripts[1] + `
-  ;globalThis.__p = { D, CROSS, render, go: k => { active = k; }, STOPS, TASK_STOPS,
-                      book, exportMarkdown, seek: n => { book.pos = n; },
+  ;globalThis.__p = { D, CROSS, render, go: k => { active = k; },
+                      openBook: (key, pos) => { bk.book = key; bk.pos = pos || 0; active = 'shelf'; },
+                      shelf: () => { bk.book = null; active = 'shelf'; },
+                      answer: (id, k, v) => { bk.ans[id] = { ...(bk.ans[id] || {}), [k]: v }; },
+                      addFinding: (text) => { bk.finds.push({ text, where: '', at: 0 }); },
+                      reset: () => { bk.book = null; bk.pos = 0; bk.ans = {}; bk.finds = []; },
+                      stopId, exportMarkdown,
                       main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
@@ -79,33 +84,57 @@ for (const k of ['entities', 'flows', 'screens', 'feats', 'ovs', 'dqs', 'ivs', '
 if (unresolved.size) { console.log('  BAD    ids with no human name: ' + [...unresolved].join(', ')); bad++; }
 else console.log('  ok     every cross-reference resolves to a name');
 
-/* The walk is the point of the page: every stop must render, both ends of the
-   route must hold, and the export must produce something pasteable. */
-const { STOPS, TASK_STOPS, book, exportMarkdown, seek } = globalThis.__p;
-console.log(`\n  walking ${STOPS.length} stops (${TASK_STOPS.length} tasks)`);
-let empties = 0;
-for (let i = 0; i < STOPS.length; i++) {
-  try {
-    q.value = ''; go('walk'); seek(i); render();
-    if (main.innerHTML.length < 400) { empties++; console.log(`  EMPTY  stop ${i}`); }
-  } catch (e) { console.log(`  THREW  stop ${i} — ${e.message}`); bad++; }
-}
-if (!empties) console.log('  ok     every stop renders');
-else bad++;
+/* The booklets are the point of the page: the shelf, every stop of every
+   booklet, both ends of each one, and an export that carries what you answered. */
+const { openBook, shelf, answer, addFinding, reset, stopId, exportMarkdown } = globalThis.__p;
 
-check('pager holds at the start', () => { seek(-5); go('walk'); render(); });
-check('pager holds at the end', () => { seek(STOPS.length + 5); go('walk'); render(); });
-check('notebook, empty', () => { seek(0); go('notebook'); render(); });
+check('the shelf', () => { q.value = ''; shelf(); render(); });
+
+let stops = 0, empties = 0;
+for (const b of D.booklets) {
+  for (let i = 0; i < b.stops.length; i++) {
+    stops++;
+    try {
+      q.value = ''; openBook(b.key, i); render();
+      if (main.innerHTML.length < 400) { empties++; console.log(`  EMPTY  ${b.key} stop ${i}`); }
+    } catch (e) { console.log(`  THREW  ${b.key} stop ${i} — ${e.message}`); bad++; }
+  }
+}
+console.log(empties ? `  BAD    ${empties} empty stops` : `  ok     all ${stops} stops across ${D.booklets.length} booklets render`);
+if (empties) bad++;
+
+/* Coverage is the whole "nothing is missing" claim — assert it here too, so a
+   broken build cannot quietly ship a page with a hole in it. */
+const gaps = Object.entries(D.coverage).filter(([, v]) => v.missing.length);
+console.log(gaps.length
+  ? `  BAD    coverage gaps: ${gaps.map(([k, v]) => k + ' ' + v.missing.join(',')).join(' | ')}`
+  : `  ok     covers every screen, task, component, rule, finding and question`);
+if (gaps.length) bad++;
+
+const first = D.booklets[0];
+check('pager holds at the start', () => { openBook(first.key, -5); render(); });
+check('pager holds at the end', () => { openBook(first.key, first.stops.length + 5); render(); });
+check('notebook, empty', () => { reset(); go('notebook'); render(); });
 
 try {
-  const stop = TASK_STOPS[0];
-  book.notes[stop.id] = { s: 'bad', n: 'the total did not move' };
+  reset();
+  const b = D.booklets.find(x => x.stops.some(s => s.kind === 'flow'));
+  const s = b.stops.find(x => x.kind === 'flow');
+  answer(stopId(s), 'behave', 'broken');
+  answer(stopId(s), 'numbers', 'wrong');
+  answer(stopId(s), 'note', 'the total moved by the whole bill');
+  addFinding('the back button on Reports goes to Home');
   go('notebook'); render();
   const md = exportMarkdown();
-  const okExport = /## Broken \(1\)/.test(md) && md.includes(stop.id) && md.includes('the total did not move');
-  console.log(okExport ? '  ok     export produces pasteable markdown' : '  BAD    export missing id or note');
-  if (!okExport) bad++;
-  delete book.notes[stop.id];
+  const ok = /## Broken \(1\)/.test(md)
+    && md.includes(stopId(s))
+    && md.includes('the total moved by the whole bill')
+    && md.includes('the back button on Reports goes to Home')
+    && /Expected:/.test(md);
+  console.log(ok ? '  ok     export carries answers, notes, your findings and the expectation'
+                 : '  BAD    export incomplete');
+  if (!ok) bad++;
+  reset();
 } catch (e) { console.log('  THREW  export — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');

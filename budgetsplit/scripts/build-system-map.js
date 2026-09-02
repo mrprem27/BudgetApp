@@ -317,7 +317,7 @@ const AREAS = [
     key: 'import', name: 'Importing and review',
     blurb: 'Statements, exports and pasted alerts, parsed into a staging inbox you edit in place before anything reaches the ledger. Nothing commits until you say so.',
     ent: ['E-17','E-66'],
-    fl:  ['FL-08','FL-25','FL-48'],
+    fl:  ['FL-08','FL-48'],
     sc:  ['SC-18','SC-19'],
     fe:  ['FE-43','FE-44','FE-45','FE-46','FE-47','FE-48','FE-49','FE-51'],
     ov:  ['OV-21','OV-24'],
@@ -327,7 +327,7 @@ const AREAS = [
     key: 'sync', name: 'Accounts, sync and backup',
     blurb: 'The optional half. An account buys off-device backup and shared-group sync and nothing else. Built end to end, encrypted per group — and no part of it has run on a phone.',
     ent: ['E-18','E-19','E-20','E-21','E-22','E-65','E-82','E-87','E-88','E-89'],
-    fl:  ['FL-11','FL-24','FL-27','FL-28','FL-29','FL-30','FL-31','FL-32','FL-49'],
+    fl:  ['FL-11','FL-24','FL-25','FL-27','FL-28','FL-29','FL-30','FL-31','FL-32','FL-49'],
     sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44'],
     fe:  ['FE-16','FE-52','FE-53','FE-54','FE-55','FE-56','FE-57','FE-58','FE-59'],
     ov:  [],
@@ -412,6 +412,118 @@ for (const d of dqs) names[d.id] = short(d.q.replace(/^~~|~~$/g, ''), 52).toLowe
 for (const f of flows) names['SN-' + f.id.slice(3)] = names['SN-' + f.id.slice(3)] || f.name.toLowerCase();
 for (const f of feats) names[f.id] = f.name.toLowerCase();
 
+/* ---- Components, and which screen each one is reachable from ---------------
+ *
+ * Nothing tracked this before, so "no component is missing" could not be said,
+ * let alone checked. Screens import components, components import components, so
+ * the map is the transitive closure of the import graph rooted at each route.
+ */
+const path = require('path');
+
+const SRC = 'src';
+const COMP_DIR = path.join(SRC, 'components');
+
+function allFiles(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) allFiles(f, out);
+    else if (/\.tsx?$/.test(e.name)) out.push(f);
+  }
+  return out;
+}
+
+const compFiles = allFiles(COMP_DIR).filter(f => f.endsWith('.tsx'));
+/** `src/components/finance/add/AmountSheet.tsx` → `AmountSheet` */
+const compName = f => path.basename(f, '.tsx');
+const byName = new Map(compFiles.map(f => [compName(f), f]));
+
+/** Every component a file imports, by name, resolved against the component tree. */
+function importsOf(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  const out = new Set();
+  for (const m of text.matchAll(/from\s+'([^']+)'/g)) {
+    const spec = m[1];
+    if (!spec.startsWith('.')) continue;
+    const name = path.basename(spec).replace(/\.tsx?$/, '');
+    if (byName.has(name)) out.add(name);
+  }
+  /* A barrel like `components/ui` re-exports; catch named imports off it too. */
+  for (const m of text.matchAll(/import\s*\{([^}]+)\}\s*from\s*'[^']*components?\/[^']*'/g)) {
+    for (const raw of m[1].split(',')) {
+      const name = raw.trim().split(/\s+as\s+/)[0].trim();
+      if (byName.has(name)) out.add(name);
+    }
+  }
+  return [...out];
+}
+
+const importCache = new Map();
+const cachedImports = (file) => {
+  if (!importCache.has(file)) importCache.set(file, importsOf(file));
+  return importCache.get(file);
+};
+
+/** Transitive closure from one route file. */
+function reachable(routeFile) {
+  const seen = new Set();
+  const stack = [...cachedImports(routeFile)];
+  while (stack.length) {
+    const n = stack.pop();
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const f = byName.get(n);
+    if (f) stack.push(...cachedImports(f));
+  }
+  return seen;
+}
+
+const routeFileFor = {};
+for (const f of allFiles('app')) {
+  if (!f.endsWith('.tsx')) continue;
+  const base = path.basename(f);
+  const rel = path.relative('app', f).replace(/\.tsx$/, '');
+  const segs = rel.split(path.sep).filter(s => !/^\(.*\)$/.test(s));
+  if (segs[segs.length - 1] === 'index') segs.pop();
+  const route = '/' + segs.join('/');
+  if (base === '_layout.tsx') {
+    routeFileFor[rel.includes(path.sep) ? '/(tabs)' : '/(root)'] = f;
+  } else {
+    routeFileFor[route] = f;
+  }
+}
+
+/* screen id → component names, and the reverse */
+const screenByRoute = Object.fromEntries(screens.map(s => [s.route, s.id]));
+screenByRoute['/(root)'] = 'SC-01';
+screenByRoute['/(tabs)'] = 'SC-02';
+
+const componentsOf = {};   // SC-id → [component]
+const screensOf = {};      // component → [SC-id]
+for (const [route, file] of Object.entries(routeFileFor)) {
+  const sc = screenByRoute[route];
+  if (!sc) continue;
+  const names = [...reachable(file)].sort();
+  componentsOf[sc] = names;
+  for (const n of names) (screensOf[n] = screensOf[n] || []).push(sc);
+}
+
+/** A component nothing reaches is either dead or reached only dynamically. */
+const orphanComponents = compFiles.map(compName).filter(n => !screensOf[n]).sort();
+
+/* Which bucket a component lives in — a `ui/` primitive is checked as part of a
+   screen, a `finance/` widget is worth naming on its own. */
+const bucketOf = {};
+for (const f of compFiles) {
+  const rel = path.relative(COMP_DIR, f);
+  bucketOf[compName(f)] = rel.split(path.sep)[0];
+}
+const componentList = compFiles.map(compName).sort().map(n => ({
+  name: n,
+  bucket: bucketOf[n],
+  screens: (screensOf[n] || []).sort(),
+  sheet: /Sheet$/.test(n),
+}));
+
 /* ---- The walkthrough ------------------------------------------------------
  * A task is a test script already: it says where to start, what to do, what should
  * happen and what goes wrong. Stitching them into one ordered route is what turns
@@ -454,6 +566,157 @@ const route = [...flows].sort((a, b) =>
 const flowScreens = new Set(flows.flatMap(f => f.screens));
 for (const a of AREAS) a.orphanScreens = a.sc.filter(id => !flowScreens.has(id));
 
+/* ---- Attribution: one home screen per component ---------------------------
+ *
+ * `SC-07` reaches 48 components and `SC-29` reaches 2, because the Add screen
+ * pulls in half the primitive library. Listing all 48 on one stop is useless, so
+ * each component gets exactly one home: the screen that reaches it with the
+ * FEWEST components, which is the most specific screen that uses it.
+ */
+const homeOf = {};
+for (const c of componentList) {
+  if (!c.screens.length) continue;
+  c.home = [...c.screens].sort((a, b) =>
+    (componentsOf[a] || []).length - (componentsOf[b] || []).length || a.localeCompare(b))[0];
+  homeOf[c.home] = homeOf[c.home] || [];
+  homeOf[c.home].push(c.name);
+}
+/* Only `finance/` and `system/` are named on a stop — those have behaviour worth
+   checking. The `ui/` primitives render on every screen; a broken one is obvious
+   the moment you open anything. */
+const notableAt = sc => (homeOf[sc] || [])
+  .filter(n => (componentList.find(c => c.name === n) || {}).bucket !== 'ui').sort();
+
+/* ---- Booklets -------------------------------------------------------------
+ *
+ * Small enough to finish in a sitting. Built from each area, split when a list
+ * runs long, plus four that cut across everything.
+ */
+const AREA_BOOKS = {
+  add:       [['screens', 'the screens'], ['do', 'logging it'], ['capture', 'capture']],
+  split:     [['screens', 'the screens'], ['do', 'groups and people'], ['settle', 'settling up']],
+  budget:    [['screens', 'the screens'], ['do', 'setting them']],
+  savings:   [['screens', 'the screens'], ['do', 'money and assets'], ['goals', 'goals']],
+  recurring: [['screens', 'the screens'], ['do', 'rules and reminders']],
+  import:    [['screens', 'the screens'], ['do', 'inbox and export']],
+  sync:      [['screens', 'the screens'], ['peer', 'when someone else is involved'], ['do', 'accounts and sync']],
+  shell:     [['screens', 'the screens'], ['do', 'settings and safety']],
+};
+/* Which "doing" booklet a task belongs to when an area has more than one. */
+const BOOK_OF_FLOW = {
+  'FL-17': 'capture', 'FL-18': 'capture', 'FL-41': 'capture', 'FL-53': 'capture',
+  'FL-06': 'settle', 'FL-19': 'settle', 'FL-20': 'settle', 'FL-21': 'settle',
+  'FL-46': 'settle', 'FL-47': 'settle',
+  'FL-27': 'peer', 'FL-28': 'peer', 'FL-29': 'peer',
+  'FL-10': 'goals', 'FL-36': 'goals', 'FL-37': 'goals',
+};
+
+const BOOKS = [];
+const seenFlow = new Set();
+
+/* The cold sweep first: a wiped app is the only place empty states exist, and
+   you cannot be in it and in demo data at the same time. */
+BOOKS.push({
+  key: 'cold', name: 'First run and empty states', state: 'empty',
+  blurb: 'Erase everything and start from nothing. The only way to see first run, and the only way to see an empty state — demo data can never show you one.',
+  stops: [
+    ...flows.filter(f => f.sweep === 'cold').map(f => { seenFlow.add(f.id); return { kind: 'flow', id: f.id }; }),
+    { kind: 'empty' },
+  ],
+});
+
+for (const a of AREAS) {
+  for (const [sub, label] of AREA_BOOKS[a.key]) {
+    let stops;
+    if (sub === 'screens') {
+      stops = a.sc.map(id => ({ kind: 'screen', id }));
+    } else {
+      const mine = a.fl.filter(id => (BOOK_OF_FLOW[id] || 'do') === sub && !seenFlow.has(id));
+      mine.forEach(id => seenFlow.add(id));
+      stops = mine.map(id => ({ kind: 'flow', id }));
+    }
+    if (!stops.length) continue;
+    const states = [...new Set(stops.filter(s => s.kind === 'flow')
+      .map(s => flows.find(f => f.id === s.id).sweep))];
+    BOOKS.push({
+      key: `${a.key}-${sub}`,
+      name: `${a.name} · ${label}`,
+      state: sub === 'screens' ? 'demo' : (states.includes('pair') ? 'pair' : states.includes('hands') ? 'hands' : 'demo'),
+      blurb: sub === 'screens'
+        ? `Open each one and look at it properly — the pieces on it, the states it can be in, whether it reads right.`
+        : a.blurb,
+      stops,
+    });
+  }
+}
+
+/* Anything the area lists missed, so a new task cannot fall through. */
+const orphanFlows = flows.filter(f => !seenFlow.has(f.id));
+if (orphanFlows.length) {
+  BOOKS.push({
+    key: 'other', name: 'Everything else', state: 'demo',
+    blurb: 'Tasks no other booklet claimed.',
+    stops: orphanFlows.map(f => ({ kind: 'flow', id: f.id })),
+  });
+}
+
+BOOKS.push({
+  key: 'rules', name: 'Rules that must hold', state: 'demo',
+  blurb: 'Twenty-two things that must never be false. Nine have a test behind them; the rest are held by people remembering, which is exactly why they are worth checking by hand.',
+  stops: ivs.map(v => ({ kind: 'rule', id: v.id })),
+});
+BOOKS.push({
+  key: 'problems', name: 'Known problems', state: 'demo',
+  blurb: 'Twenty-seven findings already written down. Confirm each is still real, still this bad, and still worth the verdict it carries.',
+  stops: ovs.map(o => ({ kind: 'problem', id: o.id })),
+});
+BOOKS.push({
+  key: 'questions', name: 'Open questions', state: 'demo',
+  blurb: 'Thirty things nobody has decided. Your opinion is the answer to most of them — that is not a figure of speech, it is why they are still open.',
+  stops: dqs.map(d => ({ kind: 'decision', id: d.id })),
+});
+
+/* Split anything that outgrew a sitting. */
+const MAX = 8;
+const booklets = [];
+for (const b of BOOKS) {
+  if (b.stops.length <= MAX) { booklets.push(b); continue; }
+  const parts = Math.ceil(b.stops.length / MAX);
+  const per = Math.ceil(b.stops.length / parts);
+  for (let i = 0; i < parts; i++) {
+    booklets.push({
+      ...b,
+      key: `${b.key}-${i + 1}`,
+      name: `${b.name} (${i + 1}/${parts})`,
+      stops: b.stops.slice(i * per, (i + 1) * per),
+    });
+  }
+}
+
+/* Attach the notable components to each screen stop. */
+for (const b of booklets) {
+  for (const s of b.stops) if (s.kind === 'screen') s.parts = notableAt(s.id);
+}
+
+/* ---- Coverage: the claim, made checkable ---------------------------------- */
+const covered = { screen: new Set(), flow: new Set(), part: new Set(), rule: new Set(), problem: new Set(), decision: new Set() };
+for (const b of booklets) for (const s of b.stops) {
+  if (s.kind === 'screen') { covered.screen.add(s.id); (s.parts || []).forEach(p => covered.part.add(p)); }
+  if (s.kind === 'flow') covered.flow.add(s.id);
+  if (s.kind === 'rule') covered.rule.add(s.id);
+  if (s.kind === 'problem') covered.problem.add(s.id);
+  if (s.kind === 'decision') covered.decision.add(s.id);
+}
+const notable = componentList.filter(c => c.bucket !== 'ui').map(c => c.name);
+const coverage = {
+  screens:    { total: screens.length, missing: screens.filter(s => !covered.screen.has(s.id)).map(s => s.id) },
+  flows:      { total: flows.length,   missing: flows.filter(f => !covered.flow.has(f.id)).map(f => f.id) },
+  components: { total: notable.length, missing: notable.filter(n => !covered.part.has(n)) },
+  rules:      { total: ivs.length,     missing: ivs.filter(v => !covered.rule.has(v.id)).map(v => v.id) },
+  problems:   { total: ovs.length,     missing: ovs.filter(o => !covered.problem.has(o.id)).map(o => o.id) },
+  decisions:  { total: dqs.length,     missing: dqs.filter(d => !covered.decision.has(d.id)).map(d => d.id) },
+};
+
 // ---- §0, §1, §12 prose ------------------------------------------------------
 const legend = [...section(0).matchAll(/^\| `([A-Z]{1,2})-` \| ([^|]*)\| ([^|]*)\| ([^|]*)\|$/gm)]
   .map(m => ({ p: m[1], is: clean(m[2]), eg: clean(m[3]), answers: clean(m[4]) }));
@@ -485,7 +748,7 @@ const meta = {
 for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
 
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, componentList, componentsOf, orphanComponents, booklets, coverage,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,

@@ -98,6 +98,36 @@ Getting into each takes one tap, from Settings → tap the version seven times �
 
 ⚠️ **Load demo data wipes the database.** It preserves only your name and avatar.
 
+#### The booklets
+
+The browsable version turns this document into **32 small booklets**, four to eight stops each,
+finishable in a sitting. Take any one from the shelf, or start at the top and it carries you
+through. They are assembled by `scripts/build-system-map.js`, not written by hand.
+
+| Booklet kind | Made of |
+|---|---|
+| *`<area>` · the screens* | Open each screen, check the pieces on it, check its empty state |
+| *`<area>` · doing it* | The tasks in §8 — where to start, the steps, what should happen |
+| First run and empty states | The one booklet needing a wiped app |
+| Rules that must hold | The 22 in §5, as cross-screen checks |
+| Known problems | The 27 in §10 — is each still true? |
+| Open questions | The 30 in §11 — your opinion is the answer |
+
+**Every screen, task, component, rule, finding and open question is in exactly one booklet**, and
+`coverage.test.ts` fails if any falls out. That test builds the booklets with the real builder
+rather than reimplementing the rule, because two implementations of one rule is how they start
+disagreeing — which is the subject of this whole document.
+
+**Components** are new here. The builder walks the import graph out from every route, then gives
+each component **one home**: the screen that reaches it with the fewest components, which is the
+most specific screen using it. Listing all 48 that `/add/quick` pulls in would be useless. Only
+`finance/` and `system/` components are named on a stop; the `ui/` primitives render everywhere and
+a broken one is obvious the moment you open anything.
+
+That map also found two components nothing imported — `Stagger` and `ContextPill` — which
+`AGENTS.md` §11 says to delete rather than keep. `deadComponents.test.ts` now enforces that rule
+instead of relying on somebody noticing.
+
 #### What the demo dataset actually contains
 
 `src/db/seedDemo.ts` is built for exactly this — *"a rich, realistic dataset that exercises every

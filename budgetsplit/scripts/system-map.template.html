@@ -185,7 +185,7 @@ pre.pre {
   .kv dt { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; }
 }
 
-/* ------------------------------------------------------------------- walk */
+/* ---------------------------------------------------- walk & booklet UI */
 .wrap { max-width:720px; margin:0 auto; }
 .prog { position:sticky; top:0; z-index:25; background:var(--ground); padding:10px 0 12px; }
 .prog .bar { height:6px; border-radius:4px; background:var(--hair); overflow:hidden; }
@@ -271,6 +271,49 @@ pre.pre {
 .act button.danger:hover { border-color:var(--warn); color:var(--warn); }
 
 @media (max-width:420px) { .opts { grid-template-columns:repeat(2,1fr); } }
+
+
+/* --------------------------------------------------------------- the shelf */
+.shelf { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-top:18px; }
+.bcard {
+  text-align:left; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  border-radius:12px; padding:14px 15px; cursor:pointer; font:inherit; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:9px; min-height:96px;
+}
+.bcard:hover { border-color:var(--accent); }
+.bcard.full { border-color:color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.btop { display:flex; gap:8px; align-items:flex-start; }
+.bname { font-size:14.5px; font-weight:500; line-height:1.35; flex:1; }
+.bbar { height:5px; border-radius:3px; background:var(--hair); overflow:hidden; }
+.bbar i { display:block; height:100%; background:var(--accent); }
+.bcard.full .bbar i { background:var(--ok); }
+.bmeta { font-family:var(--mono); font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+.bmeta b { color:var(--warn); font-weight:500; }
+
+.crumb {
+  border:0; background:none; color:var(--ink-3); font:inherit; font-size:13px;
+  cursor:pointer; padding:4px 0 8px; display:block;
+}
+.crumb:hover { color:var(--accent); }
+.intro { background:var(--raised); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:12px; }
+.intro p { font-size:14.5px; color:var(--ink-2); line-height:1.55; }
+.intro p + p { margin-top:9px; }
+.intro .how { font-size:13.5px; }
+.intro .how.warn { color:var(--warn); }
+
+/* ------------------------------------------------------------- the questions */
+.qrow + .qrow { margin-top:14px; padding-top:14px; border-top:1px solid var(--hair); }
+.qrow h3 { font-size:14.5px; font-weight:600; margin-bottom:9px; }
+.qhint { display:block; font-size:13px; font-weight:400; color:var(--ink-2); margin-top:4px; line-height:1.5; }
+.opts-3 { grid-template-columns:repeat(3,1fr); }
+.opt.fine[aria-pressed="true"], .opt.holds[aria-pressed="true"], .opt.yes[aria-pressed="true"] { background:var(--ok); border-color:var(--ok); color:var(--ground); }
+.opt.off[aria-pressed="true"] { background:var(--flag); border-color:var(--flag); color:var(--ground); }
+.opt.broken[aria-pressed="true"], .opt.wrong[aria-pressed="true"], .opt.no[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:var(--ground); }
+.opt.skip[aria-pressed="true"] { background:var(--ink-3); border-color:var(--ink-3); color:var(--ground); }
+
+.nbh { font-size:13px; margin:16px 0 8px; }
+.xbtn { border:0; background:none; color:var(--ink-3); font-size:15px; cursor:pointer; padding:0 2px; margin-left:auto; }
+.xbtn:hover { color:var(--warn); }
 
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
@@ -515,54 +558,13 @@ function match(x, q) {
   return hay.includes(q) || hay.includes(base);
 }
 
-/* ------------------------------------------------------------------- walk */
+/* ------------------------------------------------------------ the booklets */
 
-const SWEEP = {
-  cold:  { name: 'Cold start',   how: 'Settings → tap the version 7× → Storage → <b>Erase all data</b>',
-           why: 'First run, and every empty state. Demo data can never show you these.' },
-  demo:  { name: 'Look around',  how: 'Settings → tap the version 7× → Storage → <b>Load demo data</b>',
-           why: 'Nothing here changes anything, so you can do these in any order and repeat them freely.' },
-  hands: { name: 'Hands on',     how: 'Keep the demo data. These change it.',
-           why: 'The write paths. Slow down here — the point is watching a number move, not that the screen opens.' },
-  pair:  { name: 'Needs a second phone', how: 'An account, and someone else with the app.',
-           why: 'You cannot walk these alone. None of it has run on a real device yet.' },
-};
-
-const FLOW = Object.fromEntries(D.flows.map(f => [f.id, f]));
-const AREA = Object.fromEntries(D.AREAS.map(a => [a.key, a]));
-
-/* Stops: a sweep marker, then its tasks. Screens no task covers ride along at
-   the end of their area's last task rather than becoming stops of their own. */
-const STOPS = [];
-let lastSweep = null;
-for (const id of D.route) {
-  const f = FLOW[id];
-  if (f.sweep !== lastSweep) { STOPS.push({ kind: 'sweep', key: f.sweep }); lastSweep = f.sweep; }
-  STOPS.push({ kind: 'task', id, f });
-}
-const TASK_STOPS = STOPS.filter(s => s.kind === 'task');
-
-/* ------------------------------------------------------------- your notebook */
-const KEY = 'bsw-v1';
-let book = { pos: 0, notes: {} };
-try {
-  const raw = localStorage.getItem(KEY);
-  if (raw) book = { pos: 0, notes: {}, ...JSON.parse(raw) };
-} catch (_) { /* private window — the walk still works, it just forgets */ }
-function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (_) {}
-}
-const noteFor = id => book.notes[id] || { s: '', n: '' };
-
-const STATUS = [
-  ['ok',   'works', '✓'],
-  ['bad',  'broken', '✕'],
-  ['odd',  'odd', '?'],
-  ['skip', 'skipped', '–'],
-];
-
-/* --------------------------------------------------------------- one stop */
-function stepList(v, cls) {
+/* Three renderers the stop bodies share. Steps and failure modes come through
+   with their sub-ids attached, so they number themselves; everything else is a
+   `·`-separated list; and a block is just a titled section that disappears when
+   it has nothing to say. */
+function stepList(v) {
   const parts = splitSub(v);
   if (!parts.length) return '';
   return `<ol>${parts.map((p, i) =>
@@ -574,152 +576,355 @@ function dotList(v) {
   if (!parts.length) return '';
   return `<ul>${parts.map(x => `<li><span class="n">·</span><span>${md(x)}</span></li>`).join('')}</ul>`;
 }
-function block(title, inner, cls) {
-  return inner ? `<div class="blk ${cls || ''}"><h3>${esc(title)}</h3>${inner}</div>` : '';
+const block = (title, inner, cls) =>
+  inner ? `<div class="blk ${cls || ''}"><h3>${esc(title)}</h3>${inner}</div>` : '';
+
+const STATE = {
+  empty: { label: 'wipe first', how: 'Settings → tap the version 7× → Storage → <b>Erase all data</b>' },
+  demo:  { label: 'demo data',  how: 'Settings → tap the version 7× → Storage → <b>Load demo data</b>' },
+  hands: { label: 'changes things', how: 'Keep the demo data. These stops change it.' },
+  pair:  { label: 'needs 2 phones', how: 'An account, and someone else running the app.' },
+};
+
+const FLOW = Object.fromEntries(D.flows.map(f => [f.id, f]));
+const SCREEN = Object.fromEntries(D.screens.map(s => [s.id, s]));
+const RULE = Object.fromEntries(D.ivs.map(v => [v.id, v]));
+const PROB = Object.fromEntries(D.ovs.map(o => [o.id, o]));
+const DEC = Object.fromEntries(D.dqs.map(d => [d.id, d]));
+const BOOK = Object.fromEntries(D.booklets.map(b => [b.key, b]));
+
+const stopId = s => s.kind === 'empty' ? 'EMPTY' : s.id;
+
+/* -------------------------------------------------------------- your answers */
+const KEY = 'bsw-v2';
+let bk = { book: null, pos: 0, ans: {}, finds: [], done: {} };
+try {
+  const raw = localStorage.getItem(KEY);
+  if (raw) bk = { book: null, pos: 0, ans: {}, finds: [], done: {}, ...JSON.parse(raw) };
+  else {
+    /* Carry over the first walkthrough's answers rather than throwing away
+       whatever has already been walked. Runs once — after this, v2 exists. */
+    const old = localStorage.getItem('bsw-v1');
+    if (old) {
+      const o = JSON.parse(old);
+      for (const [id, v] of Object.entries(o.notes || {})) {
+        bk.ans[id] = {
+          behave: { ok: 'fine', bad: 'broken', odd: 'off', skip: 'skip' }[v.s] || '',
+          note: v.n || '',
+        };
+      }
+    }
+  }
+} catch (_) { /* private window — it works, it just forgets */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(bk)); } catch (_) {} };
+const ansFor = id => bk.ans[id] || {};
+
+/** Anything that is not "fine" or unanswered is worth carrying to the notebook. */
+const BAD = new Set(['broken', 'wrong', 'off', 'no']);
+const stopFlagged = id => Object.entries(ansFor(id)).some(([k, v]) => k !== 'note' && BAD.has(v));
+const stopAnswered = id => Object.entries(ansFor(id)).some(([k, v]) => k !== 'note' && v);
+
+/* ------------------------------------------------------------- the questions */
+const Q = {
+  look:    { q: 'Does it look right?', a: [['fine', 'fine'], ['off', 'a bit off'], ['broken', 'broken']] },
+  behave:  { q: 'Did it do what it said?', a: [['fine', 'yes'], ['off', 'sort of'], ['broken', 'no']] },
+  numbers: { q: 'Did the numbers come out right?', a: [['fine', 'right'], ['wrong', 'wrong'], ['skip', "didn't check"]] },
+  data:    { q: 'Is the data right afterwards?', a: [['fine', 'right'], ['wrong', 'wrong'], ['skip', "didn't check"]] },
+  rule:    { q: 'Does this hold in the app?', a: [['fine', 'holds'], ['broken', 'broken'], ['skip', "didn't check"]] },
+  still:   { q: 'Is this still true?', a: [['yes', 'still true'], ['no', 'fixed now'], ['skip', 'not sure']] },
+};
+function questionsFor(stop) {
+  if (stop.kind === 'flow') {
+    const f = FLOW[stop.id];
+    const writes = !/^\s*(nothing|none)\b/i.test((f.writes || '').replace(/[*_`]/g, ''));
+    return ['look', 'behave', ...(f.numbers ? ['numbers'] : []), ...(writes ? ['data'] : [])];
+  }
+  if (stop.kind === 'screen') return ['look'];
+  if (stop.kind === 'rule') return ['rule'];
+  if (stop.kind === 'problem') return ['still'];
+  if (stop.kind === 'decision') return [];
+  return ['look'];
 }
 
-function taskCard(f, idx) {
-  const a = AREA[f.area];
-  const note = noteFor(f.id);
-  const where = f.screens.map(s => `<span class="route">${esc(D.names[s] || s)}</span>`).join('');
-  return `<article class="stop">
-    <header>
-      <div class="eyebrow">${esc(a ? a.name : '')} · stop ${idx + 1} of ${TASK_STOPS.length}</div>
-      <h2>${esc(f.name)}</h2>
-      ${f.trigger ? `<p class="why">${md(f.trigger)}</p>` : ''}
-      ${where ? `<div class="where">${where}</div>` : ''}
-    </header>
-    ${block('You need', f.state ? `<p>${md(f.state)}</p>` : '', '')}
+function askBlock(stop) {
+  const id = stopId(stop);
+  const a = ansFor(id);
+  const qs = questionsFor(stop);
+  const numbersHint = stop.kind === 'flow' && FLOW[stop.id].numbers
+    ? String(FLOW[stop.id].numbers).split('·').map(x => x.trim()).filter(Boolean)[0] : '';
+  return `<div class="ans">
+    ${qs.map(k => `<div class="qrow">
+      <h3>${esc(Q[k].q)}${k === 'numbers' && numbersHint
+        ? `<span class="qhint">${md(numbersHint)}</span>` : ''}</h3>
+      <div class="opts opts-${Q[k].a.length}">${Q[k].a.map(([v, label]) =>
+        `<button class="opt ${v}" type="button" data-q="${k}" data-v="${v}"
+           aria-pressed="${a[k] === v}">${esc(label)}</button>`).join('')}</div>
+    </div>`).join('')}
+    <textarea data-note placeholder="${stop.kind === 'decision'
+      ? 'What do you think? This is the answer — there is no other one.'
+      : 'Anything else you noticed'}">${esc(a.note || '')}</textarea>
+  </div>`;
+}
+
+/* ------------------------------------------------------------- stop bodies */
+function flowStop(f) {
+  return `${block('You need', f.state ? `<p>${md(f.state)}</p>` : '')}
     ${block('Start from', stepList(f.entry) || (f.entry ? `<p>${md(f.entry)}</p>` : ''))}
     ${block('Do this', stepList(f.steps))}
     ${block('Should happen', [f.writes, f.exit].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''), 'expect')}
     ${block('Check the numbers', dotList(f.numbers), 'expect')}
     ${block('Watch out for', stepList(f.failures), 'warn')}
     ${block('Also try', dotList(f.alsoTry), 'hard')}
-    ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}
-    <div class="ans">
-      <h3>How did it go?</h3>
-      <div class="opts">${STATUS.map(([k, label, glyph]) =>
-        `<button class="opt ${k}" type="button" data-st="${k}" aria-pressed="${note.s === k}">
-           <span>${glyph}</span>${esc(label)}</button>`).join('')}</div>
-      <textarea data-note placeholder="What did you see? What did you expect?">${esc(note.n)}</textarea>
-    </div>
-  </article>`;
+    ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}`;
+}
+function screenStop(s, parts) {
+  const ways = s.entries === 0 ? 'Nothing in the app opens this — it is a deep link only.'
+    : s.entries === 1 ? 'Exactly one way in. If it is an unlabelled icon, this screen is effectively hidden.'
+    : `${s.entries} ways in.`;
+  return `${block('Open it', `<p>Go to <code>${esc(s.route)}</code>. ${esc(ways)}</p>`)}
+    ${s.purpose ? block('What it is for', `<p>${md(s.purpose)}</p>`) : ''}
+    ${parts && parts.length ? block('The pieces on it — check each one renders and reads right',
+      `<ul>${parts.map(p => `<li><span class="n">·</span><span class="mono">${esc(p)}</span></li>`).join('')}</ul>`) : ''}
+    ${block('Look for', `<ul>
+      <li><span class="n">·</span><span>the empty state — is it designed, or a blank?</span></li>
+      <li><span class="n">·</span><span>anything cut off, overlapping, or too small to tap</span></li>
+      <li><span class="n">·</span><span>the back button — does it go where you expect?</span></li>
+      <li><span class="n">·</span><span>pull to refresh, if it should have it</span></li></ul>`)}
+    ${s.note ? block('Known', `<p>${md(s.note)}</p>`) : ''}`;
+}
+function ruleStop(v) {
+  const mech = !/unenforced/i.test(v.heldBy);
+  return `${block('The rule', `<p>${md(v.rule)}</p>`, 'expect')}
+    ${block('Who holds it', `<p>${mech
+      ? `A test does: <code>${esc(v.heldBy.replace(/[*`]/g, ''))}</code>. Worth checking anyway — a test proves the maths, not the screen.`
+      : '<strong>Nothing does.</strong> This one is held by people remembering, which is why it is here.'}</p>`,
+      mech ? '' : 'warn')}
+    ${block('Applies to', dotList(humanList(v.on)))}`;
+}
+function problemStop(o) {
+  const v = VERDICT[o.verdict] || ['', o.verdict || ''];
+  return `${block('The finding', `<p>${md(o.title)}</p>`)}
+    ${block('What it costs today', o.cost ? `<p>${md(o.cost)}</p>` : '', 'warn')}
+    ${block('The verdict on it', `<p><span class="tag ${v[0]}">${esc(v[1])}</span> ${md(o.verdictNote || '')}</p>`)}
+    ${block('What would fix it', o.collapse ? `<p>${md(o.collapse)}</p>` : '')}`;
+}
+function decisionStop(d) {
+  return `${block('The question', `<p>${md(d.q)}</p>`)}
+    ${block(d.group === 'blocked' ? 'Waiting on' : 'What happens if nobody decides',
+      d.fallback ? `<p>${md(d.fallback)}</p>` : '', 'warn')}
+    ${block(d.group === 'blocked' ? 'Effect today' : 'What would force it', d.trigger ? `<p>${md(d.trigger)}</p>` : '')}`;
+}
+function emptyStop() {
+  const list = D.screens.filter(s => s.route.startsWith('/')).slice(0, 40);
+  return `${block('With the app wiped, open everything', `<p>Every list is empty right now, and this is
+    the only time you will see that. An empty state should have an icon, a line saying what goes
+    here, and something to tap — never a blank, and never a zero pretending to be data.</p>`)}
+    ${block('Walk these', `<ul>${list.map(s =>
+      `<li><span class="n">·</span><span class="mono">${esc(s.route)}</span></li>`).join('')}</ul>`)}`;
 }
 
-function sweepCard(key) {
-  const s = SWEEP[key];
-  const n = D.flows.filter(f => f.sweep === key).length;
-  return `<article class="stop">
-    <header>
-      <div class="eyebrow">Sweep · ${n} stop${n === 1 ? '' : 's'}</div>
-      <h2>${esc(s.name)}</h2>
-      <p class="why">${s.why}</p>
-    </header>
-    <div class="blk"><h3>Put the app in this state</h3><p>${s.how}</p></div>
-    ${key === 'cold' || key === 'demo'
-      ? `<div class="blk warn"><h3>Before you do</h3><p>Both of those <strong>wipe the
-         database</strong>. Loading the demo keeps only your name and picture. Do not run
-         either on data you care about.</p></div>` : ''}
-  </article>`;
+function stopBody(stop) {
+  if (stop.kind === 'flow') return flowStop(FLOW[stop.id]);
+  if (stop.kind === 'screen') return screenStop(SCREEN[stop.id], stop.parts);
+  if (stop.kind === 'rule') return ruleStop(RULE[stop.id]);
+  if (stop.kind === 'problem') return problemStop(PROB[stop.id]);
+  if (stop.kind === 'decision') return decisionStop(DEC[stop.id]);
+  return emptyStop();
+}
+function stopTitle(stop) {
+  if (stop.kind === 'flow') return FLOW[stop.id].name;
+  if (stop.kind === 'screen') return SCREEN[stop.id].route;
+  if (stop.kind === 'rule') return D.names[stop.id] || stop.id;
+  if (stop.kind === 'problem') return PROB[stop.id].title;
+  if (stop.kind === 'decision') return DEC[stop.id].q;
+  return 'Every empty state';
+}
+const stopWhy = stop => stop.kind === 'flow' ? (FLOW[stop.id].trigger || '') : '';
+
+/* ------------------------------------------------------------------- shelf */
+function bookProgress(b) {
+  const done = b.stops.filter(s => stopAnswered(stopId(s))).length;
+  return { done, total: b.stops.length, pct: Math.round((done / b.stops.length) * 100) };
+}
+function shelfView() {
+  const totalStops = D.booklets.reduce((n, b) => n + b.stops.length, 0);
+  const doneStops = D.booklets.reduce((n, b) => n + bookProgress(b).done, 0);
+  const flagged = D.booklets.reduce((n, b) =>
+    n + b.stops.filter(s => stopFlagged(stopId(s))).length, 0);
+  return `<div class="wrap">
+    <section class="hero">
+      <h1>Walk the app</h1>
+      <p>Thirty-two small booklets. Take any one — most are four to eight stops and read in a
+         sitting — or start at the top and it will carry you through. Every screen, every task,
+         every component, every rule and every open question is in here exactly once.</p>
+      <div class="stat">
+        <div><b>${doneStops}</b>of ${totalStops} stops</div>
+        <div><b>${flagged}</b>flagged</div>
+        <div><b>${D.booklets.filter(b => bookProgress(b).pct === 100).length}</b>booklets done</div>
+      </div>
+      <div class="act">
+        <button type="button" class="primary" data-open-book="${esc(D.booklets[0].key)}">Start at the top</button>
+        <button type="button" data-mode="notebook">My notebook</button>
+      </div>
+    </section>
+    <div class="shelf">${D.booklets.map(b => {
+      const p = bookProgress(b);
+      const flags = b.stops.filter(s => stopFlagged(stopId(s))).length;
+      return `<button class="bcard${p.pct === 100 ? ' full' : ''}" type="button" data-open-book="${esc(b.key)}">
+        <div class="btop">
+          <span class="bname">${esc(b.name)}</span>
+          <span class="tag ${b.state === 'empty' ? 'warn' : b.state === 'pair' ? 'flag' : b.state === 'hands' ? 'acc' : ''}">${esc(STATE[b.state].label)}</span>
+        </div>
+        <div class="bbar"><i style="width:${p.pct}%"></i></div>
+        <div class="bmeta">${p.done}/${p.total} stops${flags ? ` · <b>${flags} flagged</b>` : ''}</div>
+      </button>`;
+    }).join('')}</div>
+  </div>`;
 }
 
-/* ------------------------------------------------------------------- render */
-function walkView() {
-  book.pos = Math.max(0, Math.min(book.pos, STOPS.length - 1));
-  const stop = STOPS[book.pos];
-  const done = Object.values(book.notes).filter(v => v.s).length;
-  const bad = Object.values(book.notes).filter(v => v.s === 'bad' || v.s === 'odd').length;
-  const idx = TASK_STOPS.findIndex(s => s === stop);
+/* ----------------------------------------------------------------- booklet */
+function bookletView() {
+  const b = BOOK[bk.book];
+  if (!b) { bk.book = null; return shelfView(); }
+  bk.pos = Math.max(0, Math.min(bk.pos, b.stops.length - 1));
+  const stop = b.stops[bk.pos];
+  const id = stopId(stop);
+  const p = bookProgress(b);
+  const last = bk.pos === b.stops.length - 1;
+  const idx = D.booklets.findIndex(x => x.key === b.key);
+  const next = D.booklets[idx + 1];
 
   return `<div class="wrap">
     <div class="prog">
-      <div class="bar"><i style="width:${Math.round((done / TASK_STOPS.length) * 100)}%"></i></div>
-      <div class="meta">
-        <span><b>${done}</b> of <b>${TASK_STOPS.length}</b> walked</span>
-        ${bad ? `<span>· <b>${bad}</b> flagged</span>` : ''}
-        <span class="sp"><b>${book.pos + 1}</b>/${STOPS.length}</span>
-      </div>
+      <button class="crumb" type="button" data-mode="shelf">← all booklets</button>
+      <div class="bar"><i style="width:${Math.round(((bk.pos + 1) / b.stops.length) * 100)}%"></i></div>
+      <div class="meta"><b>${esc(b.name)}</b><span class="sp">${bk.pos + 1}/${b.stops.length}</span></div>
     </div>
-    ${stop.kind === 'sweep' ? sweepCard(stop.key) : taskCard(stop.f, idx)}
+
+    ${bk.pos === 0 ? `<div class="intro">
+      <p>${esc(b.blurb)}</p>
+      <p class="how"><strong>${esc(STATE[b.state].label)}</strong> — ${STATE[b.state].how}</p>
+      ${b.state === 'empty' || b.state === 'demo'
+        ? '<p class="how warn">Both of those <strong>wipe the database.</strong> Do not run either on data you care about.</p>' : ''}
+    </div>` : ''}
+
+    <article class="stop">
+      <header>
+        <div class="eyebrow">${esc(stop.kind)} · ${esc(id)}</div>
+        <h2>${stop.kind === 'screen' ? `<span class="mono">${esc(stopTitle(stop))}</span>` : esc(stopTitle(stop))}</h2>
+        ${stopWhy(stop) ? `<p class="why">${md(stopWhy(stop))}</p>` : ''}
+      </header>
+      ${stopBody(stop)}
+      ${askBlock(stop)}
+    </article>
+
     <div class="pager">
-      <button type="button" data-go="-1" ${book.pos === 0 ? 'disabled' : ''}>← Back</button>
-      <button type="button" data-go="1" class="primary" ${book.pos === STOPS.length - 1 ? 'disabled' : ''}>Next →</button>
+      <button type="button" data-go="-1" ${bk.pos === 0 ? 'disabled' : ''}>← Back</button>
+      ${last
+        ? (next ? `<button type="button" class="primary" data-open-book="${esc(next.key)}">Finish → next booklet</button>`
+                : '<button type="button" class="primary" data-mode="shelf">Finish</button>')
+        : '<button type="button" class="primary" data-go="1">Next →</button>'}
     </div>
     <div class="jump">
-      <select data-jump aria-label="Jump to a stop">
-        ${STOPS.map((s, i) => {
-          const label = s.kind === 'sweep' ? `— ${SWEEP[s.key].name} —`
-            : `${AREA[s.f.area] ? AREA[s.f.area].name : ''} · ${s.f.name}`;
-          const mark = s.kind === 'task' && noteFor(s.f.id).s
-            ? ({ ok: '✓ ', bad: '✕ ', odd: '? ', skip: '– ' }[noteFor(s.f.id).s] || '') : '';
-          return `<option value="${i}"${i === book.pos ? ' selected' : ''}>${esc(mark + label)}</option>`;
-        }).join('')}
-      </select>
+      <select data-jump aria-label="Jump to a stop">${b.stops.map((s, i) => {
+        const sid = stopId(s);
+        const mark = stopFlagged(sid) ? '! ' : stopAnswered(sid) ? '✓ ' : '';
+        return `<option value="${i}"${i === bk.pos ? ' selected' : ''}>${esc(mark + stopTitle(s))}</option>`;
+      }).join('')}</select>
     </div>
+    <div class="act"><button type="button" data-add-find>＋ Add a finding of your own</button></div>
   </div>`;
 }
 
 /* ---------------------------------------------------------------- notebook */
+const SEV = { broken: 3, wrong: 3, no: 2, off: 2, yes: 1, fine: 0, holds: 0, skip: 0 };
+function worstOf(id) {
+  const a = ansFor(id);
+  let worst = '', score = -1;
+  for (const [k, v] of Object.entries(a)) {
+    if (k === 'note' || !v) continue;
+    const s = SEV[v] ?? 0;
+    if (s > score) { score = s; worst = v; }
+  }
+  return { worst, score };
+}
 function exportMarkdown() {
-  const order = [['bad', 'Broken'], ['odd', 'Odd'], ['ok', 'Works'], ['skip', 'Skipped']];
-  const lines = ['# Walkthrough feedback', ''];
-  const walked = Object.values(book.notes).filter(v => v.s).length;
-  lines.push(`${walked} of ${TASK_STOPS.length} stops walked.`, '');
-  for (const [k, title] of order) {
-    const rows = TASK_STOPS.filter(s => noteFor(s.f.id).s === k);
-    if (!rows.length) continue;
-    lines.push(`## ${title} (${rows.length})`, '');
-    for (const s of rows) {
-      const f = s.f, note = noteFor(f.id);
-      lines.push(`**${f.id} · ${f.name}**${f.screens.length ? '  ·  ' + f.screens.map(x => D.names[x] || x).join(' ') : ''}`);
-      if (k === 'bad' || k === 'odd') {
-        const expect = (f.numbers || f.writes || '').split('·').map(x => x.trim()).filter(Boolean)[0];
-        if (expect) lines.push(`Expected: ${expect.replace(/[*`]/g, '')}`);
+  const rows = [];
+  for (const b of D.booklets) for (const s of b.stops) {
+    const id = stopId(s);
+    if (!stopAnswered(id) && !ansFor(id).note) continue;
+    rows.push({ b, s, id, ...worstOf(id) });
+  }
+  const out = ['# Walkthrough feedback', ''];
+  const total = D.booklets.reduce((n, b) => n + b.stops.length, 0);
+  out.push(`${rows.length} of ${total} stops answered.`, '');
+  const groups = [[3, 'Broken'], [2, 'Off'], [1, 'Still true'], [0, 'Fine']];
+  for (const [score, title] of groups) {
+    const g = rows.filter(r => r.score === score);
+    if (!g.length) continue;
+    out.push(`## ${title} (${g.length})`, '');
+    for (const r of g) {
+      const a = ansFor(r.id);
+      out.push(`**${r.id} · ${stopTitle(r.s)}**  ·  _${r.b.name}_`);
+      const answered = Object.entries(a).filter(([k, v]) => k !== 'note' && v)
+        .map(([k, v]) => `${Q[k] ? Q[k].q : k} ${v}`);
+      if (answered.length) out.push(answered.join(' · '));
+      if (r.s.kind === 'flow' && (score >= 2) && FLOW[r.s.id].numbers) {
+        const first = String(FLOW[r.s.id].numbers).split('·').map(x => x.trim()).filter(Boolean)[0];
+        if (first) out.push(`Expected: ${first.replace(/[*`]/g, '')}`);
       }
-      if (note.n) lines.push(`Note: ${note.n}`);
-      lines.push('');
+      if (a.note) out.push(`Note: ${a.note}`);
+      out.push('');
     }
   }
-  if (walked === 0) lines.push('_Nothing walked yet._');
-  return lines.join('\n');
+  if (bk.finds.length) {
+    out.push(`## Things I noticed myself (${bk.finds.length})`, '');
+    for (const f of bk.finds) out.push(`- ${f.text}${f.where ? `  _(at ${f.where})_` : ''}`);
+    out.push('');
+  }
+  if (!rows.length && !bk.finds.length) out.push('_Nothing walked yet._');
+  return out.join('\n');
 }
-
 function notebookView() {
-  const walked = TASK_STOPS.filter(s => noteFor(s.f.id).s);
-  const byStatus = k => TASK_STOPS.filter(s => noteFor(s.f.id).s === k);
-  const row = s => {
-    const f = s.f, note = noteFor(f.id);
-    const label = (STATUS.find(x => x[0] === note.s) || ['', '', ''])[1];
-    return `<div class="nbrow j" data-open="${STOPS.indexOf(s)}">
-      <div class="top"><b>${esc(f.name)}</b>
-        <span class="tag ${{ ok: 'ok', bad: 'warn', odd: 'flag', skip: '' }[note.s] || ''}">${esc(label)}</span>
-        <span class="id">${esc(f.id)}</span></div>
-      ${note.n ? `<div class="note">${esc(note.n)}</div>` : ''}
-    </div>`;
-  };
+  const rows = [];
+  for (const b of D.booklets) for (const s of b.stops) {
+    const id = stopId(s);
+    if (!stopAnswered(id) && !ansFor(id).note) continue;
+    rows.push({ b, s, id, ...worstOf(id) });
+  }
+  const g = score => rows.filter(r => r.score === score);
+  const card = r => `<div class="nbrow j" data-goto="${esc(r.b.key)}|${r.b.stops.indexOf(r.s)}">
+    <div class="top"><b>${esc(stopTitle(r.s))}</b>
+      <span class="tag ${r.score >= 3 ? 'warn' : r.score === 2 ? 'flag' : r.score === 1 ? 'acc' : 'ok'}">${esc(r.worst)}</span>
+      <span class="id">${esc(r.id)}</span></div>
+    <div class="note" style="color:var(--ink-3);font-size:12.5px">${esc(r.b.name)}</div>
+    ${ansFor(r.id).note ? `<div class="note">${esc(ansFor(r.id).note)}</div>` : ''}
+  </div>`;
   return `<div class="wrap">
     <section class="hero">
       <h1>Your notebook</h1>
-      <p>Everything you flagged while walking. Copy it and paste it back into the chat —
-         nothing leaves this device until you do.</p>
+      <p>Everything you answered or wrote down. Copy it and paste it into the chat — none of it
+         leaves this device until you do.</p>
       <div class="stat">
-        <div><b>${walked.length}</b>walked</div>
-        <div><b>${byStatus('bad').length}</b>broken</div>
-        <div><b>${byStatus('odd').length}</b>odd</div>
-        <div><b>${TASK_STOPS.length - walked.length}</b>left</div>
+        <div><b>${g(3).length}</b>broken</div><div><b>${g(2).length}</b>off</div>
+        <div><b>${bk.finds.length}</b>your own</div><div><b>${rows.length}</b>answered</div>
+      </div>
+      <div class="act">
+        <button type="button" class="primary" data-copy>Copy everything</button>
+        <button type="button" data-add-find>＋ Add a finding</button>
+        <button type="button" data-mode="shelf">Back to the booklets</button>
+        <button type="button" class="danger" data-reset>Start over</button>
       </div>
     </section>
-    <div class="act">
-      <button type="button" class="primary" data-copy>Copy everything</button>
-      <button type="button" data-resume>Back to where I was</button>
-      <button type="button" class="danger" data-reset>Start over</button>
-    </div>
-    ${walked.length ? [['bad', 'Broken'], ['odd', 'Odd'], ['ok', 'Works'], ['skip', 'Skipped']]
-        .filter(([k]) => byStatus(k).length)
-        .map(([k, t]) => `<div class="nb"><h3 style="font-size:13px;margin:14px 0 8px">${t} (${byStatus(k).length})</h3>
-           ${byStatus(k).map(row).join('')}</div>`).join('')
-      : '<p class="empty">Nothing walked yet. Start the walk and your notes land here.</p>'}
+    ${bk.finds.length ? `<div class="nb"><h3 class="nbh">Things you noticed yourself</h3>
+      ${bk.finds.map((f, i) => `<div class="nbrow"><div class="top"><b>${esc(f.text)}</b>
+        <button class="xbtn" type="button" data-drop-find="${i}" aria-label="Remove">✕</button></div>
+        ${f.where ? `<div class="note" style="color:var(--ink-3);font-size:12.5px">at ${esc(f.where)}</div>` : ''}
+      </div>`).join('')}</div>` : ''}
+    ${[[3, 'Broken'], [2, 'Off'], [1, 'Still true'], [0, 'Fine']]
+      .filter(([s]) => g(s).length)
+      .map(([s, t]) => `<div class="nb"><h3 class="nbh">${t} (${g(s).length})</h3>${g(s).map(card).join('')}</div>`)
+      .join('') || (bk.finds.length ? '' : '<p class="empty">Nothing yet. Open a booklet and start walking.</p>')}
   </div>`;
 }
 
@@ -837,12 +1042,12 @@ const CROSS = {
 };
 
 /* ------------------------------------------------------------------- shell */
-let active = 'walk';
+let active = 'shelf';
 const main = document.getElementById('main');
 const qEl = document.getElementById('q');
 
 document.getElementById('navMode').innerHTML =
-  [['walk', 'Walk the app'], ['notebook', 'My notebook']].map(([k, label]) =>
+  [['shelf', 'Walk the app'], ['notebook', 'My notebook']].map(([k, label]) =>
     `<button class="chip" type="button" data-k="${k}" aria-pressed="${k === active}">${esc(label)}</button>`).join('');
 document.getElementById('navAreas').innerHTML = D.AREAS.map(a =>
   `<button class="chip" type="button" data-k="${a.key}" aria-pressed="${a.key === active}">${esc(a.name)}</button>`).join('');
@@ -855,7 +1060,7 @@ function render() {
   document.querySelectorAll('.chip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.k === active)));
 
-  if (active === 'walk' && !q) { main.innerHTML = walkView(); return; }
+  if (active === 'shelf' && !q) { main.innerHTML = bk.book ? bookletView() : shelfView(); return; }
   if (active === 'notebook' && !q) { main.innerHTML = notebookView(); return; }
 
   if (q) {
@@ -865,7 +1070,7 @@ function render() {
     return;
   }
   const area = D.AREAS.find(a => a.key === active);
-  main.innerHTML = area ? areaView(area, '') : (CROSS[active] ? CROSS[active].view('') : walkView());
+  main.innerHTML = area ? areaView(area, '') : (CROSS[active] ? CROSS[active].view('') : shelfView());
 }
 
 document.querySelector('nav').addEventListener('click', e => {
@@ -880,52 +1085,79 @@ qEl.addEventListener('input', render);
 
 main.addEventListener('input', e => {
   const ta = e.target.closest('[data-note]');
-  if (!ta) return;
-  const stop = STOPS[book.pos];
-  if (stop.kind !== 'task') return;
-  book.notes[stop.id] = { ...noteFor(stop.id), n: ta.value };
-  save();   /* no re-render — that would steal the cursor mid-sentence */
+  if (!ta || !bk.book) return;
+  const id = stopId(BOOK[bk.book].stops[bk.pos]);
+  bk.ans[id] = { ...ansFor(id), note: ta.value };
+  save();   /* no re-render — that would take the cursor out mid-sentence */
 });
 
 main.addEventListener('change', e => {
   const j = e.target.closest('[data-jump]');
   if (!j) return;
-  book.pos = Number(j.value); save(); render();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  bk.pos = Number(j.value); save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 main.addEventListener('click', e => {
-  const st = e.target.closest('[data-st]');
-  if (st) {
-    const stop = STOPS[book.pos];
-    if (stop.kind === 'task') {
-      const cur = noteFor(stop.id);
-      book.notes[stop.id] = { ...cur, s: cur.s === st.dataset.st ? '' : st.dataset.st };
+  const hit = (sel) => e.target.closest(sel);
+
+  const opt = hit('[data-q]');
+  if (opt && bk.book) {
+    const id = stopId(BOOK[bk.book].stops[bk.pos]);
+    const cur = ansFor(id);
+    const k = opt.dataset.q;
+    bk.ans[id] = { ...cur, [k]: cur[k] === opt.dataset.v ? '' : opt.dataset.v };
+    save(); render();
+    return;
+  }
+  const open = hit('[data-open-book]');
+  if (open) {
+    bk.book = open.dataset.openBook; bk.pos = 0; active = 'shelf';
+    save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const mode = hit('[data-mode]');
+  if (mode) {
+    if (mode.dataset.mode === 'shelf') bk.book = null;
+    active = mode.dataset.mode; save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const go = hit('[data-go]');
+  if (go) {
+    bk.pos += Number(go.dataset.go); save(); render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const goto = hit('[data-goto]');
+  if (goto) {
+    const [key, pos] = goto.dataset.goto.split('|');
+    bk.book = key; bk.pos = Number(pos); active = 'shelf';
+    save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  if (hit('[data-add-find]')) {
+    /* Somewhere to put the thing no stop thought to ask about. */
+    const text = prompt('What did you notice?');
+    if (text && text.trim()) {
+      bk.finds.push({
+        text: text.trim(),
+        where: bk.book ? stopTitle(BOOK[bk.book].stops[bk.pos]) : '',
+        at: Date.now(),
+      });
       save(); render();
     }
     return;
   }
-  const go = e.target.closest('[data-go]');
-  if (go) {
-    book.pos += Number(go.dataset.go); save(); render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-  const open = e.target.closest('[data-open]');
-  if (open) {
-    book.pos = Number(open.dataset.open); active = 'walk'; save(); render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-  if (e.target.closest('[data-copy]')) {
+  const drop = hit('[data-drop-find]');
+  if (drop) { bk.finds.splice(Number(drop.dataset.dropFind), 1); save(); render(); return; }
+
+  if (hit('[data-copy]')) {
     navigator.clipboard.writeText(exportMarkdown())
       .then(() => flash('Copied — paste it into the chat'), () => flash('Copy blocked by the browser'));
     return;
   }
-  if (e.target.closest('[data-resume]')) { active = 'walk'; render(); window.scrollTo({ top: 0 }); return; }
-  if (e.target.closest('[data-reset]')) {
-    if (confirm('Clear every status and note? This cannot be undone.')) {
-      book = { pos: 0, notes: {} }; save(); render();
+  if (hit('[data-reset]')) {
+    if (confirm('Clear every answer, note and finding? This cannot be undone.')) {
+      bk = { book: null, pos: 0, ans: {}, finds: [], done: {} }; save(); render();
     }
     return;
   }
