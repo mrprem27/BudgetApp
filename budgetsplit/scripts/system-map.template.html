@@ -315,6 +315,10 @@ pre.pre {
 .xbtn { border:0; background:none; color:var(--ink-3); font-size:15px; cursor:pointer; padding:0 2px; margin-left:auto; }
 .xbtn:hover { color:var(--warn); }
 
+.route-out { margin-top:10px; font-size:13.5px; color:var(--ink-2); line-height:1.6; max-width:64ch;
+  background:var(--raised); border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:9px; padding:11px 13px; }
+.route-out strong { color:var(--ink); }
 .mdbox { margin-top:14px; }
 .mdnote { font-size:13.5px; color:var(--ink-2); margin-bottom:9px; max-width:62ch; line-height:1.55; }
 .mdbox textarea {
@@ -913,8 +917,12 @@ function notebookView() {
   return `<div class="wrap">
     <section class="hero">
       <h1>Your notebook</h1>
-      <p>Everything you answered or wrote down. Copy it and paste it into the chat — none of it
-         leaves this device until you do.</p>
+      <p>Everything you answered or wrote down. None of it leaves this device until you send it.</p>
+      <p class="route-out"><strong>Getting it out:</strong> press <em>Copy everything</em>, then paste
+         it into the chat. It gets written to <code>docs/walkthrough-feedback.md</code> in the repo,
+         so it lands in git rather than your downloads folder. There is no download button because
+         this viewer makes page-initiated saves do nothing — if the copy fails, press
+         <em>Show the markdown</em> and select it by hand.</p>
       <div class="stat">
         <div><b>${g(3).length}</b>broken</div><div><b>${g(2).length}</b>off</div>
         <div><b>${bk.finds.length}</b>your own</div><div><b>${rows.length}</b>answered</div>
@@ -930,7 +938,8 @@ function notebookView() {
     ${showMd ? `<div class="mdbox">
       <p class="mdnote">Select it all and copy, if the button above did not work. The artifact
          viewer blocks a page from saving a file, so this is the way out — it is the same text
-         the copy button puts on your clipboard.</p>
+         the copy button puts on your clipboard. Paste it into the chat and it becomes
+         <code>docs/walkthrough-feedback.md</code>.</p>
       <textarea readonly data-md>${esc(exportMarkdown())}</textarea>
     </div>` : ''}
     ${bk.finds.length ? `<div class="nb"><h3 class="nbh">Things you noticed yourself</h3>
@@ -1177,7 +1186,8 @@ main.addEventListener('click', e => {
   }
   if (hit('[data-copy]')) {
     navigator.clipboard.writeText(exportMarkdown())
-      .then(() => flash('Copied — paste it into the chat'), () => flash('Copy blocked by the browser'));
+      .then(() => flash('Copied — paste it into the chat to save it'),
+            () => flash('Copy blocked — press "Show the markdown" and select it'));
     return;
   }
   if (hit('[data-reset]')) {
