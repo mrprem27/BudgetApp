@@ -6,6 +6,18 @@ This is the map. `SCREENS.md` describes what each screen looks like; `RELEASE_CH
 tracks what is left before shipping; `AGENTS.md` is how the code gets built. This document
 answers *what the thing is*, and it is the one you cite when something is wrong.
 
+**Browsable version:** <https://claude.ai/code/artifact/027bb3db-e0b3-4a63-85b8-b38432cc1f2a>
+— the same content, organised by what the app *does* rather than by id namespace, with a
+copyable issue template on every entry. It is **generated from this file**, never hand-written:
+
+```
+node scripts/build-system-map.js out.html      # parses this document into the page
+node scripts/smoke-system-map.js out.html      # renders every view, checks nothing throws
+```
+
+Run both after editing this file, then republish to the same URL. A hand-copied page would
+reintroduce exactly the drift this document exists to end.
+
 ---
 
 ## §0 · Using this document
@@ -2737,9 +2749,11 @@ sync, or more than one device — 30 of the 54. A settings toggle does not need 
 | `❓` | Unverified. Nobody has checked. |
 | `❌ ID` | Known broken or known open, linked |
 
-Most rows below are `❓`. That is the honest state of a codebase with 2,205 passing tests and
-**zero component-render coverage** — the suite proves the arithmetic and has never once proved that
-a screen does what this document says it does.
+Most rows below are `❓`. That is the honest state of a suite with **zero component-render
+coverage**: it proves the arithmetic thoroughly and has never once proved that a screen does what
+this document says it does. `AGENTS.md` §11 names that gap as the one that shipped two launch
+crashes. (`scripts/smoke-system-map.js` renders the System Map page, which is the only render
+coverage anywhere in the repo — and it covers the page, not the app.)
 
 ---
 
@@ -3485,7 +3499,7 @@ Eight tests bind this document to the code. Six are new.
 | `flagRegister.test.ts` | Every flag in `DEFAULTS` has an `FE-` |
 | `entryPointCount.test.ts` | `/add/quick`'s entry count matches §8, and may not rise |
 | `scenarioStatus.test.ts` | Every T3/T4 row carries one of the four markers, and every `✅` names a real test |
-| `docIdGraph.test.ts` | Every `E-/AX-/IV-/FE-/SC-/FL-/SN-/OV-/DQ-` citation resolves to a definition |
+| `docIdGraph.test.ts` | Every `E-/AX-/IV-/FE-/SC-/FL-/SN-/OV-/DQ-` citation resolves to a definition — **and every `*.test.ts` a live doc names actually exists.** This document shipped naming six guard files that did not exist: the checks were real but lived together in one file, so it cited six paths you could not run. Nothing caught it because nothing was looking |
 
 Plus the five that already existed and still apply: `docCoverage`, `sourceCounts`, `featureFlags`,
 `docIds`, `devToolsGate`.
