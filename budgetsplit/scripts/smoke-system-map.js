@@ -42,6 +42,7 @@ new Function(scripts[1] + `
                       addFinding: (text) => { bk.finds.push({ text, where: '', at: 0 }); },
                       reset: () => { bk.book = null; bk.pos = 0; bk.ans = {}; bk.finds = []; },
                       stopId, exportMarkdown, fullMarkdown, setScope: s => { mdScope = s; },
+                      lookupView, itemAnswers,
                       main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
@@ -173,6 +174,80 @@ try {
   console.log(`  ok     markdown sizes — answers ${sizes.answers}KB · walk ${sizes.walk}KB · all ${sizes.all}KB`);
   reset();
 } catch (e) { console.log('  THREW  markdown section — ' + e.message); bad++; }
+
+/* ---------------------------------------------------------------- new guards */
+
+/* `prompt`, `confirm` and `alert` are inert in this viewer's sandbox, so any one
+   of them is a control that looks live and is not. Add-a-finding and Start-over
+   both shipped calling them and did nothing at all. */
+{
+  /* Block comments out first — the note explaining why these are banned says the
+     words, and a comment is not a call. */
+  const src = html
+    .replace(/window\.__DATA__=[\s\S]*?;<\/script>/, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const dialogs = [...src.matchAll(/(?<![\w.])(prompt|confirm|alert)\s*\(/g)]
+    .map(m => m[1])
+    .filter((v, i, a) => a.indexOf(v) === i);
+  console.log(dialogs.length ? `  BAD    native dialogs in the page: ${dialogs.join(', ')} — inert in this sandbox`
+                             : '  ok     no native dialogs (they do nothing here)');
+  if (dialogs.length) bad++;
+}
+
+/* Markup with no rule is invisible breakage — eleven classes sat unstyled for a
+   while and the page looked fine in the build output. */
+{
+  const style = (html.match(/<style>([\s\S]*?)<\/style>/) || [, ''])[1];
+  const used = new Set();
+  for (const m of html.matchAll(/class="([^"$]*)"/g)) {
+    for (const c of m[1].split(/\s+/)) if (/^[a-z][a-z0-9-]*$/.test(c)) used.add(c);
+  }
+  const unstyled = [...used].filter(c => !new RegExp(`\\.${c}[\\s,{:.\\[]`).test(style)).sort();
+  console.log(unstyled.length ? `  BAD    classes with no CSS: ${unstyled.join(', ')}`
+                              : `  ok     all ${used.size} classes have a rule`);
+  if (unstyled.length) bad++;
+}
+
+/* The estimates have to add up, or they are decoration. */
+{
+  const wrong = D.booklets.filter(b =>
+    Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + D.eta.setup)) > 0.6);
+  const totalOk = D.eta.total === D.booklets.reduce((n, b) => n + b.min, 0);
+  const tooLong = D.booklets.filter(b => b.min > 35 && b.stops.length > 1);
+  console.log(wrong.length ? `  BAD    ${wrong.length} booklets whose time is not the sum of their stops`
+                           : '  ok     every booklet equals the sum of its stops');
+  console.log(totalOk ? `  ok     the total equals the sum of the booklets (${D.eta.total} min)` : '  BAD    total does not add up');
+  console.log(tooLong.length ? `  BAD    over the 35-minute cap: ${tooLong.map(b => b.min + 'm ' + b.name).join(', ')}`
+                             : `  ok     no booklet over 35 min (longest ${D.eta.longest})`);
+  if (wrong.length || !totalOk || tooLong.length) bad++;
+}
+
+/* Directions, not routes. */
+{
+  const noReach = D.screens.filter(s => !s.reach && !['SC-01', 'SC-02'].includes(s.id));
+  console.log(noReach.length ? `  BAD    no directions for ${noReach.map(s => s.id).join(', ')}`
+                             : '  ok     every screen says how to get there');
+  if (noReach.length) bad++;
+}
+
+check('look something up', () => { q.value = ''; go('lookup'); render(); });
+
+/* A row inside a stop is a finding too. */
+try {
+  reset();
+  const { itemAnswers, fullMarkdown: fm, setScope: ss } = globalThis.__p;
+  answer('EMPTY::SC-20', 'look', 'broken');
+  answer('EMPTY::SC-20', 'note', 'blank, no icon, nothing to tap');
+  const got = itemAnswers();
+  const inAll = (ss('all'), fm('all'));
+  const inAns = (ss('answers'), fm('answers'));
+  const ok = got.length === 1
+    && /blank, no icon/.test(inAll) && /blank, no icon/.test(inAns);
+  console.log(ok ? '  ok     a row answer reaches the notebook and both exports'
+                 : '  BAD    row answers are not exported');
+  if (!ok) bad++;
+  reset();
+} catch (e) { console.log('  THREW  row answers — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

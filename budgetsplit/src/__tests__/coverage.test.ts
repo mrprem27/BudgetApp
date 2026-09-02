@@ -17,16 +17,24 @@ import { ROOT } from './helpers/systemDoc';
 
 const OUT = path.join(os.tmpdir(), `bs-coverage-${process.pid}.html`);
 
-function coverage(): Record<string, { total: number; missing: string[] }> {
+type Built = {
+  coverage: Record<string, { total: number; missing: string[] }>;
+  screens: Array<{ id: string; reach: string }>;
+  booklets: Array<{ name: string; min: number; stops: Array<{ min: number }> }>;
+  eta: { total: number; setup: number; longest: number };
+};
+
+function build(): Built {
   execFileSync('node', ['scripts/build-system-map.js', OUT], { cwd: ROOT, stdio: 'pipe' });
   const html = fs.readFileSync(OUT, 'utf8');
   const m = html.match(/window\.__DATA__=(\{[\s\S]*?\});<\/script>/);
   if (!m) throw new Error('built page has no data block');
-  return JSON.parse(m[1]).coverage;
+  return JSON.parse(m[1]);
 }
 
+let built: Built;
 let cov: Record<string, { total: number; missing: string[] }>;
-beforeAll(() => { cov = coverage(); });
+beforeAll(() => { built = build(); cov = built.coverage; });
 afterAll(() => { try { fs.unlinkSync(OUT); } catch { /* already gone */ } });
 
 describe('the walkthrough leaves nothing out', () => {
@@ -43,4 +51,33 @@ describe('the walkthrough leaves nothing out', () => {
       expect({ [kind]: cov[kind].missing }).toEqual({ [kind]: [] });
     });
   }
+});
+
+describe('the walkthrough is usable, not just complete', () => {
+  it('tells you how to get to every screen', () => {
+    /* A route is not a direction. `/group/[id]/budget` is unusable with a phone
+       in your hand; "Groups → a group → Budget tab" is not. SC-01 and SC-02 are
+       the shell and the tab bar — you are always inside them. */
+    const missing = built.screens
+      .filter(s => !s.reach && !['SC-01', 'SC-02'].includes(s.id))
+      .map(s => s.id);
+    expect(missing).toEqual([]);
+  });
+
+  it('keeps every booklet to a sitting', () => {
+    /* The point of the word. Capping on stop count instead of time once produced
+       an 89-minute "booklet". A single stop longer than the cap cannot be split. */
+    const tooLong = built.booklets
+      .filter(b => b.min > 35 && b.stops.length > 1)
+      .map(b => `${b.name} — ${b.min} min`);
+    expect(tooLong).toEqual([]);
+  });
+
+  it('adds its estimates up', () => {
+    const wrong = built.booklets
+      .filter(b => Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + built.eta.setup)) > 0.6)
+      .map(b => b.name);
+    expect(wrong).toEqual([]);
+    expect(built.eta.total).toBe(built.booklets.reduce((n, b) => n + b.min, 0));
+  });
 });

@@ -2004,6 +2004,62 @@ taps are listed separately below and are not in the count.
 | `SC-43` | `/settings/sync` | 3 | **New ID** |
 | `SC-44` | `/settings/sync-log` | 2 | **New ID** |
 
+### Getting there
+
+A route is not a direction. `/group/[id]/budget` tells you nothing you can act on with a phone in
+your hand; *"Groups → a group → Budget tab"* does. One line per screen, written as taps from a cold
+open. The walkthrough shows these instead of the paths.
+
+| Screen | Taps |
+|---|---|
+| `SC-03` | **Home** tab — the first one |
+| `SC-04` | **Groups** tab. With splitting off this slot is Personal instead |
+| `SC-05` | **Plan** tab — fourth slot, labelled Plan though the route says savings |
+| `SC-06` | **Settings** tab, or your avatar at the top right of Home |
+| `SC-07` | The **＋** in the middle of the tab bar |
+| `SC-08` | **＋** → *Split by items* |
+| `SC-09` | **Groups** → tap a group |
+| `SC-10` | **Settings → Budget**, or Home's *Set a monthly budget* tile |
+| `SC-10b` | **Groups → a group → Budget** tab |
+| `SC-11` | **Groups → a group → Members** tab |
+| `SC-13` | **Groups → a group → ⋯ → Edit** |
+| `SC-14` | **Groups → Personal**, pinned at the top of the list |
+| `SC-15` | Tap any transaction row, anywhere |
+| `SC-16` | **Home** → tap a category in the ranked list |
+| `SC-17` | **Plan** → tap a goal |
+| `SC-18` | **Settings → Import transactions** |
+| `SC-19` | **Home** → the inbox badge at the top right. Also where an import lands |
+| `SC-20` | **Plan** → the chart icon in the header, or **Settings → Reports & export** |
+| `SC-21` | **Reports** → tap a slice of the donut |
+| `SC-22` | **Plan** → the insights icon in the header, or Home → tap the pace line |
+| `SC-23` | **Home** → the magnifier at the top right |
+| `SC-24` | **Settings → Features** |
+| `SC-25` | **Settings → Categories** |
+| `SC-26` | **Settings → People** |
+| `SC-26a` | **People** → tap someone, or **Groups** → a balance chip |
+| `SC-27` | **Settings** → tap the version number **seven times** |
+| `SC-27a` | **Settings → Storage**, or Home's low-disk banner |
+| `SC-28` | **Settings → Activity**, or a group → **⋯ → History** |
+| `SC-29` | **Settings → Help** |
+| `SC-30` | **Home** → the bell at the top right |
+| `SC-31` | **Settings → Notifications** |
+| `SC-32` | **Plan** → the repeat icon in the header |
+| `SC-33` | **Plan** → the question-mark icon in the header. Its only way in |
+| `SC-34` | **Settings → Backup & restore** |
+| `SC-35` | **Settings → Voice entry** |
+| `SC-36` | **Settings → Account.** Only exists in a build with a server configured |
+| `SC-37` | Tap the sign-in link in your email. **Nothing in the app opens this** |
+| `SC-38` | **Settings → Account → Linked people** |
+| `SC-39` | Tap an invite someone sent you. **Nothing in the app opens this** |
+| `SC-40` | **Home** → the *waiting for you* badge at the top right |
+| `SC-41` | **Plan** → the repeat icon → tap a rule. Also where a renewal reminder lands |
+| `SC-42` | **Plan** → tap Total money → **Assets** |
+| `SC-43` | **Settings → Sync** |
+| `SC-44` | **Settings → Sync → Sync log** |
+
+`SC-01` and `SC-02` are the app shell and the tab bar — you are always inside them, so there is
+nowhere to go.
+
 ### Reachability
 
 - **Zero in-app entries:** `SC-37` `/auth` and `SC-39` `/link` — correct, both are deep-link landing

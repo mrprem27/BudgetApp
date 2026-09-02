@@ -138,6 +138,12 @@ const screens = rows(section(7))
     };
   });
 
+/* "Getting there" — taps, not routes. A path is not a direction. */
+const reachRows = rows(section(7))
+  .filter(r => /^`SC-\d+[a-z]?`$/.test(r[0]) && r.length === 2 && !/^`\S+`$/.test(r[1] || ''));
+const reachOf = Object.fromEntries(reachRows.map(r => [bare(r[0]), r[1]]));
+for (const s of screens) s.reach = reachOf[s.id] || '';
+
 // ---- §8 flows ---------------------------------------------------------------
 const flows = [];
 for (const block of doc.split(/^### (?=FL-\d)/m).slice(1)) {
@@ -676,27 +682,78 @@ BOOKS.push({
   stops: dqs.map(d => ({ kind: 'decision', id: d.id })),
 });
 
-/* Split anything that outgrew a sitting. */
-const MAX = 8;
-const booklets = [];
-for (const b of BOOKS) {
-  if (b.stops.length <= MAX) { booklets.push(b); continue; }
-  const parts = Math.ceil(b.stops.length / MAX);
-  const per = Math.ceil(b.stops.length / parts);
-  for (let i = 0; i < parts; i++) {
-    booklets.push({
-      ...b,
-      key: `${b.key}-${i + 1}`,
-      name: `${b.name} (${i + 1}/${parts})`,
-      stops: b.stops.slice(i * per, (i + 1) * per),
-    });
+/* ---- How long each stop takes ---------------------------------------------
+ *
+ * Read off the same fields the stop renders, never typed: a task that grows a
+ * step grows its estimate, and nothing has to be kept in sync by hand. Rough on
+ * purpose — the number is there to help you pick a booklet for the time you have,
+ * not to be defended to the minute.
+ */
+const partsCount = v => String(v || '').split('·').filter(x => x.trim()).length;
+const stepsCount = v => String(v || '').split(/\s+(?=\.(?:S|FM|B|E)\d)/).filter(x => x.trim()).length;
+const SETUP_MIN = 2;   // getting the app into the state a booklet asks for
+
+function stopMinutes(s) {
+  if (s.kind === 'flow') {
+    const f = flows.find(x => x.id === s.id);
+    const writes = !/^\s*(nothing|none)\b/i.test((f.writes || '').replace(/[*_`]/g, ''));
+    return 3 + stepsCount(f.steps) * 0.5 + partsCount(f.numbers) * 0.7
+             + partsCount(f.alsoTry) * 1.2 + (writes ? 2 : 0);
   }
+  if (s.kind === 'screen') return 2 + (s.parts ? s.parts.length * 0.5 : 0);
+  if (s.kind === 'rule') return 3;
+  if (s.kind === 'problem') return 2.5;
+  if (s.kind === 'decision') return 2;
+  return screens.filter(x => x.reach).length * 0.75;   // every empty state
 }
 
-/* Attach the notable components to each screen stop. */
-for (const b of booklets) {
-  for (const s of b.stops) if (s.kind === 'screen') s.parts = notableAt(s.id);
+/* Components have to be attached before anything can be timed. */
+for (const b of BOOKS) for (const s of b.stops) if (s.kind === 'screen') s.parts = notableAt(s.id);
+for (const b of BOOKS) for (const s of b.stops) s.min = Math.round(stopMinutes(s) * 10) / 10;
+
+/* ---- Split on TIME, not on stop count -------------------------------------
+ *
+ * Capping at eight stops produced an 89-minute "booklet", which is not a sitting
+ * and defeats the point of the word. Half an hour is a sitting.
+ */
+const CAP_MIN = 30;
+const booklets = [];
+for (const b of BOOKS) {
+  const total = b.stops.reduce((n, s) => n + s.min, 0);
+  if (total + SETUP_MIN <= CAP_MIN) { booklets.push({ ...b, min: Math.round(total + SETUP_MIN) }); continue; }
+  /* Fill each part up to the cap rather than slicing evenly — an even slice by
+     count puts three long stops in one part and three short ones in another. */
+  const chunks = [];
+  let cur = [];
+  let acc = 0;
+  for (const s of b.stops) {
+    /* Greedy, with no cap on the number of parts — bounding the parts was what
+       left a 39-minute booklet at the end of the run. A single stop longer than
+       the cap cannot be split and gets a booklet of its own. */
+    if (cur.length && acc + s.min > CAP_MIN - SETUP_MIN) { chunks.push(cur); cur = []; acc = 0; }
+    cur.push(s); acc += s.min;
+  }
+  if (cur.length) chunks.push(cur);
+  chunks.forEach((stops, i) => booklets.push({
+    ...b,
+    key: `${b.key}-${i + 1}`,
+    name: `${b.name} (${i + 1}/${chunks.length})`,
+    stops,
+    min: Math.round(stops.reduce((n, s) => n + s.min, 0) + SETUP_MIN),
+  }));
 }
+
+/* The roll-up the shelf shows. Asserted in the smoke test, because a total that
+   does not equal its parts is worse than no total. */
+const eta = {
+  total: booklets.reduce((n, b) => n + b.min, 0),
+  solo: booklets.filter(b => b.state !== 'pair').reduce((n, b) => n + b.min, 0),
+  pair: booklets.filter(b => b.state === 'pair').reduce((n, b) => n + b.min, 0),
+  longest: Math.max(...booklets.map(b => b.min)),
+  cap: CAP_MIN,
+  setup: SETUP_MIN,
+};
+
 
 /* ---- Coverage: the claim, made checkable ---------------------------------- */
 const covered = { screen: new Set(), flow: new Set(), part: new Set(), rule: new Set(), problem: new Set(), decision: new Set() };
@@ -748,7 +805,7 @@ const meta = {
 for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
 
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, componentList, componentsOf, orphanComponents, booklets, coverage,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, eta, componentList, componentsOf, orphanComponents, booklets, coverage,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,

@@ -328,6 +328,79 @@ pre.pre {
   white-space:pre; overflow-wrap:normal; overflow-x:auto;
 }
 
+
+/* ------------------------------------------------- jump list, in the theme */
+.jumpbtn {
+  width:100%; margin-top:14px; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink-2); border-radius:11px; padding:13px; font:inherit; font-size:14px;
+  cursor:pointer; min-height:48px;
+}
+.jumpbtn:hover { border-color:var(--accent); color:var(--ink); }
+.jumplist { list-style:none; margin:8px 0 0; padding:0; border:1px solid var(--line);
+  border-radius:11px; overflow:hidden; background:var(--surface); }
+.jumplist li + li { border-top:1px solid var(--hair); }
+.jumprow {
+  width:100%; text-align:left; border:0; background:none; color:var(--ink);
+  font:inherit; font-size:14.5px; padding:12px 14px; cursor:pointer;
+  display:grid; grid-template-columns:auto 1fr auto; gap:11px; align-items:center; min-height:48px;
+}
+.jumprow:hover { background:var(--raised); }
+.jumprow.here { background:var(--accent-b); }
+.jumprow .jn { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.jumprow .jt { line-height:1.35; }
+.jumprow .jm { font-family:var(--mono); font-size:13px; color:var(--ink-3); }
+.jumprow.done .jm { color:var(--ok); }
+.jumprow.flag .jm { color:var(--warn); font-weight:600; }
+
+/* --------------------------------------------------- the finding composer */
+.composer { margin-top:14px; background:var(--surface); border:1px solid var(--line);
+  border-radius:12px; padding:14px 15px; box-shadow:var(--shadow); }
+.composer h3 { font-size:14.5px; margin-bottom:9px; }
+.composer textarea {
+  width:100%; min-height:88px; resize:vertical; padding:12px; border:1px solid var(--line);
+  border-radius:10px; background:var(--raised); color:var(--ink); font:inherit; font-size:16px;
+}
+.act button.armed { background:var(--warn); border-color:var(--warn); color:var(--ground); font-weight:500; }
+
+/* ------------------------------------------- one control per row in a list */
+.ilist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0; }
+.irow { border-top:1px solid var(--hair); padding:9px 0; }
+.irow:first-child { border-top:0; }
+.ihead { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+.ilabel { font-size:14.5px; line-height:1.4; color:var(--ink); }
+.isub { display:block; font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-top:2px; }
+.ibtns { display:flex; gap:6px; }
+.ib {
+  width:44px; height:40px; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink-3); border-radius:9px; cursor:pointer; font-size:15px; line-height:1;
+}
+.ib:hover { color:var(--ink); }
+.ib.fine[aria-pressed="true"] { background:var(--ok); border-color:var(--ok); color:var(--ground); }
+.ib.broken[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:var(--ground); }
+.inote {
+  width:100%; margin-top:8px; padding:10px 12px; border:1px solid var(--line);
+  border-radius:9px; background:var(--raised); color:var(--ink); font:inherit; font-size:16px;
+}
+
+/* ----------------------------------------------------- directions, not paths */
+.reach { font-size:15.5px; color:var(--ink); line-height:1.5; }
+.reachsub { font-size:12.5px; color:var(--ink-3); margin-top:5px; }
+.reachsub .mono { font-family:var(--mono); }
+
+/* ------------------------------------------------------------- how it works */
+.howto { background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  padding:16px 17px; margin-top:16px; box-shadow:var(--shadow); }
+.howto h3 { font-size:15px; margin-bottom:10px; }
+.howto p, .howto li { font-size:14.5px; color:var(--ink-2); line-height:1.6; }
+.howto p + p { margin-top:9px; }
+.howto dl { display:grid; grid-template-columns:auto 1fr; gap:5px 12px; margin:10px 0 0; }
+.howto dt { font-family:var(--mono); font-size:11.5px; color:var(--accent); padding-top:3px; white-space:nowrap; }
+.howto dd { margin:0; font-size:14px; color:var(--ink-2); }
+.howto .close { margin-top:12px; }
+.bnote { font-family:var(--sans); font-size:13px; color:var(--ink-2); line-height:1.5; white-space:normal; }
+.eta { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.etabig { font-family:var(--mono); font-size:13px; color:var(--accent); }
+
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
 <script>window.__DATA__=/*__DATA__*/null/*__DATA__*/;</script>
@@ -351,10 +424,6 @@ pre.pre {
 <nav>
   <div class="nav-in">
     <div class="navrow" id="navMode"></div>
-    <p class="navlabel" style="margin-top:9px">Look something up</p>
-    <div class="navrow" id="navAreas"></div>
-    <p class="navlabel" style="margin-top:9px">Across the whole app</p>
-    <div class="navrow" id="navCross"></div>
   </div>
 </nav>
 
@@ -632,6 +701,17 @@ try {
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(bk)); } catch (_) {} };
 const ansFor = id => bk.ans[id] || {};
 
+/* View state, deliberately not persisted — none of it is a finding.
+   `prompt()` and `confirm()` are inert in this viewer's sandbox, so anything
+   that needs an answer from you has to be built into the page. */
+let composing = false;   // the add-a-finding box is open
+let showHow = false;     // set once the data is loaded, below
+let jumping = false;     // the stop list is open
+let confirming = false;  // "start over" is one tap from happening
+
+/* Explain itself once: open until you have answered something, shut after. */
+showHow = Object.keys(bk.ans).length === 0 && bk.finds.length === 0;
+
 /** Anything that is not "fine" or unanswered is worth carrying to the notebook. */
 const BAD = new Set(['broken', 'wrong', 'off', 'no']);
 const stopFlagged = id => Object.entries(ansFor(id)).some(([k, v]) => k !== 'note' && BAD.has(v));
@@ -691,13 +771,14 @@ function flowStop(f) {
     ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}`;
 }
 function screenStop(s, parts) {
-  const ways = s.entries === 0 ? 'Nothing in the app opens this — it is a deep link only.'
+  const ways = s.entries === 0 ? 'Nothing in the app opens this — it arrives from a link.'
     : s.entries === 1 ? 'Exactly one way in. If it is an unlabelled icon, this screen is effectively hidden.'
     : `${s.entries} ways in.`;
-  return `${block('Open it', `<p>Go to <code>${esc(s.route)}</code>. ${esc(ways)}</p>`)}
+  return `${block('Get there', `<p class="reach">${s.reach ? md(s.reach) : `Open <code>${esc(s.route)}</code>`}</p>
+      <p class="reachsub">${esc(ways)} <span class="mono">${esc(s.route)}</span></p>`)}
     ${s.purpose ? block('What it is for', `<p>${md(s.purpose)}</p>`) : ''}
-    ${parts && parts.length ? block('The pieces on it — check each one renders and reads right',
-      `<ul>${parts.map(p => `<li><span class="n">·</span><span class="mono">${esc(p)}</span></li>`).join('')}</ul>`) : ''}
+    ${parts && parts.length ? block('The pieces on it — mark any that look wrong',
+      `<ul class="ilist">${parts.map(p => itemRow('SC:' + s.id, p, `<span class="mono">${esc(p)}</span>`)).join('')}</ul>`) : ''}
     ${block('Look for', `<ul>
       <li><span class="n">·</span><span>the empty state — is it designed, or a blank?</span></li>
       <li><span class="n">·</span><span>anything cut off, overlapping, or too small to tap</span></li>
@@ -728,12 +809,13 @@ function decisionStop(d) {
     ${block(d.group === 'blocked' ? 'Effect today' : 'What would force it', d.trigger ? `<p>${md(d.trigger)}</p>` : '')}`;
 }
 function emptyStop() {
-  const list = D.screens.filter(s => s.route.startsWith('/')).slice(0, 40);
+  const list = D.screens.filter(s => s.reach);
   return `${block('With the app wiped, open everything', `<p>Every list is empty right now, and this is
     the only time you will see that. An empty state should have an icon, a line saying what goes
     here, and something to tap — never a blank, and never a zero pretending to be data.</p>`)}
-    ${block('Walk these', `<ul>${list.map(s =>
-      `<li><span class="n">·</span><span class="mono">${esc(s.route)}</span></li>`).join('')}</ul>`)}`;
+    ${block(`Walk all ${list.length} — tick the ones that look right, cross the ones that do not`,
+      `<ul class="ilist">${list.map(s =>
+        itemRow('EMPTY', s.id, md(s.reach), `<span class="mono">${esc(s.route)}</span>`)).join('')}</ul>`)}`;
 }
 
 function stopBody(stop) {
@@ -755,16 +837,80 @@ function stopTitle(stop) {
 const stopWhy = stop => stop.kind === 'flow' ? (FLOW[stop.id].trigger || '') : '';
 
 /* ------------------------------------------------------------------- shelf */
+/* An inline composer, because the sandbox will not give us a prompt box. */
+/* A stop that lists forty screens cannot be answered with one button. Each row
+   gets its own, keyed under the stop so it travels with it into the notebook. */
+function itemRow(sid, key, label, sub) {
+  const id = `${sid}::${key}`;
+  const a = ansFor(id);
+  return `<li class="irow">
+    <div class="ihead">
+      <div class="ilabel">${label}${sub ? `<span class="isub">${sub}</span>` : ''}</div>
+      <div class="ibtns">
+        <button type="button" class="ib fine" data-iq="${esc(id)}" data-v="fine"
+          aria-pressed="${a.look === 'fine'}" aria-label="fine">✓</button>
+        <button type="button" class="ib broken" data-iq="${esc(id)}" data-v="broken"
+          aria-pressed="${a.look === 'broken'}" aria-label="problem">✕</button>
+      </div>
+    </div>
+    ${a.look === 'broken' || a.note ? `<input class="inote" type="text" data-inote="${esc(id)}"
+      value="${esc(a.note || '')}" placeholder="what is wrong with it?">` : ''}
+  </li>`;
+}
+
+function findingBox() {
+  if (!composing) {
+    return `<div class="act"><button type="button" data-add-find>＋ Add a finding of your own</button></div>`;
+  }
+  return `<div class="composer">
+    <h3>Something you noticed that no stop asked about</h3>
+    <textarea data-find-text placeholder="e.g. the back button on Reports goes to Home, not back"></textarea>
+    <div class="act">
+      <button type="button" class="primary" data-find-save>Save it</button>
+      <button type="button" data-find-cancel>Cancel</button>
+    </div>
+  </div>`;
+}
+
 function bookProgress(b) {
   const done = b.stops.filter(s => stopAnswered(stopId(s))).length;
   return { done, total: b.stops.length, pct: Math.round((done / b.stops.length) * 100) };
 }
+const hrs = m => m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? (m % 60) + ' m' : ''}`.trim() : `${m} m`;
+
+function howTo() {
+  return `<div class="howto">
+    <h3>How this works</h3>
+    <p>A <strong>booklet</strong> is one sitting — half an hour at most — on one part of the app.
+       Take any one from the shelf, or press <em>Start at the top</em> and it carries you through
+       all ${D.booklets.length}.</p>
+    <p>Each stop tells you <strong>how to get there</strong> (in taps, not paths), what to do, and
+       what the numbers should do afterwards. Then it asks you. The questions are separate because
+       they fail separately — a screen can look right and compute wrong.</p>
+    <p><strong>Before a booklet</strong>, put the app in the state its badge asks for:</p>
+    <dl>
+      <dt>wipe first</dt><dd>Settings → tap the version 7× → <b>Erase all data</b>. The only way to see an empty state.</dd>
+      <dt>demo data</dt><dd>Settings → tap the version 7× → <b>Load demo data</b>. Nothing here changes it.</dd>
+      <dt>changes things</dt><dd>Keep the demo data — these stops change it, so go slowly.</dd>
+      <dt>needs 2 phones</dt><dd>Park these until there is a second device.</dd>
+    </dl>
+    <p>Everything saves on this device as you go — close the tab and come back. When you are done,
+       open <strong>Markdown</strong> and press copy, then paste it into the chat.</p>
+    <div class="act close"><button type="button" data-hide-how>Got it</button></div>
+  </div>`;
+}
+
 function shelfView() {
   const totalStops = D.booklets.reduce((n, b) => n + b.stops.length, 0);
   const doneStops = D.booklets.reduce((n, b) => n + bookProgress(b).done, 0);
   const flagged = D.booklets.reduce((n, b) =>
     n + b.stops.filter(s => stopFlagged(stopId(s))).length, 0);
+  const left = D.booklets.reduce((n, b) => {
+    const p = bookProgress(b);
+    return n + Math.round(b.min * (1 - p.done / p.total));
+  }, 0);
   return `<div class="wrap">
+    ${showHow ? howTo() : ''}
     <section class="hero">
       <h1>Walk the app</h1>
       <p>Thirty-two small booklets. Take any one — most are four to eight stops and read in a
@@ -773,11 +919,14 @@ function shelfView() {
       <div class="stat">
         <div><b>${doneStops}</b>of ${totalStops} stops</div>
         <div><b>${flagged}</b>flagged</div>
-        <div><b>${D.booklets.filter(b => bookProgress(b).pct === 100).length}</b>booklets done</div>
+        <div><b>${hrs(left)}</b>left of ${hrs(D.eta.total)}</div>
       </div>
+      <p class="route-out"><strong>${hrs(D.eta.solo)}</strong> you can walk on your own — about
+         ${Math.ceil(D.eta.solo / 30)} evenings at half an hour. The other
+         ${hrs(D.eta.pair)} needs a second phone and is parked at the end.</p>
       <div class="act">
         <button type="button" class="primary" data-open-book="${esc(D.booklets[0].key)}">Start at the top</button>
-        <button type="button" data-mode="notebook">My notebook</button>
+        ${showHow ? '' : '<button type="button" data-show-how>How this works</button>'}
       </div>
     </section>
     <div class="shelf">${D.booklets.map(b => {
@@ -789,7 +938,7 @@ function shelfView() {
           <span class="tag ${b.state === 'empty' ? 'warn' : b.state === 'pair' ? 'flag' : b.state === 'hands' ? 'acc' : ''}">${esc(STATE[b.state].label)}</span>
         </div>
         <div class="bbar"><i style="width:${p.pct}%"></i></div>
-        <div class="bmeta">${p.done}/${p.total} stops${flags ? ` · <b>${flags} flagged</b>` : ''}</div>
+        <div class="bmeta">${b.min} min · ${p.done}/${p.total} stops${flags ? ` · <b>${flags} flagged</b>` : ''}</div>
       </button>`;
     }).join('')}</div>
   </div>`;
@@ -811,7 +960,7 @@ function bookletView() {
     <div class="prog">
       <button class="crumb" type="button" data-mode="shelf">← all booklets</button>
       <div class="bar"><i style="width:${Math.round(((bk.pos + 1) / b.stops.length) * 100)}%"></i></div>
-      <div class="meta"><b>${esc(b.name)}</b><span class="sp">${bk.pos + 1}/${b.stops.length}</span></div>
+      <div class="meta"><b>${esc(b.name)}</b><span class="eta">${b.min} min</span><span class="sp">${bk.pos + 1}/${b.stops.length}</span></div>
     </div>
 
     ${bk.pos === 0 ? `<div class="intro">
@@ -823,7 +972,7 @@ function bookletView() {
 
     <article class="stop">
       <header>
-        <div class="eyebrow">${esc(stop.kind)} · ${esc(id)}</div>
+        <div class="eyebrow">${esc(stop.kind)} · ${esc(id)} · about ${Math.max(1, Math.round(stop.min))} min</div>
         <h2>${stop.kind === 'screen' ? `<span class="mono">${esc(stopTitle(stop))}</span>` : esc(stopTitle(stop))}</h2>
         ${stopWhy(stop) ? `<p class="why">${md(stopWhy(stop))}</p>` : ''}
       </header>
@@ -838,14 +987,19 @@ function bookletView() {
                 : '<button type="button" class="primary" data-mode="shelf">Finish</button>')
         : '<button type="button" class="primary" data-go="1">Next →</button>'}
     </div>
-    <div class="jump">
-      <select data-jump aria-label="Jump to a stop">${b.stops.map((s, i) => {
-        const sid = stopId(s);
-        const mark = stopFlagged(sid) ? '! ' : stopAnswered(sid) ? '✓ ' : '';
-        return `<option value="${i}"${i === bk.pos ? ' selected' : ''}>${esc(mark + stopTitle(s))}</option>`;
-      }).join('')}</select>
-    </div>
-    <div class="act"><button type="button" data-add-find>＋ Add a finding of your own</button></div>
+    <button class="jumpbtn" type="button" data-jump-toggle aria-expanded="${jumping}">
+      ${jumping ? 'Hide the list' : `All ${b.stops.length} stops in this booklet`}
+    </button>
+    ${jumping ? `<ol class="jumplist">${b.stops.map((s, i) => {
+      const sid = stopId(s);
+      const mark = stopFlagged(sid) ? 'flag' : stopAnswered(sid) ? 'done' : '';
+      return `<li><button type="button" class="jumprow ${mark}${i === bk.pos ? ' here' : ''}" data-jump="${i}">
+        <span class="jn">${i + 1}</span>
+        <span class="jt">${esc(stopTitle(s))}</span>
+        <span class="jm">${stopFlagged(sid) ? '!' : stopAnswered(sid) ? '✓' : ''}</span>
+      </button></li>`;
+    }).join('')}</ol>` : ''}
+    ${findingBox()}
   </div>`;
 }
 
@@ -861,6 +1015,24 @@ function worstOf(id) {
   }
   return { worst, score };
 }
+/* An answer on a row inside a stop is a finding like any other. Collected here so
+   the notebook and all three markdown scopes carry them. */
+function itemAnswers() {
+  const out = [];
+  for (const [key, a] of Object.entries(bk.ans)) {
+    if (!key.includes('::')) continue;
+    if (!a.look && !a.note) continue;
+    const [owner, item] = key.split('::');
+    const sc = owner.startsWith('SC:') ? SCREEN[owner.slice(3)] : null;
+    out.push({
+      key, item,
+      where: sc ? (sc.route + ' — the pieces on it') : 'Every empty state',
+      look: a.look || '', note: a.note || '',
+    });
+  }
+  return out.sort((x, y) => (x.look === 'broken' ? -1 : 1) - (y.look === 'broken' ? -1 : 1));
+}
+
 function exportMarkdown() {
   const rows = [];
   for (const b of D.booklets) for (const s of b.stops) {
@@ -889,6 +1061,15 @@ function exportMarkdown() {
       if (a.note) out.push(`Note: ${a.note}`);
       out.push('');
     }
+  }
+  const items = itemAnswers();
+  if (items.length) {
+    out.push(`## Individual screens and pieces (${items.length})`, '');
+    for (const i of items) {
+      const name = SCREEN[i.item] ? `${SCREEN[i.item].route}` : i.item;
+      out.push(`- **${name}** — ${i.look || 'noted'}${i.note ? ` — ${i.note}` : ''}  _(${i.where})_`);
+    }
+    out.push('');
   }
   if (bk.finds.length) {
     out.push(`## Things I noticed myself (${bk.finds.length})`, '');
@@ -931,9 +1112,19 @@ function notebookView() {
         <button type="button" data-mode="markdown">Everything as markdown</button>
         <button type="button" data-add-find>＋ Add a finding</button>
         <button type="button" data-mode="shelf">Back to the booklets</button>
-        <button type="button" class="danger" data-reset>Start over</button>
+        <button type="button" class="danger${confirming ? ' armed' : ''}" data-reset>${
+          confirming ? 'Tap again to erase everything' : 'Start over'}</button>
       </div>
     </section>
+    ${findingBox()}
+    ${(() => { const items = itemAnswers(); return items.length
+      ? `<div class="nb"><h3 class="nbh">Individual screens and pieces (${items.length})</h3>
+         ${items.map(i => `<div class="nbrow"><div class="top">
+           <b>${esc(SCREEN[i.item] ? SCREEN[i.item].route : i.item)}</b>
+           <span class="tag ${i.look === 'broken' ? 'warn' : i.look === 'fine' ? 'ok' : ''}">${esc(i.look || 'noted')}</span>
+           <span class="id">${esc(i.where)}</span></div>
+           ${i.note ? `<div class="note">${esc(i.note)}</div>` : ''}</div>`).join('')}</div>`
+      : ''; })()}
     ${bk.finds.length ? `<div class="nb"><h3 class="nbh">Things you noticed yourself</h3>
       ${bk.finds.map((f, i) => `<div class="nbrow"><div class="top"><b>${esc(f.text)}</b>
         <button class="xbtn" type="button" data-drop-find="${i}" aria-label="Remove">✕</button></div>
@@ -1064,6 +1255,17 @@ function fullMarkdown(scope) {
     }
     out.push('---', '');
   }
+  if (scope === 'all') {
+    const items = itemAnswers();
+    if (items.length) {
+      out.push('## Individual screens and pieces', '');
+      for (const i of items) {
+        const name = SCREEN[i.item] ? SCREEN[i.item].route : i.item;
+        out.push(`- **${name}** — ${i.look || 'noted'}${i.note ? ` — ${i.note}` : ''}  _(${i.where})_`);
+      }
+      out.push('');
+    }
+  }
   if (scope === 'all' && bk.finds.length) {
     out.push('## Things I noticed myself', '');
     for (const f of bk.finds) out.push(`- ${f.text}${f.where ? `  _(at ${f.where})_` : ''}`);
@@ -1072,8 +1274,15 @@ function fullMarkdown(scope) {
   return out.join('\n');
 }
 
+let mdCache = { scope: null, text: '', stamp: 0 };
 function markdownView() {
-  const text = fullMarkdown(mdScope);
+  /* Rebuilding 118 KB of text on every render is what made this view drag. It only
+     changes when the scope changes or you answer something. */
+  const stamp = Object.keys(bk.ans).length + bk.finds.length;
+  if (mdCache.scope !== mdScope || mdCache.stamp !== stamp) {
+    mdCache = { scope: mdScope, text: fullMarkdown(mdScope), stamp };
+  }
+  const text = mdCache.text;
   const kb = (text.length / 1024).toFixed(0);
   const scope = MD_SCOPES.find(s => s[0] === mdScope);
   return `<div class="wrap">
@@ -1092,6 +1301,36 @@ function markdownView() {
       </div>
     </section>
     <div class="mdbox"><textarea readonly data-md>${esc(text)}</textarea></div>
+  </div>`;
+}
+
+/* "Look something up" — the reference, with every section described. Sixteen
+   unlabelled chips told you nothing about what was behind any of them. */
+const LOOKUP_NOTE = {
+  problems:  'Duplication and overload, each with a verdict and what it would cost to fix.',
+  decisions: 'Questions nobody has answered, and what happens if nobody ever does.',
+  rules:     'Things that must never be false. Nine have a test; the rest are held by memory.',
+  scenarios: 'What happens when it goes wrong — ordinary, then two people, then bad input, then the cases the database allows and the screens forbid.',
+  reference: 'How to cite something, what the app is for, what leaves the device, and what a delete actually destroys.',
+};
+function lookupView() {
+  const card = (k, name, note, n) =>
+    `<button class="bcard" type="button" data-mode="${k}">
+      <div class="btop"><span class="bname">${esc(name)}</span>${n ? `<span class="tag">${n}</span>` : ''}</div>
+      <div class="bmeta bnote">${esc(note)}</div>
+    </button>`;
+  return `<div class="wrap">
+    <section class="hero">
+      <h1>Look something up</h1>
+      <p>The reference half. Nothing here asks you to do anything — it is for when a figure confuses
+         you mid-walk, or you want to know what a word means before you trust it.</p>
+    </section>
+    <h3 class="nbh">By what the app does</h3>
+    <div class="shelf">${D.AREAS.map(a => card(a.key, a.name, a.blurb,
+      a.fl.length + a.sc.length)).join('')}</div>
+    <h3 class="nbh">Across the whole app</h3>
+    <div class="shelf">${Object.entries(CROSS).map(([k, c]) =>
+      card(k, c.label, LOOKUP_NOTE[k] || '', c.n || 0)).join('')}</div>
   </div>`;
 }
 
@@ -1213,23 +1452,23 @@ let active = 'shelf';
 const main = document.getElementById('main');
 const qEl = document.getElementById('q');
 
-document.getElementById('navMode').innerHTML =
-  [['shelf', 'Walk the app'], ['notebook', 'My notebook'], ['markdown', 'Markdown']].map(([k, label]) =>
-    `<button class="chip" type="button" data-k="${k}" aria-pressed="${k === active}">${esc(label)}</button>`).join('');
-document.getElementById('navAreas').innerHTML = D.AREAS.map(a =>
-  `<button class="chip" type="button" data-k="${a.key}" aria-pressed="${a.key === active}">${esc(a.name)}</button>`).join('');
-document.getElementById('navCross').innerHTML = Object.entries(CROSS).map(([k, c]) =>
-  `<button class="chip" type="button" data-k="${k}" aria-pressed="false">${esc(c.label)}${
-    c.n ? `<b>${c.n}</b>` : ''}</button>`).join('');
-
+const MODES = [
+  ['shelf', 'Walk the app'], ['notebook', 'My notebook'],
+  ['markdown', 'Markdown'], ['lookup', 'Look something up'],
+];
+document.getElementById('navMode').innerHTML = MODES.map(([k, label]) =>
+  `<button class="chip" type="button" data-mode="${k}" aria-pressed="${k === active}">${esc(label)}</button>`).join('');
 function render() {
   const q = qEl.value.trim().toLowerCase();
+  const inLookup = !!(D.AREAS.find(a => a.key === active) || CROSS[active]);
   document.querySelectorAll('.chip').forEach(c =>
-    c.setAttribute('aria-pressed', String(c.dataset.k === active)));
+    c.setAttribute('aria-pressed', String(c.dataset.mode === active
+      || (c.dataset.mode === 'lookup' && inLookup))));
 
   if (active === 'shelf' && !q) { main.innerHTML = bk.book ? bookletView() : shelfView(); return; }
   if (active === 'notebook' && !q) { main.innerHTML = notebookView(); return; }
   if (active === 'markdown' && !q) { main.innerHTML = markdownView(); return; }
+  if (active === 'lookup' && !q) { main.innerHTML = lookupView(); return; }
 
   if (q) {
     /* A search is a question about the whole app, not the tab you happen to be on. */
@@ -1244,14 +1483,23 @@ function render() {
 document.querySelector('nav').addEventListener('click', e => {
   const b = e.target.closest('.chip');
   if (!b) return;
-  active = b.dataset.k;
-  if (qEl.value) { qEl.value = ''; }
+  active = b.dataset.mode;
+  if (active === 'shelf') bk.book = null;
+  jumping = false; composing = false; confirming = false;
+  if (qEl.value) qEl.value = '';
   render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 qEl.addEventListener('input', render);
 
 main.addEventListener('input', e => {
+  const inote = e.target.closest('[data-inote]');
+  if (inote) {
+    const id = inote.dataset.inote;
+    bk.ans[id] = { ...ansFor(id), note: inote.value };
+    save();
+    return;
+  }
   const ta = e.target.closest('[data-note]');
   if (!ta || !bk.book) return;
   const id = stopId(BOOK[bk.book].stops[bk.pos]);
@@ -1259,38 +1507,98 @@ main.addEventListener('input', e => {
   save();   /* no re-render — that would take the cursor out mid-sentence */
 });
 
-main.addEventListener('change', e => {
-  const j = e.target.closest('[data-jump]');
-  if (!j) return;
-  bk.pos = Number(j.value); save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
 main.addEventListener('click', e => {
   const hit = (sel) => e.target.closest(sel);
 
   const opt = hit('[data-q]');
   if (opt && bk.book) {
+    /* Answering is the most frequent thing you do here, and rebuilding the whole
+       page for it is what made this feel slow. Move the pressed state by hand and
+       leave the rest of the DOM alone. */
     const id = stopId(BOOK[bk.book].stops[bk.pos]);
     const cur = ansFor(id);
     const k = opt.dataset.q;
-    bk.ans[id] = { ...cur, [k]: cur[k] === opt.dataset.v ? '' : opt.dataset.v };
-    save(); render();
+    const clearing = cur[k] === opt.dataset.v;
+    bk.ans[id] = { ...cur, [k]: clearing ? '' : opt.dataset.v };
+    save();
+    const row = opt.closest('.opts');
+    if (row) for (const b of row.querySelectorAll('.opt')) {
+      b.setAttribute('aria-pressed', String(!clearing && b === opt));
+    }
+    return;
+  }
+
+  const ib = hit('[data-iq]');
+  if (ib) {
+    const id = ib.dataset.iq;
+    const cur = ansFor(id);
+    const clearing = cur.look === ib.dataset.v;
+    bk.ans[id] = { ...cur, look: clearing ? '' : ib.dataset.v };
+    save();
+    const row = ib.closest('.irow');
+    for (const b of row.querySelectorAll('.ib')) {
+      b.setAttribute('aria-pressed', String(!clearing && b === ib));
+    }
+    /* The note field only exists once something is crossed. */
+    const wants = !clearing && ib.dataset.v === 'broken';
+    const note = row.querySelector('.inote');
+    if (wants && !note) {
+      const el = document.createElement('input');
+      el.className = 'inote'; el.type = 'text';
+      el.setAttribute('data-inote', id);
+      el.placeholder = 'what is wrong with it?';
+      row.appendChild(el); el.focus();
+    } else if (!wants && note && !note.value) {
+      note.remove();
+    }
+    return;
+  }
+
+  if (hit('[data-show-how]')) { showHow = true; render(); return; }
+  if (hit('[data-hide-how]')) { showHow = false; render(); return; }
+
+  const jt = hit('[data-jump-toggle]');
+  if (jt) { jumping = !jumping; render(); return; }
+
+  const jr = hit('[data-jump]');
+  if (jr) {
+    bk.pos = Number(jr.dataset.jump); jumping = false; save(); render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  if (hit('[data-find-cancel]')) { composing = false; render(); return; }
+  if (hit('[data-find-save]')) {
+    const ta = main.querySelector('[data-find-text]');
+    const text = ta && ta.value.trim();
+    if (text) {
+      bk.finds.push({
+        text,
+        where: bk.book ? stopTitle(BOOK[bk.book].stops[bk.pos]) : '',
+        at: Date.now(),
+      });
+      flash('Saved to your notebook');
+    }
+    composing = false; save(); render();
     return;
   }
   const open = hit('[data-open-book]');
   if (open) {
+    jumping = false; composing = false;
     bk.book = open.dataset.openBook; bk.pos = 0; active = 'shelf';
     save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
   const mode = hit('[data-mode]');
   if (mode) {
+    jumping = false; composing = false; confirming = false;
     if (mode.dataset.mode === 'shelf') bk.book = null;
     active = mode.dataset.mode; save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
   const go = hit('[data-go]');
   if (go) {
+    jumping = false; composing = false;
     bk.pos += Number(go.dataset.go); save(); render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
@@ -1303,16 +1611,9 @@ main.addEventListener('click', e => {
     return;
   }
   if (hit('[data-add-find]')) {
-    /* Somewhere to put the thing no stop thought to ask about. */
-    const text = prompt('What did you notice?');
-    if (text && text.trim()) {
-      bk.finds.push({
-        text: text.trim(),
-        where: bk.book ? stopTitle(BOOK[bk.book].stops[bk.pos]) : '',
-        at: Date.now(),
-      });
-      save(); render();
-    }
+    composing = true; render();
+    const ta = main.querySelector('[data-find-text]');
+    if (ta) ta.focus();
     return;
   }
   const drop = hit('[data-drop-find]');
@@ -1344,9 +1645,11 @@ main.addEventListener('click', e => {
     return;
   }
   if (hit('[data-reset]')) {
-    if (confirm('Clear every answer, note and finding? This cannot be undone.')) {
-      bk = { book: null, pos: 0, ans: {}, finds: [] }; save(); render();
-    }
+    /* Two taps rather than a confirm box, which this sandbox will not show. */
+    if (!confirming) { confirming = true; render(); setTimeout(() => { confirming = false; render(); }, 4000); return; }
+    confirming = false;
+    bk = { book: null, pos: 0, ans: {}, finds: [] }; save(); render();
+    flash('Cleared');
     return;
   }
 
