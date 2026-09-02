@@ -41,7 +41,7 @@ new Function(scripts[1] + `
                       answer: (id, k, v) => { bk.ans[id] = { ...(bk.ans[id] || {}), [k]: v }; },
                       addFinding: (text) => { bk.finds.push({ text, where: '', at: 0 }); },
                       reset: () => { bk.book = null; bk.pos = 0; bk.ans = {}; bk.finds = []; },
-                      stopId, exportMarkdown, showMarkdown: () => { showMd = true; },
+                      stopId, exportMarkdown, fullMarkdown, setScope: s => { mdScope = s; },
                       main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
@@ -137,24 +137,42 @@ try {
   reset();
 } catch (e) { console.log('  THREW  export — ' + e.message); bad++; }
 
-/* The viewer sandbox blocks any download a page starts, so the readable panel is
-   the only way the notebook gets out other than the clipboard. It must contain the
-   same text the copy button produces. */
+/* The markdown section is the only way the whole thing leaves the page, so each
+   scope must build, render, and actually contain what it claims. */
 try {
   reset();
-  const b2 = D.booklets.find(x => x.stops.some(s => s.kind === 'flow'));
-  const s2 = b2.stops.find(x => x.kind === 'flow');
-  answer(stopId(s2), 'behave', 'broken');
-  answer(stopId(s2), 'note', 'panel round trip');
-  globalThis.__p.showMarkdown();
-  go('notebook'); render();
-  const html = main.innerHTML;
-  const okPanel = /data-md/.test(html) && html.includes('panel round trip') && html.includes(stopId(s2));
-  console.log(okPanel ? '  ok     the markdown panel shows the same export'
-                      : '  BAD    markdown panel missing or incomplete');
-  if (!okPanel) bad++;
+  const b3 = D.booklets.find(x => x.stops.some(s => s.kind === 'flow'));
+  const s3 = b3.stops.find(x => x.kind === 'flow');
+  answer(stopId(s3), 'numbers', 'wrong');
+  answer(stopId(s3), 'note', 'markdown round trip');
+  addFinding('a thing I noticed');
+  const { fullMarkdown, setScope } = globalThis.__p;
+
+  const sizes = {};
+  for (const scope of ['answers', 'walk', 'all']) {
+    setScope(scope); go('markdown'); render();
+    const text = fullMarkdown(scope);
+    sizes[scope] = Math.round(text.length / 1024);
+    if (main.innerHTML.length < 400) { console.log(`  BAD    markdown "${scope}" renders empty`); bad++; }
+    if (!text.length) { console.log(`  BAD    markdown "${scope}" is empty`); bad++; }
+  }
+  const all = fullMarkdown('all');
+  const walk = fullMarkdown('walk');
+  const ans = fullMarkdown('answers');
+  const checks = [
+    ['every booklet is in "walk"', D.booklets.every(b => walk.includes(b.name))],
+    ['every stop is in "walk"', D.booklets.every(b => b.stops.every(s => walk.includes(stopId(s))))],
+    ['"walk" holds none of your answers', !walk.includes('markdown round trip')],
+    ['"all" holds your answers', all.includes('markdown round trip') && all.includes('a thing I noticed')],
+    ['"answers" is only what you found', ans.includes('markdown round trip') && !ans.includes(D.booklets[1].blurb)],
+  ];
+  for (const [label, ok] of checks) {
+    console.log(ok ? `  ok     ${label}` : `  BAD    ${label}`);
+    if (!ok) bad++;
+  }
+  console.log(`  ok     markdown sizes — answers ${sizes.answers}KB · walk ${sizes.walk}KB · all ${sizes.all}KB`);
   reset();
-} catch (e) { console.log('  THREW  markdown panel — ' + e.message); bad++; }
+} catch (e) { console.log('  THREW  markdown section — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

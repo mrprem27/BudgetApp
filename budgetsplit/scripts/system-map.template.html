@@ -898,7 +898,6 @@ function exportMarkdown() {
   if (!rows.length && !bk.finds.length) out.push('_Nothing walked yet._');
   return out.join('\n');
 }
-let showMd = false;
 function notebookView() {
   const rows = [];
   for (const b of D.booklets) for (const s of b.stops) {
@@ -929,19 +928,12 @@ function notebookView() {
       </div>
       <div class="act">
         <button type="button" class="primary" data-copy>Copy everything</button>
-        <button type="button" data-show-md>${showMd ? 'Hide' : 'Show'} the markdown</button>
+        <button type="button" data-mode="markdown">Everything as markdown</button>
         <button type="button" data-add-find>＋ Add a finding</button>
         <button type="button" data-mode="shelf">Back to the booklets</button>
         <button type="button" class="danger" data-reset>Start over</button>
       </div>
     </section>
-    ${showMd ? `<div class="mdbox">
-      <p class="mdnote">Select it all and copy, if the button above did not work. The artifact
-         viewer blocks a page from saving a file, so this is the way out — it is the same text
-         the copy button puts on your clipboard. Paste it into the chat and it becomes
-         <code>docs/walkthrough-feedback.md</code>.</p>
-      <textarea readonly data-md>${esc(exportMarkdown())}</textarea>
-    </div>` : ''}
     ${bk.finds.length ? `<div class="nb"><h3 class="nbh">Things you noticed yourself</h3>
       ${bk.finds.map((f, i) => `<div class="nbrow"><div class="top"><b>${esc(f.text)}</b>
         <button class="xbtn" type="button" data-drop-find="${i}" aria-label="Remove">✕</button></div>
@@ -951,6 +943,155 @@ function notebookView() {
       .filter(([s]) => g(s).length)
       .map(([s, t]) => `<div class="nb"><h3 class="nbh">${t} (${g(s).length})</h3>${g(s).map(card).join('')}</div>`)
       .join('') || (bk.finds.length ? '' : '<p class="empty">Nothing yet. Open a booklet and start walking.</p>')}
+  </div>`;
+}
+
+/* ------------------------------------------------------------- the markdown
+ *
+ * The whole artifact as one plain-text document. Three scopes, because three
+ * different things are worth having: what you found, the walkthrough itself, or
+ * both interleaved so a reader who was not there can follow what you meant.
+ */
+let mdScope = 'all';
+const MD_SCOPES = [
+  ['answers', 'What I found', 'Only the stops you answered or wrote on.'],
+  ['walk', 'The walkthrough', 'Every booklet and every stop, with nothing of yours in it.'],
+  ['all', 'Everything', 'The walkthrough with your answers written in where you gave one.'],
+];
+
+/** `· a · b` → markdown bullets. Strips the ids that only make sense on screen. */
+function mdList(v, indent = '') {
+  const parts = String(v || '').split('·').map(x => x.trim()).filter(Boolean);
+  return parts.map(x => `${indent}- ${plain(x).replace(/\s+/g, ' ')}`);
+}
+function mdSteps(v, indent = '') {
+  const parts = splitSub(v);
+  return parts.map((p, i) =>
+    `${indent}${p.sub ? p.sub.replace(/^[A-Z]+/, '') + '.' : (i + 1) + '.'} ${plain(p.text).replace(/\s+/g, ' ')}`);
+}
+const mdField = (label, v) => v ? [`**${label}** ${plain(String(v)).replace(/\s+/g, ' ')}`, ''] : [];
+
+function stopMarkdown(stop) {
+  const out = [];
+  if (stop.kind === 'flow') {
+    const f = FLOW[stop.id];
+    out.push(...mdField('Why', f.trigger));
+    out.push(...mdField('You need', f.state));
+    if (f.entry) { out.push('**Start from**', ...mdSteps(f.entry), ''); }
+    if (f.steps) { out.push('**Do this**', ...mdSteps(f.steps), ''); }
+    out.push(...mdField('Should happen', [f.writes, f.exit].filter(Boolean).join(' ')));
+    if (f.numbers) { out.push('**Check the numbers**', ...mdList(f.numbers), ''); }
+    if (f.failures) { out.push('**Watch out for**', ...mdSteps(f.failures), ''); }
+    if (f.alsoTry) { out.push('**Also try**', ...mdList(f.alsoTry), ''); }
+    out.push(...mdField('If it went wrong', [f.reversible, f.problems].filter(Boolean).join(' ')));
+  } else if (stop.kind === 'screen') {
+    const s = SCREEN[stop.id];
+    out.push(...mdField('Open', `\`${s.route}\` — ${s.entries === 0 ? 'deep link only'
+      : s.entries === 1 ? 'one way in' : `${s.entries} ways in`}`));
+    out.push(...mdField('What it is for', s.purpose));
+    if (stop.parts && stop.parts.length) {
+      out.push('**The pieces on it**', ...stop.parts.map(p => `- \`${p}\``), '');
+    }
+    out.push('**Look for**',
+      '- the empty state — designed, or a blank?',
+      '- anything cut off, overlapping, or too small to tap',
+      '- the back button — does it go where you expect?', '');
+    out.push(...mdField('Known', s.note));
+  } else if (stop.kind === 'rule') {
+    const v = RULE[stop.id];
+    out.push(...mdField('The rule', v.rule));
+    out.push(...mdField('Who holds it', /unenforced/i.test(v.heldBy)
+      ? 'Nothing does. Held by people remembering, which is why it is here.' : v.heldBy));
+  } else if (stop.kind === 'problem') {
+    const o = PROB[stop.id];
+    out.push(...mdField('The finding', o.title));
+    out.push(...mdField('What it costs today', o.cost));
+    out.push(...mdField('Verdict', `${(VERDICT[o.verdict] || ['', o.verdict])[1]} — ${o.verdictNote || ''}`));
+    out.push(...mdField('What would fix it', o.collapse));
+  } else if (stop.kind === 'decision') {
+    const d = DEC[stop.id];
+    out.push(...mdField('The question', d.q));
+    out.push(...mdField(d.group === 'blocked' ? 'Waiting on' : 'If nobody decides', d.fallback));
+    out.push(...mdField(d.group === 'blocked' ? 'Effect today' : 'What would force it', d.trigger));
+  } else {
+    out.push('**With the app wiped, open everything.** Every list is empty right now, and this is',
+      'the only time you will see that.', '');
+  }
+  return out;
+}
+
+function answerMarkdown(id) {
+  const a = ansFor(id);
+  const said = Object.entries(a).filter(([k, v]) => k !== 'note' && v)
+    .map(([k, v]) => `${Q[k] ? Q[k].q : k} **${v}**`);
+  const out = [];
+  if (said.length) out.push(`> ${said.join(' · ')}`);
+  if (a.note) out.push(`> `, `> ${a.note.split('\n').join('\n> ')}`);
+  if (out.length) out.push('');
+  return out;
+}
+
+function fullMarkdown(scope) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const total = D.booklets.reduce((n, b) => n + b.stops.length, 0);
+  const answered = D.booklets.reduce((n, b) =>
+    n + b.stops.filter(s => stopAnswered(stopId(s)) || ansFor(stopId(s)).note).length, 0);
+
+  if (scope === 'answers') return exportMarkdown();
+
+  const out = [
+    '# BudgetSplit — the walkthrough',
+    '',
+    `Generated ${stamp} from \`docs/SYSTEM.md\`.`,
+    `${D.booklets.length} booklets · ${total} stops · ${answered} answered.`,
+    '',
+    'Every screen, task, component, rule, known problem and open question in the app appears',
+    'here exactly once. Blockquotes are what was found while walking it.',
+    '',
+    '---',
+    '',
+  ];
+  for (const b of D.booklets) {
+    const p = bookProgress(b);
+    out.push(`## ${b.name}`, '');
+    out.push(`_${b.blurb}_`, '');
+    out.push(`\`${STATE[b.state].label}\` · ${p.done}/${p.total} walked`, '');
+    for (const s of b.stops) {
+      const id = stopId(s);
+      out.push(`### ${stopTitle(s)}  \`${id}\``, '');
+      out.push(...stopMarkdown(s));
+      if (scope === 'all') out.push(...answerMarkdown(id));
+    }
+    out.push('---', '');
+  }
+  if (scope === 'all' && bk.finds.length) {
+    out.push('## Things I noticed myself', '');
+    for (const f of bk.finds) out.push(`- ${f.text}${f.where ? `  _(at ${f.where})_` : ''}`);
+    out.push('');
+  }
+  return out.join('\n');
+}
+
+function markdownView() {
+  const text = fullMarkdown(mdScope);
+  const kb = (text.length / 1024).toFixed(0);
+  const scope = MD_SCOPES.find(s => s[0] === mdScope);
+  return `<div class="wrap">
+    <section class="hero">
+      <h1>The whole thing, as markdown</h1>
+      <p>One document you can read here or take away. There is no download button because this
+         viewer makes page-initiated saves do nothing — so copy it, or select it below.
+         Paste it into the chat and it becomes <code>docs/walkthrough-feedback.md</code> in the repo.</p>
+      <div class="navrow" style="margin-top:14px">${MD_SCOPES.map(([k, label]) =>
+        `<button class="chip" type="button" data-md-scope="${k}" aria-pressed="${k === mdScope}">${esc(label)}</button>`).join('')}</div>
+      <p class="route-out" style="margin-top:12px"><strong>${esc(scope[1])}</strong> — ${esc(scope[2])}
+         <br>About ${kb} KB of text.</p>
+      <div class="act">
+        <button type="button" class="primary" data-copy-md>Copy all of it</button>
+        <button type="button" data-mode="shelf">Back to the booklets</button>
+      </div>
+    </section>
+    <div class="mdbox"><textarea readonly data-md>${esc(text)}</textarea></div>
   </div>`;
 }
 
@@ -1073,7 +1214,7 @@ const main = document.getElementById('main');
 const qEl = document.getElementById('q');
 
 document.getElementById('navMode').innerHTML =
-  [['shelf', 'Walk the app'], ['notebook', 'My notebook']].map(([k, label]) =>
+  [['shelf', 'Walk the app'], ['notebook', 'My notebook'], ['markdown', 'Markdown']].map(([k, label]) =>
     `<button class="chip" type="button" data-k="${k}" aria-pressed="${k === active}">${esc(label)}</button>`).join('');
 document.getElementById('navAreas').innerHTML = D.AREAS.map(a =>
   `<button class="chip" type="button" data-k="${a.key}" aria-pressed="${a.key === active}">${esc(a.name)}</button>`).join('');
@@ -1088,6 +1229,7 @@ function render() {
 
   if (active === 'shelf' && !q) { main.innerHTML = bk.book ? bookletView() : shelfView(); return; }
   if (active === 'notebook' && !q) { main.innerHTML = notebookView(); return; }
+  if (active === 'markdown' && !q) { main.innerHTML = markdownView(); return; }
 
   if (q) {
     /* A search is a question about the whole app, not the tab you happen to be on. */
@@ -1176,12 +1318,23 @@ main.addEventListener('click', e => {
   const drop = hit('[data-drop-find]');
   if (drop) { bk.finds.splice(Number(drop.dataset.dropFind), 1); save(); render(); return; }
 
-  if (hit('[data-show-md]')) {
-    showMd = !showMd; render();
-    if (showMd) {
-      const ta = main.querySelector('[data-md]');
-      if (ta) { ta.focus(); ta.select(); }
-    }
+  const sc = hit('[data-md-scope]');
+  if (sc) {
+    mdScope = sc.dataset.mdScope; render();
+    const ta = main.querySelector('[data-md]');
+    if (ta) ta.scrollTop = 0;
+    return;
+  }
+  if (hit('[data-copy-md]')) {
+    const text = fullMarkdown(mdScope);
+    navigator.clipboard.writeText(text).then(
+      () => flash(`Copied ${(text.length / 1024).toFixed(0)} KB — paste it into the chat`),
+      () => {
+        /* Clipboard refused. Select it instead, so one keystroke still gets it out. */
+        const ta = main.querySelector('[data-md]');
+        if (ta) { ta.focus(); ta.select(); }
+        flash('Copy blocked — it is selected, press ⌘C');
+      });
     return;
   }
   if (hit('[data-copy]')) {
