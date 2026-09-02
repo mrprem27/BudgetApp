@@ -400,6 +400,23 @@ pre.pre {
 .ib:hover { color:var(--ink); }
 .ib.fine[aria-pressed="true"] { background:var(--ok); border-color:var(--ok); color:var(--ground); }
 .ib.broken[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:var(--ground); }
+.stepn { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:6px; }
+
+/* a → b → c, as links rather than a sentence */
+.chain { display:inline; }
+.chain .link { display:inline; }
+.chain .arrow {
+  display:inline-block; margin:0 7px; color:hsl(var(--h, 174) var(--hs) var(--hl));
+  font-weight:600; transform:translateY(-1px);
+}
+
+/* the step list reads downward, so connect it */
+.blk ul.ilist > .irow { position:relative; }
+.blk ul.ilist > .irow + .irow::before {
+  content:"↓"; position:absolute; left:-14px; top:-9px;
+  font-size:11px; color:var(--ink-3); line-height:1;
+}
+.blk ul.ilist { padding-left:14px; }
 .ib.note { color:var(--ink-3); font-size:14px; }
 .ib.note:hover { color:var(--accent); border-color:var(--accent); }
 .booknote { margin-top:16px; background:var(--surface); border:1px solid var(--line);
@@ -551,13 +568,13 @@ function featTag(state) {
   return ['ok', 'on'];
 }
 
-const kv = (k, v) => v ? `<div class="kv"><dt>${esc(k)}</dt><dd>${md(v)}</dd></div>` : '';
+const kv = (k, v) => v ? `<div class="kv"><dt>${esc(k)}</dt><dd>${chain(v)}</dd></div>` : '';
 const kvList = (k, v, cls) => {
   const parts = humanList(v).split('·').map(x => x.trim()).filter(Boolean);
   if (!parts.length) return '';
   if (parts.length === 1) return kv(k, parts[0]);
   return `<div class="kv ${cls || ''}"><dt>${esc(k)}</dt><dd><ul>${
-    parts.map(x => `<li>${md(x)}</li>`).join('')}</ul></dd></div>`;
+    parts.map(x => `<li>${chain(x)}</li>`).join('')}</ul></dd></div>`;
 };
 /* Steps, branches and failure modes: one line each, sub-id kept for citing. */
 const kvSteps = (k, v, cls) => {
@@ -565,7 +582,7 @@ const kvSteps = (k, v, cls) => {
   if (!parts.length) return '';
   if (parts.length === 1 && !parts[0].sub) return kv(k, v);
   return `<div class="kv ${cls || ''}"><dt>${esc(k)}</dt><dd><ul class="steps">${
-    parts.map(p => `<li>${p.sub ? `<span class="sub-id">${esc(p.sub)}</span>` : ''}${md(p.text)}</li>`)
+    parts.map(p => `<li>${p.sub ? `<span class="sub-id">${esc(p.sub)}</span>` : ''}${chain(p.text)}</li>`)
       .join('')}</ul></dd></div>`;
 };
 const kvArr = (k, arr, cls) => !arr || !arr.length ? '' :
@@ -683,14 +700,39 @@ function stepList(v) {
   const parts = splitSub(v);
   if (!parts.length) return '';
   return `<ol>${parts.map((p, i) =>
-    `<li><span class="n">${p.sub ? esc(p.sub.replace(/^[A-Z]+/, '')) : i + 1}</span><span>${md(p.text)}</span></li>`
+    `<li><span class="n">${p.sub ? esc(p.sub.replace(/^[A-Z]+/, '')) : i + 1}</span><span>${chain(p.text)}</span></li>`
   ).join('')}</ol>`;
+}
+
+/* A step is usually its own screen — first run alone is nine of them. Marking the
+   whole task "broken" then says nothing about which one broke, so every step gets
+   its own tick, cross and note, keyed under the task. */
+function answerableSteps(sid, v) {
+  const parts = splitSub(v);
+  if (!parts.length) return '';
+  return `<ul class="ilist">${parts.map((p, i) => itemRow(
+    sid, p.sub || `S${i + 1}`,
+    `<span class="stepn">${esc((p.sub || String(i + 1)).replace(/^[A-Z]+/, ''))}</span> ${chain(p.text)}`
+  )).join('')}</ul>`;
 }
 function dotList(v) {
   const parts = String(v || '').split('·').map(x => x.trim()).filter(Boolean);
   if (!parts.length) return '';
-  return `<ul>${parts.map(x => `<li><span class="n">·</span><span>${md(x)}</span></li>`).join('')}</ul>`;
+  return `<ul>${parts.map(x => `<li><span class="n">·</span><span>${chain(x)}</span></li>`).join('')}</ul>`;
 }
+/* Anywhere the document writes `a → b → c` it means a chain, and running it
+   together as a sentence hides the shape. Render the arrows.
+   `pending → live → soft-deleted` is a lifecycle; `no VPA → the button is absent`
+   is a cause and its effect. Both read better as links than as prose. */
+function chain(v) {
+  const s = String(v || '');
+  if (!s.includes('→')) return md(s);
+  const links = s.split('→').map(x => x.trim()).filter(Boolean);
+  return `<span class="chain">${links.map((x, i) =>
+    `${i ? '<span class="arrow" aria-hidden="true">→</span>' : ''}<span class="link">${md(x)}</span>`
+  ).join('')}</span>`;
+}
+
 const block = (title, inner, cls) =>
   inner ? `<div class="blk ${cls || ''}"><h3>${esc(title)}</h3>${inner}</div>` : '';
 
@@ -799,7 +841,7 @@ function askBlock(stop) {
 function flowStop(f) {
   return `${block('You need', f.state ? `<p>${md(f.state)}</p>` : '')}
     ${block('Start from', stepList(f.entry) || (f.entry ? `<p>${md(f.entry)}</p>` : ''))}
-    ${block('Do this', stepList(f.steps))}
+    ${block('Do this — tick each one off, cross the one that breaks', answerableSteps('FL:' + f.id, f.steps))}
     ${block('Should happen', [f.writes, f.exit].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''), 'expect')}
     ${block('Check the numbers', dotList(f.numbers), 'expect')}
     ${block('Watch out for', stepList(f.failures), 'warn')}
@@ -1093,11 +1135,17 @@ function itemAnswers() {
     if (!a.look && !a.note) continue;
     const [owner, item] = key.split('::');
     const sc = owner.startsWith('SC:') ? SCREEN[owner.slice(3)] : null;
-    out.push({
-      key, item,
-      where: sc ? (sc.route + ' — the pieces on it') : 'Every empty state',
-      look: a.look || '', note: a.note || '',
-    });
+    const fl = owner.startsWith('FL:') ? FLOW[owner.slice(3)] : null;
+    let where = 'Every empty state';
+    let label = item;
+    if (sc) where = `${sc.route} — the pieces on it`;
+    if (fl) {
+      where = `${fl.name} — step ${item.replace(/^S/, '')}`;
+      /* Name the step, not just its number — "step 4" is unusable in a report. */
+      const step = splitSub(fl.steps).find(s => s.sub === item);
+      label = step ? step.text.replace(/\s+/g, ' ') : item;
+    }
+    out.push({ key, item, label, where, look: a.look || '', note: a.note || '' });
   }
   return out.sort((x, y) => (x.look === 'broken' ? -1 : 1) - (y.look === 'broken' ? -1 : 1));
 }
@@ -1142,7 +1190,7 @@ function exportMarkdown() {
   if (items.length) {
     out.push(`## Individual screens and pieces (${items.length})`, '');
     for (const i of items) {
-      const name = SCREEN[i.item] ? `${SCREEN[i.item].route}` : i.item;
+      const name = i.label || (SCREEN[i.item] ? SCREEN[i.item].route : i.item);
       out.push(`- **${name}** — ${i.look || 'noted'}${i.note ? ` — ${i.note}` : ''}  _(${i.where})_`);
     }
     out.push('');
@@ -1204,7 +1252,7 @@ function notebookView() {
     ${(() => { const items = itemAnswers(); return items.length
       ? `<div class="nb"><h3 class="nbh">Individual screens and pieces (${items.length})</h3>
          ${items.map(i => `<div class="nbrow"><div class="top">
-           <b>${esc(SCREEN[i.item] ? SCREEN[i.item].route : i.item)}</b>
+           <b>${esc(i.label || (SCREEN[i.item] ? SCREEN[i.item].route : i.item))}</b>
            <span class="tag ${i.look === 'broken' ? 'warn' : i.look === 'fine' ? 'ok' : ''}">${esc(i.look || 'noted')}</span>
            <span class="id">${esc(i.where)}</span></div>
            ${i.note ? `<div class="note">${esc(i.note)}</div>` : ''}</div>`).join('')}</div>`
@@ -1348,7 +1396,7 @@ function fullMarkdown(scope) {
     if (items.length) {
       out.push('## Individual screens and pieces', '');
       for (const i of items) {
-        const name = SCREEN[i.item] ? SCREEN[i.item].route : i.item;
+        const name = i.label || (SCREEN[i.item] ? SCREEN[i.item].route : i.item);
         out.push(`- **${name}** — ${i.look || 'noted'}${i.note ? ` — ${i.note}` : ''}  _(${i.where})_`);
       }
       out.push('');

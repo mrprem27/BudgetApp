@@ -277,5 +277,28 @@ try {
   reset();
 } catch (e) { console.log('  THREW  note levels — ' + e.message); bad++; }
 
+/* A step is usually its own screen. Marking a whole task broken says nothing about
+   which of its nine screens broke — first run is exactly that case. */
+try {
+  reset();
+  const { itemAnswers: ia2, fullMarkdown: fm5, setScope: ss5 } = globalThis.__p;
+  answer('FL:FL-01::S4', 'look', 'broken');
+  answer('FL:FL-01::S4', 'note', 'income screen accepts letters');
+  const rows2 = ia2();
+  ss5('answers'); const out5 = fm5('answers');
+  const named = rows2.find(r => r.key === 'FL:FL-01::S4');
+  const checks = [
+    ['a step answer is captured', !!named],
+    ['it is named, not numbered', !!named && /income/i.test(named.label || '')],
+    ['it says which task and step', !!named && /step 4/.test(named.where || '')],
+    ['it reaches the export', /income screen accepts letters/.test(out5)],
+  ];
+  for (const [label, ok] of checks) {
+    console.log(ok ? `  ok     ${label}` : `  BAD    ${label}`);
+    if (!ok) bad++;
+  }
+  reset();
+} catch (e) { console.log('  THREW  step answers — ' + e.message); bad++; }
+
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);
