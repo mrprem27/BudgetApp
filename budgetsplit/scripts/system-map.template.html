@@ -184,6 +184,94 @@ pre.pre {
   .kv { grid-template-columns:1fr; gap:2px; }
   .kv dt { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; }
 }
+
+/* ------------------------------------------------------------------- walk */
+.wrap { max-width:720px; margin:0 auto; }
+.prog { position:sticky; top:0; z-index:25; background:var(--ground); padding:10px 0 12px; }
+.prog .bar { height:6px; border-radius:4px; background:var(--hair); overflow:hidden; }
+.prog .bar i { display:block; height:100%; background:var(--accent); transition:width .25s ease; }
+.prog .meta { display:flex; gap:10px; align-items:baseline; margin-top:8px; font-size:12.5px; color:var(--ink-3); flex-wrap:wrap; }
+.prog .meta b { font-family:var(--mono); color:var(--ink); font-weight:500; }
+.prog .meta .sp { margin-left:auto; }
+
+.stop { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; margin-top:14px; }
+.stop header { padding:16px 18px 14px; border-bottom:1px solid var(--hair); }
+.stop .eyebrow { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-3); }
+.stop h2 { font-size:20px; line-height:1.25; margin-top:6px; }
+.stop .why { color:var(--ink-2); font-size:15px; margin-top:7px; }
+.stop .where { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.route { font-family:var(--mono); font-size:12px; background:var(--accent-b); color:var(--accent); padding:4px 9px; border-radius:7px; }
+
+.blk { padding:15px 18px; border-bottom:1px solid var(--hair); }
+.blk:last-of-type { border-bottom:0; }
+.blk h3 { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-3); font-weight:500; margin-bottom:9px; }
+.blk ol, .blk ul { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px; }
+.blk li { font-size:15px; line-height:1.5; color:var(--ink); display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:baseline; }
+.blk li .n { font-family:var(--mono); font-size:11px; color:var(--ink-3); min-width:20px; }
+.blk.warn li .n { color:var(--warn); }
+.blk p { font-size:15px; color:var(--ink-2); line-height:1.55; }
+.blk.expect { background:var(--ok-b); }
+.blk.expect h3 { color:var(--ok); }
+.blk.expect p, .blk.expect li { color:var(--ink); }
+.blk.hard { background:var(--raised); }
+
+/* answer */
+.ans { padding:15px 18px; background:var(--raised); border-top:1px solid var(--line); }
+.ans h3 { font-size:14px; font-weight:600; margin-bottom:10px; }
+.opts { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+.opt {
+  border:1px solid var(--line); background:var(--surface); color:var(--ink-2);
+  border-radius:10px; padding:11px 4px; font:inherit; font-size:13px; cursor:pointer;
+  min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+}
+.opt span { font-size:16px; line-height:1; }
+.opt:hover { border-color:var(--accent); color:var(--ink); }
+.opt[aria-pressed="true"] { color:var(--ground); font-weight:500; }
+.opt.ok[aria-pressed="true"]   { background:var(--ok);   border-color:var(--ok); }
+.opt.bad[aria-pressed="true"]  { background:var(--warn); border-color:var(--warn); }
+.opt.odd[aria-pressed="true"]  { background:var(--flag); border-color:var(--flag); }
+.opt.skip[aria-pressed="true"] { background:var(--ink-3); border-color:var(--ink-3); }
+.ans textarea {
+  width:100%; margin-top:11px; min-height:88px; resize:vertical; padding:12px;
+  border:1px solid var(--line); border-radius:10px; background:var(--surface);
+  color:var(--ink); font:inherit; font-size:16px; line-height:1.5;
+}
+.ans textarea::placeholder { color:var(--ink-3); }
+
+.pager { display:flex; gap:10px; margin:16px 0 0; }
+.pager button {
+  flex:1; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  border-radius:11px; padding:14px; font:inherit; font-size:15px; font-weight:500;
+  cursor:pointer; min-height:52px;
+}
+.pager button.primary { background:var(--accent); border-color:var(--accent); color:var(--ground); }
+.pager button:disabled { opacity:.4; cursor:default; }
+
+.jump { margin-top:14px; }
+.jump select {
+  width:100%; padding:12px; border:1px solid var(--line); border-radius:10px;
+  background:var(--surface); color:var(--ink); font:inherit; font-size:16px;
+}
+
+/* notebook */
+.nb { margin-top:14px; }
+.nbrow { background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:13px 15px; margin-bottom:8px; box-shadow:var(--shadow); }
+.nbrow .top { display:flex; gap:9px; align-items:baseline; }
+.nbrow .top b { font-size:14.5px; font-weight:500; }
+.nbrow .top .id { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-left:auto; }
+.nbrow .note { margin-top:7px; font-size:14px; color:var(--ink-2); white-space:pre-wrap; line-height:1.5; }
+.nbrow.j { cursor:pointer; }
+.nbrow.j:hover { border-color:var(--accent); }
+.act { display:flex; gap:9px; flex-wrap:wrap; margin:14px 0 20px; }
+.act button {
+  border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  border-radius:10px; padding:12px 16px; font:inherit; font-size:14.5px; cursor:pointer; min-height:48px;
+}
+.act button.primary { background:var(--accent); border-color:var(--accent); color:var(--ground); font-weight:500; }
+.act button.danger:hover { border-color:var(--warn); color:var(--warn); }
+
+@media (max-width:420px) { .opts { grid-template-columns:repeat(2,1fr); } }
+
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
 <script>window.__DATA__=/*__DATA__*/null/*__DATA__*/;</script>
@@ -206,7 +294,8 @@ pre.pre {
 
 <nav>
   <div class="nav-in">
-    <p class="navlabel">What the app does</p>
+    <div class="navrow" id="navMode"></div>
+    <p class="navlabel" style="margin-top:9px">Look something up</p>
     <div class="navrow" id="navAreas"></div>
     <p class="navlabel" style="margin-top:9px">Across the whole app</p>
     <div class="navrow" id="navCross"></div>
@@ -426,6 +515,214 @@ function match(x, q) {
   return hay.includes(q) || hay.includes(base);
 }
 
+/* ------------------------------------------------------------------- walk */
+
+const SWEEP = {
+  cold:  { name: 'Cold start',   how: 'Settings → tap the version 7× → Storage → <b>Erase all data</b>',
+           why: 'First run, and every empty state. Demo data can never show you these.' },
+  demo:  { name: 'Look around',  how: 'Settings → tap the version 7× → Storage → <b>Load demo data</b>',
+           why: 'Nothing here changes anything, so you can do these in any order and repeat them freely.' },
+  hands: { name: 'Hands on',     how: 'Keep the demo data. These change it.',
+           why: 'The write paths. Slow down here — the point is watching a number move, not that the screen opens.' },
+  pair:  { name: 'Needs a second phone', how: 'An account, and someone else with the app.',
+           why: 'You cannot walk these alone. None of it has run on a real device yet.' },
+};
+
+const FLOW = Object.fromEntries(D.flows.map(f => [f.id, f]));
+const AREA = Object.fromEntries(D.AREAS.map(a => [a.key, a]));
+
+/* Stops: a sweep marker, then its tasks. Screens no task covers ride along at
+   the end of their area's last task rather than becoming stops of their own. */
+const STOPS = [];
+let lastSweep = null;
+for (const id of D.route) {
+  const f = FLOW[id];
+  if (f.sweep !== lastSweep) { STOPS.push({ kind: 'sweep', key: f.sweep }); lastSweep = f.sweep; }
+  STOPS.push({ kind: 'task', id, f });
+}
+const TASK_STOPS = STOPS.filter(s => s.kind === 'task');
+
+/* ------------------------------------------------------------- your notebook */
+const KEY = 'bsw-v1';
+let book = { pos: 0, notes: {} };
+try {
+  const raw = localStorage.getItem(KEY);
+  if (raw) book = { pos: 0, notes: {}, ...JSON.parse(raw) };
+} catch (_) { /* private window — the walk still works, it just forgets */ }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (_) {}
+}
+const noteFor = id => book.notes[id] || { s: '', n: '' };
+
+const STATUS = [
+  ['ok',   'works', '✓'],
+  ['bad',  'broken', '✕'],
+  ['odd',  'odd', '?'],
+  ['skip', 'skipped', '–'],
+];
+
+/* --------------------------------------------------------------- one stop */
+function stepList(v, cls) {
+  const parts = splitSub(v);
+  if (!parts.length) return '';
+  return `<ol>${parts.map((p, i) =>
+    `<li><span class="n">${p.sub ? esc(p.sub.replace(/^[A-Z]+/, '')) : i + 1}</span><span>${md(p.text)}</span></li>`
+  ).join('')}</ol>`;
+}
+function dotList(v) {
+  const parts = String(v || '').split('·').map(x => x.trim()).filter(Boolean);
+  if (!parts.length) return '';
+  return `<ul>${parts.map(x => `<li><span class="n">·</span><span>${md(x)}</span></li>`).join('')}</ul>`;
+}
+function block(title, inner, cls) {
+  return inner ? `<div class="blk ${cls || ''}"><h3>${esc(title)}</h3>${inner}</div>` : '';
+}
+
+function taskCard(f, idx) {
+  const a = AREA[f.area];
+  const note = noteFor(f.id);
+  const where = f.screens.map(s => `<span class="route">${esc(D.names[s] || s)}</span>`).join('');
+  return `<article class="stop">
+    <header>
+      <div class="eyebrow">${esc(a ? a.name : '')} · stop ${idx + 1} of ${TASK_STOPS.length}</div>
+      <h2>${esc(f.name)}</h2>
+      ${f.trigger ? `<p class="why">${md(f.trigger)}</p>` : ''}
+      ${where ? `<div class="where">${where}</div>` : ''}
+    </header>
+    ${block('You need', f.state ? `<p>${md(f.state)}</p>` : '', '')}
+    ${block('Start from', stepList(f.entry) || (f.entry ? `<p>${md(f.entry)}</p>` : ''))}
+    ${block('Do this', stepList(f.steps))}
+    ${block('Should happen', [f.writes, f.exit].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''), 'expect')}
+    ${block('Check the numbers', dotList(f.numbers), 'expect')}
+    ${block('Watch out for', stepList(f.failures), 'warn')}
+    ${block('Also try', dotList(f.alsoTry), 'hard')}
+    ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}
+    <div class="ans">
+      <h3>How did it go?</h3>
+      <div class="opts">${STATUS.map(([k, label, glyph]) =>
+        `<button class="opt ${k}" type="button" data-st="${k}" aria-pressed="${note.s === k}">
+           <span>${glyph}</span>${esc(label)}</button>`).join('')}</div>
+      <textarea data-note placeholder="What did you see? What did you expect?">${esc(note.n)}</textarea>
+    </div>
+  </article>`;
+}
+
+function sweepCard(key) {
+  const s = SWEEP[key];
+  const n = D.flows.filter(f => f.sweep === key).length;
+  return `<article class="stop">
+    <header>
+      <div class="eyebrow">Sweep · ${n} stop${n === 1 ? '' : 's'}</div>
+      <h2>${esc(s.name)}</h2>
+      <p class="why">${s.why}</p>
+    </header>
+    <div class="blk"><h3>Put the app in this state</h3><p>${s.how}</p></div>
+    ${key === 'cold' || key === 'demo'
+      ? `<div class="blk warn"><h3>Before you do</h3><p>Both of those <strong>wipe the
+         database</strong>. Loading the demo keeps only your name and picture. Do not run
+         either on data you care about.</p></div>` : ''}
+  </article>`;
+}
+
+/* ------------------------------------------------------------------- render */
+function walkView() {
+  book.pos = Math.max(0, Math.min(book.pos, STOPS.length - 1));
+  const stop = STOPS[book.pos];
+  const done = Object.values(book.notes).filter(v => v.s).length;
+  const bad = Object.values(book.notes).filter(v => v.s === 'bad' || v.s === 'odd').length;
+  const idx = TASK_STOPS.findIndex(s => s === stop);
+
+  return `<div class="wrap">
+    <div class="prog">
+      <div class="bar"><i style="width:${Math.round((done / TASK_STOPS.length) * 100)}%"></i></div>
+      <div class="meta">
+        <span><b>${done}</b> of <b>${TASK_STOPS.length}</b> walked</span>
+        ${bad ? `<span>· <b>${bad}</b> flagged</span>` : ''}
+        <span class="sp"><b>${book.pos + 1}</b>/${STOPS.length}</span>
+      </div>
+    </div>
+    ${stop.kind === 'sweep' ? sweepCard(stop.key) : taskCard(stop.f, idx)}
+    <div class="pager">
+      <button type="button" data-go="-1" ${book.pos === 0 ? 'disabled' : ''}>← Back</button>
+      <button type="button" data-go="1" class="primary" ${book.pos === STOPS.length - 1 ? 'disabled' : ''}>Next →</button>
+    </div>
+    <div class="jump">
+      <select data-jump aria-label="Jump to a stop">
+        ${STOPS.map((s, i) => {
+          const label = s.kind === 'sweep' ? `— ${SWEEP[s.key].name} —`
+            : `${AREA[s.f.area] ? AREA[s.f.area].name : ''} · ${s.f.name}`;
+          const mark = s.kind === 'task' && noteFor(s.f.id).s
+            ? ({ ok: '✓ ', bad: '✕ ', odd: '? ', skip: '– ' }[noteFor(s.f.id).s] || '') : '';
+          return `<option value="${i}"${i === book.pos ? ' selected' : ''}>${esc(mark + label)}</option>`;
+        }).join('')}
+      </select>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------------------------------------------- notebook */
+function exportMarkdown() {
+  const order = [['bad', 'Broken'], ['odd', 'Odd'], ['ok', 'Works'], ['skip', 'Skipped']];
+  const lines = ['# Walkthrough feedback', ''];
+  const walked = Object.values(book.notes).filter(v => v.s).length;
+  lines.push(`${walked} of ${TASK_STOPS.length} stops walked.`, '');
+  for (const [k, title] of order) {
+    const rows = TASK_STOPS.filter(s => noteFor(s.f.id).s === k);
+    if (!rows.length) continue;
+    lines.push(`## ${title} (${rows.length})`, '');
+    for (const s of rows) {
+      const f = s.f, note = noteFor(f.id);
+      lines.push(`**${f.id} · ${f.name}**${f.screens.length ? '  ·  ' + f.screens.map(x => D.names[x] || x).join(' ') : ''}`);
+      if (k === 'bad' || k === 'odd') {
+        const expect = (f.numbers || f.writes || '').split('·').map(x => x.trim()).filter(Boolean)[0];
+        if (expect) lines.push(`Expected: ${expect.replace(/[*`]/g, '')}`);
+      }
+      if (note.n) lines.push(`Note: ${note.n}`);
+      lines.push('');
+    }
+  }
+  if (walked === 0) lines.push('_Nothing walked yet._');
+  return lines.join('\n');
+}
+
+function notebookView() {
+  const walked = TASK_STOPS.filter(s => noteFor(s.f.id).s);
+  const byStatus = k => TASK_STOPS.filter(s => noteFor(s.f.id).s === k);
+  const row = s => {
+    const f = s.f, note = noteFor(f.id);
+    const label = (STATUS.find(x => x[0] === note.s) || ['', '', ''])[1];
+    return `<div class="nbrow j" data-open="${STOPS.indexOf(s)}">
+      <div class="top"><b>${esc(f.name)}</b>
+        <span class="tag ${{ ok: 'ok', bad: 'warn', odd: 'flag', skip: '' }[note.s] || ''}">${esc(label)}</span>
+        <span class="id">${esc(f.id)}</span></div>
+      ${note.n ? `<div class="note">${esc(note.n)}</div>` : ''}
+    </div>`;
+  };
+  return `<div class="wrap">
+    <section class="hero">
+      <h1>Your notebook</h1>
+      <p>Everything you flagged while walking. Copy it and paste it back into the chat —
+         nothing leaves this device until you do.</p>
+      <div class="stat">
+        <div><b>${walked.length}</b>walked</div>
+        <div><b>${byStatus('bad').length}</b>broken</div>
+        <div><b>${byStatus('odd').length}</b>odd</div>
+        <div><b>${TASK_STOPS.length - walked.length}</b>left</div>
+      </div>
+    </section>
+    <div class="act">
+      <button type="button" class="primary" data-copy>Copy everything</button>
+      <button type="button" data-resume>Back to where I was</button>
+      <button type="button" class="danger" data-reset>Start over</button>
+    </div>
+    ${walked.length ? [['bad', 'Broken'], ['odd', 'Odd'], ['ok', 'Works'], ['skip', 'Skipped']]
+        .filter(([k]) => byStatus(k).length)
+        .map(([k, t]) => `<div class="nb"><h3 style="font-size:13px;margin:14px 0 8px">${t} (${byStatus(k).length})</h3>
+           ${byStatus(k).map(row).join('')}</div>`).join('')
+      : '<p class="empty">Nothing walked yet. Start the walk and your notes land here.</p>'}
+  </div>`;
+}
+
 const CROSS = {
   problems: {
     label: 'Problems', n: D.ovs.length,
@@ -540,10 +837,13 @@ const CROSS = {
 };
 
 /* ------------------------------------------------------------------- shell */
-let active = D.AREAS[0].key;
+let active = 'walk';
 const main = document.getElementById('main');
 const qEl = document.getElementById('q');
 
+document.getElementById('navMode').innerHTML =
+  [['walk', 'Walk the app'], ['notebook', 'My notebook']].map(([k, label]) =>
+    `<button class="chip" type="button" data-k="${k}" aria-pressed="${k === active}">${esc(label)}</button>`).join('');
 document.getElementById('navAreas').innerHTML = D.AREAS.map(a =>
   `<button class="chip" type="button" data-k="${a.key}" aria-pressed="${a.key === active}">${esc(a.name)}</button>`).join('');
 document.getElementById('navCross').innerHTML = Object.entries(CROSS).map(([k, c]) =>
@@ -555,6 +855,9 @@ function render() {
   document.querySelectorAll('.chip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.k === active)));
 
+  if (active === 'walk' && !q) { main.innerHTML = walkView(); return; }
+  if (active === 'notebook' && !q) { main.innerHTML = notebookView(); return; }
+
   if (q) {
     /* A search is a question about the whole app, not the tab you happen to be on. */
     const parts = D.AREAS.map(a => areaView(a, q)).filter(Boolean);
@@ -562,7 +865,7 @@ function render() {
     return;
   }
   const area = D.AREAS.find(a => a.key === active);
-  main.innerHTML = area ? areaView(area, '') : CROSS[active].view('');
+  main.innerHTML = area ? areaView(area, '') : (CROSS[active] ? CROSS[active].view('') : walkView());
 }
 
 document.querySelector('nav').addEventListener('click', e => {
@@ -575,7 +878,58 @@ document.querySelector('nav').addEventListener('click', e => {
 });
 qEl.addEventListener('input', render);
 
+main.addEventListener('input', e => {
+  const ta = e.target.closest('[data-note]');
+  if (!ta) return;
+  const stop = STOPS[book.pos];
+  if (stop.kind !== 'task') return;
+  book.notes[stop.id] = { ...noteFor(stop.id), n: ta.value };
+  save();   /* no re-render — that would steal the cursor mid-sentence */
+});
+
+main.addEventListener('change', e => {
+  const j = e.target.closest('[data-jump]');
+  if (!j) return;
+  book.pos = Number(j.value); save(); render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 main.addEventListener('click', e => {
+  const st = e.target.closest('[data-st]');
+  if (st) {
+    const stop = STOPS[book.pos];
+    if (stop.kind === 'task') {
+      const cur = noteFor(stop.id);
+      book.notes[stop.id] = { ...cur, s: cur.s === st.dataset.st ? '' : st.dataset.st };
+      save(); render();
+    }
+    return;
+  }
+  const go = e.target.closest('[data-go]');
+  if (go) {
+    book.pos += Number(go.dataset.go); save(); render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const open = e.target.closest('[data-open]');
+  if (open) {
+    book.pos = Number(open.dataset.open); active = 'walk'; save(); render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  if (e.target.closest('[data-copy]')) {
+    navigator.clipboard.writeText(exportMarkdown())
+      .then(() => flash('Copied — paste it into the chat'), () => flash('Copy blocked by the browser'));
+    return;
+  }
+  if (e.target.closest('[data-resume]')) { active = 'walk'; render(); window.scrollTo({ top: 0 }); return; }
+  if (e.target.closest('[data-reset]')) {
+    if (confirm('Clear every status and note? This cannot be undone.')) {
+      book = { pos: 0, notes: {} }; save(); render();
+    }
+    return;
+  }
+
   const b = e.target.closest('[data-cite]');
   if (!b) return;
   const id = b.dataset.cite;

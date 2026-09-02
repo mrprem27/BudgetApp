@@ -160,6 +160,9 @@ for (const block of doc.split(/^### (?=FL-\d)/m).slice(1)) {
     failures: f['Failures'] || '',
     reversible: f['Reversible'] || '',
     problems: f['Problems'] || '',
+    state: f['State'] || '',
+    numbers: f['Numbers'] || '',
+    alsoTry: f['Also try'] || '',
     terse: false,
   });
 }
@@ -409,6 +412,48 @@ for (const d of dqs) names[d.id] = short(d.q.replace(/^~~|~~$/g, ''), 52).toLowe
 for (const f of flows) names['SN-' + f.id.slice(3)] = names['SN-' + f.id.slice(3)] || f.name.toLowerCase();
 for (const f of feats) names[f.id] = f.name.toLowerCase();
 
+/* ---- The walkthrough ------------------------------------------------------
+ * A task is a test script already: it says where to start, what to do, what should
+ * happen and what goes wrong. Stitching them into one ordered route is what turns
+ * this document into something you can walk with a phone in your hand.
+ */
+const areaOf = {};
+for (const a of AREAS) for (const id of a.fl) areaOf[id] = a.key;
+for (const f of flows) {
+  f.area = areaOf[f.id];
+  /* Which sweep this belongs to, read off its own State line rather than
+     guessed: "empty" only in a wiped app, "second device" not walkable alone,
+     everything else on demo data. */
+  const st = (f.state || '').toLowerCase();
+  /* What a person can do right now, which is a question about state and about
+     whether the task CHANGES anything — a read-only task is safe in any order,
+     a writing one leaves the app different for everything after it. */
+  const readOnly = /^\s*(nothing|none)\b/i.test((f.writes || '').replace(/[*_`]/g, ''));
+  f.sweep = /second device|needs a second|real email|not walkable|needs an account/.test(st) ? 'pair'
+          : /^\s*empty\b|only way to see|erase all data, then relaunch/.test(st) ? 'cold'
+          : readOnly ? 'demo'
+          : 'hands';
+  const txt = [f.entry, f.steps, f.exit, f.problems, f.summary].join(' ');
+  f.screens = [...new Set(txt.match(/\bSC-\d+[a-z]?\b/g) || [])];
+  const sn = 'SN-' + f.id.slice(3);
+  f.cases = (ladders.find(l => l.id === sn) || {}).rows || [];
+  f.t0 = (ladders.find(l => l.id === sn) || {}).t0 || '';
+  f.crossing = (crossings.find(c => c.id === sn || c.also === sn) || {}).bites || '';
+}
+/* Screens no task walks you through still need looking at once. */
+/* The route: cold first (it needs a wiped app), then everything demo data can
+   answer, then the write paths, then the ones needing a second phone. Within a
+   sweep, area order — which is roughly the order a person meets the app. */
+const SWEEPS = ['cold', 'demo', 'hands', 'pair'];
+const areaRank = Object.fromEntries(AREAS.map((a, i) => [a.key, i]));
+const route = [...flows].sort((a, b) =>
+  SWEEPS.indexOf(a.sweep) - SWEEPS.indexOf(b.sweep)
+  || areaRank[a.area] - areaRank[b.area]
+  || Number(a.id.slice(3)) - Number(b.id.slice(3))).map(f => f.id);
+
+const flowScreens = new Set(flows.flatMap(f => f.screens));
+for (const a of AREAS) a.orphanScreens = a.sc.filter(id => !flowScreens.has(id));
+
 // ---- §0, §1, §12 prose ------------------------------------------------------
 const legend = [...section(0).matchAll(/^\| `([A-Z]{1,2})-` \| ([^|]*)\| ([^|]*)\| ([^|]*)\|$/gm)]
   .map(m => ({ p: m[1], is: clean(m[2]), eg: clean(m[3]), answers: clean(m[4]) }));
@@ -440,7 +485,7 @@ const meta = {
 for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
 
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,

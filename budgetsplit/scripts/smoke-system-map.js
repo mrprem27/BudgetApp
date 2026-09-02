@@ -35,7 +35,9 @@ global.clearTimeout = () => {};
 
 new Function(scripts[0])();
 new Function(scripts[1] + `
-  ;globalThis.__p = { D, CROSS, render, go: k => { active = k; }, main: document.getElementById('main'), q: document.getElementById('q') };
+  ;globalThis.__p = { D, CROSS, render, go: k => { active = k; }, STOPS, TASK_STOPS,
+                      book, exportMarkdown, seek: n => { book.pos = n; },
+                      main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
 const { D, CROSS, render, go, main, q } = globalThis.__p;
@@ -76,6 +78,35 @@ for (const k of ['entities', 'flows', 'screens', 'feats', 'ovs', 'dqs', 'ivs', '
 }
 if (unresolved.size) { console.log('  BAD    ids with no human name: ' + [...unresolved].join(', ')); bad++; }
 else console.log('  ok     every cross-reference resolves to a name');
+
+/* The walk is the point of the page: every stop must render, both ends of the
+   route must hold, and the export must produce something pasteable. */
+const { STOPS, TASK_STOPS, book, exportMarkdown, seek } = globalThis.__p;
+console.log(`\n  walking ${STOPS.length} stops (${TASK_STOPS.length} tasks)`);
+let empties = 0;
+for (let i = 0; i < STOPS.length; i++) {
+  try {
+    q.value = ''; go('walk'); seek(i); render();
+    if (main.innerHTML.length < 400) { empties++; console.log(`  EMPTY  stop ${i}`); }
+  } catch (e) { console.log(`  THREW  stop ${i} — ${e.message}`); bad++; }
+}
+if (!empties) console.log('  ok     every stop renders');
+else bad++;
+
+check('pager holds at the start', () => { seek(-5); go('walk'); render(); });
+check('pager holds at the end', () => { seek(STOPS.length + 5); go('walk'); render(); });
+check('notebook, empty', () => { seek(0); go('notebook'); render(); });
+
+try {
+  const stop = TASK_STOPS[0];
+  book.notes[stop.id] = { s: 'bad', n: 'the total did not move' };
+  go('notebook'); render();
+  const md = exportMarkdown();
+  const okExport = /## Broken \(1\)/.test(md) && md.includes(stop.id) && md.includes('the total did not move');
+  console.log(okExport ? '  ok     export produces pasteable markdown' : '  BAD    export missing id or note');
+  if (!okExport) bad++;
+  delete book.notes[stop.id];
+} catch (e) { console.log('  THREW  export — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

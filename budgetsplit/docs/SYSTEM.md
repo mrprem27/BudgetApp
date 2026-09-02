@@ -85,6 +85,40 @@ Two shapes that come up often enough to name:
 | Why has nobody fixed this? | §11 |
 | I have an old `V2-14` / `DEBT-11` reference — where did it go? | §12 |
 
+### Walking the app
+
+Every task in §8 carries a **`State.`** line naming which of three base states it can be walked in.
+Getting into each takes one tap, from Settings → tap the version seven times → `/storage`.
+
+| Sweep | State | How | Only testable here |
+|---|---|---|---|
+| **1 · Cold** | empty | **Erase all data** | First run, and **every empty state**. Demo data can never show you these |
+| **2 · Loaded** | demo | **Load demo data** | Every populated surface at once. Most of the app, and the fastest sweep |
+| **3 · Hands-on** | yours | build on top of demo | The write paths, where the point is watching a **number move** |
+
+⚠️ **Load demo data wipes the database.** It preserves only your name and avatar.
+
+#### What the demo dataset actually contains
+
+`src/db/seedDemo.ts` is built for exactly this — *"a rich, realistic dataset that exercises every
+surface."* Cite it by name in a `State.` line rather than saying "a group with a balance":
+
+| | |
+|---|---|
+| **People** | Aarav · Priya · Rohan · Sneha · Vikram |
+| **Groups** | Personal · **Roommates** (equal splits, part-settled) · **Goa Trip** (exact + shares + an itemized bill, **simplify OFF**) · **Office Lunch** (fully settled) · **Family** (you owe *them*) · **Manali Trip** (settled back) · **Weekend Plans** (deliberately empty) · **Old Flat** (archived) |
+| **Budgets** | Groceries ₹9,000 spent vs ₹8,000 → **over** · Eating Out ₹2,700 vs ₹3,000 → **near** · Fuel ₹1,500 vs ₹4,000 → **under** · plus daily and yearly cadences |
+| **Recurring** | Netflix, Spotify, rent auto-pay, weekly cleaning, a 90-day custom interval · Gym is **paused** · an old prepaid plan is **ended** · three due within 3 days · Prime Video repeats un-ruled, to be detected |
+| **Goals** | Emergency Fund 40%, **locked** · Goa Trip Fund **100%** · New Laptop 19% · Europe Vacation, with a **withdrawal** · Anniversary Gift **120% overfunded** · Tax Payment, deadline **already past** · Weekend Getaway at **97.5% — add ₹500 to fire the celebration** · New Phone at **0%** |
+| **Money** | ₹2,10,000 bank · ₹45,000 cash · ₹45,000 wallet · ₹10,000 of ₹60,000 credit used · assets: index funds, gold, an FD |
+| **Peers** | **Aarav is trusted**, so his expense applied on arrival · **Priya is on review**, so hers waits and counts nowhere · a transfer from Aarav **still waits, though he is trusted** · **Rohan disputes** an entry you wrote |
+| **Inbox** | 9 rows waiting in Review — 6 from Google Pay, 3 from email alerts, some pre-categorised, some not |
+| **Edges** | a ₹5 expense · a ₹65,000 one · a soft-deleted row · a row labelled *"Delete me — tests the Undo toast"* · `Poker Night`, a category **Aarav used that you do not have** |
+
+The peer rows are the part worth knowing about: **approvals, disputes and trust are walkable on one
+phone.** Only real sync — pushing, pulling, sharing a group, accepting an invite, signing in —
+genuinely needs a second device.
+
 ### Reading it honestly
 
 Every section carries a `Last verified` date and the test that holds it to the code. A section
@@ -2061,6 +2095,16 @@ Failures.    .FM1 a read error on the done-flag is treated as "not done", so a
              .FM2 declining notifications silently disables FE-50's value
 Reversible.  "Replay welcome tour" clears the flag but **requires an app restart** —
              the gate cannot be re-entered live. A known rough edge.
+State.       empty — Storage → Erase all data, then relaunch. This is the ONLY
+             way to see first run, and the only way to see any empty state.
+Numbers.     · nothing exists yet. Every list should be a designed empty state
+               with something to tap, never a zero or a blank
+             · the figures you type here become the opening balances every later
+               number is built on — get them wrong and everything downstream is
+Also try.    · refuse the notification permission and check the app still works
+             · pick the personal-only persona and confirm the Groups tab is gone
+             · replay the tour from Settings — it needs an app restart, which is
+               a known rough edge worth seeing for yourself
 Ladder.      SN-01
 Problems.    —
 ```
@@ -2083,6 +2127,16 @@ Branches.    .B1 `splitting` off is structural — the tab bar changes shape and
 Failures.    .FM1 turning off a flag whose data still exists hides the data, never
                   deletes it — but nothing says so on screen
 Reversible.  Fully, instantly.
+State.       any.
+Numbers.     · turning a switch off **hides a surface, it never deletes data**.
+               Turn it back on and everything should still be there
+             · turning off splitting with money outstanding: the balances survive
+               untouched, they just stop being shown
+Also try.    · turn off splitting and count how much of the app changes shape —
+               the tab bar, Home's strip, and the Transfer kind all go
+             · re-apply a persona and check it warns you first: it overwrites
+               **every** switch, including ones you set by hand
+             · toggle location and watch it ask the OS rather than just flipping
 Ladder.      SN-02
 Problems.    —
 ```
@@ -2090,10 +2144,20 @@ Problems.    —
 ### FL-03 · Premium upgrade — 0 entry points
 
 ```
-This flow does not exist, and the entry documents that on purpose so it is not
-re-invented. There is no paywall, no IAP, no entitlement and no SDK anywhere in
-the app. Feature flags are user preferences and must never be repurposed as
-entitlements. See DQ-01 for the open question of what monetisation would even be.
+Trigger.     Nothing. There is nothing to trigger.
+State.       any — the point is that you will not find this anywhere.
+Steps.       .S1 look for a paywall, an upgrade prompt, a locked feature, a
+             "Pro" badge or a price. There is none, in any state.
+Writes.      Nothing exists to write. No paywall, no IAP, no entitlement, no SDK.
+Numbers.     · no figure anywhere is gated. Every feature is on for everyone
+             · **feature switches are preferences, not a paywall in disguise.**
+               If you ever find one that reads as "upgrade to unlock", that is
+               the bug this entry exists to catch
+Also try.    · turn off several switches and confirm nothing offers to sell them
+               back to you
+             · search Settings for any mention of price, plan, upgrade or Pro
+Problems.    DQ-01 — what monetisation would even be is genuinely undecided, and
+             this entry is here so the answer is not accidentally "the flags".
 ```
 
 ### FL-04 · Add an expense — 24 entry points, 11 params
@@ -2151,6 +2215,21 @@ Failures.    .FM1 amount unparseable → inline validation, haptic.error
              .FM5 shares stop summing to payments after a member is removed mid-edit
 Reversible.  Undo toast for 5 s, then soft-delete from SC-15. An entry someone
              else wrote cannot be deleted by you — dispute it instead (FL-28).
+State.       demo or yours — Roommates holds you, Aarav and Priya, so a
+             three-way split is one tap away.
+Numbers.     · **the check that matters most in this app.** Log ₹300 in Roommates
+               split three ways: Home's month total rises by **₹100, not ₹300**.
+               Your share is your spending, whoever fronted the cash (IV-08)
+             · the group balance moves by the other ₹200, owed to you
+             · **cash drops by ₹300 only if you paid.** If Aarav paid, your cash
+               does not move at all (IV-20)
+             · Reports and the category's budget bar move by ₹100, not ₹300
+Also try.    · log one where **someone else paid** and confirm your cash is
+               untouched while your spending still rose
+             · backdate one into last month and check it lands in last month's
+               budget, not this one
+             · ₹0 · a negative amount · `12.345` · `1,2,3`
+             · log into a category already over budget and watch the nudge fire
 Ladder.      SN-04
 Problems.    OV-08 (11 params, 24 entries) · OV-02 (if kind=transfer) · OV-27
 ```
@@ -2175,6 +2254,18 @@ Failures.    .FM1 items summing to less than the bill leaves a remainder that
                   must land somewhere deterministic (IV-02)
              .FM2 OCR returns nothing useful → falls back to manual entry
 Reversible.  As FL-04.
+State.       demo — the Goa Trip seafood dinner is already itemized, and mixes
+             percent and shares splits on one bill.
+Numbers.     · the line items, plus tax and tip, minus the discount, must equal
+               the bill total shown at the top
+             · **your share is the sum of the items assigned to you** — not the
+               bill divided by the number of people
+             · a line nobody is assigned splits across everyone
+Also try.    · open the demo's seafood dinner and **add the four items up by
+               hand**, then apply 5% GST, 10% tip and the ₹200 coupon
+             · leave a line unassigned and see where its cost goes
+             · make the items sum to less than the bill and find where the
+               remainder lands — it has to land somewhere deterministic
 Ladder.      SN-05
 Problems.    **Line items do not sync.** A peer receives a single expense: the
              money is right, the breakdown is gone. Nothing on screen says so.
@@ -2209,6 +2300,21 @@ Failures.    .FM1 they settle simultaneously → two settlements, balance oversh
              .FM3 an entry awaiting approval is inside the amount being settled
              .FM4 Android: useUpiApps returns null, the whole hand-off is unreachable
 Reversible.  Soft-delete the settlement, which reopens the debt.
+State.       demo — Aarav and Priya part-settled in Roommates, Office Lunch is
+             fully settled, Family is one you owe. **Goa has simplify OFF**, so
+             every debt there stays separate.
+Numbers.     · **your month spending must NOT change.** Settling is not spending
+               — the purchase already counted (IV-06)
+             · **Reports must not change either**
+             · cash drops by exactly what you handed over
+             · the balance with that person goes to zero, or to the remainder
+Also try.    · **settle half** and check the remainder is right
+             · **settle more than you owe** and watch the direction flip
+             · Office Lunch is already at zero — check it says so rather than
+               offering you a settle-up of ₹0
+             · you share more than one group with Rohan: settle "all groups" and
+               then check **which group each row landed in**. There is a real
+               open question here, and it is the best find in this document
 Ladder.      SN-06 — the richest ladder in the document
 Problems.    OV-02 (kind=settlement means four things) · DQ-13 · DQ-11 (Android)
 ```
@@ -2232,6 +2338,18 @@ Failures.    .FM1 three red surfaces can stack on one open — deliberately not
                   de-duplicated, because whether that is too many is a question
                   only real users settle (DQ-12)
 Reversible.  n/a — read-only.
+State.       demo — seeded so every card has something to show.
+Numbers.     · **the hero total must equal the sum of the category rows below it**
+             · the month-end projection here must be the **same number** Insights
+               shows. Two screens, one figure
+             · owe and owed are **two figures, never netted into one** — ₹5,000
+               out and ₹5,000 in is not zero
+             · switching Today / Month / Year changes the window, not the maths
+Also try.    · **add the category rows up and check they equal the hero**
+             · check the health ring refuses to score when there is too little
+               data, rather than showing a misleading zero
+             · look for three red things at once — whether that is too many is a
+               live open question, and your opinion is the answer
 Ladder.      SN-07
 Problems.    OV-14 (E-50 recomputed per render)
 ```
@@ -2258,6 +2376,19 @@ Failures.    .FM1 format not recognised → the raw text is kept, nothing is los
                   and counterparty are reset so the row stays committable
              .FM3 duplicates against existing txns are flagged, not blocked
 Reversible.  Undo per commit. Discard per row. Clear all.
+State.       demo — **9 rows are already waiting** in Review: 6 from Google Pay,
+             3 from email alerts, some pre-categorised and some not.
+Numbers.     · **nothing in the inbox counts anywhere until you commit.** Note
+               Home's total before and after opening Review — it must not move
+             · after committing all 9, your month total rises by exactly their
+               sum, and the badge goes away
+             · a row you route into a group and split counts only your share
+Also try.    · open Review and **check Home's badge count matches the row count**
+             · edit a row's category in place, leave, come back — the draft
+               should still be there
+             · commit one row, then re-import the same file and check the
+               duplicate warning fires
+             · discard everything and confirm no transaction was created
 Ladder.      SN-08
 Problems.    OV-24 (12 sheet states) · OV-21 · FE-48 has never been device-tested
 ```
@@ -2283,6 +2414,22 @@ Failures.    .FM1 a category renamed after a budget is set — the reference is 
                   name, so the rename rewrites it (OV-06)
              .FM2 a budget set on a category later deleted becomes unreachable
 Reversible.  Clear the amount.
+State.       demo — Groceries is **over** (₹9,000 of ₹8,000), Eating Out is
+             **near** (₹2,700 of ₹3,000), Fuel is **under**. Daily and yearly
+             cadences are both set, so every bar state exists already.
+Numbers.     · a budget is measured against **your share**, never the whole bill
+               (IV-08). The Roommates groceries were ₹4,500 and ₹1,500 is yours
+             · the bar colour must match the arithmetic: over red, near amber,
+               under green
+             · a **blank** override means "keep following the group", not zero —
+               this is the one most likely to be wrong
+             · a daily line and a monthly line are the same money at different
+               rates; the yearly one only counts on the Year view
+Also try.    · **check Groceries reads ₹9,000 of ₹8,000** and the bar is red
+             · set a group default, then override one category for yourself and
+               leave another blank — confirm the blank one still follows
+             · rename a category that has a budget and check the budget follows
+             · set a budget, then delete the category, and see what happens
 Ladder.      SN-09
 Problems.    OV-07 (three concepts, two levels, plus two dead and one stray)
              OV-19 (period vs cadence) · the path from Home is 3 hops, from a
@@ -2307,6 +2454,22 @@ Branches.    .B1 auto-funding on a frequency, run by launch maintenance
 Failures.    .FM1 funding more than you hold → refused against E-54
              .FM2 the source bucket round trip is only partly built (DQ-15)
 Reversible.  Withdraw, which writes the opposite row. Raids have explicit undo.
+State.       demo — eight goals covering every state: **Weekend Getaway sits at
+             97.5%, so ₹500 finishes it and fires the celebration.** Emergency
+             Fund is locked, Tax Payment's deadline has passed, New Phone is 0%,
+             Anniversary Gift is 120% overfunded.
+Numbers.     · **funding a goal does not change net worth** — the money moved
+               from cash into a goal, and both are yours
+             · **it is not spending either.** Your month total must not move
+             · the goal's ring and its rupee figure must agree
+             · funding order is drag rank **within** a priority tag, not the tag
+               alone — the two are easy to confuse
+Also try.    · **add ₹500 to Weekend Getaway and watch the celebration fire**
+             · try to fund more than you hold
+             · withdraw from Europe Vacation and check the history shows both the
+               deposits and the withdrawal, netting to ₹3,000
+             · look at Anniversary Gift at 120% — an overfunded goal is allowed
+             · look at Tax Payment, whose deadline is already past
 Ladder.      SN-10
 Problems.    priority vs sort_order is a standing confusion: priority protects
              from a raid, drag rank decides funding order. Two orderings, one word.
@@ -2334,6 +2497,17 @@ Failures.    .FM1 wrong passphrase → refused, nothing touched
                   re-publish it
              .FM3 a backup over ~25 MiB is capped by KV standing in for R2 (DQ-85)
 Reversible.  No. A restore is not undoable, which is why .S6 is explicit.
+State.       demo — plenty to back up. **Do this before any destructive test.**
+Numbers.     · after restoring, every figure must match what it was at backup
+               time, exactly — Home's total, every balance, every goal
+             · **your app preferences will not come back.** They live in a
+               different store that is not in the backup, and nothing on screen
+               warns you
+Also try.    · back up, change three things, restore, and check all three reverted
+             · **check whether your feature switches survived** — they should not,
+               and knowing that is the point
+             · try a wrong passphrase and confirm nothing was touched
+             · check the confirmation makes "this replaces everything" unmissable
 Ladder.      SN-11
 Problems.    The restore path has **never run on a device** — RELEASE §0.4.
 ```
@@ -2352,6 +2526,16 @@ Exit.        Dismisses.
 Branches.    .B1 INCOME_LANDING picks the bucket: bank (default), cash, wallet, upi
 Failures.    .FM1 logged into a shared group, where it means nothing
 Reversible.  As FL-04.
+State.       demo — three months of ₹85,000 salary, a freelance gig, and interest.
+Numbers.     · income raises cash and **never** appears in a spending total
+             · it lands in the bucket you pick — bank by default, and the Plan
+               screen's three buckets must add up afterwards
+             · **income is never split.** It writes one payment and zero shares,
+               because splitting income means nothing (IV-16)
+Also try.    · log income **into a shared group** and see whether the app lets
+               you, and what it does with it
+             · land some in Cash instead of Bank and check the buckets on Plan
+             · check Reports shows income separately, never mixed into spending
 Ladder.      SN-12
 Problems.    INCOME_LANDING is a view over PAY_METHOD rather than a real account
              concept — deliberately, and DQ-14 is where that gets revisited.
@@ -2377,6 +2561,19 @@ Branches.    .B1 a recurring occurrence opens the RULE, not the occurrence —
 Failures.    .FM1 409 on push after an offline edit
              .FM2 an edit that makes someone else worse off needs their approval (IV-09)
 Reversible.  The previous values are not kept. Undo covers deletion, not edits.
+State.       demo — any transaction. Aarav's electricity is a peer entry, which
+             behaves differently.
+Numbers.     · change ₹300 to ₹600 in a three-way split and your total rises by
+               **₹100, not ₹300** — the same rule as adding
+             · every surface must move together: Home, the balance, the budget
+               bar, Reports. **A figure that moves while the others do not is
+               worse than all of them moving**
+Also try.    · edit an amount and then check **four screens agree**
+             · edit a peer entry — Aarav's — and see whether it is allowed
+             · change who paid, without changing the amount, and watch cash move
+               while your spending does not
+             · edit a **materialized recurring occurrence** and confirm it opens
+               the rule rather than a dead end
 Ladder.      SN-13
 Problems.    The prop is called onEditTxn/editRef everywhere and it opens a
              *detail* screen — the naming and the behaviour disagree.
@@ -2399,6 +2596,19 @@ Branches.    .B1 a recurring rule asks: rule only, or rule + everything it logge
                  there is to dispute it (FL-28)
 Failures.    .FM1 undo after the toast expires → use SC-15's restore
 Reversible.  Yes, both by toast and by restore.
+State.       demo — there is a row labelled **"Delete me — tests the Undo toast"**
+             seeded for exactly this, and one already soft-deleted.
+Numbers.     · deleting reverses everything adding did, on every surface
+             · **undo must restore all of it**, not just the row
+             · a soft-deleted row must vanish from every total while still being
+               recoverable
+Also try.    · **delete the "Delete me" row and press Undo** — then check Home's
+               total is back to what it was
+             · let the toast expire, then restore from the entry instead
+             · delete a recurring **rule** and choose "keep what it logged", then
+               do it again choosing "remove them too"
+             · try to delete Aarav's entry — a peer's entry is refused, and it
+               should say so plainly rather than failing quietly
 Ladder.      SN-14
 Problems.    —
 ```
@@ -2421,6 +2631,17 @@ Branches.    .B1 recur_mode auto materializes; remind only notifies
 Failures.    .FM1 an end date before the start date
              .FM2 a rule created in a group you then leave
 Reversible.  Pause, end, or delete — FL-16.
+State.       demo — Netflix, Spotify, rent, a weekly clean and a 90-day custom
+             interval already exist. **Prime Video repeats un-ruled**, waiting to
+             be detected.
+Numbers.     · **a rule is not a transaction.** Creating one must move **no**
+               figure — not Home, not the budget, not Reports (IV-04)
+             · it appears under "coming up", which is a forecast, not a total
+             · only when an occurrence actually fires does anything count
+Also try.    · **create a rule and check Home's month total does not move**
+             · set it to a past start date and see whether occurrences appear
+             · set an end date before the start date
+             · create one in a shared group and check whose share it counts as
 Ladder.      SN-15
 Problems.    OV-03 — a rule and a transaction are the same table, which is the
              single most load-bearing piece of knowledge in this document.
@@ -2442,6 +2663,17 @@ Branches.    .B1 skip the next one  .B2 undo the next skip  .B3 pause / resume
 Failures.    .FM1 a skip is local and does not travel — two devices can disagree
                   about one occurrence
 Reversible.  Skips undo. Pause resumes. Stop is an end state.
+State.       demo — **Gym is paused, the old prepaid plan is ended**, and three
+             rules fall due within three days.
+Numbers.     · pausing stops future occurrences and **changes no past figure**
+             · a skipped occurrence removes exactly one, and the monthly-equivalent
+               total should drop for that month only
+             · ending is not deleting: what it already logged stays
+Also try.    · **find the paused Gym rule and the ended prepaid one** and check
+               they look different from active ones, and from each other
+             · skip the next occurrence of the weekly newspaper, then undo it
+             · check the same rule looks the same in all three places that list
+               recurring things — Plan, the group tab, and Home's "coming up"
 Ladder.      SN-16
 Problems.    Three renderings of overlapping recurring data — SC-32, the group's
              Recurring tab, and Home's "coming up". Two earlier ones were already
@@ -2467,6 +2699,18 @@ Failures.    .FM1 the phrase does not parse → the raw text becomes the note
              .FM2 the one-tap Shortcut install is dead: VOICE_SHORTCUT_URL is null,
                   so only the four-step manual setup works (DQ-22)
 Reversible.  As FL-04. Voice auto-save has no off switch, deliberately (DQ-20).
+State.       any, on a real device — the keyboard's own dictation, so nothing to
+             install and no permission to grant.
+Numbers.     · what it fills in must be what you said, and nothing more —
+               a wrong amount here is a wrong ledger
+             · it is a prefilled form, not a save: **nothing is written until you
+               confirm**, so a bad parse costs a tap
+Also try.    · say "two hundred rupees chai" and check every field it filled
+             · say something it cannot parse and confirm the words survive as
+               a note rather than being thrown away
+             · say a person's name and see whether it routes to a split
+             · check the Siri setup screen — the one-tap install is dead today,
+               so only the four manual steps work, and that should be evident
 Ladder.      SN-17
 Problems.    The whole Shortcuts apparatus is slated for deletion when App
              Intents land.
@@ -2489,6 +2733,16 @@ Failures.    .FM1 permission denied *after* Scan was tapped
              .FM2 OCR returns nothing usable → manual entry, nothing lost
              .FM3 iOS only; the Android port needs an ML Kit rewrite
 Reversible.  Nothing is written until the bill is saved.
+State.       any, on a real iPhone with a real receipt. **iOS only.**
+Numbers.     · the scanned total must match the paper in your hand
+             · **nothing is written until you finish the bill**, so a bad scan
+               costs corrections, not data
+             · the items must sum to the total, the same as any itemized bill
+Also try.    · scan a real receipt and count how many lines it got right
+             · scan something that is not a receipt at all
+             · deny the camera permission **after** tapping Scan
+             · switch the provider to on-device in Settings and scan the same
+               receipt again — offline, and the results should be comparable
 Ladder.      SN-18
 Problems.    A Mistral fallback is documented in ocrProviders/index.ts and was
              never built — deliberately abandoned, since device solves it offline.
@@ -2514,6 +2768,20 @@ Failures.    .FM1 UPI gives no reliable callback — **only the human knows**, w
              .FM2 a tampered QR: the code's `pn` is written by whoever made it,
                   so the VPA leads and the name is labelled unverified (IV-19)
 Reversible.  Nothing is written until confirmed.
+State.       any, with a real UPI QR to point at. **The only way in is a
+             350 ms long-press on the FAB** — worth checking you can find it.
+Numbers.     · **nothing is written when you hand off.** The app cannot know
+               whether the payment succeeded — only you can
+             · confirming afterwards writes a pending row, not a transaction, so
+               it still goes through Review
+             · declining the confirmation must leave no trace at all
+Also try.    · **long-press the FAB and see whether the gesture is discoverable**
+               without being told
+             · scan a QR, come back **without paying**, and decline — check
+               nothing was recorded
+             · check the sheet leads with the **VPA**, not the name printed in
+               the code. A code's name is written by whoever made the code, and
+               over 70% of Indian UPI fraud in 2025 was exactly this (IV-19)
 Ladder.      SN-19
 Problems.    Over 70% of Indian digital-payment fraud in 2025 was QR tampering or
              collect-request manipulation. IV-18 and IV-19 are the defences and
@@ -2538,51 +2806,381 @@ Failures.    .FM1 the app returns without confirming anything
              .FM2 **Android: useUpiApps returns null**, so the entire per-app
                   payload table is unreachable, not merely dead (DQ-11)
 Reversible.  Soft-delete the settlement.
+State.       demo, on a real device with a UPI app installed. **iOS — on Android
+             this silently does nothing.**
+Numbers.     · the amount handed to the UPI app must match the balance shown
+             · confirming writes the settlement **straight to the ledger**, not
+               to Review — the one difference from Scan & Pay
+             · then the same checks as settling: spending unchanged, cash down
+Also try.    · hand off, come back **without paying**, and decline the prompt
+             · check which apps are offered — PhonePe, Paytm, Amazon Pay and
+               WhatsApp all refuse this hand-off, and that is closed on our side
+             · if you have an Android device, try it there and watch nothing
+               happen at all. That is a known untested hole, not a surprise
 Ladder.      SN-20
 Problems.    OV-02 · OV-21 (E-84 and E-85 are near-identical siblings)
 ```
 
 ---
 
-### FL-21 → FL-54 · the rest
+*The remaining tasks, same shape as the twenty above. Written to be walked with the app open.*
 
-Terser, and complete in the fields that matter. Every one names its entities, its exit and its
-problems; the interest in most of them is in their ladder.
+### FL-21 · Request money by QR — 1 entry point
 
 ```
-FL-21 · Request money by QR — 1 entry (SC-07, flag upiSettle)
-  Renders a upi://pay QR the payer scans with their own app. PUSH, never a
-  collect request — NPCI banned P2P collect outright from 1 Oct 2025 (IV-18).
-  Writes nothing until they pay and you record it. Ladder SN-21.
+Trigger.     "Pay me back" — without asking them to type your handle.
+State.       demo — you need your own UPI id set first (Settings → Getting paid).
+Entry.       .E1 SC-07 Transfer → "Show QR to get ₹X"  (flag: upiSettle)
+Pre.         Your own upi_vpa on E-01. Without it the button does not render.
+Steps.       .S1 open Transfer  .S2 pick the person and amount
+             .S3 tap Show QR  .S4 they scan it with their own UPI app
+             .S5 they pay  .S6 you record the settlement yourself (FL-06)
+Entities.    R E-01 (your VPA) · nothing is written here
+Writes.      **Nothing.** The QR is a picture. The money moving and the ledger
+             recording it are two separate events, and only you can join them.
+Numbers.     · no figure moves at this step — not your balance, not your cash
+             · the balance only moves when you record the settlement afterwards
+Exit.        Closes the sheet, back to Add.
+Branches.    .B1 the same payload also goes out as an intent, in FL-20
+Failures.    .FM1 no VPA set → the button is absent, with no explanation
+             .FM2 they pay and you forget to record it → the balance stays wrong,
+                  and nothing in the app knows
+Reversible.  Nothing to reverse.
+Also try.    · scan your own QR with a UPI app and check the amount is prefilled
+             · request ₹0, and a negative amount
+             · check it is a **push** QR: your app must never send them a collect
+               request — NPCI banned P2P collect outright from 1 Oct 2025 (IV-18)
+Ladder.      SN-21
+Problems.    The gap between paying and recording is unguarded, by design —
+             see FL-19's E-84 for the version that does prompt you.
+```
 
-FL-22 · Create a group — 1 entry (SC-04 "+" sheet)
-  W E-02, W E-03 (you, as admin and creator). Exits by pushing SC-09.
-  Shares GroupForm with SC-13. Creating is a sheet; editing is a route (OV-26).
-  Ladder SN-22.
+### FL-22 · Create a group — 1 entry point
 
-FL-23 · Add or remove members — 2 entries (SC-09 Members tab, SC-11)
-  W E-03, W E-01 if the person is new. Removal is SOFT (IV-21) because a departed
-  member's past shares still have to resolve. Swipe-remove with undo. Ladder SN-23.
+```
+Trigger.     "We need to split things — flatmates, a trip, a team lunch."
+State.       any. On empty this is the first thing worth doing.
+Entry.       .E1 SC-04, the "+" sheet
+Pre.         flags.splitting for the Groups tab to exist at all.
+Steps.       .S1 name it  .S2 pick an icon and colour  .S3 add people
+             .S4 choose the default split  .S5 create
+Entities.    W E-02 · W E-03 (you, as creator and admin) · W E-01 for new people
+Writes.      The group, your membership with role `admin`, and `created_by` = you.
+             `insertGroup` also seeds the group's categories.
+Numbers.     · a new group contributes ₹0 to everything until it has an expense
+             · it appears on Groups immediately, and on Home's people strip only
+               once a balance exists
+Exit.        Pushes SC-09, the new group's hub.
+Branches.    .B1 default split — equal, exact, percent or shares — is only a
+                 default; any single expense can override it
+             .B2 simplify debts on or off changes who pays whom, never how much
+Failures.    .FM1 a group with no creator and no admin can never have its budget
+                  edited by anyone, permanently — which is why .S5 writes both
+             .FM2 an empty name
+Reversible.  Archive it, or delete it if you created it (FL-26).
+Also try.    · create one with no other members, then add someone later
+             · two groups with the same name
+             · a very long name, and an emoji in it
+Ladder.      SN-22
+Problems.    OV-26 — creating is a sheet, editing the same thing is a full screen.
+```
 
-FL-24 · Share a group — 2 entries (SC-13, SC-09 overflow)
-  W E-88 roster, W E-82 wrapped key per device. This is the moment a local group
-  becomes a synced one. Server-gated. Ladder SN-24. Never run on a phone.
+### FL-23 · Add or remove members — 2 entry points
 
-FL-25 · Accept an invite / adopt a group — 1 entry (SC-39, deep link only)
-  R E-19, W E-02, W E-03, W E-88. Claiming ASKS; nothing is linked until the
-  sender confirms. adoptGroup rebuilds the group from the roster doc.
-  Ladder SN-25. Never run on a phone.
+```
+Trigger.     "Priya moved in" / "Vikram moved out."
+State.       demo — Roommates has you, Aarav and Priya.
+Entry.       .E1 SC-09 Members tab  .E2 SC-11
+Pre.         Admin in that group (E-64).
+Steps.       .S1 open Members  .S2 add an existing person, or type a new name
+             .S3 to remove, swipe the row  .S4 confirm
+Entities.    W E-03 · W E-01 when the name is new
+Writes.      Adding inserts a membership row. **Removing is a soft delete** —
+             `deleted_at` is set and the row stays, because a departed member's
+             past shares still have to resolve (IV-21).
+Numbers.     · removing someone does **not** change any past expense or any
+               balance — their old shares still count, and still show
+             · what changes is only who future expenses can be split with
+Exit.        Stays on Members; the list reloads.
+Branches.    .B1 adding an existing person reuses their row, and their history
+             .B2 a removed member can be added back, and the same row revives
+Failures.    .FM1 a non-admin sees no add or remove control
+             .FM2 removing someone who is owed money — allowed, and the balance
+                  survives, which surprises people
+Reversible.  Undo toast on remove; otherwise add them again.
+Also try.    · remove someone mid-settlement and watch the balance
+             · remove yourself (you cannot — leaving is FL-26)
+             · add a person whose name matches one already there
+Ladder.      SN-23
+Problems.    —
+```
 
-FL-26 · Leave, archive or delete a group — 3 entries (SC-13 ×3)
-  Three different end states that are routinely conflated (OV-11):
-    archive  → is_archived, still yours, reversible
-    leave    → announce the exit, THEN stop syncing (the other order leaves
-               nothing able to publish it). A creator cannot leave.
-    delete   → creator only, a TOMBSTONE: deleted_at + is_archived, every entry
-               survives. It used to hard-delete everything, which rewrote the
-               deleter's own closed months and then resurrected the group as an
-               empty husk on the next pull.
-  All three dismissTo SC-04. Ladder SN-26.
+### FL-24 · Share a group — 2 entry points
+
+```
+Trigger.     "Put this group on Aarav's phone too."
+State.       **needs a second device and an account.** Not walkable solo.
+Entry.       .E1 SC-13 → Share  .E2 SC-09 overflow
+Pre.         An account (FL-30), a build with the server configured, and the
+             other person linked to a local person (FL-31).
+Steps.       .S1 open the group  .S2 Share  .S3 pick who  .S4 confirm
+Entities.    W E-88 roster · W E-82 a key wrapped for their device · W E-18
+Writes.      The group's key is wrapped once per recipient device and the roster
+             is published. This is the moment a local group becomes a synced one.
+Numbers.     · nothing changes on your side — no balance, no total
+             · on theirs, the whole group's history appears at once
+Exit.        Back to the group.
+Branches.    .B1 sharing with someone with no account is refused (IV-11)
+Failures.    .FM1 no server configured → the option does not exist
+             .FM2 **none of this has ever run on a phone**
+Reversible.  Stop syncing the group; the other side keeps what it has.
+Also try.    · nothing solo. Park this until there are two devices.
+Ladder.      SN-24
+Problems.    Built end to end, never run on a phone.
+```
+
+### FL-25 · Accept an invite — 1 entry point
+
+```
+Trigger.     Someone sent you a link.
+State.       **needs a second device.** Not walkable solo.
+Entry.       .E1 SC-39, from a `budgetsplit:///link?token=…` deep link only
+Pre.         The link, and the app installed.
+Steps.       .S1 tap the link  .S2 the app opens on SC-39  .S3 claim
+             .S4 **the sender confirms on their phone**  .S5 the group appears
+Entities.    R E-19 · W E-02 · W E-03 · W E-88
+Writes.      Claiming **asks**. Nothing is linked until the sender approves —
+             a forwarded link must not be enough to join.
+Numbers.     · after adoption, their whole group history lands at once, and your
+               owe/owed figures move by your share of all of it
+Exit.        `replace`s to the group, or to Settings if it is only a person link.
+Branches.    .B1 `adoptGroup` rebuilds the group from the roster document
+Failures.    .FM1 a forwarded link claimed by a stranger — stopped at .S4
+             .FM2 a spent token
+Reversible.  Leave the group (FL-26).
+Also try.    · nothing solo.
+Ladder.      SN-25
+Problems.    Never run on a phone.
+```
+
+### FL-26 · Leave, archive or delete a group — 3 entry points
+
+```
+Trigger.     "This is over" — and which of the three you mean matters.
+State.       demo — Old Flat is already archived; Weekend Plans is empty and
+             safe to delete.
+Entry.       .E1 SC-13 Archive  .E2 SC-13 Leave  .E3 SC-13 Delete
+Pre.         Delete is creator-only. Leave is refused for the creator.
+Steps.       .S1 open the group  .S2 ⋯ → Edit  .S3 pick one  .S4 confirm
+Entities.    R/W E-02 · W E-03 · W E-18 · W E-11 (cursors)
+Writes.      **Three genuinely different things** (OV-11):
+             archive  → `is_archived`, still yours, fully reversible
+             leave    → announce the exit, **then** stop syncing. The other order
+                        leaves nothing able to publish the departure
+             delete   → creator only, and a **tombstone, not a wipe**:
+                        `deleted_at` + `is_archived` are set and **every entry
+                        survives**
+Numbers.     · **archiving changes no figure at all** — the group's past spending
+               still counts toward your months, because it happened
+             · **deleting changes no figure either.** It used to hard-delete
+               every transaction, which silently rewrote months you had already
+               closed and made decisions on
+             · leaving stops future entries reaching you; your history stays
+Exit.        All three `dismissTo` SC-04.
+Branches.    .B1 unarchiving is refused for a group carrying `deleted_at`
+Failures.    .FM1 a creator trying to leave → refused, told to delete instead
+             .FM2 leaving with an unsettled balance → allowed, and it says so
+Reversible.  Archive yes. Leave and delete, no.
+Also try.    · archive Old Flat's sibling and check Home's totals do not move
+             · delete Weekend Plans (it is empty on purpose) and confirm your
+               month total is unchanged
+             · try to leave a group you created
+Ladder.      SN-26
+Problems.    OV-11 — three end states, and the UI words for them are not distinct
+             enough. Two other documents still describe delete as destroying data.
+```
+
+### FL-27 · Approve or reject a peer entry — 2 entry points
+
+```
+Trigger.     Someone added something that touches your money.
+State.       demo — **Priya's ₹3,600 groceries is waiting**, and Aarav's
+             electricity already applied because he is trusted. Both in Roommates.
+Entry.       .E1 SC-40, from the Home badge  .E2 SC-15, on the entry itself
+Pre.         A peer entry exists. Demo data makes three.
+Steps.       .S1 open Waiting for you  .S2 read the entry  .S3 Approve, or
+             "Not mine"  .S4 optionally, trust the person from here
+Entities.    R/W E-20 · R E-04 · W E-22 on reject
+Writes.      Approving clears the exclusion and the entry starts counting.
+             Rejecting soft-deletes it **for you** and sends an objection back.
+Numbers.     · **this is the check worth doing.** Before approving, note Home's
+               month total and the Roommates balance. A waiting entry must move
+               **neither** (IV-05)
+             · after approving Priya's ₹3,600 split three ways, your month total
+               rises by **₹1,200, not ₹3,600** (IV-08)
+             · the group balance moves by the other ₹2,400
+Exit.        Back to the queue, one item shorter.
+Branches.    .B1 trusting the person from here applies their future entries at
+                 once, in every group you share (IV-10)
+             .B2 a **transfer** waits even from a trusted person — money arriving
+                 is a different question from an expense being recorded
+Failures.    .FM1 rejecting leaves the two devices holding different rows. The
+                  objection travels, so it is visible, but nothing reconciles them
+Reversible.  Reopen the approval.
+Also try.    · approve Aarav's transfer and watch cash, not just the balance
+             · reject Priya's and check the Roommates balance goes back
+             · compare Priya's entry with Aarav's — same shape, different landing,
+               and the only difference is who wrote it
+Ladder.      SN-27
+Problems.    —
+```
+
+### FL-28 · Dispute an entry — 1 entry point
+
+```
+Trigger.     "That split is wrong" — about an entry you did not write, or one
+             someone is objecting to that you did.
+State.       demo — **Rohan disputes your ₹2,800 airport cab** in Goa Trip. Open
+             it and look for the red banner.
+Entry.       .E1 SC-15
+Pre.         A synced entry with an author.
+Steps.       .S1 open the entry  .S2 read the banner  .S3 raise or withdraw
+Entities.    W E-22 · W E-20 (`dispute_state`)
+Writes.      An objection, keyed on their **account** id rather than a local
+             person — it can arrive before any person mapping exists.
+Numbers.     · a dispute **changes no figure on your side**. It is a message,
+               not a correction
+             · the two devices' balances stay different until someone edits or
+               deletes the entry
+Exit.        Stays on the entry.
+Branches.    .B1 withdrawing an objection travels back too
+Failures.    .FM1 nothing reconciles the rows themselves — only the humans do
+Reversible.  Withdraw it.
+Also try.    · open the disputed Goa cab and check the banner is **red**, and
+               visibly unlike the amber "waiting for you" one — they mean
+               opposite things
+             · check your Goa balance still includes the disputed amount
+Ladder.      SN-28
+Problems.    —
+```
+
+### FL-29 · Set trust — 2 entry points
+
+```
+Trigger.     "I do not need to check everything Aarav adds."
+State.       demo — **Aarav is trusted, Priya is on review**, and that single
+             difference is why their entries land differently.
+Entry.       .E1 SC-26a TrustSheet  .E2 SC-40 "Trust <name>"
+Pre.         The person has an account matched to them (FL-31). Without it the
+             setting is inert (IV-11).
+Steps.       .S1 open the person  .S2 Trust  .S3 pick trusted or on review
+             .S4 optionally override for one group only
+Entities.    W E-01.trust_state · W E-21 for the per-group override
+Writes.      Trust is **per person, never per group** (IV-10). The per-group
+             override is still keyed on a human, which is why it is allowed.
+Numbers.     · changing trust moves no figure retroactively — entries already
+               waiting stay waiting
+             · it only decides where their **next** entry lands
+Exit.        Closes the sheet.
+Branches.    .B1 "trusted everywhere except this group" is the override
+             .B2 clearing the override falls back to the global answer
+Failures.    .FM1 a person with no account — the control should say why it does
+                  nothing, and this is worth checking on screen
+Reversible.  Fully, both directions.
+Also try.    · trust Priya, then look at her waiting entry — it should still wait
+             · set a per-group override on Aarav for Roommates only
+             · check the override is clearable, or "trusted except here" is a
+               one-way door
+Ladder.      SN-29
+Problems.    —
+```
+
+### FL-30 · Sign in — 4 entry points
+
+```
+Trigger.     "Back up off this phone" / "put this on my other phone."
+State.       **needs a real email and a server build.** Never seen on a device.
+Entry.       .E1 SC-06 → Account  .E2 SC-34  .E3 SC-43  .E4 the restore offer
+Pre.         A build with `EXPO_PUBLIC_API_URL` set. Otherwise none of this exists.
+Steps.       .S1 type your email  .S2 send the link  .S3 open the mail
+             .S4 tap it — the app opens on SC-37  .S5 the token is spent once
+             .S6 SC-37 replaces itself with the account screen
+Entities.    W E-87 · R E-01
+Writes.      An account keyed on the email, and a session. No password anywhere.
+Numbers.     · signing in changes no financial figure. It buys backup and sync,
+               nothing else
+Exit.        `replace`s to SC-36, or Home.
+Branches.    .B1 signing out keeps all local data
+             .B2 deleting the account is a separate, live endpoint
+Failures.    .FM1 **a typo in the email makes a second account holding none of
+                  your backups**, and email is the only identity — it cannot be
+                  changed or merged (DQ-08)
+             .FM2 a link opened twice — the token is spent
+Reversible.  Sign out. The account itself is deletable.
+Also try.    · sign in, then check that Settings shows **which email** you used
+               — this is the cheap fix for DQ-08 nobody has taken
+             · open the magic link on a different phone
+Ladder.      SN-30
+Problems.    DQ-08. Never seen on a device.
+```
+
+### FL-31 · Link a person to an account — 1 entry point
+
+```
+Trigger.     "This Aarav in my list is that Aarav who just signed up."
+State.       **needs a second account.** Demo fakes the result: Aarav, Priya and
+             Rohan already carry account ids.
+Entry.       .E1 SC-38 Linked people
+Pre.         An account, and an invite accepted in both directions.
+Steps.       .S1 open Linked people  .S2 pick the incoming account
+             .S3 match it to a person in your list  .S4 confirm
+Entities.    W E-01.remote_uid — **the only writer of that column**
+Writes.      The thread between an account and a local person.
+Numbers.     · no figure moves. This is identity, not money
+Exit.        Stays.
+Branches.    .B1 matching says **who they are**. Trusting says **and their
+                 entries may count**. Two decisions, deliberately separate
+Failures.    .FM1 matching the wrong person — their entries would then reach the
+                  wrong name in your ledger
+Reversible.  Unmatch.
+Also try.    · check that a person with no account cannot be trusted meaningfully
+             · look at Aarav in demo data: he has an account id, which is why
+               his trust setting does anything at all
+Ladder.      SN-31
+Problems.    Never run on a phone.
+```
+
+### FL-32 · Sync push and pull — 0 entry points
+
+```
+Trigger.     Nothing. It runs itself when the tab bar mounts — there is no button.
+State.       **needs a second device.** Demo fakes the results, not the transport.
+Entry.       .X1 app launch, from the tab bar
+Pre.         An account, a shared group, and a network.
+Steps.       .S1 the outbox is drained, oldest first  .S2 each entry is sealed
+             with the group key  .S3 pushed  .S4 the server's changes are pulled
+             .S5 each arriving entry goes through `ingestPeerTxn`
+             .S6 trust decides: land it, or hold it for approval
+Entities.    R/W E-18 · W E-04 · W E-20 · R E-82 · R/W E-88 · W E-11 (cursors)
+Writes.      Compare-and-set on `sync_version`. A stale push is a **409**, never
+             a silent last-write-wins.
+Numbers.     · **the promise to check:** an entry waiting for approval must move
+               **no figure of yours** — not Home, not the balance, not Reports
+             · once approved, every figure moves at once and they agree
+Exit.        Nothing visible. SC-43 says when it last ran and why it did nothing.
+Branches.    .B1 offline → the outbox just grows
+             .B2 a group that vanished server-side is archived, never deleted
+Failures.    .FM1 409 on push after an offline edit
+             .FM2 entries this device cannot decrypt
+             .FM3 **no part of this has run on a phone**
+Reversible.  n/a.
+Also try.    · open Settings → Sync and read what it says about the last run —
+               that screen is the only window into any of this
+             · nothing else, solo
+Ladder.      SN-32 — the fullest list of cases in the document, and worth reading
+             before trusting any of it
+Problems.    Built end to end, never run on a phone.
+```
 
 FL-27 · Approve or reject a peer entry — 2 entries (SC-40, SC-15)
   R/W E-20. Approving removes the exclusion and the entry starts counting.
@@ -2614,108 +3212,646 @@ FL-32 · Sync push / pull — 0 user entries; runs from the tab bar on mount
   a stale push is a 409. Cursors live in E-11. Ladder SN-32 — the one to read
   before trusting any of this. Built end to end, never run on a phone.
 
-FL-33 · Buy or sell an asset — 3 entries (SC-42, SC-05 TotalMoneyCard, SC-07 banner)
-  W E-14 balance AND W E-04 (kind=settlement) in ONE transaction — a half-written
-  one drops net worth by the amount invested and leaves a ledger row that looks
-  entirely correct (IV-03). Transfers OUT are not income: you already owned it,
-  it only changed shape. Ladder SN-33. Shipped 2026-09-01, never on a device.
+```
 
-FL-34 · Pay the card bill — 1 entry (SC-05 PayCardBill sheet)
-  W E-04 (kind=settlement, pay_method=card). A third meaning of 'settlement'
-  (OV-02). Reduces credit used, moves cash. Ladder SN-34.
+### FL-33 · Buy or sell an asset — 3 entry points
 
-FL-35 · Move money to investments — 1 entry (SC-05 MoveToInvestments sheet)
-  W E-14 + W E-04. money.investments is DERIVED from live assets and nothing
-  writes it (IV-14). An archived asset stops counting (IV-15). Ladder SN-35.
+```
+Trigger.     "I bought gold" / "I put ₹20,000 into the index fund."
+State.       demo — index funds ₹95,000, gold ₹40,000, an FD ₹15,000.
+Entry.       .E1 SC-42  .E2 SC-05 TotalMoneyCard  .E3 SC-07's transfer banner
+Pre.         None. Assets are personal.
+Steps.       .S1 open Assets  .S2 pick one, or add  .S3 put in, or take out
+             .S4 amount  .S5 confirm
+Entities.    W E-14 balance · W E-04 (kind=settlement) · W E-06 · W E-07
+Writes.      **Both halves in ONE transaction** (IV-03). A half-written one drops
+             net worth by the amount invested and leaves a ledger row that looks
+             entirely correct — the worst kind of wrong.
+Numbers.     · **net worth must not change.** Cash goes down ₹20,000, the asset
+               goes up ₹20,000, and the total on Plan is the same number
+             · **your month spending must not change either** — buying an asset
+               is not consuming anything (IV-06)
+             · taking money out is **not income**: you already owned it, it only
+               changed shape
+Exit.        Back to Assets.
+Branches.    .B1 archiving an asset stops it counting toward net worth (IV-15),
+                 because archiving is how you say you no longer own it
+             .B2 restating a balance ("it is worth more now") is a third verb
+Failures.    .FM1 deleting an asset with history is refused — archive instead
+             .FM2 a negative balance is not allowed
+Reversible.  Take the money back out. Archiving is reversible.
+Also try.    · **write down Plan's net worth, buy ₹10,000 of gold, check it is
+               the same number.** This is the whole point of the asset register
+             · check the ledger row appears in Personal but **not** in Reports
+             · archive the FD and watch net worth drop by exactly ₹15,000
+Ladder.      SN-33
+Problems.    OV-02 — this writes `kind='settlement'`, the same value a debt
+             settle-up uses, so the settle-up suggester can offer to "settle" it.
+             Shipped 2026-09-01, never run on a device.
+```
 
-FL-36 · Overspend raid — 1 entry (SC-05, offered when you are over)
-  R E-62 plan → asks → W E-16 withdrawals. Nets receivables, which safeToSpend
-  deliberately does not — two different questions, do not unify. Locked goals are
-  protected. Explicit undo. Ladder SN-36.
+### FL-34 · Pay the card bill — 1 entry point
 
-FL-37 · Surplus sweep — 0 entries; unattended, opt-in
-  Runs in launch maintenance when auto_sweep_enabled is on (OFF by default,
-  because it moves real money with nobody watching). W E-16. Ladder SN-37.
-  The source-asset round trip is only partly built (DQ-15).
+```
+Trigger.     "The card bill is due."
+State.       demo — ₹10,000 used of a ₹60,000 limit.
+Entry.       .E1 SC-05 → PayCardBill
+Pre.         A credit limit and some used, set in the money profile (FL-45).
+Steps.       .S1 open Plan  .S2 tap the credit line  .S3 amount  .S4 confirm
+Entities.    W E-04 (kind=settlement, pay_method=card) · W E-06 · W E-07
+Writes.      A settlement carrying `pay_method='card'` — the second of the four
+             meanings that value has (OV-02).
+Numbers.     · credit used goes **down** by what you paid
+             · cash goes **down** by the same amount
+             · **net worth does not change** — you moved a debt, not spent
+             · your month spending does not change either
+Exit.        Back to Plan.
+Branches.    .B1 paying more than is used
+Failures.    .FM1 paying with money you do not have
+Reversible.  Delete the settlement row.
+Also try.    · pay ₹4,000 and check credit available rises to ₹54,000
+             · check Reports does not move
+             · pay the full ₹10,000 and see what the card row looks like at zero
+Ladder.      SN-34
+Problems.    OV-02.
+```
 
-FL-38 · Rebalance a budget — 2 entries (SC-03 over-budget state, SC-09 Budget tab)
-  R E-56 → a donor plan → W E-12. "Re-plan the rest of the month" rather than
-  "you failed". Ladder SN-38.
+### FL-35 · Move money to investments — 1 entry point
 
-FL-39 · Afford check — 2 entries (SC-33; the same engine drives SC-07's BudgetNudge)
-  R E-61 over seven axes. Only cash produces a hard No; necessity softens the
-  buffer axis alone and never overrides it. Writes nothing. Ladder SN-39.
-  Sole route entry is an unlabeled icon (OV-16).
+```
+Trigger.     "Move ₹5,000 from cash into the index fund."
+State.       demo — three assets already exist.
+Entry.       .E1 SC-05 → MoveToInvestments
+Pre.         At least one asset.
+Steps.       .S1 open Plan  .S2 tap investments  .S3 pick the asset
+             .S4 amount  .S5 confirm
+Entities.    W E-14 · W E-04 · R E-54
+Writes.      As FL-33 — both halves, one transaction.
+Numbers.     · `money.investments` is **derived from live assets and nothing
+               writes it** (IV-14). If you ever see it change without an asset
+               changing, that is a bug
+             · net worth unchanged; cash down; the asset up
+Exit.        Back to Plan.
+Branches.    .B1 the same movement backwards is FL-33's "take out"
+Failures.    .FM1 no asset yet → you are sent to create one first
+Reversible.  Move it back.
+Also try.    · move money in, then check the Assets screen shows the new balance
+             · confirm the investments figure equals the sum of live assets
+Ladder.      SN-35
+Problems.    OV-20 — five near-identical spellings of "investment" across the app.
+```
 
-FL-40 · Search — 1 entry (SC-03 magnifier)
-  R E-04 over 3 years, month-sectioned, 150 ms debounce. A LEDGER, not an
-  analysis surface: it shows all three kinds including settlements, groups by
-  date, and shows a total ONLY when a single kind is selected — because one
-  figure across money-in, money-out and money-moved answers no question (IV-17).
-  Deliberately no pull-to-refresh. Ladder SN-40.
+### FL-36 · Overspend raid — 1 entry point
 
-FL-41 · Manage categories — 2 entries (SC-06 → SC-25, SC-07 inline create)
-  W E-09, W E-10 on delete. A rename rewrites every referencing row BY NAME
-  (OV-06). A delete leaves old transactions holding an orphan string that folds
-  into Others (E-63). Self-heals an empty catalog. Ladder SN-41.
+```
+Trigger.     You are over for the month and something has to give.
+State.       demo — Groceries is ₹9,000 against ₹8,000, so the prompt is live.
+Entry.       .E1 SC-05, offered when you are over
+Pre.         An overspend, and at least one unlocked goal.
+Steps.       .S1 open Plan  .S2 read the proposal — which goals, how much
+             .S3 accept, or decline  .S4 undo if you change your mind
+Entities.    R E-62 plan · W E-16 withdrawals · R E-15
+Writes.      Withdrawals from goals, in raid order. **It asks first** — this
+             moves real money.
+Numbers.     · the goals named lose exactly what the proposal said
+             · **`emergency`-tagged and locked goals are never touched** — demo's
+               Emergency Fund is both, so it must be absent from every proposal
+             · `want` goals are raided before `need` ones
+             · the raid **nets what friends owe you first**, which safe-to-spend
+               deliberately does not — a receivable is not spendable, but it *is*
+               a reason not to break open savings. Do not expect the two figures
+               to agree; they answer different questions
+Exit.        Stays on Plan.
+Branches.    .B1 declining leaves everything untouched
+Failures.    .FM1 not enough in unlocked goals to cover the overspend
+Reversible.  **Explicit undo**, and it must restore every goal exactly.
+Also try.    · check New Phone (0% funded, `want`, last in rank) is proposed first
+             · check Emergency Fund is never proposed
+             · accept, then undo, then verify all eight goals are back to where
+               they were
+Ladder.      SN-36
+Problems.    —
+```
 
-FL-42 · Reports and export — 3 entries (SC-06, SC-05 rail, backup_nudge notification)
-  R E-63, E-04. Donut → SC-21 → SC-15. CSV and PDF out through the share sheet.
-  Month selector cannot advance past the current month. Ladder SN-42.
+### FL-37 · Surplus sweep — 0 entry points
 
-FL-43 · Insights — 3 entries (SC-05 rail, SC-03 pace tap, SC-03 ForecastCard)
-  R E-63 E-57 E-56. An always-present headline over collapsible sections. The
-  single narrative home — insights were removed from the group Budget tab, the
-  Plan tab and Reports on purpose. Ladder SN-43.
+```
+Trigger.     Nothing. It runs itself, if you turned it on.
+State.       demo, **plus** turning on `auto_sweep_enabled` in Settings → Features.
+Entry.       .X1 launch maintenance
+Pre.         `auto_sweep_enabled` — **off by default, because it moves real money
+             with nobody watching.**
+Steps.       .S1 turn it on  .S2 restart the app  .S3 look at your goals
+Entities.    R E-62 · W E-16 · R E-54
+Writes.      Deposits into goals, in funding order, from what is left over.
+Numbers.     · money leaves cash and appears in goals — net worth unchanged
+             · funding order is drag rank within a priority tag, not the tag alone
+Exit.        Nothing visible. You find out by looking.
+Branches.    .B1 nothing to sweep → nothing happens, silently
+Failures.    .FM1 it runs while you are mid-edit somewhere else
+             .FM2 you do not notice it ran
+Reversible.  Withdraw from the goal.
+Also try.    · turn it on, note your cash, restart, and see if anything moved
+             · turn it off again — this is the one switch that spends money
+               without asking, and it is worth knowing where it is
+Ladder.      SN-37
+Problems.    DQ-15 — where the money came from is only approximately tracked.
+```
 
-FL-44 · Reminders — 2 entries (SC-06 → SC-31; SC-30 is read-only)
-  W E-91 prefs → regenerates E-90 at every cold start, because the OS holds the
-  schedule and can drift from the rules that made it. Taps route through
-  routeForReminder. Needs a dev build; jest cannot prove any of it. Ladder SN-44.
+### FL-38 · Rebalance a budget — 2 entry points
 
-FL-45 · Set the money profile — 2 entries (SC-05 MoneyEditorSheet, onboarding)
-  W E-11 money.* keys. Opening balances for three buckets, credit limit and used.
-  Nothing writes money.investments (IV-14). Ladder SN-45.
+```
+Trigger.     "I am over on groceries and there are two weeks left."
+State.       demo — Groceries over, Fuel well under. A donor exists.
+Entry.       .E1 SC-03's over-budget state  .E2 SC-09 Budget tab
+Pre.         At least one over line and one under line.
+Steps.       .S1 tap the over-budget prompt  .S2 read which lines would give
+             .S3 accept, or adjust  .S4 save
+Entities.    R E-56 · W E-12
+Writes.      New amounts on the budget lines. Nothing about your spending changes.
+Numbers.     · **the total across all lines should stay the same** — this moves
+               an allowance, it does not create one
+             · the over line's bar should go from red toward amber or green
+             · the donor line's headroom shrinks by exactly what it gave
+Exit.        Back where you came from.
+Branches.    .B1 no donor with headroom → it should say so, not offer nothing
+Failures.    .FM1 every line already over
+Reversible.  Edit the amounts back.
+Also try.    · rebalance, then add the totals by hand and check they match
+             · try it when Fuel is the only line with room
+Ladder.      SN-38
+Problems.    —
+```
 
-FL-46 · Write off a receivable — 1 entry (SC-26a)
-  W E-01.receivable_state. The ONLY stored fact about a debt — everything else
-  about a balance is derived (E-50). Removes it from E-51 without deleting any
-  transaction. Ladder SN-46.
+### FL-39 · Afford check — 2 entry points
 
-FL-47 · WhatsApp reminder — 1 entry (SC-26a)
-  Composes a message; never sends one. The app does not chase anyone.
-  Ladder SN-47.
+```
+Trigger.     "Can I buy this?"
+State.       demo — realistic cash, bills and goals make the answer meaningful.
+Entry.       .E1 SC-33  .E2 SC-07's inline BudgetNudge, same engine
+Pre.         flags.affordCheck.
+Steps.       .S1 open Plan → the "Can I afford?" icon  .S2 amount
+             .S3 optionally a category  .S4 optionally Need / Want / Can wait
+             .S5 read the verdict and the reasons
+Entities.    R E-61 · R E-53 · R E-54 · R E-56 · R E-58 · R E-51
+Writes.      **Nothing.** It is a question, not an action.
+Numbers.     · seven axes: cash, buffer, category budget, category norm, income
+               share, month projection, basket size
+             · **only cash produces a hard No.** Everything else can make it
+               Tight, never impossible
+             · marking something a Need softens the **buffer axis alone** and
+               must never override the cash answer
+Exit.        Stays, or "Log it" hands you to Add with the amount prefilled.
+Branches.    .B1 the same engine writes the one-line nudge inside Add
+Failures.    .FM1 nobody finds this screen — its only route in is an unlabeled
+                  icon, and the flag file says so out loud (OV-16)
+Reversible.  Nothing written.
+Also try.    · ask about ₹500, then ₹50,000, then ₹5,00,000 and watch the verdict
+               and the reasons change
+             · ask about ₹3,000 of Groceries — already over budget — and check
+               the category axis fires
+             · mark a large amount as a Need and confirm it does **not** flip a
+               cash No into a yes
+Ladder.      SN-39
+Problems.    OV-16.
+```
 
-FL-48 · CSV export and re-import — 3 entries (SC-14, SC-20, SC-06)
-  Round-trips through FL-08 — isBudgetSplitExport detects our own format.
-  Demo rows are filtered by hardcoded signatures, which can drift from
-  seedDemo.ts. Ladder SN-48.
+### FL-40 · Search — 1 entry point
 
-FL-49 · Server backup and restore — 1 entry (SC-34)
-  As FL-11 but to an account. KV stands in for R2, capping backups around
-  25 MiB (DQ-85). Restore has never run on a device. Ladder SN-49.
+```
+Trigger.     "Where was that dinner?"
+State.       demo — three months of history to search.
+Entry.       .E1 SC-03's magnifier
+Pre.         None.
+Steps.       .S1 tap search  .S2 type  .S3 results appear by month
+             .S4 filter by kind  .S5 tap through to the entry
+Entities.    R E-04
+Writes.      Nothing.
+Numbers.     · **on "All" there is deliberately no total.** One figure across
+               money-in, money-out and money-moved answers no question (IV-17)
+             · pick a single kind and a total appears
+             · it is a **ledger**, so settlements are listed here even though
+               Reports excludes them
+Exit.        Tapping a row opens the entry.
+Branches.    .B1 scope: everything, personal only, or groups only
+Failures.    .FM1 a query matching nothing
+             .FM2 deliberately **no pull-to-refresh** — the list is the query
+Reversible.  Nothing written.
+Also try.    · search "Prawns" — it is a line item inside an itemized bill
+             · search a rupee amount
+             · **check "All" shows no total, then pick Expenses and check one
+               appears.** This shipped as a bug twice
+             · search something that only matches a soft-deleted row
+Ladder.      SN-40
+Problems.    —
+```
 
-FL-50 · Load demo data / erase everything — 1 entry (SC-27, 7 taps on the version)
-  Neither is undoable and neither takes a backup first. Live in release builds
-  today, deliberately, so testers can reset the same build (DQ-21). Ladder SN-50.
+### FL-41 · Manage categories — 2 entry points
 
-FL-51 · Lock and privacy — 1 entry (SC-06)
-  Biometric lock (locks on background, re-auths on foreground), privacy screen,
-  hide amounts. All off by default. Ladder SN-51.
+```
+Trigger.     "I want a category for the dog."
+State.       demo — **`Poker Night` is sitting uncategorised**, because Aarav used
+             a category you do not have.
+Entry.       .E1 SC-06 → SC-25  .E2 SC-07, created inline while adding
+Pre.         None. The catalog self-heals if empty.
+Steps.       .S1 open Categories  .S2 add, rename, or delete
+             .S3 or adopt an uncategorised name  .S4 confirm
+Entities.    W E-09 · W E-10 on delete
+Writes.      A rename **rewrites every referencing row by name**, because the
+             reference is a string and not an id (OV-06). A delete writes a
+             tombstone, or the next launch would resurrect it.
+Numbers.     · renaming moves no money — every total should be identical after
+             · **deleting does not recategorise anything.** Old transactions keep
+               the name as an orphan string and fold into `Others`
+             · adopting `Poker Night` should move ₹400 out of `Others` and into
+               a category of its own
+Exit.        Stays on Categories.
+Branches.    .B1 the same name can exist twice — once as an expense, once as a
+                 transfer. `Rent` and `Other` both do
+Failures.    .FM1 deleting a category that has a budget — the budget goes with it
+             .FM2 `Other` and `Others` are one character apart and mean entirely
+                  different things (OV-18)
+Reversible.  Recreate it; the tombstone is removed.
+Also try.    · **adopt `Poker Night` and watch `Others` shrink by ₹400**
+             · rename Groceries and check the budget still applies
+             · delete a category you have spent in, then look at Reports
+Ladder.      SN-41
+Problems.    OV-06 · OV-18 · DQ-16.
+```
 
-FL-52 · Merge two people — 1 entry (the merge alert from the tab bar's sync chain)
-  Moves every reference across eight tables, then deletes. The real answer to
-  "delete a person", since deletePerson refuses anyone referenced anywhere.
-  Ladder SN-52.
+### FL-42 · Reports and export — 3 entry points
 
-FL-53 · Adopt an uncategorized name — 1 entry (SC-25)
-  Turns a name that only exists on transactions into a real E-09 row. The
-  counterpart to the Others fold. Ladder SN-53.
+```
+Trigger.     "What did last month look like?"
+State.       demo — three months of history, so the trend has three points.
+Entry.       .E1 SC-06  .E2 SC-05's rail  .X1 the backup-nudge notification
+Pre.         flags.reports.
+Steps.       .S1 open Reports  .S2 pick a month  .S3 read the donut and trend
+             .S4 tap a slice to drill in  .S5 export CSV or PDF
+Entities.    R E-63 · R E-04 · R E-56
+Writes.      Nothing, until you export — and that goes to the share sheet.
+Numbers.     · **settlements are excluded here** (IV-06). Demo has settlements in
+               Roommates and Office Lunch; none of them may appear in the donut
+             · every figure is **your share**, not the bill (IV-08). The Goa hotel
+               was ₹40,000 and ₹10,000 of it is yours
+             · the donut's slices must sum to the month total shown above it
+             · the month selector **cannot advance past this month**
+Exit.        A slice opens the drill-down; a row opens the entry.
+Branches.    .B1 CSV round-trips back in through Import (FL-48)
+Failures.    .FM1 a month with no data
+             .FM2 export cancelled at the share sheet
+Reversible.  Nothing written.
+Also try.    · **add the donut slices by hand and check they equal the total**
+             · compare this month with last: demo puts Eating Out at ₹2,700
+               against ₹1,500, an ~80% jump the insights should notice
+             · try to move the month selector into the future
+Ladder.      SN-42
+Problems.    —
+```
 
-FL-54 · Storage cleanup — 3 entries (SC-06, SC-03 low-disk banner, SC-07)
-  SC-27a only: clear cached exports, delete receipt photos. Nothing here can
-  lose a transaction — that is the whole reason it is separate from SC-27.
-  Ladder SN-54.
+### FL-43 · Insights — 3 entry points
+
+```
+Trigger.     "Tell me something I do not already know."
+State.       demo — deliberately seeded so every section has something to say.
+Entry.       .E1 SC-05's rail  .E2 SC-03's pace tap  .E3 SC-03's forecast card
+Pre.         flags.insights.
+Steps.       .S1 open Insights  .S2 read the headline  .S3 expand each section
+Entities.    R E-63 · R E-57 · R E-56 · R E-53
+Writes.      Nothing.
+Numbers.     · the headline's spend-vs-budget figure must match Home's
+             · the month-end projection must match Home's forecast card — **two
+               screens, one number, and they must agree**
+             · "changed vs last month" should surface Eating Out, which demo
+               moved from ₹1,500 to ₹2,700
+Exit.        Sections link to Add, Budget and category detail.
+Branches.    .B1 before day 3 the forecast declines to guess, which is the
+                 honest answer rather than a bad number
+Failures.    .FM1 too little data → sections should self-hide, not show zeroes
+Reversible.  Nothing written.
+Also try.    · **open Insights and Home side by side and check the projection
+               is the same number on both**
+             · check no section shows a settlement as spending
+             · look for a section with nothing to say and confirm it is hidden
+               rather than empty
+Ladder.      SN-43
+Problems.    —
+```
+
+```
+### FL-44 · Reminders — 2 entry points
+
+```
+Trigger.     "Tell me before the rent goes out."
+State.       demo — three rules fall due within 3 days, so there is something to
+             be reminded about. **Needs a dev build for real notifications.**
+Entry.       .E1 SC-06 → SC-31  .E2 SC-30, which is read-only
+Pre.         flags.reminders, and the OS permission.
+Steps.       .S1 open Notifications  .S2 turn on renewals, daily log, backup
+             .S3 grant the OS permission  .S4 send a test  .S5 tap the test
+Entities.    W E-91 prefs · W E-90 the OS schedule
+Writes.      Preferences here; the OS holds the actual schedule, and it is
+             **regenerated at every cold start** because the two can drift.
+Numbers.     · nothing financial moves
+             · SC-30 should list the same bills as Plan's "upcoming", and the
+               same ones Home shows under "coming up" — three surfaces, one set
+Exit.        Stays. A tapped notification routes: a renewal opens the rule, the
+             daily nudge opens Add, the backup nudge opens Reports.
+Branches.    .B1 permission refused → the switches should say so, not fail quietly
+Failures.    .FM1 **jest cannot prove any of this.** It is device-only
+             .FM2 the OS schedule drifting from the rules that made it
+Reversible.  Turn them off.
+Also try.    · send a test, background the app, and tap the notification —
+               check it lands on the right screen and not just Home
+             · compare SC-30's list against Plan's upcoming section
+             · deny the permission and see what the screen says
+Ladder.      SN-44
+Problems.    Needs a dev build. DQ-80 gates real push entirely.
+```
+
+### FL-45 · Set the money profile — 2 entry points
+
+```
+Trigger.     "The app does not know how much I actually have."
+State.       demo — bank ₹2,10,000 · cash ₹45,000 · wallet ₹45,000 ·
+             ₹10,000 used of ₹60,000 credit.
+Entry.       .E1 SC-05 MoneyEditorSheet  .E2 onboarding
+Pre.         None.
+Steps.       .S1 open Plan  .S2 tap the money card  .S3 set the three buckets
+             .S4 set the credit limit and what is used  .S5 save
+Entities.    W E-11 `money.*` keys
+Writes.      Opening balances only. Every later figure is those plus the ledger.
+Numbers.     · **investments is not editable here, deliberately** — it is derived
+               from live assets and nothing writes it (IV-14). If you find a way
+               to type into it, that is a bug
+             · changing the opening bank balance should move total money by
+               exactly that difference, and nothing else
+             · cash available = the three buckets ± every transaction you paid for
+Exit.        Closes the sheet; Plan reloads.
+Branches.    .B1 onboarding sets the same keys, from a friendlier form
+Failures.    .FM1 negative values
+             .FM2 credit used above the limit
+Reversible.  Edit again.
+Also try.    · **note total money, add ₹1,000 to the wallet opening, check the
+               total rose by exactly ₹1,000**
+             · look for any field that lets you type an investments figure
+             · set credit used above the limit and see what happens
+Ladder.      SN-45
+Problems.    DQ-14 — buckets are not named accounts, and never will be until
+             that is decided.
+```
+
+### FL-46 · Write off a receivable — 1 entry point
+
+```
+Trigger.     "Sneha is never paying me back, and I am done tracking it."
+State.       demo — several people owe you across Goa and Manali.
+Entry.       .E1 SC-26a
+Pre.         A person who owes you.
+Steps.       .S1 open the person  .S2 write it off  .S3 confirm
+Entities.    W E-01.receivable_state
+Writes.      **The only stored fact about a debt in the entire app.** Everything
+             else about a balance is computed on the spot (E-50).
+Numbers.     · the amount leaves your "owed to you" total on Home
+             · **no transaction is deleted** — the group ledger is unchanged, and
+               opening the group still shows every expense
+             · your past spending does not change: your share was always yours
+Exit.        Stays.
+Branches.    .B1 it is reversible — expecting it again restores the figure
+Failures.    .FM1 writing off, then them paying anyway
+Reversible.  Yes, by setting it back to expected.
+Also try.    · **write one off, then open the group and confirm every expense is
+               still there.** This is the difference between forgiving a debt and
+               deleting history
+             · check Home's owed total dropped by exactly that amount
+             · undo it and check the figure comes back
+Ladder.      SN-46
+Problems.    —
+```
+
+### FL-47 · WhatsApp reminder — 1 entry point
+
+```
+Trigger.     "Nudge Rohan about the Goa money."
+State.       demo — Rohan owes you in Goa Trip.
+Entry.       .E1 SC-26a
+Pre.         WhatsApp installed. Their number is not required — you pick the chat.
+Steps.       .S1 open the person  .S2 tap the reminder  .S3 WhatsApp opens with
+             a drafted message  .S4 **you** send it, or do not
+Entities.    R E-50 for the amount
+Writes.      Nothing. Ever.
+Numbers.     · the amount in the draft must match the balance on screen
+             · nothing changes in the app whether you send it or not
+Exit.        Leaves the app.
+Branches.    .B1 no WhatsApp installed
+Failures.    .FM1 the draft naming the wrong scope — the global net rather than
+                  this group's, or the other way round
+Reversible.  Nothing written.
+Also try.    · **check the drafted amount against the balance the screen shows**
+             · back out without sending and confirm nothing was recorded
+             · try it for someone you owe, rather than someone who owes you
+Ladder.      SN-47
+Problems.    The app drafts; it never sends. That is deliberate — it is not a
+             debt collector.
+```
+
+### FL-48 · CSV export and re-import — 3 entry points
+
+```
+Trigger.     "Get my data out" / "put it back."
+State.       demo — plenty to export.
+Entry.       .E1 SC-14  .E2 SC-20  .E3 SC-06 → Export all data
+Pre.         None.
+Steps.       .S1 export  .S2 the share sheet opens  .S3 save the file
+             .S4 Settings → Import  .S5 pick the same file  .S6 review
+             .S7 commit
+Entities.    R E-04 · W E-17 on the way back in
+Writes.      Export writes nothing. Re-import goes through the Review inbox, so
+             nothing lands unseen.
+Numbers.     · **round-trip test:** export, re-import, commit, and your month
+               total should be **exactly doubled** — every row is now there twice
+             · which also means the duplicate warning should fire on all of them
+Exit.        Export leaves to the share sheet; import lands on Review.
+Branches.    .B1 `isBudgetSplitExport` recognises our own format and maps columns
+Failures.    .FM1 demo rows are filtered by hardcoded signatures that can fall
+                  out of step with `seedDemo.ts` — a known drift risk
+             .FM2 a file edited in a spreadsheet and re-saved
+Reversible.  Discard on the Review screen before committing.
+Also try.    · **export and re-import without committing** — check the duplicate
+               warning fires on every row
+             · open the CSV in a spreadsheet and check the amounts are readable
+               rupees, not paise
+             · export a single group rather than everything
+Ladder.      SN-48
+Problems.    The demo-row filter and `seedDemo.ts` are edited independently.
+```
+
+### FL-49 · Server backup and restore — 1 entry point
+
+```
+Trigger.     "Keep a copy somewhere that is not this phone."
+State.       **needs an account and a server build.** Restore has never run on
+             a device.
+Entry.       .E1 SC-34
+Pre.         An account (FL-30), and a passphrase you will not forget.
+Steps.       .S1 open Backup  .S2 set a passphrase  .S3 back up to the account
+             .S4 to restore: pick it  .S5 passphrase  .S6 confirm **replace all**
+Entities.    R/W E-89 · W every backed-up table
+Writes.      Encrypted before it leaves. The server cannot read it.
+Numbers.     · after a restore every figure should match what you had at backup
+               time, exactly
+             · **but your app preferences will not come back** — they live in a
+               different store that is not in the backup, and nothing says so
+Exit.        A restore forces a reload.
+Branches.    .B1 the same flow writes a local file instead (FL-11)
+Failures.    .FM1 **a restore is refused outright while sync is on**, because it
+                  would re-publish an old state. Check the refusal, not the warning
+             .FM2 backups above about 25 MiB — KV is standing in for R2 (DQ-85)
+Reversible.  **No.** A restore is not undoable, which is why it asks twice.
+Also try.    · back up, change something, restore, and check the change is gone
+             · **check whether your feature switches survived the restore**
+Ladder.      SN-49
+Problems.    Restore never run on a device. RELEASE §0.4.
+```
+
+### FL-50 · Load demo data or erase everything — 1 entry point
+
+```
+Trigger.     Starting a test sweep, or clearing up after one.
+State.       any. **This flow is how you change state.**
+Entry.       .E1 SC-27, reached by tapping the version seven times in Settings
+Pre.         `DEV_TOOLS_ENABLED`, which is deliberately true for the pilot.
+Steps.       .S1 Settings  .S2 tap the version 7×  .S3 Storage opens
+             .S4 Load demo data, or Erase all data  .S5 confirm
+Entities.    W everything, or D everything
+Writes.      Both **wipe the database**. Loading demo preserves only your name
+             and avatar.
+Numbers.     · after loading demo you should see 5 people, 8 groups and 8 goals,
+               and the confirmation toast says the counts it actually wrote
+             · after erasing, every figure is zero and every list is an empty
+               state — which is the only way to see those
+Exit.        Stays on Storage.
+Branches.    .B1 erase gives you sweep 1; demo gives you sweep 2
+Failures.    .FM1 **neither is undoable and neither takes a backup first**
+             .FM2 running it on real data
+Reversible.  No.
+Also try.    · erase, then walk the first-run flow and every empty state
+             · load demo and check the toast's counts against what you see
+Ladder.      SN-50
+Problems.    DQ-21 — this ships in release builds today, on purpose, so testers
+             can reset the build they were given. It is also what makes this
+             whole walkthrough possible.
+```
+
+### FL-51 · Lock and privacy — 1 entry point
+
+```
+Trigger.     "Do not show my money to whoever picks up my phone."
+State.       any.
+Entry.       .E1 SC-06
+Pre.         A device passcode or biometric enrolled.
+Steps.       .S1 Settings  .S2 turn on the lock  .S3 background the app
+             .S4 come back  .S5 authenticate
+Entities.    R E-80 preferences
+Writes.      Preferences only.
+Numbers.     · hide-amounts must blank **every** figure, not only the hero — the
+               category rows, the balances, the goal amounts
+             · nothing is actually changed; this is presentation
+Exit.        Stays.
+Branches.    .B1 the privacy screen covers the app in the task switcher
+             .B2 hide amounts is separate from the lock
+Failures.    .FM1 biometrics unavailable or refused
+             .FM2 a figure that escapes hide-amounts somewhere
+Reversible.  Turn it off.
+Also try.    · turn on hide amounts and **hunt for a number that still shows**
+             · background and reopen with the lock on
+             · check the task switcher preview is covered
+Ladder.      SN-51
+Problems.    All off by default.
+```
+
+### FL-52 · Merge two people — 1 entry point
+
+```
+Trigger.     "There are two Aaravs."
+State.       demo, plus creating a duplicate person by hand first.
+Entry.       .E1 the merge alert, from the tab bar's sync chain
+Pre.         Two person rows that are the same human.
+Steps.       .S1 create a second "Aarav" in People  .S2 give them an expense
+             .S3 the merge prompt appears  .S4 pick which survives  .S5 confirm
+Entities.    W E-01 · W E-03 · W E-06 · W E-07 · W E-12 · W E-21 · W E-04
+Writes.      Every reference across **eight tables** is moved, then the loser is
+             deleted. This is the real answer to "delete a person" — a plain
+             delete is refused for anyone referenced anywhere.
+Numbers.     · **the merged person's balance must equal the sum of the two**
+             · no expense may be lost, and no total may change
+Exit.        Stays.
+Branches.    .B1 `deletePerson` refuses; merge is the supported path
+Failures.    .FM1 a reference the merge misses would be a dangling id, and
+                  foreign keys are off, so nothing else would catch it (DQ-19)
+Reversible.  **No.**
+Also try.    · make a duplicate, split an expense with each, merge, and **check
+               the balance is the sum**
+             · check the group member list shows one of them afterwards, not two
+Ladder.      SN-52
+Problems.    DQ-19.
+```
+
+### FL-53 · Adopt an uncategorised name — 1 entry point
+
+```
+Trigger.     "What is this `Poker Night` thing in my breakdown?"
+State.       demo — **`Poker Night` is there waiting**, from Aarav's game night
+             in Roommates. ₹400 of it is yours.
+Entry.       .E1 SC-25
+Pre.         A transaction carrying a category name you do not have — which
+             happens whenever someone else in a shared group uses their own.
+Steps.       .S1 open Categories  .S2 find the uncategorised section
+             .S3 adopt it, or leave it  .S4 pick an icon and colour
+Entities.    W E-09
+Writes.      Turns a name that only exists on transactions into a real category.
+Numbers.     · **before adopting, your ₹400 is inside `Others`**
+             · after adopting, `Others` drops by ₹400 and `Poker Night` appears
+               with ₹400 — the month total must not move
+Exit.        Stays.
+Branches.    .B1 leaving it alone is a valid choice; it stays folded
+Failures.    .FM1 confusing `Others` (the fold) with `Other` (a real category one
+                  character away, OV-18)
+Reversible.  Delete the category again; it returns to the fold.
+Also try.    · **note the `Others` figure, adopt `Poker Night`, check `Others`
+               dropped by exactly ₹400 and the month total did not move**
+             · adopt it and then set a budget on it
+Ladder.      SN-53
+Problems.    OV-18 · DQ-16.
+```
+
+### FL-54 · Storage cleanup — 3 entry points
+
+```
+Trigger.     "The phone says it is full."
+State.       demo — there are attachment rows, though not real files.
+Entry.       .E1 SC-06  .E2 SC-03's low-disk banner  .E3 SC-07
+Pre.         None.
+Steps.       .S1 open Storage  .S2 read what the app is using
+             .S3 clear cached exports, or delete receipt photos  .S4 confirm
+Entities.    D E-83 files · R device free space
+Writes.      Files only. **Nothing here can lose a transaction** — that is the
+             entire reason this screen is separate from the developer one.
+Numbers.     · the reclaimed figure should match what the row promised
+             · **no financial figure may change at all**
+             · a transaction whose photo you deleted stays, and loses its image
+Exit.        Stays.
+Branches.    .B1 the low-disk banner on Home routes straight here
+Failures.    .FM1 a URI left pointing at a file that is gone — there is a reaper
+                  for exactly this, run at cold start
+Reversible.  No, but nothing important is lost.
+Also try.    · delete all receipt photos, then **open a transaction that had
+               one** and check the entry survived
+             · check your month total is untouched
+             · confirm this screen has no way to erase data — that is `SC-27`
+Ladder.      SN-54
+Problems.    Deliberately separate from SC-27, so the two destructive actions
+             are never one tap from Settings.
 ```
 ---
 
@@ -2737,8 +3873,18 @@ is what makes coverage checkable: a money flow whose ladder has no `AX-11` cross
 | **T3** | Adversarial: bad input, interruption, race, offline, permission denied, stale data, deleted counterparty. Things that **do** happen. | `AX-07` `AX-08` `AX-09`, input validity, process death |
 | **T4** | Pathological: the schema permits it, the UI forbids it, and nothing enforces the gap. | schema-vs-UI gap ∪ scale ∪ clock ∪ FK-off |
 
-**Coverage rule.** T0–T2 for every flow. T3 **and** T4 are mandatory for any flow touching money,
-sync, or more than one device — 30 of the 54. A settings toggle does not need a T4.
+**What is actually here, as of 2026-09-02.** This section used to claim "T0–T2 for every flow" while
+carrying four ladders, which is the document overstating itself — the same failure as the six guard
+files it once named that did not exist. The truth:
+
+| | |
+|---|---|
+| **Four tasks** carry a full T0–T4 ladder | `SN-04` add an expense · `SN-06` settle up · `SN-08` import → review · `SN-32` sync |
+| **Every other task** carries its ordinary and multi-party cases inline | as `Also try` in its §8 entry, where a person walking the app will actually read them |
+| **The crossings table** below covers the rest | one line per task, naming where it is known or suspected to misbehave |
+
+The four with full ladders are the four where the money is hardest and the failure is quietest.
+Promoting another task to a full ladder is a deliberate act, not a backlog item.
 
 **Status markers**, a closed set of four:
 
