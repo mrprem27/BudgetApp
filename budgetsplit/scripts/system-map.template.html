@@ -189,7 +189,7 @@ pre.pre {
 .wrap { max-width:720px; margin:0 auto; }
 .prog { position:sticky; top:0; z-index:25; background:var(--ground); padding:10px 0 12px; }
 .prog .bar { height:6px; border-radius:4px; background:var(--hair); overflow:hidden; }
-.prog .bar i { display:block; height:100%; background:var(--accent); transition:width .25s ease; }
+.prog .bar i { display:block; height:100%; background:hsl(var(--h, 174) var(--hs) var(--hl)); transition:width .25s ease; }
 .prog .meta { display:flex; gap:10px; align-items:baseline; margin-top:8px; font-size:12.5px; color:var(--ink-3); flex-wrap:wrap; }
 .prog .meta b { font-family:var(--mono); color:var(--ink); font-weight:500; }
 .prog .meta .sp { margin-left:auto; }
@@ -273,19 +273,34 @@ pre.pre {
 @media (max-width:420px) { .opts { grid-template-columns:repeat(2,1fr); } }
 
 
+/* ------------------------------------------------------- grouped, and coloured
+   A hue per area, from one custom property so both themes stay legible: the same
+   hue, lighter and less saturated on a dark ground. */
+:root { --hl:38%; --hs:52%; --hb:94%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hl:66%; --hs:46%; --hb:15%; } }
+:root[data-theme="dark"] { --hl:66%; --hs:46%; --hb:15%; }
+
+.group { margin-top:22px; }
+.ghead { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  padding:0 0 8px; border-bottom:2px solid hsl(var(--h) var(--hs) var(--hl) / .35); }
+.ghead h2 { font-size:14px; color:hsl(var(--h) var(--hs) var(--hl)); }
+.gmeta { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-left:auto;
+  font-variant-numeric:tabular-nums; }
+
 /* --------------------------------------------------------------- the shelf */
 .shelf { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-top:18px; }
 .bcard {
   text-align:left; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  border-left:3px solid hsl(var(--h) var(--hs) var(--hl));
   border-radius:12px; padding:14px 15px; cursor:pointer; font:inherit; box-shadow:var(--shadow);
   display:flex; flex-direction:column; gap:9px; min-height:96px;
 }
-.bcard:hover { border-color:var(--accent); }
-.bcard.full { border-color:color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.bcard:hover { border-color:hsl(var(--h) var(--hs) var(--hl)); border-left-color:hsl(var(--h) var(--hs) var(--hl)); }
+.bcard.full { background:hsl(var(--h) var(--hs) var(--hb)); }
 .btop { display:flex; gap:8px; align-items:flex-start; }
 .bname { font-size:14.5px; font-weight:500; line-height:1.35; flex:1; }
 .bbar { height:5px; border-radius:3px; background:var(--hair); overflow:hidden; }
-.bbar i { display:block; height:100%; background:var(--accent); }
+.bbar i { display:block; height:100%; background:hsl(var(--h) var(--hs) var(--hl)); }
 .bcard.full .bbar i { background:var(--ok); }
 .bmeta { font-family:var(--mono); font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
 .bmeta b { color:var(--warn); font-weight:500; }
@@ -319,6 +334,14 @@ pre.pre {
   background:var(--raised); border:1px solid var(--line); border-left:3px solid var(--accent);
   border-radius:9px; padding:11px 13px; }
 .route-out strong { color:var(--ink); }
+.asknote { font-size:12.5px; color:var(--ink-3); margin:0 0 9px; }
+.req, .opt-label {
+  font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.07em;
+  padding:2px 6px; border-radius:4px; margin-right:6px;
+}
+.req { background:var(--accent-b); color:var(--accent); }
+.opt-label { background:var(--hair); color:var(--ink-3); }
+.ans .asknote:not(:first-child) { margin-top:14px; padding-top:14px; border-top:1px solid var(--hair); }
 .mdbox { margin-top:14px; }
 .mdnote { font-size:13.5px; color:var(--ink-2); margin-bottom:9px; max-width:62ch; line-height:1.55; }
 .mdbox textarea {
@@ -408,8 +431,8 @@ pre.pre {
 .howto dd { margin:0; font-size:14px; color:var(--ink-2); }
 .howto .close { margin-top:12px; }
 .bnote { font-family:var(--sans); font-size:13px; color:var(--ink-2); line-height:1.5; white-space:normal; }
-.eta { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
-.etabig { font-family:var(--mono); font-size:13px; color:var(--accent); }
+.est { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+
 
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
 </style>
@@ -756,6 +779,8 @@ function askBlock(stop) {
   const numbersHint = stop.kind === 'flow' && FLOW[stop.id].numbers
     ? String(FLOW[stop.id].numbers).split('·').map(x => x.trim()).filter(Boolean)[0] : '';
   return `<div class="ans">
+    ${qs.length ? `<p class="asknote"><span class="req">answer these</span> — they are separate
+       because they fail separately</p>` : ''}
     ${qs.map(k => `<div class="qrow">
       <h3>${esc(Q[k].q)}${k === 'numbers' && numbersHint
         ? `<span class="qhint">${md(numbersHint)}</span>` : ''}</h3>
@@ -763,6 +788,7 @@ function askBlock(stop) {
         `<button class="opt ${v}" type="button" data-q="${k}" data-v="${v}"
            aria-pressed="${a[k] === v}">${esc(label)}</button>`).join('')}</div>
     </div>`).join('')}
+    <p class="asknote"><span class="opt-label">optional</span> anything else worth writing down</p>
     <textarea data-note placeholder="${stop.kind === 'decision'
       ? 'What do you think? This is the answer — there is no other one.'
       : 'Anything else you noticed'}">${esc(a.note || '')}</textarea>
@@ -777,7 +803,7 @@ function flowStop(f) {
     ${block('Should happen', [f.writes, f.exit].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''), 'expect')}
     ${block('Check the numbers', dotList(f.numbers), 'expect')}
     ${block('Watch out for', stepList(f.failures), 'warn')}
-    ${block('Also try', dotList(f.alsoTry), 'hard')}
+    ${block('Also try — optional, and where the interesting failures are', dotList(f.alsoTry), 'hard')}
     ${block('If it went wrong', [f.reversible, f.problems].filter(Boolean).map(x => `<p>${md(x)}</p>`).join(''))}`;
 }
 function screenStop(s, parts) {
@@ -894,7 +920,7 @@ const hrs = m => m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? (m % 60) + ' m' :
 function howTo() {
   return `<div class="howto">
     <h3>How this works</h3>
-    <p>A <strong>booklet</strong> is one sitting — half an hour at most — on one part of the app.
+    <p>A <strong>booklet</strong> is one sitting — ${D.time.cap} minutes at most — on one part of the app.
        Take any one from the shelf, or press <em>Start at the top</em> and it carries you through
        all ${D.booklets.length}.</p>
     <p>Each stop tells you <strong>how to get there</strong> (in taps, not paths), what to do, and
@@ -926,34 +952,57 @@ function shelfView() {
     ${showHow ? howTo() : ''}
     <section class="hero">
       <h1>Walk the app</h1>
-      <p>Thirty-two small booklets. Take any one — most are four to eight stops and read in a
-         sitting — or start at the top and it will carry you through. Every screen, every task,
-         every component, every rule and every open question is in here exactly once.</p>
+      <p>${D.booklets.length} small booklets, none longer than ${D.time.cap} minutes. Take any one,
+         or start at the top and it carries you through. Every screen, every task, every component,
+         every rule and every open question is in here exactly once.</p>
       <div class="stat">
         <div><b>${doneStops}</b>of ${totalStops} stops</div>
         <div><b>${flagged}</b>flagged</div>
-        <div><b>${hrs(left)}</b>left of ${hrs(D.eta.total)}</div>
+        <div><b>≈ ${hrs(left)}</b>left, of ≈ ${hrs(D.time.total)}</div>
       </div>
-      <p class="route-out"><strong>${hrs(D.eta.solo)}</strong> you can walk on your own — about
-         ${Math.ceil(D.eta.solo / 30)} evenings at half an hour. The other
-         ${hrs(D.eta.pair)} needs a second phone and is parked at the end.</p>
+      <p class="route-out"><strong>Roughly ${hrs(D.time.solo)}</strong> you can walk on your own —
+         about ${Math.ceil(D.time.solo / 30)} evenings at half an hour. The other
+         ${hrs(D.time.pair)} needs a second phone and is parked at the end.
+         <br>Every time here is an <strong>estimate</strong>, worked out from how much each stop
+         asks of you. Treat them as a way to pick a booklet for the time you have, not a promise.</p>
       <div class="act">
         <button type="button" class="primary" data-open-book="${esc(D.booklets[0].key)}">Start at the top</button>
         ${showHow ? '' : '<button type="button" data-show-how>How this works</button>'}
       </div>
     </section>
-    <div class="shelf">${D.booklets.map(b => {
-      const p = bookProgress(b);
-      const flags = b.stops.filter(s => stopFlagged(stopId(s))).length;
-      return `<button class="bcard${p.pct === 100 ? ' full' : ''}" type="button" data-open-book="${esc(b.key)}">
-        <div class="btop">
-          <span class="bname">${esc(b.name)}</span>
-          <span class="tag ${b.state === 'empty' ? 'warn' : b.state === 'pair' ? 'flag' : b.state === 'hands' ? 'acc' : ''}">${esc(STATE[b.state].label)}</span>
-        </div>
-        <div class="bbar"><i style="width:${p.pct}%"></i></div>
-        <div class="bmeta">${b.min} min · ${p.done}/${p.total} stops${flags ? ` · <b>${flags} flagged</b>` : ''}</div>
-      </button>`;
-    }).join('')}</div>
+    ${(() => {
+      /* Grouped, and each area in its own hue — thirty-two cards in one flat grid
+         gave you no way to see that six of them were the same subject. */
+      const groups = [];
+      for (const b of D.booklets) {
+        const g = groups.find(x => x.name === b.group);
+        (g || groups[groups.push({ name: b.group, hue: b.hue, books: [] }) - 1]).books.push(b);
+      }
+      return groups.map(g => {
+        const done = g.books.reduce((n, b) => n + bookProgress(b).done, 0);
+        const all = g.books.reduce((n, b) => n + b.stops.length, 0);
+        const mins = g.books.reduce((n, b) => n + b.min, 0);
+        return `<section class="group" style="--h:${g.hue}">
+          <div class="ghead">
+            <h2>${esc(g.name)}</h2>
+            <span class="gmeta">${g.books.length} booklets · ≈ ${hrs(mins)} · ${done}/${all} stops</span>
+          </div>
+          <div class="shelf">${g.books.map(b => {
+            const p = bookProgress(b);
+            const flags = b.stops.filter(s => stopFlagged(stopId(s))).length;
+            return `<button class="bcard${p.pct === 100 ? ' full' : ''}" type="button"
+                      style="--h:${b.hue}" data-open-book="${esc(b.key)}">
+              <div class="btop">
+                <span class="bname">${esc(b.name.replace(g.name + ' · ', ''))}</span>
+                <span class="tag ${b.state === 'empty' ? 'warn' : b.state === 'pair' ? 'flag' : b.state === 'hands' ? 'acc' : ''}">${esc(STATE[b.state].label)}</span>
+              </div>
+              <div class="bbar"><i style="width:${p.pct}%"></i></div>
+              <div class="bmeta">≈ ${b.min} min · ${p.done}/${p.total} stops${flags ? ` · <b>${flags} flagged</b>` : ''}</div>
+            </button>`;
+          }).join('')}</div>
+        </section>`;
+      }).join('');
+    })()}
   </div>`;
 }
 
@@ -969,11 +1018,11 @@ function bookletView() {
   const idx = D.booklets.findIndex(x => x.key === b.key);
   const next = D.booklets[idx + 1];
 
-  return `<div class="wrap">
+  return `<div class="wrap" style="--h:${b.hue}">
     <div class="prog">
       <button class="crumb" type="button" data-mode="shelf">← all booklets</button>
       <div class="bar"><i style="width:${Math.round(((bk.pos + 1) / b.stops.length) * 100)}%"></i></div>
-      <div class="meta"><b>${esc(b.name)}</b><span class="eta">${b.min} min</span><span class="sp">${bk.pos + 1}/${b.stops.length}</span></div>
+      <div class="meta"><b>${esc(b.name)}</b><span class="est">≈ ${b.min} min</span><span class="sp">${bk.pos + 1}/${b.stops.length}</span></div>
     </div>
 
     ${bk.pos === 0 ? `<div class="intro">
@@ -985,7 +1034,7 @@ function bookletView() {
 
     <article class="stop">
       <header>
-        <div class="eyebrow">${esc(stop.kind)} · ${esc(id)} · about ${Math.max(1, Math.round(stop.min))} min</div>
+        <div class="eyebrow">${esc(stop.kind)} · ${esc(id)} · roughly ${Math.max(1, Math.round(stop.min))} min</div>
         <h2>${stop.kind === 'screen' ? `<span class="mono">${esc(stopTitle(stop))}</span>` : esc(stopTitle(stop))}</h2>
         ${stopWhy(stop) ? `<p class="why">${md(stopWhy(stop))}</p>` : ''}
       </header>
@@ -1270,6 +1319,8 @@ function fullMarkdown(scope) {
     '',
     `Generated ${stamp} from \`docs/SYSTEM.md\`.`,
     `${D.booklets.length} booklets · ${total} stops · ${answered} answered.`,
+    `Estimated ${Math.round(D.time.total / 60)} hours in total — a rough figure, worked out from`,
+    'how much each stop asks of you.',
     '',
     'Every screen, task, component, rule, known problem and open question in the app appears',
     'here exactly once. Blockquotes are what was found while walking it.',
@@ -1281,7 +1332,7 @@ function fullMarkdown(scope) {
     const p = bookProgress(b);
     out.push(`## ${b.name}`, '');
     out.push(`_${b.blurb}_`, '');
-    out.push(`\`${STATE[b.state].label}\` · ${b.min} min · ${p.done}/${p.total} walked`, '');
+    out.push(`\`${STATE[b.state].label}\` · about ${b.min} min · ${p.done}/${p.total} walked`, '');
     const bn = scope === 'all' ? (ansFor('BOOK::' + b.key).note || '').trim() : '';
     if (bn) out.push(`> ${bn.split('\n').join('\n> ')}`, '');
     for (const s of b.stops) {

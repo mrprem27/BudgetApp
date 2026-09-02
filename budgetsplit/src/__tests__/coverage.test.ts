@@ -21,7 +21,7 @@ type Built = {
   coverage: Record<string, { total: number; missing: string[] }>;
   screens: Array<{ id: string; reach: string }>;
   booklets: Array<{ name: string; min: number; stops: Array<{ min: number }> }>;
-  eta: { total: number; setup: number; longest: number };
+  time: { total: number; setup: number; longest: number };
 };
 
 function build(): Built {
@@ -75,9 +75,9 @@ describe('the walkthrough is usable, not just complete', () => {
 
   it('adds its estimates up', () => {
     const wrong = built.booklets
-      .filter(b => Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + built.eta.setup)) > 0.6)
+      .filter(b => Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + built.time.setup)) > 0.6)
       .map(b => b.name);
     expect(wrong).toEqual([]);
-    expect(built.eta.total).toBe(built.booklets.reduce((n, b) => n + b.min, 0));
+    expect(built.time.total).toBe(built.booklets.reduce((n, b) => n + b.min, 0));
   });
 });

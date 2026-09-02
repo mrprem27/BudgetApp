@@ -598,6 +598,14 @@ const notableAt = sc => (homeOf[sc] || [])
  * Small enough to finish in a sitting. Built from each area, split when a list
  * runs long, plus four that cut across everything.
  */
+/* A hue per area so the shelf reads in groups. Rotated around the app's teal
+   rather than picked at random, so eleven colours still look like one family. */
+const HUE = {
+  add: 174, split: 262, budget: 205, savings: 152,
+  recurring: 32, import: 292, sync: 224, shell: 12,
+  cold: 340, rules: 190, problems: 8, questions: 45,
+};
+
 const AREA_BOOKS = {
   add:       [['screens', 'the screens'], ['do', 'logging it'], ['capture', 'capture']],
   split:     [['screens', 'the screens'], ['do', 'groups and people'], ['settle', 'settling up']],
@@ -623,7 +631,7 @@ const seenFlow = new Set();
 /* The cold sweep first: a wiped app is the only place empty states exist, and
    you cannot be in it and in demo data at the same time. */
 BOOKS.push({
-  key: 'cold', name: 'First run and empty states', state: 'empty',
+  key: 'cold', group: 'Start here', hue: HUE['cold'], name: 'First run and empty states', state: 'empty',
   blurb: 'Erase everything and start from nothing. The only way to see first run, and the only way to see an empty state — demo data can never show you one.',
   stops: [
     ...flows.filter(f => f.sweep === 'cold').map(f => { seenFlow.add(f.id); return { kind: 'flow', id: f.id }; }),
@@ -631,6 +639,7 @@ BOOKS.push({
   ],
 });
 
+for (const a of AREAS) a.hue = HUE[a.key];
 for (const a of AREAS) {
   for (const [sub, label] of AREA_BOOKS[a.key]) {
     let stops;
@@ -646,6 +655,8 @@ for (const a of AREAS) {
       .map(s => flows.find(f => f.id === s.id).sweep))];
     BOOKS.push({
       key: `${a.key}-${sub}`,
+      group: a.name,
+      hue: HUE[a.key],
       name: `${a.name} · ${label}`,
       state: sub === 'screens' ? 'demo' : (states.includes('pair') ? 'pair' : states.includes('hands') ? 'hands' : 'demo'),
       blurb: sub === 'screens'
@@ -660,24 +671,24 @@ for (const a of AREAS) {
 const orphanFlows = flows.filter(f => !seenFlow.has(f.id));
 if (orphanFlows.length) {
   BOOKS.push({
-    key: 'other', name: 'Everything else', state: 'demo',
+    key: 'other', group: 'Across the whole app', hue: 200, name: 'Everything else', state: 'demo',
     blurb: 'Tasks no other booklet claimed.',
     stops: orphanFlows.map(f => ({ kind: 'flow', id: f.id })),
   });
 }
 
 BOOKS.push({
-  key: 'rules', name: 'Rules that must hold', state: 'demo',
+  key: 'rules', group: 'Across the whole app', hue: HUE['rules'], name: 'Rules that must hold', state: 'demo',
   blurb: 'Twenty-two things that must never be false. Nine have a test behind them; the rest are held by people remembering, which is exactly why they are worth checking by hand.',
   stops: ivs.map(v => ({ kind: 'rule', id: v.id })),
 });
 BOOKS.push({
-  key: 'problems', name: 'Known problems', state: 'demo',
+  key: 'problems', group: 'Across the whole app', hue: HUE['problems'], name: 'Known problems', state: 'demo',
   blurb: 'Twenty-seven findings already written down. Confirm each is still real, still this bad, and still worth the verdict it carries.',
   stops: ovs.map(o => ({ kind: 'problem', id: o.id })),
 });
 BOOKS.push({
-  key: 'questions', name: 'Open questions', state: 'demo',
+  key: 'questions', group: 'Across the whole app', hue: HUE['questions'], name: 'Open questions', state: 'demo',
   blurb: 'Thirty things nobody has decided. Your opinion is the answer to most of them — that is not a figure of speech, it is why they are still open.',
   stops: dqs.map(d => ({ kind: 'decision', id: d.id })),
 });
@@ -743,9 +754,11 @@ for (const b of BOOKS) {
   }));
 }
 
-/* The roll-up the shelf shows. Asserted in the smoke test, because a total that
-   does not equal its parts is worse than no total. */
-const eta = {
+/* The roll-up the shelf shows. Every figure here is an ESTIMATE, read off how much
+   each stop asks of you — never a promise, and shown with a ≈ so it cannot be read
+   as one. Asserted in the smoke test, because a total that does not equal its parts
+   is worse than no total. */
+const time = {
   total: booklets.reduce((n, b) => n + b.min, 0),
   solo: booklets.filter(b => b.state !== 'pair').reduce((n, b) => n + b.min, 0),
   pair: booklets.filter(b => b.state === 'pair').reduce((n, b) => n + b.min, 0),
@@ -805,7 +818,7 @@ const meta = {
 for (const e of entities) e.friendly = FRIENDLY[e.id] || e.name;
 
 const out = {
-  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, eta, componentList, componentsOf, orphanComponents, booklets, coverage,
+  meta, legend, subIds, issueTpl, router, worlds, notList, egress, AREAS, names, route, SWEEPS, time, componentList, componentsOf, orphanComponents, booklets, coverage,
   entities, tree, cardinality, cascade, axes, ivs, feats, flagRows,
   screens, flows, ladders, laddersCompact, crossings, ovs, dqs,
   supersede, guards,

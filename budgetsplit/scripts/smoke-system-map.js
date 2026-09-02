@@ -211,14 +211,14 @@ try {
 /* The estimates have to add up, or they are decoration. */
 {
   const wrong = D.booklets.filter(b =>
-    Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + D.eta.setup)) > 0.6);
-  const totalOk = D.eta.total === D.booklets.reduce((n, b) => n + b.min, 0);
+    Math.abs(b.min - (b.stops.reduce((n, s) => n + s.min, 0) + D.time.setup)) > 0.6);
+  const totalOk = D.time.total === D.booklets.reduce((n, b) => n + b.min, 0);
   const tooLong = D.booklets.filter(b => b.min > 35 && b.stops.length > 1);
   console.log(wrong.length ? `  BAD    ${wrong.length} booklets whose time is not the sum of their stops`
                            : '  ok     every booklet equals the sum of its stops');
-  console.log(totalOk ? `  ok     the total equals the sum of the booklets (${D.eta.total} min)` : '  BAD    total does not add up');
+  console.log(totalOk ? `  ok     the total equals the sum of the booklets (${D.time.total} min)` : '  BAD    total does not add up');
   console.log(tooLong.length ? `  BAD    over the 35-minute cap: ${tooLong.map(b => b.min + 'm ' + b.name).join(', ')}`
-                             : `  ok     no booklet over 35 min (longest ${D.eta.longest})`);
+                             : `  ok     no booklet over 35 min (longest ${D.time.longest})`);
   if (wrong.length || !totalOk || tooLong.length) bad++;
 }
 
