@@ -249,5 +249,33 @@ try {
   reset();
 } catch (e) { console.log('  THREW  row answers — ' + e.message); bad++; }
 
+/* Detail has to be possible wherever an answer is — a tick with a caveat had
+   nowhere to go, and a booklet had no note at all. */
+try {
+  reset();
+  const { fullMarkdown: fm3, setScope: ss3, itemAnswers: ia } = globalThis.__p;
+  const b4 = D.booklets[1];
+  answer('EMPTY::SC-20', 'look', 'fine');
+  answer('EMPTY::SC-20', 'note', 'fine but the icon is tiny');
+  answer('BOOK::' + b4.key, 'note', 'this whole area feels slower than the rest');
+  ss3('all'); const all4 = fm3('all');
+  ss3('answers'); const ans4 = fm3('answers');
+  const checks = [
+    ['a note on a ticked row is kept', ia().some(i => i.look === 'fine' && i.note)],
+    ['a ticked row\'s note is exported', /fine but the icon is tiny/.test(ans4)],
+    ['a booklet note is exported', /this whole area feels slower/.test(ans4)],
+    ['a booklet note sits under its booklet', /this whole area feels slower/.test(all4)],
+  ];
+  for (const [label, ok] of checks) {
+    console.log(ok ? `  ok     ${label}` : `  BAD    ${label}`);
+    if (!ok) bad++;
+  }
+  go('notebook'); render();
+  const shown = /this whole area feels slower/.test(main.innerHTML);
+  console.log(shown ? '  ok     the notebook shows booklet notes' : '  BAD    booklet notes missing from the notebook');
+  if (!shown) bad++;
+  reset();
+} catch (e) { console.log('  THREW  note levels — ' + e.message); bad++; }
+
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);

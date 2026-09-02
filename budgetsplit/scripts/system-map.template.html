@@ -377,6 +377,16 @@ pre.pre {
 .ib:hover { color:var(--ink); }
 .ib.fine[aria-pressed="true"] { background:var(--ok); border-color:var(--ok); color:var(--ground); }
 .ib.broken[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:var(--ground); }
+.ib.note { color:var(--ink-3); font-size:14px; }
+.ib.note:hover { color:var(--accent); border-color:var(--accent); }
+.booknote { margin-top:16px; background:var(--surface); border:1px solid var(--line);
+  border-radius:12px; padding:14px 15px; box-shadow:var(--shadow); }
+.booknote h3 { font-size:14.5px; font-weight:600; margin-bottom:9px; }
+.booknote em { color:var(--accent); font-style:normal; }
+.booknote textarea {
+  width:100%; min-height:72px; resize:vertical; padding:12px; border:1px solid var(--line);
+  border-radius:10px; background:var(--raised); color:var(--ink); font:inherit; font-size:16px;
+}
 .inote {
   width:100%; margin-top:8px; padding:10px 12px; border:1px solid var(--line);
   border-radius:9px; background:var(--raised); color:var(--ink); font:inherit; font-size:16px;
@@ -851,10 +861,13 @@ function itemRow(sid, key, label, sub) {
           aria-pressed="${a.look === 'fine'}" aria-label="fine">✓</button>
         <button type="button" class="ib broken" data-iq="${esc(id)}" data-v="broken"
           aria-pressed="${a.look === 'broken'}" aria-label="problem">✕</button>
+        <button type="button" class="ib note" data-inote-add="${esc(id)}"
+          aria-label="add a note">✎</button>
       </div>
     </div>
     ${a.look === 'broken' || a.note ? `<input class="inote" type="text" data-inote="${esc(id)}"
-      value="${esc(a.note || '')}" placeholder="what is wrong with it?">` : ''}
+      value="${esc(a.note || '')}" placeholder="${a.look === 'fine'
+        ? 'anything worth saying about it?' : 'what is wrong with it?'}">` : ''}
   </li>`;
 }
 
@@ -980,6 +993,13 @@ function bookletView() {
       ${askBlock(stop)}
     </article>
 
+    ${last ? `<div class="booknote">
+      <h3>Anything about <em>${esc(b.name)}</em> as a whole?</h3>
+      <textarea data-note-for="BOOK::${esc(b.key)}"
+        placeholder="Something that spans these stops rather than sitting on one of them">${
+        esc(ansFor('BOOK::' + b.key).note || '')}</textarea>
+    </div>` : ''}
+
     <div class="pager">
       <button type="button" data-go="-1" ${bk.pos === 0 ? 'disabled' : ''}>← Back</button>
       ${last
@@ -1062,6 +1082,13 @@ function exportMarkdown() {
       out.push('');
     }
   }
+  const bookNotes = D.booklets
+    .map(b => ({ b, note: (ansFor('BOOK::' + b.key).note || '').trim() }))
+    .filter(x => x.note);
+  if (bookNotes.length) {
+    out.push(`## On a booklet as a whole (${bookNotes.length})`, '');
+    for (const x of bookNotes) out.push(`**${x.b.name}**`, x.note, '');
+  }
   const items = itemAnswers();
   if (items.length) {
     out.push(`## Individual screens and pieces (${items.length})`, '');
@@ -1117,6 +1144,14 @@ function notebookView() {
       </div>
     </section>
     ${findingBox()}
+    ${(() => {
+      const notes = D.booklets.map(b => ({ b, note: (ansFor('BOOK::' + b.key).note || '').trim() }))
+        .filter(x => x.note);
+      return notes.length ? `<div class="nb"><h3 class="nbh">On a booklet as a whole (${notes.length})</h3>
+        ${notes.map(x => `<div class="nbrow j" data-goto="${esc(x.b.key)}|${x.b.stops.length - 1}">
+          <div class="top"><b>${esc(x.b.name)}</b></div>
+          <div class="note">${esc(x.note)}</div></div>`).join('')}</div>` : '';
+    })()}
     ${(() => { const items = itemAnswers(); return items.length
       ? `<div class="nb"><h3 class="nbh">Individual screens and pieces (${items.length})</h3>
          ${items.map(i => `<div class="nbrow"><div class="top">
@@ -1246,7 +1281,9 @@ function fullMarkdown(scope) {
     const p = bookProgress(b);
     out.push(`## ${b.name}`, '');
     out.push(`_${b.blurb}_`, '');
-    out.push(`\`${STATE[b.state].label}\` · ${p.done}/${p.total} walked`, '');
+    out.push(`\`${STATE[b.state].label}\` · ${b.min} min · ${p.done}/${p.total} walked`, '');
+    const bn = scope === 'all' ? (ansFor('BOOK::' + b.key).note || '').trim() : '';
+    if (bn) out.push(`> ${bn.split('\n').join('\n> ')}`, '');
     for (const s of b.stops) {
       const id = stopId(s);
       out.push(`### ${stopTitle(s)}  \`${id}\``, '');
@@ -1500,6 +1537,13 @@ main.addEventListener('input', e => {
     save();
     return;
   }
+  const bn = e.target.closest('[data-note-for]');
+  if (bn) {
+    const id = bn.dataset.noteFor;
+    bk.ans[id] = { ...ansFor(id), note: bn.value };
+    save();
+    return;
+  }
   const ta = e.target.closest('[data-note]');
   if (!ta || !bk.book) return;
   const id = stopId(BOOK[bk.book].stops[bk.pos]);
@@ -1556,6 +1600,23 @@ main.addEventListener('click', e => {
 
   if (hit('[data-show-how]')) { showHow = true; render(); return; }
   if (hit('[data-hide-how]')) { showHow = false; render(); return; }
+
+  const addNote = hit('[data-inote-add]');
+  if (addNote) {
+    /* A tick with a caveat had nowhere to go. Detail is available whatever you
+       answered, and on every row, not only the crossed ones. */
+    const row = addNote.closest('.irow');
+    let note = row.querySelector('.inote');
+    if (!note) {
+      note = document.createElement('input');
+      note.className = 'inote'; note.type = 'text';
+      note.setAttribute('data-inote', addNote.dataset.inoteAdd);
+      note.placeholder = 'anything worth saying about it?';
+      row.appendChild(note);
+    }
+    note.focus();
+    return;
+  }
 
   const jt = hit('[data-jump-toggle]');
   if (jt) { jumping = !jumping; render(); return; }
