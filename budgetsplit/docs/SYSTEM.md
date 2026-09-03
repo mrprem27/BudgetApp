@@ -18,6 +18,12 @@ node scripts/smoke-system-map.js out.html      # renders every view, checks noth
 Run both after editing this file, then republish to the same URL. A hand-copied page would
 reintroduce exactly the drift this document exists to end.
 
+**Your answers live in that browser's `localStorage`, and only there.** To carry a walk from a
+laptop to a phone: on the laptop, `Markdown → Everything`, copy, and paste that whole file into
+the phone's page under `Markdown → Continuing on another device?`. The file's last section is a
+fenced ` ```bsw-state ` block — machine-readable, not prose, so the paste restores your exact
+answers rather than approximating them from the surrounding text.
+
 ---
 
 ## §0 · Using this document

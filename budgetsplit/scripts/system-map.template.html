@@ -343,6 +343,21 @@ pre.pre {
 .opt-label { background:var(--hair); color:var(--ink-3); }
 .ans .asknote:not(:first-child) { margin-top:14px; padding-top:14px; border-top:1px solid var(--hair); }
 .mdbox { margin-top:14px; }
+
+.restorebox { margin-top:20px; background:var(--surface); border:1px solid var(--line);
+  border-radius:12px; padding:15px 16px; box-shadow:var(--shadow); }
+.restorebox h3 { font-size:14.5px; margin-bottom:8px; }
+.restorebox p { font-size:13.5px; color:var(--ink-2); line-height:1.55; }
+.restorebox p + p { margin-top:8px; }
+.restorebox textarea[data-restore-in] {
+  width:100%; min-height:140px; margin-top:11px; resize:vertical; padding:12px;
+  border:1px solid var(--line); border-radius:10px; background:var(--raised);
+  color:var(--ink); font-family:var(--mono); font-size:12px; line-height:1.5;
+}
+.restorefound { margin-top:13px; padding-top:13px; border-top:1px solid var(--hair); }
+.warn-text { color:var(--warn); }
+.act button.danger { border-color:var(--warn); color:var(--warn); }
+.act button.danger:hover { background:var(--warn-b); }
 .mdnote { font-size:13.5px; color:var(--ink-2); margin-bottom:9px; max-width:62ch; line-height:1.55; }
 .mdbox textarea {
   width:100%; min-height:320px; resize:vertical; padding:13px;
@@ -784,6 +799,9 @@ let composing = false;   // the add-a-finding box is open
 let showHow = false;     // set once the data is loaded, below
 let jumping = false;     // the stop list is open
 let confirming = false;  // "start over" is one tap from happening
+let restoring = false;   // the paste-to-restore box is open
+let restoreFound = null; // { ans, finds } parsed from the pasted text, or null
+let restoreArmed = false; // "Replace everything" is one tap from happening
 
 /* Explain itself once: open until you have answered something, shut after. */
 showHow = Object.keys(bk.ans).length === 0 && bk.finds.length === 0;
@@ -982,6 +1000,10 @@ function howTo() {
     </dl>
     <p>Everything saves on this device as you go — close the tab and come back. When you are done,
        open <strong>Markdown</strong> and press copy, then paste it into the chat.</p>
+    <p>Switching devices mid-walk? <code>Markdown → Everything</code> ends with a block your
+       phone cannot see any other way — paste that whole file into the walkthrough on the other
+       device (<strong>Markdown → Continuing on another device?</strong>) and it picks up your
+       answers from there.</p>
     <div class="act close"><button type="button" data-hide-how>Got it</button></div>
   </div>`;
 }
@@ -1208,7 +1230,40 @@ function exportMarkdown() {
     out.push('');
   }
   if (!rows.length && !bk.finds.length) out.push('_Nothing walked yet._');
+  out.push(...stateBlock());
   return out.join('\n');
+}
+
+/* Everything above is prose, and prose does not round-trip. This block does: the
+   answers exactly as stored, so pasting the file back into another browser
+   restores the walk rather than approximating it. `localStorage` is per-browser,
+   so without this a walk started on a laptop cannot be finished on a phone. */
+function stateBlock() {
+  const payload = JSON.stringify({ v: 2, ans: bk.ans, finds: bk.finds });
+  return [
+    '---',
+    '',
+    '<!-- Paste this whole file back into the walkthrough (Markdown → Restore) to',
+    '     put these answers into another browser. Everything below is machine-read. -->',
+    '',
+    '```bsw-state',
+    payload,
+    '```',
+    '',
+  ];
+}
+
+/** Pull the state out of a pasted file — or out of a bare JSON blob. */
+function readState(text) {
+  const fenced = String(text).match(/```bsw-state\s*([\s\S]*?)```/);
+  const raw = fenced ? fenced[1] : String(text);
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  try {
+    const parsed = JSON.parse(raw.slice(start, raw.lastIndexOf('}') + 1));
+    if (!parsed || typeof parsed.ans !== 'object') return null;
+    return { ans: parsed.ans || {}, finds: Array.isArray(parsed.finds) ? parsed.finds : [] };
+  } catch (_) { return null; }
 }
 function notebookView() {
   const rows = [];
@@ -1418,6 +1473,7 @@ function fullMarkdown(scope) {
     for (const f of bk.finds) out.push(`- ${f.text}${f.where ? `  _(at ${f.where})_` : ''}`);
     out.push('');
   }
+  if (scope === 'all') out.push(...stateBlock());
   return out.join('\n');
 }
 
@@ -1448,6 +1504,33 @@ function markdownView() {
       </div>
     </section>
     <div class="mdbox"><textarea readonly data-md>${esc(text)}</textarea></div>
+
+    <div class="restorebox">
+      <h3>Continuing on another device?</h3>
+      <p>This browser cannot see what you answered somewhere else — <code>localStorage</code> is
+         per-browser. Paste a file exported from there (the <em>Everything</em> scope carries your
+         answers; the others do not) and it can pick up where that one left off.</p>
+      ${!restoring ? `<div class="act"><button type="button" data-restore-open>Paste a file to restore</button></div>` : `
+        <textarea data-restore-in placeholder="Paste the whole file here, including the fenced block at the end"></textarea>
+        <div class="act">
+          <button type="button" class="primary" data-restore-check>Check it</button>
+          <button type="button" data-restore-cancel>Cancel</button>
+        </div>
+        ${restoreFound ? `
+          <div class="restorefound">
+            <p><strong>Found ${Object.keys(restoreFound.ans).length} answer${Object.keys(restoreFound.ans).length === 1 ? '' : 's'}</strong>
+               and ${restoreFound.finds.length} finding${restoreFound.finds.length === 1 ? '' : 's'} in that file.</p>
+            <p class="warn-text">This <strong>replaces everything</strong> in this browser — your
+               current answers here are not merged, they are gone.</p>
+            <div class="act">
+              <button type="button" class="danger${restoreArmed ? ' armed' : ''}" data-restore-apply>${
+                restoreArmed ? 'Tap again to replace everything' : 'Replace everything with this'}</button>
+            </div>
+          </div>` : (restoring && restoreFound === false ? `<p class="warn-text">That does not look like a walkthrough
+              export — no <code>bsw-state</code> block found. Make sure you pasted the whole file,
+              fenced block included.</p>` : '')}
+      `}
+    </div>
   </div>`;
 }
 
@@ -1813,6 +1896,35 @@ main.addEventListener('click', e => {
     navigator.clipboard.writeText(exportMarkdown())
       .then(() => flash('Copied — paste it into the chat to save it'),
             () => flash('Copy blocked — press "Show the markdown" and select it'));
+    return;
+  }
+  if (hit('[data-restore-open]')) {
+    restoring = true; restoreFound = null; restoreArmed = false; render();
+    const ta = main.querySelector('[data-restore-in]');
+    if (ta) ta.focus();
+    return;
+  }
+  if (hit('[data-restore-cancel]')) {
+    restoring = false; restoreFound = null; restoreArmed = false; render();
+    return;
+  }
+  if (hit('[data-restore-check]')) {
+    const ta = main.querySelector('[data-restore-in]');
+    const parsed = readState(ta ? ta.value : '');
+    restoreFound = parsed || false;
+    restoreArmed = false;
+    render();
+    return;
+  }
+  if (hit('[data-restore-apply]')) {
+    if (!restoreFound) return;
+    if (!restoreArmed) { restoreArmed = true; render(); setTimeout(() => { restoreArmed = false; render(); }, 4000); return; }
+    bk = { book: null, pos: 0, ans: restoreFound.ans, finds: restoreFound.finds };
+    save();
+    restoring = false; restoreFound = null; restoreArmed = false;
+    active = 'shelf';
+    render();
+    flash('Restored — picking up from where that file left off');
     return;
   }
   if (hit('[data-reset]')) {

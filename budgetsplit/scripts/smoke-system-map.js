@@ -42,7 +42,12 @@ new Function(scripts[1] + `
                       addFinding: (text) => { bk.finds.push({ text, where: '', at: 0 }); },
                       reset: () => { bk.book = null; bk.pos = 0; bk.ans = {}; bk.finds = []; },
                       stopId, exportMarkdown, fullMarkdown, setScope: s => { mdScope = s; },
-                      lookupView, itemAnswers,
+                      lookupView, itemAnswers, readState,
+                      getBk: () => bk, setBk: v => { bk = v; },
+                      openRestore: () => { restoring = true; },
+                      restoreCheck: text => { restoreFound = readState(text) || false; },
+                      restoreApply: () => { bk = { book: null, pos: 0, ans: restoreFound.ans, finds: restoreFound.finds }; },
+                      getRestoreFound: () => restoreFound,
                       main: document.getElementById('main'), q: document.getElementById('q') };
 `)();
 
@@ -317,6 +322,58 @@ try {
   if (homeless) bad++;
   reset();
 } catch (e) { console.log('  THREW  popups — ' + e.message); bad++; }
+
+/* The whole reason this exists: a walk started in one browser must survive being
+   pasted, as text, into another. Round-trip it through the real export and the
+   real parser, not a shortcut. */
+try {
+  const { getBk, setBk, restoreCheck, restoreApply, getRestoreFound,
+          fullMarkdown: fm7, setScope: ss7 } = globalThis.__p;
+  const before = getBk();
+
+  reset();
+  const bAny = D.booklets.find(x => x.stops.some(s => s.kind === 'flow'));
+  const sAny = bAny.stops.find(x => x.kind === 'flow');
+  answer(stopId(sAny), 'behave', 'broken');
+  answer(stopId(sAny), 'note', 'cross-device round trip');
+  answer('BOOK::' + bAny.key, 'note', 'a booklet-level note too');
+  addFinding('noticed on my laptop');
+
+  ss7('all');
+  const exported = fm7('all');
+
+  // A fresh "browser" — wipe the in-page state and parse the exported text back in.
+  setBk({ book: null, pos: 0, ans: {}, finds: [] });
+  restoreCheck(exported);
+  const found = getRestoreFound();
+  const parsedOk = found && Object.keys(found.ans).length > 0;
+  console.log(parsedOk ? '  ok     the state block parses back out of the export'
+                       : '  BAD    the pasted export did not parse');
+  if (!parsedOk) bad++;
+
+  if (parsedOk) {
+    restoreApply();
+    const after = getBk();
+    const checks = [
+      ['the flag survives', after.ans[stopId(sAny)]?.behave === 'broken'],
+      ['the note survives', after.ans[stopId(sAny)]?.note === 'cross-device round trip'],
+      ['the booklet note survives', after.ans['BOOK::' + bAny.key]?.note === 'a booklet-level note too'],
+      ['the finding survives', after.finds.some(f => f.text === 'noticed on my laptop')],
+    ];
+    for (const [label, ok] of checks) {
+      console.log(ok ? `  ok     ${label}` : `  BAD    ${label}`);
+      if (!ok) bad++;
+    }
+  }
+
+  // Garbage in must fail closed, not throw and not silently "succeed" with nothing.
+  restoreCheck('not a walkthrough file at all');
+  console.log(getRestoreFound() === false ? '  ok     a non-export paste is rejected, not misread'
+                                          : '  BAD    garbage input was not rejected');
+  if (getRestoreFound() !== false) bad++;
+
+  setBk(before);
+} catch (e) { console.log('  THREW  restore round trip — ' + e.message); bad++; }
 
 console.log(bad ? `\n${bad} problem(s)` : '\nall views render');
 process.exit(bad ? 1 : 0);
