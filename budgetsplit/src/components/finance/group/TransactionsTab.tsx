@@ -6,6 +6,7 @@ import { groupByDate } from '../../../lib/txnGrouping';
 import { TransactionRow } from '../TransactionRow';
 import { TxnCell } from '../TxnCell';
 import { FilterBar } from '../../ui/FilterBar';
+import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../../../lib/txnFilter';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
@@ -29,19 +30,30 @@ type Props = {
  *  own search/kind filter (tab-local UI state). */
 export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
-  const [filterKind, setFilterKind] = useState('all');
+  const [kind, setKind] = useState<KindFilter>(KIND_ANY);
   const [search, setSearch] = useState('');
+  const [range, setRange] = useState<RangePreset>('any');
+  const [from, setFrom] = useState<number | null>(null);
+  const [to, setTo] = useState<number | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
 
-  const filteredTxns = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return txns.filter(t => {
-      if (filterKind !== 'all' && t.kind !== filterKind) return false;
-      if (q && !(`${t.category} ${t.note ?? ''}`.toLowerCase().includes(q))) return false;
-      return true;
-    });
-  }, [txns, filterKind, search]);
+  /*
+   * `OV-34`: this searched `category + note` only, while Search searched tags and
+   * both spellings of the amount, and Personal searched nothing at all. One
+   * predicate now, in `lib/txnFilter.ts`.
+   *
+   * The person filter matters most here — this is the shared ledger, so "everything
+   * involving Aarav" is the question the screen exists to answer and could not.
+   */
+  const filteredTxns = useMemo(
+    () => applyFilters(txns, { query: search, kind, from, to, personId }),
+    [txns, search, kind, from, to, personId],
+  );
 
   const sections = useMemo(() => groupByDate<TxnWithSplits>(filteredTxns), [filteredTxns]);
+
+  // Stable identity for the person sheet — `FilterBar` memoises on it.
+  const people = useMemo(() => members.map(m => ({ id: m.id, name: m.name })), [members]);
 
   // Stable renderItem so TransactionRow's React.memo holds; handlers read via refs.
   const delRef = useRef(onDeleteTxn); delRef.current = onDeleteTxn;
@@ -75,22 +87,26 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
       ListHeaderComponent={
         txns.length > 0 ? (
           <View style={{ marginBottom: space.xs }}>
+            {/* Kind is a named prop now, not a hand-rolled chip group — it is a
+                property of a transaction, so it must behave the same on all three
+                ledgers. `groups` is left for what is genuinely screen-specific,
+                and this screen has none. */}
             <FilterBar
               collapsible
               search={search}
               onSearch={setSearch}
-              searchPlaceholder="Search note or category"
-              selected={{ kind: filterKind }}
-              onSelect={(_, v) => setFilterKind(v)}
-              groups={[{
-                key: 'kind',
-                options: [
-                  { label: 'All', value: 'all' },
-                  { label: 'Expense', value: 'expense' },
-                  { label: 'Income', value: 'income' },
-                  { label: 'Settlement', value: 'settlement' },
-                ],
-              }]}
+              searchPlaceholder="Search this group…"
+              selected={{}}
+              onSelect={() => {}}
+              kind={kind}
+              onKind={setKind}
+              range={range}
+              customFrom={from}
+              customTo={to}
+              onRange={(r, f2, t2) => { setRange(r); setFrom(f2); setTo(t2); }}
+              people={people}
+              personId={personId}
+              onPerson={setPersonId}
             />
           </View>
         ) : null
@@ -116,7 +132,13 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
             body="Nothing in this group matches the current filter."
             tint={colors.textSecondary}
             actionLabel="Clear filters"
-            onAction={() => { setFilterKind('all'); setSearch(''); }}
+            // Clears every filter, not the two that used to exist. A "clear
+            // filters" that left a date range or a person set would be the same
+            // dead end it exists to escape.
+            onAction={() => {
+              setKind(KIND_ANY); setSearch('');
+              setRange('any'); setFrom(null); setTo(null); setPersonId(null);
+            }}
           />
         )
       }

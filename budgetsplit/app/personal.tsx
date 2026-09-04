@@ -8,6 +8,7 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { TabPills } from '../src/components/ui/TabPills';
 import { FilterBar } from '../src/components/ui/FilterBar';
+import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../src/lib/txnFilter';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
@@ -61,6 +62,13 @@ export default function PersonalScreen() {
   const bottomPad = useContentInset({ fab: true });
   const [tab, setTab] = useState<TabKey>('activity');
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
+  // The transaction filters, none of which this screen had: it offered scope only.
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<KindFilter>(KIND_ANY);
+  const [range, setRange] = useState<RangePreset>('any');
+  const [from, setFrom] = useState<number | null>(null);
+  const [to, setTo] = useState<number | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
@@ -83,6 +91,10 @@ export default function PersonalScreen() {
   }, [me?.id]);
 
   const persons = data?.persons ?? [];
+  // Stable identity: `FilterBar` memoises on it, and the person sheet only needs
+  // id + name. Me included — "only what I'm on" is a real question here, because
+  // this ledger already spans every group.
+  const people = useMemo(() => persons.map(p => ({ id: p.id, name: p.name })), [persons]);
   const activity = data?.activity ?? [];
   const groups = data?.groups ?? [];
   // `getMyGlobalBudgetSummary` is the canonical answer to "how am I doing against
@@ -101,12 +113,24 @@ export default function PersonalScreen() {
   // Rows span every group, so the actions read the owning group off each txn.
   const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
 
-  const filtered = useMemo(() => activity.filter(a =>
+  /*
+   * Scope narrows WHICH LEDGER; `applyFilters` narrows the rows inside it.
+   *
+   * This screen offered scope and nothing else — no free text, no kind, no dates —
+   * while the group ledger and Search each offered a different subset. `OV-34`
+   * collapsed the predicate into `lib/txnFilter.ts`, so a word that finds a row on
+   * one of the three now finds it on all of them.
+   */
+  const scoped = useMemo(() => activity.filter(a =>
     filter === 'all' ? true
     : filter === 'personal' ? a.isPersonal
     : filter === 'groups' ? !a.isPersonal
     : a.group_id === filter,
   ), [activity, filter]);
+  const filtered = useMemo(
+    () => applyFilters(scoped, { query, kind, from, to, personId }),
+    [scoped, query, kind, from, to, personId],
+  );
   const sections = useMemo(() => groupByDate(filtered), [filtered]);
 
   // `FilterBar` memoises its chip elements on these three; passing a literal
@@ -241,6 +265,19 @@ export default function PersonalScreen() {
                       selected={filterSelected}
                       onSelect={onSelectFilter}
                       groups={filterGroups}
+                      search={query}
+                      onSearch={setQuery}
+                      searchPlaceholder="Search your activity…"
+                      collapsible
+                      kind={kind}
+                      onKind={setKind}
+                      range={range}
+                      customFrom={from}
+                      customTo={to}
+                      onRange={(r, f2, t2) => { setRange(r); setFrom(f2); setTo(t2); }}
+                      people={people}
+                      personId={personId}
+                      onPerson={setPersonId}
                     />
                   </View>
                 ) : null

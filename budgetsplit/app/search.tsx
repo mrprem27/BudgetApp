@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { startOfMonth } from 'date-fns';
@@ -15,14 +14,23 @@ import { SectionHeader } from '../src/components/ui/SectionHeader';
 import { getTransactionsInRange } from '../src/db/queries/transactions';
 import { getMe } from '../src/db/queries/persons';
 import { getAllGroups } from '../src/db/queries/groups';
-import { parseTags } from '../src/lib/tags';
-import { formatRupees, formatCompact } from '../src/lib/money';
+import { formatCompact } from '../src/lib/money';
 import { txnTotal } from '../src/lib/splitMath';
+import { FilterBar } from '../src/components/ui/FilterBar';
+import { applyFilters, resolveRange, KIND_ANY, type KindFilter, type RangePreset } from '../src/lib/txnFilter';
+import { getAllPersons } from '../src/db/queries/persons';
 import { useScreenData } from '../src/hooks/useScreenData';
-import { TXN_KIND, TXN_KIND_LABEL_PLURAL, SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type TxnKind, type SearchSource } from '../src/constants/enums';
+import { SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type SearchSource } from '../src/constants/enums';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
 
-type KindFilter = TxnKind | 'all';
+// `KindFilter` was declared here, one of three private copies of the same idea.
+// It lives in `lib/txnFilter.ts` now, with the predicate that reads it.
+
+/** Stable identity — `FilterBar` memoises its chips on it (see the note there). */
+const SOURCE_GROUP = [{
+  key: 'source',
+  options: SEARCH_SOURCE.map(v => ({ label: SEARCH_SOURCE_LABEL[v], value: v })),
+}];
 
 const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000;
 const SECTION_CAP = 6;
@@ -42,22 +50,31 @@ export default function SearchScreen() {
     const id = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(id);
   }, [query]);
-  const [kind, setKind] = useState<KindFilter>('all');
+  const [kind, setKind] = useState<KindFilter>(KIND_ANY);
   const [source, setSource] = useState<SearchSource>('all');
+  // Date range and person, which no ledger surface offered before `OV-34`.
+  const [range, setRange] = useState<RangePreset>('any');
+  const [from, setFrom] = useState<number | null>(null);
+  const [to, setTo] = useState<number | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data, loading, error, reload } = useScreenData(async (db) => {
     const now = Date.now();
-    const [txns, me, grps] = await Promise.all([
+    const [txns, me, grps, persons] = await Promise.all([
       getTransactionsInRange(db, null, now - THREE_YEARS_MS, now),
       getMe(db),
       getAllGroups(db),
+      getAllPersons(db),
     ]);
     return {
       all: txns,
       myId: me?.id ?? '',
       personalGroupId: grps.find(g => g.is_personal === 1)?.id ?? '',
       groupNames: Object.fromEntries(grps.map(g => [g.id, g.name])) as Record<string, string>,
+      // Everyone, so the person chip can narrow to any of them. `me` included —
+      // "only the ones I'm on" is a real question on a screen spanning every group.
+      people: persons.map(x => ({ id: x.id, name: x.name })),
     };
   }, []);
 
@@ -67,22 +84,23 @@ export default function SearchScreen() {
   const groupNames = data?.groupNames ?? {};
 
   const { sections, totalCount, totalAmount } = useMemo(() => {
-    // Strip commas so "1,200" and "1200" match either way against the amount.
-    const q = debouncedQuery.trim().toLowerCase().replace(/,/g, '');
-    const filtered = all.filter(t => {
-      if (kind !== 'all' && t.kind !== kind) return false;
-      if (source === 'personal' && personalGroupId && t.group_id !== personalGroupId) return false;
-      if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;
-      if (!q) return true;
-      const total = txnTotal(t);
-      // Tags join the haystack rather than getting a filter row of their own. Someone
-      // looking for a trip types its name — they don't reach for a tag picker first —
-      // and a chip row here would be a fourth control on a screen whose entire point is
-      // the text field.
-      const tags = parseTags(t.tags).join(' ');
-      const hay = `${t.category} ${t.note ?? ''} ${tags} ${formatRupees(total)} ${Math.round(total / 100)}`.toLowerCase().replace(/,/g, '');
-      return hay.includes(q);
-    });
+    /*
+     * Kind, text, date range and person come from `lib/txnFilter.ts` — the same
+     * predicate the Personal ledger and the group ledger now run, so a word that
+     * finds a row here finds it there too. This screen's haystack was the widest of
+     * the three and became the shared one: tags and both spellings of the amount
+     * are folded in, because someone hunting a row types whatever they remember
+     * about it rather than reaching for the right control first.
+     *
+     * `source` stays local: it is not a property of a transaction, it is which
+     * ledger you are looking at.
+     */
+    const filtered = applyFilters(all, { query: debouncedQuery, kind, from, to, personId })
+      .filter(t => {
+        if (source === 'personal' && personalGroupId && t.group_id !== personalGroupId) return false;
+        if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;
+        return true;
+      });
 
     /*
      * Grouped by `date` — WHEN IT HAPPENED — like every other ledger surface.
@@ -125,7 +143,7 @@ export default function SearchScreen() {
       ? 0
       : filtered.reduce((s, t) => s + txnTotal(t), 0);
     return { sections: secs, totalCount: filtered.length, totalAmount: totalAmt };
-  }, [all, debouncedQuery, kind, source, personalGroupId, expanded]);
+  }, [all, debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded]);
 
   const hasQuery = query.trim().length > 0;
   // Results reflect the debounced query — key the empty-state copy off it too.
@@ -161,44 +179,25 @@ export default function SearchScreen() {
             </View>
           </View>
 
-          {/* Filters: source · kind (centralized enums). `flexGrow:0` is critical —
-              a horizontal ScrollView in a flex column otherwise stretches to fill the
-              whole screen and shoves the results off. */}
-          <View style={styles.chipsWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-              {SEARCH_SOURCE.map(s => (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.chip, source === s && styles.chipActive]}
-                  onPress={() => setSource(s)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: source === s }}
-                >
-                  <Text style={[styles.chipText, source === s && styles.chipTextActive]}>{SEARCH_SOURCE_LABEL[s]}</Text>
-                </TouchableOpacity>
-              ))}
-              <View style={styles.chipDivider} />
-              {TXN_KIND.map(k => (
-                <TouchableOpacity
-                  key={k}
-                  style={[styles.chip, kind === k && styles.chipActive]}
-                  onPress={() => setKind(kind === k ? 'all' : k)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: kind === k }}
-                >
-                  <Text style={[styles.chipText, kind === k && styles.chipTextActive]}>{TXN_KIND_LABEL_PLURAL[k]}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            {/* Fade hints the row keeps scrolling past the last visible chip. */}
-            <LinearGradient
-              colors={[colors.bg + '00', colors.bg]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.chipsFade}
-              pointerEvents="none"
-            />
-          </View>
+          {/* One filter bar, shared with the Personal and group ledgers. This screen
+              used to hand-roll its own chip row over `TouchableOpacity` — one of four
+              such implementations, including inside `ui/FilterBar` itself (`OV-34`).
+              `source` is passed as a scope group because it names a ledger, not a
+              property of a transaction. */}
+          <FilterBar
+            selected={{ source }}
+            onSelect={(_, v) => setSource(v as SearchSource)}
+            groups={SOURCE_GROUP}
+            kind={kind}
+            onKind={setKind}
+            range={range}
+            customFrom={from}
+            customTo={to}
+            onRange={(r, f2, t2) => { setRange(r); setFrom(f2); setTo(t2); }}
+            people={data?.people ?? []}
+            personId={personId}
+            onPerson={setPersonId}
+          />
 
           {/* Results fill the remaining space so the list scrolls and the empty
               state sits in a stable region below the filters. */}
@@ -285,15 +284,6 @@ const styles = StyleSheet.create({
     height: 48, paddingHorizontal: 14,
   },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, paddingVertical: 0 },
-  chipsWrap: { position: 'relative' },
-  chipsScroll: { flexGrow: 0, flexShrink: 0 },
-  chips: { flexDirection: 'row', gap: space.sm, paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm, alignItems: 'center' },
-  chipsFade: { position: 'absolute', right: 0, top: 0, bottom: space.sm, width: 28 },
-  chipDivider: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: space.xs, alignSelf: 'center' },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted },
-  chipActive: { backgroundColor: colors.accent },
-  chipText: { ...type.label, color: colors.textSecondary },
-  chipTextActive: { color: colors.onAccent },
   results: { flex: 1 },
   resultHeader: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs },
   resultCount: { ...type.caption, color: colors.textMuted },

@@ -514,12 +514,16 @@ stops the next kind being half-added.
 
 **Gate:** none. This was the first phase that added a capability rather than repairing one.
 
-### Phase 5 · One filter — `OV-34`
+### Phase 5 · One filter — `OV-34` ✅ **done 2026-09-05**
 
-Rebuild `FilterBar` on `ui/Chip`, carry the union of what the four surfaces already do, adopt it in
-`SC-23` and `SC-19`. Decide on **date range** and **person** first, per §5b, so it is built once.
+Rebuilt `FilterBar` on `ui/Chip`, carried the union of what the four surfaces did, adopted in
+`SC-23`, `SC-14` and the group ledger. **Date range and person** were both taken, per §5b.
 
-**Gate:** those two field decisions. The parity collapse itself has none.
+§5b's table was wrong in two places, and the corrections shaped the work: `SC-14` Personal offered
+group scope and **no free text at all** (not "kind, free text"), and **date range was not missing
+everywhere** — `SC-19` Review already had a full date+time range, so it was lifted rather than
+designed. The bigger half of the fix is not the chips: `lib/txnFilter.ts` means the same word finds
+the same row on all three ledgers, which it did not before.
 
 ### Phase 6 · Budget and income clarity
 

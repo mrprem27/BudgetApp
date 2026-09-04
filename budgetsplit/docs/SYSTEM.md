@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (115 modules) and touches neither
+`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (116 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -4541,7 +4541,24 @@ OV-34 · Four filter surfaces, three implementations                [alias-spraw
   Blast.   One component rewritten on an existing primitive, plus three call
            sites. No query changes — all four filter in memory today.
   Risk.    Low. Behaviour is additive per surface; nothing loses a filter.
-  Verdict. COLLAPSE.
+  Correction. Four hand-rolled chip implementations, not three — ui/FilterBar was
+           itself one of them (its chips are at :68; :89 and :131 cited here were
+           the search buttons). And two doc claims were backwards: SC-14 Personal
+           offered group scope and NO text search at all, not "kind, free text";
+           and date range was NOT absent everywhere — review/FilterForm already
+           chained DatePickerSheet into TimePickerSheet, so the collapse adopted
+           that rather than designing it.
+  Verdict. COLLAPSE — **done 2026-09-05**. Two halves. The matching moved to
+           lib/txnFilter.ts, so a word that finds a row on one ledger finds it on
+           all three — Search's haystack was the widest and became the shared one
+           (tags, and both spellings of the amount). The chips became ui/Chip
+           everywhere, including inside FilterBar. Date range and person are on
+           all three; person existed nowhere before, in an app about shared
+           spending. Held by filterSurfaces.test.ts + txnFilter.test.ts.
+  Left.    CategoryChip and ReviewRowCard still paint their own pills. Neither is
+           a filter, and each has a visual argument (a filled selected state; a
+           flex:1 row-internal pill), so both are allowlisted BY NAME with the
+           reason rather than silently.
   Trigger. Now — SC-23 is a ledger and finding a row is its whole job.
 ```
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { Chip } from '../ui/Chip';
 import { colors, type, space, radius } from '../tokens';
 import { GROUP_TYPES } from '../../constants/palette';
 import { MemberAvatar } from './MemberAvatar';
@@ -58,20 +59,14 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
 
       <Text style={styles.fieldLabel}>Type</Text>
       <View style={styles.chipRow}>
-        {GROUP_TYPES.map(t => {
-          const on = values.icon === t.icon;
-          return (
-            <TouchableOpacity
-              key={t.key}
-              style={[styles.chip, on && styles.chipOn]}
-              onPress={() => onChange({ icon: t.icon, color: t.color })}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-            >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>{t.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {GROUP_TYPES.map(t => (
+          <Chip
+            key={t.key}
+            label={t.label}
+            selected={values.icon === t.icon}
+            onPress={() => onChange({ icon: t.icon, color: t.color })}
+          />
+        ))}
       </View>
 
       {showMembers && allPersons.length > 0 && (
@@ -98,20 +93,14 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
         <>
           <Text style={styles.fieldLabel}>Default split</Text>
           <View style={styles.chipRow}>
-            {SPLIT_OPTIONS.map(s => {
-              const on = values.defaultSplit === s.key;
-              return (
-                <TouchableOpacity
-                  key={s.key}
-                  style={[styles.chip, on && styles.chipOn]}
-                  onPress={() => onChange({ defaultSplit: s.key })}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{s.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+            {SPLIT_OPTIONS.map(s => (
+              <Chip
+                key={s.key}
+                label={s.label}
+                selected={values.defaultSplit === s.key}
+                onPress={() => onChange({ defaultSplit: s.key })}
+              />
+            ))}
           </View>
         </>
       )}
@@ -122,11 +111,7 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
 const styles = StyleSheet.create({
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.md, marginBottom: space.xs },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  chip: { paddingHorizontal: space.md, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: colors.border },
-  chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { ...type.label, color: colors.textSecondary },
-  chipTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   memberRow: { gap: space.md, paddingVertical: space.xs, paddingRight: space.md },
   memberPick: { alignItems: 'center', gap: space.xs, width: 52 },
   memberAvatarWrap: { borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
