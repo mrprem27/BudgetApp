@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
+import { settlementView } from '../../lib/settlementView';
 import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
 import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode } from '../../constants/enums';
@@ -105,6 +106,30 @@ export async function getTransactionsForGroup(
       WHERE t.group_id = ? AND t.is_deleted = 0 AND t.recur_freq IS NULL
       ORDER BY t.date DESC, t.created_at DESC`,
     [groupId],
+  );
+  return loadSplitsMany(db, rows);
+}
+
+/**
+ * Every movement in and out of one asset, newest first.
+ *
+ * The rows behind an asset's balance. `deleteAsset` already asks this question in
+ * its `COUNT(*)` form — it refuses to delete an asset with history — so this is
+ * that query's sibling, and the only other reader of `asset_id` in the app.
+ *
+ * `recur_freq IS NULL` like every other ledger (`IV-04`: a rule is not a
+ * transaction). No approval filter: an asset movement is personal, so there is no
+ * peer entry to wait on, and adding one would be a filter that can never fire.
+ */
+export async function getTransactionsForAsset(
+  db: SQLite.SQLiteDatabase,
+  assetId: string,
+): Promise<TxnWithSplits[]> {
+  const rows = await db.getAllAsync<Txn>(
+    `SELECT t.*, ${AWAITING_APPROVAL_COL} FROM txn t
+      WHERE t.asset_id = ? AND t.is_deleted = 0 AND t.recur_freq IS NULL
+      ORDER BY t.date DESC, t.created_at DESC`,
+    [assetId],
   );
   return loadSplitsMany(db, rows);
 }
@@ -380,10 +405,15 @@ export async function insertTxnRows(
       // A personal transfer records only the side that moved, so money arriving
       // has no payment row — read the amount off the shares instead of logging ₹0.
       const moved = totalPaid || input.shares.reduce((a, s) => a + s.amount, 0);
+      // The verb says which of the four things this settlement was. It read
+      // "Settled ₹50,000" for an SIP, in a feed where the expense beside it said
+      // "Expense added" — so the one entry that was not a settlement between
+      // people was the one the feed called settled.
+      const view = settlementView({ ...input, asset_id: input.assetId ?? null, pay_method: input.payMethod ?? null });
       await logAudit(db, {
         entityType: 'settlement', entityId: id, groupId: input.groupId,
         action: 'settled', amount: moved,
-        summary: `Settled ${formatRupees(moved)}`,
+        summary: `${view.verb} ${formatRupees(moved)}`,
       });
     } else {
       const label = input.kind === 'income' ? 'income' : 'expense';

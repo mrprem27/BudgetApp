@@ -1894,7 +1894,7 @@ started this document.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+46 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42`, `SC-43` and `SC-44` are new: `/assets`, `/settings/sync` and
 `/settings/sync-log` had no ID and no behaviour section anywhere before this document.
 
@@ -1981,6 +1981,7 @@ taps are listed separately below and are not in the count.
 | `SC-33` | `/afford` | Can I afford this | **1** | Sole entry, now a **labelled** icon on `SC-05` (`OV-16`) |
 | `SC-41` | `/recurring/[id]` | **One** rule, with all the actions | 5 | Replaced `group/[id]/recurring` |
 | `SC-42` | `/assets` | The asset register | 3 | **New ID.** Undocumented until now |
+| `SC-46` | `/asset/[id]` | **One asset**, and the movements that built its balance | 1 | The exit surface `OV-30` was missing: the register showed a balance with no path back to its rows |
 
 #### Transactions, review, people
 
@@ -2067,6 +2068,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-41` | **Plan** → the repeat icon → tap a rule. Also where a renewal reminder lands |
 | `SC-42` | **Plan** → tap Total money → **Assets** |
 | `SC-45` | **Settings → Security → Who can add to my ledger**. Also the empty state of the *waiting for you* queue |
+| `SC-46` | **Plan → Assets → tap an asset**. Tapping a row used to open its edit sheet; Edit moved to the row's action strip, because seeing what is in an asset is commoner than renaming it |
 | `SC-43` | **Settings → Sync** |
 | `SC-44` | **Settings → Sync → Sync log** |
 
@@ -2105,7 +2107,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 5 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 5 of 46 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of
@@ -4675,12 +4677,22 @@ OV-18 · `Other` and `Others`, one character apart                  [alias-spraw
   fold bucket (E-63). Both render in the same breakdown.
   Verdict. RENAME-ONLY. Rename the fold to **"Everything else"**. One string.
 
-OV-20 · Five near-identical investment identifiers                 [alias-sprawl]
+OV-20 · Seven near-identical investment identifiers                [alias-sprawl]
   'Investments / SIP' (expense category) · 'Investment' (transfer category) ·
   asset.kind='investment' · MoneyProfile.investments (derived) ·
-  MIGRATED_INVESTMENTS_NAME = 'Investments'.
+  MIGRATED_INVESTMENTS_NAME = 'Investments' · AddKind.Invest / 'Invest' ·
+  moveToInvestments' hardcoded note 'Moved to investments'.
+  Count.   Was five. P6 added the sixth — AddKind.Invest — and it is the ONLY one
+           a user ever reads; the seventh is a literal that bypasses the constant.
+           onboarding.ts writes name: 'Investments' rather than importing
+           MIGRATED_INVESTMENTS_NAME, so that is an eighth uncontrolled copy.
+  Sharper  The first two no longer merely LOOK alike. The Invest banner fires on
+  now.     the expense category and its action switches to the kind that files
+           under the transfer one — two opposite meanings, one tap apart.
   Verdict. RENAME-ONLY, and worth doing because these mean genuinely opposite
-           things: one is money consumed, one is money moved.
+           things: one is money consumed, one is money moved. What P8 fixed is the
+           PRESENTATION sprawl (four words for one movement, lib/settlementView.ts);
+           the identifier sprawl is untouched and still open.
 
 OV-22 · Six vocabularies over daily/weekly/monthly/yearly          [alias-sprawl]
   BUDGET_CADENCE · Period · BUDGET_PERIOD · TabKey+TARGET_FOR_TAB · RECUR_FREQ ·
@@ -4774,7 +4786,7 @@ OV-06 · Categories are referenced by NAME, not by id            [split-storage]
               is a product decision, not a schema one.  → DQ-16
   Verdict. NEEDS-DECISION.
 
-OV-10 · backOr is used in 5 of 45 route files            [path-duplication]
+OV-10 · backOr is used in 5 of 46 route files            [path-duplication]
   lib/nav.ts documents exactly the cold-start-empty-stack failure it fixes. ~40
   bare router.back() calls remain. Safe today only because nothing deep-links into
   those screens — and FL-44 adds deep links.
@@ -4865,7 +4877,7 @@ above the entry recording that it was closed.
 | `DQ-06` | **Widget scope** — balance? today's spend? quick-add? Genuinely undecided. | No widget. | `DQ-80` (a paid Apple account) unblocking. |
 | `DQ-07` | ~~**Rejecting a peer entry diverges the two devices silently.**~~ **Closed 2026-08.** A rejection now travels back to the author as an objection on the entry (`E-22`), and withdrawing it travels too — `pushSyncDispute` on push, `recordDispute` on pull, round-tripped in `peerApproval.test.ts`. The two devices still hold different rows; the difference is now **visible to both**, which was the actual defect. | — | — |
 | `DQ-08` | **Email is the only identity**, unchangeable and unmergeable. A typo at sign-in creates a second account holding none of your backups. | The typo wins. | The first support message that starts "I can't find my backup". |
-| `DQ-26` | **Does investing belong in Budget, and as what?** A ₹10,000 monthly SIP is invisible to the plan today. `IV-17` forbids folding it into a spend total, so it needs its own line or nothing at all — and "nothing" means the budget describes consumption while under-stating committed outflow. Raised by Walk 1 on `SC-10` and again on `SC-25`. | Absent. The budget answers "what did I consume" and stays silent on "what did I commit". | `OV-30`'s Invest pill landing, which makes the omission visible in one tap. |
+| `DQ-26` | **ANSWERED 2026-09-05 — does investing belong in Budget, and as what?** A ₹10,000 monthly SIP was invisible to the plan. `IV-17` forbids folding it into a spend total, so the only question was *a separate line or nothing* — and "nothing" left the budget describing consumption while under-stating committed outflow. | **A named second line, never summed.** `budgetInvestedCaption` — *"plus ₹10,000 invested this month · kept, not spent"* — on the same terms and in the same style as the pooled-budget line directly above it. The figure is accumulated inside `getCategorySpendingDetail`'s existing loop, so it reads the same rows, window and approval filter as the spend figure beside it and the two cannot disagree. | Fired: `OV-30` landed 2026-09-05, which is what made the omission visible in one tap. |
 
 `DQ-08` has a cheap partial answer nobody has taken: **show the signed-in email wherever restore is
 offered.** That does not solve identity; it turns a silent loss into a visible one.

@@ -59,7 +59,11 @@ export default function AssetsScreen() {
           title={asset.name}
           subtitle={ASSET_KIND_LABEL[asset.kind]}
           value={<Text style={styles.balance}>{formatRupees(asset.balance)}</Text>}
-          onPress={() => setSheet({ mode: 'edit', asset })}
+          // Tap opens the asset; the pencil-shaped action is Edit in the row's
+          // own action strip below. Tapping a row that shows a balance and going
+          // to a FORM was the register's only door, so the movements behind that
+          // balance were unreachable.
+          onPress={() => router.push(`/asset/${asset.id}`)}
           accessibilityLabel={`${asset.name}, ${formatRupees(asset.balance)}`}
         />
         <View style={styles.actionRow}>
@@ -74,6 +78,10 @@ export default function AssetsScreen() {
             disabled={asset.balance <= 0}
           />
           <SecondaryButton label="Worth now" size="sm" onPress={() => setSheet({ mode: 'restate', asset })} style={styles.actionBtn} />
+          {/* Edit moved here when the row's tap became "open this asset". Renaming
+              is rarer than seeing what is in it, so the row's whole surface goes to
+              the common case and the rare one keeps a named button. */}
+          <SecondaryButton label="Edit" size="sm" onPress={() => setSheet({ mode: 'edit', asset })} style={styles.actionBtn} />
         </View>
       </View>
     );

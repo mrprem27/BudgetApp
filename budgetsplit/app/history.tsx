@@ -86,7 +86,20 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
           const dotColor = DOT_COLOR[item.action] ?? colors.accent;
           const noun = ENTITY_NOUN[item.entity_type] ?? 'Item';
           const verb = ACTION_VERB[item.action] ?? 'changed';
-          const label = `${noun} ${verb}`;
+          /*
+           * A settlement's own summary says which of the four things it was —
+           * `insertTxn` writes "Invested ₹10,000" or "Settled ₹500" — and it is
+           * rendered directly below. The label above it said "Settlement recorded"
+           * regardless, so an SIP was captioned with a word that is wrong for it,
+           * sitting over a line that had it right.
+           *
+           * The summary's first word is the verb, so the label borrows it and the
+           * two agree. Not the whole summary: that renders below, and printing it
+           * twice would be worse than printing it wrong.
+           */
+          const label = item.entity_type === 'settlement' && item.summary
+            ? `${item.summary.split(' ')[0]} money`
+            : `${noun} ${verb}`;
           const badge = BADGE_LABEL[item.action];
           const itemDate = new Date(item.created_at);
           const dateStr = isFinite(itemDate.getTime())

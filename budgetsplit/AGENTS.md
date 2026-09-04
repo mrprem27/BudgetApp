@@ -415,11 +415,24 @@ Rules:
 `txn.kind` is `expense` / `income` / `settlement` (a **Transfer** in the UI). They are not
 interchangeable in an aggregation, and the rule is:
 
-| Surface | expense | income | settlement |
-|---|---|---|---|
-| **Analysis** — category breakdowns, budgets, spend pace, the Reports donut | ✅ counted | ✅ counted, separately | ⛔ **excluded** |
-| **Ledger** — transaction lists, Search, the expanded month list | ✅ shown | ✅ shown | ✅ **shown** |
-| **Money math** (`lib/cash.ts`) | lowers cash | raises cash | moves cash both ways |
+`txn.kind` has three values, but a **settlement means four different things**
+(`OV-02`), and two of them the user entered with two different buttons. The
+discriminator is `txn.asset_id`, and `lib/settlementView.ts` is the only place that
+reads it — every surface asks that function rather than deciding for itself, which
+is what ended the four different words one movement used to have.
+
+| Surface | expense | income | transfer | **invest** |
+|---|---|---|---|---|
+| **Analysis** — category breakdowns, budgets, spend pace, the Reports donut | ✅ counted | ✅ counted, separately | ⛔ **excluded** | ⛔ **excluded** — nothing was consumed |
+| **Ledger** — transaction lists, Search, the expanded month list | ✅ shown | ✅ shown | ✅ **shown** | ✅ **shown**, as "Invested · Gold" |
+| **Money math** (`lib/cash.ts`) | lowers cash | raises cash | moves cash both ways | lowers cash, raises an asset — **net worth flat** |
+| **Reported beside** | — | — | — | ✅ named on the Budget card (`DQ-26`), never summed into it |
+
+**An investment is not an expense and a redemption is not income**, and both got
+that wrong on screen for a while: the row inferred its sign from "did I pay?",
+which is false for a personal asset movement because there is no counterparty — so
+a redemption rendered green and positive. `settlementView`'s `outbound` decides the
+sign once, for every surface.
 
 **Why settlements are excluded from analysis:** settling a debt isn't consumption. The
 original purchase was already booked as an expense; counting the settlement too would
@@ -699,7 +712,7 @@ BudgetApp/
 │   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
 │   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
 │   │   ├── group/[id].tsx       # Group hub + [id]/{budget,edit,members}
-│   │   └── …                    # 45 routes in total
+│   │   └── …                    # 46 routes in total
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── ui/              # Generic primitives, domain-free

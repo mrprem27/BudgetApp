@@ -26,8 +26,17 @@ export type TxnKind = typeof TXN_KIND[number];
 export const TXN_KIND_LABEL: Record<TxnKind, string> = {
   expense: 'Expense', income: 'Income', settlement: 'Settlement',
 };
+/**
+ * Plurals for a filter chip or a tab.
+ *
+ * `settlement` reads **"Transfers"**, not "Settlements". One movement had four
+ * names across the app — "Transfers" on the report drill-down, "Settlement" on the
+ * detail badge, "Settlements" here, "settled" in the feed — and "Transfer" is the
+ * one the user chose it with on the Add screen, so it is the one that stays
+ * (`OV-34`, `OV-01`: user-facing copy gets one word).
+ */
 export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
-  expense: 'Expenses', income: 'Income', settlement: 'Settlements',
+  expense: 'Expenses', income: 'Income', settlement: 'Transfers',
 };
 
 /**

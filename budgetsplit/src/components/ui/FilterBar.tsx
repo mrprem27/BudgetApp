@@ -140,6 +140,12 @@ export function FilterBar({
    */
   const txnChips = (
     <>
+      {/* `settlement` is labelled "Transfers", not "Settlements" — one word for
+          person-to-person movement, matching the Reports drill-down's tab and the
+          Transfer pill you entered it with. An investment is a settlement too, and
+          it is found by its own text ("gold", "Invested") rather than by a fifth
+          chip: this row already carries kind, date and person, and `SC-23`'s whole
+          point is the text field above it. */}
       {onKind && TXN_KIND.map(k => (
         <Chip
           key={k}

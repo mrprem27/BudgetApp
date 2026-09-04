@@ -304,7 +304,7 @@ const AREAS = [
     blurb: 'Money set aside and things you own. Buying gold or funding an SIP is a transfer, not an expense: the cash moved, nothing was consumed, and net worth must not change.',
     ent: ['E-11','E-14','E-15','E-16','E-54','E-62'],
     fl:  ['FL-10','FL-33','FL-34','FL-35','FL-36','FL-37','FL-45'],
-    sc:  ['SC-05','SC-17','SC-42'],
+    sc:  ['SC-05','SC-17','SC-42','SC-46'],
     fe:  ['FE-27','FE-28','FE-29','FE-30','FE-31'],
     ov:  ['OV-20','OV-30','OV-33'],
     dq:  ['DQ-14','DQ-15','DQ-24','DQ-27'],

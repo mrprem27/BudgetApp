@@ -2,6 +2,7 @@ import type * as SQLite from 'expo-sqlite';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { fullDate, monthLabel } from './dateFormat';
 import { getTransactionsInRange } from '../db/queries/transactions';
+import { settlementView } from './settlementView';
 import { getMe } from '../db/queries/persons';
 import { GROUP_EXPORT_HEADER } from './importParse';
 import { rowLine } from './groupExport';
@@ -69,13 +70,22 @@ export async function buildReportHtml(
       .sort((a, b) => b.date - a.date)
       .map(t => {
         const amt = txnTotal(t);
-        // Print-safe (dark-on-white) amount colors — the PDF is a light document.
-        const color = t.kind === 'income' ? '#0E7C5A' : '#C0392B';
+        /*
+         * Print-safe (dark-on-white) amount colours — the PDF is a light document.
+         *
+         * Three, not two. Every settlement printed red with a minus, so an SIP read
+         * as spending in a document whose only totals are Income / Expense / Net —
+         * the printed rows and the printed net disagreed with each other. A
+         * settlement moved money without consuming it, so it gets neither colour.
+         */
+        const settle = t.kind === 'settlement' ? settlementView(t) : null;
+        const color = t.kind === 'income' ? '#0E7C5A' : settle ? '#5B4BC4' : '#C0392B';
+        const sign = t.kind === 'income' ? '+' : settle ? (settle.outbound ? '−' : '+') : '-';
         return `<tr>
               <td>${format(new Date(t.date), 'dd MMM')}</td>
               <td>${esc(t.category)}</td>
               <td class="note">${esc(t.note ?? '')}</td>
-              <td style="text-align:right;color:${color};font-family:'SF Mono',monospace;font-weight:600">${t.kind === 'income' ? '+' : '-'}${formatRupees(amt)}</td>
+              <td style="text-align:right;color:${color};font-family:'SF Mono',monospace;font-weight:600">${sign}${formatRupees(amt)}</td>
             </tr>`;
       })
       .join('');
