@@ -101,3 +101,82 @@ describe('trusting someone in one group and not another', () => {
     expect(requiresMyApproval(me, expense, 'review')).toBe(false);
   });
 });
+
+/**
+ * The three rules, from the one sentence that produces them:
+ *
+ *   Trust means "I believe what you say we spent."
+ *   It never means "I believe what you say my money did."
+ *
+ * Those are different claims. What we spent, they watched happen. What my money
+ * did is a fact about my bank they cannot observe — it fails on a declined UPI, a
+ * wrong VPA, a bank hold — so honesty is the wrong instrument for it.
+ */
+describe('the three rules', () => {
+  const stranger = { is_me: 0, remote_uid: 'acct-aarav', trust_state: 'review' };
+  const trusted = { ...stranger, trust_state: 'trusted' };
+
+  describe('rule 1 — not my money never waits', () => {
+    const notMine = { kind: 'expense' as const, touchesMe: false };
+
+    it('lets it through from someone I have NOT trusted', () => {
+      /*
+       * This used to queue, on the argument that `simplify()` re-pairs debts
+       * across a group. True, but it changes WHICH of two people I am told to
+       * pay, never how much I owe — and it re-derives on every read. A prompt
+       * that cannot change one of my numbers is not a safeguard, it is a
+       * monthly interruption asking me to vouch for something I did not watch.
+       */
+      expect(requiresMyApproval(stranger, notMine)).toBe(false);
+    });
+
+    it('lets a settlement between two OTHER people through too', () => {
+      // My net with the group is unchanged by it.
+      expect(requiresMyApproval(stranger, { kind: 'settlement', touchesMe: false })).toBe(false);
+    });
+
+    it('is not overridden by a per-group "review"', () => {
+      expect(requiresMyApproval(trusted, notMine, 'review')).toBe(false);
+    });
+  });
+
+  describe('rule 2 — a claim that my money moved always asks', () => {
+    const theySayIPaid = { kind: 'expense' as const, touchesMe: true, assertsIPaid: true };
+
+    it('asks even when I fully trust them', () => {
+      // SYNC-F13. "You paid ₹4,000" took cash out of my pocket on their say-so,
+      // with no prompt, because only settlements were force-confirmed.
+      expect(requiresMyApproval(trusted, theySayIPaid)).toBe(true);
+    });
+
+    it('cannot be waived by a per-group "trusted"', () => {
+      expect(requiresMyApproval(trusted, theySayIPaid, 'trusted')).toBe(true);
+    });
+
+    it('asks for an incoming transfer, the same way, for the same reason', () => {
+      const transfer = { kind: 'settlement' as const, touchesMe: true };
+      expect(requiresMyApproval(trusted, transfer, 'trusted')).toBe(true);
+    });
+  });
+
+  describe('rule 3 — an ordinary share is what trust is FOR', () => {
+    // Someone else paid, I owe a piece. The common case, and it must stay
+    // frictionless or trust buys nothing.
+    const myShare = { kind: 'expense' as const, touchesMe: true, assertsIPaid: false };
+
+    it('applies straight away from someone I trust', () => {
+      expect(requiresMyApproval(trusted, myShare)).toBe(false);
+    });
+
+    it('waits from someone I have not', () => {
+      expect(requiresMyApproval(stranger, myShare)).toBe(true);
+    });
+
+    it('treats a missing assertsIPaid as false, not as unknown', () => {
+      // Older callers omit it. Absent must mean "they did not say I paid",
+      // which is the direction that keeps trust working rather than the one
+      // that makes everything queue.
+      expect(requiresMyApproval(trusted, { kind: 'expense', touchesMe: true })).toBe(false);
+    });
+  });
+});

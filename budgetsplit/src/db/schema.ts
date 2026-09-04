@@ -204,8 +204,13 @@ CREATE TABLE IF NOT EXISTS asset (
                  CHECK(kind IN ('investment','property','gold','deposit','vehicle','other')),
   icon         TEXT,
   color        TEXT,
-  -- Paise. Moved only by transfers in/out and by the user restating it, both of
-  -- which write a transaction row so the change is explainable afterwards.
+  -- Paise. Two things move it, and only ONE of them leaves a trace:
+  --   * a transfer in/out writes a settlement row, so the change is explainable;
+  --   * the user restating the value writes NOTHING -- deliberately, because a
+  --     market gain never touched a bank and booking one would move cash for money
+  --     that did not move. See restateAssetBalance().
+  -- So this column is a current value with no history behind it. Whether it should
+  -- keep one is DQ-27; the comment here used to claim it already did.
   balance      INTEGER NOT NULL DEFAULT 0,
   is_archived  INTEGER NOT NULL DEFAULT 0,
   -- Manual order, like savings goals -- the same drag-rank decision.
@@ -361,7 +366,19 @@ CREATE TABLE IF NOT EXISTS txn_approval (
   -- balance and mine disagree and neither of us is told (F10). NULL means nothing
   -- to send; 'raise' means tell them I object; 'clear' means I have taken it back.
   -- The drain clears it once the server has accepted.
-  dispute_state TEXT
+  dispute_state TEXT,
+  -- "They have retracted this, and I have not agreed yet." (F14)
+  --
+  -- Deliberately NOT expressed as state='pending', and that is the whole design.
+  -- NOT_AWAITING_APPROVAL excludes a pending row from every money statement, so
+  -- reusing it here would make the entry stop counting the instant their deletion
+  -- arrived — which is precisely the defect. An entry I already accepted has to go
+  -- on counting until I say otherwise, so state stays as it was and this rides
+  -- alongside it.
+  --
+  -- Approving applies the soft delete; rejecting means "no, this did happen" and
+  -- clears the flag, leaving the entry exactly where it was.
+  pending_delete INTEGER NOT NULL DEFAULT 0
 );
 
 -- Trust for one person in ONE group, overriding my global answer for them.
@@ -620,6 +637,10 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn ADD COLUMN sync_version INTEGER NOT NULL DEFAULT 0",
   // The dispute outbox — see the column comment in the CREATE above (F10).
   "ALTER TABLE txn_approval ADD COLUMN dispute_state TEXT",
+  // A retraction I have not agreed to yet — see the column comment above (F14).
+  // Default 0 is right for every existing row: nothing has ever been retracted,
+  // because before this the retraction simply took effect.
+  "ALTER TABLE txn_approval ADD COLUMN pending_delete INTEGER NOT NULL DEFAULT 0",
 ];
 
 /**

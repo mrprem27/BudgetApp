@@ -120,9 +120,34 @@ export type OutboxRow = { entry_id: string; group_id: string; queued_at: number 
  */
 export const MAX_PER_DRAIN = 50;
 
-export async function pendingUploads(db: SQLite.SQLiteDatabase): Promise<OutboxRow[]> {
+/**
+ * @param sendable the groups this device actually holds a key for. Rows for any
+ *   other group are left alone — they are not lost, they are simply not eligible
+ *   yet, and they become eligible the moment the group is shared.
+ *
+ * Filtering here rather than in the drain loop is the whole point. The page is
+ * `ORDER BY queued_at ASC LIMIT 50`, and the loop used to fetch that page and then
+ * `continue` past every un-sendable row without removing it. So more than fifty
+ * queued rows in a group nobody has been invited to — which is the ordinary state
+ * of a personal-shaped group you made months ago — meant every drain fetched the
+ * same fifty unsendable rows forever, and a group you HAD shared never got its
+ * turn. Nothing aged them out; the queue was permanently jammed by rows that were
+ * never going anywhere.
+ *
+ * An empty `sendable` short-circuits: `IN ()` is a syntax error in SQLite, and
+ * there is nothing to ask for anyway.
+ */
+export async function pendingUploads(
+  db: SQLite.SQLiteDatabase,
+  sendable: string[],
+): Promise<OutboxRow[]> {
+  if (sendable.length === 0) return [];
+  const holes = sendable.map(() => '?').join(',');
   return db.getAllAsync<OutboxRow>(
-    `SELECT * FROM sync_outbox ORDER BY queued_at ASC LIMIT ${MAX_PER_DRAIN}`,
+    `SELECT * FROM sync_outbox
+      WHERE group_id IN (${holes})
+      ORDER BY queued_at ASC LIMIT ${MAX_PER_DRAIN}`,
+    sendable,
   );
 }
 

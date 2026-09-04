@@ -11,7 +11,19 @@ export type TxnApproval = {
   decided_at: number | null;
   /** Where an incoming transfer actually landed for me. Null for everything else. */
   landed_pay_method: string | null;
+  /** 1 when the author has retracted an entry I already accepted. See the schema. */
+  pending_delete: number;
 };
+
+/**
+ * Two shapes of "waiting on me", and they are not the same question.
+ *
+ * `state = 'pending'` is an entry that has never counted. `pending_delete = 1` is
+ * an entry that IS counting and whose author now says it should not. Both need a
+ * decision from me; only the first is excluded from my money figures, which is
+ * why they cannot share one column.
+ */
+const AWAITING_ME = `(a.state = 'pending' OR a.pending_delete = 1)`;
 
 /** Every entry still waiting on me, oldest arrival first. */
 export async function getPendingApprovals(db: SQLite.SQLiteDatabase): Promise<TxnApproval[]> {
@@ -22,7 +34,7 @@ export async function getPendingApprovals(db: SQLite.SQLiteDatabase): Promise<Tx
     // or the badge — the two writes in `rejectTxn` are not atomic (see there).
     `SELECT a.* FROM txn_approval a
        JOIN txn t ON t.id = a.txn_id AND t.is_deleted = 0
-      WHERE a.state = 'pending' ORDER BY a.created_at ASC`,
+      WHERE ${AWAITING_ME} ORDER BY a.created_at ASC`,
   );
 }
 
@@ -31,7 +43,7 @@ export async function getPendingApprovalCount(db: SQLite.SQLiteDatabase): Promis
   const row = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM txn_approval a
        JOIN txn t ON t.id = a.txn_id AND t.is_deleted = 0
-      WHERE a.state = 'pending'`,
+      WHERE ${AWAITING_ME}`,
   );
   return row?.n ?? 0;
 }
@@ -62,6 +74,26 @@ export async function approveTxn(
   landedPayMethod?: PayMethod | null,
 ): Promise<void> {
   const now = Date.now();
+  /*
+   * A retraction is approved by APPLYING it — agreeing that the entry should go.
+   *
+   * Read before the transaction because `softDeleteTxn` opens its own and
+   * expo-sqlite cannot nest, so this cannot all be one write. Order is what keeps
+   * it safe: clear the flag first, so a failure between the two leaves the entry
+   * counting and un-flagged (asked again on the next sync) rather than silently
+   * gone — the same "fail toward still-visible" reasoning as `rejectTxn`.
+   */
+  const retraction = await db.getFirstAsync<{ n: number }>(
+    'SELECT 1 AS n FROM txn_approval WHERE txn_id = ? AND pending_delete = 1', [txnId],
+  );
+  if (retraction) {
+    await db.runAsync(
+      `UPDATE txn_approval SET pending_delete = 0, state = 'approved', decided_at = ? WHERE txn_id = ?`,
+      [now, txnId],
+    );
+    await softDeleteTxn(db, txnId, false, true);
+    return;
+  }
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE txn_approval SET state = 'approved', decided_at = ?, landed_pay_method = ?
@@ -93,6 +125,24 @@ export async function approveTxn(
  * was told, which is the worst thing this app can do with money.
  */
 export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
+  /*
+   * Refusing a RETRACTION means "no, this did happen" — so the entry stays
+   * exactly where it is and only the flag clears. It must not fall through to the
+   * soft delete below, which would carry out the very removal I just refused.
+   *
+   * `dispute_state = 'raise'` still fires: the author needs to know I disagreed,
+   * and that is the same need the rejection path has.
+   */
+  const retraction = await db.getFirstAsync<{ n: number }>(
+    'SELECT 1 AS n FROM txn_approval WHERE txn_id = ? AND pending_delete = 1', [txnId],
+  );
+  if (retraction) {
+    await db.runAsync(
+      `UPDATE txn_approval SET pending_delete = 0, decided_at = ?, dispute_state = 'raise' WHERE txn_id = ?`,
+      [Date.now(), txnId],
+    );
+    return;
+  }
   // Two writes, NOT wrapped in a transaction: `softDeleteTxn` opens its own, and
   // expo-sqlite cannot nest. So the ORDER is what keeps every intermediate state
   // safe, and it is the deliberate one.

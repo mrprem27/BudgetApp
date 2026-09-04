@@ -48,30 +48,54 @@ export type IncomingEntry = {
   kind: 'expense' | 'income' | 'settlement';
   /** Does this entry name me as a payer or a sharer? */
   touchesMe: boolean;
+  /**
+   * Does a PAYMENT name me — is somebody asserting that my money already moved?
+   *
+   * Deliberately separate from `touchesMe` rather than a narrowing of it. The two
+   * mean different things and both are needed: `touchesMe` is "am I in this at
+   * all", which decides whether it is my business; this is "did they say I paid",
+   * which decides whether trust is even the right question.
+   *
+   * Optional so an older caller keeps compiling and keeps its previous meaning —
+   * absent is the same as false, which is the safe direction.
+   */
+  assertsIPaid?: boolean;
 };
 
 /**
  * Does this entry need my say-so before it counts?
  *
- * `appliesImmediately` asks "do I trust this person". This asks the prior
- * question — "is trust even the right test here" — and for one kind it is not.
+ * One sentence produces the whole function:
  *
- * **A transfer is always confirmed, however much I trust the sender.** Trust is
- * about honesty, and an incoming transfer fails for reasons neither person
- * controls: a declined UPI, a wrong VPA, a bank hold. The cost of being wrong is
- * also asymmetric in a way an expense's is not — "I paid you ₹5,000" credits cash
- * I may never have received *and* erases a real debt in the same write, so an
- * honest mistake quietly writes off money I am owed. An expense from someone I
- * trust only adds a cost I would have agreed to anyway.
+ * > **Trust means "I believe what you say we spent." It never means "I believe
+ * > what you say my money did."**
  *
- * The same reasoning applies whichever way the transfer points. If they claim I
- * paid them, my cash goes down on their say-so; if they claim they paid me, my
- * receivable goes down. Either way a figure of mine moves because someone else
- * said so, which is the thing this whole model exists to stop.
+ * Those are different claims. What we spent is a thing they watched happen and I
+ * can check against my own memory of the evening. What my money did is a fact
+ * about my bank that they cannot observe at all — and it fails for reasons neither
+ * of us controls: a declined UPI, a wrong VPA, a bank hold. Trusting someone's
+ * honesty is the wrong instrument for it, so no amount of trust waives it and no
+ * per-group override can either.
  *
- * Entries that do not name me at all still queue, because `simplify()` re-pairs
- * debts across the whole group — an expense between two other people can still
- * move who I owe.
+ * Three rules, in order:
+ *
+ * 1. **Not my money → never waits.** If neither a payment nor a share names me,
+ *    approving it moves not one of my figures, and asking is friction buying
+ *    nothing. This used to queue on the argument that `simplify()` can re-pair
+ *    debts across a group — true, but it changes *which* of two people I am told
+ *    to pay, never how much I owe, and it re-derives on every read. A prompt that
+ *    cannot change a number is not a safeguard.
+ * 2. **They said my money moved → always ask.** A payment naming me, or a transfer
+ *    naming me. "You paid ₹4,000" takes cash out on their say-so; "I paid you
+ *    ₹5,000" credits cash I may never have received *and* erases a real debt in
+ *    the same write. Both are claims about my account.
+ * 3. **Otherwise → trust decides.** A share I owe is a cost I would have agreed to
+ *    anyway, and that is the ordinary case: someone else paid, we all owe a piece.
+ *    This is what keeps trust worth having.
+ *
+ * A settlement between two OTHER people follows rule 1 with everyone else. My net
+ * is unchanged by it, and asking me to vouch for a payment I did not watch would
+ * be a monthly interruption in exchange for no protection.
  */
 export function requiresMyApproval(
   author: TrustSubject,
@@ -80,25 +104,11 @@ export function requiresMyApproval(
   override?: string | null,
 ): boolean {
   if (author.is_me === 1) return false;
-  /*
-   * Ahead of trust, and ahead of any override: a transfer that NAMES ME is
-   * confirmed however much I trust the sender, in every group. No per-group answer
-   * can waive it, because the reason has nothing to do with the person's honesty.
-   *
-   * `touchesMe` is the precise boundary, and it is deliberate rather than an
-   * oversight — the invariant is sometimes stated as "a transfer always needs
-   * approval", which is broader than its own reasoning supports. Everything that
-   * makes a transfer different is about MY money: it credits cash I may never have
-   * received, and erases a real debt in the same write. A settlement between two
-   * OTHER people does neither. My net with the group is unchanged by it; only
-   * which of them `simplify()` tells me to pay can shift, and that re-derives on
-   * every read. So it follows the ordinary trust rule: from someone on review it
-   * waits, like all their entries, and from someone I have trusted it applies.
-   *
-   * Asking me to "approve" a payment between two people I did not watch make it
-   * would be asking me to vouch for something I cannot check, every month, in
-   * exchange for no protection at all.
-   */
-  if (entry.kind === 'settlement' && entry.touchesMe) return true;
+  // Rule 1. Nothing of mine is named, so nothing of mine can move.
+  if (!entry.touchesMe) return false;
+  // Rule 2. Ahead of trust and ahead of any override, because the reason has
+  // nothing to do with this person's honesty.
+  if (entry.assertsIPaid || entry.kind === 'settlement') return true;
+  // Rule 3.
   return !appliesImmediately(author, override);
 }

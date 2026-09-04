@@ -197,9 +197,18 @@ export async function ingestPeerTxn(
    */
   if (existing && env.version <= existing.sync_version) return { ok: false, reason: 'stale' };
 
-  // Does this need my say-so? A transfer always does, however much I trust them —
-  // see `requiresMyApproval` for why trust is the wrong test for money arriving.
+  // Does this need my say-so? See `requiresMyApproval` for the three rules.
+  //
+  // Two separate questions, and both are needed. `touchesMe` is "am I in this at
+  // all" — if not, none of my figures can move and it never waits. `assertsIPaid`
+  // is "did they say the money came out of MY pocket", which is a claim about my
+  // bank rather than about our dinner, and no amount of trust settles it.
+  //
+  // Note the second reads `payments` ONLY. A share is what I consumed; a payment
+  // is what I am said to have handed over, and it is the payment rows that
+  // `CASH_TOTALS_SQL` turns into a movement of my cash.
   const touchesMe = [...env.payments, ...env.shares].some(r => r.personId === me.id);
+  const assertsIPaid = env.payments.some(p => p.personId === me.id);
 
   /*
    * A decision I have already made cannot be edited away.
@@ -244,9 +253,33 @@ export async function ingestPeerTxn(
     ));
 
   const applied = !wasRejected
-    && (fromAcceptedRule || !requiresMyApproval(author, { kind: env.kind, touchesMe }, groupTrust));
+    && (fromAcceptedRule
+      || !requiresMyApproval(author, { kind: env.kind, touchesMe, assertsIPaid }, groupTrust));
   const now = Date.now();
-  const deleted = env.isDeleted ? 1 : 0;
+
+  /*
+   * A retraction of something that is COUNTING for me needs my say-so (F14).
+   *
+   * Editing an entry already re-opens my approval — an entry I accepted at ₹4,000
+   * arriving at ₹40,000 moves nothing until I look again. Deleting skipped that
+   * entirely: `is_deleted` was written whatever `applied` said, and every reader
+   * filters it with no reference to approval state, so my numbers moved back in
+   * silence. Careful about the edit, unchecked about the erase.
+   *
+   * Narrow on purpose — it gates only the case that actually costs something:
+   *   * the entry must already exist here (nothing to retract otherwise);
+   *   * it must name me (rule 1 — if none of my figures move, do not ask);
+   *   * and it must be counting NOW. A retraction of something still waiting, or
+   *     one I already rejected, applies immediately: nothing of mine ever moved,
+   *     so nothing of mine moves back, and asking would be theatre.
+   */
+  const holdRetraction = !!(
+    env.isDeleted && existing && touchesMe
+    && !(await db.getFirstAsync<{ n: number }>(
+      "SELECT 1 AS n FROM txn_approval WHERE txn_id = ? AND state IN ('pending','rejected')", [id],
+    ))
+  );
+  const deleted = env.isDeleted && !holdRetraction ? 1 : 0;
 
   await db.withTransactionAsync(async () => {
     if (existing) {
@@ -320,14 +353,33 @@ export async function ingestPeerTxn(
      * needs one — is deliberate too: nothing is waiting on me any more, so
      * leaving it pending would strand the entry with no way to resolve it.
      */
-    if (!applied) {
+    if (holdRetraction) {
+      /*
+       * A held retraction, and the shape is deliberately NOT 'pending'.
+       *
+       * `state` stays 'approved' so `NOT_AWAITING_APPROVAL` keeps counting the
+       * entry — I accepted it and have not changed my mind, so it must go on
+       * being my money until I do. `pending_delete` is what puts it in front of
+       * me. Using 'pending' here would make their retraction take effect the
+       * instant it arrived, which is the whole bug.
+       */
+      await db.runAsync(
+        `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at, pending_delete)
+         VALUES (?, 'approved',
+                 COALESCE((SELECT created_at FROM txn_approval WHERE txn_id = ?), ?),
+                 NULL, 1)`,
+        [id, id, now],
+      );
+    } else if (!applied) {
       await db.runAsync(
         `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at)
          VALUES (?, 'pending', ?, NULL)`,
         [id, now],
       );
     } else if (existing) {
-      await db.runAsync('DELETE FROM txn_approval WHERE txn_id = ?', [id]);
+      // Not on a deletion: the row carries my decision, and an applied deletion
+      // used to erase the record that I had ever approved the entry at all.
+      if (!env.isDeleted) await db.runAsync('DELETE FROM txn_approval WHERE txn_id = ?', [id]);
     }
     // Named, not anonymous. Reusing `insertTxnRows` would log "Added expense ₹X"
     // as though I had added it, in the one log a dispute would be settled from.

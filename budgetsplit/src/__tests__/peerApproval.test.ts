@@ -161,6 +161,65 @@ describe('a peer entry waiting on me', () => {
   });
 
   /**
+   * SYNC-F13 — the one that was live.
+   *
+   * The envelope above names AARAV as the payer, so trusting him only ever added
+   * a cost I would have agreed to. This one says *I* paid. That is not a claim
+   * about our dinner, it is a claim about my bank — and `CASH_TOTALS_SQL` turns a
+   * payment row naming me straight into cash leaving my pocket.
+   *
+   * It used to apply on arrival, because only settlements were force-confirmed.
+   */
+  it('asks before letting a trusted author say that I paid', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    const before = await snapshot(db, me);
+
+    const res = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      payments: [{ personId: me, amount: BILL }],
+    });
+
+    expect(res).toMatchObject({ ok: true, applied: false });
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+    // The whole point: my cash has not moved, and neither has anything else.
+    expect(await snapshot(db, me)).toEqual(before);
+  });
+
+  it('lets an entry that names me nowhere through, from anyone', async () => {
+    // Rule 1. Aarav pays, Aarav consumes — I am not in it. Approving this could
+    // not move one of my figures, so asking me was friction buying nothing.
+    // Deliberately from an author on REVIEW, which is the case that used to queue.
+    const { db, me, aarav, flat } = await setup();
+    const before = await snapshot(db, me);
+
+    const res = await ingestPeerTxn(asDb(db), {
+      ...envelope(flat, me, aarav),
+      shares: [{ personId: aarav, amount: BILL }],
+    });
+
+    expect(res).toMatchObject({ ok: true, applied: true });
+    expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+
+    /*
+     * Every MONEY figure of mine is untouched — which is the claim, and the
+     * reason asking me was pointless.
+     *
+     * Not the whole snapshot: `txnCount` and `firstTxnMs` do move, and should.
+     * They come from `getLedgerStats`, the health score's minimum-data gate,
+     * which counts rows in my database rather than rupees of mine — and the
+     * entry genuinely is in my database now. Asserting they stay still would be
+     * asserting that an applied entry was not applied.
+     */
+    const after = await snapshot(db, me);
+    expect(after.owe).toBe(before.owe);
+    expect(after.owed).toBe(before.owed);
+    expect(after.cashAvailable).toBe(before.cashAvailable);
+    expect(after.budgetSpent).toBe(before.budgetSpent);
+    expect(after.budgetSharedSpent).toBe(before.budgetSharedSpent);
+    expect(after.raidTotal).toBe(before.raidTotal);
+  });
+
+  /**
    * The reason `txn_approval` is its own table. `updateTxn` DELETEs and re-INSERTs
    * every share and payment row, so an approval stored on those would vanish here
    * — and the entry would silently start counting without my ever accepting it.
@@ -603,15 +662,67 @@ describe('an edit from a peer', () => {
     expect((await snapshot(db, me)).owe).toBe(0);
   });
 
-  it('carries a deletion the author made, and it moves my numbers back', async () => {
+  /**
+   * SYNC-F14. This test used to assert the opposite, and its old title was the bug
+   * report: *"carries a deletion the author made, and it moves my numbers back"*.
+   *
+   * Editing already re-opened my approval; deleting skipped it entirely, because
+   * `is_deleted` was written whatever the gate said and every reader filters it
+   * with no reference to approval state. Careful about the edit, unchecked about
+   * the erase — and the erase is the one with no undo.
+   */
+  it('holds a retraction of something I accepted, and my numbers do not move', async () => {
     const { db, me, aarav, flat } = await setup({ trusted: true });
     await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
     expect((await snapshot(db, me)).owe).toBe(MY_SHARE);
 
     await ingestPeerTxn(asDb(db), { ...edited(flat, me, aarav, 2, BILL), isDeleted: true });
 
+    // Still counting, still visible — I accepted it and have not changed my mind.
+    expect((await snapshot(db, me)).owe).toBe(MY_SHARE);
+    expect(await getTransactionsForGroup(asDb(db), flat)).toHaveLength(1);
+    // ...but it is in front of me now.
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+  });
+
+  it('carries out the retraction once I agree to it', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    await ingestPeerTxn(asDb(db), { ...edited(flat, me, aarav, 2, BILL), isDeleted: true });
+
+    await approveTxn(asDb(db), 'entry-1');
+
     expect((await snapshot(db, me)).owe).toBe(0);
     expect(await getTransactionsForGroup(asDb(db), flat)).toHaveLength(0);
+    expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+  });
+
+  it('keeps the entry when I refuse the retraction — "no, this did happen"', async () => {
+    const { db, me, aarav, flat } = await setup({ trusted: true });
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    await ingestPeerTxn(asDb(db), { ...edited(flat, me, aarav, 2, BILL), isDeleted: true });
+
+    await rejectTxn(asDb(db), 'entry-1');
+
+    // Refusing a retraction must NOT fall through to the ordinary reject path,
+    // which soft-deletes — that would carry out the very removal I just refused.
+    expect((await snapshot(db, me)).owe).toBe(MY_SHARE);
+    expect(await getTransactionsForGroup(asDb(db), flat)).toHaveLength(1);
+    expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+  });
+
+  it('applies a retraction of something still waiting, without asking', async () => {
+    // Nothing of mine ever moved, so nothing of mine moves back. Asking here
+    // would be theatre — the author has withdrawn a claim I had not accepted.
+    const { db, me, aarav, flat } = await setup();
+    await ingestPeerTxn(asDb(db), edited(flat, me, aarav, 1, BILL));
+    expect(await getPendingApprovalCount(asDb(db))).toBe(1);
+
+    await ingestPeerTxn(asDb(db), { ...edited(flat, me, aarav, 2, BILL), isDeleted: true });
+
+    expect(await getTransactionsForGroup(asDb(db), flat)).toHaveLength(0);
+    expect(await getPendingApprovalCount(asDb(db))).toBe(0);
+    expect((await snapshot(db, me)).owe).toBe(0);
   });
 });
 

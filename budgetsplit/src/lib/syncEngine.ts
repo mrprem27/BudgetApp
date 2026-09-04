@@ -260,15 +260,18 @@ async function drain(
   secret: Uint8Array,
 ): Promise<{ pushed: number; conflicts: string[] }> {
   const keys = await keyring(groups, secret);
-  const queued = await pendingUploads(db);
+  // Ask only for rows we could actually send. A group with no key is still queued
+  // and still waiting — it is just not allowed to occupy the page and starve a
+  // group that IS sendable. See `pendingUploads`.
+  const queued = await pendingUploads(db, [...keys.keys()]);
   let pushed = 0;
   const conflicts: string[] = [];
 
   for (const row of queued) {
     const key = keys.get(row.group_id);
-    // Not published yet, or this device has no wrap for it. Leave it queued:
-    // it will go the moment the group is shareable, and dropping it would lose
-    // the change with nothing to show it was ever made.
+    // Belt and braces: the query already excluded these. Kept because the key can
+    // in principle go away between the query and here, and a missing key must
+    // never mean "send it unsealed".
     if (!key) continue;
 
     const entry = await readEntryDoc(db, row.entry_id);

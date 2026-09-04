@@ -1,5 +1,5 @@
 import { insertTxn, insertItemizedTxn, updateTxn, softDeleteTxn } from '../db/queries/transactions';
-import { pendingUploads, pendingUploadCount, markDelivered } from '../db/queries/syncOutbox';
+import { pendingUploads, pendingUploadCount, markDelivered, MAX_PER_DRAIN } from '../db/queries/syncOutbox';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
 import { deleteGroup } from '../db/queries/groups';
 import { pullCursor, setPullCursor, archiveVanishedGroup } from '../db/queries/syncDoc';
@@ -37,7 +37,7 @@ describe('sync outbox', () => {
   it('queues a shared-group entry the moment it is written', async () => {
     const { db, me, shared } = await setup();
     const id = await insertTxn(asDb(db), expense(shared, me));
-    expect((await pendingUploads(asDb(db))).map(r => r.entry_id)).toEqual([id]);
+    expect((await pendingUploads(asDb(db), [shared])).map(r => r.entry_id)).toEqual([id]);
   });
 
   it('never queues anything personal', async () => {
@@ -58,7 +58,7 @@ describe('sync outbox', () => {
       ...expense(shared, me), entryMode: 'itemized',
       items: [{ name: 'Coffee', qty: 1, unitPrice: 50000, assignedTo: [me] }],
     });
-    expect((await pendingUploads(asDb(db))).map(r => r.entry_id)).toContain(id);
+    expect((await pendingUploads(asDb(db), [shared])).map(r => r.entry_id)).toContain(id);
   });
 
   it('collapses repeated edits of one entry into a single queued row', async () => {
@@ -80,7 +80,7 @@ describe('sync outbox', () => {
     const id = await insertTxn(asDb(db), expense(shared, me));
     await markDelivered(asDb(db), id);
     await softDeleteTxn(asDb(db), id);
-    expect((await pendingUploads(asDb(db))).map(r => r.entry_id)).toEqual([id]);
+    expect((await pendingUploads(asDb(db), [shared])).map(r => r.entry_id)).toEqual([id]);
   });
 
   it('follows an entry moved from personal into a shared group', async () => {
@@ -93,7 +93,7 @@ describe('sync outbox', () => {
       id, groupId: shared, kind: 'expense', date: Date.now(), category: 'Food',
       payments: [{ personId: me, amount: 50000 }], shares: [{ personId: me, amount: 50000 }],
     });
-    expect((await pendingUploads(asDb(db))).map(r => r.entry_id)).toEqual([id]);
+    expect((await pendingUploads(asDb(db), [shared])).map(r => r.entry_id)).toEqual([id]);
   });
 
   /**
@@ -114,6 +114,48 @@ describe('sync outbox', () => {
     });
     expect(res.ok).toBe(true);
     expect(await pendingUploadCount(asDb(db))).toBe(0);
+  });
+
+  /**
+   * SYNC-F18 — head-of-line starvation.
+   *
+   * A page is `ORDER BY queued_at ASC LIMIT 50`, and the drain used to fetch that
+   * page and then skip past every row whose group it had no key for, without
+   * removing it. So an unshared group holding more than fifty rows — the ordinary
+   * state of a group you made months ago and never invited anyone to — filled every
+   * page forever, and a group you HAD shared never got its turn. Nothing aged them
+   * out, so the jam was permanent rather than temporary.
+   *
+   * Fifty-one, not fifty: fifty exactly would still leave room for nothing, but it
+   * would pass a version of this bug that used `<` somewhere. One past the cap is
+   * the first count that can starve.
+   */
+  it('is not starved by an older group this device cannot send', async () => {
+    const { db, me, shared } = await setup();
+    const unshared = addGroup(db, 'Weekend Plans');
+    addMember(db, unshared, me);
+
+    for (let i = 0; i < MAX_PER_DRAIN + 1; i += 1) {
+      await insertTxn(asDb(db), expense(unshared, me));
+    }
+    const wanted = await insertTxn(asDb(db), expense(shared, me));
+
+    // Everything is queued — nothing was dropped for being unsendable.
+    expect(await pendingUploadCount(asDb(db))).toBe(MAX_PER_DRAIN + 2);
+
+    // But a drain that can only open `shared` is offered only `shared`'s row,
+    // however much older the other group's backlog is.
+    const page = await pendingUploads(asDb(db), [shared]);
+    expect(page.map(r => r.entry_id)).toEqual([wanted]);
+  });
+
+  it('asks for nothing when this device can open no group at all', async () => {
+    // `IN ()` is a syntax error in SQLite, so the empty case has to short-circuit
+    // rather than build a query — and it is the normal state before sharing.
+    const { db, me, shared } = await setup();
+    await insertTxn(asDb(db), expense(shared, me));
+    expect(await pendingUploads(asDb(db), [])).toEqual([]);
+    expect(await pendingUploadCount(asDb(db))).toBe(1);
   });
 
   it('forgets an entry only once it has been delivered', async () => {
