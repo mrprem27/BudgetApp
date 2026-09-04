@@ -10,7 +10,10 @@ import { getTransactionsForGroup } from '../../src/db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
-import { getGroupMembers, getMe } from '../../src/db/queries/persons';
+import { getGroupMembers, getMe, setTrustState } from '../../src/db/queries/persons';
+import { asTrustState } from '../../src/constants/enums';
+import { confirmAsync } from '../../src/lib/confirm';
+import { trustMeans } from '../../src/lib/trustCopy';
 import { getGroupNet } from '../../src/db/queries/balances';
 import { getCategoryBudgetStatus } from '../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../src/lib/budget';
@@ -52,6 +55,7 @@ export default function GroupDetailScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [simplifyOn, setSimplifyOn] = useState(true);
+  const [trusting, setTrusting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   // A budget write moves Home's pace and Insights, so it needs the global signal.
   const { refresh } = useDataRefresh();
@@ -175,6 +179,46 @@ export default function GroupDetailScreen() {
   const settlements = useMemo(() => (simplifyOn ? simplifiedSettles : rawDebts(settled)), [simplifyOn, simplifiedSettles, settled]);
   const personMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
   const contributions = useMemo(() => computeContributions(settled, members, net), [settled, members, net]);
+
+  /*
+   * Who this button would actually change: people in this group who have an
+   * account and are not already trusted. Excludes me, and excludes anyone with
+   * no `remote_uid` — their setting is inert either way, so counting them would
+   * make the button offer to do something it cannot.
+   */
+  const trustable = useMemo(
+    () => members.filter(m => m.is_me !== 1 && m.remote_uid != null && asTrustState(m.trust_state) !== 'trusted'),
+    [members],
+  );
+
+  /**
+   * Trust everyone here, in one tap — by writing each PERSON.
+   *
+   * Nothing is stored on the group, so somebody added next month still starts on
+   * "asks me". A group-level flag would have been one column and would have
+   * silently extended trust to whoever is invited next, which is exactly what
+   * `IV-10` forbids and why trust has never been group-shaped.
+   */
+  async function handleTrustAll() {
+    if (trusting || trustable.length === 0) return;
+    const names = trustable.map(m => m.name).join(', ');
+    const ok = await confirmAsync(
+      `Trust everyone in ${group?.name ?? 'this group'}?`,
+      `${trustMeans(names)} This applies to them everywhere, not only here — trust is about a person, `
+      + 'not a group, so anyone added later still waits for you.',
+      'Trust them',
+    );
+    if (!ok) return;
+    setTrusting(true);
+    try {
+      for (const m of trustable) await setTrustState(db, m.id, 'trusted');
+      haptic.success();
+      await reload();
+      refresh();
+    } finally {
+      setTrusting(false);
+    }
+  }
   const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
   const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
   const totalSpent = useMemo(
@@ -294,6 +338,8 @@ export default function GroupDetailScreen() {
           onSettlePair={(from, to, amount) => router.push(`/add/quick?kind=transfer&from=${from}&to=${to}&amount=${amount}&groupId=${id}`)}
           groupName={group.name}
           contributions={contributions}
+          trustAllCount={trustable.length}
+          onTrustAll={trustable.length > 0 ? handleTrustAll : undefined}
         />
       )}
 

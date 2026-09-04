@@ -173,7 +173,7 @@ right-slide push.
 
 ## 3. Screen index (S-XX)
 
-Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 44 route files under
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route files under
 `app/`; expo-router registers each implicitly by filename.
 
 ### 3.1 Shell / layout (not user-visible screens)
@@ -241,6 +241,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 44 route f
 |---|---|---|---|
 | S-24 | **Feature management** | `app/features.tsx` | Non-toggleable "Core" pillars + the switchable modules in sections. Every switch here changes something. Location tagging sits in this list but writes to `settings`, not the flag namespace — deliberately, because it must await an OS grant and refuse if denied (§17). |
 | S-25 | **Categories** | `app/categories.tsx` | Global category catalog (expense / income / transfer), sectioned. Create, rename, delete, and **adopt** an uncategorized name. Self-heals an empty catalog. |
+| S-45 | **Who can add to my ledger** | `app/trust.tsx` | The one place that answers it. Everyone who could write to your numbers, in three groups — **counts straight away**, **waits for you**, and **cannot reach you yet** (no linked account, so the setting is stored and inert; listing them as "waiting" would reassure in the wrong direction). A per-group exception is named on the row rather than hidden behind a tap. Tapping a row opens the same `TrustSheet` the person screen uses, so the two cannot drift. Carries the standing note that trusting somebody is not handing over the keys: even a trusted person is asked before anything claiming YOUR money moved. Reached from Settings → Security and from the `/approvals` empty state. |
 | S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
 | S-26a | **Person detail** | `app/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Settle from here. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
 | S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |

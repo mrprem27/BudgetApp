@@ -18,8 +18,12 @@
  * the second one is what made the copy wrong rather than just inconsistent:
  *
  * 1. Their entries count immediately, in every group you share.
- * 2. Money arriving as a transfer still waits for you, every time — "did that reach
- *    me, and where" is not a question about honesty (`lib/trust.ts`, AGENTS §13).
+ * 2. Anything claiming YOUR OWN money moved still waits for you, every time —
+ *    whether they say you paid a bill or that they paid you back. "Did that leave
+ *    my account, and where did it land" is not a question about their honesty; it
+ *    fails on a declined UPI, a wrong VPA or a bank hold (`lib/trust.ts`, AGENTS
+ *    §13). Trust means "I believe what you say we spent", never "I believe what
+ *    you say my money did".
  *
  * Trust is **per person, never per group** (§13), with a per-person-per-group
  * exception that must stay clearable.
@@ -30,8 +34,9 @@
 
 /** What trust does, as one sentence. The `and` clause is not optional — see above. */
 export const trustMeans = (name: string): string =>
-  `Anything ${name} adds in a group you share counts straight away, without waiting for you. `
-  + 'Money they say they have sent you still has to be confirmed each time.';
+  `Anything ${name} adds that only costs you a share counts straight away, without waiting for you. `
+  + 'Anything saying your own money moved — that you paid, or that they paid you — '
+  + 'still has to be confirmed each time.';
 
 /** What NOT trusting does. The mirror, so the two read as one choice. */
 export const reviewMeans = (name: string): string =>
@@ -84,3 +89,16 @@ export const trustAndApproveLabel = (name: string, count: number): string =>
 
 export const trustAndApproveBody = (name: string, count: number): string =>
   `${trustMeans(name)}${count > 0 ? ` The ${count === 1 ? 'entry' : `${count} entries`} waiting here will be accepted now.` : ''}`;
+
+/**
+ * The standing reassurance, for a surface listing several people at once.
+ *
+ * Trusting somebody is not handing over the keys, and a screen full of toggles has
+ * to say so where the toggles are — not two taps away inside a confirm dialog that
+ * only appears once you have already decided. Names no person, because it is true
+ * of everyone on the list.
+ */
+export const trustStandingNote = (): string =>
+  'Even someone set to count straight away is asked first when an entry says your own '
+  + 'money moved — that you paid it, or that they paid you back. That is never a '
+  + 'question about their honesty.';

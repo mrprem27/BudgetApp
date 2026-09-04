@@ -34,6 +34,20 @@ type Props = {
   onSettlePair: (from: string, to: string, amount: number) => void;
   groupName: string;
   /**
+   * Trust everyone currently in this group, in one tap.
+   *
+   * A BUTTON, never a setting on the group. A stored group-level flag would
+   * silently extend trust to whoever is added next month — somebody you have
+   * never met gaining the ability to move your money by being invited. Writing
+   * each person instead gives the same one tap and cannot do that: a new member
+   * still starts on "asks me" (`IV-10`).
+   *
+   * Absent when there is nobody to trust, or when nobody here has an account yet.
+   */
+  onTrustAll?: () => void;
+  /** How many people this would actually change, for the label. */
+  trustAllCount?: number;
+  /**
    * Who paid what, and each member's distance from a fair share. Moved here from the
    * Budget tab, where it sat between the budget hero and the category list: it's a
    * settlement concern, and the people and balances it talks about are on this tab.
@@ -44,7 +58,7 @@ type Props = {
 
 /** Group Members tab: balances summary, collapsible member list, invite, simplify
  *  toggle, and the settlement (who-owes-whom) list. Owns the expand state. */
-export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, contributions, refreshing, onRefresh }: Props) {
+export function MembersTab({ members, net, meId, totalSpent, settlements, personMap, simplifyOn, onToggleSimplify, onInvite, onSettlePair, groupName, contributions, refreshing, onRefresh, onTrustAll, trustAllCount = 0 }: Props) {
   const [membersExpanded, setMembersExpanded] = useState(false);
   const bottomPad = useContentInset({ fab: true });
   const myNet = net[meId] ?? 0;
@@ -140,6 +154,15 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         <Feather name="user-plus" size={16} color={colors.accent} />
         <Text style={styles.inviteBtnText}>Invite someone</Text>
       </TouchableOpacity>
+
+      {onTrustAll && trustAllCount > 0 && (
+        <TouchableOpacity style={styles.inviteBtn} onPress={onTrustAll} accessibilityRole="button">
+          <Feather name="shield" size={16} color={colors.accent} />
+          <Text style={styles.inviteBtnText}>
+            {`Trust everyone in ${groupName}`}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>

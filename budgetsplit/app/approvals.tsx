@@ -66,8 +66,11 @@ export default function ApprovalsScreen() {
               // Every other empty state offers a way forward; this one left you on a
               // dead screen with a back button. Who may write to you is the thing this
               // screen is actually about, so that is where it sends you.
+              //
+              // Pointed at /friends when it shipped, which does not mention trust at
+              // all — the label promised something its destination could not do.
               actionLabel="Manage who you trust"
-              onAction={() => router.push('/friends')}
+              onAction={() => router.push('/trust')}
             />
           ) : (
             byAuthor.map(group => (

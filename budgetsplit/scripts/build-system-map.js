@@ -334,7 +334,7 @@ const AREAS = [
     blurb: 'The optional half. An account buys off-device backup and shared-group sync and nothing else. Built end to end, encrypted per group — and no part of it has run on a phone.',
     ent: ['E-18','E-19','E-20','E-21','E-22','E-65','E-82','E-87','E-88','E-89'],
     fl:  ['FL-11','FL-24','FL-25','FL-27','FL-28','FL-29','FL-30','FL-31','FL-32','FL-49'],
-    sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44'],
+    sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44','SC-45'],
     fe:  ['FE-16','FE-52','FE-53','FE-54','FE-55','FE-56','FE-57','FE-58','FE-59'],
     ov:  [],
     dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-28','DQ-29','DQ-31','DQ-32','DQ-85','DQ-86'],

@@ -388,6 +388,13 @@ export default function SettingsScreen() {
       {/* SECURITY */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={styles.card}>
+        {/* Under Security, not under People: this is the answer to "who can write
+            to my numbers", which is a question about exposure rather than about
+            contacts. It was previously answerable only one person at a time. */}
+        {flags.splitting && (<>
+          <SettingsRow icon="shield" label="Who can add to my ledger" onPress={() => { router.push('/trust'); }} />
+          <View style={settingsRowDivider} />
+        </>)}
         <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={toggleLock} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />

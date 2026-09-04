@@ -665,7 +665,7 @@ BudgetApp/
 │   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
 │   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
 │   │   ├── group/[id].tsx       # Group hub + [id]/{budget,edit,members}
-│   │   └── …                    # 44 routes in total
+│   │   └── …                    # 45 routes in total
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── ui/              # Generic primitives, domain-free

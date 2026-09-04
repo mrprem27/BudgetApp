@@ -175,7 +175,7 @@ heading is how a document starts lying.
 ### What it is
 
 A **personal-finance app and a bill-splitting app in one**, local-first, for the India pilot.
-44 screens, 22 SQLite tables, 112 `src/lib` modules, 16 feature flags.
+45 screens, 22 SQLite tables, 113 `src/lib` modules, 16 feature flags.
 
 The two halves are not bolted together — they share one ledger and are kept honest by one rule
 (§5 `IV-08`): **the group ledger records what happened; your personal ledger records what it cost
@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (112 modules) and touches neither
+`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (113 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1894,7 +1894,7 @@ started this document.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-44 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42`, `SC-43` and `SC-44` are new: `/assets`, `/settings/sync` and
 `/settings/sync-log` had no ID and no behaviour section anywhere before this document.
 
@@ -1992,6 +1992,7 @@ taps are listed separately below and are not in the count.
 | `SC-23` | `/search` | 3-year search, month-sectioned | 1 | A **ledger**, not an analysis surface |
 | `SC-25` | `/categories` | The global catalog | 1 | |
 | `SC-26` | `/friends` | People | 2 | |
+| `SC-45` | `/trust` | **Who can add to my ledger** — trust for everyone, in one list | 2 | Three groups, not two: the third is people with no account, whose setting is inert |
 | `SC-26a` | `/person/[id]` | One person, across every group | 2 | |
 | `SC-28` | `/history` | Audit log | 4 | |
 | `SC-40` | `/approvals` | Entries waiting on you | 2 | **Reachable** — the old doc said otherwise |
@@ -2065,6 +2066,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-40` | **Home** → the *waiting for you* badge at the top right |
 | `SC-41` | **Plan** → the repeat icon → tap a rule. Also where a renewal reminder lands |
 | `SC-42` | **Plan** → tap Total money → **Assets** |
+| `SC-45` | **Settings → Security → Who can add to my ledger**. Also the empty state of the *waiting for you* queue |
 | `SC-43` | **Settings → Sync** |
 | `SC-44` | **Settings → Sync → Sync log** |
 
@@ -2103,7 +2105,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 5 of 44 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 5 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of
@@ -4715,7 +4717,7 @@ OV-06 · Categories are referenced by NAME, not by id            [split-storage]
               is a product decision, not a schema one.  → DQ-16
   Verdict. NEEDS-DECISION.
 
-OV-10 · backOr is used in 5 of 44 route files            [path-duplication]
+OV-10 · backOr is used in 5 of 45 route files            [path-duplication]
   lib/nav.ts documents exactly the cold-start-empty-stack failure it fixes. ~40
   bare router.back() calls remain. Safe today only because nothing deep-links into
   those screens — and FL-44 adds deep links.

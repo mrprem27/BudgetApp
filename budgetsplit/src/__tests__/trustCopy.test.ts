@@ -22,6 +22,19 @@ describe('what trust means is said once, and said fully', () => {
     expect(s).toMatch(/confirmed each time/i);
   });
 
+  it('covers BOTH directions of "my money moved", not just money arriving', () => {
+    /*
+     * The carve-out widened when `requiresMyApproval` did. It used to gate only an
+     * incoming transfer, so the copy only mentioned money they say they sent —
+     * and then "you paid this ₹4,000" started waiting too, which the sentence did
+     * not admit. A rule the app enforces and the copy under-states is the same
+     * class of wrong as one it over-states: the user calibrates on the words.
+     */
+    const s = trustMeans('Aarav');
+    expect(s).toMatch(/you paid/i);
+    expect(s).toMatch(/they paid you/i);
+  });
+
   it('states the mirror for not trusting, including what is already accepted', () => {
     const s = reviewMeans('Aarav');
     expect(s).toMatch(/waits for your approval/i);
