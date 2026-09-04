@@ -15,6 +15,16 @@ const DISMISS_DY = 90;   // px dragged past which we dismiss
 const DISMISS_VY = 800;  // px/s flick velocity past which we dismiss
 /** Must match the close timing below — {@link SheetModal} waits this long before unmounting. */
 export const SHEET_EXIT_MS = 200;
+/**
+ * How long the entrance spring takes to settle, near enough.
+ *
+ * A spring has no duration, so this is measured rather than derived: at
+ * `damping 16, stiffness 170, mass 0.7` the sheet is visually parked by ~380ms.
+ * It exists so a caller can wait for the sheet to ARRIVE before doing something
+ * that fights the animation — focusing a field, in practice. Slightly generous on
+ * purpose: focusing a frame late is invisible, focusing early is the jank.
+ */
+export const SHEET_ENTER_MS = 380;
 
 type Props = {
   /** Called once the close animation finishes (e.g. router.back / setVisible(false)). */

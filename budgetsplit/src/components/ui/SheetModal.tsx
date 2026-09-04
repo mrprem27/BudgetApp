@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DraggableSheet, SHEET_EXIT_MS } from './DraggableSheet';
+import { DraggableSheet, SHEET_EXIT_MS, SHEET_ENTER_MS } from './DraggableSheet';
 import { joinStage, claimStage } from '../../lib/sheetStage';
 
 type Props = {
@@ -13,6 +13,15 @@ type Props = {
   scroll?: boolean;
   /** Optional control rendered at the right of the title row. */
   headerRight?: React.ReactNode;
+  /**
+   * Fired once the entrance has landed. For focusing a field.
+   *
+   * `autoFocus` fires at MOUNT — while the sheet is still mid-spring — so the
+   * keyboard came up underneath a moving sheet and the two animated over each
+   * other. Waiting is the whole fix: the sheet arrives, then the field takes
+   * focus, and there is one transition instead of two on top of each other.
+   */
+  onOpened?: () => void;
 };
 
 /**
@@ -47,10 +56,11 @@ type Props = {
  * one unmounts immediately, animation forfeited. Nobody watches a sheet leave while
  * another arrives; a stuck screen is not a trade-off.
  */
-export function SheetModal({ visible, onClose, title, children, scroll = true, headerRight }: Props) {
+export function SheetModal({ visible, onClose, title, children, scroll = true, headerRight, onOpened }: Props) {
   // Lags `visible` on the way down only; leads it on the way up.
   const [rendered, setRendered] = useState(visible);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stable identity for the lifetime of the instance: the stage holds this
   // reference, so a new closure per render would leak registrations.
@@ -65,12 +75,23 @@ export function SheetModal({ visible, onClose, title, children, scroll = true, h
 
   useEffect(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    if (visible) { claimStage(yieldNow.current!); setRendered(true); return; }
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (visible) {
+      claimStage(yieldNow.current!);
+      setRendered(true);
+      if (onOpened) {
+        openTimer.current = setTimeout(onOpened, SHEET_ENTER_MS);
+      }
+      return;
+    }
     // A slightly longer wait than the animation, so the final frame has landed before the
     // native view goes away.
     timer.current = setTimeout(() => setRendered(false), SHEET_EXIT_MS + 40);
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [visible]);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (openTimer.current) clearTimeout(openTimer.current);
+    };
+  }, [visible, onOpened]);
 
   return (
     <Modal visible={rendered} transparent animationType="none" onRequestClose={onClose}>

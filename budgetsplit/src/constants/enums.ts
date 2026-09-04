@@ -93,6 +93,27 @@ export const PAY_METHOD_ICON: Record<PayMethod, FeatherName> = {
 };
 
 /**
+ * What a PERSON may choose. `PAY_METHOD` is what a row may STORE (`OV-28`).
+ *
+ * `Autopay` is not a payment method, and the enum was the only place saying it is.
+ * It carries the `repeat` glyph, `payMethodBucket` folds it to `bank` so no money
+ * calculation treats it as its own thing, and it means what the recurring
+ * control's `RECUR_MODE = 'auto'` already means — on the same screen, two rows
+ * apart. Offering both made one screen ask the same question twice, and the
+ * answer the user reached first was the one that changed nothing.
+ *
+ * It stays in `PAY_METHOD` because it is the right answer for an **imported**
+ * row: a mandate debit genuinely arrives labelled "autopay", `payMethodDetect`
+ * matches it, and there is no rule on this device to carry `recurMode`. Detected,
+ * never picked — which is the whole distinction this constant exists to make.
+ *
+ * `Other` is deliberately KEPT. Hiding a legitimate answer pushes people onto a
+ * wrong one, and "I don't know" is a real state a ledger has to be able to hold.
+ */
+export const PAY_METHOD_CHOOSABLE: readonly PayMethod[] =
+  PAY_METHOD.filter(m => m !== PayMethod.Autopay);
+
+/**
  * Where incoming money can land. The same `pay_method` column, asked the other way
  * round: income arrives *into* cash, a bank account or a wallet — it never arrives
  * "by card" or "by autopay". Bank is the default because salary is the common case.

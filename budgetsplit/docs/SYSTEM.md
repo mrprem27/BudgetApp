@@ -4373,8 +4373,10 @@ OV-28 · Autopay is both a chosen method and a detected fact            [overloa
   Blast.   One array, plus a fallback for rows already carrying the value —
            which already render through PAY_METHOD_LABEL.
   Risk.    Low. Detection, storage and the cash fold are untouched.
-  Verdict. COLLAPSE.
-  Trigger. Now — it is one array, on the busiest screen in the app.
+  Verdict. COLLAPSE — **done 2026-09-04**. `PAY_METHOD_CHOOSABLE` is what a person
+           may pick; `PAY_METHOD` stays what a row may store, so detection and the
+           bank fold are unchanged. Held by payMethod.test.ts.
+  Trigger. —
 
 OV-29 · Onboarding asks how you pay twice, with different sets  [path-duplication]
   The N.   2 steps, one state. The `money` step renders PayMethodSelector over

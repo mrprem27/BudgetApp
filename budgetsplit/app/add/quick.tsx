@@ -69,7 +69,25 @@ export default function QuickAddScreen() {
   const accent = kindAccent(kind);
   const nudgeColor = f.nudgePct == null ? null : f.nudgePct > 0.2 ? colors.income : f.nudgePct > 0 ? colors.healthAmber : colors.expense;
 
-  const open = (s: QuickAddSheet) => { Keyboard.dismiss(); setSheet(s); };
+  /**
+   * Sheets that open their own text field, so the keyboard should STAY up.
+   *
+   * Dismissing it here started a ~250ms keyboard-down while the sheet was
+   * springing up, and the sheet's field then brought it straight back — three
+   * transitions, none aware of the others, for one tap. Leaving it up means the
+   * sheet slides over a layout that is not moving, and `DraggableSheet` never
+   * flips its keyboard padding either, which was the second half of the jank.
+   *
+   * NOT `tags`: that sheet opens onto the tags you have used before, and raising
+   * a keyboard over the list you came to pick from is worse than the extra tap.
+   * Its field is for adding a NEW tag, which is the rarer half.
+   */
+  const KEEPS_KEYBOARD: QuickAddSheet[] = ['note', 'voice'];
+
+  const open = (s: QuickAddSheet) => {
+    if (!KEEPS_KEYBOARD.includes(s)) Keyboard.dismiss();
+    setSheet(s);
+  };
   const pickReceipt = useAttachmentPicker({
     onPicked: f.setAttachmentUri,
     onOpenStorageSettings: () => router.push('/settings/storage'),
@@ -283,8 +301,6 @@ export default function QuickAddScreen() {
             payMethod={f.payMethod}
             onOpenPayMethod={() => open('payMethod')}
             isIncome={kind === 'income'}
-            txnDate={f.txnDate}
-            onOpenTime={() => open('time')}
             onSplitByItems={!isEditing && kind === 'expense' && flags.itemized
               ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
               : undefined}

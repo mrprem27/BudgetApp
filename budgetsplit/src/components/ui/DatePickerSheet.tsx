@@ -3,17 +3,30 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
-  addMonths, subMonths, isSameDay, isSameMonth, format,
+  addMonths, subMonths, addYears, isSameDay, isSameMonth, format,
 } from 'date-fns';
 import { monthLabel } from '../../lib/dateFormat';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from './SheetModal';
+import { Divider } from './Divider';
+import { ListRow } from './ListRow';
 
 type Props = {
   visible: boolean;
   value: number;       // epoch ms
   onClose: () => void;
   onChange: (ms: number) => void;
+  /**
+   * Show a "Time · 6:45 pm ›" row under the calendar, so one control answers
+   * WHEN rather than two chips answering half of it each.
+   *
+   * **Opt-in.** Three of this sheet's four callers have no business showing a
+   * time: a recurring END DATE has no time-of-day, and Review's filter bounds
+   * chain into their own time step. Only pass it where the entry genuinely
+   * carries a moment.
+   */
+  timeLabel?: string;
+  onPickTime?: () => void;
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -22,7 +35,7 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
  * A reload-friendly (no native module) calendar picker. Any past or future date
  * can be chosen; the selected date keeps the existing time-of-day.
  */
-export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
+export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, onPickTime }: Props) {
   // Guard against an invalid/NaN epoch — date-fns throws RangeError otherwise.
   const safeValue = Number.isFinite(value) ? value : Date.now();
   const [viewMonth, setViewMonth] = useState(() => new Date(safeValue));
@@ -44,6 +57,24 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
 
   return (
     <SheetModal visible={visible} onClose={onClose} title="Select date" scroll={false}>
+      {/*
+        Two rows, because a year is not twelve months of tapping.
+        
+        Month-only navigation made a date last March a twelve-tap journey — and
+        picking a day closes the sheet, so a mis-tap on the way sent you back to
+        the form to start again. That is what "if I select a date it goes back"
+        was actually about: not the dismiss, the distance.
+      */}
+      <View style={styles.navRow}>
+        <TouchableOpacity onPress={() => setViewMonth(m => addYears(m, -1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous year">
+          <Feather name="chevrons-left" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+        <Text style={styles.yearLabel}>{format(viewMonth, 'yyyy')}</Text>
+        <TouchableOpacity onPress={() => setViewMonth(m => addYears(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Next year">
+          <Feather name="chevrons-right" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.navRow}>
         <TouchableOpacity onPress={() => setViewMonth(m => subMonths(m, 1))} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
           <Feather name="chevron-left" size={22} color={colors.textPrimary} />
@@ -84,6 +115,19 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
         })}
       </View>
 
+      {onPickTime && (
+        <>
+          <Divider indent="none" />
+          <ListRow
+            icon="clock"
+            title="Time"
+            value={timeLabel}
+            onPress={onPickTime}
+            accessibilityLabel={`Time: ${timeLabel ?? 'not set'}. Change`}
+          />
+        </>
+      )}
+
       <TouchableOpacity style={styles.todayBtn} onPress={() => pick(new Date())} accessibilityRole="button">
         <Text style={styles.todayText}>Today</Text>
       </TouchableOpacity>
@@ -94,6 +138,9 @@ export function DatePickerSheet({ visible, value, onClose, onChange }: Props) {
 const styles = StyleSheet.create({
   navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs },
   monthLabel: { ...type.subheading, color: colors.textPrimary },
+  // Quieter than the month: the year is the coarse control and should not compete
+  // with the row people actually use most.
+  yearLabel: { ...type.label, color: colors.textSecondary, letterSpacing: 1 },
   weekRow: { flexDirection: 'row', marginTop: space.sm },
   weekday: { flex: 1, textAlign: 'center', ...type.caption, color: colors.textMuted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.xs },

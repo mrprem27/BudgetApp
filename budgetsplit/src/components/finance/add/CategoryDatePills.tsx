@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { format, isSameDay } from 'date-fns';
-import { shortDate } from '../../../lib/dateFormat';
+import { shortDate, timeOfDay } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
 import { IconCircle } from '../../ui/IconCircle';
 import { colors, space } from '../../tokens';
@@ -54,12 +54,22 @@ export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate,
         onPress={onCategory}
         accessibilityLabel={selectedCategory ? `${catWord}: ${selectedCategory.name}` : `Choose ${catWord.toLowerCase()}`}
       />
+      {/*
+        One chip for WHEN, not two.
+        
+        Date and time were separate chips answering halves of one question, which
+        cost a slot on the busiest screen in the app and made the row longer than
+        it needed to be. The time still shows — it is in the label — so nothing is
+        hidden; only editing it is one tap deeper, inside the date sheet, which is
+        where somebody adjusting when it happened already is.
+      */}
       <Chip
         chevron
         icon="calendar"
-        label={isToday ? 'Today' : shortDate(new Date(txnDate))}
+        label={`${isToday ? 'Today' : shortDate(new Date(txnDate))} · ${timeOfDay(txnDate)}`}
+        maxWidth={200}
         onPress={onDate}
-        accessibilityLabel={`Date: ${isToday ? 'today' : format(new Date(txnDate), 'd MMMM yyyy')}`}
+        accessibilityLabel={`When: ${isToday ? 'today' : format(new Date(txnDate), 'd MMMM yyyy')} at ${timeOfDay(txnDate)}. Change`}
       />
     </View>
   );

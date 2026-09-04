@@ -1,5 +1,6 @@
 import React from 'react';
 import { AddKind } from '../../../constants/enums';
+import { timeOfDay } from '../../../lib/dateFormat';
 import { SplitSheet } from './SplitSheet';
 import { PayersSheet } from './PayersSheet';
 import { TransferSlotSheet } from './TransferSlotSheet';
@@ -175,15 +176,23 @@ export function QuickAddSheets({
         visible={open === 'time'}
         value={{ hour: new Date(f.txnDate).getHours(), minute: new Date(f.txnDate).getMinutes() }}
         title="What time?"
-        onClose={onClose}
-        onSave={({ hour, minute }) => { f.setTxnTime(hour, minute); onClose(); }}
+        // Back to the date sheet, not to the form: the wheel was opened from
+        // inside it, so returning anywhere else loses the thread.
+        onClose={() => onOpen('date')}
+        onSave={({ hour, minute }) => { f.setTxnTime(hour, minute); onOpen('date'); }}
       />
 
+      {/* The time lives INSIDE the date sheet — one control for "when", rather
+          than two chips each answering half of it. `onPickTime` swaps to the wheel
+          rather than nesting it: both are RN <Modal>s and nesting breaks keyboard
+          handling, the same reason the end-date picker swaps. */}
       <DatePickerSheet
         visible={open === 'date'}
         value={f.txnDate}
         onClose={onClose}
         onChange={f.setTxnDate}
+        timeLabel={timeOfDay(f.txnDate)}
+        onPickTime={() => onOpen('time')}
       />
       <DatePickerSheet
         visible={open === 'endDate'}

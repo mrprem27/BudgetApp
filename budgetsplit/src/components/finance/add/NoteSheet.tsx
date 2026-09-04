@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
@@ -20,9 +20,15 @@ type Props = {
  * shouldn't be a one-line box you can't see the end of.
  */
 export function NoteSheet({ visible, onClose, value, onChangeText, maxLength = 120 }: Props) {
+  const input = useRef<TextInput>(null);
   return (
-    <SheetModal visible={visible} onClose={onClose} title="Note" scroll={false}>
+    /* Focus when the sheet has ARRIVED, not at mount. `autoFocus` fired while the
+       sheet was still mid-spring, so the keyboard rose underneath a moving sheet
+       and the two animated over each other — which is what read as "the component
+       goes, then the keyboard is going". */
+    <SheetModal visible={visible} onClose={onClose} title="Note" scroll={false} onOpened={() => input.current?.focus()}>
       <TextInput
+        ref={input}
         style={styles.input}
         value={value}
         onChangeText={onChangeText}
@@ -32,7 +38,6 @@ export function NoteSheet({ visible, onClose, value, onChangeText, maxLength = 1
         autoCapitalize="sentences"
         maxLength={maxLength}
         multiline
-        autoFocus
       />
       <PrimaryButton label="Done" onPress={onClose} style={styles.done} />
     </SheetModal>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { shortDate } from '../../../lib/dateFormat';
@@ -68,6 +68,7 @@ const PROMPT: Record<AddKind, string> = {
 export function VoiceEntrySheet({
   visible, onClose, categories, learned, onApply, accent = colors.accent, kind, people,
 }: Props) {
+  const input = useRef<TextInput>(null);
   const [text, setText] = useState('');
   const isTransfer = kind === AddKind.Transfer;
 
@@ -86,7 +87,8 @@ export function VoiceEntrySheet({
   const apply = () => { if (!usable) return; onApply(draft); setText(''); onClose(); };
 
   return (
-    <SheetModal visible={visible} onClose={close} title="Say it instead">
+    // Focus once the sheet has landed — see NoteSheet.
+    <SheetModal visible={visible} onClose={close} title="Say it instead" onOpened={() => input.current?.focus()}>
       <View style={styles.promptRow}>
         <IconCircle icon="mic" size={layout.avatarSize} color={accent} />
         <Text style={styles.prompt}>
@@ -96,12 +98,12 @@ export function VoiceEntrySheet({
       </View>
 
       <TextInput
+        ref={input}
         style={styles.input}
         value={text}
         onChangeText={setText}
         placeholder={EXAMPLES[kind][0]}
         placeholderTextColor={colors.textMuted}
-        autoFocus
         multiline
         autoCapitalize="none"
         autoCorrect={false}

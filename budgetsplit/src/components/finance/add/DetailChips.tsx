@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { timeOfDay } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
@@ -32,10 +31,6 @@ type Props = {
   /** Tags on this transaction. Orthogonal to category — one category, many tags. */
   tags?: string[];
   onOpenTags?: () => void;
-
-  /** The transaction's time-of-day. Always set (it defaults to now), like pay method. */
-  txnDate: number;
-  onOpenTime: () => void;
 
   /** Omitted entirely when location is off in settings, or while editing. */
   place?: CapturedPlace | null;
@@ -83,7 +78,6 @@ export function DetailChips({
   note, onOpenNote, onClearNote,
   attachmentUri, onOpenAttachment, onClearAttachment,
   tags = [], onOpenTags,
-  txnDate, onOpenTime,
   place, capturingLoc, onCaptureLocation, onClearLocation,
   payMethod, onOpenPayMethod, isIncome,
   onSplitByItems,
@@ -114,16 +108,10 @@ export function DetailChips({
           accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
         />
 
-        {/* Always filled — the time is real whether or not it was chosen. */}
-        <Chip
-          label={timeOfDay(txnDate)}
-          icon="clock"
-          selected
-          accent={accent}
-          chevron
-          onPress={onOpenTime}
-          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
-        />
+        {/* No Time chip. It lives inside the date sheet now, and the date chip's
+            own label carries it ("Today · 6:45 pm") — one control for "when"
+            instead of two answering half of it each, and one slot back on the
+            busiest row in the app. */}
 
         {/* A chip, not a row in the card below. Repeat HOLDS a value and has a
             real on/off, so it belongs in the same visual language as the other

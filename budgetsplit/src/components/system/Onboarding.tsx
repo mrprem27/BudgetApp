@@ -343,24 +343,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             />
           }
         >
-          <Card clip>
-            {PAY_CHOICES.map((m, i) => (
-              <React.Fragment key={m}>
-                {i > 0 && <Divider indent="text" />}
-                <ListRow
-                  icon={PAY_METHOD_ICON[m]}
-                  iconColor={payMethod === m ? colors.accent : colors.textSecondary}
-                  title={PAY_METHOD_LABEL[m]}
-                  chevron={false}
-                  value={payMethod === m
-                    ? <Feather name="check" size={18} color={colors.accent} />
-                    : undefined}
-                  onPress={() => { haptic.selection(); setPayMethod(m); }}
-                />
-              </React.Fragment>
-            ))}
-          </Card>
-          <Text style={styles.helpLine}>Autopay and other methods are still available on each transaction.</Text>
+          {/* The shared picker, not a private copy of it. This step hand-rolled
+              the same list for months while `PayMethodSelector` scrolled tiles
+              sideways elsewhere — one question, two designs. The list won, so the
+              component became the list and this is now the only version. */}
+          <PayMethodSelector value={payMethod} onChange={setPayMethod} />
+          <Text style={styles.helpLine}>You can change this on any transaction.</Text>
         </StepScaffold>
       )}
 
@@ -582,15 +570,6 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   );
 }
 
-/**
- * Offered as a default, in the order they are likely in this market.
- *
- * Deliberately not every `PayMethod`. Autopay is set by a mandate rather than
- * chosen at the till, and "Other" is a fallback, not a habit — defaulting every
- * future expense to either would be worse than a wrong guess between the four
- * real ones. Both stay selectable on an individual transaction.
- */
-const PAY_CHOICES: PayMethod[] = [PayMethod.Upi, PayMethod.Card, PayMethod.Cash, PayMethod.Bank, PayMethod.Wallet];
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },

@@ -323,17 +323,17 @@ already built and two are bugs on the app's highest-traffic screen.
 | `W1-20` | *"Every Month doesn't turn off once opened"* | The repeat sheet re-enables itself: an effect with `enabled` in its dependency list and no guard, so switching off **while the sheet is open** turns it straight back on. The sheet's own comment says the switch is the way back off. It is not. **One-line fix.** |
 | `W1-21` | *"in Transfer, why is changing the arrow allowed before both people are selected"* | The direction control has no guard. One tap on an untouched form swaps an empty id with yours, both slots resolve to you, and the form shows *"From and To must be different people"* — an error the user could not have caused. |
 | `W1-22` | *"no bottom black screen — broken or reduced"* | The screen never reads safe-area insets; its scroll container ends 16pt from the physical edge on a `fullScreenModal`. This regresses the codebase's own rule — `useContentInset` names *"in Quick Add"* as one of the guessed values it exists to replace. |
-| `W1-23` | *"if I select a date in the calendar it goes back"* | Picking a day calls `onChange` then closes. Correct for a one-shot picker, wrong when you are scanning months. |
+| `W1-23` ✅ | *"if I select a date in the calendar it goes back"* | Picking a day calls `onChange` then closes. Correct for a one-shot picker, wrong when you are scanning months. |
 
 ### Information architecture — decisions, not fixes
 
 | | Claim | Position |
 |---|---|---|
-| `OV-28` | *"Auto Pay is not a how… repeat IS auto pay"* | **Right, and now filed.** Autopay is offered in the picker, folds to `bank` in every money calculation, and carries the `repeat` glyph — while the recurring control on the same screen already has auto/remind. It is a *detected* fact about an imported row, never a chosen one. |
+| `OV-28` ✅ | *"Auto Pay is not a how… repeat IS auto pay"* | **Right, and now filed.** Autopay is offered in the picker, folds to `bank` in every money calculation, and carries the `repeat` glyph — while the recurring control on the same screen already has auto/remind. It is a *detected* fact about an imported row, never a chosen one. |
 | `W1-24` | *"how is really: through which asset, so we can reduce from it"* | This is `DQ-14` restated from the outside, and it is the better framing. Pay method is a label; an account is a thing with a balance. Parked there. |
-| `W1-25` | *"date and time should be one component, with year and month selectors"* | Time **is** captured and has its own chip and sheet. The ask is to merge two controls into one date-time control and to add a year selector — reaching a date a year back is currently twelve taps. |
+| `W1-25` ✅ | *"date and time should be one component, with year and month selectors"* | Time **is** captured and has its own chip and sheet. The ask is to merge two controls into one date-time control and to add a year selector — reaching a date a year back is currently twelve taps. |
 | `W1-26` | *"repeat should be last of the three"* | Ordering, in "How & when". Free. |
-| `W1-27` | *"'How was it paid' could be vertical rather than a horizontal scroll"* | Same component the onboarding money step uses — fixing it once fixes both notes. |
+| `W1-27` ✅ | *"'How was it paid' could be vertical rather than a horizontal scroll"* | Same component the onboarding money step uses — fixing it once fixes both notes. |
 | `W1-28` | *"component placement comes and goes in a line/section and sizes change — feels broken"* | The general form of `W1-05` and the empty-state anchor: things that appear conditionally must not move what is already on screen. Worth one rule rather than N fixes. |
 | `W1-29` | *"Transfer and Income have a bottom line, others don't"* | Inconsistent divider. Free. |
 | `W1-30` | *"the calculator feels too complex"* | It has four operators, a custom keypad, a running total and a remainder warning. No `AC`, no `%`. **Worth asking what to cut before cutting** — the divide-by-N case is the one that earns it. |
@@ -344,7 +344,7 @@ already built and two are bugs on the app's highest-traffic screen.
 |---|---|---|
 | `W1-31` | *"tags could be saved for reuse, most-used first"* | Already: the vocabulary is derived from your own rows and ranked by frequency. The real delta is **per-category** ranking. |
 | `W1-32` | *"category component's arrow can be incomplete on the right"* | The category chip is a `grow` chip with a chevron — cosmetic, needs a device look. |
-| `W1-33` | *"opening Notes/Tags/Split isn't fast enough — the component goes, then the keyboard"* | Not a slow animation. Opening a sheet dismisses the keyboard first, the modal presents, then the sheet's own field autofocuses while the sheet is still mid-spring — **two uncoordinated keyboard transitions**. Fixable by focusing after the animation rather than at mount. |
+| `W1-33` ✅ | *"opening Notes/Tags/Split isn't fast enough — the component goes, then the keyboard"* | Not a slow animation. Opening a sheet dismisses the keyboard first, the modal presents, then the sheet's own field autofocuses while the sheet is still mid-spring — **two uncoordinated keyboard transitions**. Fixable by focusing after the animation rather than at mount. |
 
 ---
 
@@ -392,7 +392,7 @@ Every note from the walk, once. `Filed` names the durable id where one exists.
 | `W1-02` | features should adapt to intent | Partly true already; an ask | — |
 | `W1-03` | name field under the keyboard | Body is centred; keyboard only insets | — |
 | `W1-04` | payday should be a date, not chips | Seven option chips | — |
-| `W1-05` | money step footer reads cut off | Horizontal selector, 16pt to the footer, no trailing line | — |
+| `W1-05` ✅ | money step footer reads cut off | Horizontal selector, 16pt to the footer, no trailing line | — |
 | `W1-06` | more pay methods, better icons | Layout | — |
 | `W1-07` | budget presets should be blank without income | Falls back to flat presets | — |
 | `W1-08` | people step shouldn't create groups; want name + email | Group creation is here; name only is collected; `email` column unused | — |
