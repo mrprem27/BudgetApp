@@ -59,7 +59,12 @@ export function DestinationSheet({
               <ListRow
                 leading={<IconCircle icon={asFeather(g.icon, 'layers')} size={layout.iconCircle} color={g.color} />}
                 title={g.name}
-                subtitle={g.is_personal === 1 ? 'Only you' : g.is_shared === 1 ? 'Shared' : undefined}
+                // Counted, not stored: `is_shared` is never updated, so it read
+                // "Shared" only on groups you RECEIVED and never on ones you
+                // shared yourself. See `MEMBER_COUNT` in queries/groups.
+                subtitle={g.is_personal === 1
+                  ? 'Only you'
+                  : (g.member_count ?? 0) > 1 ? `Shared with ${(g.member_count ?? 1) - 1}` : undefined}
                 value={active ? <Feather name="check" size={18} color={accent} /> : undefined}
                 chevron={false}
                 selected={active}

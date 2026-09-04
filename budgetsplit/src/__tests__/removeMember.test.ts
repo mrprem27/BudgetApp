@@ -1,6 +1,6 @@
 import { removeMemberFromGroup, addMemberToGroup, getGroupMembers } from '../db/queries/persons';
 import { getMyExposure, getGroupNet } from '../db/queries/balances';
-import { getGroupContext, getGroupMembersWithRoles, getSharedGroupsWith } from '../db/queries/groups';
+import { getGroupContext, getGroupMembersWithRoles, getSharedGroupsWith, getAllGroups } from '../db/queries/groups';
 import { isAdmin } from '../lib/permissions';
 import { readRosterDoc, adoptGroup } from '../db/queries/syncDoc';
 import { ingestPeerTxn } from '../db/queries/peerIngest';
@@ -205,5 +205,46 @@ describe('the removal reaches the other phones', () => {
     // And the roster says so, rather than still carrying a removal date.
     const doc = await readRosterDoc(asDb(s.db), s.gid);
     expect(doc!.members.find(m => m.pid === s.aarav)?.removedAt).toBeNull();
+  });
+});
+
+/**
+ * SYNC-F23 — "Shared" was a stored flag that nothing ever updated.
+ *
+ * `budget_group.is_shared` is hard-coded 0 on create and 1 on adoption, and no
+ * statement anywhere UPDATEs it. So the destination picker showed "Shared" only
+ * on groups you RECEIVED, and never on a group you shared yourself — wrong for
+ * exactly the case you would most expect it on. It is counted now, and a count
+ * cannot drift because it is the thing itself.
+ */
+describe('a group knows how many people are in it', () => {
+  it('counts the members, and does not trust is_shared', async () => {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const aarav = addPerson(db, 'Aarav');
+    const gid = addGroup(db, 'Flat', false, me);
+    addMember(db, gid, me, 'admin');
+    addMember(db, gid, aarav, 'member');
+
+    const [flat] = (await getAllGroups(asDb(db))).filter(g => g.id === gid);
+    expect(flat.member_count).toBe(2);
+    // The stored flag says otherwise, which is the whole point.
+    expect(flat.is_shared).toBe(0);
+  });
+
+  it('drops back to one when the other person is removed', async () => {
+    // Removal is soft, so the row survives — the count has to respect
+    // `memberActive` or a departed member keeps the group looking shared.
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const aarav = addPerson(db, 'Aarav');
+    const gid = addGroup(db, 'Flat', false, me);
+    addMember(db, gid, me, 'admin');
+    addMember(db, gid, aarav, 'member');
+
+    await removeMemberFromGroup(asDb(db), gid, aarav, me);
+
+    const [flat] = (await getAllGroups(asDb(db))).filter(g => g.id === gid);
+    expect(flat.member_count).toBe(1);
   });
 });

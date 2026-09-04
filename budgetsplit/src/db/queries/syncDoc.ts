@@ -1,5 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import type { PeerEnvelope } from './peerIngest';
+import { memberActive } from './memberSql';
 
 /**
  * The document that travels — one shared entry, as bytes on the wire.
@@ -42,6 +43,18 @@ export type EntryDoc = {
   date: number;
   category: string;
   note: string | null;
+  /**
+   * The entry's tags, as they are stored — a JSON array string, or null.
+   *
+   * Peer rows were written with `tags` set to NULL on purpose, so a tagged
+   * expense arrived on the other phone with its tags silently gone. The note
+   * travelled and the tags did not, which is an arbitrary line: both are things
+   * the author wrote to describe the same entry.
+   *
+   * Optional, so an entry sealed by an older build still opens — absent means
+   * "no tags", which is what those entries effectively carried anyway.
+   */
+  tags?: string | null;
   payMethod: string | null;
   recurFreq: string | null;
   recurInterval: number | null;
@@ -78,6 +91,7 @@ type TxnRow = {
   date: number;
   category: string;
   note: string | null;
+  tags: string | null;
   pay_method: string | null;
   recur_freq: string | null;
   recur_interval: number | null;
@@ -108,7 +122,7 @@ export async function readEntryDoc(
   entryId: string,
 ): Promise<EntryForPush | null> {
   const t = await db.getFirstAsync<TxnRow>(
-    `SELECT id, group_id, kind, date, category, note, pay_method,
+    `SELECT id, group_id, kind, date, category, note, tags, pay_method,
             recur_freq, recur_interval, recur_end, parent_recur_id, recur_override_date,
             sync_version, is_deleted
        FROM txn WHERE id = ?`,
@@ -134,6 +148,7 @@ export async function readEntryDoc(
       date: t.date,
       category: t.category,
       note: t.note,
+      tags: t.tags,
       payMethod: t.pay_method,
       recurFreq: t.recur_freq,
       recurInterval: t.recur_interval,
@@ -269,6 +284,10 @@ export function toPeerEnvelope(
     date: doc.date,
     category: doc.category,
     note: doc.note,
+    // `?? null` for the same reason as the recurrence keys below: an entry sealed
+    // by a build before tags travelled has no such key, and `undefined` reaches
+    // the INSERT as a bind error rather than as "no tags".
+    tags: doc.tags ?? null,
     payMethod: doc.payMethod,
     recurFreq: doc.recurFreq,
     recurInterval: doc.recurInterval,
@@ -611,6 +630,16 @@ export async function adoptGroup(
   db: SQLite.SQLiteDatabase,
   groupId: string,
   doc: RosterDoc,
+  /**
+   * The account id that PUBLISHED this roster, from the entry's `author`.
+   *
+   * A roster is a claim, not a fact — and without knowing who made the claim,
+   * every claim in it had to be believed. That let anyone in the group publish a
+   * roster promoting themselves to admin, and the receiving device applied it
+   * (`SYNC-F19`). Optional so an older caller still compiles; absent means
+   * "unknown publisher", which is treated as the weakest possible authority.
+   */
+  publisherUid?: string | null,
 ): Promise<NameCollision[]> {
   const collisions: NameCollision[] = [];
 
@@ -619,6 +648,46 @@ export async function adoptGroup(
   );
   const byUid = new Map(existing.filter(p => p.remote_uid).map(p => [p.remote_uid!, p.id]));
   const haveId = new Set(existing.map(p => p.id));
+
+  /*
+   * May this publisher grant a rank? (`SYNC-F19`)
+   *
+   * Two ways to qualify, and both are checked against what THIS device already
+   * believes rather than against anything in the arriving document — otherwise a
+   * roster could authorise itself:
+   *
+   *   * they are the group's known creator, or
+   *   * they are already an active admin here.
+   *
+   * A publisher we cannot resolve to a local person qualifies for neither, which
+   * is the safe answer: an unknown sender is the weakest authority there is.
+   *
+   * Read BEFORE the transaction so it reflects the state the roster is being
+   * applied to, not a state this same roster just wrote.
+   */
+  const publisherLocalId = publisherUid ? byUid.get(publisherUid) ?? null : null;
+  const standing = publisherLocalId
+    ? await db.getFirstAsync<{ n: number }>(
+      `SELECT 1 AS n FROM budget_group g
+        WHERE g.id = ?
+          AND (g.created_by = ?
+               OR EXISTS (SELECT 1 FROM group_member m
+                           WHERE m.group_id = g.id AND m.person_id = ?
+                             AND m.role = 'admin' AND ${memberActive('m')}))`,
+      [groupId, publisherLocalId, publisherLocalId],
+    )
+    : null;
+  /*
+   * A group this device has never seen has no creator and no admins yet, so
+   * nobody could ever qualify and the first roster would install no ranks at all
+   * — leaving it permanently unadministrable, which is `SYNC-F20`. The FIRST
+   * roster is therefore trusted: at that moment there is no existing answer for
+   * it to overwrite, so it cannot take anything away from anyone.
+   */
+  const known = await db.getFirstAsync<{ n: number }>(
+    'SELECT 1 AS n FROM budget_group WHERE id = ?', [groupId],
+  );
+  const mayGrantRoles = !known || !!standing;
 
   await db.withTransactionAsync(async () => {
     // The group itself, under the SHARED id — that is what adoption means, and it
@@ -688,12 +757,27 @@ export async function adoptGroup(
        * Their ENTRIES stay either way, and so does the person row, which other
        * groups and their own history still reference.
        */
+      /*
+       * Membership travels; RANK is only a claim (`SYNC-F19`).
+       *
+       * `deleted_at` is applied unconditionally — a removal has to reach every
+       * device or the group disagrees about who is in it, and the worst case is
+       * somebody being wrongly dropped from a roster, which is visible and
+       * reversible by re-adding them.
+       *
+       * `role` is different: believing it unconditionally let any member publish
+       * a roster that made them admin, and admin is what guards the budget, the
+       * membership and the group's existence. So it is applied only from a
+       * publisher who already has the standing to grant it, and otherwise the
+       * existing local answer is kept.
+       */
       await db.runAsync(
         `INSERT INTO group_member (group_id, person_id, joined_at, role, deleted_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(group_id, person_id) DO UPDATE SET
-           role = excluded.role, deleted_at = excluded.deleted_at`,
-        [groupId, localId, Date.now(), role, m.removedAt ?? null],
+           role = CASE WHEN ? THEN excluded.role ELSE group_member.role END,
+           deleted_at = excluded.deleted_at`,
+        [groupId, localId, Date.now(), role, m.removedAt ?? null, mayGrantRoles ? 1 : 0],
       );
     }
 
@@ -707,9 +791,18 @@ export async function adoptGroup(
      */
     const creatorLocalId = doc.createdBy ? byUid.get(doc.createdBy) ?? null : null;
     if (creatorLocalId) {
+      /*
+       * Set ONCE, never changed (`SYNC-F19`).
+       *
+       * The old guard was `created_by IS NOT ?`, which is an idempotence check,
+       * not an immutability one: a second roster naming a DIFFERENT resolvable
+       * creator overwrote the first, handing someone else delete rights over a
+       * group they did not make. Who created a group is a fact about the past and
+       * cannot be revised by a later message.
+       */
       await db.runAsync(
-        'UPDATE budget_group SET created_by = ? WHERE id = ? AND created_by IS NOT ?',
-        [creatorLocalId, groupId, creatorLocalId],
+        'UPDATE budget_group SET created_by = ? WHERE id = ? AND created_by IS NULL',
+        [creatorLocalId, groupId],
       );
     }
   });

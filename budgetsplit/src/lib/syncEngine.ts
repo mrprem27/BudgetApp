@@ -444,7 +444,10 @@ async function pullAll(
       for (const e of res.entries.filter(x => x.entryId === ROSTER_ENTRY_ID)) {
         const doc = await openEntry<RosterDoc>(e.ciphertext, key, groupId, e.entryId, e.version);
         if (!doc) continue;
-        const clashes = await adoptGroup(db, groupId, doc);
+        // WHO published it, not just what it says. The server stamps `author` on
+        // every entry, so this was already on the wire and simply never read —
+        // which is what let a roster promote its own author (`SYNC-F19`).
+        const clashes = await adoptGroup(db, groupId, doc, e.author);
         if (clashes.length > 0) collisions.push(...clashes);
         pulled++;
       }

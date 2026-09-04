@@ -170,7 +170,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
   action      TEXT NOT NULL,
   summary     TEXT NOT NULL,
   amount      INTEGER,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  -- Who did it, as a person id. NULL means me, which is almost every row.
+  -- The name used to live only inside the summary text, so it was unqueryable
+  -- and it drifted on a rename or a merge (F22).
+  actor_person_id TEXT REFERENCES person(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
@@ -641,6 +645,8 @@ export const COLUMN_MIGRATIONS = [
   // Default 0 is right for every existing row: nothing has ever been retracted,
   // because before this the retraction simply took effect.
   "ALTER TABLE txn_approval ADD COLUMN pending_delete INTEGER NOT NULL DEFAULT 0",
+  // Who performed an audited action — see the column comment above (F22).
+  "ALTER TABLE audit_log ADD COLUMN actor_person_id TEXT",
 ];
 
 /**

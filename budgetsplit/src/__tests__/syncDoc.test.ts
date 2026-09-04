@@ -184,3 +184,49 @@ describe('the pull cursor', () => {
     expect(await pullCursor(asDb(db), 'anything')).toBe(0);
   });
 });
+
+/**
+ * Tags used to be dropped on arrival — peer rows were written with `tags` set to
+ * NULL on purpose, so a tagged expense landed on the other phone with its tags
+ * silently gone. The note travelled and the tags did not, which is an arbitrary
+ * line: both are things the author wrote to describe the same entry.
+ *
+ * Tested through the full seam rather than on `readEntryDoc` alone, because the
+ * document is hand-written on BOTH sides — this file's own opening comment warns
+ * that a field added to one and forgotten in `toPeerEnvelope` typechecks and
+ * loses data quietly. Which is exactly what happened while writing this.
+ */
+describe('tags on the wire', () => {
+  it('carries them from one device to the other', async () => {
+    const { db, me, aarav, flat } = await twoDevices();
+    const id = await insertTxn(asDb(db), {
+      groupId: flat, kind: 'expense', entryMode: 'quick',
+      date: Date.now(), category: 'Food', tags: ['work', 'reimbursable'],
+      payments: [{ personId: aarav, amount: BILL }],
+      shares: [{ personId: me, amount: BILL / 2 }, { personId: aarav, amount: BILL / 2 }],
+    });
+
+    const entry = (await readEntryDoc(asDb(db), id))!;
+    expect(entry.doc.tags).toBe(JSON.stringify(['work', 'reimbursable']));
+
+    const resolve = await personResolver(asDb(db));
+    const env = toPeerEnvelope(resolve, flat, id, 1, false, entry.doc);
+    expect(env!.tags).toBe(JSON.stringify(['work', 'reimbursable']));
+  });
+
+  it('stores no tags as NULL, never as an empty string', async () => {
+    // `getTagsByFrequency` filters `tags IS NOT NULL`, so '' would make an
+    // untagged peer row look like it carried tags.
+    const { db, me, aarav, flat } = await twoDevices();
+    const id = await insertTxn(asDb(db), {
+      groupId: flat, kind: 'expense', entryMode: 'quick',
+      date: Date.now(), category: 'Food',
+      payments: [{ personId: aarav, amount: BILL }],
+      shares: [{ personId: me, amount: BILL / 2 }, { personId: aarav, amount: BILL / 2 }],
+    });
+    const entry = (await readEntryDoc(asDb(db), id))!;
+    const resolve = await personResolver(asDb(db));
+    const env = toPeerEnvelope(resolve, flat, id, 1, false, entry.doc);
+    expect(env!.tags ?? null).toBeNull();
+  });
+});

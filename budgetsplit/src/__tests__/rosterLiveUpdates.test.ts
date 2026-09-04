@@ -176,15 +176,71 @@ describe('an adopted group has an admin', () => {
     expect(group(s.db)).toMatchObject({ created_by: s.aarav });
   });
 
-  it('leaves a promotion in place for the next republish to carry', async () => {
+  const bothAdmin: RosterDoc['members'] = [
+    { pid: 'their-me', uid: MY_UID, name: 'Prem', color: '#4F46E5', role: 'admin' },
+    { pid: 'their-aarav', uid: THEIR_UID, name: 'Aarav', color: '#20C4B8', role: 'admin' },
+  ];
+
+  it('carries a promotion made by the creator', async () => {
+    // Aarav made the group, so his roster may say who is an admin in it.
     const s = invitee();
-    await adoptGroup(asDb(s.db), FLAT, roster());
-    await adoptGroup(asDb(s.db), FLAT, roster({}, [
-      { pid: 'their-me', uid: MY_UID, name: 'Prem', color: '#4F46E5', role: 'admin' },
-      { pid: 'their-aarav', uid: THEIR_UID, name: 'Aarav', color: '#20C4B8', role: 'admin' },
-    ]));
+    await adoptGroup(asDb(s.db), FLAT, roster(), THEIR_UID);
+    await adoptGroup(asDb(s.db), FLAT, roster({}, bothAdmin), THEIR_UID);
     expect(s.db.raw.prepare('SELECT role FROM group_member WHERE group_id = ? AND person_id = ?').get(FLAT, s.me))
       .toEqual({ role: 'admin' });
+  });
+
+  /**
+   * SYNC-F19 — a roster is a claim, and rank is the part worth checking.
+   *
+   * `role = excluded.role` believed every roster unconditionally, so any member
+   * could publish one making themselves admin and every device applied it. Admin
+   * guards the budget, the membership and the group's existence.
+   */
+  it('refuses a promotion from someone with no standing to grant it', async () => {
+    const s = invitee();
+    await adoptGroup(asDb(s.db), FLAT, roster(), THEIR_UID);
+
+    // Priya is an ordinary member, and she says everybody is an admin.
+    await adoptGroup(asDb(s.db), FLAT, roster({}, bothAdmin), PRIYA_UID);
+
+    expect(s.db.raw.prepare('SELECT role FROM group_member WHERE group_id = ? AND person_id = ?').get(FLAT, s.me))
+      .toEqual({ role: 'member' });
+  });
+
+  it('refuses a promotion from a publisher it cannot resolve at all', async () => {
+    // The weakest authority there is, and the easiest to forge.
+    const s = invitee();
+    await adoptGroup(asDb(s.db), FLAT, roster(), THEIR_UID);
+    await adoptGroup(asDb(s.db), FLAT, roster({}, bothAdmin), 'acct-nobody');
+    expect(s.db.raw.prepare('SELECT role FROM group_member WHERE group_id = ? AND person_id = ?').get(FLAT, s.me))
+      .toEqual({ role: 'member' });
+  });
+
+  it('still applies a REMOVAL from anyone, because a group must agree on who is in it', async () => {
+    // Rank is a claim; membership is not. The worst case of believing a removal
+    // is somebody wrongly dropped, which is visible and fixed by re-adding them.
+    const s = invitee();
+    await adoptGroup(asDb(s.db), FLAT, roster(), THEIR_UID);
+    await adoptGroup(asDb(s.db), FLAT, roster({}, [
+      { pid: 'their-me', uid: MY_UID, name: 'Prem', color: '#4F46E5', role: 'member', removedAt: 111 },
+      { pid: 'their-aarav', uid: THEIR_UID, name: 'Aarav', color: '#20C4B8', role: 'admin' },
+    ]), PRIYA_UID);
+
+    expect(s.db.raw.prepare('SELECT deleted_at FROM group_member WHERE group_id = ? AND person_id = ?').get(FLAT, s.me))
+      .toEqual({ deleted_at: 111 });
+  });
+
+  it('never lets a later roster name a different creator', async () => {
+    // `created_by` was guarded by an idempotence check, not an immutability one,
+    // so a second roster naming someone else handed them delete rights over a
+    // group they did not make. Who created it is a fact about the past.
+    const s = invitee();
+    await adoptGroup(asDb(s.db), FLAT, roster(), THEIR_UID);
+    expect(group(s.db)).toMatchObject({ created_by: s.aarav });
+
+    await adoptGroup(asDb(s.db), FLAT, roster({ createdBy: MY_UID }), MY_UID);
+    expect(group(s.db)).toMatchObject({ created_by: s.aarav });
   });
 });
 

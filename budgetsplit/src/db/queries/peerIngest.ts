@@ -62,6 +62,13 @@ export type PeerEnvelope = {
   recurOverrideDate?: number | null;
   category: string;
   note?: string | null;
+  /**
+   * The author's tags, as stored — a JSON array string, or null/absent.
+   *
+   * Absent means "no tags", not "unknown": an entry sealed by a build older than
+   * this carried none, and treating that as unknown would leave nothing to write.
+   */
+  tags?: string | null;
   payMethod?: string | null;
   /** Paise. Must sum to the same total as `shares`. */
   payments: Array<{ personId: string; amount: number }>;
@@ -292,13 +299,13 @@ export async function ingestPeerTxn(
        * author, and the ledger is read as "who put this number here".
        */
       await db.runAsync(
-        `UPDATE txn SET kind=?, date=?, category=?, note=?, pay_method=?,
+        `UPDATE txn SET kind=?, date=?, category=?, note=?, tags=?, pay_method=?,
                         recur_freq=?, recur_interval=?, recur_end=?,
                         parent_recur_id=?, recur_override_date=?,
                         author_person_id=?, sync_version=?, is_deleted=?, updated_at=?
           WHERE id = ?`,
         [
-          env.kind, env.date, env.category, env.note ?? null, env.payMethod ?? null,
+          env.kind, env.date, env.category, env.note ?? null, env.tags || null, env.payMethod ?? null,
           env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
           env.parentRecurId ?? null, env.recurOverrideDate ?? null,
           author.id, env.version, deleted, now, id,
@@ -311,16 +318,18 @@ export async function ingestPeerTxn(
       await db.runAsync('DELETE FROM txn_share WHERE txn_id = ?', [id]);
     } else {
       await db.runAsync(
-        // `tags` is NULL, not '': every other write path stores "no tags" as NULL
-        // (`serializeTags([])`), and `getTagsByFrequency` filters `tags IS NOT NULL`,
-        // so an empty string made peer rows look like they carried tags.
+        // Tags travel now. "No tags" is NULL and never '': every other write path
+        // stores it that way (`serializeTags([])`), and `getTagsByFrequency`
+        // filters `tags IS NOT NULL`, so an empty string made peer rows look like
+        // they carried tags they did not.
         `INSERT INTO txn
            (id,group_id,kind,entry_mode,date,category,note,tags,tz,pay_method,source,
             recur_freq,recur_interval,recur_end,parent_recur_id,recur_override_date,
             author_person_id,sync_version,is_deleted,created_at,updated_at)
-         VALUES (?,?,?,'quick',?,?,?,NULL,?,?,'peer',?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,'quick',?,?,?,?,?,?,'peer',?,?,?,?,?,?,?,?,?,?)`,
         [
           id, env.groupId, env.kind, env.date, env.category, env.note ?? null,
+          env.tags || null,
           localTz(), env.payMethod ?? null,
           env.recurFreq ?? null, env.recurInterval ?? null, env.recurEnd ?? null,
           env.parentRecurId ?? null, env.recurOverrideDate ?? null,
@@ -394,6 +403,10 @@ export async function ingestPeerTxn(
       amount: total,
       summary: `${author.name} ${verb} ${formatRupees(total)} · ${env.category}`
         + (applied ? '' : ' — waiting for you'),
+      // The name is still in the summary because that is what reads well in the
+      // log. This is the queryable half: "what has Aarav changed?" now has an
+      // answer, and it survives him being renamed or merged (F22).
+      actorPersonId: author.id,
     });
   });
 

@@ -14,6 +14,8 @@ export type AuditLog = {
   summary: string;
   amount: number | null;
   created_at: number;
+  /** Who did it. See `AuditInput.actorPersonId`. */
+  actor_person_id: string | null;
 };
 
 export type AuditInput = {
@@ -23,6 +25,19 @@ export type AuditInput = {
   action: AuditAction;
   summary: string;
   amount?: number | null;
+  /**
+   * WHO did this, as a person id.
+   *
+   * The name used to exist only inside `summary` — "Aarav added ₹400 · Food" —
+   * which made it unqueryable ("what has Aarav changed?" has no answer) and made
+   * it drift: rename or merge that person and every past row still says the old
+   * name, because the string was copied at write time.
+   *
+   * Null means me. That is the common case and the honest default: almost every
+   * row in this table is my own action, and writing my id on all of them would be
+   * noise. A non-null value is what makes a row worth asking about.
+   */
+  actorPersonId?: string | null;
 };
 
 /**
@@ -32,11 +47,12 @@ export type AuditInput = {
  */
 export async function logAudit(db: SQLite.SQLiteDatabase, entry: AuditInput): Promise<void> {
   await db.runAsync(
-    `INSERT INTO audit_log (id, entity_type, entity_id, group_id, action, summary, amount, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (id, entity_type, entity_id, group_id, action, summary, amount, created_at, actor_person_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uuid(), entry.entityType, entry.entityId, entry.groupId ?? null,
       entry.action, entry.summary, entry.amount ?? null, Date.now(),
+      entry.actorPersonId ?? null,
     ],
   );
 }

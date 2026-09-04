@@ -21,7 +21,20 @@ export type BudgetGroup = {
    * group-level budget the app does not have.
    */
   carry_over: number;
+  /**
+   * ⚠️ **Dead. Never read it — use `member_count`.**
+   *
+   * Hard-coded 0 on create, hard-coded 1 on adoption, never UPDATEd by anything.
+   * So it is 1 only on groups you received and 0 forever on groups you shared
+   * yourself. The column stays because dropping one in SQLite needs a table
+   * rebuild, which is not worth a migration for a field nothing should read.
+   */
   is_shared: number;
+  /**
+   * Active members, counted at read time. Present on `getAllGroups` only.
+   * `> 1` is what "shared" actually means — see `MEMBER_COUNT`.
+   */
+  member_count?: number;
   is_archived: number;
   is_personal: number;
   simplify_debt: number;
@@ -49,9 +62,27 @@ import {
 } from '../../lib/permissions';
 export type { SplitMode } from '../../constants/enums';
 
+/**
+ * How many people are in a group, counted rather than stored.
+ *
+ * `budget_group.is_shared` was meant to answer this and never could: it is
+ * hard-coded 0 on create, hard-coded 1 on adoption, and nothing anywhere ever
+ * UPDATEs it. So it read 1 only on groups you RECEIVED, and stayed 0 forever on
+ * every group you shared yourself — the picker's "Shared" label was wrong for
+ * exactly the groups you would most expect it on (`OV-34`/`SYNC-F23`).
+ *
+ * A count cannot drift, because it is the thing itself. `memberActive` because a
+ * departed member is soft-deleted and must not keep a group looking shared.
+ */
+const MEMBER_COUNT = `(
+  SELECT COUNT(*) FROM group_member m
+   WHERE m.group_id = budget_group.id AND ${memberActive('m')}
+)`;
+
 export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
   return db.getAllAsync<BudgetGroup>(
-    'SELECT * FROM budget_group WHERE is_archived = 0 ORDER BY created_at ASC',
+    `SELECT *, ${MEMBER_COUNT} AS member_count
+       FROM budget_group WHERE is_archived = 0 ORDER BY created_at ASC`,
   );
 }
 

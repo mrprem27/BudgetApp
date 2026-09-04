@@ -1,5 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { softDeleteTxn, restoreTxn } from './transactions';
+import { logAudit } from './audit';
 import type { ApprovalState, PayMethod } from '../../constants/enums';
 
 export { NOT_AWAITING_APPROVAL } from './approvalSql';
@@ -92,6 +93,10 @@ export async function approveTxn(
       [now, txnId],
     );
     await softDeleteTxn(db, txnId, false, true);
+    await logAudit(db, {
+      entityType: 'txn', entityId: txnId, action: 'deleted',
+      summary: 'You agreed to remove an entry the author retracted',
+    });
     return;
   }
   await db.withTransactionAsync(async () => {
@@ -107,6 +112,18 @@ export async function approveTxn(
     if (landedPayMethod) {
       await db.runAsync('UPDATE txn SET pay_method = ?, updated_at = ? WHERE id = ?', [landedPayMethod, now, txnId]);
     }
+    /*
+     * The decision, not just the entry (F21).
+     *
+     * "I accepted Aarav's ₹4,000" appeared nowhere — which is exactly the record
+     * a disagreement gets settled from, and the one place a dispute would send
+     * you looking. Inside the transaction, so the log and the decision commit or
+     * roll back together.
+     */
+    await logAudit(db, {
+      entityType: 'txn', entityId: txnId, action: 'updated',
+      summary: 'You accepted an entry somebody else wrote',
+    });
   });
 }
 
@@ -141,6 +158,10 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
       `UPDATE txn_approval SET pending_delete = 0, decided_at = ?, dispute_state = 'raise' WHERE txn_id = ?`,
       [Date.now(), txnId],
     );
+    await logAudit(db, {
+      entityType: 'txn', entityId: txnId, action: 'updated',
+      summary: 'You refused a retraction — the entry stays',
+    });
     return;
   }
   // Two writes, NOT wrapped in a transaction: `softDeleteTxn` opens its own, and
@@ -173,6 +194,10 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
      VALUES (?, 'rejected', COALESCE((SELECT created_at FROM txn_approval WHERE txn_id = ?), ?), ?, 'raise')`,
     [txnId, txnId, Date.now(), Date.now()],
   );
+  await logAudit(db, {
+    entityType: 'txn', entityId: txnId, action: 'deleted',
+    summary: 'You refused an entry somebody else wrote',
+  });
 }
 
 /** Undo either decision, putting the entry back in the queue exactly as it was. */
@@ -191,4 +216,8 @@ export async function reopenApproval(db: SQLite.SQLiteDatabase, txnId: string): 
   );
   // Only a reject soft-deleted it; restoring an already-live row is a no-op.
   await restoreTxn(db, txnId);
+  await logAudit(db, {
+    entityType: 'txn', entityId: txnId, action: 'updated',
+    summary: 'You took back your decision — it is waiting again',
+  });
 }
