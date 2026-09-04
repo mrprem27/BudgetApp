@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { colors, type, space, layout } from '../../tokens';
@@ -7,7 +7,7 @@ import { Card } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
 import { Divider } from '../../ui/Divider';
 import { SheetModal } from '../../ui/SheetModal';
-import { IconCircle } from '../../ui/IconCircle';
+import { EmptyState } from '../../ui/EmptyState';
 import { MemberAvatar } from '../MemberAvatar';
 import { haptic } from '../../../lib/haptics';
 import { settings } from '../../../lib/settings';
@@ -124,18 +124,14 @@ export function ShareGroupRow({ groupId, members, onShared }: Props) {
            * or a linked person who is not in this group. Saying "nobody to share
            * with" alone would leave someone stuck with no idea which.
            */
-          <View style={styles.empty}>
-            <IconCircle icon="user-plus" color={colors.accent} bg={colors.accentMuted} size={64} />
-            <Text style={styles.emptyTitle}>Nobody here to share with yet</Text>
-            <Text style={styles.emptyBody}>
-              You can share with someone who is both a member of this group and linked to your
-              account. Link them under Settings → Linked people, and make sure they are in this
-              group.
-            </Text>
-            <TouchableOpacity onPress={() => { setOpen(false); router.push('/settings/linked'); }}>
-              <Text style={styles.emptyAction}>Open Linked people</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="user-plus"
+            title="Nobody here to share with yet"
+            body={'You can share with someone who is both a member of this group and linked to your '
+              + 'account. Link them under Settings → Linked people, and make sure they are in this group.'}
+            actionLabel="Open Linked people"
+            onAction={() => { setOpen(false); router.push('/settings/linked'); }}
+          />
         ) : (
           links.map((l, i) => (
             <View key={l.person.id}>
@@ -183,12 +179,5 @@ const REASON: Record<string, string> = {
 
 const styles = StyleSheet.create({
   loading: { paddingVertical: space.xl },
-  empty: { alignItems: 'center', paddingVertical: space.lg, paddingHorizontal: space.md },
-  emptyTitle: { ...type.subheading, color: colors.textPrimary, marginTop: space.md, textAlign: 'center' },
-  emptyBody: {
-    ...type.body, color: colors.textSecondary, textAlign: 'center',
-    marginTop: space.sm, lineHeight: 20,
-  },
-  emptyAction: { ...type.button, color: colors.accent, marginTop: space.md },
   send: { ...type.button, color: colors.accent },
 });

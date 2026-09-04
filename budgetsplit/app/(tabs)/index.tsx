@@ -15,6 +15,7 @@ import { getRecurringForGroup } from '../../src/db/queries/recurring';
 
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { ErrorState } from '../../src/components/ui/ErrorState';
+import { EmptyState } from '../../src/components/ui/EmptyState';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { Banner } from '../../src/components/ui/Banner';
 import { useStorageWarning } from '../../src/hooks/useStorageWarning';
@@ -256,14 +257,26 @@ export default function DashboardScreen() {
 
             {(spending === 0 && income === 0 && !budget.exists && !everHadCats) ? (
               <>
-                {/* Dedicated first-run empty home (design Screen 6) */}
+                {/* Dedicated first-run empty home (design Screen 6).
+                    The CONTENTS are the shared `EmptyState`; the card around it is
+                    this screen's business, and it keeps one because its siblings —
+                    the GET STARTED tiles below — are cards too. A bare block here
+                    would be the odd one out. `settings/linked.tsx` is the same rule
+                    with the opposite answer: its siblings are plain, so its Card
+                    comes off.
+
+                    `art` keeps the ₹0 in the money face, which says more about an
+                    empty ledger than any glyph could — and is why this was
+                    hand-rolled in the first place. */}
                 <View style={styles.emptyHero}>
-                  <View style={styles.emptyHeroTile}><Text style={styles.emptyHeroZero}>₹0</Text></View>
-                  <Text style={styles.emptyHeroTitle}>Nothing logged yet</Text>
-                  <Text style={styles.emptyHeroBody}>Log your first expense to see where your money's going.</Text>
-                  <TouchableOpacity style={styles.emptyHeroCta} onPress={() => router.push('/add/quick?kind=expense')} accessibilityRole="button" accessibilityLabel="Log first expense">
-                    <Text style={styles.emptyHeroCtaText}>Log first expense</Text>
-                  </TouchableOpacity>
+                  <EmptyState
+                    art={<View style={styles.emptyHeroTile}><Text style={styles.emptyHeroZero}>₹0</Text></View>}
+                    icon="inbox"
+                    title="Nothing logged yet"
+                    body="Log your first expense to see where your money's going."
+                    actionLabel="Log first expense"
+                    onAction={() => router.push('/add/quick?kind=expense')}
+                  />
                 </View>
 
                 {/* Only what's genuinely still missing. Onboarding can set a
@@ -404,13 +417,10 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
   // Dedicated first-run empty home (design Screen 6)
-  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, paddingVertical: space.xl, paddingHorizontal: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  // Chrome only: `EmptyState` owns the padding and the alignment inside it.
+  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, marginBottom: space.md, borderWidth: 1, borderColor: colors.border },
   emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
   emptyHeroZero: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, color: colors.accent, letterSpacing: -1 },
-  emptyHeroTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: 6 },
-  emptyHeroBody: { ...type.label, color: colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 240, marginBottom: space.lg },
-  emptyHeroCta: { alignSelf: 'stretch', backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
-  emptyHeroCtaText: { ...type.button, color: colors.bg },
   getStartedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: 14, padding: space.md, borderWidth: 1, borderColor: colors.border },
   startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

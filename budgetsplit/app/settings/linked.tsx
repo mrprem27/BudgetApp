@@ -342,13 +342,15 @@ export default function LinkedPeopleScreen() {
 
             <SectionHeader title="Linked" />
             {links.length === 0 ? (
-              <Card padded>
-                <EmptyState
-                  icon="users"
-                  title="Nobody linked yet"
-                  body="Send someone an invite link and, once you confirm it's them, you'll see each other's shared details here."
-                />
-              </Card>
+              /* No Card: the only site in the app that wrapped one, and its
+                 siblings here are plain sections — so the border read as a broken
+                 tile rather than as an empty state. Home keeps its card for the
+                 opposite reason: its siblings ARE cards. */
+              <EmptyState
+                icon="users"
+                title="Nobody linked yet"
+                body="Send someone an invite link and, once you confirm it's them, you'll see each other's shared details here."
+              />
             ) : (
               <Card>
                 {links.map((link, i) => (

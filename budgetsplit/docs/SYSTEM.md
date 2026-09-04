@@ -4458,8 +4458,15 @@ OV-32 · One empty state, four renderings                           [alias-spraw
   Blast.   One component, one style line, three call sites.
   Risk.    Low, but it changes what four screens look like. WALK-01 §4 has the
            options.
-  Verdict. COLLAPSE.
-  Trigger. Now.
+  Verdict. COLLAPSE — **done 2026-09-04**. The anchor is an opt-in `fill` prop at
+           the eight sites that own their space, NOT a default: `flex: 1` against
+           an auto-height parent resolves to zero, and ~30 call sites sit in a
+           ScrollView content container or a ListEmptyComponent. The reported jump
+           was one word — `paddingHorizontal` → `padding` in personal.tsx. Both
+           hand-rolls absorbed (Home keeps its "₹0" via a new `art` slot);
+           linked.tsx's Card unwrapped. Held by emptyState.test.ts, which fails on
+           a 64pt IconCircle outside the component.
+  Trigger. —
 
 OV-33 · Restating an asset leaves no record, and two comments say it does [phantom]
   The N.   2 comments referring to a row that is never written. schema.ts:207-209

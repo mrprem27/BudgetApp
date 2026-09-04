@@ -417,6 +417,7 @@ export default function ReviewScreen() {
           body="Import a Google Pay statement, a bank / UPI export, or a transaction-alert email (Settings → Import) and the transactions show up here — grouped by source — to confirm."
           actionLabel="Import transactions"
           onAction={() => router.push('/import')}
+          fill
         />
       ) : emptyFiltered ? (
         <EmptyState
@@ -425,6 +426,7 @@ export default function ReviewScreen() {
           body="No transactions match the current filter or focus. Adjust the filter, or show all."
           actionLabel="Show all"
           onAction={() => { setSourceTab(null); exitFocus(); }}
+          fill
         />
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">

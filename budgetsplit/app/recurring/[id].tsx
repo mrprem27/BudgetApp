@@ -101,6 +101,7 @@ export default function RecurringRuleScreen() {
             tint={colors.textSecondary}
             actionLabel="See all recurring"
             onAction={() => router.replace('/plan/recurring')}
+            fill
           />
         )}
       </View>

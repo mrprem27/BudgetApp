@@ -103,7 +103,7 @@ export default function GoalDetailScreen() {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Goal" onBack={() => router.back()} />
-        <EmptyState icon="target" title="Goal not found" body="This savings goal may have been deleted." tint={colors.textSecondary} />
+        <EmptyState icon="target" title="Goal not found" body="This savings goal may have been deleted." tint={colors.textSecondary} fill />
       </View>
     );
   }

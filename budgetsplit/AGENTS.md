@@ -34,6 +34,30 @@ Every list/data empty state MUST have ALL of these:
 
 Never render just a `<Text>` saying "Nothing here" or "No X yet". That looks broken.
 
+**Use `EmptyState`. Never rebuild it.** `emptyState.test.ts` fails on a 64pt `IconCircle` anywhere
+but that component, because a 64pt disc *is* the signature of an empty state. Home once built its own
+with a 72pt tile and a raw accent `TouchableOpacity`; `ShareGroupRow` built one at the right size and
+the wrong padding. Four renderings of one component is how three different heights happened.
+
+### Where it sits — the half of this rule that was missing
+
+The anatomy above was specified from the start; **position was not**, so it drifted. The same state
+sat 48pt down one tab of Personal and 64pt down the next, purely because one list used
+`paddingHorizontal` and the other `padding`. Switching tabs moved the illustration.
+
+- **`fill` is the anchor**, and it is **opt-in on purpose**. `flex: 1` resolves against an
+  auto-height parent as **zero**, and ~30 of the component's call sites sit inside a `ScrollView`
+  content container or a `ListEmptyComponent`. Making it the default collapses them all, silently —
+  and `ErrorState` wraps `EmptyState`, so the blast radius is ~71 places with **no render test
+  anywhere** to catch it.
+- Pass `fill` only when the state **owns the screen**: nothing above it but chrome, nothing below it
+  at all. Mid-scroll, with real content on both sides, there is nothing to centre within.
+- **Whether it sits in a `Card` is the caller's business, and follows its siblings.** Home keeps one
+  because its neighbours are cards; `settings/linked.tsx` dropped one because its neighbours are
+  plain sections. Same rule, opposite answers — which is why it is a rule and not a preference.
+- A list's content container uses **`padding`**, not `paddingHorizontal`. That one word was the
+  whole of the reported defect.
+
 ---
 
 ## 3. Cards — Group everything

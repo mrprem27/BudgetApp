@@ -223,6 +223,7 @@ export default function SearchScreen() {
                 title={hasSearched ? 'No matches' : 'Search your transactions'}
                 body={hasSearched ? 'Try a different word or amount.' : 'Find any past expense, income or settlement by category, note or amount.'}
                 tint={colors.textSecondary}
+                fill
               />
             )) : (
               <SectionList

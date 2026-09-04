@@ -340,7 +340,13 @@ const styles = StyleSheet.create({
 
   // No `gap` here: a date section's rows form ONE card, so any gap between them
   // slices it into separate slabs. `SectionHeader` supplies its own spacing.
-  activityContent: { paddingHorizontal: layout.screenPaddingH },
+  //
+  // `padding`, not `paddingHorizontal`: this was the ONE list in the app missing
+  // its vertical inset, and that 16pt was the whole of the reported defect —
+  // Personal's empty state sat 48pt down on Activity and 64pt down on Budget
+  // (`BudgetList.tsx` uses `padding`), so switching tabs moved the illustration.
+  // Every group tab already matches; this was the outlier.
+  activityContent: { padding: layout.screenPaddingH },
 
 
 

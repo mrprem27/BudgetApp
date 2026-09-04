@@ -93,6 +93,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           icon="alert-circle"
           title="No personal space yet"
           body="My Budget lives in your personal space, which this device doesn't have. Restart the app to rebuild it."
+          fill
         />
       </View>
     );

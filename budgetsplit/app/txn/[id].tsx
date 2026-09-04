@@ -83,6 +83,7 @@ export default function TxnDetailScreen() {
           actionLabel="Go back"
           onAction={() => router.back()}
           tint={colors.textSecondary}
+          fill
         />
       </View>
     );

@@ -36,9 +36,11 @@ namespace.
 The cold sweep is the only sweep that can see first run and empty states, and it found three
 different classes of thing.
 
-**One systemic problem.** Empty states have no vertical anchor and four different renderings, so
-moving between two tabs of the same screen moves the illustration. This was the walk's opening note
-and is the only finding in it that is not local — `OV-32`.
+**One systemic problem.** Empty states had no vertical anchor and four different renderings, so
+moving between two tabs of the same screen moved the illustration. This was the walk's opening note
+and the only finding in it that is not local — `OV-32`, ✅ **fixed 2026-09-04**. The anchor is opt-in,
+because the obvious version of it collapses ~30 call sites to zero height, and it is now held by
+`emptyState.test.ts` rather than by anyone remembering.
 
 **Six notes that named the wrong defect.** This is the most valuable part of the walk, and the
 reason walking beats reading. In every case something real was seen and the cause was elsewhere:
@@ -404,12 +406,12 @@ Every note from the walk, once. `Filed` names the durable id where one exists.
 
 | id | Screen | Finding | Filed |
 |---|---|---|---|
-| — | all | Three heights, four renderings | `OV-32` |
+| — | all | Three heights, four renderings | ✅ `OV-32` — done 2026-09-04 |
 | — | `SC-20`, `SC-19` | Two empty states nothing can reach | `OV-31` |
 | `W1-12` | `SC-22` | Forecast section vanishes with no explanation | — |
 | `W1-13` | `SC-22` | Amber sample note has no zero guard | — |
 | `W1-14` | `SC-40` | Empty state has no CTA | — |
-| `W1-15` | `SC-38` | Only empty state wrapped in a `Card` | `OV-32` |
+| `W1-15` | `SC-38` | Only empty state wrapped in a `Card` | ✅ unwrapped |
 | `W1-16` | `SC-16` | Could suggest a top 3 before any spend | — |
 | `W1-17` | `SC-21` | Reports groups not collapsible | — |
 | `W1-18` | `SC-09`, `SC-11`, `SC-13` | Member and group-edit rows read as undesigned | — |

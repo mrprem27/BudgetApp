@@ -246,7 +246,7 @@ export default function GroupDetailScreen() {
     return (
       <View style={styles.container}>
         <ScreenHeader title="Group" onBack={() => router.back()} />
-        <EmptyState icon="alert-circle" title="Group not found" body="This group may have been deleted or archived." actionLabel="Back to Groups" onAction={() => router.back()} tint={colors.textSecondary} />
+        <EmptyState icon="alert-circle" title="Group not found" body="This group may have been deleted or archived." actionLabel="Back to Groups" onAction={() => router.back()} tint={colors.textSecondary} fill />
       </View>
     );
   }
