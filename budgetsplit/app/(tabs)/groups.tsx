@@ -18,6 +18,7 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
 import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
+import { groupsTabView } from '../../src/lib/groupsView';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
 import { utilLabel, budgetHealth, isGlobalBudgetGroup, getMyGlobalBudgetSummary } from '../../src/lib/budget';
@@ -249,34 +250,12 @@ export default function GroupsScreen() {
     );
   }
 
-  // Personal ("Just you") pinned on top, then the shared groups (design Screens 2).
-  const sharedGroups = groups.filter(g => g.is_personal !== 1);
-  const personalGroup = groups.find(g => g.is_personal === 1);
-
-  const activeGroups = personalGroup ? [personalGroup, ...sharedGroups] : sharedGroups;
-
-  /*
-   * ⚠️ `ListEmptyComponent` below has NEVER rendered in the active view, and cannot.
-   *
-   * `seedIfNeeded` creates the Personal group on first launch, unconditionally, so
-   * `activeGroups` always holds at least one row. A brand-new user therefore sees a
-   * single "Personal" card and, as the only way forward, the bare `+` glyph in the
-   * header — the unlabelled-door failure `OV-16` just fixed on the Plan screen, and
-   * exactly what AGENTS §2 exists to prevent. Onboarding used to paper over it by
-   * building a group on the people step; `W1-08` removed that, so it is now the
-   * first thing a real user meets.
-   *
-   * The fix is NOT to drop Personal from the list when it is alone. When
-   * `flags.splitting` is on, this list is the only way into the Personal ledger —
-   * the tab bar's direct `/personal` slot exists solely for the splitting-off
-   * persona (`(tabs)/_layout.tsx`). Emptying the list would trade a missing empty
-   * state for a missing ledger.
-   *
-   * So the prompt goes BELOW the Personal card instead, where the empty state would
-   * have been. No `fill`: it does not own the screen (AGENTS §2 — there is real
-   * content above it), and it sits with `renderBalances` in the footer.
-   */
-  const noSharedGroups = sharedGroups.length === 0;
+  // Personal ("Just you") pinned on top, then the shared groups (design Screens 2)
+  // — and whether to offer the "No groups yet" prompt, which is NOT the same
+  // question as whether the list is empty. `lib/groupsView.ts` explains why, and
+  // `groupsView.test.ts` is what keeps `ListEmptyComponent` from going unreachable
+  // again.
+  const { active: activeGroups, showEmptyPrompt } = groupsTabView(groups);
 
   function renderBalances() {
     const activeFriends = friends.filter(f => f.net !== 0);
@@ -370,9 +349,9 @@ export default function GroupsScreen() {
               <>
                 {/* The empty state Personal keeps `ListEmptyComponent` from ever
                     showing — same anatomy, same CTA, just placed under the one card
-                    that is always there rather than instead of it. See the note by
-                    `noSharedGroups`. */}
-                {!loading && noSharedGroups && (
+                    that is always there rather than instead of it. See
+                    `lib/groupsView.ts`. */}
+                {!loading && showEmptyPrompt && (
                   <EmptyState
                     icon="users"
                     title="No groups yet"

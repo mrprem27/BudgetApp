@@ -445,12 +445,18 @@ const styles = StyleSheet.create({
   newPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 },
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  // `flexShrink` on both this and the buttons, because Yoga defaults it to 0 (RN
+  // does not use the web default) — and `ScreenHeader` gives its title `flex: 1`,
+  // i.e. the only shrinkable thing in the row. At the default text size the four
+  // labelled columns leave ~16pt of slack, but `type.caption` scales with Dynamic
+  // Type, and without this the title collapsed to "…" first and then the rightmost
+  // button ran off the screen edge, since the row does not clip.
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
   // A labelled column, not a disc: the tinted circle was carrying the whole burden
   // of "this is tappable", which is why four of them read as decoration. The label
   // does that job now, so the button is the icon over its name — and `touchMin`
   // keeps the target at §6's floor even though the painted glyph is 18pt.
-  headerIconBtn: { minWidth: layout.touchMin, minHeight: layout.touchMin, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xs },
+  headerIconBtn: { minWidth: layout.touchMin, minHeight: layout.touchMin, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xs, flexShrink: 1 },
   headerIconLabel: { ...type.caption, color: colors.accent },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },

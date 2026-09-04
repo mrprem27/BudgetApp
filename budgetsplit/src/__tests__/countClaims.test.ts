@@ -160,3 +160,47 @@ describe('documented counts match the source', () => {
     expect(wrong).toEqual([]);
   });
 });
+
+/**
+ * `SYSTEM.md`'s complexity register groups its entries under headings that count
+ * them — "The six that need a decision first", "The four that only look like
+ * duplication". Resolving one item means editing a heading, and that went wrong
+ * the first time it was tried: `OV-16` was answered, a heading was changed from
+ * six to five, and the section underneath still held six — because `OV-16` had
+ * never been in that section at all. The register disagreed with itself, in the
+ * one document whose job is to be the map.
+ *
+ * Same principle as the rest of this file: don't trust the prose, count the source.
+ * Here the "source" is the register's own entries.
+ */
+describe('the complexity register agrees with its own headings', () => {
+  const WORDS: Record<string, number> = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  };
+
+  it('has a heading count matching the entries beneath it', () => {
+    const src = fs.readFileSync(path.join(DOCS, 'SYSTEM.md'), 'utf8');
+    const lines = src.split('\n');
+    const wrong: string[] = [];
+
+    lines.forEach((line, i) => {
+      const h = /^###\s+The\s+(\w+)\s+that\s+/.exec(line);
+      if (!h) return;
+      const claimed = WORDS[h[1].toLowerCase()];
+      if (claimed == null) return;
+
+      // Entries run to the next `###`, and each is an id at the start of a line
+      // inside the fenced block — `OV-06 · Categories are…`.
+      let found = 0;
+      for (let k = i + 1; k < lines.length && !/^###\s/.test(lines[k]); k++) {
+        if (/^(OV|DQ|E|IV|FE)-\d+\s+·/.test(lines[k])) found++;
+      }
+      if (found !== claimed) {
+        wrong.push(`SYSTEM.md:${i + 1} "${line.trim()}" — ${found} entries beneath it`);
+      }
+    });
+
+    expect(wrong).toEqual([]);
+  });
+});

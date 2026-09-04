@@ -122,9 +122,17 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
    *
    * Best-effort on purpose — a storage fault must not block the step. The cost of
    * it failing is one tile too many, which is where we already were.
+   *
+   * ⚠️ Only when nothing was added. "Skip" is also the way out for someone who has
+   * added three people and is done with the step — and their contacts are still
+   * committed by `finalize`. Recording that as "no thanks to people and groups"
+   * wrote down the opposite of what they did, and then suppressed the Home tiles on
+   * the strength of it. With people present, Skip means the same as Continue.
    */
   async function skipPeople() {
-    try { await settings.setOnboardingSkippedPeople(true); } catch { /* best-effort */ }
+    if (people.length === 0) {
+      try { await settings.setOnboardingSkippedPeople(true); } catch { /* best-effort */ }
+    }
     setStage('permissions');
   }
 

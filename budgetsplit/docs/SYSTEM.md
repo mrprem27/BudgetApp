@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (114 modules) and touches neither
+`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (115 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause

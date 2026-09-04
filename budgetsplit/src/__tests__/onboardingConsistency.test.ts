@@ -143,6 +143,39 @@ describe('each question is asked exactly once', () => {
 });
 
 /**
+ * A step must not throw away something the user typed into it.
+ *
+ * The people step has a draft (name + email) that only becomes a contact when
+ * `addPerson` runs. Someone who types a name and taps **Continue** plainly means
+ * "and this one" — but `onPrimary` advanced the stage and the draft went with it,
+ * silently, on a button that was simultaneously counting the people who had made
+ * it ("Continue with 2"). Nothing rendered, so nothing could catch it.
+ *
+ * Source-scanned because the alternative is rendering a component, which this
+ * suite never does. It asserts the wiring, not the behaviour — but the wiring is
+ * where it went wrong.
+ */
+describe('no step discards a draft on the way out', () => {
+  const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+
+  it('flushes the person draft before leaving the people step', () => {
+    const step = src.slice(src.indexOf("stage === 'people'"), src.indexOf("stage === 'permissions'"));
+    const onPrimary = /onPrimary=\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/.exec(step);
+    expect(onPrimary).toBeTruthy();
+    expect(onPrimary![1]).toContain('addPerson');
+  });
+
+  it('still lets the draft be added by return, not only by the button', () => {
+    // `returnKeyType="next"` with no `onSubmitEditing` shipped once: a key that
+    // named an action, did nothing, and could not move focus either — `ui/Input`
+    // exposes no ref.
+    const step = src.slice(src.indexOf("stage === 'people'"), src.indexOf("stage === 'permissions'"));
+    expect(step.match(/onSubmitEditing=\{addPerson\}/g) ?? []).toHaveLength(2);
+    expect(step).not.toContain('returnKeyType="next"');
+  });
+});
+
+/**
  * The hero's `FadeIn` delays are the one part of the animation that may be changed
  * (`LogoAssembly` itself is off limits — AGENTS §11), and they have been wrong
  * repeatedly because the numbers were literals in the JSX while the reasoning lived
