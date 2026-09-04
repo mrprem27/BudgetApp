@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
@@ -33,16 +33,27 @@ export function RecurringSheet({ visible, onClose, ...controls }: Props) {
   const { enabled, setEnabled } = controls;
 
   /*
-   * Opening this IS the intent to repeat, so turn it on.
+   * Opening this IS the intent to repeat, so turn it on — ONCE PER OPEN.
    *
    * It used to open on an off switch with nothing below it: you tapped a chip
    * labelled "Repeat", landed on a sheet titled "Repeat this", and then had to
    * find a third control saying the same thing before any options appeared. Three
    * statements of one intention, and two taps before the screen showed you
    * anything. The switch stays as the way back off.
+   *
+   * That last sentence was false in practice. `enabled` was in the dependency
+   * array with no latch, so switching it off re-ran the effect and switched it
+   * straight back on: the toggle visibly snapped back and the only way to stop a
+   * transaction repeating was to never open the sheet — which is what enables it.
+   * The latch arms on visible false→true, so the intent is read once at open and
+   * the user owns the value from then on.
    */
+  const armed = useRef(false);
   useEffect(() => {
-    if (visible && !enabled) setEnabled(true);
+    if (!visible) { armed.current = false; return; }
+    if (armed.current) return;
+    armed.current = true;
+    if (!enabled) setEnabled(true);
   }, [visible, enabled, setEnabled]);
 
   return (

@@ -66,7 +66,20 @@ export function TransferBody({
   const leftPerson = reversed ? to : from;
   const rightPerson = reversed ? from : to;
 
+  /*
+   * Refuses until both slots are filled, and the reason is not tidiness.
+   *
+   * `onSwap` swaps the two ids. On an untouched form `toId` is still '' while
+   * `fromId` has been back-filled to me, so one tap produced `from: '', to: me` —
+   * and the effect that back-fills `fromId` then re-fired and set it to me as
+   * well. Both slots became me, and the card showed "From and To must be different
+   * people": an error state reachable in one tap on a form nobody had typed into,
+   * blaming the user for something they could not have done.
+   */
+  const canReverse = !!fromId && !!toId;
+
   function reverse() {
+    if (!canReverse) return;
     setReversed(r => !r);
     onSwap();
   }
@@ -145,7 +158,7 @@ export function TransferBody({
             <Text style={styles.dirName} numberOfLines={1}>{nameOf(leftPerson, 'Pick')}</Text>
           </TouchableOpacity>
 
-          <DirectionArrow reversed={reversed} onPress={reverse} label={directionLabel} />
+          <DirectionArrow reversed={reversed} onPress={reverse} label={directionLabel} disabled={!canReverse} />
 
           <TouchableOpacity
             style={styles.dirTile}
@@ -252,10 +265,12 @@ export function TransferBody({
  * swapping in the mirror image would just be a different static picture. Rotation is
  * native-driver-safe (AGENTS §11) and honours Reduce Motion.
  */
-function DirectionArrow({ reversed, onPress, label }: {
+function DirectionArrow({ reversed, onPress, label, disabled }: {
   reversed: boolean;
   onPress: () => void;
   label: string | null;
+  /** Nothing to reverse until both slots are filled — see `reverse()`. */
+  disabled?: boolean;
 }) {
   // Accumulates rather than toggling between 0 and 180, so consecutive taps keep turning the
   // same way instead of rocking back and forth. Driven by `reversed` so the glyph can never
@@ -275,15 +290,17 @@ function DirectionArrow({ reversed, onPress, label }: {
 
   return (
     <PressableScale
-      onPress={() => { haptic.selection(); onPress(); }}
+      onPress={() => { if (disabled) return; haptic.selection(); onPress(); }}
       hitSlop={12}
       // The glyph's heading is invisible to a screen reader, so the state it encodes has to be
-      // spoken. Falls back to the action alone before anyone is picked.
-      accessibilityLabel={label ? `${label}. Tap to reverse.` : 'Reverse who pays whom'}
+      // spoken. Falls back to naming what is missing rather than offering an action that
+      // does nothing — "Reverse who pays whom" on a control that refuses is a lie.
+      accessibilityLabel={label ? `${label}. Tap to reverse.` : 'Pick both people to set the direction'}
+      accessibilityState={{ disabled: !!disabled }}
       style={styles.arrowBtn}
     >
-      <Animated.View style={[styles.arrowDisc, style]}>
-        <Feather name="arrow-right" size={20} color={colors.settle} />
+      <Animated.View style={[styles.arrowDisc, disabled && styles.arrowDiscOff, style]}>
+        <Feather name="arrow-right" size={20} color={disabled ? colors.textMuted : colors.settle} />
       </Animated.View>
     </PressableScale>
   );
@@ -320,6 +337,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: alpha(colors.settle, 33),
   },
+  // Muted until both people are picked. Kept visible rather than hidden: the arrow is
+  // what tells you the card is about a direction at all, so removing it would leave two
+  // avatars and no statement of what sits between them.
+  arrowDiscOff: { backgroundColor: colors.bgMuted, borderColor: colors.border },
   errText: { ...type.caption, color: colors.expense, textAlign: 'center' },
   upiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.settle, backgroundColor: alpha(colors.settle, 8) },
   upiBtnText: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },

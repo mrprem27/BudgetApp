@@ -410,6 +410,13 @@ export default function SettingsScreen() {
         {flags.importReview && (<>
           <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import'); }} />
           <View style={settingsRowDivider} />
+          {/* The other half of the same feature, and the only way IN when the queue is
+              empty. `/review`'s two existing entries both require rows — Import replaces
+              to it only after a successful parse, and Home's inbox badge is gated on a
+              non-zero count — so its "Nothing to review" state was unreachable: you could
+              never open the screen and be told there was nothing there. */}
+          <SettingsRow icon="inbox" label="Review inbox" value="Imported · unconfirmed" onPress={() => { router.push('/review'); }} />
+          <View style={settingsRowDivider} />
         </>)}
         {flags.reports && (<>
           <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
@@ -449,7 +456,10 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        {/* Clears the people-step answer too: replaying the tour means asking the
+            questions again, and a stale "no thanks" from the previous run would
+            silently suppress Home's tiles for a setup that never declined anything. */}
+        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); await settings.setOnboardingSkippedPeople(false); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
       </View>

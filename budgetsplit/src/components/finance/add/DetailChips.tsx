@@ -114,10 +114,28 @@ export function DetailChips({
           accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
         />
 
+        {/* Always filled — the time is real whether or not it was chosen. */}
+        <Chip
+          label={timeOfDay(txnDate)}
+          icon="clock"
+          selected
+          accent={accent}
+          chevron
+          onPress={onOpenTime}
+          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
+        />
+
         {/* A chip, not a row in the card below. Repeat HOLDS a value and has a
             real on/off, so it belongs in the same visual language as the other
             settable things — as a card row its only state signal was a line of
-            grey text, and "is this repeating?" could not be answered at a glance. */}
+            grey text, and "is this repeating?" could not be answered at a glance.
+
+            LAST of the three on purpose, and the header above has said so all
+            along: pay method and time describe the entry you are writing now,
+            while repeat describes every future copy of it. Sitting second, it
+            interrupted "how it was paid" and "when" with a question about other
+            months entirely — and it is the only one of the three that is usually
+            left alone. */}
         {onOpenRecurring && (
           <Chip
             label={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : 'Repeat'}
@@ -130,17 +148,6 @@ export function DetailChips({
             accessibilityLabel={recurEnabled ? 'Repeats. Change or turn off' : 'Make this repeat'}
           />
         )}
-
-        {/* Always filled — the time is real whether or not it was chosen. */}
-        <Chip
-          label={timeOfDay(txnDate)}
-          icon="clock"
-          selected
-          accent={accent}
-          chevron
-          onPress={onOpenTime}
-          accessibilityLabel={`Time: ${timeOfDay(txnDate)}. Change`}
-        />
       </View>
 
       {/* No `first`: this header's own 24pt top margin IS the break between groups. */}

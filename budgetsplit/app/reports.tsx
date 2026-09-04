@@ -316,7 +316,13 @@ export default function ReportsScreen() {
           {/* Month-end forecast (a projection into the future) lives on the Insights
               screen now — Reports shows only actual, historical data. */}
 
-          {summaries.length === 0 && (
+          {/* Guarded on ACTIVITY, not on how many groups exist.
+              `summaries` is one row per group and `seed.ts` creates a Personal group on
+              every device, so `summaries.length === 0` was never true and this state was
+              unreachable — a brand-new user got zero-value cards and a bare
+              "No transactions this month" string instead of the designed empty state.
+              `monthSpent`/`monthEarned` are the same figures the hero above renders. */}
+          {monthSpent === 0 && monthEarned === 0 && (
             <EmptyState
               icon="bar-chart-2"
               title="Nothing to report yet"

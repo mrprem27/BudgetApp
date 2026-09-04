@@ -141,9 +141,15 @@ export default function DashboardScreen() {
   // monthly — offering them "Set a monthly budget" would be re-asking a question
   // they already answered.
   const peopleCount = data?.peopleCount ?? 0;
+  // Skipping the people step at setup is an answer, and re-asking on the very next
+  // screen reads as the app not having heard it. The flag is set only by that Skip
+  // and stops mattering the moment a person or group exists — so it suppresses the
+  // nag, never the feature: both tiles come back if you later add someone and
+  // remove them, and every other route to groups and people is untouched.
+  const declinedPeople = data?.skippedPeople ?? false;
   const showBudgetTile = !budget.exists;
-  const showGroupTile = flags.splitting && groups.filter(g => g.is_personal !== 1).length === 0;
-  const showPeopleTile = flags.splitting && peopleCount === 0;
+  const showGroupTile = flags.splitting && !declinedPeople && groups.filter(g => g.is_personal !== 1).length === 0;
+  const showPeopleTile = flags.splitting && !declinedPeople && peopleCount === 0;
 
   return (
     <View style={styles.container}>

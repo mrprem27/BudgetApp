@@ -63,9 +63,27 @@ export async function setRemoteUid(
   await db.runAsync('UPDATE person SET remote_uid = ? WHERE id = ?', [remoteUid, personId]);
 }
 
+/**
+ * WHY a person cannot be removed. One bucket used to cover all three, and the UI
+ * guessed — it told everyone "you've shared expenses with them", which is false for
+ * somebody who has only ever been a name in a group, and false again for a linked
+ * account with no entries yet. A refusal that misstates its own reason is worse
+ * than a bare no, because the advice attached to it sends people somewhere useless.
+ */
+export type DeletePersonBlock =
+  /** A linked account: a live write path, whose entries can arrive at any moment. */
+  | 'account'
+  /** Money exists — a payment, a share, an entry they authored, an import draft. */
+  | 'history'
+  /** Group-shaped only: a membership, a trust answer, a budget override, a group they made. */
+  | 'group';
+
+/** One member per reason, so `reason` discriminates and `via` narrows with it. */
 export type DeletePersonResult =
   | { ok: true }
-  | { ok: false; reason: 'is-me' | 'not-found' | 'in-use' };
+  | { ok: false; reason: 'is-me' }
+  | { ok: false; reason: 'not-found' }
+  | { ok: false; reason: 'in-use'; via: DeletePersonBlock };
 
 /**
  * Remove a person this device made and never used.
@@ -94,26 +112,40 @@ export async function deletePerson(
   if (!p) return { ok: false, reason: 'not-found' };
   if (p.is_me === 1) return { ok: false, reason: 'is-me' };
   // A linked account means somebody real, whose entries can arrive at any time.
-  if (p.remote_uid) return { ok: false, reason: 'in-use' };
+  if (p.remote_uid) return { ok: false, reason: 'in-use', via: 'account' };
 
-  // Every column anywhere that names a person, checked in one place — the same
-  // list `mergePerson` moves. A reference this misses is a dangling id, and
-  // foreign keys are off, so nothing else would catch it.
-  const referenced = await db.getFirstAsync<{ n: number }>(
-    `SELECT (
-       (SELECT COUNT(*) FROM txn_payment       WHERE person_id = ?) +
-       (SELECT COUNT(*) FROM txn_share         WHERE person_id = ?) +
-       (SELECT COUNT(*) FROM group_member      WHERE person_id = ?) +
-       (SELECT COUNT(*) FROM person_group_trust WHERE person_id = ?) +
-       (SELECT COUNT(*) FROM category_budget   WHERE person_id = ?) +
-       (SELECT COUNT(*) FROM txn               WHERE author_person_id = ?) +
-       (SELECT COUNT(*) FROM budget_group      WHERE created_by = ?) +
-       (SELECT COUNT(*) FROM pending_txn
-         WHERE counterparty_id = ? OR author_person_id = ? OR payer_person_id = ?)
-     ) AS n`,
+  /*
+   * Every column anywhere that names a person, checked in one place — the same
+   * list `mergePerson` moves. A reference this misses is a dangling id, and
+   * foreign keys are off, so nothing else would catch it.
+   *
+   * Counted in TWO buckets rather than one, because the two mean different things
+   * to the person reading the refusal. `history` is money that exists and would be
+   * orphaned; `group` is a name in a roster with no money behind it. The totals add
+   * up to the same ten columns as before — this changes what we can SAY, not what
+   * is allowed.
+   */
+  const referenced = await db.getFirstAsync<{ history: number; group: number }>(
+    `SELECT
+       (
+         (SELECT COUNT(*) FROM txn_payment WHERE person_id = ?) +
+         (SELECT COUNT(*) FROM txn_share   WHERE person_id = ?) +
+         (SELECT COUNT(*) FROM txn         WHERE author_person_id = ?) +
+         (SELECT COUNT(*) FROM pending_txn
+           WHERE counterparty_id = ? OR author_person_id = ? OR payer_person_id = ?)
+       ) AS history,
+       (
+         (SELECT COUNT(*) FROM group_member       WHERE person_id = ?) +
+         (SELECT COUNT(*) FROM person_group_trust WHERE person_id = ?) +
+         (SELECT COUNT(*) FROM category_budget    WHERE person_id = ?) +
+         (SELECT COUNT(*) FROM budget_group       WHERE created_by = ?)
+       ) AS "group"`,
     Array(10).fill(personId),
   );
-  if ((referenced?.n ?? 0) > 0) return { ok: false, reason: 'in-use' };
+  // History wins when both are true: it is the stronger claim and the one that
+  // explains why removal would change a number.
+  if ((referenced?.history ?? 0) > 0) return { ok: false, reason: 'in-use', via: 'history' };
+  if ((referenced?.group ?? 0) > 0) return { ok: false, reason: 'in-use', via: 'group' };
 
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM person WHERE id = ?', [personId]);

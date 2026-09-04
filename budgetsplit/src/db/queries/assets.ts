@@ -114,9 +114,10 @@ export async function insertAsset(
   return (await getAssetById(db, id))!;
 }
 
-/** Rename / recolour / re-kind. Deliberately cannot change `balance` — that only
- *  moves through a transfer or {@link restateAssetBalance}, both of which leave a
- *  row explaining the change. */
+/** Rename / recolour / re-kind. Deliberately cannot change `balance` — that moves
+ *  only through a transfer, which writes a settlement row explaining it, or through
+ *  {@link restateAssetBalance}, which writes nothing at all and says why. Keeping
+ *  both out of here is what stops a balance changing as a side effect of a rename. */
 export async function updateAsset(
   db: SQLite.SQLiteDatabase,
   id: string,

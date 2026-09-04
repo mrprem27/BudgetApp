@@ -87,6 +87,21 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     setStage('summary');
   }
 
+  /**
+   * Skipping the people step is an ANSWER, and it has to be recorded as one.
+   *
+   * Home's GET STARTED tiles key on `flags.splitting` plus a live count, so a skip
+   * was invisible to them: you declined people and groups here, and the next screen
+   * asked for a group again. A count cannot tell "not yet" from "no thanks".
+   *
+   * Best-effort on purpose — a storage fault must not block the step. The cost of
+   * it failing is one tile too many, which is where we already were.
+   */
+  async function skipPeople() {
+    try { await settings.setOnboardingSkippedPeople(true); } catch { /* best-effort */ }
+    setStage('permissions');
+  }
+
   /** Summary CTA: open Quick Add once, right after the gate opens. */
   async function finishAndAddFirst() {
     try { await settings.setPendingFirstAdd(true); } catch { /* best-effort */ }
@@ -127,7 +142,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
     payMethod, setPayMethod,
-    people, setPeople, personDraft, setPersonDraft, addPerson,
+    people, setPeople, personDraft, setPersonDraft, addPerson, skipPeople,
     groupName, setGroupName,
     // permissions
     notifPerm, locPerm, allowNotifications, allowLocation,

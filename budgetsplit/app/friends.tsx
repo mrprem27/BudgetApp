@@ -21,6 +21,7 @@ import { pickAndSaveAvatar } from '../src/lib/avatar';
 import { deleteAttachment } from '../src/lib/attachment';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
+import { refusalReason } from '../src/lib/personCopy';
 import { haptic } from '../src/lib/haptics';
 import type { Person } from '../src/db/queries/persons';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -121,13 +122,7 @@ export default function FriendsScreen() {
           const res = await deletePerson(db, person.id);
           if (!res.ok) {
             haptic.error();
-            Alert.alert(
-              `Can't remove ${person.name}`,
-              res.reason === 'is-me'
-                ? 'This is you.'
-                : "You've shared expenses with them, so removing them would change your numbers. "
-                  + 'Take them out of a group instead — their history stays either way.',
-            );
+            Alert.alert(`Can't remove ${person.name}`, refusalReason(res));
             return;
           }
           haptic.warning();

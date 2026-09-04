@@ -63,6 +63,11 @@ export default function ApprovalsScreen() {
               icon="user-check"
               title="Nothing waiting"
               body="When someone adds an expense in a group you share, it will wait here until you accept it — and it won't touch your numbers until you do."
+              // Every other empty state offers a way forward; this one left you on a
+              // dead screen with a back button. Who may write to you is the thing this
+              // screen is actually about, so that is where it sends you.
+              actionLabel="Manage who you trust"
+              onAction={() => router.push('/friends')}
             />
           ) : (
             byAuthor.map(group => (

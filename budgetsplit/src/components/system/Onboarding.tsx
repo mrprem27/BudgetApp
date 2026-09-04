@@ -88,7 +88,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
     payMethod, setPayMethod,
-    people, setPeople, personDraft, setPersonDraft, addPerson,
+    people, setPeople, personDraft, setPersonDraft, addPerson, skipPeople,
     groupName, setGroupName,
     notifPerm, locPerm, allowNotifications, allowLocation,
     saving, finalize, finishAndAddFirst, onDone: done,
@@ -422,7 +422,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               primaryLabel={people.length > 0 ? `Create “${groupName}” with ${people.length}` : 'Continue'}
               onPrimary={() => setStage('permissions')}
               skipLabel="Skip"
-              onSkip={() => setStage('permissions')}
+              // Records the decision as well as advancing — see `skipPeople`.
+              onSkip={skipPeople}
             />
           }
         >

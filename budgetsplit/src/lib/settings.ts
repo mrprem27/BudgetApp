@@ -48,6 +48,15 @@ const K = {
   appLastOpen: 'app_last_open',
   onboardingDone: 'onboarding_done',
   onboardingIntent: 'onboarding_intent',
+  /**
+   * "I was offered people and groups at setup, and said no."
+   *
+   * Written only by the people step's Skip. Home's GET STARTED tiles used to key on
+   * `flags.splitting` and a live count alone, so skipping was invisible to them and
+   * the very next screen asked for a group again — which reads as the app not
+   * having listened. A count cannot express a decision; this can.
+   */
+  onboardingSkippedPeople: 'onboarding_skipped_people',
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
   goalReorderHintSeen: 'goal_reorder_hint_seen',
@@ -238,6 +247,8 @@ export const settings = {
   clearOnboardingDone: () => AsyncStorage.removeItem(K.onboardingDone),
   onboardingIntent: () => getString(K.onboardingIntent),
   setOnboardingIntent: (v: string) => setString(K.onboardingIntent, v),
+  onboardingSkippedPeople: () => getBool(K.onboardingSkippedPeople, false),
+  setOnboardingSkippedPeople: (v: boolean) => setBool(K.onboardingSkippedPeople, v),
   pendingFirstAdd: () => getBool(K.pendingFirstAdd, false),
   setPendingFirstAdd: (v: boolean) => setBool(K.pendingFirstAdd, v),
   clearPendingFirstAdd: () => AsyncStorage.removeItem(K.pendingFirstAdd),

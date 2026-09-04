@@ -13,6 +13,7 @@ import { INVESTMENT_EXPENSE_CATEGORY } from '../../src/constants/categories';
 import { Banner } from '../../src/components/ui/Banner';
 import { getTagsByFrequency } from '../../src/db/queries/transactions';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
+import { useContentInset } from '../../src/hooks/useContentInset';
 import { useVoiceDeepLink } from '../../src/hooks/useVoiceDeepLink';
 import { Screen } from '../../src/components/ui/Screen';
 import { AddHeader } from '../../src/components/finance/add/AddHeader';
@@ -45,6 +46,16 @@ export default function QuickAddScreen() {
   // rather than kept in the form hook — nothing here writes to it mid-edit.
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
+
+  /*
+   * No args: a fullScreenModal with no tab bar, no FAB and no sticky footer — the
+   * commit action lives in the header (AGENTS §5). The static style carried a flat
+   * `paddingBottom: space.md`, so on a notched phone the last card ended 16pt from
+   * the physical edge, under the home indicator. `useContentInset` exists precisely
+   * to end that guessing, and its own docblock names "insets.bottom + 40 in Quick
+   * Add" as one of the values it replaced — this screen had since regressed past it.
+   */
+  const bottomPad = useContentInset();
 
   useVoiceDeepLink({
     form: f,
@@ -82,7 +93,7 @@ export default function QuickAddScreen() {
           nothing there. The library's implementation makes `'padding'` work, so
           the special case and the magic number both go. */}
       <KeyboardAvoidingView style={styles.fill} behavior="padding">
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
 
           {!isEditing && !isRecurEdit && (
             <View style={styles.formBlock}>
@@ -306,7 +317,10 @@ const styles = StyleSheet.create({
   // No container `gap` — a block that renders its own top margin (e.g.
   // SplitSummary's header) would silently stack with it (AGENTS.md §3/§12).
   // Each block gets its own `formBlock` margin instead.
-  scroll: { padding: layout.screenPaddingH, paddingBottom: space.md },
+  // Horizontal and top only. The bottom comes from `useContentInset` at the call
+  // site, where it can see the safe area; a literal here would be dead weight the
+  // override silently replaces, which is how the old guessed value survived.
+  scroll: { padding: layout.screenPaddingH },
   formBlock: { marginBottom: space.md },
   remainderWarning: { ...type.label, color: colors.expense, textAlign: 'center' },
 });

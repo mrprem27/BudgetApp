@@ -21,6 +21,14 @@ type Props = {
  * live feed on data that may be stale. Extracted from HealthSheet's only copy.
  */
 export function SampleNote({ txnCount, periodLabel = 'this month', lowSampleHint, style }: Props) {
+  /*
+   * Nothing logged is not a thin sample — it is no sample, and there is no figure
+   * above this for the note to qualify. Rendering it anyway put "Based on 0
+   * transactions logged this month" on screen in amber, which reads as a warning
+   * about a number that is not there. Guarded here rather than at the call sites
+   * so every caller gets it.
+   */
+  if (txnCount <= 0) return null;
   const low = txnCount < LOW_SAMPLE_TXNS;
   return (
     <Text style={[styles.note, low && styles.noteLow, style]}>
