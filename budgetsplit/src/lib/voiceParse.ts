@@ -450,6 +450,24 @@ const INCOME_HINTS = new Set([
 ]);
 
 /**
+ * Words that mean money went into something you own.
+ *
+ * Mirrors `smartCategory`'s `Investments / SIP` keyword list, and deliberately so:
+ * that list already routed "sip 5000" to the investment CATEGORY, which is how a
+ * dictated investment used to arrive as an expense wearing a banner that told you
+ * it was not one. Now the same vocabulary reaches the right *kind*.
+ *
+ * ⚠️ `dividend` and `interest` are NOT here — they are in `INCOME_HINTS`, and money
+ * arriving from a holding is income, not a purchase of one. `INCOME_HINTS` is
+ * checked first, so "ten thousand dividend" stays income even though a dividend is
+ * unmistakably investment-shaped. That precedence is the point, not an accident.
+ */
+const INVEST_HINTS = new Set([
+  'sip', 'invest', 'invested', 'investment', 'mutual', 'stock', 'stocks', 'shares',
+  'zerodha', 'groww', 'upstox', 'etf', 'nps', 'ppf', 'fd', 'rd', 'gold', 'crypto', 'bitcoin',
+]);
+
+/**
  * Verbs that mean money moved between two named people.
  *
  * `owe`/`owed` are deliberately absent: they are in `GROUP_HINTS`, so they mean a *split* that
@@ -479,14 +497,19 @@ const SETTLE_VERBS = new Set([
 export function detectVoiceKind(
   transcript: string,
   opts: { people?: { id: string; name: string }[] } = {},
-): 'expense' | 'income' | 'transfer' {
+): 'expense' | 'income' | 'transfer' | 'invest' {
   const tokens = tokenize(transcript);
+  // Income first: a dividend is investment-shaped language for money ARRIVING.
   if (tokens.some(t => INCOME_HINTS.has(t))) return 'income';
 
   const namedSomeone = opts.people ? matchPerson(tokens, opts.people) !== null : false;
   const hasSettleVerb = tokens.some(t => SETTLE_VERBS.has(t));
   const sharedWording = tokens.some(t => (GROUP_HINTS as readonly string[]).includes(t));
+  // A named person beats an investment word: "paid Riya for the gold" is a
+  // settlement with Riya, whatever the gold was.
   if (namedSomeone && hasSettleVerb && !sharedWording) return 'transfer';
+
+  if (tokens.some(t => INVEST_HINTS.has(t))) return 'invest';
 
   return 'expense';
 }

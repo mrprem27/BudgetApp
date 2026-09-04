@@ -63,8 +63,9 @@ That is **pick-then-fill**, and §3 writes it up as a pattern.
 
 **And the headline, which reads backwards from how it was written.** The note said *"I lost Invest"*.
 Nobody lost it: the model is correct, `transferToAsset` has been writing it correctly all along, and
-`OV-20` already counts five names for it. What is missing is a **button**. The Add screen detects
-that you are investing and then sends you somewhere else to do it — `OV-30`.
+`OV-20` already counts five names for it. What was missing was a **button** — the Add screen detected
+that you were investing and then sent you somewhere else to do it. ✅ **Fixed 2026-09-05** (`OV-30`):
+Invest is a fourth pill, saving through the write path that already existed.
 
 **What the walk did not find** is worth stating too. No money was wrong. Every note is about a
 surface, a label, a position or a missing entry point; not one of them is a figure that came out
@@ -432,7 +433,7 @@ Every note from the walk, once. `Filed` names the durable id where one exists.
 | `W1-17` | `SC-21` | Reports groups not collapsible | — |
 | `W1-18` | `SC-09`, `SC-11`, `SC-13` | Member and group-edit rows read as undesigned | — |
 | `W1-19` | `SC-26` | Cannot remove a settled person. Splits in two: `W1-19a` the message, which is simply false when the only reference is group membership, and `W1-19b` the policy, which is a decision | `W1-19a` free · `W1-19b` → `DQ-25` |
-| — | `SC-04` | "I lost Invest" | `OV-30` |
+| — ✅ | `SC-04` | "I lost Invest" | `OV-30` |
 | — | `SC-05` | Assets / investments / in-account flow unclear; Plan feels complex | `OV-30`, `DQ-27` |
 | — | `SC-10`, `SC-25` | Not all payments are expenses; expendable-income tag | `DQ-24`, `DQ-26` |
 | `W1-34` | `SC-06` | Settings option grouping and clarity | — |
@@ -499,12 +500,19 @@ materialising it changes numbers.
 
 **Gate:** pick-then-fill is a redesign; the individual defects are not and do not have to wait.
 
-### Phase 4 · The Invest pill — `OV-30`
+### Phase 4 · The Invest pill — `OV-30` ✅ **done 2026-09-05**
 
-Surface only. Adds the fourth entry kind, routes it through `transferToAsset`, deletes the banner.
-Does **not** wait on `OV-02`.
+Surface only. Adds the fourth entry kind and routes it through `transferToAsset`. Did **not** wait
+on `OV-02`.
 
-**Gate:** none. This is the first phase that adds a capability rather than repairing one.
+Two things went differently from the plan. The banner was **repointed rather than deleted** — it now
+switches kind in place, keeping the amount already typed, which is strictly better than sending you
+to another screen to start again. And "surface only" was optimistic: eight files moved, of which the
+compiler caught two. The rest were `switch` defaults, a `===` chain and negated single-kind gates,
+all of which compiled and silently did the wrong thing. `addKind.test.ts` is the mechanism that
+stops the next kind being half-added.
+
+**Gate:** none. This was the first phase that added a capability rather than repairing one.
 
 ### Phase 5 · One filter — `OV-34`
 

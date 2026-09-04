@@ -9,6 +9,7 @@ import { asFeather } from '../../../constants/palette';
 import { categoryVisual } from '../../../constants/categories';
 import type { Category } from '../../../db/queries/categories';
 import type { AddKind } from '../../../constants/enums';
+import type { FeatherName } from '../../../constants/palette';
 
 type Props = {
   kind: AddKind;
@@ -18,6 +19,16 @@ type Props = {
   onDate: () => void;
   /** The screen's kind colour, used when no category colour applies. */
   accent?: string;
+  /**
+   * Replaces the left chip entirely.
+   *
+   * The left chip answers *"where does this belong?"*, and the answer is not always
+   * a category: an expense picks one, a transfer gives a Reason, and **Invest names
+   * an asset** — its category is fixed to `INVESTMENT_CATEGORY`, so offering a
+   * picker would ask a question with one legal answer. Same row, same shape, same
+   * chevron; only the noun changes.
+   */
+  destination?: { label: string; icon: FeatherName; onPress: () => void; a11y: string };
 };
 
 /**
@@ -34,26 +45,39 @@ type Props = {
  * calendar for the date — because a row of identically-shaped pills is only
  * scannable if the glyphs distinguish them.
  */
-export function CategoryDatePills({ kind, selectedCategory, onCategory, txnDate, onDate, accent = colors.accent }: Props) {
+export function CategoryDatePills({
+  kind, selectedCategory, onCategory, txnDate, onDate, accent = colors.accent, destination,
+}: Props) {
   const catWord = kind === 'transfer' ? 'Reason' : 'Category';
   const catColor = selectedCategory?.color ?? accent;
   const isToday = isSameDay(new Date(txnDate), new Date());
 
   return (
     <View style={styles.row}>
-      <Chip
-        grow
-        chevron
-        label={selectedCategory?.name ?? catWord}
-        // A chosen category shows its own colour+glyph in a disc; an empty one shows
-        // the neutral glyph for what's being asked for.
-        leading={selectedCategory
-          ? <IconCircle icon={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={22} color={catColor} iconSize={13} />
-          : undefined}
-        icon={selectedCategory ? undefined : kind === 'transfer' ? 'message-circle' : 'tag'}
-        onPress={onCategory}
-        accessibilityLabel={selectedCategory ? `${catWord}: ${selectedCategory.name}` : `Choose ${catWord.toLowerCase()}`}
-      />
+      {destination ? (
+        <Chip
+          grow
+          chevron
+          label={destination.label}
+          icon={destination.icon}
+          onPress={destination.onPress}
+          accessibilityLabel={destination.a11y}
+        />
+      ) : (
+        <Chip
+          grow
+          chevron
+          label={selectedCategory?.name ?? catWord}
+          // A chosen category shows its own colour+glyph in a disc; an empty one shows
+          // the neutral glyph for what's being asked for.
+          leading={selectedCategory
+            ? <IconCircle icon={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={22} color={catColor} iconSize={13} />
+            : undefined}
+          icon={selectedCategory ? undefined : kind === 'transfer' ? 'message-circle' : 'tag'}
+          onPress={onCategory}
+          accessibilityLabel={selectedCategory ? `${catWord}: ${selectedCategory.name}` : `Choose ${catWord.toLowerCase()}`}
+        />
+      )}
       {/*
         One chip for WHEN, not two.
         

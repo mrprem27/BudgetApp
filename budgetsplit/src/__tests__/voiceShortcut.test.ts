@@ -199,7 +199,12 @@ describe('the install links', () => {
     expect(VOICE_COMMANDS[0].steps).toBe(VOICE_SHORTCUT_STEPS);
     expect(detectVoiceKind('fifty thousand salary')).toBe('income');
     expect(detectVoiceKind('paid Riya five hundred', { people: [{ id: 'r', name: 'Riya' }] })).toBe('transfer');
-    expect(new Set([AddKind.Expense, 'income', 'transfer'])).toEqual(new Set(ADD_KIND));
+    expect(detectVoiceKind('ten thousand into my sip')).toBe('invest');
+    // Income beats an investment word: money ARRIVING from a holding is income.
+    expect(detectVoiceKind('twelve hundred dividend')).toBe('income');
+    // A named person beats one too — the gold is what it was for, not where it went.
+    expect(detectVoiceKind('paid Riya for the gold', { people: [{ id: 'r', name: 'Riya' }] })).toBe('transfer');
+    expect(new Set([AddKind.Expense, 'income', 'transfer', 'invest'])).toEqual(new Set(ADD_KIND));
   });
 
   it('keeps the name short, and not a lone common word', () => {

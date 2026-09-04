@@ -211,6 +211,13 @@ export async function transferToAsset(
   /** Which bucket the money leaves, so cash lands in the right place. */
   fromBucket: PayMethod = PayMethod.Bank,
   note?: string,
+  /**
+   * When it happened. Defaults to now, which is right for the Plan tab's one-tap
+   * "Moved to investments" — but the Add screen has a date chip, and an Invest
+   * entry backdated to last Tuesday must land on last Tuesday or the ledger
+   * disagrees with what the user typed.
+   */
+  date?: number,
 ): Promise<string> {
   const { me, asset, personal, amount } = await transferContext(db, assetId, amountPaise);
   const id = uuid();
@@ -221,7 +228,7 @@ export async function transferToAsset(
       groupId: personal.id,
       kind: 'settlement',
       entryMode: 'quick',
-      date: now,
+      date: date ?? now,
       category: INVESTMENT_CATEGORY,
       note: note ?? `Moved to ${asset.name}`,
       payMethod: fromBucket,

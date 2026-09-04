@@ -29,6 +29,7 @@ import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useToast } from '../components/system/Toast';
 import { getSafeToSpend } from '../db/queries/spendPower';
+import { getAssets, transferToAsset, defaultInvestmentAsset, type Asset } from '../db/queries/assets';
 import { setPendingSettlement } from '../lib/pendingSettlement';
 import { useStore } from '../store';
 import { useLocationCapture } from './useLocationCapture';
@@ -37,7 +38,7 @@ import { buildUpiUri, buildUpiRequestUri } from '../lib/upiIntent';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
-import { AddKind, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
+import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 
 export type AddTxnParams = {
@@ -70,8 +71,19 @@ export function useAddTxnForm(params: AddTxnParams) {
   const groups = useStore(s => s.groups);
   const me = useStore(s => s.me);
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
+  /**
+   * The kind a deep link asked for, or Expense.
+   *
+   * Derived from `ADD_KIND` rather than written as a chain of `===`. The chain it
+   * replaces named three members and fell through to Expense for anything else, so
+   * adding a fourth did not break the build — `/add/quick?kind=invest` simply
+   * opened on Expense, silently, which is the worst way for a deep link to fail.
+   * A membership test cannot go stale.
+   */
   const [kind, setKind] = useState<AddKind>(
-    paramKind === AddKind.Income ? AddKind.Income : paramKind === AddKind.Transfer ? AddKind.Transfer : AddKind.Expense,
+    (ADD_KIND as readonly string[]).includes(paramKind ?? '')
+      ? paramKind as AddKind
+      : AddKind.Expense,
   );
   const [amountText, setAmountText] = useState(paramAmount && /^\d+$/.test(paramAmount) ? paiseToInput(parseInt(paramAmount, 10)) : '');
   const [allPersons, setAllPersons] = useState<Person[]>([]);
@@ -94,6 +106,16 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);  // Seeded from the user's default in the settings effect below.
   const [transferNote, setTransferNote] = useState('');
+  /**
+   * Where an Invest entry lands, and the assets it can choose from.
+   *
+   * Seeded with `defaultInvestmentAsset` in the settings effect, so the fast path
+   * — amount, save — costs no picker interaction. `null` means the register is
+   * empty, which is a real state on a fresh install: the pill then asks you to
+   * make an asset rather than refusing with a disabled button.
+   */
+  const [investAssetId, setInvestAssetId] = useState<string | null>(null);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -263,6 +285,23 @@ export function useAddTxnForm(params: AddTxnParams) {
 
   // Transfer: load everyone, default the payer to me, recompute scopes on change.
   useEffect(() => { getAllPersons(db).then(setAllPersons).catch(() => {}); }, [db]);
+
+  /**
+   * The asset register, and the one Invest opens on.
+   *
+   * `defaultInvestmentAsset` CREATES an asset when the register is empty, which is
+   * right for the Plan tab's "Moved to investments" (you asked for it) and wrong
+   * here (you only opened a screen). So the default is picked from what exists,
+   * and minting is deferred to the moment an invest is actually saved.
+   */
+  useEffect(() => {
+    getAssets(db)
+      .then(rows => {
+        setAssets(rows);
+        setInvestAssetId(prev => prev ?? rows[0]?.id ?? null);
+      })
+      .catch(() => {});
+  }, [db]);
   useEffect(() => {
     if (!me) return;
     getFriendBalances(db, me.id)
@@ -393,7 +432,13 @@ export function useAddTxnForm(params: AddTxnParams) {
     });
   }, [kind, snapshot, total, selectedCategory, nudgeStat]);
 
-  const canSave = kind === 'transfer'
+  const canSave = kind === AddKind.Invest
+    // An amount and somewhere for it to go. No category (it is always
+    // `INVESTMENT_CATEGORY`), no split, no group — the money never leaves you, so
+    // there is nobody to share it with. A null asset is savable because saving is
+    // what mints the first one; see `handleSaveInvest`.
+    ? total > 0
+    : kind === 'transfer'
     ? (total > 0 && transferFromId !== '' && transferToId !== '' && transferFromId !== transferToId && selectedCategory !== null)
     : (total > 0
         && selectedCategory !== null
@@ -624,8 +669,46 @@ export function useAddTxnForm(params: AddTxnParams) {
    * in a list. Passing it replaces the `router.back()` this otherwise ends with; the duplicate
    * prompt still fires either way, which is exactly the guard auto-save wants.
    */
+  /**
+   * Invest → the asset register, through the path that already existed.
+   *
+   * `transferToAsset` writes the settlement row and the asset balance inside one
+   * `withTransactionAsync`, and has done for months — `OV-30` was never a missing
+   * write path, only a missing button. So this branch composes; it does not
+   * reimplement. Booking it here by hand would put a second copy of the transfer
+   * rule on the Add screen, competing with `queries/assets.ts`, which is exactly
+   * what `updateTxn` refuses to do for the same reason.
+   *
+   * Net worth does not move: cash leaves a bucket and an asset of equal value
+   * appears. Nothing is consumed, so nothing reaches a budget or a spend total
+   * (`AGENTS.md` §12, `IV-17`).
+   */
+  async function handleSaveInvest() {
+    if (total <= 0 || saving) return;
+    setSaving(true);
+    try {
+      // Deferred minting: the register can legitimately be empty on a fresh
+      // install, and refusing the save would make the pill useless exactly when
+      // someone is trying to use it for the first time. `defaultInvestmentAsset`
+      // creates one — but only now, because they asked, not because the screen
+      // opened.
+      const assetId = investAssetId ?? (await defaultInvestmentAsset(db)).id;
+      await transferToAsset(db, assetId, total, payMethod, note.trim() || undefined, txnDate);
+      haptic.success();
+      refresh();
+      router.back();
+    } catch (e) {
+      haptic.error();
+      const m = saveFailureMessage(e);
+      Alert.alert(m.title, m.title === 'Error' ? 'Could not record the investment.' : m.body);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSave(opts?: { onSaved?: (txnId: string) => void }) {
     if (kind === 'transfer') return handleSaveTransfer();
+    if (kind === AddKind.Invest) return handleSaveInvest();
     if (!canSave || saving) return;
     setSaving(true);
     try {
@@ -805,6 +888,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     // transfer
     allPersons, personNet, transferFromId, setTransferFromId, transferToId, setTransferToId,
     transferScope, setTransferScope, transferScopes, transferNote, setTransferNote, transferScopeBal,
+    assets, investAssetId, setInvestAssetId,
     transferFrom, transferTo, transferPayee, transferHandoff, canPayTransferUpi, canRequestTransferQr,
     transferHandoffHooks,
     payMethod, setPayMethod,

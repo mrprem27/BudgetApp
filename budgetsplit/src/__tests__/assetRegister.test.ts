@@ -77,6 +77,35 @@ describe('a transfer into an asset conserves net worth', () => {
     expect(row?.asset_id).toBe(gold.id);
   });
 
+  /**
+   * The Add screen's Invest pill (`OV-30`) saves through this function, and that
+   * screen has a date chip. Before it took a date, every invest landed at `now` —
+   * so backdating one to last Tuesday silently filed it today, and the ledger
+   * disagreed with the form the user had just filled in.
+   */
+  it('lands on the date it was given, not on today', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+    const lastTuesday = Date.now() - 6 * 24 * 60 * 60 * 1000;
+
+    const id = await transferToAsset(asDb(db), gold.id, 250000, PayMethod.Bank, 'January SIP', lastTuesday);
+
+    const row = await db.getFirstAsync<{ date: number }>('SELECT date FROM txn WHERE id = ?', [id]);
+    expect(row?.date).toBe(lastTuesday);
+  });
+
+  it('still defaults to now, so the Plan tab’s one-tap action is unchanged', async () => {
+    const { db } = await setup();
+    const gold = await insertAsset(asDb(db), { name: 'Gold' });
+    const before = Date.now();
+
+    const id = await transferToAsset(asDb(db), gold.id, 250000);
+
+    const row = await db.getFirstAsync<{ date: number }>('SELECT date FROM txn WHERE id = ?', [id]);
+    expect(row!.date).toBeGreaterThanOrEqual(before);
+    expect(row!.date).toBeLessThanOrEqual(Date.now());
+  });
+
   it('writes both halves or neither', async () => {
     const { db } = await setup();
     const gold = await insertAsset(asDb(db), { name: 'Gold' });

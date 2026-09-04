@@ -16,11 +16,12 @@ import { DatePickerSheet } from '../../ui/DatePickerSheet';
 import { TimePickerSheet } from '../../ui/TimePickerSheet';
 import { UpiUriSheet } from '../UpiUriSheet';
 import { RequestQrSheet } from '../RequestQrSheet';
+import { AssetPickerSheet } from './AssetPickerSheet';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 
 /** Which overlay is open. One at a time — they're all modal. */
 export type QuickAddSheet =
-  | 'split' | 'payers' | 'date' | 'endDate' | 'destination'
+  | 'split' | 'payers' | 'date' | 'endDate' | 'destination' | 'asset'
   | 'payMethod' | 'recurring' | 'note' | 'scope' | 'tags' | 'time' | 'calc' | 'voice'
   | 'upiUri' | 'requestQr' | null;
 
@@ -75,6 +76,18 @@ export function QuickAddSheets({
         scopes={f.transferScopes}
         scope={f.transferScope}
         onSelect={f.setTransferScope}
+        accent={accent}
+      />
+
+      {/* Invest's destination. `destination` is the GROUP picker and answers a
+          different question — which ledger — so this is its own slot rather than a
+          mode of that one. */}
+      <AssetPickerSheet
+        visible={open === 'asset'}
+        onClose={onClose}
+        assets={f.assets}
+        value={f.investAssetId}
+        onSelect={f.setInvestAssetId}
         accent={accent}
       />
 

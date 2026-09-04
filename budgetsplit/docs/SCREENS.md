@@ -196,7 +196,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-07 | **Quick Add** | `app/add/quick.tsx` | One form for expense / income / transfer, plus edit mode and recurring-rule edit mode. All state in `useAddTxnForm`; the file is render-only. |
+| S-07 | **Quick Add** | `app/add/quick.tsx` | One form for expense / income / transfer / **invest**, plus edit mode and recurring-rule edit mode. All state in `useAddTxnForm`; the file is render-only. |
 | S-08 | **Itemized bill** | `app/add/itemized.tsx` | 4-step wizard (items → assign → payers → review) with per-item splitting, four adjustment types, and **receipt scanning** (§7.4). State in `useItemizedForm`. |
 
 ### 3.4 Group screens
@@ -379,15 +379,17 @@ Both add screens are `fullScreenModal` presentations sliding from the bottom. Mo
 pull-to-refresh — they're wizards.
 
 ### 7.1 Quick Add — `app/add/quick.tsx`
-**Purpose:** log one expense / income / settlement transfer (create or edit).
+**Purpose:** log one expense / income / settlement transfer / **investment** (create or edit).
 Body order, top to bottom:
 
 1. **ModalHeader** — ✕ left, title centre, **Save** right (a tinted text button, kind-coloured, disabled until `canSave`). AGENTS §5's PrimaryButton rule has a recorded exception for modal headers.
-2. 🔘 **Kind** — `TabPills` at `size="lg"` (full-width, 56pt): `Expense · Income · Transfer`. Transfer is hidden unless `flags.splitting` or you're editing an existing transfer; Income forces the Personal group.
+2. 🔘 **Kind** — `TabPills`: `Expense · Transfer · Invest · Income`. Transfer is hidden unless `flags.splitting` or you're editing an existing transfer; **Invest is not filtered with it** — moving your own money into your own asset needs nobody else, so turning off bill-splitting must not remove a personal-finance feature. Income forces the Personal group. Two of the four store as `settlement` and are told apart by `txn.asset_id` (`SETTLEMENT_ADD_KINDS`).
 3. **ContextPill** — one compact centred pill answering "what is this about?", used by **both** kinds. For an **expense** it shows the destination group + "N people · equal" / "just you" → **DestinationSheet** (every group, ordered by `getGroupsByRecentUse` — Personal pinned, then most-recently-used); **rendered even with one group**, unlike the old `GroupSelector` which was gated on `groups.length > 1`. For a **transfer** it shows which debt is being settled + its balance → **ScopeSheet** (All groups + each shared group, each with its outstanding amount). Transfer previously asked this a second time with its own chip row inside `TransferBody`.
 4. **Amount input** (`type.amountXL` SpaceMono) — `sanitizeAmountInput` caps it live, `parseToPaise` on read. Once it holds a value, a **÷ disc** below the field opens `AmountCalculatorSheet`: a *sequential* calculator (not an expression parser — precedence would make "100 + 20 × 3" answer 160 when 360 was meant). `+`/`−` take an amount, `×`/`÷` take a plain factor, so "÷ 3" means split three ways. The accumulator is integer paise and the fraction-producing operators round **once**, explicitly, so the figure shown is the figure saved; non-even divisions warn (₹100 ÷ 3 leaves a paisa). Logic + 22 tests in `lib/amountCalc.ts`.
-5. **Category + date chips** → `CategoryPicker` / `DatePickerSheet`. Both are `ui/Chip` with a trailing chevron — the *same* primitive as the "Other details" chips below, so the screen has one pill shape. Category `grow`s to fill the row (a long name truncates instead of pushing Date off-screen) and shows its own colour+glyph in an `IconCircle`; Date carries a `calendar` glyph it previously had none of.
+5. **Category + date chips** → `CategoryPicker` / `DatePickerSheet`. Both are `ui/Chip` with a trailing chevron — the *same* primitive as the "Other details" chips below, so the screen has one pill shape. Category `grow`s to fill the row (a long name truncates instead of pushing Date off-screen) and shows its own colour+glyph in an `IconCircle`; Date carries a `calendar` glyph it previously had none of. The left chip answers *"where does this belong?"*, and on **Invest** that is an **asset**, not a category — its category is fixed to `INVESTMENT_CATEGORY`, so a picker would ask a question with one legal answer. `AssetPickerSheet` lists the register with balances.
 6. **Transfer body** (`TransferBody`, transfer only): from/to people, scope (per-group or "all groups"), 🔘 pay method, note.
+
+   **Invest body** is deliberately almost nothing: amount, asset, date, note. No split (nobody else is involved), no destination group (always Personal), and no smart-category title — the title exists to *guess* a category and there is nothing to guess. Saves through `transferToAsset`, which writes the settlement row and the asset balance in one transaction; net worth does not move. **Create-only** — `updateTxn` refuses an asset-linked row (`AssetTransferError`) because the register owns those actions.
 7. **Title/Note field** (`ui/Input`, `edit-3` glyph, focus ring), then the **budget nudge** ("₹X left in {cat} this month", from `getAffordSnapshot`).
 8. **SplitSummary** *(shared expense, total > 0)* — split-with + paid-by. Sits **above** the optional details, so nothing can push it off-screen.
 9. **Remainder warning** when payers or shares don't add up.
@@ -1791,7 +1793,7 @@ Every rule that can block or alter a save, with the copy the user actually sees.
 | Field / rule | Rule | On failure |
 |---|---|---|
 | **Any amount** | `parseToPaise` → integer paise; `sanitizeAmountInput` caps the live input. Money is never a float. | Input can't be typed past the cap |
-| **Quick Add `canSave`** | Amount > 0 **and** a category (expense/income) **and**, for a transfer, a from-person, a to-person and a shared group between them | Save button disabled; transfer with no shared group → explicit Alert |
+| **Quick Add `canSave`** | Amount > 0 **and** a category (expense/income) **and**, for a transfer, a from-person, a to-person and a shared group between them. **Invest needs only an amount** — no category, no group, and a null asset is savable because saving is what mints the first one | Save button disabled; transfer with no shared group → explicit Alert |
 | **Person name** | ≤ 30 chars; onboarding contacts dedup by name | Truncated / silently deduped |
 | **Budget line** | Only amounts **> 0** are written by `setCategoryBudgets`; a zeroed line removes the budget | Silent (zero = "no budget", not an error) |
 | **Split sum** | `computeShares` / `splitByMode` distribute the exact remainder so shares sum to the total with no rounding drift | Remainder warning in Add; Review row footer reads "₹X unassigned" / "₹X over" |

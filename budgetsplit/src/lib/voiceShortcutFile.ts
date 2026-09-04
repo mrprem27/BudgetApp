@@ -121,6 +121,9 @@ const TINT: Record<AddKind, number> = {
   [AddKind.Expense]: 431817727,   // Teal
   [AddKind.Income]: 4292093695,   // Green
   [AddKind.Transfer]: 2071128575, // Violet
+  // Invest shares Violet with Transfer: both are settlements, and the palette has
+  // no fifth value close to `colors.income` that Transfer is not already using.
+  [AddKind.Invest]: 2071128575,   // Violet
 };
 
 /**
@@ -135,6 +138,7 @@ const GLYPH: Record<AddKind, number> = {
   [AddKind.Expense]: 59511,
   [AddKind.Income]: 59473,
   [AddKind.Transfer]: 59461,
+  [AddKind.Invest]: 59473,        // reuses Income's upward glyph; see the ⚠️ above
 };
 
 /**

@@ -32,18 +32,21 @@ type Props = {
 
 /**
  * Examples per kind. A transfer's shape is genuinely different — a person and a direction, not
- * a merchant — so showing expense examples there taught the wrong phrasing.
+ * a merchant — so showing expense examples there taught the wrong phrasing. Invest's is
+ * different again: a destination you own, not a person and not a merchant.
  */
 const EXAMPLES: Record<AddKind, string[]> = {
   [AddKind.Expense]: ['four fifty groceries', 'twelve hundred rent yesterday', 'chai dus rupaye'],
   [AddKind.Income]: ['fifty thousand salary', 'two thousand refund yesterday', 'paanch sau cashback'],
   [AddKind.Transfer]: ['paid Riya five hundred', 'two thousand to Sam yesterday', 'settled dus hazaar'],
+  [AddKind.Invest]: ['ten thousand into my SIP', 'five thousand gold', 'twenty five hundred to the FD'],
 };
 
 const PROMPT: Record<AddKind, string> = {
   [AddKind.Expense]: 'say the amount and what it was for',
   [AddKind.Income]: 'say the amount and where it came from',
   [AddKind.Transfer]: 'say the amount and who you paid',
+  [AddKind.Invest]: 'say the amount and where it went',
 };
 
 /**

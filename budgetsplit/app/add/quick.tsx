@@ -7,7 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout } from '../../src/theme';
 import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
-import { ADD_KIND, ADD_KIND_LABEL } from '../../src/constants/enums';
+import { ADD_KIND, ADD_KIND_LABEL, AddKind } from '../../src/constants/enums';
 import { insertCategory } from '../../src/db/queries/categories';
 import { INVESTMENT_EXPENSE_CATEGORY } from '../../src/constants/categories';
 import { Banner } from '../../src/components/ui/Banner';
@@ -66,6 +66,11 @@ export default function QuickAddScreen() {
 
   const { kind, flags, isEditing, isRecurEdit } = f;
   const isTransfer = kind === 'transfer';
+  // Invest is a settlement too, but a personal one — no counterparty, no split, no
+  // group. Where a gate means "is this a settlement" it must ask both; where it
+  // means "does this involve another person" it must ask only `isTransfer`.
+  const isInvest = kind === AddKind.Invest;
+  const investAsset = f.assets.find(a => a.id === f.investAssetId) ?? null;
   const accent = kindAccent(kind);
   const nudgeColor = f.nudgePct == null ? null : f.nudgePct > 0.2 ? colors.income : f.nudgePct > 0 ? colors.healthAmber : colors.expense;
 
@@ -96,6 +101,11 @@ export default function QuickAddScreen() {
   // Transfer is hidden when splitting is off — a settlement needs someone to settle
   // with — but stays visible while editing one, or the pill would vanish from a row
   // that already is a transfer.
+  //
+  // Invest is NOT filtered with it. Moving your own money into your own asset needs
+  // nobody else, so it is exactly as available to a splitting-off user as Expense
+  // is; hiding it with Transfer would remove a personal-finance feature because
+  // someone turned off bill-splitting.
   const tabs = flags.splitting || isTransfer
     ? KIND_TABS
     : KIND_TABS.filter(t => t.key !== 'transfer');
@@ -151,6 +161,14 @@ export default function QuickAddScreen() {
               onCategory={() => { Keyboard.dismiss(); setShowCatPicker(true); }}
               txnDate={f.txnDate}
               onDate={() => open('date')}
+              // Invest's category is always `INVESTMENT_CATEGORY`, so the left chip
+              // asks the question that does have more than one answer: which asset.
+              destination={isInvest ? {
+                label: investAsset?.name ?? 'Choose asset',
+                icon: 'trending-up',
+                onPress: () => open('asset'),
+                a11y: investAsset ? `Into ${investAsset.name}. Change` : 'Choose which asset',
+              } : undefined}
             />
           </View>
 
@@ -196,7 +214,26 @@ export default function QuickAddScreen() {
             </View>
           )}
 
-          {kind !== 'transfer' && (
+          {/* Invest's whole form: an amount, an asset, a date and a note.
+              No category picker (it is fixed), no split (nobody else is involved),
+              no destination group (it is always Personal), and no smart-category
+              title — the title exists to GUESS a category, and there is nothing to
+              guess. What is left is the note, which is where "January SIP" goes. */}
+          {isInvest && (
+            <View style={styles.formBlock}>
+              <Input
+                value={f.note}
+                onChangeText={f.setNote}
+                icon="edit-3"
+                placeholder="Note (optional)"
+                maxLength={80}
+                autoCapitalize="sentences"
+                accessibilityLabel="Note"
+              />
+            </View>
+          )}
+
+          {!isTransfer && !isInvest && (
             <>
               {/* Top field: Title (drives category) when smart-category is on, else the
                   Note. `ui/Input` rather than a bespoke card input, so this field and the
@@ -225,17 +262,21 @@ export default function QuickAddScreen() {
                 * budget it has no business eating, and net worth FALLS by the
                 * amount invested.
                 *
-                * A nudge rather than a block: it might genuinely be a brokerage
-                * fee. The register is one tap away, and the sentence says what
-                * the difference actually is.
+                * This used to be a Banner reading "record it against an asset and
+                * your net worth stays put", whose action pushed to `/assets` —
+                * i.e. it caught the mistake and then sent you to another screen to
+                * redo the entry. `OV-30`: a banner that catches a mistake the
+                * screen could have prevented is a workaround, not a feature. The
+                * Invest pill is the control it was standing in for, so this now
+                * switches kind in place, keeping the amount already typed.
                 */}
               {kind === 'expense' && f.selectedCategory?.name === INVESTMENT_EXPENSE_CATEGORY && (
                 <View style={styles.formBlock}>
                   <Banner
                     icon="trending-up"
-                    text="Buying an investment isn’t spending — record it against an asset and your net worth stays put."
-                    actionLabel="Assets"
-                    onAction={() => router.push('/assets')}
+                    text="Buying an investment isn’t spending — log it as Invest and your net worth stays put."
+                    actionLabel="Switch to Invest"
+                    onAction={() => f.onSelectKind(AddKind.Invest)}
                   />
                 </View>
               )}

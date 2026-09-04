@@ -15,7 +15,11 @@ import type { AddKind } from '../constants/enums';
 export function kindAccent(kind: AddKind): string {
   switch (kind) {
     case 'income':   return colors.income;
-    case 'transfer': return colors.settle;
+    // Invest shares `settle` with Transfer on purpose: they are the same movement
+    // in the ledger (a settlement), told apart only by where the money went. A
+    // fifth colour would claim a distinction the money model does not make.
+    case 'transfer':
+    case 'invest':   return colors.settle;
     default:         return colors.accent;
   }
 }
@@ -27,7 +31,8 @@ export function kindAccent(kind: AddKind): string {
 export function kindGradient(kind: AddKind): readonly [string, string] {
   switch (kind) {
     case 'income':   return [colors.income, colors.healthGreen];
-    case 'transfer': return [colors.settle, colors.settle];
+    case 'transfer':
+    case 'invest':   return [colors.settle, colors.settle];
     default:         return [colors.accent, colors.accentDeep];
   }
 }
@@ -41,7 +46,8 @@ export function kindGradient(kind: AddKind): readonly [string, string] {
 export function kindAmountColor(kind: AddKind): string {
   switch (kind) {
     case 'income':   return colors.income;
-    case 'transfer': return colors.settle;
+    case 'transfer':
+    case 'invest':   return colors.settle;
     default:         return colors.textPrimary;
   }
 }

@@ -4417,11 +4417,24 @@ OV-30 · Add detects an investment and cannot record one                 [phanto
            through transferToAsset. Storage does not change: `asset_id` already
            separates it from a debt settlement, which is the discriminator OV-02
            proposes to formalise.
-  Blast.   ADD_KIND and its labels, one branch in useAddTxnForm's save, and the
-           banner is deleted rather than kept.
+  Blast.   UNDERSTATED HERE, and the correction is the lesson. This entry said
+           "ADD_KIND and its labels, one branch in useAddTxnForm's save, and the
+           banner". The real set was eight files, of which only TWO failed the
+           build: the Record<AddKind,…> maps in VoiceEntrySheet and
+           voiceShortcutFile. The six that compiled fine were switch statements
+           with a default:, a === chain with a fallback, and `kind !== 'transfer'`
+           gates whose meaning silently widened. Worst was the deep link —
+           ?kind=invest fell through to Expense and opened the wrong form.
   Risk.    Low, and it does not wait on OV-02 — it is what makes OV-02 worth
            doing rather than a bookkeeping tidy-up.
-  Verdict. COLLAPSE.
+  Verdict. COLLAPSE — **done 2026-09-05**. A fourth pill saving through
+           transferToAsset, which gained a `date` parameter so the screen's date
+           chip is honoured. The banner survives, repointed: it switches kind in
+           place instead of pushing to /assets, so it keeps the amount you typed.
+           Voice detection reaches the new kind (INVEST_HINTS, ordered after
+           INCOME_HINTS so a dividend stays income). Held by addKind.test.ts,
+           which asserts exhaustiveness where the compiler cannot — and forbids
+           new `kind !== '<one kind>'` gates, the shape that widened silently.
   Trigger. Now. WALK-01 §2 has the three layers this separates.
 
 OV-31 · Two designed empty states nothing can reach               [dead-alternative]

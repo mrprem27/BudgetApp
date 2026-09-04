@@ -142,6 +142,12 @@ export const TRANSFER_CATEGORIES: CategoryDef[] = [
 /** Transfer categories grouped into sections (single section for now). */
 export const TRANSFER_SECTIONS: { title: string; names: string[] }[] = [
   { title: 'Transfers', names: ['Repayment', 'Rent', 'Shared Bill', 'Lent', 'Borrowed'] },
+  // `INVESTMENT_CATEGORY` was in TRANSFER_CATEGORIES and in no section, so
+  // `categorySection` fell it through to 'Other' — the one transfer category that
+  // is not a transfer between people had no home in its own picker. It gets its
+  // own heading rather than joining 'Transfers', because the Invest pill files
+  // every row under it and lumping it in would read as a person-to-person move.
+  { title: 'Investments', names: [INVESTMENT_CATEGORY] },
   { title: 'Other', names: ['Other'] },
 ];
 

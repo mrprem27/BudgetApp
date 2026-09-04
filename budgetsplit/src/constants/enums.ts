@@ -38,21 +38,48 @@ export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
  * Previously declared in `components/finance/add/KindToggle.tsx`, so a type every
  * layer needed (the form hook, the amount field, the category pills) was reached
  * for through a component.
+ *
+ * ## Two of these four map to `settlement`, and that is the point
+ *
+ * `AddKind` is the **entry surface**; `TxnKind` is what happened to the money.
+ * They are different questions and the app conflated them for a long time —
+ * `WALK-01` §2 separates the three layers. Transfer and Invest are both a
+ * `settlement` in the ledger, told apart by `txn.asset_id`: a transfer moves money
+ * between people, an investment moves it into a thing you own. Neither is
+ * consumption, so neither counts in analysis (`AGENTS.md` §12).
+ *
+ * Invest existed as a *movement* long before it existed as a button —
+ * `transferToAsset` has written both halves atomically for months. What the user
+ * met instead was a banner on the Expense pill saying "you may have meant an
+ * asset, go to /assets", which is a workaround for a missing control (`OV-30`).
  */
 /** Transfer sits in the MIDDLE deliberately: it's the switcher's neutral centre,
- *  with money-out on the left and money-in on the right. */
+ *  with money-out on the left and money-in on the right. Invest sits beside
+ *  Transfer because it is the same movement with a different destination. */
 export enum AddKind {
   Expense = 'expense',
   Income = 'income',
   Transfer = 'transfer',
+  Invest = 'invest',
 }
 /** Render order for the switcher — not the same thing as the member list. */
-export const ADD_KIND = [AddKind.Expense, AddKind.Transfer, AddKind.Income] as const;
+export const ADD_KIND = [AddKind.Expense, AddKind.Transfer, AddKind.Invest, AddKind.Income] as const;
 export const ADD_KIND_LABEL: Record<AddKind, string> = {
   [AddKind.Expense]: 'Expense',
   [AddKind.Income]: 'Income',
   [AddKind.Transfer]: 'Transfer',
+  [AddKind.Invest]: 'Invest',
 };
+
+/**
+ * The `AddKind`s that are stored as a `settlement`.
+ *
+ * Exported because "is this a settlement?" is asked in several places and was
+ * being written as `kind === 'transfer'` — which silently stopped meaning that the
+ * moment Invest landed. Anything checking "does this move money without consuming
+ * it" belongs here rather than naming one member.
+ */
+export const SETTLEMENT_ADD_KINDS: readonly AddKind[] = [AddKind.Transfer, AddKind.Invest];
 
 /** `txn.entry_mode CHECK(entry_mode IN ('quick','itemized'))`. */
 export const ENTRY_MODE = ['quick', 'itemized'] as const;
